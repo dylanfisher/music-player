@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Builds the MusicPlayer executable and wraps it in a signed .app, so it runs with its
+# Info.plist (bundle ID, minimum macOS, and later the usage strings). Prints the .app path.
+#   ./scripts/bundle [debug|release]
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+config="${1:-debug}"
+swift build -c "$config" --product MusicPlayer >&2
+bin="$(swift build -c "$config" --show-bin-path)"
+app="$bin/MusicPlayer.app"
+
+rm -rf "$app"
+mkdir -p "$app/Contents/MacOS"
+cp "$bin/MusicPlayer" "$app/Contents/MacOS/"
+cp Support/Info.plist "$app/Contents/"
+
+# The deployment target is declared once, in Package.swift.
+min_macos=$(swift package dump-package | python3 -I -c '
+import json, sys
+print(next(p["version"] for p in json.load(sys.stdin)["platforms"] if p["platformName"] == "macos"))')
+/usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string $min_macos" "$app/Contents/Info.plist"
+
+# Ad-hoc signature for local runs. Release signing and notarization come later.
+codesign --force --sign - "$app" >&2
+echo "$app"

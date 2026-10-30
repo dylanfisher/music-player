@@ -16,12 +16,12 @@ against a codebase you haven't searched.
 
 | Before adding… | Run |
 |---|---|
-| any named thing | `rg -i '<name>' --type {{RG_TYPE}}` |
-| a primitive | `ls {{PRIMITIVES}}/` |
-| a component | `ls {{COMPONENTS}}/` |
-| a helper / util | `rg 'export (function\|const)' {{LIB}}/` |
-| a config value | `rg '<KEY>' {{CONFIG}}` — config is read in one module only |
-| a type / interface | `rg '(type\|interface\|class) <Name>'` |
+| any named thing | `rg -i '<name>' --type swift --type c` |
+| a module | `ls Sources/*/` — or `swift package describe` |
+| a primitive | `ls Sources/Primitives/` |
+| a helper / extension | `rg '^(public )?(func\|extension) ' Sources/` |
+| a preference key | `rg '<key>' Sources/Core/` — preferences are read in one Core module only |
+| a type | `rg '(struct\|enum\|class\|actor\|protocol\|typealias) <Name>' Sources/` |
 
 If a search turns up something close but not identical, that's the second occurrence. Use it or
 duplicate it — do not abstract yet (principle 3).
@@ -34,41 +34,42 @@ the dependency direction.
 
 | Tier | Path | What belongs here | May import from |
 |---|---|---|---|
-| **primitives** | `{{PRIMITIVES}}` | Smallest reusable units. No project-specific knowledge, no I/O, no config reads. Portable to another project as-is. | nothing in this table |
-| **components** | `{{COMPONENTS}}` | Compositions that know about this project — its domain types, its config, its conventions. | primitives |
-| **features** | `{{FEATURES}}` | Vertical slices a user or caller actually invokes. Routes, commands, endpoints, screens. | components, primitives |
-| **lib** | `{{LIB}}` | Pure cross-cutting helpers. No state. | primitives |
-| **config** | `{{CONFIG}}` | The one module that reads the environment and throws on a missing key. | nothing |
+| **primitives** | `Sources/Primitives` | Portable units with no knowledge of music or this app: ring buffer, SQLite wrapper, HTTP server, SSDP. No preference reads. | nothing in this table |
+| **core** | `Sources/Core` | The domain: library index and scanner, tag reading, decoders, DSD/DoP, outputs (CoreAudio HAL device, UPnP renderer), preferences. | primitives, other core modules |
+| **features** | `Sources/Features` | User-facing slices: library browser, now playing, preferences window, and later remote control. | core, primitives |
+| **app** | `Sources/App` | The composition root: `main`, app delegate, menus. Wires features together; holds no logic of its own. | features, core, primitives |
 
-**Dependency direction is one-way: features → components → primitives.** Never upward, never
-sideways between features. If a primitive needs something from a component, it isn't a primitive.
+Each SwiftPM target is one module at `Sources/<Tier>/<Name>`, and its tests are at
+`Tests/<Name>Tests`. `Support/` holds bundle resources such as `Info.plist`, which
+`scripts/bundle` copies into the `.app`.
 
-Enforce this with a tool rather than in prose — `eslint-plugin-import`'s `no-restricted-paths`,
-`dependency-cruiser`, `import-linter` (Python), or `go-arch-lint`. Wire it into `./scripts/check`
-and this paragraph becomes the only place it's written down.
+**Dependency direction is one-way: app → features → core → primitives.** Never upward, never
+sideways between features. Core modules may import each other; SwiftPM rejects cycles. If a
+primitive needs something from core, it isn't a primitive.
 
-If the stack has no such plugin, write `scripts/arch`: hold the tier table above as a map of tier →
-tiers it may import from, walk the source files under each tier, parse their import statements, and
-fail on any edge the map forbids. That is about forty lines in any language, and worth them — an
-unenforced dependency rule is one that has already been broken somewhere nobody has looked.
+`scripts/arch.swift` enforces this from `Package.swift`, and `./scripts/check` runs it. The
+compiler already rejects any import a target hasn't declared, so checking the declared
+dependencies covers every import. Its tier map has to match the table above.
 
 ## Naming
 
 - One thing per file; the filename is the thing's name.
-- Directory names plural, file names singular: `{{PRIMITIVES}}/button`, not `.../buttons`.
-- Tests sit beside what they test, or mirror the tree — pick one, never both.
-- {{Any project-specific convention: prefixes, suffixes, casing the formatter can't enforce}}
+- Tier directories plural, module directories singular and UpperCamelCase: `Core/Library`, not
+  `core/libraries`. The module name equals its directory name.
+- Tests mirror the modules: `Tests/<Module>Tests/<Thing>Tests.swift`, using Swift Testing.
+- C APIs in primitives take a `<Module>` prefix (`RingBufferWrite`), because C has no namespaces.
+- Units go in names wherever they're ambiguous: `sampleRateHz`, `bufferFrames`, `latencyMs`.
 
 ## Promotion
 
-Things move up a tier deliberately, never by accident:
+Things move between tiers deliberately, never by accident:
 
 - **Third occurrence** → extract to the lowest tier that all three callers can reach (principle 3).
-- **Component loses its project knowledge** → it's a primitive now; move it down.
-- **Primitive grows a config read or a domain type** → it was never a primitive; move it up.
+- **Core module loses its domain knowledge** → it's a primitive now; move it down.
+- **Primitive grows a preference read or a domain type** → it was never a primitive; move it up.
 
 A promotion is its own commit, separate from whatever work revealed it (principle 4).
 
-<!-- paths: {{PRIMITIVES}} {{COMPONENTS}} {{FEATURES}} {{LIB}} {{CONFIG}} -->
+<!-- paths: Sources/Primitives Sources/Core Sources/Features Sources/App -->
 <!-- ↑ scripts/check verifies every path above exists. Keep it in sync with the Tiers table;
      a rename that misses this line fails the gate, which is the point. -->

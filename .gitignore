@@ -5,31 +5,15 @@
 *.pem
 *.key
 
-# Dependencies
-node_modules/
-.venv/
-venv/
-__pycache__/
-vendor/
-
-# Build output
-dist/
-build/
-out/
-target/
-*.tsbuildinfo
-
-# Caches
-.cache/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-coverage/
-*.log
+# SwiftPM / Xcode build output
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
 
 # Editors / OS
 .DS_Store
-.idea/
 .vscode/*
 !.vscode/extensions.json
 

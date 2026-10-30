@@ -4,7 +4,16 @@
       "Bash(./scripts/check)",
       "Bash(./scripts/dev:*)",
       "Bash(./scripts/setup)",
-      "Bash(./scripts/test:*)"
+      "Bash(./scripts/test:*)",
+      "Bash(swift scripts/arch.swift)",
+      "Bash(./scripts/bundle:*)",
+      "Bash(swift build:*)",
+      "Bash(swift test:*)",
+      "Bash(swift format lint:*)",
+      "Bash(swift format format:*)",
+      "Bash(swift package dump-package)",
+      "Bash(swift package describe:*)",
+      "Bash(swift package resolve)"
     ],
     "deny": [
       "Bash(op read:*)",

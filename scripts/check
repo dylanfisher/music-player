@@ -16,13 +16,6 @@ run() {
   if ! "$@"; then failures+=("$name"); fi
 }
 
-# Placeholder for an unconfigured step. Replace the whole `todo "..."` with the
-# real command during scaffolding.
-todo() {
-  printf '\033[31mnot configured — run /scaffold (see docs/scaffold.md). Suggested: %s\033[0m\n' "$1" >&2
-  return 1
-}
-
 # AGENTS.md is the highest-leverage file in the repo and the easiest to let rot.
 # These are the only rules about it a tool can check; the rest is judgment.
 run agents.md bash -c '
@@ -104,10 +97,11 @@ run residue bash -c '
   echo "no leftovers"
 '
 
-run format    todo "npx prettier --check ."
-run lint      todo "npx eslint ."
-run typecheck todo "npx tsc --noEmit"   # delete this step entirely if the language is untyped
-run arch      todo "npx depcruise --validate"   # or ./scripts/arch — see the Tiers table in docs/map.md
+# swift-format checks layout and its lint rules (.swift-format) in one pass.
+run format    swift format lint --strict --recursive --parallel Package.swift Sources Tests scripts/arch.swift
+# Strict concurrency and warnings-as-errors are set in Package.swift, so a clean build is the typecheck.
+run typecheck swift build --build-tests
+run arch      swift scripts/arch.swift
 run test      ./scripts/test
 
 if [ ${#failures[@]} -gt 0 ]; then

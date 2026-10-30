@@ -8,14 +8,12 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 2
 
-[*.{py,rs}]
+# Matches .swift-format; C follows the same width.
+[*.{swift,c,h}]
 indent_size = 4
 
-[*.go]
+[*.plist]
 indent_style = tab
 
 [*.md]
 trim_trailing_whitespace = false
-
-[Makefile]
-indent_style = tab

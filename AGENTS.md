@@ -1,26 +1,16 @@
 # AGENTS.md
 
-<!-- ══════════════════════════════════════════════════════════════
-     TEMPLATE — NOT YET INITIALIZED
-
-     Agent: if this block is still present, this repo was just cloned
-     from the starter and has not been set up. Do NOT infer the answers
-     by scanning the filesystem — run the interview in docs/scaffold.md
-     (or the /scaffold command) with the user, fill in every {{...}}
-     below, then delete this block.
-     ══════════════════════════════════════════════════════════════ -->
-
 Instructions for AI coding agents working in this repo. Humans: see [README.md](README.md).
 
 **Keep this file under ~50 lines.** Anything longer lives in `docs/` and is linked from here.
 
 ## Stack
 
-- **Language:** {{LANGUAGE + VERSION}}
-- **Package manager:** {{PACKAGE MANAGER}}
-- **Framework:** {{FRAMEWORK, or "none"}}
-- **Test framework:** {{TEST FRAMEWORK}}
-- **Layout:** {{where source lives, where tests live}} — tiers and search recipes: [docs/map.md](docs/map.md)
+- **Language:** Swift 6 language mode, strict concurrency; toolchain from the Xcode in `.xcode-version`. C for the real-time audio core.
+- **Platform:** macOS 12+ (`Package.swift`); it must run on a 2015 MacBook Pro. Guard newer APIs with `#available`.
+- **Package manager:** SwiftPM only — no `.xcodeproj`. `scripts/bundle` builds the `.app`.
+- **Frameworks:** AppKit, CoreAudio (HAL), system SQLite, Network.framework (UPnP/DLNA). Tests: Swift Testing.
+- **Layout:** `Sources/<Tier>/<Module>`, tests in `Tests/<Module>Tests` — tiers and search recipes: [docs/map.md](docs/map.md)
 
 ## Commands
 
@@ -48,13 +38,11 @@ Non-negotiable, regardless of stack. Rationale: [docs/principles.md](docs/princi
 
 ## Boundaries
 
-<!-- Highest-value section. Be specific about what must NOT be touched directly.
-     Delete these examples and replace with real ones. -->
-- {{e.g. Never edit `db/migrations/` by hand — run `<migration command>`.}}
-- {{e.g. Never commit to `main` — branch first.}}
-- {{e.g. `src/generated/` is generated — edit the schema, then regenerate.}}
+- **Music files are read-only.** Never write, retag, rename, move, or delete anything in the user's library or on the NAS. App state lives in the SQLite index.
+- **The real-time audio thread is C-only.** Nothing reachable from the CoreAudio IO proc allocates, locks, logs, or calls Swift/ObjC; it goes through `Sources/Primitives/RingBuffer`.
+- **Commit locally; never push.** No `git push`, no `gh`. The owner pushes.
 - **Pre-release:** breaking changes are fine. Stored data has one shape — no version fields, migrations, or compatibility shims; data that doesn't match is discarded. Delete this line at the first production release.
-- Never write, print, or `op read` a plaintext secret. `.env.example` holds `op://` references; they resolve via `op run` at runtime.
+- The app has no secrets. If one appears, stop and ask before adding any secret handling.
 
 ## Definition of done
 
