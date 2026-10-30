@@ -14,6 +14,12 @@ func value(after flag: String) -> String? {
     return arguments[index + 1]
 }
 
+/// 312.4 -> "5:12".
+func clock(_ seconds: Double) -> String {
+    let whole = Int(seconds)
+    return "\(whole / 60):" + String(format: "%02d", whole % 60)
+}
+
 func runAndExit(_ command: () throws -> Void) -> Never {
     do {
         try command()
@@ -31,7 +37,15 @@ if let path = value(after: "--play") {
     runAndExit {
         try playFile(
             at: URL(fileURLWithPath: path), deviceName: value(after: "--device"),
-            log: { print($0) })
+            // Progress rewrites one line in place, so log lines clear it first ("\r" + erase line).
+            log: {
+                print("\r\u{1B}[K\($0)")
+                fflush(stdout)
+            },
+            progress: { played, duration in
+                print("\r  \(clock(played)) / \(clock(duration))", terminator: "")
+                fflush(stdout)
+            })
     }
 }
 

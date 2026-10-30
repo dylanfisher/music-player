@@ -25,20 +25,28 @@ public enum PlaybackError: Error, CustomStringConvertible {
 /// - Parameters:
 ///   - deviceName: Part of an output device's name, case-insensitive. Nil means the system
 ///     default output.
-///   - log: Receives one line when playback starts and one when it ends.
-public func playFile(at url: URL, deviceName: String?, log: (String) -> Void) throws {
+///   - log: Receives a line before opening the file, when playback starts, and when it ends.
+///   - progress: Receives seconds played and the file's duration, about twice a second.
+public func playFile(
+    at url: URL, deviceName: String?, log: (String) -> Void,
+    progress: (_ playedSeconds: Double, _ durationSeconds: Double) -> Void
+) throws {
+    // Logged first, because opening a file on a network volume can block on a privacy prompt.
+    log("opening \(url.path)")
     let decoder = try FileDecoder(url: url)
     let target = try outputDevice(named: deviceName)
     let device = try ExclusiveDevice(id: target.id)
     // Restore the device even when playback fails, then report the playback error.
-    let result = Result { try play(decoder, named: url.lastPathComponent, on: device, target, log) }
+    let result = Result {
+        try play(decoder, named: url.lastPathComponent, on: device, target, log, progress)
+    }
     try device.close()
     try result.get()
 }
 
 private func play(
     _ decoder: FileDecoder, named name: String, on device: ExclusiveDevice,
-    _ target: AudioDevice, _ log: (String) -> Void
+    _ target: AudioDevice, _ log: (String) -> Void, _ progress: (Double, Double) -> Void
 ) throws {
     let file = decoder.fileFormat
     var format = try device.configure(sampleRateHz: file.mSampleRate)
@@ -88,6 +96,16 @@ private func play(
         }
     }
 
+    let duration = Double(decoder.lengthFrames) / format.mSampleRate
+    var lastReport = Date.distantPast
+    // Played = decoded minus what's still queued in the chunk and the ring buffer.
+    func report() {
+        guard Date().timeIntervalSince(lastReport) >= 0.5 else { return }
+        lastReport = Date()
+        let queued = (chunkBytes - chunkOffset + RingBufferReadable(ring)) / bytesPerFrame
+        progress(Double(decoded - queued) / format.mSampleRate, duration)
+    }
+
     try fill()
     try device.start(reading: ring)
     var underrunBytes: UInt64 = 0
@@ -96,9 +114,13 @@ private func play(
         while !finished {
             Thread.sleep(forTimeInterval: 0.01)
             try fill()
+            report()
         }
         underrunBytes = device.underrunBytes
-        while RingBufferReadable(ring) > 0 { Thread.sleep(forTimeInterval: 0.01) }
+        while RingBufferReadable(ring) > 0 {
+            Thread.sleep(forTimeInterval: 0.01)
+            report()
+        }
         // The last IO buffer is still playing when the ring buffer empties.
         Thread.sleep(forTimeInterval: 0.1)
     }

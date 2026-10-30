@@ -7,6 +7,8 @@ import HALOutput
 final class FileDecoder {
     /// The format stored in the file. For compressed formats `mBitsPerChannel` is 0.
     let fileFormat: AudioStreamBasicDescription
+    /// Frames at the file's own rate.
+    let lengthFrames: Int64
     private let file: ExtAudioFileRef
     private var bytesPerFrame: UInt32 = 0
 
@@ -22,6 +24,15 @@ final class FileDecoder {
             ExtAudioFileGetProperty(self.file, kExtAudioFileProperty_FileDataFormat, &size, &format)
         )
         fileFormat = format
+
+        var length: Int64 = 0
+        size = UInt32(MemoryLayout.size(ofValue: length))
+        try throwIfError(
+            "ExtAudioFileGetProperty(FileLengthFrames)",
+            ExtAudioFileGetProperty(
+                self.file, kExtAudioFileProperty_FileLengthFrames, &size, &length)
+        )
+        lengthFrames = length
     }
 
     deinit { ExtAudioFileDispose(file) }
