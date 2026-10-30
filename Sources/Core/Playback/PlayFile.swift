@@ -27,9 +27,12 @@ public enum PlaybackError: Error, CustomStringConvertible {
 ///     default output.
 ///   - log: Receives a line before opening the file, when playback starts, and when it ends.
 ///   - progress: Receives seconds played and the file's duration, about twice a second.
+///   - shouldStop: Polled while playing. Returning true ends playback early, still restoring the
+///     device.
 public func playFile(
     at url: URL, deviceName: String?, log: (String) -> Void,
-    progress: (_ playedSeconds: Double, _ durationSeconds: Double) -> Void
+    progress: (_ playedSeconds: Double, _ durationSeconds: Double) -> Void,
+    shouldStop: () -> Bool
 ) throws {
     // Logged first, because opening a file on a network volume can block on a privacy prompt.
     log("opening \(url.path)")
@@ -38,7 +41,8 @@ public func playFile(
     let device = try ExclusiveDevice(id: target.id)
     // Restore the device even when playback fails, then report the playback error.
     let result = Result {
-        try play(decoder, named: url.lastPathComponent, on: device, target, log, progress)
+        try play(
+            decoder, named: url.lastPathComponent, on: device, target, log, progress, shouldStop)
     }
     try device.close()
     try result.get()
@@ -46,7 +50,8 @@ public func playFile(
 
 private func play(
     _ decoder: FileDecoder, named name: String, on device: ExclusiveDevice,
-    _ target: AudioDevice, _ log: (String) -> Void, _ progress: (Double, Double) -> Void
+    _ target: AudioDevice, _ log: (String) -> Void, _ progress: (Double, Double) -> Void,
+    _ shouldStop: () -> Bool
 ) throws {
     let file = decoder.fileFormat
     var format = try device.configure(sampleRateHz: file.mSampleRate)
@@ -111,25 +116,25 @@ private func play(
     var underrunBytes: UInt64 = 0
     // The ring buffer must not be freed while the IO proc is running, so stop before rethrowing.
     let result = Result {
-        while !finished {
+        while !finished && !shouldStop() {
             Thread.sleep(forTimeInterval: 0.01)
             try fill()
             report()
         }
         underrunBytes = device.underrunBytes
-        while RingBufferReadable(ring) > 0 {
+        while RingBufferReadable(ring) > 0 && !shouldStop() {
             Thread.sleep(forTimeInterval: 0.01)
             report()
         }
         // The last IO buffer is still playing when the ring buffer empties.
-        Thread.sleep(forTimeInterval: 0.1)
+        if !shouldStop() { Thread.sleep(forTimeInterval: 0.1) }
     }
     try device.stop()
     try result.get()
 
     let seconds = Double(decoded) / format.mSampleRate
     log(
-        "done: \(String(format: "%.1f", seconds)) s,"
+        "\(shouldStop() ? "stopped" : "done"): \(String(format: "%.1f", seconds)) s,"
             + " underruns: \(underrunBytes / UInt64(bytesPerFrame)) frames")
 }
 

@@ -29,6 +29,7 @@ public final class ExclusiveDevice {
     private let stream: AudioStreamID
     private let originalRateHz: Double
     private let originalFormat: AudioStreamBasicDescription
+    private let originalDefaults: [(selector: AudioObjectPropertySelector, device: AudioObjectID)]
     private var ioProc: AudioDeviceIOProcID?
     private var render: OpaquePointer?
     private var isOpen = true
@@ -47,6 +48,9 @@ public final class ExclusiveDevice {
         self.stream = stream
         originalRateHz = try readScalar(id, address(kAudioDevicePropertyNominalSampleRate))
         originalFormat = try readScalar(stream, address(kAudioStreamPropertyPhysicalFormat))
+        originalDefaults = try defaultOutputSelectors.map { selector in
+            (selector, try readScalar(systemObject, address(selector)))
+        }
 
         try writeScalar(id, address(kAudioDevicePropertyHogMode), getpid())
         let newOwner: pid_t = try readScalar(id, address(kAudioDevicePropertyHogMode))
@@ -113,7 +117,8 @@ public final class ExclusiveDevice {
         }
     }
 
-    /// Stops playback, restores the rate and format the device had before, and releases hog mode.
+    /// Stops playback, restores the rate and format the device had before, releases hog mode, and
+    /// restores the system's default output devices.
     public func close() throws {
         guard isOpen else { return }
         isOpen = false
@@ -121,8 +126,23 @@ public final class ExclusiveDevice {
         try writeScalar(stream, address(kAudioStreamPropertyPhysicalFormat), originalFormat)
         try writeScalar(id, address(kAudioDevicePropertyNominalSampleRate), originalRateHz)
         try writeScalar(id, address(kAudioDevicePropertyHogMode), pid_t(-1))
+        // While a device is hogged, macOS moves the default output and alert-sound output to
+        // another device, and doesn't move them back when hog mode ends.
+        for original in originalDefaults {
+            let now: AudioObjectID = try readScalar(systemObject, address(original.selector))
+            if now != original.device {
+                try writeScalar(systemObject, address(original.selector), original.device)
+            }
+        }
     }
 }
+
+private let systemObject = AudioObjectID(kAudioObjectSystemObject)
+
+/// System Settings → Sound → Output, and the device for alerts and sound effects.
+private let defaultOutputSelectors = [
+    kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDefaultSystemOutputDevice,
+]
 
 /// Polls until `condition` holds. Devices apply rate and format changes asynchronously, and
 /// playing before they finish produces a click or the wrong rate.
