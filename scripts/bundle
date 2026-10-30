@@ -2,12 +2,16 @@
 # Builds the MusicPlayer executable and wraps it in a signed .app, so it runs with its
 # Info.plist (bundle ID, minimum macOS, and later the usage strings). Prints the .app path.
 #   ./scripts/bundle [debug|release]
+# Release builds are universal, because they get copied to other Macs, including the
+# Intel 2015 MacBook Pro. Debug builds are native only, for speed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 config="${1:-debug}"
-swift build -c "$config" --product MusicPlayer >&2
-bin="$(swift build -c "$config" --show-bin-path)"
+flags=(-c "$config")
+[ "$config" = release ] && flags+=(--arch arm64 --arch x86_64)
+swift build "${flags[@]}" --product MusicPlayer >&2
+bin="$(swift build "${flags[@]}" --show-bin-path)"
 app="$bin/MusicPlayer.app"
 
 rm -rf "$app"
