@@ -1,0 +1,257 @@
+# Build plan
+
+The roadmap from today's command-line player to the full app. Agents work through it phase by
+phase, mostly unattended, and stop only at **hardware checkpoints**, where the owner has to try
+something on the DAC Mac, the Denon, a phone, or the 2015 MacBook Pro.
+
+Each phase ends with the [phase gate](#phase-gate): review, performance audit, and architecture
+check. A phase isn't done until its gate passes.
+
+## How to run it
+
+Start a session with "run the next phase of docs/plan.md". For several phases unattended, say "use
+a workflow to run phases N–M of docs/plan.md". For each phase, the orchestrating agent:
+
+1. **Plans.** It reads the phase, the code it touches, and `docs/map.md`, then writes a short
+   implementation plan under the phase heading: files, modules, tests, and order. It does a
+   search first (map.md recipes), so it extends existing code instead of writing a second copy.
+2. **Implements** on a branch `phase/<n>-<slug>` with an Opus subagent (per the owner's
+   CLAUDE.md), in small commits that each pass `./scripts/check`.
+3. **Runs the phase gate.** The reviewers and auditors are Sonnet subagents running in parallel.
+   It fixes every confirmed finding, then reruns the gate.
+4. **Records.** It ticks the phase's boxes, adds a "Result" line with measured numbers, commits,
+   and fast-forwards `main` to the branch. It never pushes.
+5. **Stops or continues.** At a hardware checkpoint it stops and lists what to push, what to run,
+   and what to paste back. Otherwise it moves on to the next phase.
+
+If something blocks a phase that only the owner can resolve (a product decision, missing
+hardware, an Apple API that can't do what the phase assumes), stop and ask. Don't work around it.
+
+## Phase gate
+
+Run after every phase, before ticking it off.
+
+- [ ] **Gate:** `./scripts/check` passes.
+- [ ] **Code review:** `/code-review high` on the phase branch. Fix confirmed findings in
+      their own commits, then rerun the review until it finds nothing new above low severity.
+- [ ] **Simplify:** `/simplify` on the same branch. Look especially for duplication across modules
+      and for abstractions with one caller.
+- [ ] **Performance audit:** `./scripts/bench` against the budgets in
+      [Performance budgets](#performance-budgets). A budget miss blocks the phase. A regression
+      over 10% against the last recorded result needs a fix or a written reason in the Result
+      line.
+- [ ] **Real-time audit**, if the phase touched playback: everything reachable from the IO proc
+      is C in `HALRender` and uses no locks, no allocation, no logging and no ObjC. Ring buffer
+      sizing is justified in a comment.
+- [ ] **Architecture audit:** `docs/map.md` still describes the tree. No module reaches around
+      another (the tier check only catches tier direction). Settings are read in one place. New
+      user-facing strings and constants each have one definition.
+- [ ] **Docs:** an ADR in `docs/decisions/` for every non-obvious choice. AGENTS.md boundaries
+      updated if the phase created something that must not be edited directly, keeping AGENTS.md
+      under ~50 lines.
+- [ ] **Result line** written: what shipped, the benchmark numbers, and anything deferred.
+
+## Performance budgets
+
+These are targets for a 43k-track library, measured by `./scripts/bench` on the fixture library
+(phase 1). "Old Mac" means the 2015 MacBook Pro on macOS 12, measured at hardware checkpoints.
+Change a budget only with a reason in the Result line.
+
+| What | Apple Silicon | Old Mac |
+|---|---|---|
+| Cold launch to an interactive library window | < 1.0 s | < 2.5 s |
+| Search-as-you-type, per keystroke (p95) | < 30 ms | < 80 ms |
+| Re-sort the track table by any column | < 100 ms | < 250 ms |
+| Full scan of the fixture library, local SSD | < 60 s | < 180 s |
+| Rescan with no changes, on the NAS | < 30 s | < 60 s |
+| Resident memory with the library loaded | < 250 MB | < 250 MB |
+| CPU while playing 24/192 FLAC | < 2% of a core | < 5% of a core |
+| Underruns in a 1-hour playback soak | 0 | 0 |
+| Gap between same-format tracks | 0 samples | 0 samples |
+| Track change that switches sample rate | < 500 ms | < 500 ms |
+| CPU when idle (not playing) | ~0%, no timers firing faster than settings allow | same |
+
+## Phases
+
+### 1. Foundations: settings, logging, benchmarks, fixtures
+
+Everything later phases measure and configure against.
+
+- [ ] **Settings** module (Core): one typed schema holding every setting's key, type, default and
+      description. Settings are stored as JSON at `~/Library/Application Support/MusicPlayer/
+      settings.json`, and the file holds only the values the user changed. The schema is the
+      single source for defaults, the settings window (phase 6) and the command palette. A file
+      that doesn't match the schema fails loudly, naming the bad key; it isn't silently replaced
+      with defaults.
+- [ ] **Settings export and import:** export the full effective settings as JSON. Import a JSON
+      file as overrides, validating it the same way.
+- [ ] **Logging** through `os.Logger`, with one subsystem and a category per module. Nothing logs
+      from the real-time path.
+- [ ] **Fixture library generator** (`scripts/fixtures`): builds a 43k-file tree on local disk in
+      the shape of a real library (artists, albums, mixed FLAC, ALAC, AAC, WAV, AIFF, MP3, varied
+      tags, some with embedded art, a few malformed files). It takes a handful of real tiny
+      encoded files (afconvert) and clones them with rewritten tag blocks. Fixture files go in
+      `.build/` or `~/Library/Caches`, never in git.
+- [ ] **Benchmark harness:** a `Bench` executable target and `scripts/bench`. It runs named
+      benchmarks, prints a table, and exits non-zero on a budget miss. Each later phase adds its
+      own benchmarks. Bench stays out of `./scripts/check`, because it takes too long.
+
+### 2. Tag and format reading
+
+- [ ] Our own parsers (no dependencies) for FLAC/Vorbis comments, MP4 atoms (ALAC, AAC), ID3v2.2,
+      2.3 and 2.4 (MP3, AIFF, WAV, and DSF later), and WAV `LIST/INFO`. They read the common
+      fields, track and disc numbers, compilation and album-artist flags, and embedded art.
+- [ ] Audio properties from the container: codec, sample rate, bit depth, channels and duration,
+      without decoding audio.
+- [ ] Malformed input never crashes or hangs: tests with truncated, oversized and garbage blocks,
+      plus a fuzz test over the fixtures with random byte flips.
+- [ ] Benchmark: parse 43k fixture files cold.
+
+### 3. Library index and watched folders
+
+- [ ] **SQLite** primitive: a thin wrapper over system `libsqlite3` with prepared statements, a
+      transaction helper, and errors that throw with the SQL and message.
+- [ ] **Schema:** tracks, albums, artists, and an FTS5 table for search. Plays, ratings and
+      history go in their own tables, so a rescan never touches them. Because of the pre-release
+      boundary there are no migrations: a schema mismatch means rebuilding the index, but keep the
+      stats tables.
+- [ ] **Scanner:** a parallel file walk with incremental rescans keyed on path, size and mtime.
+      It's NAS-friendly: one stat per file, bounded concurrency, and it can be paused and
+      cancelled. Progress is reported, never blocking the UI.
+- [ ] **Watched folders,** configurable in settings: a list of roots, each with an include/exclude
+      pattern list. FSEvents doesn't report changes on SMB volumes, so local roots use FSEvents and
+      network roots use a polling rescan at a configurable interval (default 15 minutes, never
+      while playback is starting). Optionally pause polling during playback.
+- [ ] Benchmarks: full scan, no-change rescan, and the query latencies the UI will need.
+- [ ] **Hardware checkpoint (owner):** scan the real NAS library on the DAC Mac. Report the time,
+      the database size, and any files that failed to parse.
+
+### 4. Playback engine
+
+Turns the one-file command into the engine everything else drives.
+
+- [ ] An **output** protocol with two implementations: `HALOutput` now, UPnP in phase 9. The
+      engine never knows which one it's driving.
+- [ ] **Queue** and a state machine: play, pause, stop, next, previous, seek, repeat and shuffle.
+      State changes go out as one observable stream that the UI, media keys and the remote all
+      read.
+- [ ] **Gapless:** the next track decodes ahead. Same format means no reconfigure and zero gap.
+      A rate change reconfigures the device between tracks.
+- [ ] **Device handling:** pick the output device in settings, by UID so it survives renames. If
+      the device is unplugged, pause and report it rather than switching to the speakers. When it
+      reappears, offer to resume.
+- [ ] **Volume:** none in the bit-perfect path. An optional digital volume, off by default, says
+      plainly that it stops the output being bit-perfect.
+- [ ] Restores the device and default outputs on every exit path, as `ExclusiveDevice.close()`
+      does today.
+- [ ] Benchmarks: playback CPU, a 1-hour soak with underrun count, and gap measurement.
+- [ ] **Hardware checkpoint (owner):** on the ADI-2, play a gapless album, a playlist mixing
+      44.1 and 96 kHz tracks, unplug the DAC during playback, and quit with Ctrl-C. Confirm the
+      macOS default output is restored after each.
+
+### 5. Main window
+
+- [ ] AppKit window: a sidebar (library, playlists, watched folders), Swinsian-style column
+      browser panes (genre, artist, album), and an `NSTableView` of tracks with configurable,
+      sortable and reorderable columns. A now-playing bar with art, seek and time.
+- [ ] Search field filtering through FTS5 as you type.
+- [ ] Queue view: reorder, remove, and "play next".
+- [ ] Album art loaded lazily and cached at display size. No full-size images held in memory.
+- [ ] Window layout and column state are saved through Settings.
+- [ ] Benchmarks: launch to interactive, search keystroke, re-sort, and memory.
+- [ ] **Hardware checkpoint (owner):** run the release build on the 2015 MacBook Pro (macOS 12,
+      Intel) with the real library. Report launch time and how scrolling and searching feel, and
+      run `./scripts/bench` there.
+
+### 6. Commands, shortcuts, command palette, settings window
+
+- [ ] A **command registry**: every user action, including changing each setting, is one command
+      with an ID, a title, and an optional default shortcut. Menus, shortcuts, the palette and the
+      remote API all read from it. No action exists outside it.
+- [ ] **Configurable shortcuts** for every command, stored in settings JSON. Conflicts are
+      reported by name, not silently overridden.
+- [ ] **⌘K palette:** fuzzy search over commands, settings, tracks, albums, artists and playlists,
+      driven only by the keyboard. Results in < 30 ms per keystroke at 43k tracks.
+- [ ] **Settings window** generated from the settings schema, so a new setting appears there
+      without any UI code.
+
+### 7. Playlists, smart playlists, stats
+
+- [ ] Manual playlists: create, rename, reorder, and add with drag and drop or a command.
+- [ ] Smart playlists: a rule editor (field, operator, value; any or all; limit and sort) that
+      compiles to SQL. They update live as the library changes.
+- [ ] Play counts, skip counts, last played, ratings and a history view, all in SQLite and never
+      in files. A play counts after 50% or 4 minutes.
+- [ ] Benchmark: evaluating a complex smart playlist over 43k tracks.
+
+### 8. System integration
+
+- [ ] Media keys and headphone controls via `MPRemoteCommandCenter`.
+- [ ] Now Playing in Control Center via `MPNowPlayingInfoCenter`, with art.
+- [ ] Dock menu with the current track and transport controls.
+
+### 9. UPnP/DLNA output (Denon AVR-X1800H)
+
+- [ ] **HTTP server** primitive on Network.framework: serves files with `Range` support, bound to
+      the LAN, and only to paths the library knows about.
+- [ ] **SSDP discovery** of MediaRenderers, and fetching each renderer's description and
+      `GetProtocolInfo` to learn what formats it accepts.
+- [ ] A **UPnP output** that implements the phase 4 output protocol, using AVTransport (set URI,
+      play, pause, seek, `SetNextAVTransportURI` for gapless) and RenderingControl (volume). It
+      sends original file bytes. Formats the renderer can't take are reported, not transcoded.
+- [ ] Renderers appear next to HAL devices in the output picker.
+- [ ] Info.plist gets `NSLocalNetworkUsageDescription` and Bonjour entries.
+- [ ] **Hardware checkpoint (owner):** play 16/44.1, 24/96 and 24/192 FLAC to the Denon. Report
+      what its display shows, gapless behavior, seek, and volume.
+
+### 10. Web remote
+
+- [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
+      playback state, queue, library browsing and search, and pushes state changes to every
+      connected client.
+- [ ] **Pairing:** a code shown in the app is exchanged for a token. Clients without a token get
+      nothing. LAN only, configurable port, and the whole remote can be switched off.
+- [ ] **Web app:** static HTML, CSS and JS in `Support/`, with no framework and no build step,
+      sized for phones. Now playing, transport, queue, browse and search.
+- [ ] Several clients stay in sync with each other and with the Mac UI.
+- [ ] **Hardware checkpoint (owner):** control playback from a phone and a second computer at
+      once, and pair a new device.
+
+### 11. Tag editor
+
+This replaces the read-only boundary in AGENTS.md. Do it first in the phase, with an ADR.
+
+- [ ] **New boundary:** music files are written only through the tag-writer module, only for a
+      tag edit the user confirmed, and never by tests against real libraries.
+- [ ] **Writers** for FLAC/Vorbis, MP4 and ID3v2.3/2.4, reusing the phase 2 parsers.
+- [ ] **Safety:** write to a temp file next to the original, then re-read it and check that the
+      audio payload is byte-identical (hash before and after) and that the tags read back as
+      written. Replace atomically. Keep an undo journal of the old tag blocks for the last N
+      edits. Any check failing leaves the original untouched.
+- [ ] **UI:** an editor for one track or a batch, with mixed-value display for multiple
+      selection, and art replace and remove.
+- [ ] **Hardware checkpoint (owner):** edit tags on copies of a few NAS files first, then on real
+      ones. Confirm Swinsian and Finder read the results.
+
+### 12. DSD over DoP
+
+- [ ] DSF and DFF parsers, and DSD in the library (rate shown as DSD64, DSD128 or DSD256).
+- [ ] DoP packing in Swift on the decode thread, with markers 0x05/0xFA in the top byte. The IO
+      proc stays a byte copy.
+- [ ] DoP carrier selection: DSD64 at 176.4 kHz, DSD128 at 352.8 kHz, DSD256 at 705.6 kHz. A
+      device without the rate is refused, never converted.
+- [ ] DSD to the Denon over UPnP, if its `GetProtocolInfo` lists it.
+- [ ] **Hardware checkpoint (owner):** DSD64, DSD128 and DSD256 on the ADI-2. Its DSD indicator
+      lighting is the bit-perfect proof for the whole HAL path.
+
+### 13. Release readiness
+
+- [ ] Developer ID signing, hardened runtime and notarization in `scripts/bundle release`.
+      Secrets come from 1Password at that point, so this phase adds the secrets setup it removed.
+- [ ] First-run flow: choose watched folders and the output device.
+- [ ] Accessibility pass: VoiceOver labels on the table, transport and palette.
+- [ ] An app icon and an About window.
+- [ ] Remove the **Pre-release** boundary from AGENTS.md if this is the first public release, and
+      decide how stored data will be migrated from then on.
+- [ ] **Hardware checkpoint (owner):** a clean install on the 2015 MacBook Pro and the DAC Mac
+      from a notarized build.

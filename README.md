@@ -26,6 +26,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 | Path | Purpose |
 |---|---|
 | `AGENTS.md` | Rules for AI coding agents, and the definition of done. Kept under ~50 lines. |
+| [docs/plan.md](docs/plan.md) | The build plan: phases, the gate between them, and performance budgets. |
 | [docs/map.md](docs/map.md) | Tiers, where code lives, and how to find something before writing a second one. |
 | [docs/writing.md](docs/writing.md) | Comment voice and commit message format. |
 | [docs/principles.md](docs/principles.md) | Why the principles in AGENTS.md are what they are. |
