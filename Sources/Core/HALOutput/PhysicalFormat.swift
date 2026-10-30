@@ -23,6 +23,15 @@ public struct PhysicalFormat: Sendable, Equatable {
         self.isMixable = isMixable
     }
 
+    /// A format at one fixed rate, such as a stream's current one.
+    public init(_ format: AudioStreamBasicDescription) {
+        self.init(
+            AudioStreamRangedDescription(
+                mFormat: format,
+                mSampleRateRange: AudioValueRange(
+                    mMinimum: format.mSampleRate, mMaximum: format.mSampleRate)))
+    }
+
     public init(_ ranged: AudioStreamRangedDescription) {
         let format = ranged.mFormat
         self.init(
@@ -33,5 +42,14 @@ public struct PhysicalFormat: Sendable, Equatable {
             isFloat: format.mFormatFlags & kAudioFormatFlagIsFloat != 0,
             isMixable: format.mFormatFlags & kAudioFormatFlagIsNonMixable == 0
         )
+    }
+}
+
+extension PhysicalFormat {
+    /// For example `'lpcm' 2 ch 32-bit int @ 96 kHz, non-mixable`.
+    public var summary: String {
+        let sample = "\(bitsPerChannel)-bit \(isFloat ? "float" : "int")"
+        let mixing = isMixable ? "" : ", non-mixable"
+        return "'\(formatID)' \(channels) ch \(sample) @ \(kilohertz(sampleRateHz)) kHz\(mixing)"
     }
 }

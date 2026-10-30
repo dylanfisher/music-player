@@ -1,0 +1,52 @@
+import AudioToolbox
+import Foundation
+import HALOutput
+
+/// Reads any file AudioToolbox can decode (FLAC, ALAC, WAV, AIFF, …) as PCM in a format the
+/// caller chooses. Use from one thread.
+final class FileDecoder {
+    /// The format stored in the file. For compressed formats `mBitsPerChannel` is 0.
+    let fileFormat: AudioStreamBasicDescription
+    private let file: ExtAudioFileRef
+    private var bytesPerFrame: UInt32 = 0
+
+    init(url: URL) throws {
+        var file: ExtAudioFileRef?
+        try throwIfError("ExtAudioFileOpenURL", ExtAudioFileOpenURL(url as CFURL, &file))
+        self.file = file!
+
+        var format = AudioStreamBasicDescription()
+        var size = UInt32(MemoryLayout.size(ofValue: format))
+        try throwIfError(
+            "ExtAudioFileGetProperty(FileDataFormat)",
+            ExtAudioFileGetProperty(self.file, kExtAudioFileProperty_FileDataFormat, &size, &format)
+        )
+        fileFormat = format
+    }
+
+    deinit { ExtAudioFileDispose(file) }
+
+    /// Sets the format `read` produces. Must be interleaved PCM.
+    func setOutputFormat(_ format: AudioStreamBasicDescription) throws {
+        var format = format
+        try throwIfError(
+            "ExtAudioFileSetProperty(ClientDataFormat)",
+            ExtAudioFileSetProperty(
+                file, kExtAudioFileProperty_ClientDataFormat,
+                UInt32(MemoryLayout.size(ofValue: format)), &format))
+        bytesPerFrame = format.mBytesPerFrame
+    }
+
+    /// Decodes up to `frames` frames into `buffer`. Returns how many were decoded: 0 at the end.
+    func read(into buffer: UnsafeMutableRawPointer, frames: UInt32) throws -> UInt32 {
+        precondition(bytesPerFrame > 0, "setOutputFormat must be called before read")
+        var frames = frames
+        var list = AudioBufferList(
+            mNumberBuffers: 1,
+            mBuffers: AudioBuffer(
+                mNumberChannels: fileFormat.mChannelsPerFrame,
+                mDataByteSize: frames * bytesPerFrame, mData: buffer))
+        try throwIfError("ExtAudioFileRead", ExtAudioFileRead(file, &frames, &list))
+        return frames
+    }
+}

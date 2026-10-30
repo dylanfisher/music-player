@@ -53,6 +53,13 @@ public struct AudioDevice: Sendable {
         }
     }
 
+    /// The device macOS sends sound to by default (System Settings → Sound → Output).
+    public static func defaultOutputID() throws -> AudioObjectID {
+        try readScalar(
+            AudioObjectID(kAudioObjectSystemObject),
+            address(kAudioHardwarePropertyDefaultOutputDevice))
+    }
+
     private init(id: AudioObjectID, streamIDs: [AudioStreamID]) throws {
         let rates: [AudioValueRange] = try readArray(
             id, address(kAudioDevicePropertyAvailableNominalSampleRates))
@@ -72,11 +79,7 @@ public struct AudioDevice: Sendable {
                     stream, address(kAudioStreamPropertyAvailablePhysicalFormats))
                 return Stream(
                     id: stream,
-                    current: PhysicalFormat(
-                        AudioStreamRangedDescription(
-                            mFormat: current,
-                            mSampleRateRange: AudioValueRange(
-                                mMinimum: current.mSampleRate, mMaximum: current.mSampleRate))),
+                    current: PhysicalFormat(current),
                     available: available.map(PhysicalFormat.init)
                 )
             },

@@ -18,19 +18,42 @@ let package = Package(
             cSettings: strictC
         ),
         .target(
+            name: "HALRender",
+            dependencies: ["RingBuffer"],
+            path: "Sources/Core/HALRender",
+            cSettings: strictC
+        ),
+        .target(
             name: "HALOutput",
+            dependencies: ["HALRender"],
             path: "Sources/Core/HALOutput",
+            swiftSettings: strictSwift
+        ),
+        .target(
+            name: "Playback",
+            dependencies: ["HALOutput", "RingBuffer"],
+            path: "Sources/Core/Playback",
             swiftSettings: strictSwift
         ),
         .executableTarget(
             name: "MusicPlayer",
-            dependencies: ["HALOutput"],
+            dependencies: ["HALOutput", "Playback"],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
         ),
         .testTarget(
             name: "HALOutputTests",
             dependencies: ["HALOutput"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "HALRenderTests",
+            dependencies: ["HALRender", "RingBuffer"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "PlaybackTests",
+            dependencies: ["Playback"],
             swiftSettings: strictSwift
         ),
         .testTarget(

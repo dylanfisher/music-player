@@ -10,6 +10,20 @@ public struct HALError: Error, CustomStringConvertible {
     }
 }
 
+/// A failed CoreAudio call that isn't a property read or write.
+public struct OSStatusError: Error, CustomStringConvertible {
+    public var operation: String
+    public var status: OSStatus
+
+    public var description: String {
+        "\(operation) failed: '\(fourCharCode(UInt32(bitPattern: status)))' (\(status))"
+    }
+}
+
+public func throwIfError(_ operation: String, _ status: OSStatus) throws {
+    guard status == noErr else { throw OSStatusError(operation: operation, status: status) }
+}
+
 /// Renders a CoreAudio four-character code such as `'lpcm'`. Codes with non-printable bytes,
 /// which most plain OSStatus values have, come back as hex.
 public func fourCharCode(_ code: UInt32) -> String {
@@ -51,6 +65,17 @@ func readArray<T>(_ object: AudioObjectID, _ address: AudioObjectPropertyAddress
         guard status == noErr else { throw HALError(selector: address.mSelector, status: status) }
         initialized = Int(size) / MemoryLayout<T>.stride
     }
+}
+
+func writeScalar<T>(_ object: AudioObjectID, _ address: AudioObjectPropertyAddress, _ value: T)
+    throws
+{
+    var address = address
+    let status = withUnsafeBytes(of: value) { bytes in
+        AudioObjectSetPropertyData(
+            object, &address, 0, nil, UInt32(bytes.count), bytes.baseAddress!)
+    }
+    guard status == noErr else { throw HALError(selector: address.mSelector, status: status) }
 }
 
 func readString(_ object: AudioObjectID, _ address: AudioObjectPropertyAddress) throws -> String {
