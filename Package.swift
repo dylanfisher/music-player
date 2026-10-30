@@ -17,9 +17,20 @@ let package = Package(
             path: "Sources/Primitives/RingBuffer",
             cSettings: strictC
         ),
+        .target(
+            name: "HALOutput",
+            path: "Sources/Core/HALOutput",
+            swiftSettings: strictSwift
+        ),
         .executableTarget(
             name: "MusicPlayer",
+            dependencies: ["HALOutput"],
             path: "Sources/App/MusicPlayer",
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "HALOutputTests",
+            dependencies: ["HALOutput"],
             swiftSettings: strictSwift
         ),
         .testTarget(
