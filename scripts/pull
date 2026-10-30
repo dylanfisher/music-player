@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Runs on the Mac the DAC is attached to, not on the build Mac. Builds the build Mac's current
+# working tree, copies the .app here, and runs it with its logs in this terminal. Extra args go
+# to the app:
+#   pull                  # build, copy, launch
+#   pull --list-devices   # build, copy, print the device probe
+#
+# Needs Remote Login on the build Mac and an SSH key from this Mac. Set MUSIC_PLAYER_BUILD_HOST
+# to build somewhere else.
+set -euo pipefail
+
+host="${MUSIC_PLAYER_BUILD_HOST:-dylanfisher@Dylans-MacBook-Pro.local}"
+dest="$HOME/Applications"
+
+# Build output goes to stderr, so only the .app path comes back on stdout.
+app=$(ssh "$host" 'cd projects/music-player && ./scripts/bundle release')
+
+mkdir -p "$dest"
+# rsync doesn't set the quarantine flag, so Gatekeeper leaves the ad-hoc-signed app alone.
+rsync -a --delete "$host:$app" "$dest/"
+
+exec "$dest/MusicPlayer.app/Contents/MacOS/MusicPlayer" "$@"
