@@ -16,7 +16,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 | Run the app | `./scripts/dev` |
 | Run tests | `./scripts/test` |
 | Build the `.app` | `./scripts/bundle [debug\|release]` |
-| Build and run on another Mac (run it on that Mac) | `scripts/pull [app args]` |
+| Update a second Mac's clone, then run the app | `./scripts/pull` |
 | Everything CI runs | `./scripts/check` |
 
 `./scripts/check` runs every step even after one fails, so one run lists every problem.
