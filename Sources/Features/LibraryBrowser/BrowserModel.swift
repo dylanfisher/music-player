@@ -49,6 +49,12 @@ public final class BrowserModel {
     private var names: (applied: Int, list: [TrackName])?
     /// The sources the sidebar showed, for Back and Forward.
     public private(set) var history = SourceHistory()
+    /// The source a change not yet applied visits, so History records only sources that showed.
+    private var pendingVisit: BrowserSource?? = .none
+    /// The sort the table had before a source with its own sort replaced it, to go back to.
+    private var sortBeforeDefault: (column: TrackColumn, ascending: Bool)?
+    /// Entries of the shown manual playlist with no track in the library, which it can't list.
+    public private(set) var missingTracks = 0
 
     public init(reader: LibraryReader, sortColumn: TrackColumn, ascending: Bool) {
         self.reader = reader
@@ -70,13 +76,14 @@ public final class BrowserModel {
         var saved = saved
         do {
             playlists = try await reader.playlists()
+            if case .playlist(let id) = saved.source, !playlists.contains(where: { $0.id == id }) {
+                logger.notice("the saved playlist \(id) is gone; showing the library")
+                saved.source = nil
+            }
         } catch {
+            // The saved source stays: a playlist that couldn't be listed may still be there.
             logger.error("couldn't read the playlists: \(error)")
             failed("couldn't read the playlists: \(error)")
-        }
-        if case .playlist(let id) = saved.source, !playlists.contains(where: { $0.id == id }) {
-            logger.notice("the saved playlist \(id) is gone; showing the library")
-            saved.source = nil
         }
         history = SourceHistory(start: saved.source)
         pending = TrackFilter(source: saved.source, search: pending.search)
@@ -97,13 +104,13 @@ public final class BrowserModel {
     /// Shows a watched folder, a playlist or History, or the whole library for nil, as a step
     /// Back can undo.
     public func setSource(_ source: BrowserSource?) async {
-        history.visit(source)
-        if let sort = defaultSort(source) { pendingSort = sort }
+        pendingVisit = .some(source)
         await showSource(source)
     }
 
     /// A manual playlist opens in its own order, and History with the latest play first. Other
-    /// sources keep the sort the table has.
+    /// sources keep the sort the table has, and leaving one of those two puts back the sort it
+    /// replaced, unless the user chose another meanwhile.
     func defaultSort(_ source: BrowserSource?) -> (column: TrackColumn, ascending: Bool)? {
         switch source {
         case .playlist(let id):
@@ -129,7 +136,12 @@ public final class BrowserModel {
     /// Reads the playlists again. If the one shown has gone, the library is shown.
     public func reloadPlaylists() async throws {
         playlists = try await reader.playlists()
-        if case .playlist(let id) = pending.source, !playlists.contains(where: { $0.id == id }) {
+        let ids = Set(playlists.map(\.id))
+        history.remove { source in
+            if case .playlist(let id) = source { return !ids.contains(id) }
+            return false
+        }
+        if case .playlist(let id) = pending.source, !ids.contains(id) {
             await setSource(nil)
         }
     }
@@ -228,8 +240,26 @@ public final class BrowserModel {
     }
 
     private func showSource(_ source: BrowserSource?) async {
+        changeSort(from: pending.source, to: source)
         pending.source = source
         await reload(panesFrom: .genre, reason: .user)
+    }
+
+    private func changeSort(from old: BrowserSource?, to new: BrowserSource?) {
+        let leaving = defaultSort(old)
+        if let leaving {
+            if pendingSort == leaving, let sortBeforeDefault { pendingSort = sortBeforeDefault }
+            sortBeforeDefault = nil
+        }
+        if let entering = defaultSort(new) {
+            if sortBeforeDefault == nil { sortBeforeDefault = pendingSort }
+            pendingSort = entering
+        } else if pendingSort.column == .playlistOrder {
+            // Playlist order means nothing here, as after the shown playlist was deleted.
+            let table = AppState().trackTable.defaultValue
+            pendingSort = sortBeforeDefault ?? (table.sortColumn, table.sortAscending)
+            sortBeforeDefault = nil
+        }
     }
 
     /// Sorts by `column`, ascending, unless the table already sorts by it.
@@ -246,7 +276,8 @@ public final class BrowserModel {
     /// Nil when the library has no such track.
     public func reveal(_ id: Int64) async -> Int? {
         if let row = trackIDs.firstIndex(of: id) { return row }
-        history.visit(nil)
+        pendingVisit = .some(nil)
+        changeSort(from: pending.source, to: nil)
         pending = TrackFilter()
         await reload(panesFrom: .genre, reason: .user)
         return trackIDs.firstIndex(of: id)
@@ -255,7 +286,8 @@ public final class BrowserModel {
     /// Shows the whole library narrowed to one genre, artist or album, as the palette chooses
     /// one: the other panes are All and the search is cleared.
     public func showOnly(_ pane: Pane, id: Int64) async {
-        history.visit(nil)
+        pendingVisit = .some(nil)
+        changeSort(from: pending.source, to: nil)
         pending = TrackFilter()
         switch pane {
         case .genre: pending.genre = id
@@ -377,7 +409,16 @@ public final class BrowserModel {
             }
             let ids = try await reader.trackIDs(
                 next, sortedBy: sort.column, ascending: sort.ascending)
+            var missing = 0
+            if case .playlist(let id) = next.source,
+                playlists.first(where: { $0.id == id })?.isManual == true
+            {
+                missing = try await reader.missingEntryCount(id)
+            }
             guard mine == generation else { return }
+            if case .some(let source) = pendingVisit { history.visit(source) }
+            pendingVisit = .none
+            missingTracks = missing
             let previousIDs = trackIDs
             filter = next
             pending = next
@@ -398,6 +439,7 @@ public final class BrowserModel {
             pendingSort = (sortColumn, ascending)
             pendingPanes = nil
             pendingSaved = nil
+            pendingVisit = .none
             logger.error("a library query failed: \(error)")
             failed("\(error)")
         }
@@ -443,6 +485,19 @@ public struct SourceHistory: Equatable, Sendable {
         guard source != visited[position] else { return }
         visited = Array(visited[...position]) + [source]
         position += 1
+    }
+
+    /// Forgets the sources `gone` picks, such as deleted playlists, and the repeats that
+    /// leaves, keeping the place at the nearest source before it that stays.
+    mutating func remove(_ gone: (BrowserSource?) -> Bool) {
+        var kept: [BrowserSource?] = []
+        var place = 0
+        for (index, source) in visited.enumerated() where !gone(source) {
+            if kept.last != .some(source) { kept.append(source) }
+            if index <= position { place = kept.count - 1 }
+        }
+        visited = kept.isEmpty ? [nil] : kept
+        position = place
     }
 
     /// The source to show, or nil at the start.

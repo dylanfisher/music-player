@@ -1,8 +1,9 @@
 import Foundation
-import Library
+import SQLite
 import Settings
 import Testing
 
+@testable import Library
 @testable import LibraryBrowser
 
 /// A model over a copy of the shared browser library, which these tests write playlists and
@@ -76,9 +77,9 @@ private func writableModel(
     try await model.recordPlay(paths[0], at: 300)
     #expect(model.trackIDs == [first, second])
 
-    // A folder keeps the sort it finds.
+    // Leaving History puts back the sort it replaced.
     await model.setSource(.folder("/"))
-    #expect(model.sortColumn == .lastPlayed)
+    #expect(model.sortColumn == .artist && model.ascending)
 }
 
 @MainActor @Test func aSmartPlaylistFollowsRatingsAndItsRules() async throws {
@@ -117,4 +118,65 @@ private func writableModel(
         BrowserState(source: .playlist(999), genre: nil, artist: nil, album: nil))
     #expect(model.filter.source == nil)
     #expect(model.trackIDs.count == (try index.trackCount()))
+}
+
+@MainActor @Test func leavingAManualPlaylistPutsBackTheSortItReplaced() async throws {
+    let (model, _) = try await writableModel()
+    await model.setSort(.title, ascending: false)
+    try await model.createPlaylist(named: "Mix", rules: nil, rows: [0, 1])
+    let mix = try #require(model.shownPlaylist?.id)
+    #expect(model.sortColumn == .playlistOrder)
+    await model.setSource(nil)
+    #expect(model.sortColumn == .title && !model.ascending)
+
+    // A sort chosen inside the playlist stays when leaving it.
+    await model.setSource(.playlist(mix))
+    await model.setSort(.year, ascending: true)
+    await model.setSource(.folder("/"))
+    #expect(model.sortColumn == .year)
+
+    // Deleting the shown playlist leaves no playlist order behind.
+    await model.setSource(.playlist(mix))
+    try await model.deletePlaylist(mix)
+    #expect(model.filter.source == nil)
+    #expect(model.sortColumn == .year)
+}
+
+@MainActor @Test func aSourceThatFailsIsntVisitedOrShown() async throws {
+    let (model, index) = try await writableModel()
+    try await model.createPlaylist(named: "Broken", rules: SmartRules(match: .all, rules: []))
+    let broken = try #require(model.shownPlaylist?.id)
+    await model.setSource(nil)
+    try index.database.prepare("UPDATE playlists SET rules = '{}' WHERE id = ?").run(broken)
+    try await model.reloadPlaylists()
+    var failures: [String] = []
+    model.failed = { failures.append($0) }
+    let before = model.history
+    await model.setSource(.playlist(broken))
+    #expect(model.filter.source == nil)
+    #expect(model.history == before)
+    #expect(failures.count == 1)
+}
+
+@MainActor @Test func aDeletedPlaylistLeavesHistory() async throws {
+    let (model, _) = try await writableModel()
+    try await model.createPlaylist(named: "Gone", rules: nil, rows: [0])
+    let gone = try #require(model.shownPlaylist?.id)
+    await model.setSource(.history)
+    try await model.deletePlaylist(gone)
+    // Back goes past where the playlist was, straight to the library.
+    #expect(await model.back())
+    #expect(model.filter.source == nil)
+    #expect(!model.history.canGoBack)
+}
+
+@MainActor @Test func aManualPlaylistCountsTracksNotInTheLibrary() async throws {
+    let (model, index) = try await writableModel()
+    try await model.createPlaylist(named: "Mix", rules: nil, rows: [0])
+    let mix = try #require(model.shownPlaylist?.id)
+    _ = try index.addToPlaylist(mix, paths: ["/gone/a.flac"])
+    await model.refresh()
+    #expect(model.missingTracks == 1)
+    await model.setSource(nil)
+    #expect(model.missingTracks == 0)
 }

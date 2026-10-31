@@ -7,6 +7,7 @@ import Testing
 @Test func statusShowsTracksScansAndProblems() {
     var status = LibraryStatus()
     #expect(status.text(trackCount: 1) == "1 track")
+    #expect(status.text(trackCount: 3, missingCount: 2) == "3 tracks · 2 tracks not in the library")
     var progress = ScanProgress()
     progress.found = 40
     status.apply(.scanning(folder: "/Volumes/music/library", progress))

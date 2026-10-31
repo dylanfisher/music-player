@@ -92,7 +92,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             model: model, select: { pane, id in Task { await model.select(pane, id: id) } },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         sidebarController = SidebarController(
-            selectSource: { source in Task { await model.setSource(source) } },
+            // The sidebar shows the model's source after, which stays put when it fails.
+            selectSource: { source in
+                Task {
+                    await model.setSource(source)
+                    owner?.showSource()
+                }
+            },
             addFolder: { owner?.addFolder() },
             removeFolder: { path in owner?.removeFolder(path) },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
@@ -241,7 +247,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     private func showStatus() {
-        statusLabel.stringValue = status.text(trackCount: model.trackIDs.count)
+        statusLabel.stringValue = status.text(
+            trackCount: model.trackIDs.count, missingCount: model.missingTracks)
         statusLabel.toolTip = status.folderLines.joined(separator: "\n")
         problemsButton.isHidden = !status.hasProblems
     }

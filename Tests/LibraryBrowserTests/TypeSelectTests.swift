@@ -43,3 +43,14 @@ private final class Clock {
     #expect(!history.canGoForward)
     #expect(history.back() == .some(.folder("/a")))
 }
+
+@Test func forgettingASourceKeepsThePlaceAndDropsRepeats() {
+    var history = SourceHistory(start: nil)
+    history.visit(.playlist(1))
+    history.visit(nil)
+    history.visit(.playlist(2))
+    history.remove { $0 == .playlist(1) }
+    #expect(history.back() == .some(nil))
+    #expect(history.back() == nil)
+    #expect(history.forward() == .some(.playlist(2)))
+}

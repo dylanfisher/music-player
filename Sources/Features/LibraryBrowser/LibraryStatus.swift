@@ -37,8 +37,10 @@ public struct LibraryStatus: Equatable, Sendable {
     }
 
     /// "1,204 tracks · scanning Music: 300 of 1,200 read · 3 files and 1 folder with problems".
-    public func text(trackCount: Int) -> String {
+    /// `missingCount` is how many of a playlist's tracks aren't in the library.
+    public func text(trackCount: Int, missingCount: Int = 0) -> String {
         var parts = [count(trackCount, "track")]
+        if missingCount > 0 { parts.append(count(missingCount, "track") + " not in the library") }
         for (folder, progress) in scanning.sorted(by: { $0.key < $1.key }) {
             let name = (folder as NSString).lastPathComponent
             parts.append(
