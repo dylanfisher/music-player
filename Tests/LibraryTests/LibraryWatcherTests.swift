@@ -105,3 +105,23 @@ private final class LockedEvents: @unchecked Sendable {
         }
     }
 }
+
+@Test func aRescanOfEditedFoldersReachesANetworkFolder() async throws {
+    let library = try TestLibrary()
+    let network = WatchedFolder(path: library.root, kind: .network, pollIntervalMinutes: 60)
+    let watcher = LibraryWatcher(databaseURL: library.databaseURL, networkReaders: 4)
+    watcher.start(folders: [network], pausePollingDuringPlayback: true)
+    defer { watcher.stop() }
+
+    let index = try library.index()
+    #expect(try await eventually(within: 20) { try index.trackCount() == library.readableCount })
+    let file = library.manifest.files.first { $0.malformation == nil }!
+    let folder = (library.path(file) as NSString).deletingLastPathComponent
+    try FileManager.default.copyItem(atPath: library.path(file), toPath: folder + "/copied in.flac")
+    // No poll is due for an hour and FSEvents doesn't watch a network folder.
+    try await Task.sleep(nanoseconds: 3_000_000_000)
+    #expect(try index.trackCount() == library.readableCount)
+    watcher.rescan(directories: [folder])
+    #expect(
+        try await eventually(within: 20) { try index.trackCount() == library.readableCount + 1 })
+}
