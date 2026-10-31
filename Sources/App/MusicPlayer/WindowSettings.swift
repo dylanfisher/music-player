@@ -15,7 +15,7 @@ struct WindowSettings {
     var browser: BrowserState
     var folders: [WatchedFolder]
 
-    init(_ settings: SettingsStore<AppSettings>, state: SettingsStore<AppState>) {
+    @MainActor init(_ settings: ConfigStore<AppSettings>, state: StateStore<AppState>) {
         frame = state[\.windowFrame]
         sidebarWidth = state[\.sidebarWidth]
         browserHeight = state[\.browserHeight]

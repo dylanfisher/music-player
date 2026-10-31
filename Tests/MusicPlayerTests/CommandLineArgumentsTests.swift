@@ -12,6 +12,10 @@ import Testing
 @Test func unknownOptionsFailLoudly() {
     #expect(argumentProblem(["--scna", "/m"]) == "--scna isn't an option")
     #expect(argumentProblem(["--settings", "/s.json", "--measure-window"]) == nil)
+    #expect(argumentProblem(["--home", "/tmp/h", "--scan", "/m"]) == nil)
+    #expect(argumentProblem(["--home"]) == "--home needs a folder")
+    #expect(
+        argumentProblem(["--export-settings", "/x.json"]) == "--export-settings isn't an option")
     // macOS adds single-dash arguments of its own when it launches an app.
     #expect(argumentProblem(["-NSDocumentRevisionsDebugMode", "YES"]) == nil)
 }

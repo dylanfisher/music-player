@@ -13,6 +13,7 @@ let eraseLine = "\r\u{1B}[K"
 /// measures a rescan with no changes. `readers` fixes how many files a network scan reads at
 /// once, instead of tuning it. `hints` picks the caching hints each read gives the volume, so
 /// they can be compared on a NAS.
+@MainActor
 func scanCommand(folder: String, databasePath: String?, readers: Int?, hints: ReadHints) throws {
     let path = URL(fileURLWithPath: folder).standardizedFileURL.path
     // Unknown only when the folder is missing.
@@ -24,10 +25,10 @@ func scanCommand(folder: String, databasePath: String?, readers: Int?, hints: Re
     } else {
         // The app removes files outside its watched folders at launch, so a scan into its own
         // index of anything else would be undone.
-        let settingsURL = try settingsFileURL()
-        let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
+        let paths = try appPaths()
+        let settings = try readConfig(paths)
         try requireWatched(path, in: settings[\.watchedFolders])
-        databaseURL = defaultLibraryFileURL(settingsFileURL: settingsURL)
+        databaseURL = libraryFileURL(in: paths.dataDirectory)
     }
     if readers != nil, isLocal == nil {
         FileHandle.standardError.write(Data("error: \(path) doesn't exist\n".utf8))

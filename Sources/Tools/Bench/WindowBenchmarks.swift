@@ -85,7 +85,7 @@ private let windowRunCount = 3
 private let windowRunTimeoutSeconds = 300.0
 
 /// The app launched `windowRunCount` times against the fixture library, already indexed, each
-/// run in a fresh settings directory holding a copy of the index.
+/// run in a fresh home folder holding a copy of the index.
 private let windowRuns = Result { () throws -> [WindowReport] in
     let library = try scannedLibrary.get()
     let app = try appExecutable()
@@ -93,22 +93,26 @@ private let windowRuns = Result { () throws -> [WindowReport] in
         try withScratchDirectory("window") { directory in
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true)
-            let settingsURL = directory.appendingPathComponent("settings.json")
-            let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
-            try settings.set(\.watchedFolders, to: [library.folder])
+            let paths = AppPaths(home: directory)
+            try MainActor.assumeIsolated {
+                // No shortcuts are set, so none is checked.
+                let settings = ConfigStore(
+                    AppSettings(), fileURL: paths.configFile, check: { _, _, _ in nil },
+                    creating: true)
+                try settings.set(\.watchedFolders, to: [library.folder])
+            }
             try FileManager.default.copyItem(
-                at: library.databaseURL,
-                to: defaultLibraryFileURL(settingsFileURL: settingsURL))
-            return try measureWindow(app, settingsURL: settingsURL)
+                at: library.databaseURL, to: libraryFileURL(in: paths.dataDirectory))
+            return try measureWindow(app, home: directory)
         }
     }
 }
 
 /// Runs the app with `--measure-window` and reads the JSON line it prints.
-private func measureWindow(_ app: URL, settingsURL: URL) throws -> WindowReport {
+private func measureWindow(_ app: URL, home: URL) throws -> WindowReport {
     let process = Process()
     process.executableURL = app
-    process.arguments = ["--settings", settingsURL.path, "--measure-window"]
+    process.arguments = ["--home", home.path, "--measure-window"]
     let output = Pipe()
     process.standardOutput = output
     let finished = DispatchSemaphore(value: 0)

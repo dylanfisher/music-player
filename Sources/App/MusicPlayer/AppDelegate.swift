@@ -10,6 +10,7 @@ import NowPlaying
 import Playback
 import QueueView
 import Settings
+import SettingsWindow
 
 private let logger = moduleLogger()
 
@@ -21,19 +22,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let artPixels = Int(NowPlayingBar.artPoints) * 2
     static let artCacheImages = 64
 
-    private let settingsURL: URL
+    private let paths: AppPaths
     private let measuring: Bool
     private let snapshotURL: URL?
     /// How long after the first rows the snapshot waits, for the scan and art to show.
     static let snapshotDelaySeconds = 4.0
-    private var settings: SettingsStore<AppSettings>?
+    private(set) var settings: ConfigStore<AppSettings>?
+    let banner = ConfigBanner()
     private(set) var saver: LayoutSaver?
     private(set) var window: MainWindow?
     private(set) var browser: LibraryBrowser?
     private var nowPlaying: NowPlayingBar?
     private(set) var queue: QueuePanel?
     private var watcher: LibraryWatcher?
-    private var output: DeviceOutput?
+    private(set) var output: DeviceOutput?
     private(set) var engine: PlaybackEngine?
     private var activity = PlaybackActivity.stopped
     /// The engine's latest state, for the menus' check marks.
@@ -42,23 +44,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var digitalVolume = false
     /// The digital volume, in dB below full.
     var volumeDecibels = 0.0
-    private var dispatcher: CommandDispatcher?
+    /// The output settings changed while playing; the output reopens once playback stops.
+    var outputChanged = false
+    private var playbackUpdates: Task<Void, Never>?
+    private(set) var dispatcher: CommandDispatcher?
     private var menu: MainMenu?
     private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
     /// `snapshotURL` gets a PNG of the window a few seconds after that.
-    init(settingsURL: URL, measuring: Bool, snapshotURL: URL?) {
-        self.settingsURL = settingsURL
+    init(paths: AppPaths, measuring: Bool, snapshotURL: URL?) {
+        self.paths = paths
         self.measuring = measuring
         self.snapshotURL = snapshotURL
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
-            let dispatcher = CommandDispatcher(
-                bindings: try KeyBindings(
-                    AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: appName)))
+            let settings = ConfigStore(
+                AppSettings(), fileURL: paths.configFile, check: try shortcutCheck(),
+                creating: true)
+            self.settings = settings
+            applyAppearance(settings[\.appearance])
+            let dispatcher = CommandDispatcher(bindings: try keyBindings(settings.shortcuts))
             let menu = MainMenu(dispatcher: dispatcher, appName: appName, settings: AppSettings())
             dispatcher.bindingsChanged = { [weak menu] in menu?.showChords() }
             NSApp.mainMenu = menu.bar
@@ -66,8 +74,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.helpMenu = menu.helpMenu
             self.dispatcher = dispatcher
             self.menu = menu
-            try openWindow()
+            try openWindow(settings)
             registerCommands(dispatcher)
+            registerSettingCommands(dispatcher)
+            settings.changed = { [weak self] keys in self?.settingsChanged(keys) }
+            settings.problemsChanged = { [weak self] in self?.showConfigProblems() }
+            banner.openConfigFile = { [weak dispatcher] in dispatcher?.run(.openConfigFile) }
+            showConfigProblems()
+            settings.startWatching()
         } catch {
             fail("The library couldn't open", error)
         }
@@ -78,15 +92,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         playback.currentIndex.map { playback.queue[$0].path }
     }
 
-    private func openWindow() throws {
-        let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
-        self.settings = settings
-        let state = try SettingsStore(
-            AppState(), fileURL: stateFileURL(settingsFileURL: settingsURL), mismatch: .discard)
+    private func openWindow(_ settings: ConfigStore<AppSettings>) throws {
+        let state = try StateStore(AppState(), fileURL: paths.stateFile)
         let saver = LayoutSaver(state)
         self.saver = saver
         let layout = WindowSettings(settings, state: state)
-        let databaseURL = defaultLibraryFileURL(settingsFileURL: settingsURL)
+        let databaseURL = libraryFileURL(in: paths.dataDirectory)
         // Rows for the table come from a connection of the main thread's own.
         let index = try LibraryIndex(at: databaseURL)
         let browser = LibraryBrowser(
@@ -97,7 +108,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
         let queue = QueuePanel(model: QueueModel(lookup: lookup))
         let window = MainWindow(
-            settings: layout, browser: browser, nowPlaying: nowPlaying, queue: queue, saver: saver)
+            settings: layout, banner: banner.view, browser: browser, nowPlaying: nowPlaying,
+            queue: queue, saver: saver)
         self.browser = browser
         self.nowPlaying = nowPlaying
         self.queue = queue
@@ -177,9 +189,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Playback
 
     /// Opens nothing yet: the device is held only once something plays.
-    private func startPlayback(_ settings: SettingsStore<AppSettings>) {
+    func startPlayback(_ settings: ConfigStore<AppSettings>) {
         do {
-            let recordURL = defaultRestoreRecordURL(settingsFileURL: settingsURL)
+            let recordURL = restoreRecordURL(in: paths.dataDirectory)
             if let recovered = try HALDeviceProvider.recoverAfterCrash(restoreRecordURL: recordURL)
             {
                 logger.notice("\(recovered)")
@@ -195,7 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.engine = engine
             nowPlaying?.connect(engine)
             queue?.connect(engine)
-            Task { [weak self] in
+            playbackUpdates = Task { [weak self] in
                 for await update in await engine.updates() {
                     self?.playback = update.state
                     self?.playbackChanged(update.state)
@@ -215,8 +227,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Opens the output again with the output settings as they are now. While something plays
+    /// or is paused, that waits until playback stops, so a settings change never cuts a track.
+    func reopenOutput() {
+        guard let settings, output != nil else { return }
+        guard playback.status == .stopped else {
+            outputChanged = true
+            logger.notice("the output settings changed; they apply once playback stops")
+            return
+        }
+        outputChanged = false
+        playbackUpdates?.cancel()
+        output?.close()
+        output = nil
+        engine = nil
+        playback = PlaybackState()
+        startPlayback(settings)
+    }
+
     /// Tells the watcher, so network rescans stay off the NAS while a track starts.
     private func playbackChanged(_ state: PlaybackState) {
+        if outputChanged, state.status == .stopped { reopenOutput() }
         let now = watcherActivity(state)
         guard now != activity, let settings else { return }
         activity = now
@@ -226,11 +257,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Watched folders
 
-    private func startWatching(_ folders: [WatchedFolder], _ settings: SettingsStore<AppSettings>) {
+    private func startWatching(_ folders: [WatchedFolder], _ settings: ConfigStore<AppSettings>) {
         watcher?.stop()
         guard let browser else { return }
         let watcher = LibraryWatcher(
-            databaseURL: defaultLibraryFileURL(settingsFileURL: settingsURL),
+            databaseURL: libraryFileURL(in: paths.dataDirectory),
             networkReaders: settings[\.networkScanReaders], events: browser.watcherEvents)
         let pause = settings[\.pausePollingDuringPlayback]
         watcher.start(folders: folders, pausePollingDuringPlayback: pause)
@@ -253,7 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func watch(_ url: URL, _ settings: SettingsStore<AppSettings>) {
+    private func watch(_ url: URL, _ settings: ConfigStore<AppSettings>) {
         let path = url.standardizedFileURL.path
         var folders = settings[\.watchedFolders]
         guard !folders.contains(where: { $0.path == path }) else { return }
@@ -264,9 +295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try settings.set(\.watchedFolders, to: folders)
         } catch {
             fail("Couldn't add \(path)", error)
-            return
         }
-        changedFolders(folders, settings)
     }
 
     private func confirmRemoving(_ path: String) {
@@ -285,21 +314,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try settings.set(\.watchedFolders, to: folders)
             } catch {
                 self?.fail("Couldn't remove \(path)", error)
-                return
             }
-            self?.changedFolders(folders, settings)
         }
     }
 
-    private func changedFolders(_ folders: [WatchedFolder], _ settings: SettingsStore<AppSettings>)
-    {
+    func changedFolders(_ folders: [WatchedFolder], _ settings: ConfigStore<AppSettings>) {
         startWatching(folders, settings)
         if let browser { Task { await browser.setFolders(folders) } }
     }
 
     // MARK: Errors
 
-    private func fail(_ message: String, _ error: any Error) {
+    func fail(_ message: String, _ error: any Error) {
         logger.error("\(message): \(error)")
         let alert = NSAlert()
         alert.messageText = message

@@ -3,30 +3,40 @@ import Log
 
 private let logger = moduleLogger()
 
-/// `~/Library/Application Support/MusicPlayer/settings.json`.
-public func defaultSettingsFileURL() throws -> URL {
-    try FileManager.default.url(
-        for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false
-    ).appendingPathComponent("\(appDirectoryName)/settings.json")
+/// Where the app keeps its files: the config file, and the folder of the library database,
+/// the state file and the device record.
+public struct AppPaths: Sendable {
+    public var configFile: URL
+    public var dataDirectory: URL
+
+    public init(configFile: URL, dataDirectory: URL) {
+        self.configFile = configFile
+        self.dataDirectory = dataDirectory
+    }
+
+    /// Everything in one folder, for tests, Bench and runs that must not touch the real files.
+    public init(home: URL) {
+        self.init(configFile: home.appendingPathComponent("config.json"), dataDirectory: home)
+    }
+
+    /// `~/.config/music-player/config.json` and `~/Library/Application Support/MusicPlayer`.
+    public static func standard() throws -> AppPaths {
+        AppPaths(
+            configFile: defaultConfigFileURL(),
+            dataDirectory: try FileManager.default.url(
+                for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil,
+                create: false
+            ).appendingPathComponent(appDirectoryName))
+    }
+
+    public var stateFile: URL { dataDirectory.appendingPathComponent("state.json") }
 }
 
-/// `state.json` beside the settings file, in `~/Library/Application Support/MusicPlayer`.
-public func stateFileURL(settingsFileURL: URL) -> URL {
-    settingsFileURL.deletingLastPathComponent().appendingPathComponent("state.json")
-}
-
-/// What a store does with a file that doesn't match its schema.
-public enum MismatchPolicy: Sendable {
-    /// Throw, naming every bad key: the file holds choices the user made.
-    case fail
-    /// Log it and start from the defaults, which the next save writes over it: the file holds
-    /// only where the user left things, and stored data has one shape before release.
-    case discard
-}
-
-/// The settings in effect: the schema's defaults overridden by the values in a JSON file. The file
-/// holds only values that differ from their defaults. Safe to use from any thread.
-public final class SettingsStore<Schema: SettingsSchema>: @unchecked Sendable {
+/// App state in effect: the schema's defaults overridden by the values in a JSON file, which holds
+/// only values that differ from their defaults. A file that doesn't match the schema is logged and
+/// discarded whole, and the next save writes over it: it holds only where the user left things,
+/// and stored data has one shape before release. Safe to use from any thread.
+public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
     public let schema: Schema
     public let fileURL: URL
     private let descriptors: [SettingDescriptor]
@@ -34,9 +44,9 @@ public final class SettingsStore<Schema: SettingsSchema>: @unchecked Sendable {
     private let lock = NSLock()
     private var overrides: [String: any SettingValue]
 
-    /// Reads `fileURL`. A missing file means nothing has been changed; a file that doesn't match
-    /// the schema throws, naming every bad key, or is discarded, as `mismatch` says.
-    public init(_ schema: Schema, fileURL: URL, mismatch: MismatchPolicy = .fail) throws {
+    /// Reads `fileURL`. A missing file means nothing has been changed. Throws only when the file
+    /// is there but can't be read.
+    public init(_ schema: Schema, fileURL: URL) throws {
         self.schema = schema
         self.fileURL = fileURL
         descriptors = schema.settings
@@ -48,7 +58,7 @@ public final class SettingsStore<Schema: SettingsSchema>: @unchecked Sendable {
             data = try Data(contentsOf: fileURL)
         } catch CocoaError.fileReadNoSuchFile {
             overrides = [:]
-            logger.info("no settings file at \(fileURL.path), using defaults")
+            logger.info("no state file at \(fileURL.path), using defaults")
             return
         } catch {
             throw SettingsError.unreadable(path: fileURL.path, reason: "\(error)")
@@ -56,12 +66,11 @@ public final class SettingsStore<Schema: SettingsSchema>: @unchecked Sendable {
         do {
             overrides = try parse(data, path: fileURL.path, settings: byKey)
         } catch {
-            guard mismatch == .discard else { throw error }
             logger.error("discarded \(fileURL.path), which doesn't match this build: \(error)")
             overrides = [:]
             return
         }
-        logger.info("loaded \(self.overrides.count) changed settings from \(fileURL.path)")
+        logger.info("loaded \(self.overrides.count) saved values from \(fileURL.path)")
     }
 
     public subscript<Value>(_ setting: KeyPath<Schema, Setting<Value>>) -> Value {
@@ -77,39 +86,6 @@ public final class SettingsStore<Schema: SettingsSchema>: @unchecked Sendable {
                 path: nil, problems: [SettingProblem(key: setting.key, reason: reason)])
         }
         try update { $0[setting.key] = value }
-    }
-
-    /// Every setting with its current value, defaults included, as pretty-printed JSON.
-    public func exportJSON() throws -> Data {
-        let effective = lock.withLock { overrides }
-        return try serialize(
-            Dictionary(
-                uniqueKeysWithValues: try descriptors.map { descriptor in
-                    let value = effective[descriptor.key] ?? descriptor.defaultValue
-                    return (descriptor.key, try json(value))
-                }))
-    }
-
-    public func export(to url: URL) throws {
-        try exportJSON().write(to: url, options: .atomic)
-        logger.info("exported settings to \(url.path)")
-    }
-
-    /// Applies the values in `url` on top of the current ones, after validating the whole file the
-    /// way `init` does. Keys the file leaves out keep their values. Nothing changes if any key is
-    /// bad. Returns how many values the file held.
-    @discardableResult
-    public func importSettings(from url: URL) throws -> Int {
-        let data: Data
-        do {
-            data = try Data(contentsOf: url)
-        } catch {
-            throw SettingsError.unreadable(path: url.path, reason: "\(error)")
-        }
-        let imported = try parse(data, path: url.path, settings: byKey)
-        try update { $0.merge(imported) { _, new in new } }
-        logger.info("imported \(imported.count) settings from \(url.path)")
-        return imported.count
     }
 
     /// Changes a copy of the overrides, writes it, and only then makes it current, so a failed
@@ -128,7 +104,7 @@ public final class SettingsStore<Schema: SettingsSchema>: @unchecked Sendable {
 }
 
 /// Decodes and validates a settings file, collecting every bad key before throwing.
-private func parse(
+func parse(
     _ data: Data, path: String, settings byKey: [String: SettingDescriptor]
 ) throws -> [String: any SettingValue] {
     let object: Any

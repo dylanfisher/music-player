@@ -92,6 +92,8 @@ public struct SettingDescriptor: Sendable {
     public let title: String
     public let summary: String
     public let kind: SettingKind
+    /// Completes "expected …": "true or false".
+    public let typeName: String
     public let defaultValue: any SettingValue
     let decode: @Sendable (Any) -> Result<any SettingValue, SettingProblem.Reason>
 }
@@ -104,7 +106,8 @@ protocol DescribedSetting {
 extension Setting: DescribedSetting {
     var descriptor: SettingDescriptor {
         SettingDescriptor(
-            key: key, title: title, summary: summary, kind: kind, defaultValue: defaultValue,
+            key: key, title: title, summary: summary, kind: kind, typeName: Value.typeName,
+            defaultValue: defaultValue,
             decode: { json in decode(json: json).map { $0 } })
     }
 }

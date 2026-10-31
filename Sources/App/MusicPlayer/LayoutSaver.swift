@@ -11,12 +11,12 @@ final class LayoutSaver {
     /// How long after the last change the file is written.
     static let delaySeconds = 1.0
 
-    private let settings: SettingsStore<AppState>
+    private let settings: StateStore<AppState>
     /// The latest value of each changed setting, by key, as a write to run.
     private var pending: [String: () throws -> Void] = [:]
     private var scheduled = false
 
-    init(_ settings: SettingsStore<AppState>) {
+    init(_ settings: StateStore<AppState>) {
         self.settings = settings
     }
 

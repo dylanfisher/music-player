@@ -5,9 +5,9 @@ import SQLite
 
 private let logger = moduleLogger()
 
-/// `library.sqlite` beside `settings.json`, in `~/Library/Application Support/MusicPlayer`.
-public func defaultLibraryFileURL(settingsFileURL: URL) -> URL {
-    settingsFileURL.deletingLastPathComponent().appendingPathComponent("library.sqlite")
+/// `library.sqlite` in the app's data folder, `~/Library/Application Support/MusicPlayer`.
+public func libraryFileURL(in dataDirectory: URL) -> URL {
+    dataDirectory.appendingPathComponent("library.sqlite")
 }
 
 /// The library database: what every scanned file holds, and the stats no scan can recreate.

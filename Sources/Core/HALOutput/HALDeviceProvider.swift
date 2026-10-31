@@ -201,9 +201,9 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
     }
 }
 
-/// `~/Library/Application Support/MusicPlayer/device-restore.json`, beside the settings file.
-public func defaultRestoreRecordURL(settingsFileURL: URL) -> URL {
-    settingsFileURL.deletingLastPathComponent().appendingPathComponent("device-restore.json")
+/// `device-restore.json` in the app's data folder, `~/Library/Application Support/MusicPlayer`.
+public func restoreRecordURL(in dataDirectory: URL) -> URL {
+    dataDirectory.appendingPathComponent("device-restore.json")
 }
 
 /// The snapshots in the record file, one per device UID; none when there is no file.

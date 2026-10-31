@@ -35,11 +35,12 @@ private let keyHelp =
 /// bit-perfect, on the device from `--device` or Settings, with keyboard control. Restores the
 /// device, the default outputs and the terminal on q, Ctrl-C, SIGTERM, an error, or the end of the
 /// queue. Never returns.
+@MainActor
 func playCommand(paths: [String], deviceName: String?) throws -> Never {
     guard !paths.isEmpty else { throw PlayCommandError.nothingToPlay }
-    let settingsURL = try settingsFileURL()
-    let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
-    let recordURL = defaultRestoreRecordURL(settingsFileURL: settingsURL)
+    let appFiles = try appPaths()
+    let settings = try readConfig(appFiles)
+    let recordURL = restoreRecordURL(in: appFiles.dataDirectory)
     if let recovered = try HALDeviceProvider.recoverAfterCrash(restoreRecordURL: recordURL) {
         print(recovered)
     }

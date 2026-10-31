@@ -31,24 +31,29 @@ private func temporaryFile() -> URL {
         .appendingPathComponent("settings-\(UUID().uuidString)/settings.json")
 }
 
-private func store(_ json: String? = nil) throws -> SettingsStore<TestSchema> {
+private func store(_ json: String? = nil) throws -> StateStore<TestSchema> {
     let url = temporaryFile()
     if let json {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(json.utf8).write(to: url)
     }
-    return try SettingsStore(TestSchema(), fileURL: url)
+    return try StateStore(TestSchema(), fileURL: url)
 }
 
-private func fileContents(_ store: SettingsStore<TestSchema>) throws -> [String: Any] {
+private func fileContents(_ store: StateStore<TestSchema>) throws -> [String: Any] {
     try JSONSerialization.jsonObject(with: Data(contentsOf: store.fileURL)) as! [String: Any]
 }
 
-/// The problems a settings file is rejected with.
+/// The settings of `schema` by key, as `parse` takes them.
+func keyed(_ schema: some SettingsSchema) -> [String: SettingDescriptor] {
+    Dictionary(uniqueKeysWithValues: schema.settings.map { ($0.key, $0) })
+}
+
+/// The problems a file is rejected with.
 private func problems(_ json: String) -> [SettingProblem] {
     do {
-        _ = try store(json)
+        _ = try parse(Data(json.utf8), path: "test.json", settings: keyed(TestSchema()))
     } catch SettingsError.invalid(_, let problems) {
         return problems
     } catch {
@@ -90,7 +95,7 @@ private func problems(_ json: String) -> [SettingProblem] {
     try settings.set(\.tags, to: ["a", "b"])
     try settings.set(\.folders, to: [folder])
 
-    let reloaded = try SettingsStore(TestSchema(), fileURL: settings.fileURL)
+    let reloaded = try StateStore(TestSchema(), fileURL: settings.fileURL)
     #expect(reloaded[\.flag] == true)
     #expect(reloaded[\.gain] == 0.25)
     #expect(reloaded[\.name] == "Den")
@@ -126,8 +131,12 @@ private func problems(_ json: String) -> [SettingProblem] {
 }
 
 @Test func acceptsAnOptionalInsideItsRangeOrNull() throws {
-    #expect(try store(#"{"limit": 4}"#)[\.limit] == 4)
-    #expect(try store(#"{"limit": null}"#)[\.limit] == nil)
+    let limits = try parse(
+        Data(#"{"limit": 4}"#.utf8), path: "test.json", settings: keyed(TestSchema()))
+    #expect(limits["limit"] as? Int == 4)
+    let none = try parse(
+        Data(#"{"limit": null}"#.utf8), path: "test.json", settings: keyed(TestSchema()))
+    #expect(none.keys.contains("limit"))
 }
 
 @Test func namesTheBadFieldInsideAStructuredValue() throws {
@@ -156,20 +165,19 @@ private func problems(_ json: String) -> [SettingProblem] {
 }
 
 @Test func errorMessageNamesTheFileAndKey() throws {
-    let url = temporaryFile()
-    try FileManager.default.createDirectory(
-        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try Data(#"{"count": 0}"#.utf8).write(to: url)
     #expect {
-        try SettingsStore(TestSchema(), fileURL: url)
+        try parse(Data(#"{"count": 0}"#.utf8), path: "/x/state.json", settings: keyed(TestSchema()))
     } throws: { error in
-        "\(error)" == "\(url.path): \"count\": 0 is outside 1...10"
+        "\(error)" == "/x/state.json: \"count\": 0 is outside 1...10"
     }
 }
 
 @Test func rejectsFilesThatArentAnObject() {
-    #expect(throws: SettingsError.self) { try store("[1, 2]") }
-    #expect(throws: SettingsError.self) { try store("{") }
+    for json in ["[1, 2]", "{"] {
+        #expect(throws: SettingsError.self) {
+            try parse(Data(json.utf8), path: "test.json", settings: keyed(TestSchema()))
+        }
+    }
 }
 
 @Test func setValidatesAndLeavesTheFileAlone() throws {
@@ -178,47 +186,6 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(throws: SettingsError.self) { try settings.set(\.count, to: 0) }
     #expect(settings[\.count] == 3)
     #expect(try fileContents(settings)["count"] as? Int == 3)
-}
-
-@Test func exportHoldsEveryEffectiveValue() throws {
-    let settings = try store()
-    try settings.set(\.count, to: 8)
-    let exported =
-        try JSONSerialization.jsonObject(with: settings.exportJSON()) as! [String: Any]
-    #expect(exported.keys.sorted() == TestSchema().settings.map(\.key).sorted())
-    #expect(exported["count"] as? Int == 8)
-    #expect(exported["device"] as? String == "built-in")
-}
-
-@Test func importAppliesAFileOnTopOfTheCurrentValues() throws {
-    let source = try store()
-    try source.set(\.theme, to: .dark)
-    try source.set(\.tags, to: ["x"])
-    let exportURL = temporaryFile()
-    try FileManager.default.createDirectory(
-        at: exportURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try source.export(to: exportURL)
-
-    let target = try store()
-    try target.set(\.count, to: 9)
-    #expect(try target.importSettings(from: exportURL) == TestSchema().settings.count)
-    #expect(target[\.theme] == .dark)
-    #expect(target[\.tags] == ["x"])
-    // The export carries the defaults too, so it resets values it doesn't change.
-    #expect(target[\.count] == 5)
-    #expect(try fileContents(target).keys.sorted() == ["tags", "theme"])
-}
-
-@Test func importOfABadFileChangesNothing() throws {
-    let target = try store()
-    try target.set(\.count, to: 9)
-    let url = temporaryFile()
-    try FileManager.default.createDirectory(
-        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try Data(#"{"count": 2, "colour": "red"}"#.utf8).write(to: url)
-
-    #expect(throws: SettingsError.self) { try target.importSettings(from: url) }
-    #expect(target[\.count] == 9)
 }
 
 @Test func schemaListsSettingsInDeclarationOrder() {
@@ -242,7 +209,7 @@ private func problems(_ json: String) -> [SettingProblem] {
 @Test func appSettingsHaveUniqueKeysAndLoad() throws {
     let keys = AppSettings().settings.map(\.key)
     #expect(Set(keys).count == keys.count)
-    let settings = try SettingsStore(AppSettings(), fileURL: temporaryFile())
+    let settings = try StateStore(AppSettings(), fileURL: temporaryFile())
     #expect(settings[\.hogMode] == true)
     #expect(settings[\.outputDeviceUID] == nil)
     #expect(settings[\.digitalVolume] == false)
@@ -256,7 +223,7 @@ private func problems(_ json: String) -> [SettingProblem] {
 
 @Test func windowLayoutSurvivesAReloadAndRejectsBadValues() throws {
     let url = temporaryFile()
-    let settings = try SettingsStore(AppState(), fileURL: url, mismatch: .discard)
+    let settings = try StateStore(AppState(), fileURL: url)
     let layout = TrackTableLayout(
         columns: [
             ColumnLayout(column: .path, width: 300), ColumnLayout(column: .title, width: 90),
@@ -264,7 +231,7 @@ private func problems(_ json: String) -> [SettingProblem] {
         sortColumn: .dateAdded, sortAscending: false)
     try settings.set(\.trackTable, to: layout)
     try settings.set(\.windowFrame, to: WindowFrame(x: 10, y: 20, width: 800, height: 500))
-    let reloaded = try SettingsStore(AppState(), fileURL: url, mismatch: .discard)
+    let reloaded = try StateStore(AppState(), fileURL: url)
     #expect(reloaded[\.trackTable] == layout)
     #expect(reloaded[\.windowFrame] == WindowFrame(x: 10, y: 20, width: 800, height: 500))
 
@@ -293,7 +260,7 @@ private func problems(_ json: String) -> [SettingProblem] {
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(json.utf8).write(to: url)
         do {
-            _ = try SettingsStore(AppState(), fileURL: url)
+            _ = try parse(Data(contentsOf: url), path: url.path, settings: keyed(AppState()))
         } catch SettingsError.invalid(_, let problems) {
             return problems.map { "\($0.key) \($0.reason)" }.joined()
         }
@@ -325,7 +292,9 @@ private func problems(_ json: String) -> [SettingProblem] {
     try FileManager.default.createDirectory(
         at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data(#"{"window.sidebarWidth": 250, "window.old": 1}"#.utf8).write(to: url)
-    #expect(throws: SettingsError.self) { try SettingsStore(AppState(), fileURL: url) }
-    let state = try SettingsStore(AppState(), fileURL: url, mismatch: .discard)
+    #expect(throws: SettingsError.self) {
+        try parse(Data(contentsOf: url), path: url.path, settings: keyed(AppState()))
+    }
+    let state = try StateStore(AppState(), fileURL: url)
     #expect(state[\.sidebarWidth] == AppState().sidebarWidth.defaultValue)
 }

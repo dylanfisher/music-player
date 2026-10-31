@@ -13,15 +13,14 @@ let ioHintsChoices = ReadHints.allCases.map(\.rawValue).joined(separator: ", ")
 
 /// Each flag that takes a value, and what the value is.
 private let valueFlags = [
-    ("--export-settings", "a file"), ("--import-settings", "a file"),
     ("--play", "a file or folder"), ("--device", "part of a device name"),
     ("--scan", "a folder"), ("--db", "a database file"),
     ("--readers", "a number of files to read at once"), ("--scan-io-hints", ioHintsChoices),
-    ("--settings", "a settings file"), ("--snapshot", "a PNG file to write"),
+    ("--settings", "a config file"), ("--home", "a folder"), ("--snapshot", "a PNG file to write"),
 ]
 /// The command-line modes, which run and exit without the window.
 private let modeFlags = [
-    "--list-devices", "--export-settings", "--import-settings", "--scan", "--play",
+    "--list-devices", "--scan", "--play",
 ]
 /// Flags only the window uses.
 private let windowFlags = ["--measure-window", "--snapshot"]

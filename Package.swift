@@ -93,6 +93,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "SettingsWindow",
+            dependencies: ["Commands", "KeyChord", "Log", "Settings"],
+            path: "Sources/Features/SettingsWindow",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "NowPlaying",
             dependencies: ["Artwork", "DisplayText", "Library", "Log", "Playback"],
             path: "Sources/Features/NowPlaying",
@@ -109,7 +115,7 @@ let package = Package(
             dependencies: [
                 "Artwork", "Commands", "DisplayText", "HALOutput", "KeyChord", "Library",
                 "LibraryBrowser", "Log", "Metadata", "NowPlaying", "Playback", "QueueView",
-                "SQLite", "Settings",
+                "SQLite", "Settings", "SettingsWindow",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
@@ -129,8 +135,8 @@ let package = Package(
         .executableTarget(
             name: "Bench",
             dependencies: [
-                "DisplayText", "Fixtures", "HALOutput", "Library", "LibraryBrowser", "Metadata",
-                "Playback", "SQLite", "Settings",
+                "Commands", "DisplayText", "Fixtures", "HALOutput", "Library", "LibraryBrowser",
+                "Metadata", "Playback", "SQLite", "Settings",
             ],
             path: "Sources/Tools/Bench",
             swiftSettings: strictSwift
@@ -218,6 +224,11 @@ let package = Package(
         .testTarget(
             name: "SettingsTests",
             dependencies: ["Settings"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "SettingsWindowTests",
+            dependencies: ["Commands", "KeyChord", "Settings", "SettingsWindow"],
             swiftSettings: strictSwift
         ),
         .testTarget(

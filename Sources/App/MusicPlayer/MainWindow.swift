@@ -7,7 +7,8 @@ import Settings
 /// The app's name, as the window title and the app menu show it.
 let appName = ProcessInfo.processInfo.processName
 
-/// The main window: the now-playing bar and search field across the top, then the sidebar, the
+/// The main window: the config file's banner when it has a problem, the now-playing bar and
+/// search field across the top, then the sidebar, the
 /// browser and the queue side by side. It places the features' views and reports layout
 /// changes; it holds no logic of its own.
 @MainActor
@@ -25,8 +26,8 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
     private var restoring = true
 
     init(
-        settings: WindowSettings, browser: LibraryBrowser, nowPlaying: NowPlayingBar,
-        queue: QueuePanel, saver: LayoutSaver
+        settings: WindowSettings, banner: NSView, browser: LibraryBrowser,
+        nowPlaying: NowPlayingBar, queue: QueuePanel, saver: LayoutSaver
     ) {
         self.browser = browser
         self.queue = queue
@@ -65,10 +66,10 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
 
         let line = NSBox()
         line.boxType = .separator
-        let stack = NSStackView(views: [top, line, split])
+        let stack = NSStackView(views: [banner, top, line, split])
         stack.orientation = .vertical
         stack.spacing = 0
-        for view in [top, line, split] {
+        for view in [banner, top, line, split] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }

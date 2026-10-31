@@ -7,12 +7,13 @@ import Settings
 // Command-line modes, run from Terminal on the Mac the DAC is attached to:
 //   MusicPlayer --list-devices
 //   MusicPlayer --play <file or folder>... [--device <part of name>]
-//   MusicPlayer --export-settings <file>
-//   MusicPlayer --import-settings <file>
 //   MusicPlayer --scan <folder> [--db <file>] [--readers <n>] [--scan-io-hints none|rdahead|all]
 // and the window:
-//   MusicPlayer [--settings <file>] [--measure-window] [--snapshot <png file>]
-// --settings reads another settings file, and the library beside it, in every mode.
+//   MusicPlayer [--measure-window] [--snapshot <png file>]
+// and in every mode [--home <folder>] [--settings <file>]:
+// --home keeps the config file, library, state file and device record in one folder instead of
+// ~/.config/music-player and Application Support, for tests and runs on the build Mac.
+// --settings reads another config file.
 // --measure-window prints the launch time and memory as JSON and quits, for Bench.
 // --snapshot draws the window into a PNG a few seconds after its first rows, to check the layout.
 let arguments = CommandLine.arguments
@@ -61,27 +62,17 @@ let ioHints = value(after: "--scan-io-hints").map { text in
     return hints
 }
 
-/// The settings file from `--settings`, or the default one.
-func settingsFileURL() throws -> URL {
-    try value(after: "--settings").map(URL.init(fileURLWithPath:)) ?? defaultSettingsFileURL()
+/// The app's files: in `--home`'s folder or the standard places, with `--settings`'s config file.
+func appPaths() throws -> AppPaths {
+    var paths =
+        try value(after: "--home").map { AppPaths(home: URL(fileURLWithPath: $0)) }
+        ?? AppPaths.standard()
+    if let file = value(after: "--settings") { paths.configFile = URL(fileURLWithPath: file) }
+    return paths
 }
 
 if arguments.contains("--list-devices") {
     runAndExit { print(deviceReport(try AudioDevice.outputDevices())) }
-}
-if let path = value(after: "--export-settings") {
-    runAndExit {
-        let settings = try SettingsStore(AppSettings(), fileURL: try settingsFileURL())
-        try settings.export(to: URL(fileURLWithPath: path))
-        print("exported every setting to \(path)")
-    }
-}
-if let path = value(after: "--import-settings") {
-    runAndExit {
-        let settings = try SettingsStore(AppSettings(), fileURL: try settingsFileURL())
-        let count = try settings.importSettings(from: URL(fileURLWithPath: path))
-        print("imported \(count) settings into \(settings.fileURL.path)")
-    }
 }
 if let folder = value(after: "--scan") {
     runAndExit {
@@ -96,16 +87,16 @@ if arguments.contains("--play") {
     }
 }
 
-let launchSettingsURL: URL
+let launchPaths: AppPaths
 do {
-    launchSettingsURL = try settingsFileURL()
+    launchPaths = try appPaths()
 } catch {
     FileHandle.standardError.write(Data("error: \(error)\n".utf8))
     exit(1)
 }
 let app = NSApplication.shared
 let delegate = AppDelegate(
-    settingsURL: launchSettingsURL, measuring: arguments.contains("--measure-window"),
+    paths: launchPaths, measuring: arguments.contains("--measure-window"),
     snapshotURL: value(after: "--snapshot").map(URL.init(fileURLWithPath:)))
 app.delegate = delegate
 app.setActivationPolicy(.regular)
