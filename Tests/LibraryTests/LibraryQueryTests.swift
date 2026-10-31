@@ -65,7 +65,7 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
     let index = try library.index()
     let file = try #require(library.manifest.files.first { $0.malformation == nil })
     let folder = (library.path(file) as NSString).deletingLastPathComponent
-    let filter = TrackFilter(folder: folder)
+    let filter = TrackFilter(source: .folder(folder))
     let paths = Array(try index.paths(ids: try index.trackIDs(filter, sortedBy: .path)).values)
     #expect(!paths.isEmpty)
     #expect(paths.allSatisfy { $0.hasPrefix(folder + "/") })

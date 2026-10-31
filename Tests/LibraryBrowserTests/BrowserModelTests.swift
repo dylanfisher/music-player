@@ -115,11 +115,11 @@ private func loadedModel(
 @MainActor @Test func aWatchedFolderNarrowsEverything() async throws {
     let (model, index) = try await loadedModel()
     let row = try #require(try index.rows(ids: [model.trackIDs[0]]).first)
-    let folder = (row.path as NSString).deletingLastPathComponent
+    let folder = BrowserSource.folder((row.path as NSString).deletingLastPathComponent)
     await model.setSource(folder)
-    #expect(model.filter.folder == folder)
-    #expect(model.trackIDs == (try index.trackIDs(TrackFilter(folder: folder), sortedBy: .artist)))
-    #expect(model.genres == (try index.genres(TrackFilter(folder: folder))))
+    #expect(model.filter.source == folder)
+    #expect(model.trackIDs == (try index.trackIDs(TrackFilter(source: folder), sortedBy: .artist)))
+    #expect(model.genres == (try index.genres(TrackFilter(source: folder))))
     #expect(model.state.source == folder)
 }
 

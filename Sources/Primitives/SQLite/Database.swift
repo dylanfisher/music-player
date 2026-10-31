@@ -83,6 +83,9 @@ public final class Database {
         }
     }
 
+    /// How many rows the last INSERT, UPDATE or DELETE on this connection changed.
+    public var changes: Int { Int(sqlite3_changes(connection)) }
+
     /// The rowid of the last row inserted on this connection.
     public var lastInsertRowID: Int64 { sqlite3_last_insert_rowid(connection) }
 }

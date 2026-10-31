@@ -1,9 +1,11 @@
-/// What the library window narrows the tracks to: the sidebar's watched folder, the browser panes
-/// and the search field. Each pane query applies only the parts to its left, so the artist pane
-/// lists the selected genre's artists, and the album pane the albums of both.
+import Settings
+
+/// What the library window narrows the tracks to: the sidebar's source, the browser panes and the
+/// search field. Each pane query applies only the parts to its left, so the artist pane lists the
+/// selected genre's artists, and the album pane the albums of both.
 public struct TrackFilter: Equatable, Sendable {
-    /// A watched folder's path, or nil for the whole library.
-    public var folder: String?
+    /// A watched folder, a playlist or History, or nil for the whole library.
+    public var source: BrowserSource?
     public var genre: Int64?
     public var artist: Int64?
     public var album: Int64?
@@ -12,10 +14,10 @@ public struct TrackFilter: Equatable, Sendable {
     public var search: String
 
     public init(
-        folder: String? = nil, genre: Int64? = nil, artist: Int64? = nil, album: Int64? = nil,
-        search: String = ""
+        source: BrowserSource? = nil, genre: Int64? = nil, artist: Int64? = nil,
+        album: Int64? = nil, search: String = ""
     ) {
-        self.folder = folder
+        self.source = source
         self.genre = genre
         self.artist = artist
         self.album = album

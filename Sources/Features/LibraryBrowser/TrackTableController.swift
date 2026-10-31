@@ -179,7 +179,7 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
             as? NSTableCellView ?? makeCell(tableColumn.identifier, numeric: column.isNumeric)
-        cell.textField?.stringValue = (trackRow(row)).map(column.text) ?? ""
+        cell.textField?.stringValue = trackRow(row).map { column.text($0, position: row) } ?? ""
         if let firstRowsDrawn {
             self.firstRowsDrawn = nil
             // After this pass draws, so the measurement includes the first frame.

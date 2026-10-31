@@ -147,6 +147,10 @@ public struct Row {
         return sqlite3_column_double(statement, column)
     }
 
+    public func optionalDouble(_ column: Int32) -> Double? {
+        isNull(column) ? nil : sqlite3_column_double(statement, column)
+    }
+
     public func text(_ column: Int32) throws(SQLiteError) -> String {
         try notNull(column)
         return String(cString: sqlite3_column_text(statement, column))

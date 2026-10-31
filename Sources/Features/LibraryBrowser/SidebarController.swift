@@ -11,7 +11,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     private let library = SidebarNode(.library, title: "Music")
     private let groups: [SidebarNode]
     private let folderGroup = SidebarNode(.group, title: "Watched Folders")
-    private let selectSource: (String?) -> Void
+    private let selectSource: (BrowserSource?) -> Void
     private let addFolder: () -> Void
     private let removeFolder: (String) -> Void
     private let keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
@@ -21,7 +21,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     private var folders: [WatchedFolder] = []
 
     init(
-        selectSource: @escaping (String?) -> Void, addFolder: @escaping () -> Void,
+        selectSource: @escaping (BrowserSource?) -> Void, addFolder: @escaping () -> Void,
         removeFolder: @escaping (String) -> Void,
         keyCommand: @escaping ([KeyChord]) -> CommandDispatcher.KeyOutcome
     ) {
@@ -92,7 +92,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     }
 
     /// Lists `folders` and selects `source`, the library for nil.
-    func show(folders: [WatchedFolder], source: String?) {
+    func show(folders: [WatchedFolder], source: BrowserSource?) {
         self.folders = folders
         applying = true
         defer { applying = false }
@@ -105,14 +105,14 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.reloadData()
         for group in groups { outline.expandItem(group) }
         let selected =
-            source.flatMap { path in folderGroup.children.first { $0.kind == .folder(path) } }
+            source.flatMap { source in folderGroup.children.first { $0.source == source } }
             ?? library
         outline.selectRowIndexes([outline.row(forItem: selected)], byExtendingSelection: false)
         updateRemoveButton()
     }
 
     /// Selects `source` without reporting it, for Back and Forward.
-    func show(source: String?) { show(folders: folders, source: source) }
+    func show(source: BrowserSource?) { show(folders: folders, source: source) }
 
     /// The outline moves through its own rows, skipping the group headings; every other key
     /// goes through the registry.
@@ -206,7 +206,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         updateRemoveButton()
         guard !applying else { return }
         switch selectedNode?.kind {
-        case .folder(let path): selectSource(path)
+        case .folder(let path): selectSource(.folder(path))
         case .library: selectSource(nil)
         case .group, nil: break
         }
@@ -224,6 +224,14 @@ private final class SidebarNode {
     let title: String
     var toolTip: String?
     var children: [SidebarNode] = []
+
+    /// What selecting the row shows; nil for the library and the group headings.
+    var source: BrowserSource? {
+        switch kind {
+        case .folder(let path): .folder(path)
+        case .group, .library: nil
+        }
+    }
 
     init(_ kind: Kind, title: String) {
         self.kind = kind

@@ -2,5 +2,6 @@
 /// each sorts by, and LibraryBrowser its title.
 public enum TrackColumn: String, Codable, CaseIterable, Sendable {
     case title, artist, album, albumArtist, trackNumber, discNumber, year, genre, duration, codec,
-        sampleRate, bitDepth, dateAdded, path
+        sampleRate, bitDepth, dateAdded, path, playCount, skipCount, lastPlayed, rating,
+        playlistOrder
 }

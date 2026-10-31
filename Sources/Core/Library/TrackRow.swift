@@ -27,6 +27,12 @@ public struct TrackRow: Equatable, Sendable {
     /// When the scanner first indexed the file, in seconds since 1970.
     public var addedSeconds: Double
     public var art: EmbeddedArt?
+    public var playCount = 0
+    public var skipCount = 0
+    /// Seconds since 1970; nil when never played.
+    public var lastPlayedSeconds: Double? = nil
+    /// Stars, 0 to `SmartField.maxRating`; 0 is unrated.
+    public var rating = 0
 
     /// The year the date tag starts with, which is what the year column sorts by.
     public var year: Int? {

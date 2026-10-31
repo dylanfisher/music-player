@@ -156,3 +156,12 @@ private final class LockedFailures: @unchecked Sendable {
     func add(_ failure: String) { lock.withLock { failures.append(failure) } }
     var all: [String] { lock.withLock { failures } }
 }
+
+@Test func readsAnOptionalDoubleAndCountsChanges() throws {
+    let database = try temporaryDatabase()
+    try database.execute("CREATE TABLE t (r REAL)")
+    try database.execute("INSERT INTO t VALUES (2.5), (NULL), (1)")
+    #expect(try database.prepare("SELECT r FROM t").map { $0.optionalDouble(0) } == [2.5, nil, 1])
+    try database.execute("UPDATE t SET r = 0 WHERE r IS NOT NULL")
+    #expect(database.changes == 2)
+}

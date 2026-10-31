@@ -58,14 +58,14 @@ public final class BrowserModel {
     /// The selections the window saves, by name.
     public var state: BrowserState {
         BrowserState(
-            source: filter.folder, genre: name(filter.genre, in: genres),
+            source: filter.source, genre: name(filter.genre, in: genres),
             artist: name(filter.artist, in: artists), album: name(filter.album, in: albums))
     }
 
     /// Loads the panes and tracks, selecting what `saved` names where it still exists.
     public func load(_ saved: BrowserState) async {
         history = SourceHistory(start: saved.source)
-        pending = TrackFilter(folder: saved.source, search: pending.search)
+        pending = TrackFilter(source: saved.source, search: pending.search)
         await reload(panesFrom: .genre, saved: saved, reason: .loaded)
     }
 
@@ -80,10 +80,11 @@ public final class BrowserModel {
         await reload(panesFrom: Pane(rawValue: pane.rawValue + 1), reason: .user)
     }
 
-    /// Shows one watched folder, or the whole library for nil, as a step Back can undo.
-    public func setSource(_ folder: String?) async {
-        history.visit(folder)
-        await showSource(folder)
+    /// Shows a watched folder, a playlist or History, or the whole library for nil, as a step
+    /// Back can undo.
+    public func setSource(_ source: BrowserSource?) async {
+        history.visit(source)
+        await showSource(source)
     }
 
     /// Shows the source before the current one; false when there is none.
@@ -99,8 +100,8 @@ public final class BrowserModel {
         return true
     }
 
-    private func showSource(_ folder: String?) async {
-        pending.folder = folder
+    private func showSource(_ source: BrowserSource?) async {
+        pending.source = source
         await reload(panesFrom: .genre, reason: .user)
     }
 
@@ -299,10 +300,10 @@ public final class BrowserModel {
 /// The sources shown, oldest first, and where Back and Forward are in them. Nil is the whole
 /// library.
 public struct SourceHistory: Equatable, Sendable {
-    private(set) var visited: [String?]
+    private(set) var visited: [BrowserSource?]
     private(set) var position = 0
 
-    public init(start: String? = nil) {
+    public init(start: BrowserSource? = nil) {
         visited = [start]
     }
 
@@ -311,20 +312,20 @@ public struct SourceHistory: Equatable, Sendable {
 
     /// A new source drops the ones Forward would have gone to; the source already shown adds
     /// nothing.
-    mutating func visit(_ source: String?) {
+    mutating func visit(_ source: BrowserSource?) {
         guard source != visited[position] else { return }
         visited = Array(visited[...position]) + [source]
         position += 1
     }
 
     /// The source to show, or nil at the start.
-    mutating func back() -> String?? {
+    mutating func back() -> BrowserSource?? {
         guard canGoBack else { return nil }
         position -= 1
         return .some(visited[position])
     }
 
-    mutating func forward() -> String?? {
+    mutating func forward() -> BrowserSource?? {
         guard canGoForward else { return nil }
         position += 1
         return .some(visited[position])
@@ -348,15 +349,15 @@ public struct BrowserChange: Equatable, Sendable {
     public var previousIDs: [Int64]
 }
 
-/// The selections the window saves: the sidebar's watched folder, and each pane's entry by name,
-/// since IDs change when the index is rebuilt. Nil is the whole library, or All.
+/// The selections the window saves: the sidebar's source, and each pane's entry by name, since
+/// IDs change when the index is rebuilt. Nil is the whole library, or All.
 public struct BrowserState: Equatable, Sendable {
-    public var source: String?
+    public var source: BrowserSource?
     public var genre: String?
     public var artist: String?
     public var album: String?
 
-    public init(source: String?, genre: String?, artist: String?, album: String?) {
+    public init(source: BrowserSource?, genre: String?, artist: String?, album: String?) {
         self.source = source
         self.genre = genre
         self.artist = artist

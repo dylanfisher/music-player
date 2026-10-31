@@ -36,38 +36,47 @@ extension LibraryIndex {
         _ columns: String, _ filter: TrackFilter, _ column: TrackColumn, _ ascending: Bool,
         _ read: (Row) throws -> T
     ) throws -> [T] {
-        let (conditions, values) = trackConditions(
-            filter, panes: [.folder, .genre, .artist, .album, .search])
+        let (conditions, values) = try trackConditions(
+            filter, panes: [.source, .genre, .artist, .album, .search])
+        // Playlist order is the shown playlist's; anywhere else it's null, which leaves the
+        // album order below.
+        var entries = ""
+        var entryValues: [(any SQLiteValue)?] = []
+        if column == .playlistOrder {
+            entries = "LEFT JOIN playlist_entries pe ON pe.playlist_id = ? AND pe.path = f.path"
+            if case .playlist(let id) = filter.source {
+                entryValues = [id]
+            } else {
+                entryValues = [nil]
+            }
+        }
         let sql = """
             SELECT \(columns) FROM tracks t
-            JOIN files f ON f.id = t.file_id
-            LEFT JOIN artists ar ON ar.id = t.artist_id
-            LEFT JOIN artists aa ON aa.id = t.album_artist_id
-            LEFT JOIN albums al ON al.id = t.album_id
-            LEFT JOIN genres g ON g.id = t.genre_id
+            \(trackJoins)
+            \(entries)
             \(whereClause(conditions))
             ORDER BY \(column.expression) \(ascending ? "ASC" : "DESC"), ar.sort_name,
                 al.sort_title, t.disc_number, t.track_number, t.sort_title, t.file_id
             """
-        return try statement(sql).map(binding: values, row: read)
+        return try statement(sql).map(binding: entryValues + values, row: read)
     }
 
-    /// The genres of the tracks in `filter`'s folder.
+    /// The genres of the tracks in `filter`'s source.
     public func genres(_ filter: TrackFilter = TrackFilter()) throws -> [BrowserEntry] {
-        try pane("SELECT id, name FROM genres", "genre_id", "sort_name", filter, [.folder])
+        try pane("SELECT id, name FROM genres", "genre_id", "sort_name", filter, [.source])
     }
 
-    /// The artists of the tracks in `filter`'s folder and genre.
+    /// The artists of the tracks in `filter`'s source and genre.
     public func artists(_ filter: TrackFilter = TrackFilter()) throws -> [BrowserEntry] {
         try pane(
-            "SELECT id, name FROM artists", "artist_id", "sort_name", filter, [.folder, .genre])
+            "SELECT id, name FROM artists", "artist_id", "sort_name", filter, [.source, .genre])
     }
 
-    /// The albums of the tracks in `filter`'s folder, genre and artist.
+    /// The albums of the tracks in `filter`'s source, genre and artist.
     public func albums(_ filter: TrackFilter = TrackFilter()) throws -> [BrowserEntry] {
         try pane(
             "SELECT id, title, (SELECT name FROM artists WHERE id = albums.artist_id) FROM albums",
-            "album_id", "sort_title", filter, [.folder, .genre, .artist], row: albumEntry)
+            "album_id", "sort_title", filter, [.source, .genre, .artist], row: albumEntry)
     }
 
     /// The rows for `ids`, in the same order. An ID with no track, such as one a rescan just
@@ -131,9 +140,9 @@ extension LibraryIndex {
         _ rowSQL: String, _ column: String, _ order: String, _ filter: TrackFilter,
         _ panes: [FilterPart], row read: (Row) throws -> BrowserEntry = entry
     ) throws -> [BrowserEntry] {
-        let (conditions, values) = trackConditions(filter, panes: panes)
-        // Joined to files only when a folder needs it, since the join costs a lookup per track.
-        let files = filter.folder == nil ? "" : " JOIN files f ON f.id = t.file_id"
+        let (conditions, values) = try trackConditions(filter, panes: panes)
+        // Joined to files only when a source needs it, since the join costs a lookup per track.
+        let files = filter.source == nil ? "" : " JOIN files f ON f.id = t.file_id"
         let sql =
             "\(rowSQL) WHERE id IN (SELECT t.\(column) FROM tracks t\(files)"
             + "\(whereClause(conditions).isEmpty ? "" : " " + whereClause(conditions)))"
@@ -144,43 +153,68 @@ extension LibraryIndex {
 
 /// The parts of a `TrackFilter`, so each query names the ones it applies.
 private enum FilterPart {
-    case folder, genre, artist, album, search
+    case source, genre, artist, album, search
 }
 
-/// SQL conditions on tracks `t` and files `f` for the `panes` of `filter` that are set, and the
-/// values they bind, in order.
-private func trackConditions(_ filter: TrackFilter, panes: [FilterPart]) -> (
-    [String], [(any SQLiteValue)?]
-) {
-    var conditions: [String] = []
-    var values: [(any SQLiteValue)?] = []
-    for part in panes {
-        switch part {
-        case .folder:
-            guard let folder = filter.folder else { continue }
+extension LibraryIndex {
+    /// SQL conditions on tracks `t` and files `f` for the `panes` of `filter` that are set, and
+    /// the values they bind, in order.
+    fileprivate func trackConditions(_ filter: TrackFilter, panes: [FilterPart]) throws -> (
+        [String], [(any SQLiteValue)?]
+    ) {
+        var conditions: [String] = []
+        var values: [(any SQLiteValue)?] = []
+        for part in panes {
+            switch part {
+            case .source:
+                guard let source = filter.source else { continue }
+                let (condition, sourceValues) = try sourceCondition(source)
+                conditions.append(condition)
+                values += sourceValues
+            case .genre:
+                guard let genre = filter.genre else { continue }
+                conditions.append("t.genre_id = ?")
+                values.append(genre)
+            case .artist:
+                guard let artist = filter.artist else { continue }
+                conditions.append("t.artist_id = ?")
+                values.append(artist)
+            case .album:
+                guard let album = filter.album else { continue }
+                conditions.append("t.album_id = ?")
+                values.append(album)
+            case .search:
+                guard let search = ftsQuery(filter.search) else { continue }
+                conditions.append(
+                    "t.file_id IN (SELECT rowid FROM track_search WHERE track_search MATCH ?)")
+                values.append(search)
+            }
+        }
+        return (conditions, values)
+    }
+
+    private func sourceCondition(_ source: BrowserSource) throws -> (
+        String, [(any SQLiteValue)?]
+    ) {
+        switch source {
+        case .folder(let folder):
             let range = pathRange(under: folder)
-            conditions.append("f.path >= ? AND f.path < ?")
-            values += [range.lowerBound, range.upperBound]
-        case .genre:
-            guard let genre = filter.genre else { continue }
-            conditions.append("t.genre_id = ?")
-            values.append(genre)
-        case .artist:
-            guard let artist = filter.artist else { continue }
-            conditions.append("t.artist_id = ?")
-            values.append(artist)
-        case .album:
-            guard let album = filter.album else { continue }
-            conditions.append("t.album_id = ?")
-            values.append(album)
-        case .search:
-            guard let search = ftsQuery(filter.search) else { continue }
-            conditions.append(
-                "t.file_id IN (SELECT rowid FROM track_search WHERE track_search MATCH ?)")
-            values.append(search)
+            return ("f.path >= ? AND f.path < ?", [range.lowerBound, range.upperBound])
+        case .history:
+            return ("f.path IN (SELECT path FROM history)", [])
+        case .playlist(let id):
+            let playlist = try playlist(id)
+            switch playlist.kind {
+            case .manual:
+                return ("f.path IN (SELECT path FROM playlist_entries WHERE playlist_id = ?)", [id])
+            case .smart(let rules):
+                let (condition, values) = rules.condition(now: Date().timeIntervalSince1970)
+                return (condition, values)
+            case .unreadable(let detail):
+                throw LibraryError.unreadableRules(playlist: playlist.name, detail: detail)
+            }
         }
     }
-    return (conditions, values)
 }
 
 private func whereClause(_ conditions: [String]) -> String {
@@ -192,14 +226,11 @@ private let rowSelect = """
     SELECT t.file_id, f.path, t.title, ar.name, al.title, t.album_id, aa.name, g.name, t.date,
         t.track_number, t.disc_number, t.codec, t.sample_rate_hz, t.bits_per_sample,
         t.length_frames, f.added_seconds, t.art_offset, t.art_byte_count, t.art_mime_type,
-        t.art_unsynchronised, al_ar.name
+        t.art_unsynchronised, al_ar.name, p.play_count, p.skip_count, p.last_played_seconds,
+        r.rating
     FROM tracks t
-    JOIN files f ON f.id = t.file_id
-    LEFT JOIN artists ar ON ar.id = t.artist_id
-    LEFT JOIN artists aa ON aa.id = t.album_artist_id
-    LEFT JOIN albums al ON al.id = t.album_id
+    \(trackJoins)
     LEFT JOIN artists al_ar ON al_ar.id = al.artist_id
-    LEFT JOIN genres g ON g.id = t.genre_id
     """
 
 private func trackRow(_ row: Row) throws -> TrackRow {
@@ -219,7 +250,9 @@ private func trackRow(_ row: Row) throws -> TrackRow {
         trackNumber: row.optionalInt(9), discNumber: row.optionalInt(10), codec: try row.text(11),
         sampleRateHz: rate, bitsPerSample: row.optionalInt(13),
         durationSeconds: rate > 0 ? Double(try row.int(14)) / Double(rate) : 0,
-        addedSeconds: try row.double(15), art: art)
+        addedSeconds: try row.double(15), art: art, playCount: row.optionalInt(21) ?? 0,
+        skipCount: row.optionalInt(22) ?? 0, lastPlayedSeconds: row.optionalDouble(23),
+        rating: row.optionalInt(24) ?? 0)
 }
 
 private func entry(_ row: Row) throws -> BrowserEntry {

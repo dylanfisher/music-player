@@ -1,6 +1,7 @@
 /// Throws when the object being decoded has a key outside `Keys`, so a misspelled field fails
-/// instead of being ignored. Structured setting values call it first in `init(from:)`.
-func rejectUnknownKeys<Keys: CodingKey & CaseIterable>(_ decoder: any Decoder, _: Keys.Type)
+/// instead of being ignored. Structured setting values call it first in `init(from:)`, and so do
+/// other stored values, such as a smart playlist's rules.
+public func rejectUnknownKeys<Keys: CodingKey & CaseIterable>(_ decoder: any Decoder, _: Keys.Type)
     throws
 {
     let known = Set(Keys.allCases.map(\.stringValue))

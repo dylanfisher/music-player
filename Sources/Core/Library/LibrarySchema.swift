@@ -7,8 +7,8 @@
 enum SchemaPart: String, CaseIterable {
     /// Everything a scan can rebuild from the files: dropped and recreated when its SQL changes.
     case index
-    /// Plays, ratings and history, which no scan can recreate. Keyed by path (ADR 0008), so a
-    /// rebuilt index finds them again.
+    /// Plays, ratings, history and playlists, which no scan can recreate. Keyed by path
+    /// (ADR 0008), so a rebuilt index finds them again.
     case stats
 
     var sql: String {
@@ -23,7 +23,7 @@ enum SchemaPart: String, CaseIterable {
 let schemaIdentityTable = "schema_identity"
 
 /// The tables `statsSchema` creates, which an index rebuild keeps.
-let statsTables: Set<String> = ["plays", "ratings", "history"]
+let statsTables: Set<String> = ["plays", "ratings", "history", "playlists", "playlist_entries"]
 
 private let indexSchema = """
     CREATE TABLE files (
@@ -121,4 +121,18 @@ private let statsSchema = """
         played_seconds REAL NOT NULL
     );
     CREATE INDEX history_path ON history (path);
+    CREATE TABLE playlists (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        -- A smart playlist's SmartRules as JSON; NULL for a manual playlist.
+        rules TEXT
+    );
+    -- Each track at most once per playlist, in position order.
+    CREATE TABLE playlist_entries (
+        playlist_id INTEGER NOT NULL REFERENCES playlists (id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY (playlist_id, path)
+    );
+    CREATE INDEX playlist_entries_order ON playlist_entries (playlist_id, position);
     """

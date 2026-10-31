@@ -89,7 +89,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             model: model, select: { pane, id in Task { await model.select(pane, id: id) } },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         sidebarController = SidebarController(
-            selectSource: { folder in Task { await model.setSource(folder) } },
+            selectSource: { source in Task { await model.setSource(source) } },
             addFolder: { owner?.addFolder() },
             removeFolder: { path in owner?.removeFolder(path) },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
@@ -174,9 +174,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Lists a changed set of watched folders. If the shown folder went, the library is shown.
     public func setFolders(_ folders: [WatchedFolder]) async {
         self.folders = folders
-        let source = folders.contains { $0.path == model.filter.folder } ? model.filter.folder : nil
+        var source = model.filter.source
+        if case .folder(let path) = source, !folders.contains(where: { $0.path == path }) {
+            source = nil
+        }
         sidebarController.show(folders: folders, source: source)
-        if source != model.filter.folder { await model.setSource(source) }
+        if source != model.filter.source { await model.setSource(source) }
     }
 
     /// What the watcher reported. Refreshes as rows arrive, at most every
@@ -367,7 +370,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     public func forward() { Task { if await model.forward() { showSource() } } }
 
-    private func showSource() { sidebarController.show(source: model.filter.folder) }
+    private func showSource() { sidebarController.show(source: model.filter.source) }
 
     public var isStatusBarVisible: Bool { !statusBar.isHidden }
 

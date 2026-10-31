@@ -1,3 +1,4 @@
+import Settings
 import Testing
 
 @testable import LibraryBrowser
@@ -31,14 +32,14 @@ private final class Clock {
 
 @Test func backAndForwardStepThroughTheSources() {
     var history = SourceHistory(start: nil)
-    history.visit("/a")
-    history.visit("/a")
-    history.visit("/b")
-    #expect(history.back() == .some("/a"))
+    history.visit(.folder("/a"))
+    history.visit(.folder("/a"))
+    history.visit(.playlist(1))
+    #expect(history.back() == .some(.folder("/a")))
     #expect(history.back() == .some(nil))
     #expect(history.back() == nil)
-    #expect(history.forward() == .some("/a"))
-    history.visit("/c")
+    #expect(history.forward() == .some(.folder("/a")))
+    history.visit(.history)
     #expect(!history.canGoForward)
-    #expect(history.back() == .some("/a"))
+    #expect(history.back() == .some(.folder("/a")))
 }
