@@ -24,10 +24,13 @@ never draws blank while scrolling. WAL mode lets both read while the watcher wri
 count is its length. `RowCache` keeps at most 30 pages (3,000 rows) and drops the least recently
 used page. New IDs or a library change clear it.
 
-**The last change wins.** Each model change (pane, source, search, sort, refresh) takes a new
-generation number before its queries; when they return, a change that a newer one overtook is
-dropped. Queries on the actor run one at a time, so a burst of keystrokes costs one query each,
-and only the last result reaches the view.
+**The last change wins, carrying the ones before it.** Each model change (pane, source, search,
+sort, refresh) edits a pending filter and sort, which start from the newest change rather than the
+last one shown, and takes a new generation number before its queries. When they return, results that
+a newer change overtook are dropped; the newer change already includes this one, and reloads the
+panes from the leftmost pane any pending change needs. The sort is committed only when its query
+succeeds. Queries on the actor run one at a time, so a burst of keystrokes costs one query each, and
+only the last result reaches the view.
 
 **Panes narrow left to right.** `TrackFilter` (folder, genre, artist, album, search) narrows the
 tracks; each pane applies only the parts to its left. A selection a narrowed pane no longer lists
@@ -36,7 +39,7 @@ change when the index is rebuilt; a saved name that's gone loads as All and is l
 
 **Refreshing.** The watcher reports progress at most once a second and each scan's outcome. The
 window refreshes at most every 2 s during a scan and at once when one ends with changes. The
-selection is kept by ID. On a refresh the first visible track keeps its place on screen; on a
+selection is kept by ID, read through the IDs the table showed before the change. On a refresh the first visible track keeps its place on screen; on a
 user's change the table scrolls to the selection, or the top.
 
 **Playing.** A double-click on one row queues the whole visible list, starting there, so
@@ -46,8 +49,9 @@ track. Queue edits are the engine's (play next, move, remove, in play order); re
 current track moves on to the next, since the output can't keep playing a track the queue no
 longer holds.
 
-**Art** is read with `readArt` and decoded straight to the bar's size with ImageIO's thumbnail
-call, in a cache of 64 images (`Artwork`). The full-size image is never decoded.
+**Art** is read with `readArt` and decoded straight to the bar's size with ImageIO's thumbnail call,
+in a cache of 64 images: `ArtworkLoader` (`Artwork`) holds them, and the app sets the size and count
+(`AppDelegate.artPixels` and `artCacheImages`). The full-size image is never decoded.
 
 ## Alternatives considered
 

@@ -391,10 +391,11 @@ Implementation plan:
    rates.
 5. **Artwork** (Core): `ArtworkLoader` reads art with `readArt`, decodes it straight to a thumbnail
    at display size with ImageIO, and keeps a bounded cache. Never holds a full-size image.
-6. **Features:** `LibraryBrowser` (sidebar, Genre | Artist | Album panes, the track table with a
-   paged row cache, search, the play-selection order), `NowPlaying` (the bar: art, title, artist,
-   transport, seek, times, format line) and `QueueView` (the side panel). View models hold the
-   logic and are tested; the AppKit views stay thin. Features never import each other.
+6. **Features:** `LibraryBrowser` (sidebar, whose Playlists group stays empty until phase 7; Genre |
+   Artist | Album panes, the track table with a paged row cache, search, the play-selection order),
+   `NowPlaying` (the bar: art, title, artist, transport, seek, times, format line) and `QueueView`
+   (the side panel). View models hold the logic and are tested; the AppKit views stay thin. Features
+   never import each other.
 7. **App:** the window composes the three, and wires `PlaybackEngine`, `DeviceOutput`
    (created after the first rows are drawn, never playing on its own) and `LibraryWatcher`,
    including its playback hook. Settings are read once at launch and passed in; layout changes are
