@@ -96,7 +96,8 @@ let package = Package(
         .executableTarget(
             name: "MusicPlayer",
             dependencies: [
-                "DisplayText", "HALOutput", "Library", "Metadata", "Playback", "SQLite", "Settings",
+                "Artwork", "DisplayText", "HALOutput", "Library", "LibraryBrowser", "Log",
+                "Metadata", "NowPlaying", "Playback", "QueueView", "SQLite", "Settings",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
@@ -174,7 +175,7 @@ let package = Package(
         ),
         .testTarget(
             name: "MusicPlayerTests",
-            dependencies: ["Metadata", "MusicPlayer"],
+            dependencies: ["Library", "Metadata", "MusicPlayer", "Playback"],
             swiftSettings: strictSwift
         ),
         .testTarget(

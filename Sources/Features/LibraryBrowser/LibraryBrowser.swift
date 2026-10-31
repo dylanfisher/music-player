@@ -28,16 +28,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
     public var stateChanged: (BrowserState) -> Void = { _ in }
     public var addFolder: () -> Void = {}
     public var removeFolder: (String) -> Void = { _ in }
-    /// Called once, when the table first draws rows.
+    /// Called once, when the table first draws rows, or once loading finds none to draw.
     public var firstRowsDrawn: (() -> Void)? {
         get { table.firstRowsDrawn }
         set { table.firstRowsDrawn = newValue }
     }
 
     private let reader: LibraryReader
-    private var table: TrackTableController!
-    private var panes: PanesController!
-    private var sidebarController: SidebarController!
+    private let table: TrackTableController
+    private let panes: PanesController
+    private let sidebarController: SidebarController
     private let split = NSSplitView()
     private let statusLabel = NSTextField(labelWithString: "")
     private let problemsButton = NSButton()
@@ -59,36 +59,30 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
         self.folders = folders
         model = BrowserModel(
             reader: reader, sortColumn: layout.sortColumn, ascending: layout.sortAscending)
-        let content = NSViewController()
-        self.content = content
-        let sidebar = NSViewController()
-        self.sidebar = sidebar
-        super.init()
-
+        let model = self.model
+        // The views report to this object, which exists only after its stored properties do.
+        weak var owner: LibraryBrowser?
         let cache = RowCache { ids in try index.rows(ids: ids) }
         let actions = BrowserActions(
-            play: { [weak self] rows, clicked in self?.playRows(rows, clicked: clicked) },
-            playNext: { [weak self] rows in self?.queueNext(rows) },
-            sort: { [weak self] column, ascending in
-                guard let self else { return }
-                Task { await self.model.setSort(column, ascending: ascending) }
+            play: { rows, clicked in owner?.playRows(rows, clicked: clicked) },
+            playNext: { rows in owner?.queueNext(rows) },
+            sort: { column, ascending in
+                Task { await model.setSort(column, ascending: ascending) }
             },
-            layoutChanged: { [weak self] layout in self?.tableLayoutChanged(layout) },
-            failed: { [weak self] message in self?.show(failure: message) })
+            layoutChanged: { layout in owner?.tableLayoutChanged(layout) },
+            failed: { message in owner?.show(failure: message) })
         table = TrackTableController(model: model, cache: cache, layout: layout, actions: actions)
-        panes = PanesController(model: model) { [weak self] pane, id in
-            guard let self else { return }
-            Task { await self.model.select(pane, id: id) }
+        panes = PanesController(model: model) { pane, id in
+            Task { await model.select(pane, id: id) }
         }
         sidebarController = SidebarController(
-            selectSource: { [weak self] folder in
-                guard let self else { return }
-                Task { await self.model.setSource(folder) }
-            },
-            addFolder: { [weak self] in self?.addFolder() },
-            removeFolder: { [weak self] path in self?.removeFolder(path) })
-        sidebar.view = sidebarController.view
-        sidebar.addChild(sidebarController)
+            selectSource: { folder in Task { await model.setSource(folder) } },
+            addFolder: { owner?.addFolder() },
+            removeFolder: { path in owner?.removeFolder(path) })
+        sidebar = sidebarController
+        content = NSViewController()
+        super.init()
+        owner = self
         content.view = makeContent()
         content.addChild(table)
         content.addChild(panes)
@@ -143,7 +137,17 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
     public func load(_ saved: BrowserState) async {
         sidebarController.show(folders: folders, source: saved.source)
         await model.load(saved)
+        if model.trackIDs.isEmpty, let firstRowsDrawn {
+            self.firstRowsDrawn = nil
+            firstRowsDrawn()
+        }
         await countIssues()
+    }
+
+    /// Scrolls the table through every row, drawing each screenful, and passes each row to
+    /// `visit`. For measuring memory once the whole library has been on screen.
+    public func scrollThroughEveryRow(_ visit: (TrackRow) -> Void) {
+        table.scrollThroughEveryRow(visit)
     }
 
     /// Lists a changed set of watched folders. If the shown folder went, the library is shown.

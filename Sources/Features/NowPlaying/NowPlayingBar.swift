@@ -14,7 +14,7 @@ public final class NowPlayingBar: NSViewController {
     /// How often the position updates while playing. Nothing ticks while paused or stopped.
     static let positionIntervalSeconds = 0.5
     /// The art's size in points.
-    static let artPoints = 48.0
+    public static let artPoints = 48.0
 
     public let model: NowPlayingModel
     /// Shows or hides the queue panel.
@@ -117,11 +117,23 @@ public final class NowPlayingBar: NSViewController {
         bar.alignment = .centerY
         bar.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
         art.translatesAutoresizingMaskIntoConstraints = false
+        // A centered stack lets a tall view overflow it; this makes the bar tall enough instead.
         NSLayoutConstraint.activate([
+            middle.topAnchor.constraint(greaterThanOrEqualTo: bar.topAnchor, constant: 6),
+            middle.bottomAnchor.constraint(lessThanOrEqualTo: bar.bottomAnchor, constant: -6),
             art.widthAnchor.constraint(equalToConstant: Self.artPoints),
             art.heightAnchor.constraint(equalToConstant: Self.artPoints),
         ])
-        middle.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        bar.distribution = .fill
+        bar.setClippingResistancePriority(.required, for: .vertical)
+        // A stack view's own hugging is its huggingPriority, not its content hugging.
+        middle.setHuggingPriority(.init(1), for: .horizontal)
+        transport.setHuggingPriority(.required, for: .horizontal)
+        slider.setContentHuggingPriority(.init(1), for: .horizontal)
+        seek.distribution = .fill
+        for view in [art, queueButton] as [NSView] {
+            view.setContentHuggingPriority(.required, for: .horizontal)
+        }
         view = bar
         setEnabled(false)
         show()

@@ -96,8 +96,8 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
             restore(anchor)
         } else if let first = rows.first {
             table.scrollRowToVisible(first)
-        } else {
-            table.scroll(.zero)
+        } else if !model.trackIDs.isEmpty {
+            table.scrollRowToVisible(0)
         }
     }
 
@@ -116,18 +116,43 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         applyingSort = false
     }
 
+    private var clip: NSClipView? { table.enclosingScrollView?.contentView }
+
+    /// The top of the area rows show in, below the header, in the table's coordinates.
+    private var visibleTop: CGFloat {
+        guard let clip else { return 0 }
+        return clip.bounds.minY + clip.contentInsets.top
+    }
+
     /// The first visible row's track and how far it sits from the top of the visible area.
     private func scrollAnchor() -> (id: Int64, offset: CGFloat)? {
-        let visible = table.visibleRect
-        let row = table.row(at: NSPoint(x: visible.minX, y: visible.minY))
+        let top = visibleTop
+        let row = table.row(at: NSPoint(x: table.visibleRect.minX, y: top))
         guard row >= 0, model.trackIDs.indices.contains(row) else { return nil }
-        return (model.trackIDs[row], table.rect(ofRow: row).minY - visible.minY)
+        return (model.trackIDs[row], table.rect(ofRow: row).minY - top)
     }
 
     private func restore(_ anchor: (id: Int64, offset: CGFloat)) {
-        guard let row = model.rows(holding: [anchor.id]).first else { return }
-        let y = table.rect(ofRow: row).minY - anchor.offset
-        table.scroll(NSPoint(x: table.visibleRect.minX, y: max(0, y)))
+        guard let clip, let row = model.rows(holding: [anchor.id]).first else { return }
+        let y = table.rect(ofRow: row).minY - anchor.offset - clip.contentInsets.top
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: y))
+        table.enclosingScrollView?.reflectScrolledClipView(clip)
+    }
+
+    /// Scrolls through every row a screenful at a time, drawing each, and passes each row to
+    /// `visit`. For measuring memory after the whole table has been seen.
+    func scrollThroughEveryRow(_ visit: (TrackRow) -> Void) {
+        let perScreen = max(1, Int(table.visibleRect.height / table.rowHeight))
+        var first = 0
+        while first < model.trackIDs.count {
+            let last = min(model.trackIDs.count - 1, first + perScreen - 1)
+            table.scrollRowToVisible(last)
+            table.displayIfNeeded()
+            for index in first...last {
+                if let row = trackRow(index) { visit(row) }
+            }
+            first = last + 1
+        }
     }
 
     // MARK: Data source and delegate

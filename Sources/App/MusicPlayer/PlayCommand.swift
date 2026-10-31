@@ -32,7 +32,7 @@ private let keyHelp =
 /// queue. Never returns.
 func playCommand(paths: [String], deviceName: String?) throws -> Never {
     guard !paths.isEmpty else { throw PlayCommandError.nothingToPlay }
-    let settingsURL = try defaultSettingsFileURL()
+    let settingsURL = try settingsFileURL()
     let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
     let recordURL = defaultRestoreRecordURL(settingsFileURL: settingsURL)
     if let recovered = try HALDeviceProvider.recoverAfterCrash(restoreRecordURL: recordURL) {

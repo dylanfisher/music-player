@@ -24,7 +24,7 @@ func scanCommand(folder: String, databasePath: String?, readers: Int?, hints: Re
     } else {
         // The app removes files outside its watched folders at launch, so a scan into its own
         // index of anything else would be undone.
-        let settingsURL = try defaultSettingsFileURL()
+        let settingsURL = try settingsFileURL()
         let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
         try requireWatched(path, in: settings[\.watchedFolders])
         databaseURL = defaultLibraryFileURL(settingsFileURL: settingsURL)

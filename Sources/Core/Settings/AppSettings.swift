@@ -30,16 +30,21 @@ public struct AppSettings: SettingsSchema {
     // The main window's layout, saved as it changes. The app reads these once, at launch.
     public let windowFrame = Setting<WindowFrame?>(
         "window.frame", default: nil, "Where the main window was. Null centers it.")
+    /// What the window's sizes accept, in points, so the window never saves one that won't load.
+    public static let sidebarWidthRange = 100...600
+    public static let browserHeightRange = 0...2000
+    public static let queueWidthRange = 150...1000
     public let sidebarWidth = Setting(
-        "window.sidebarWidth", default: 180, range: 100...600, "Width of the sidebar, in points.")
+        "window.sidebarWidth", default: 180, range: sidebarWidthRange,
+        "Width of the sidebar, in points.")
     public let browserHeight = Setting(
-        "window.browserHeight", default: 160, range: 0...2000,
+        "window.browserHeight", default: 160, range: browserHeightRange,
         "Height of the genre, artist and album panes above the track table, in points. 0 hides"
             + " them.")
     public let queueVisible = Setting(
         "window.queueVisible", default: false, "Show the queue beside the track table.")
     public let queueWidth = Setting(
-        "window.queueWidth", default: 280, range: 150...1000, "Width of the queue, in points.")
+        "window.queueWidth", default: 280, range: queueWidthRange, "Width of the queue, in points.")
     public let trackTable = Setting(
         "browser.trackTable",
         default: TrackTableLayout(

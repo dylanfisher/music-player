@@ -20,9 +20,10 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
     required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
 
     override func loadView() {
-        let split = NSSplitView()
-        split.isVertical = true
-        split.dividerStyle = .thin
+        // Equal widths, as in Swinsian; the panes don't resize apart from each other.
+        let row = NSStackView()
+        row.distribution = .fillEqually
+        row.spacing = 1
         for pane in BrowserModel.Pane.allCases {
             let table = NSTableView()
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("entry"))
@@ -39,9 +40,9 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
             scroll.documentView = table
             scroll.hasVerticalScroller = true
             scroll.autohidesScrollers = true
-            split.addArrangedSubview(scroll)
+            row.addArrangedSubview(scroll)
         }
-        view = split
+        view = row
     }
 
     func reload() {
