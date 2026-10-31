@@ -106,7 +106,12 @@ private func printProgress(_ progress: ScanProgress, since started: Date) {
                 progress.read, progress.toRead, progress.unchanged, progress.failed,
                 Double(progress.read) / elapsed)
         }
-    print(eraseLine + line, terminator: "")
+    let load = progress.load
+    print(
+        eraseLine + line
+            + ", \(load.readers) readers (\(load.idleReaders) idle), \(load.listers) listers,"
+            + " \(load.queued) queued",
+        terminator: "")
     fflush(stdout)
 }
 

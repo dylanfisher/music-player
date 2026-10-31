@@ -58,6 +58,8 @@ final class ScanPipeline: @unchecked Sendable {
     private var toRead = 0
     private var limit: Int
     private var readerThreads = 0
+    /// Readers waiting in `nextFile` for the walk.
+    private var idleReaders = 0
     private var controller: ReadConcurrency?
     private var window: Window
     private var batch: [ScannedFile] = []
@@ -175,11 +177,12 @@ final class ScanPipeline: @unchecked Sendable {
                     outcome.unchanged += 1
                 }
             }
-            counter.update { [found, unchanged = outcome.unchanged, toRead, walkFinished] in
+            counter.update { [found, unchanged = outcome.unchanged, toRead, walkFinished, load] in
                 $0.stage = walkFinished ? .reading : .walking
                 $0.found = found
                 $0.unchanged = unchanged
                 $0.toRead = toRead
+                $0.load = load
             }
             condition.broadcast()
         }
@@ -194,6 +197,13 @@ final class ScanPipeline: @unchecked Sendable {
 
     /// Called with `condition` held.
     private var walkFinished: Bool { directories.isEmpty && listing == 0 }
+
+    /// Called with `condition` held.
+    private var load: ScanProgress.Load {
+        .init(
+            readers: limit, idleReaders: idleReaders, listers: listing,
+            queued: queued.count - nextQueued)
+    }
 
     // MARK: Reading
 
@@ -239,7 +249,9 @@ final class ScanPipeline: @unchecked Sendable {
                 }
                 if walkFinished { break }
                 window.starved = true
+                idleReaders += 1
                 condition.wait()
+                idleReaders -= 1
             }
             readerThreads -= 1
             return nil
@@ -260,9 +272,10 @@ final class ScanPipeline: @unchecked Sendable {
             // Every file would wake a waiting progress reader 43k times a scan for no visible
             // difference.
             if outcome.read % 32 == 0 || outcome.read == toRead {
-                counter.update { [read = outcome.read, failed = outcome.failed] in
+                counter.update { [read = outcome.read, failed = outcome.failed, load] in
                     $0.read = read
                     $0.failed = failed
+                    $0.load = load
                 }
             }
             measure(seconds)

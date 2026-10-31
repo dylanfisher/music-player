@@ -86,6 +86,25 @@ private func emptyFiles(_ count: Int) throws -> String {
     #expect(SimulatedNAS.FileDelay(medianSeconds: 0.01, sigma: 1).meanSeconds > 0.016)
 }
 
+@Test func progressShowsWhereTheScanIsWaiting() async throws {
+    let library = try TestLibrary()
+    let (stream, continuation) = AsyncStream.makeStream(
+        of: ScanProgress.self, bufferingPolicy: .unbounded)
+    // Slow listings, so readers wait for the walk.
+    let nas = SimulatedNAS(
+        operationSeconds: 0.001, listingSeconds: 0.02, capacity: 64, fileDelay: nil)
+    _ = try LibraryScanner(databaseURL: library.databaseURL, networkReaders: 3, access: nas)
+        .scan(WatchedFolder(path: library.root, kind: .network), progress: continuation)
+    continuation.finish()
+    var loads: [ScanProgress.Load] = []
+    for await progress in stream { loads.append(progress.load) }
+    #expect(loads.allSatisfy { $0.readers == 3 })
+    #expect(loads.contains { $0.listers > 0 })
+    #expect(loads.contains { $0.queued > 0 })
+    #expect(loads.contains { $0.idleReaders > 0 })
+    #expect(loads.last == ScanProgress.Load(readers: 3, idleReaders: 0, listers: 0, queued: 0))
+}
+
 @Test func networkReadersClimbMidScanOnASlowNAS() throws {
     let root = try emptyFiles(1500)
     let databaseURL = URL(fileURLWithPath: root + ".sqlite")

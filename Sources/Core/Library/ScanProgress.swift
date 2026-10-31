@@ -17,6 +17,21 @@ public struct ScanProgress: Equatable, Sendable {
     public var toRead = 0
     public var read = 0
     public var failed = 0
+    /// Where the scan's time is going now, so a slow scan shows whether the readers, the walk
+    /// or the volume holds it back.
+    public var load = Load()
+
+    /// What the scan's threads are doing at one moment.
+    public struct Load: Equatable, Sendable {
+        /// Files read at once: the level the scan has set, fixed or tuned.
+        public var readers = 0
+        /// Readers waiting for the walk to queue a file.
+        public var idleReaders = 0
+        /// Directories being listed.
+        public var listers = 0
+        /// Changed files the walk has queued that no reader has taken yet.
+        public var queued = 0
+    }
 
     /// A stream for a scan's progress that keeps only the newest value, so a scan never waits
     /// on a slow reader such as the UI. Pass the continuation to `LibraryScanner.scan`.
