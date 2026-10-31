@@ -34,7 +34,7 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 Set by the owner on 2026-10-30 and 2026-10-31:
 
 1. Finish phase 5. Its 2015 MacBook Pro checkpoint stays pending.
-2. Phases 6, 7, 8 and then 11, each through its gate.
+2. Phases 6, 7, 8, 11 and then 15, each through its gate.
 3. Write the [hardening sub-plan](#14-hardening), committed as `docs: plan phase 14`, then run
    14a onward, each through its gate.
 4. Phase 9 last, if time is left, against a simulated renderer only. Nothing contacts the Denon
@@ -919,7 +919,7 @@ command, not ⌘Z; the SMB fallbacks are untested until the checkpoint.
 
 ### 14. Hardening
 
-A sub-plan, written and run after phase 11 and before phase 9. It's a set of separate phases,
+A sub-plan, written and run after phase 15 and before phase 9. It's a set of separate phases,
 14a onward, each run and gated like any other. Each one gets a goal, a scope, a method, the tools it uses, and
 an exit criterion that a script or a number can check. A sub-phase finds problems and fixes them
 in its own commits. Anything it can't fix goes in its Result line. The sub-plan covers at least:
@@ -959,3 +959,50 @@ in its own commits. Anything it can't fix goes in its Result line. The sub-plan 
   - `docs/map.md`, the ADRs, the README and AGENTS.md checked against the code.
   - Module boundaries and public surface cut to what's used.
   - Dead code removed.
+
+### 15. Stable track identity and full play history
+
+Stats key on the file's path (ADR 0008) because `files.id` is a row number that every index
+rebuild, and every file leaving and coming back, hands out again. That costs three things today:
+
+- **Space.** `history` stores the full path in every row and again in its index, about 250 bytes
+  a play. Measured: 100k plays take 24 MB, and 1M would take about 250 MB.
+- **Date Added.** `files.added_seconds` is lost on every rebuild, so each track shows the rebuild
+  time.
+- **Joins.** Every stats join matches long path strings.
+
+This phase gives each path a permanent ID kept with the stats, uses it as `files.id`, keys every
+stats table on it, and adds a paged timeline of every play. It supersedes ADR 0008's "key stats by
+path" and amends ADR 0018. Write the ADR first, at the next free number.
+
+- [ ] **Identity:** a stats table `paths` (`id INTEGER PRIMARY KEY`, `path TEXT UNIQUE NOT NULL`,
+      `added_seconds REAL NOT NULL`). The scanner looks a path up there, or inserts it, and uses
+      that ID as `files.id`. `added_seconds` moves off `files`. Rows are never deleted, so a file
+      that leaves the index and comes back gets its old ID and Date Added. A renamed or moved file
+      is still a new path, as now.
+- [ ] **Stats by ID:** `plays`, `ratings`, `history` and `playlist_entries` key on `path_id`
+      instead of `path`. Joins from `files` become `files.id = path_id`. Smart rules, sorts,
+      playlist entries whose file left the index (still counted on the status line) and the
+      `files.path IN (…)` conditions all move over. The stats SQL changes, so the owner's
+      current stats are dropped once, which the pre-release rule allows.
+- [ ] **History shape:** `history (id INTEGER PRIMARY KEY, path_id INTEGER NOT NULL, played_at
+      INTEGER NOT NULL)` in whole seconds, with an index on `path_id`. Rows are append-only, so
+      `id` order is time order and no index on `played_at` is needed.
+- [ ] **History view** (one row per track) reads `plays` where `last_played_seconds` is set, so
+      its cost follows the number of tracks played rather than the length of the log.
+- [ ] **Play timeline:** every play, newest first, loaded 200 at a time by key
+      (`WHERE id < :last ORDER BY id DESC LIMIT 200`), never `OFFSET`. A new play is added to the
+      top of the loaded rows; a library change re-resolves only the loaded rows. Plays of files
+      no longer in the index show as missing rather than being hidden, so pages stay full. The
+      track table identifies rows by track ID (ADR 0018), and the timeline repeats tracks, so its
+      rows need their own identity (the history ID). Plan how selection, play, drag and ⌘⌫ act
+      on a timeline row before building the UI, and record the choice in the ADR. Where it lives
+      (a second History mode or its own sidebar item) is the implementer's call, per ADR 0012.
+- [ ] **Tests:** IDs and Date Added survive an index rebuild and a file leaving and coming back;
+      stats, ratings and playlist entries follow the ID; the timeline pages are stable while new
+      plays arrive; missing files show as missing.
+- [ ] **Bench**, with the budgets added to [Performance budgets](#performance-budgets): with 1M
+      synthetic plays over the 43k fixture library, one timeline page p95 < 5 ms, the one-row-
+      per-track History view p95 < 30 ms, recording a play < 2 ms, and the history table plus
+      its index < 40 MB. Measured on a scratch database before the phase (100k plays, Apple
+      Silicon): a page 0.5 ms, the current History view 25 ms, about 27 bytes a play.
