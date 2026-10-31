@@ -201,8 +201,12 @@ untyped covers, and wide AAC layouts. Deferred: DSF to phase 12.
       network roots use a polling rescan at a configurable interval (default 15 minutes, never
       while playback is starting). Optionally pause polling during playback.
 - [x] Benchmarks: full scan, no-change rescan, and the query latencies the UI will need.
-- [ ] **Hardware checkpoint (owner):** scan the real NAS library on the DAC Mac. Report the time,
+- [x] **Hardware checkpoint (owner):** scan the real NAS library on the DAC Mac. Report the time,
       the database size, and any files that failed to parse.
+      Done 2026-10-30, Synology over wired Ethernet: 43,329 files, 0 failed, 0 warnings, 33.9 MB
+      database. The cold first scan took 718.7 s at 60 files/s, and the controller held 3–8
+      readers, which the stall fix after 3b addresses (ADR 0010). The no-change rescan took 25.4 s
+      (budget 30 s). `xargs -P 16` showed the NAS scales about 17x with parallel reads.
 
 Implementation plan:
 
