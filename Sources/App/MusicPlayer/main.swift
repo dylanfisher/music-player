@@ -8,6 +8,7 @@ import Settings
 //   MusicPlayer --play <file> [--device <part of name>]
 //   MusicPlayer --export-settings <file>
 //   MusicPlayer --import-settings <file>
+//   MusicPlayer --scan <folder> [--db <file>]
 let arguments = CommandLine.arguments
 
 func value(after flag: String) -> String? {
@@ -36,9 +37,14 @@ func runAndExit(_ command: () throws -> Void) -> Never {
 // A flag with nothing after it would otherwise fall through to launching the GUI.
 for (flag, what) in [
     ("--export-settings", "a file"), ("--import-settings", "a file"), ("--play", "a file"),
-    ("--device", "part of a device name"),
+    ("--device", "part of a device name"), ("--scan", "a folder"), ("--db", "a database file"),
 ] where arguments.contains(flag) && value(after: flag) == nil {
     FileHandle.standardError.write(Data("error: \(flag) needs \(what)\n".utf8))
+    exit(1)
+}
+
+if arguments.contains("--db") && !arguments.contains("--scan") {
+    FileHandle.standardError.write(Data("error: --db only goes with --scan\n".utf8))
     exit(1)
 }
 
@@ -58,6 +64,9 @@ if let path = value(after: "--import-settings") {
         let count = try settings.importSettings(from: URL(fileURLWithPath: path))
         print("imported \(count) settings into \(settings.fileURL.path)")
     }
+}
+if let folder = value(after: "--scan") {
+    runAndExit { try scanCommand(folder: folder, databasePath: value(after: "--db")) }
 }
 /// Set from signal handlers on another thread, read by the playback loop.
 final class StopRequest: @unchecked Sendable {
