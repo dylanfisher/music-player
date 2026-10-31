@@ -52,6 +52,8 @@ extension CommandID {
     public static let deletePlaylist = CommandID("playlist.delete")
 
     public static let playPause = CommandID("playback.playPause")
+    public static let play = CommandID("playback.play")
+    public static let pause = CommandID("playback.pause")
     public static let playSelection = CommandID("playback.playSelection")
     public static let playNext = CommandID("playback.playNext")
     public static let nextTrack = CommandID("playback.next")
@@ -133,6 +135,8 @@ public enum AppCommands {
             Command(.deletePlaylist, "Delete Playlist…"),
 
             Command(.playPause, "Play/Pause", [.init(.space)]),
+            Command(.play, "Play"),
+            Command(.pause, "Pause"),
             Command(.playSelection, "Play Selection", [.init(.return), .init(.down, cmd)]),
             Command(.playNext, "Play Next", [.init(.return, opt)]),
             Command(.nextTrack, "Next Track", [.init(.right, cmd)]),

@@ -120,7 +120,8 @@ public enum AppMenus {
             MenuSection(
                 title: "Controls", role: .plain,
                 entries: [
-                    .command(.playPause), .command(.playSelection), .command(.playNext),
+                    .command(.playPause), .command(.play), .command(.pause),
+                    .command(.playSelection), .command(.playNext),
                     .command(.stop), .separator, .command(.nextTrack), .command(.previousTrack),
                     .command(.seekForward), .command(.seekBack), .separator, .command(.shuffle),
                     .submenu(

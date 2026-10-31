@@ -148,6 +148,9 @@ extension AppDelegate {
                 })
         }
         engineCommand(.playPause) { await $0.togglePause() }
+        // Absolute, so a second press of either does nothing whatever the menus last saw.
+        engineCommand(.play) { await $0.play() }
+        engineCommand(.pause) { await $0.pause() }
         engineCommand(.stop) { await $0.stop() }
         engineCommand(.nextTrack) { await $0.next() }
         engineCommand(.previousTrack) { await $0.previous() }
