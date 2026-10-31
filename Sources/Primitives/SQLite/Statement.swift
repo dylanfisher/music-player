@@ -76,6 +76,13 @@ public final class Statement {
     public func map<T>(_ values: (any SQLiteValue)?..., row transform: (Row) throws -> T) throws
         -> [T]
     {
+        try map(binding: values, row: transform)
+    }
+
+    /// `map` with the values as a list, for SQL whose parameter count varies.
+    public func map<T>(binding values: [(any SQLiteValue)?], row transform: (Row) throws -> T)
+        throws -> [T]
+    {
         try start(values)
         defer { sqlite3_reset(statement) }
         let row = Row(statement: statement, sql: sql)

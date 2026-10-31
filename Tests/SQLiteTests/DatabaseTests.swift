@@ -43,6 +43,17 @@ private func temporaryDatabase() throws -> Database {
     #expect(try select.map(99) { try $0.int(0) } == [99])
 }
 
+@Test func bindsAListOfValues() throws {
+    let database = try temporaryDatabase()
+    try database.execute("CREATE TABLE t (i INTEGER)")
+    let insert = try database.prepare("INSERT INTO t VALUES (?)")
+    for value in 0..<10 { try insert.run(value) }
+    let values: [(any SQLiteValue)?] = [2, 5, 7]
+    let query = try database.prepare("SELECT i FROM t WHERE i IN (?, ?, ?) ORDER BY i")
+    #expect(try query.map(binding: values) { try $0.int(0) } == [2, 5, 7])
+    #expect(throws: SQLiteError.self) { try query.map(binding: [1]) { try $0.int(0) } }
+}
+
 @Test func errorsCarryTheSQLAndMessage() throws {
     let database = try temporaryDatabase()
     let error = #expect(throws: SQLiteError.self) { try database.prepare("SELECT * FROM nope") }
