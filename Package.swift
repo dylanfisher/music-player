@@ -24,14 +24,19 @@ let package = Package(
             cSettings: strictC
         ),
         .target(
+            name: "Log",
+            path: "Sources/Core/Log",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "HALOutput",
-            dependencies: ["HALRender"],
+            dependencies: ["HALRender", "Log"],
             path: "Sources/Core/HALOutput",
             swiftSettings: strictSwift
         ),
         .target(
             name: "Playback",
-            dependencies: ["HALOutput", "RingBuffer"],
+            dependencies: ["HALOutput", "Log", "RingBuffer"],
             path: "Sources/Core/Playback",
             swiftSettings: strictSwift
         ),
@@ -49,6 +54,11 @@ let package = Package(
         .testTarget(
             name: "HALRenderTests",
             dependencies: ["HALRender", "RingBuffer"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "LogTests",
+            dependencies: ["Log"],
             swiftSettings: strictSwift
         ),
         .testTarget(

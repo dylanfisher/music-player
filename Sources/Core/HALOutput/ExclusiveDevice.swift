@@ -1,6 +1,9 @@
 import CoreAudio
 import Foundation
 import HALRender
+import Log
+
+private let logger = moduleLogger()
 
 public enum ExclusiveDeviceError: Error, CustomStringConvertible {
     case hogModeHeld(by: pid_t)
@@ -55,6 +58,7 @@ public final class ExclusiveDevice {
         try writeScalar(id, address(kAudioDevicePropertyHogMode), getpid())
         let newOwner: pid_t = try readScalar(id, address(kAudioDevicePropertyHogMode))
         guard newOwner == getpid() else { throw ExclusiveDeviceError.hogModeHeld(by: newOwner) }
+        logger.info("device \(id, privacy: .public): took hog mode")
     }
 
     /// Switches the hardware to `sampleRateHz` in its bit-perfect format, and returns the format
@@ -78,6 +82,9 @@ public final class ExclusiveDevice {
                 stream, address(kAudioStreamPropertyPhysicalFormat))
             return PhysicalFormat(now) == PhysicalFormat(format)
         }
+        logger.info(
+            "device \(self.id, privacy: .public): switched to \(PhysicalFormat(format).summary, privacy: .public)"
+        )
         return try readScalar(stream, address(kAudioStreamPropertyVirtualFormat))
     }
 
@@ -134,6 +141,7 @@ public final class ExclusiveDevice {
                 try writeScalar(systemObject, address(original.selector), original.device)
             }
         }
+        logger.info("device \(self.id, privacy: .public): restored and released hog mode")
     }
 }
 

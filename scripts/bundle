@@ -25,6 +25,13 @@ import json, sys
 print(next(p["version"] for p in json.load(sys.stdin)["platforms"] if p["platformName"] == "macos"))')
 /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string $min_macos" "$app/Contents/Info.plist"
 
+# The bundle ID is declared once, in Swift, because it's also the log subsystem.
+bundle_id=$(sed -n 's/^public let bundleIdentifier = "\(.*\)"$/\1/p' Sources/Core/Log/ModuleLogger.swift)
+if [ -z "$bundle_id" ]; then
+  echo "couldn't read bundleIdentifier from Sources/Core/Log/ModuleLogger.swift" >&2; exit 1
+fi
+/usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $bundle_id" "$app/Contents/Info.plist"
+
 # Ad-hoc signature for local runs. Release signing and notarization come later.
 codesign --force --sign - "$app" >&2
 echo "$app"

@@ -1,7 +1,10 @@
 import CoreAudio
 import Foundation
 import HALOutput
+import Log
 import RingBuffer
+
+private let logger = moduleLogger()
 
 public enum PlaybackError: Error, CustomStringConvertible {
     case noDevice(named: String, available: [String])
@@ -133,9 +136,13 @@ private func play(
     try result.get()
 
     let seconds = Double(decoded) / format.mSampleRate
+    let underrunFrames = underrunBytes / UInt64(bytesPerFrame)
+    if underrunFrames > 0 {
+        logger.error("\(name): \(underrunFrames, privacy: .public) frames of underrun")
+    }
     log(
         "\(shouldStop() ? "stopped" : "done"): \(String(format: "%.1f", seconds)) s,"
-            + " underruns: \(underrunBytes / UInt64(bytesPerFrame)) frames")
+            + " underruns: \(underrunFrames) frames")
 }
 
 private func outputDevice(named name: String?) throws -> AudioDevice {
