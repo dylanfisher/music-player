@@ -117,7 +117,7 @@ let package = Package(
         ),
         .target(
             name: "NowPlaying",
-            dependencies: ["Artwork", "DisplayText", "Library", "Log", "Playback"],
+            dependencies: ["Artwork", "Commands", "DisplayText", "Library", "Log", "Playback"],
             path: "Sources/Features/NowPlaying",
             swiftSettings: strictSwift
         ),
@@ -230,7 +230,9 @@ let package = Package(
         ),
         .testTarget(
             name: "NowPlayingTests",
-            dependencies: ["Library", "Metadata", "NowPlaying", "Playback"],
+            dependencies: [
+                "Artwork", "Commands", "Library", "Metadata", "NowPlaying", "Playback", "Settings",
+            ],
             swiftSettings: strictSwift
         ),
         .testTarget(
