@@ -28,13 +28,11 @@ enum WindowMeasurement {
                 artFailures += 1
             }
         }
-        let report: [String: Any] = [
-            "launchSeconds": launchSeconds, "loadedMB": loadedMB, "scrolledMB": footprintMB(),
-            "rows": rows, "artImages": artImages, "artFailures": artFailures,
-        ]
+        let report = WindowReport(
+            launchSeconds: launchSeconds, loadedMB: loadedMB, scrolledMB: footprintMB(),
+            rows: rows, artImages: artImages, artFailures: artFailures)
         do {
-            let data = try JSONSerialization.data(withJSONObject: report, options: .sortedKeys)
-            FileHandle.standardOutput.write(data + Data("\n".utf8))
+            FileHandle.standardOutput.write(try JSONEncoder().encode(report) + Data("\n".utf8))
         } catch {
             FileHandle.standardError.write(Data("error: \(error)\n".utf8))
         }

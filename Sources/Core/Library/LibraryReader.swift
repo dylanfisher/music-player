@@ -35,8 +35,4 @@ public actor LibraryReader {
     public func fileIssues() throws -> [FileIssue] {
         try index.fileIssues()
     }
-
-    public func trackCount() throws -> Int {
-        try index.trackCount()
-    }
 }

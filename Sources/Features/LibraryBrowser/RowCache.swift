@@ -55,7 +55,4 @@ public final class RowCache {
         while recency.count > capacityPages { pages[recency.removeFirst()] = nil }
         return pages[page]?[ids[index]]
     }
-
-    /// How many rows are cached.
-    public var count: Int { pages.values.reduce(0) { $0 + $1.count } }
 }

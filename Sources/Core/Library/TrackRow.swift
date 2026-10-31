@@ -30,6 +30,4 @@ public struct TrackRow: Equatable, Sendable {
         guard let date, date.count >= 4 else { return nil }
         return Int(date.prefix(4))
     }
-
-    public var url: URL { URL(fileURLWithPath: path) }
 }

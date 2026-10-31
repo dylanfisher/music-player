@@ -63,9 +63,6 @@ public final class ArtworkLoader: @unchecked Sendable {
         return image
     }
 
-    /// How many thumbnails are cached.
-    public var count: Int { lock.withLock { images.count } }
-
     /// Marks `key` most recently used. Runs under `lock`.
     private func touch(_ key: ArtworkKey) {
         guard let index = recency.firstIndex(of: key) else { return }

@@ -53,7 +53,6 @@ private func fileWithArt(width: Int, height: Int, prefix: Int = 100) throws -> (
     _ = try loader.image(files[1].1, path: files[1].0)
     #expect(loader.cached(keys[0]) != nil)  // now the most recently used
     _ = try loader.image(files[2].1, path: files[2].0)
-    #expect(loader.count == 2)
     #expect(loader.cached(keys[1]) == nil)
     #expect(loader.cached(keys[0]) != nil)
     #expect(loader.cached(keys[2]) != nil)

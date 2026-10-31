@@ -24,7 +24,6 @@ private func row(_ id: Int64) -> TrackRow {
     _ = try cache.row(at: 0)  // page 0 is now the most recently used
     _ = try cache.row(at: 34)  // the last, short page; page 1 goes
     #expect(fetched.last == Array(130..<135))
-    #expect(cache.count == 15)
     _ = try cache.row(at: 1)
     #expect(fetched.count == 3)
     _ = try cache.row(at: 12)

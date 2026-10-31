@@ -182,8 +182,9 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         } catch {
             if !reportedFetchFailure {
                 reportedFetchFailure = true
-                logger.error("couldn't read rows for the table: \(error)")
-                actions.failed("couldn't read rows for the table: \(error)")
+                let message = "couldn't read rows for the table: \(error)"
+                logger.error("\(message)")
+                actions.failed(message)
             }
             return nil
         }

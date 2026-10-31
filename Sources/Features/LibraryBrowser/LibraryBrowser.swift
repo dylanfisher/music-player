@@ -195,7 +195,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
         do {
             status.fileIssueCount = Set(try await reader.fileIssues().map(\.path)).count
         } catch {
-            show(failure: "couldn't read the library's problems: \(error)")
+            report(problemsUnreadable(error))
         }
         showStatus()
     }
@@ -212,6 +212,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
         statusLabel.stringValue = status.text(trackCount: model.trackIDs.count)
         statusLabel.toolTip = status.folderLines.joined(separator: "\n")
         problemsButton.isHidden = !status.hasProblems
+    }
+
+    private func report(_ message: String) {
+        logger.error("\(message)")
+        show(failure: message)
     }
 
     private func show(failure message: String) {
@@ -231,8 +236,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
                     play(request)
                 }
             } catch {
-                logger.error("couldn't read the tracks to play: \(error)")
-                show(failure: "couldn't read the tracks to play: \(error)")
+                report("couldn't read the tracks to play: \(error)")
             }
         }
     }
@@ -242,8 +246,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
             do {
                 playNext(try await model.urls(ofRows: rows))
             } catch {
-                logger.error("couldn't read the tracks to queue: \(error)")
-                show(failure: "couldn't read the tracks to queue: \(error)")
+                report("couldn't read the tracks to queue: \(error)")
             }
         }
     }
@@ -254,7 +257,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
             do {
                 issues = try await reader.fileIssues().map(\.description)
             } catch {
-                issues = ["couldn't read the library's problems: \(error)"]
+                issues = [problemsUnreadable(error)]
             }
             let window = problems ?? ProblemsWindow()
             problems = window
@@ -279,4 +282,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
         // The table keeps room for a few rows.
         min(proposedMaximumPosition, splitView.bounds.height - 120)
     }
+}
+
+private func problemsUnreadable(_ error: any Error) -> String {
+    "couldn't read the library's problems: \(error)"
 }
