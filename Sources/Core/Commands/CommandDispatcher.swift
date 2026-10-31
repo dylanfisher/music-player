@@ -50,8 +50,6 @@ public final class CommandDispatcher {
         handlers[id] = Handler(run: run, isEnabled: enabled, isOn: isOn)
     }
 
-    public func hasHandler(_ id: CommandID) -> Bool { handlers[id] != nil }
-
     public func isEnabled(_ id: CommandID) -> Bool { handlers[id]?.isEnabled() ?? false }
 
     /// Nil for a command that isn't a toggle.

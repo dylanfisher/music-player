@@ -146,9 +146,6 @@ public struct KeyBindings: Sendable {
         registry.command(id)?.chords.first(where: \.canBeKeyEquivalent)
     }
 
-    /// The chord the palette shows beside a command: the first in effect.
-    public func firstChord(of id: CommandID) -> KeyChord? { registry.command(id)?.chords.first }
-
     /// The rule for recording `chord` at `position` of `id`. With `replacing`, a command that
     /// has the chord loses it. A chord the command has in its other slot moves.
     public func assign(
