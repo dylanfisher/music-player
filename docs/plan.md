@@ -598,6 +598,41 @@ is not "more than 200"; the dialogs and drag and drop are tested only through th
 - [ ] Media keys and headphone controls via `MPRemoteCommandCenter`.
 - [ ] Now Playing in Control Center via `MPNowPlayingInfoCenter`, with art.
 - [ ] Dock menu with the current track and transport controls.
+- [ ] **Hardware checkpoint (owner):** on the DAC Mac, after pushing, run `./scripts/pull` and
+      play an album with art to the ADI-2. Then check each of these and report which work:
+      1. Press F8 (play/pause) twice, then F9 (next) and F7 (previous), with another app in
+         front.
+      2. With AirPods or wired headphones with a remote connected to that Mac, press the stem
+         or button once (play/pause), twice (next) and three times (previous).
+      3. Open Control Center and expand Now Playing: the title, artist, album and art show, the
+         time moves while playing and stops when paused, dragging the scrubber seeks, and the
+         buttons work.
+      4. Right-click the Dock icon: the current track and artist show above Play/Pause, Next
+         Track and Previous Track, and each works.
+      5. Choose Playback ▸ Stop: Now Playing in Control Center goes back to empty.
+
+Implementation plan:
+
+1. **Playback.** The engine publishes `.seeked(seconds:)` after a seek, so anything showing the
+   time re-anchors it without polling.
+2. **NowPlaying** (the feature that already has the bar's model) gains the system side, all
+   without AppKit or MediaPlayer except one adapter file: `RemoteCommand` (the remote commands
+   and what each runs: Play/Pause, Stop, Next Track, Previous Track from the registry; the
+   scrubber's position seeks the engine as the bar's slider does), `RemoteCommandCenter` and
+   `NowPlayingCenter` (protocols over `MPRemoteCommandCenter` and `MPNowPlayingInfoCenter`),
+   `NowPlayingInfo` (title, artist, album, duration, elapsed at an anchor time, rate, art, and
+   the art's size for a requested box), and `MediaControls` (applies updates: which commands are
+   on, the info re-anchored only on track start, pause, resume, seek, device changes and
+   metadata changes, cleared on stop; art read off the main thread through `ArtworkLoader`).
+   `DockMenu` lists the current track and the transport commands, titles from the registry,
+   enabled from the dispatcher. `SystemMediaCenters` is the MediaPlayer adapter.
+3. **App.** Builds `MediaControls` with the adapters, connects it to the engine, passes library
+   refreshes on, and answers `applicationDockMenu`.
+4. **Docs.** MediaPlayer on AGENTS.md's frameworks line; an ADR for the choices.
+5. **Tests.** PlaybackTests (seek publishes), NowPlayingTests (commands enabled by state, each
+   remote command runs its registry command, play and pause by state, seek clamped, info on
+   start, pause, resume, seek and stop, no update for events that change nothing, elapsed
+   extrapolated when art arrives, art sizes, the Dock menu's items).
 
 ### 9. UPnP/DLNA output (Denon AVR-X1800H)
 
