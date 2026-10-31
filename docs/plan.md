@@ -482,6 +482,50 @@ Read 0012 and the Searcher records it lists before planning this phase.
       setting appears there without any UI code, and a Shortcuts pane.
 - [ ] **Appearance** setting: auto, light or dark.
 
+Implementation plan, in six slices, each its own commits:
+
+1. **Registry.** `Primitives/KeyChord`: a key plus modifiers with one stored spelling
+   (`cmd+shift+k`), the menu's symbols (⌃⌥⇧⌘), and the conversions to and from `NSEvent` and
+   menu key equivalents. `Core/Commands`: `CommandID`, `Command` (ID, title, up to two default
+   chords), `CommandRegistry` (a clash between defaults throws), `KeyBindings` (defaults, the
+   user's overrides, reserved and fixed chords: the effective chords, what was dropped, and the
+   rules for assigning a chord), `AppCommands` (every command, in menu sections), and the commands
+   generated from the settings schema. Settings gains a title per setting, `Appearance` and
+   `ShortcutOverride`.
+2. **Menus and keys.** `App`: the main menu built from the sections, a hidden item per
+   alternate, reserved and fixed chords, chords that change in place. `CommandDispatcher`
+   (Commands): a handler and an enabled check per ID, and the key rule (bound runs, unbound
+   ⌘/⌃/⌥ beeps). Row movement (`RowMove`, Commands) and type-to-select (`TypeSelect`,
+   LibraryBrowser) in the track table and panes; Space, Return, the arrows and Tab through the
+   focused list's `keyDown`. The search field takes Esc, ↑ and ↓ and keeps ⌘←/⌘→.
+3. **Config file.** Settings: `ConfigText` (comments, trailing commas and a BOM blanked to
+   spaces, a scan of key spans, patches that keep the text), `ConfigFile` (the file's settings
+   and shortcuts, errors by line and key, the default text), `ConfigStore` (watched with
+   FSEvents, reloads, a queue of patches that waits while the file is broken).
+   `~/.config/music-player/config.json`; `--home <folder>` puts the config file, library, state
+   file and device record in one folder for tests, Bench and runs on the build Mac. The error
+   banner, Open Config File and Copy Default Config. `--export-settings` and `--import-settings`
+   go.
+4. **State file.** The layout keys move to `AppState`, a second schema saved by `StateStore`
+   (the old `SettingsStore`) to `state.json` in Application Support, discarded whole when it
+   doesn't decode.
+5. **Palette.** `Primitives/FuzzyMatch` (0079's scores, top-k without a full sort).
+   `Features/Palette`: the model (sources, ranking with kind and frecency bonuses off the main
+   actor, latest query wins), the borderless panel and its rows. ⌘K lists commands, settings,
+   genres, artists and albums; ⌘P the current track list, read by `LibraryReader` off the main
+   actor. Frecency and the panel's place go to the state file. Bench: a keystroke over 43k rows.
+6. **Settings window.** `Features/SettingsWindow`: a toolbar of panes. General is an
+   `NSGridView` generated from the schema with Open Config File, Reveal in Finder and Copy
+   Default Config; Shortcuts has a search field, sections as the menus, two recorders and Reset
+   per row, Reset All. `--snapshot` takes `settings` or `palette` to draw those windows.
+
+Tests: KeyChordTests, FuzzyMatchTests, CommandsTests (clashes, overrides, reserved and fixed,
+assign, generated commands, row moves), SettingsTests (config text, patches, errors, store
+reloads, state file), LibraryBrowserTests (type-to-select), PaletteTests (ranking, frecency,
+latest query), SettingsWindowTests (General rows from the schema, the Shortcuts model),
+MusicPlayerTests (every command has a menu item, key equivalents, the search field's keys).
+ADRs for the decisions 0012 leaves open.
+
 ### 7. Playlists, smart playlists, stats
 
 - [ ] Manual playlists: create, rename, reorder, and add with drag and drop or a command.
