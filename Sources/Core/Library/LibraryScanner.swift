@@ -36,7 +36,7 @@ public struct LibraryScanner: Sendable {
         _ folder: WatchedFolder, only subtrees: [String] = [], control: ScanControl = ScanControl(),
         progress: AsyncStream<ScanProgress>.Continuation? = nil
     ) throws -> ScanSummary {
-        let root = trimmingTrailingSlashes(folder.path)
+        let root = canonicalPath(folder.path)
         var summary = ScanSummary()
         guard let device = directoryDevice(root) else {
             summary.issues.append(

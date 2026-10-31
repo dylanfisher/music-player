@@ -157,9 +157,9 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
 }
 
 @Test func trailingSlashesComeOffEveryPathButTheRoot() {
-    #expect(trimmingTrailingSlashes("/a/b//") == "/a/b")
-    #expect(trimmingTrailingSlashes("/a/b") == "/a/b")
-    #expect(trimmingTrailingSlashes("/") == "/")
+    #expect(canonicalPath("/a/b//") == "/a/b")
+    #expect(canonicalPath("/a/b") == "/a/b")
+    #expect(canonicalPath("/") == "/")
     #expect(isPath("/a/b/c", under: "/a/b/"))
     #expect(pathRange(under: "/a/b//") == "/a/b/"..<"/a/b0")
 }

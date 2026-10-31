@@ -350,17 +350,19 @@ private struct AlbumKey: Hashable {
     var artist: Int64?
 }
 
-/// `path` without trailing slashes, except that "/" stays. Every path the library compares or
-/// stores goes through this, so "/a/b/" and "/a/b" name one folder.
-func trimmingTrailingSlashes(_ path: String) -> String {
-    var trimmed = Substring(path)
+/// `path` as the library stores and compares it: without trailing slashes, except that "/"
+/// stays, and in the decomposed Unicode form APFS lists names in. A folder typed or picked in
+/// Settings can be precomposed, which Swift treats as equal but SQLite's bytewise comparison
+/// and range queries don't (ADR 0009). Every configured root goes through this.
+func canonicalPath(_ path: String) -> String {
+    var trimmed = Substring(path.decomposedStringWithCanonicalMapping)
     while trimmed.count > 1, trimmed.hasSuffix("/") { trimmed = trimmed.dropLast() }
     return String(trimmed)
 }
 
 /// `directory` as a prefix of the paths under it: "dir" becomes "dir", and "/" becomes "".
 private func stem(_ directory: String) -> String {
-    let base = trimmingTrailingSlashes(directory)
+    let base = canonicalPath(directory)
     return base == "/" ? "" : base
 }
 

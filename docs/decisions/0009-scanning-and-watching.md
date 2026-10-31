@@ -39,6 +39,15 @@ the earliest due poll. Files outside every watched folder are removed at launch.
 hook keeps network scans from starting, and pauses a running one, while a track starts, and
 while playing if `library.pausePollingDuringPlayback` is on.
 
+**One spelling for paths.** Swift compares strings by canonical equivalence and SQLite compares
+bytes, including the range query that finds a folder's files. APFS lists names decomposed
+(NFD) even for a folder created precomposed, so enumeration, `realpath` and FSEvents agree
+with each other, and the other spelling still opens the file. Only a configured root can
+differ, because Settings may hold it precomposed, so `canonicalPath` decomposes it and trims
+trailing slashes, once, wherever a root enters the library. The test
+`rootSpelledPrecomposedOrDecomposedIsOneFolder` shows both spellings of a root giving one set of
+paths. Names a network share lists precomposed are stored as listed.
+
 ## Alternatives considered
 
 - **`FileManager.enumerator`** — rejected: one error handler for the whole walk makes it hard

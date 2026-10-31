@@ -315,3 +315,22 @@ import Testing
     try index.store([scanned(path + ".copy")])
     #expect(try index.trackCount() == 1)
 }
+
+@Test func rootSpelledPrecomposedOrDecomposedIsOneFolder() throws {
+    let library = try TestLibrary()
+    let precomposed = (library.root as NSString).deletingLastPathComponent + "/Caf\u{e9}"
+    try FileManager.default.moveItem(atPath: library.root, toPath: precomposed)
+    let decomposed = precomposed.decomposedStringWithCanonicalMapping
+    #expect(Array(precomposed.utf8) != Array(decomposed.utf8))
+
+    let first = try library.scan(WatchedFolder(path: precomposed, kind: .local))
+    #expect(first.read == library.manifest.files.count)
+    let again = try library.scan(WatchedFolder(path: decomposed, kind: .local))
+    #expect(again.read == 0)
+    #expect(again.removed == 0)
+    let index = try library.index()
+    #expect(try index.trackCount() == library.readableCount)
+    let paths = try index.database.prepare("SELECT path FROM files").map { try $0.text(0) }
+    #expect(paths.allSatisfy { Array($0.utf8).starts(with: Array(decomposed.utf8)) })
+    #expect(paths.allSatisfy { FileManager.default.fileExists(atPath: $0) })
+}
