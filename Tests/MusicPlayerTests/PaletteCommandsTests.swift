@@ -18,3 +18,13 @@ import Testing
     #expect(items.map(\.detail) == ["Artist", "Album — Abba", "Album — Queen"])
     #expect(shown[queen]?.1 == 8)
 }
+
+@Test func playlistsAreListedByIDWithTheirKind() {
+    let items = playlistItems([
+        Playlist(id: 4, name: "Mix", kind: .manual),
+        Playlist(id: 9, name: "Mix", kind: .smart(SmartRules(match: .all, rules: []))),
+    ])
+    #expect(items.map(\.key) == [LibraryKey.playlist(4), LibraryKey.playlist(9)])
+    #expect(items.map(\.kind) == [.playlist, .playlist])
+    #expect(items.map(\.detail) == ["Playlist", "Smart Playlist"])
+}

@@ -69,11 +69,6 @@ extension TrackColumn {
     }
 }
 
-/// A rating as stars, empty when unrated.
-public func stars(_ count: Int) -> String {
-    String(repeating: "★", count: count)
-}
-
 @MainActor private let dateFormat: DateFormatter = {
     let format = DateFormatter()
     format.dateStyle = .short

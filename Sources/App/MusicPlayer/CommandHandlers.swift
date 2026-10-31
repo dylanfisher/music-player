@@ -13,11 +13,17 @@ extension AppDelegate {
         registerListCommands(dispatcher)
         registerViewCommands(dispatcher)
         registerPlaybackCommands(dispatcher)
+        registerPlaylistCommands(dispatcher)
         dispatcher.handle(.addFolder, enabled: hasWindow) { [weak self] in self?.addFolder() }
     }
 
     /// Whether the main window is open, for the commands that need it.
     var hasWindow: () -> Bool { { [weak self] in self?.window != nil } }
+
+    /// Whether the track table has a selection, for the commands that act on it.
+    var hasSelectedTracks: () -> Bool {
+        { [weak self] in self?.browser?.hasSelectedTracks == true }
+    }
 
     private func registerListCommands(_ dispatcher: CommandDispatcher) {
         for (id, move) in RowMove.commands {
@@ -33,22 +39,33 @@ extension AppDelegate {
                 self.browser?.selectAllTracks()
             }
         }
-        let hasTracks = { [weak self] in self?.browser?.hasSelectedTracks == true }
-        dispatcher.handle(.revealInFinder, enabled: hasTracks) { [weak self] in
+        dispatcher.handle(.revealInFinder, enabled: hasSelectedTracks) { [weak self] in
             self?.withSelectedPaths { paths in
                 NSWorkspace.shared.activateFileViewerSelecting(
                     paths.map(URL.init(fileURLWithPath:)))
             }
         }
-        dispatcher.handle(.copyPath, enabled: hasTracks) { [weak self] in
+        dispatcher.handle(.copyPath, enabled: hasSelectedTracks) { [weak self] in
             self?.withSelectedPaths { paths in
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(paths.joined(separator: "\n"), forType: .string)
             }
         }
+        // The list with the keys decides: the queue, or else a manual playlist the table shows.
         dispatcher.handle(
-            .removeFromQueue, enabled: { [weak self] in self?.queue?.hasSelection == true },
-            run: { [weak self] in self?.queue?.removeSelection() })
+            .removeFromQueue,
+            enabled: { [weak self] in
+                self?.queue?.hasSelection == true || self?.browser?.canRemoveFromPlaylist == true
+            },
+            run: { [weak self] in
+                guard let self else { return }
+                let inQueue = self.window?.window.firstResponder === self.queue?.list
+                if inQueue || self.browser?.canRemoveFromPlaylist != true {
+                    self.queue?.removeSelection()
+                } else {
+                    self.browser?.removeSelectionFromPlaylist()
+                }
+            })
     }
 
     private func registerViewCommands(_ dispatcher: CommandDispatcher) {

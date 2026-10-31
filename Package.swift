@@ -87,7 +87,7 @@ let package = Package(
         ),
         .target(
             name: "Commands",
-            dependencies: ["KeyChord", "Log", "Settings"],
+            dependencies: ["DisplayText", "KeyChord", "Log", "Settings"],
             path: "Sources/Core/Commands",
             swiftSettings: strictSwift
         ),

@@ -4,7 +4,7 @@ import FuzzyMatch
 public struct PaletteItem: Sendable {
     /// In the order equal scores rank them.
     public enum Kind: Int, Sendable, Comparable {
-        case command, setting, genre, artist, album, track
+        case command, setting, playlist, genre, artist, album, track
 
         public static func < (a: Kind, b: Kind) -> Bool { a.rawValue < b.rawValue }
     }

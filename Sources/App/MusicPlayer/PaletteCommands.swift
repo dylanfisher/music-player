@@ -49,7 +49,8 @@ extension AppDelegate {
         switch mode {
         case .commands:
             let session = palette.show(
-                .commands, items: commandItems(), over: window, place: state[\.palettePlace])
+                .commands, items: commandItems() + playlistItems(browser.playlists), over: window,
+                place: state[\.palettePlace])
             Task {
                 do {
                     let (items, entries) = libraryItems(try await browser.allEntries())
@@ -135,6 +136,11 @@ extension AppDelegate {
         case .genre, .artist, .album:
             guard let (pane, id) = paletteEntries[item.key] else { return }
             Task { await browser.showOnly(pane, id: id) }
+        case .playlist:
+            guard let id = Int64(item.key.dropFirst(LibraryKey.playlistPrefix.count)),
+                browser.playlists.contains(where: { $0.id == id })
+            else { return }
+            browser.show(.playlist(id))
         case .track:
             // "track:<row>:<id>": the row, if it still shows that track.
             let parts = item.key.split(separator: ":")
@@ -170,11 +176,23 @@ extension AppDelegate {
 /// rather than IDs, so frecency survives a rebuilt index (ADR 0016). Genres and artists are
 /// unique by name; an album is unique by its title and artist.
 enum LibraryKey {
+    static let playlistPrefix = "playlist:"
+    /// By ID, which survives a rebuilt index and a rename, since playlists live with the stats.
+    static func playlist(_ id: Int64) -> String { playlistPrefix + String(id) }
     static func genre(_ name: String) -> String { "genre:\(name)" }
     static func artist(_ name: String) -> String { "artist:\(name)" }
     /// The title and artist apart by a unit separator, a control character tags don't use.
     static func album(_ title: String, by artist: String?) -> String {
         "album:\(title)\u{1F}\(artist ?? "")"
+    }
+}
+
+/// The palette rows for the playlists, by name.
+func playlistItems(_ playlists: [Playlist]) -> [PaletteItem] {
+    playlists.map { playlist in
+        PaletteItem(
+            kind: .playlist, key: LibraryKey.playlist(playlist.id), title: playlist.name,
+            detail: playlist.isManual ? "Playlist" : "Smart Playlist")
     }
 }
 

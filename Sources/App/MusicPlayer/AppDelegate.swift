@@ -9,6 +9,7 @@ import Log
 import NowPlaying
 import Palette
 import Playback
+import PlaylistEditor
 import QueueView
 import Settings
 import SettingsWindow
@@ -56,6 +57,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The output settings changed while playing; the output reopens once playback stops.
     var outputChanged = false
     private var playbackUpdates: Task<Void, Never>?
+    /// Plays and skips, counted from the engine's updates, and the wake-up for the next play.
+    var playCounter = PlayCounter()
+    var playTick: Task<Void, Never>?
+    /// The smart playlist editor while it's open.
+    var ruleEditor: RuleEditorSheet?
     private(set) var dispatcher: CommandDispatcher?
     private var menu: MainMenu?
     private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
@@ -195,12 +201,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch snapshotOf {
             case .main: { [weak self] in self?.window?.window }
             case .palette: { [weak self] in self?.palette?.window }
+            case .playlist: { [weak self] in self?.ruleEditor?.window }
             case .settings, .shortcuts: { [weak self] in self?.settingsWindow?.window }
             }
         let wait = snapshotOf == .main ? 0 : 1.0
         switch snapshotOf {
         case .main: break
         case .palette: dispatcher?.run(.showPalette)
+        case .playlist: dispatcher?.run(.newSmartPlaylist)
         case .settings: settingsWindowController()?.show(.general)
         case .shortcuts: settingsWindowController()?.show(.shortcuts)
         }
@@ -256,6 +264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 for await update in await engine.updates() {
                     self?.playback = update.state
                     self?.playbackChanged(update.state)
+                    self?.countPlays(update)
                     if case .trackStarted(let index) = update.event {
                         self?.countPlay(update.state.queue[index].path)
                     }

@@ -1,3 +1,4 @@
+import DisplayText
 import KeyChord
 import Settings
 
@@ -39,6 +40,16 @@ extension CommandID {
     public static let revealInFinder = CommandID("track.revealInFinder")
     public static let copyPath = CommandID("track.copyPath")
     public static let removeFromQueue = CommandID("queue.remove")
+    public static let addToPlaylist = CommandID("playlist.addSelection")
+    /// Rate the selection 0 (no rating) to 5 stars, by index.
+    public static let rate = (0...5).map { CommandID("track.rate\($0)") }
+
+    public static let newPlaylist = CommandID("playlist.new")
+    public static let newPlaylistFromSelection = CommandID("playlist.newFromSelection")
+    public static let newSmartPlaylist = CommandID("playlist.newSmart")
+    public static let editSmartPlaylist = CommandID("playlist.editRules")
+    public static let renamePlaylist = CommandID("playlist.rename")
+    public static let deletePlaylist = CommandID("playlist.delete")
 
     public static let playPause = CommandID("playback.playPause")
     public static let playSelection = CommandID("playback.playSelection")
@@ -68,64 +79,80 @@ public enum AppCommands {
     private static let ctrl: KeyChord.Modifiers = .control
 
     /// The commands written here, without the ones generated from settings.
-    static let fixedSet: [Command] = [
-        Command(.showPalette, "Command Palette…", [.init("k", cmd), .init("p", [cmd, shift])]),
-        Command(.goToItem, "Go to Item…", [.init("p", cmd), .init("k", [cmd, shift])]),
+    static let fixedSet: [Command] =
+        [
+            Command(
+                .showPalette, "Command Palette…", [.init("k", cmd), .init("p", [cmd, shift])]),
+            Command(.goToItem, "Go to Item…", [.init("p", cmd), .init("k", [cmd, shift])]),
 
-        Command(.selectNext, "Select Next Row", [.init(.down)]),
-        Command(.selectPrevious, "Select Previous Row", [.init(.up)]),
-        Command(.extendDown, "Extend Selection Down", [.init(.down, shift)]),
-        Command(.extendUp, "Extend Selection Up", [.init(.up, shift)]),
-        Command(
-            .tenRowsDown, "Move Down 10 Rows", [.init(.down, opt), .init(.down, [ctrl, shift])]),
-        Command(.tenRowsUp, "Move Up 10 Rows", [.init(.up, opt), .init(.up, [ctrl, shift])]),
-        Command(.selectFirst, "Select First Row", [.init(.home), .init(.up, [opt, cmd])]),
-        Command(.selectLast, "Select Last Row", [.init(.end), .init(.down, [opt, cmd])]),
-        Command(.pageDown, "Page Down", [.init(.pageDown)]),
-        Command(.pageUp, "Page Up", [.init(.pageUp)]),
-        Command(.selectAll, "Select All", [.init("a", cmd)]),
+            Command(.selectNext, "Select Next Row", [.init(.down)]),
+            Command(.selectPrevious, "Select Previous Row", [.init(.up)]),
+            Command(.extendDown, "Extend Selection Down", [.init(.down, shift)]),
+            Command(.extendUp, "Extend Selection Up", [.init(.up, shift)]),
+            Command(
+                .tenRowsDown, "Move Down 10 Rows",
+                [.init(.down, opt), .init(.down, [ctrl, shift])]),
+            Command(.tenRowsUp, "Move Up 10 Rows", [.init(.up, opt), .init(.up, [ctrl, shift])]),
+            Command(.selectFirst, "Select First Row", [.init(.home), .init(.up, [opt, cmd])]),
+            Command(.selectLast, "Select Last Row", [.init(.end), .init(.down, [opt, cmd])]),
+            Command(.pageDown, "Page Down", [.init(.pageDown)]),
+            Command(.pageUp, "Page Up", [.init(.pageUp)]),
+            Command(.selectAll, "Select All", [.init("a", cmd)]),
 
-        Command(.find, "Find", [.init("f", cmd)]),
-        Command(.sortByTitle, "Sort by Title", [.init("1", [ctrl, opt])]),
-        Command(.sortByArtist, "Sort by Artist", [.init("2", [ctrl, opt])]),
-        Command(.sortByAlbum, "Sort by Album", [.init("3", [ctrl, opt])]),
-        Command(.sortByDateAdded, "Sort by Date Added", [.init("4", [ctrl, opt])]),
-        Command(.reverseSort, "Reverse Sort Order", [.init("p", [opt, cmd, shift])]),
+            Command(.find, "Find", [.init("f", cmd)]),
+            Command(.sortByTitle, "Sort by Title", [.init("1", [ctrl, opt])]),
+            Command(.sortByArtist, "Sort by Artist", [.init("2", [ctrl, opt])]),
+            Command(.sortByAlbum, "Sort by Album", [.init("3", [ctrl, opt])]),
+            Command(.sortByDateAdded, "Sort by Date Added", [.init("4", [ctrl, opt])]),
+            Command(.reverseSort, "Reverse Sort Order", [.init("p", [opt, cmd, shift])]),
 
-        Command(.toggleSidebar, "Show Sidebar", [.init("s", [ctrl, cmd])]),
-        Command(.focusSidebar, "Focus Sidebar", [.init("0", cmd)]),
-        Command(.toggleStatusBar, "Show Status Bar", [.init("/", cmd)]),
-        Command(.toggleQueue, "Show Queue", [.init("u", [opt, cmd])]),
-        Command(.showCurrentTrack, "Show Current Track", [.init("l", cmd)]),
-        Command(.back, "Back", [.init("[", cmd)]),
-        Command(.forward, "Forward", [.init("]", cmd)]),
-        Command(.focusNextPane, "Focus Next Pane", [.init(.right)]),
-        Command(.focusPreviousPane, "Focus Previous Pane", [.init(.left)]),
-        Command(.focusNextArea, "Focus Next Area", [.init(.tab)]),
+            Command(.toggleSidebar, "Show Sidebar", [.init("s", [ctrl, cmd])]),
+            Command(.focusSidebar, "Focus Sidebar", [.init("0", cmd)]),
+            Command(.toggleStatusBar, "Show Status Bar", [.init("/", cmd)]),
+            Command(.toggleQueue, "Show Queue", [.init("u", [opt, cmd])]),
+            Command(.showCurrentTrack, "Show Current Track", [.init("l", cmd)]),
+            Command(.back, "Back", [.init("[", cmd)]),
+            Command(.forward, "Forward", [.init("]", cmd)]),
+            Command(.focusNextPane, "Focus Next Pane", [.init(.right)]),
+            Command(.focusPreviousPane, "Focus Previous Pane", [.init(.left)]),
+            Command(.focusNextArea, "Focus Next Area", [.init(.tab)]),
 
-        Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
-        Command(.revealInFinder, "Reveal in Finder", [.init("r", [opt, cmd])]),
-        Command(.copyPath, "Copy Path", [.init("c", [opt, cmd])]),
-        Command(.removeFromQueue, "Remove from Queue", [.init(.delete, cmd)]),
+            Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
+            Command(.revealInFinder, "Reveal in Finder", [.init("r", [opt, cmd])]),
+            Command(.copyPath, "Copy Path", [.init("c", [opt, cmd])]),
+            Command(.removeFromQueue, "Remove from Queue or Playlist", [.init(.delete, cmd)]),
+            Command(.addToPlaylist, "Add to Playlist…"),
 
-        Command(.playPause, "Play/Pause", [.init(.space)]),
-        Command(.playSelection, "Play Selection", [.init(.return), .init(.down, cmd)]),
-        Command(.playNext, "Play Next", [.init(.return, opt)]),
-        Command(.nextTrack, "Next Track", [.init(.right, cmd)]),
-        Command(.previousTrack, "Previous Track", [.init(.left, cmd)]),
-        Command(.seekForward, "Seek Forward", [.init(.right, [opt, cmd])]),
-        Command(.seekBack, "Seek Back", [.init(.left, [opt, cmd])]),
-        Command(.volumeUp, "Volume Up", [.init(.up, [ctrl, cmd])]),
-        Command(.volumeDown, "Volume Down", [.init(.down, [ctrl, cmd])]),
-        Command(.stop, "Stop"),
-        Command(.shuffle, "Shuffle"),
-        Command(.repeatOff, "Repeat Off"),
-        Command(.repeatAll, "Repeat All"),
-        Command(.repeatOne, "Repeat One"),
+            Command(.newPlaylist, "New Playlist", [.init("n", cmd)]),
+            Command(
+                .newPlaylistFromSelection, "New Playlist from Selection",
+                [.init("n", [cmd, shift])]),
+            Command(.newSmartPlaylist, "New Smart Playlist…", [.init("n", [opt, cmd])]),
+            Command(.editSmartPlaylist, "Edit Smart Playlist…"),
+            Command(.renamePlaylist, "Rename Playlist…"),
+            Command(.deletePlaylist, "Delete Playlist…"),
 
-        Command(.openConfigFile, "Open Config File"),
-        Command(.copyDefaultConfig, "Copy Default Config"),
-    ]
+            Command(.playPause, "Play/Pause", [.init(.space)]),
+            Command(.playSelection, "Play Selection", [.init(.return), .init(.down, cmd)]),
+            Command(.playNext, "Play Next", [.init(.return, opt)]),
+            Command(.nextTrack, "Next Track", [.init(.right, cmd)]),
+            Command(.previousTrack, "Previous Track", [.init(.left, cmd)]),
+            Command(.seekForward, "Seek Forward", [.init(.right, [opt, cmd])]),
+            Command(.seekBack, "Seek Back", [.init(.left, [opt, cmd])]),
+            Command(.volumeUp, "Volume Up", [.init(.up, [ctrl, cmd])]),
+            Command(.volumeDown, "Volume Down", [.init(.down, [ctrl, cmd])]),
+            Command(.stop, "Stop"),
+            Command(.shuffle, "Shuffle"),
+            Command(.repeatOff, "Repeat Off"),
+            Command(.repeatAll, "Repeat All"),
+            Command(.repeatOne, "Repeat One"),
+
+            Command(.openConfigFile, "Open Config File"),
+            Command(.copyDefaultConfig, "Copy Default Config"),
+        ]
+        + CommandID.rate.enumerated().map { count, id in
+            Command(id, count == 0 ? "Clear Rating" : "Rate \(stars(count))")
+        }
 
     /// Every command: those above, then those generated from `settings`.
     public static func all(_ settings: AppSettings = AppSettings()) -> [Command] {

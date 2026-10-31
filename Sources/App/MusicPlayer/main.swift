@@ -16,7 +16,8 @@ import Settings
 // --settings reads another config file.
 // --measure-window prints the launch time and memory as JSON and quits, for Bench.
 // --snapshot draws the window into a PNG a few seconds after its first rows, to check the layout.
-// --snapshot-of draws the palette, or the Settings window's General or Shortcuts pane, instead.
+// --snapshot-of draws the palette, the smart playlist editor, or the Settings window's General or
+// Shortcuts pane, instead.
 let arguments = CommandLine.arguments
 
 func value(after flag: String) -> String? { value(after: flag, in: arguments) }

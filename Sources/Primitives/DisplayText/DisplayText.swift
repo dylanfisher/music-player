@@ -12,3 +12,8 @@ public func kilohertz(_ hertz: Double) -> String {
     let khz = hertz / 1000
     return khz.rounded() == khz ? String(Int(khz)) : String(khz)
 }
+
+/// 3 -> "★★★"; 0, unrated, -> "".
+public func stars(_ count: Int) -> String {
+    String(repeating: "★", count: max(0, count))
+}

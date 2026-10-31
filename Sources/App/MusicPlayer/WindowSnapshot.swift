@@ -1,9 +1,9 @@
 import AppKit
 
-/// What `--snapshot-of` draws: the main window, its palette opened on ⌘K, or the Settings
-/// window's General or Shortcuts pane.
+/// What `--snapshot-of` draws: the main window, its palette opened on ⌘K, the smart playlist
+/// editor opened on a new playlist, or the Settings window's General or Shortcuts pane.
 enum SnapshotTarget: String, CaseIterable {
-    case main, palette, settings, shortcuts
+    case main, palette, playlist, settings, shortcuts
 }
 
 /// `--snapshot <file>`: draws the window's content into a PNG, for checking the layout on a Mac

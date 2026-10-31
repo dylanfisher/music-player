@@ -13,9 +13,13 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   the change up on save; a mistake shows in a banner across the window and nothing in the file
   applies until it's fixed. The Settings window (⌘,) edits the same file, with a General pane
   for the settings and a Shortcuts pane for every command's two chords.
-- **⌘K** opens the command palette: every command, setting, genre, artist and album, ranked by
-  how well they match and how often and recently you chose or played them.
+- **⌘K** opens the command palette: every command, setting, playlist, genre, artist and album,
+  ranked by how well they match and how often and recently you chose or played them.
 - **⌘P** is Go to Item: the tracks of the current list, by title.
+- **Playlists** (⌘N, or ⇧⌘N from the selection) take tracks dragged onto them in the sidebar,
+  and reorder by dragging while sorted by Order. **Smart playlists** (⌥⌘N) pick tracks by rules
+  and follow the library as it changes. Plays, skips, ratings and History are kept in the
+  library database, never in the music files; a play counts after half the track or 4 minutes.
 
 ## Develop
 
@@ -25,7 +29,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 |---|---|
 | Install / bootstrap | `./scripts/setup` |
 | Run the app | `./scripts/dev` (`--home <folder>` keeps the config file, library and state in one folder; `--settings <file>` names another config file) |
-| Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|settings\|shortcuts]` |
+| Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|settings\|shortcuts]` |
 | Run tests | `./scripts/test` |
 | Build the `.app` | `./scripts/bundle [debug\|release]` |
 | Update a second Mac's clone, then run the app | `./scripts/pull` |

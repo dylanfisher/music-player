@@ -67,8 +67,14 @@ public enum AppMenus {
             MenuSection(
                 title: "File", role: .plain,
                 entries: [
+                    .command(.newPlaylist), .command(.newPlaylistFromSelection),
+                    .command(.newSmartPlaylist), .command(.editSmartPlaylist),
+                    .command(.renamePlaylist), .command(.deletePlaylist), .separator,
                     .command(.addFolder), .setting("library.pausePollingDuringPlayback"),
-                    .separator, .command(.revealInFinder), .command(.copyPath), .separator,
+                    .separator, .command(.revealInFinder), .command(.copyPath),
+                    .command(.addToPlaylist),
+                    .submenu("Rating", CommandID.rate.map(MenuEntry.command), showsChords: true),
+                    .separator,
                     .standard(StandardItem("Close Window", "performClose:", KeyChord("w", cmd))),
                 ]),
             MenuSection(
