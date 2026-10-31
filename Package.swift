@@ -42,6 +42,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Playback",
+            dependencies: ["Log"],
+            path: "Sources/Core/Playback",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Metadata",
             path: "Sources/Core/Metadata",
             swiftSettings: strictSwift
@@ -115,6 +121,11 @@ let package = Package(
         .testTarget(
             name: "MetadataTests",
             dependencies: ["Fixtures", "Metadata"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "PlaybackTests",
+            dependencies: ["Playback"],
             swiftSettings: strictSwift
         ),
         .testTarget(

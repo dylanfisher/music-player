@@ -1,0 +1,58 @@
+import Foundation
+
+/// Everything a UI, media keys or a remote shows about playback.
+public struct PlaybackState: Sendable, Equatable {
+    public enum Status: Sendable, Equatable {
+        case stopped, playing, paused
+    }
+
+    public enum Device: Sendable, Equatable {
+        case connected
+        /// Unplugged or gone. Playback paused instead of moving to another device.
+        case lost
+        /// Back after being lost, so playback can resume where it paused.
+        case returned
+    }
+
+    public var status = Status.stopped
+    public var queue: [URL] = []
+    /// Into `queue`: the track playing or paused, or the one `play()` starts.
+    public var currentIndex: Int?
+    public var repeatMode = RepeatMode.off
+    public var shuffle = false
+    /// Once the current track has started.
+    public var durationSeconds: Double?
+    public var outputFormat: String?
+    public var device = Device.connected
+
+    public init() {}
+}
+
+/// One change to `PlaybackState`, and what caused it.
+public struct PlaybackUpdate: Sendable {
+    public var state: PlaybackState
+    /// Nil for the first update a subscriber gets, which is the state at the time.
+    public var event: PlaybackEvent?
+}
+
+public enum PlaybackEvent: Sendable, Equatable {
+    case queueChanged
+    /// The track at this index into the queue began playing.
+    case trackStarted(index: Int)
+    case trackEnded(index: Int)
+    case resumed
+    case paused
+    case stopped
+    case repeatChanged
+    case shuffleChanged
+    case formatChanged(FormatChange)
+    /// The track was skipped because it couldn't be played.
+    case trackFailed(URL, reason: String)
+    case underrun(frames: Int)
+    case deviceLost
+    case deviceReturned
+    /// The output stopped because of an error.
+    case failed(reason: String)
+    /// The queue played to its end.
+    case finished
+}
