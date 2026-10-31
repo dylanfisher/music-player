@@ -41,6 +41,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Metadata",
+            path: "Sources/Core/Metadata",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Settings",
             dependencies: ["Log"],
             path: "Sources/Core/Settings",
@@ -93,6 +98,11 @@ let package = Package(
         .testTarget(
             name: "LogTests",
             dependencies: ["Log"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "MetadataTests",
+            dependencies: ["Fixtures", "Metadata"],
             swiftSettings: strictSwift
         ),
         .testTarget(

@@ -1,0 +1,337 @@
+/// An ID3v2 tag's fields and art, and how many bytes the tag takes.
+struct ID3v2Tag {
+    var tags: TrackTags
+    var art: EmbeddedArt?
+    /// Header, extended header, frames, padding and footer.
+    var byteCount: Int
+}
+
+private enum FrameKind {
+    case text(TagField)
+    /// `TCON`, which may refer to the ID3v1 list.
+    case genre
+    /// `COMM`; only the one with an empty description is the user's comment.
+    case comment
+    case picture
+}
+
+/// ID3v2.2 has three-character IDs, 2.3 and 2.4 four. `TDRC` is 2.4's date and `TYER` 2.3's year;
+/// taggers mix them, so both are read in every version.
+private let frameKinds: [String: FrameKind] = [
+    "TT2": .text(.title), "TP1": .text(.artist), "TAL": .text(.album),
+    "TP2": .text(.albumArtist), "TCO": .genre, "TYE": .text(.date), "TRK": .text(.track),
+    "TPA": .text(.disc), "TCP": .text(.compilation), "TCM": .text(.composer), "COM": .comment,
+    "PIC": .picture,
+    "TIT2": .text(.title), "TPE1": .text(.artist), "TALB": .text(.album),
+    "TPE2": .text(.albumArtist), "TCON": .genre, "TDRC": .text(.date), "TYER": .text(.date),
+    "TRCK": .text(.track), "TPOS": .text(.disc), "TCMP": .text(.compilation),
+    "TCOM": .text(.composer), "COMM": .comment, "APIC": .picture,
+]
+
+/// How far into a picture frame to read for its MIME type and description. Longer headers are
+/// read whole.
+private let pictureHeaderBytes = 1024
+
+/// The tag body's frames: in the file, or decoded into memory when the whole tag is
+/// unsynchronised, because then frame sizes count decoded bytes.
+private struct FrameArea {
+    var range: Range<Int>
+    var reader: ByteReader
+    /// Set when the tag was decoded; `range` then indexes it rather than the file.
+    var decoded: Bytes?
+
+    func bytes(_ range: Range<Int>) throws(ParseFailure) -> Bytes {
+        if let decoded { return try decoded.slice(range) }
+        return try reader.bytes(range)
+    }
+
+    func fileOffset(_ position: Int) -> Int { decoded?.fileOffset(position) ?? position }
+}
+
+/// Reads the ID3v2 tag at `start`, which must end by `end`: the end of the file for MP3, or of
+/// the chunk for WAV and AIFF. `container` names that limit in errors.
+func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String)
+    throws(ParseFailure) -> ID3v2Tag
+{
+    guard end - start >= 10 else {
+        throw .malformed(at: start, "ID3v2 header cut off by the end of \(container)")
+    }
+    let header = try reader.bytes(start..<start + 10)
+    guard header.matches("ID3", at: 0) else {
+        throw .malformed(at: start, "\(container) doesn't start with an ID3v2 tag")
+    }
+    let version = try header.uint8(3)
+    guard (2...4).contains(version) else {
+        throw .unsupported(at: start, "ID3v2.\(version)")
+    }
+    let flags = try header.uint8(5)
+    let knownFlags: UInt8 = [2: 0xC0, 3: 0xE0, 4: 0xF0][version]!
+    guard flags & ~knownFlags == 0 else {
+        throw .malformed(at: start + 5, "ID3v2.\(version) tag has unknown flags \(flags)")
+    }
+    if version == 2, flags & 0x40 != 0 {
+        throw .unsupported(at: start + 5, "compressed ID3v2.2 tag")
+    }
+    guard let size = try header.syncsafe(6) else {
+        throw .malformed(at: start + 6, "ID3v2 tag size isn't a syncsafe integer")
+    }
+    let footer = version == 4 && flags & 0x10 != 0 ? 10 : 0
+    let byteCount = 10 + size + footer
+    guard byteCount <= end - start else {
+        throw .malformed(
+            at: start,
+            "ID3v2 tag of \(byteCount) bytes runs past the end of \(container)"
+                + " (\(end - start) bytes from the tag)")
+    }
+
+    let body = start + 10..<start + 10 + size
+    let tagUnsynchronised = flags & 0x80 != 0
+    var area = FrameArea(range: body, reader: reader)
+    if tagUnsynchronised, version < 4 {
+        let (decoded, escapes) = UnsyncEscapes.decode(try reader.bytes(body).array)
+        area.decoded = Bytes(decoded, base: body.lowerBound, escapes: escapes)
+        area.range = 0..<decoded.count
+    }
+    var cursor = area.range.lowerBound
+    if flags & 0x40 != 0, version >= 3 {
+        cursor += try extendedHeaderSize(area, at: cursor, version: version)
+    }
+
+    var tags = TrackTags()
+    var pictures: [(type: UInt32, art: EmbeddedArt)] = []
+    let headerSize = version == 2 ? 6 : 10
+    let idLength = version == 2 ? 3 : 4
+    while area.range.upperBound - cursor >= headerSize {
+        let frameHeader = try area.bytes(cursor..<cursor + headerSize)
+        if try frameHeader.uint8(0) == 0 { break }  // padding
+        let idBytes = try frameHeader.slice(0..<idLength).array
+        let id = latin1(idBytes)
+        guard idBytes.allSatisfy({ (0x41...0x5A).contains($0) || (0x30...0x39).contains($0) })
+        else {
+            throw .malformed(at: area.fileOffset(cursor), "invalid ID3v2 frame ID \"\(id)\"")
+        }
+        let frameSize: Int
+        switch version {
+        case 2: frameSize = Int(try frameHeader.uint24BE(3))
+        case 3: frameSize = Int(try frameHeader.uint32BE(4))
+        default:
+            guard let syncsafe = try frameHeader.syncsafe(4) else {
+                throw .malformed(
+                    at: area.fileOffset(cursor + 4), "ID3v2.4 frame \(id) size isn't syncsafe")
+            }
+            frameSize = syncsafe
+        }
+        let frameStart = cursor + headerSize
+        guard frameSize <= area.range.upperBound - frameStart else {
+            throw .malformed(
+                at: area.fileOffset(cursor),
+                "ID3v2 frame \(id) of \(frameSize) bytes runs past the end of its tag")
+        }
+        let frame = frameStart..<frameStart + frameSize
+        cursor = frame.upperBound
+        guard let kind = frameKinds[id] else { continue }
+
+        var data = frame.lowerBound
+        var frameUnsynchronised = false
+        if version >= 3 {
+            let format = try frameHeader.uint8(9)
+            let (compressed, encrypted, grouped): (UInt8, UInt8, UInt8) =
+                version == 3 ? (0x80, 0x40, 0x20) : (0x08, 0x04, 0x40)
+            if format & (compressed | encrypted) != 0 {
+                throw .unsupported(
+                    at: area.fileOffset(frame.lowerBound - headerSize),
+                    "compressed or encrypted ID3v2 frame \(id)")
+            }
+            if format & grouped != 0 { data += 1 }
+            if version == 4 {
+                if format & 0x01 != 0 { data += 4 }  // data length indicator
+                frameUnsynchronised = format & 0x02 != 0 || tagUnsynchronised
+            }
+        }
+        guard data <= frame.upperBound else {
+            throw .malformed(
+                at: area.fileOffset(frame.lowerBound), "ID3v2 frame \(id) is too short")
+        }
+        let contents = data..<frame.upperBound
+        if case .picture = kind {
+            if let picture = try picture(
+                area, contents, version: version, unsynchronised: frameUnsynchronised,
+                stored: tagUnsynchronised || frameUnsynchronised)
+            {
+                pictures.append(picture)
+            }
+            continue
+        }
+
+        var bytes = try area.bytes(contents)
+        if frameUnsynchronised {
+            let (decoded, escapes) = UnsyncEscapes.decode(bytes.array)
+            bytes = Bytes(decoded, base: area.fileOffset(contents.lowerBound), escapes: escapes)
+        }
+        let offset = bytes.fileOffset(0)
+        switch kind {
+        case .text(let field): try tags.set(field, try textFrame(bytes), at: offset)
+        case .genre:
+            try tags.set(.genre, try genre(try textFrame(bytes), version, at: offset), at: offset)
+        case .comment:
+            if let comment = try commentFrame(bytes) { try tags.set(.comment, comment, at: offset) }
+        case .picture: break
+        }
+    }
+    return ID3v2Tag(tags: tags, art: preferredPicture(pictures), byteCount: byteCount)
+}
+
+/// 2.3 gives the size after its own four bytes; 2.4 gives a syncsafe size that includes them.
+private func extendedHeaderSize(_ area: FrameArea, at cursor: Int, version: UInt8)
+    throws(ParseFailure) -> Int
+{
+    let bytes = try area.bytes(cursor..<min(area.range.upperBound, cursor + 4))
+    let size: Int
+    if version == 3 {
+        size = 4 + Int(try bytes.uint32BE(0))
+    } else {
+        guard let syncsafe = try bytes.syncsafe(0), syncsafe >= 6 else {
+            throw .malformed(at: area.fileOffset(cursor), "ID3v2.4 extended header size is invalid")
+        }
+        size = syncsafe
+    }
+    guard size <= area.range.upperBound - cursor else {
+        throw .malformed(
+            at: area.fileOffset(cursor),
+            "ID3v2 extended header of \(size) bytes runs past the end of its tag")
+    }
+    return size
+}
+
+private func encoding(_ byte: UInt8, at offset: Int) throws(ParseFailure) -> TextEncoding {
+    switch byte {
+    case 0: .latin1
+    case 1: .utf16WithBOM
+    case 2: .utf16BigEndian
+    case 3: .utf8
+    default: throw .malformed(at: offset, "ID3v2 text encoding \(byte)")
+    }
+}
+
+private func terminator(_ encoding: TextEncoding) -> [UInt8] {
+    switch encoding {
+    case .utf16WithBOM, .utf16BigEndian: [0, 0]
+    case .latin1, .utf8: [0]
+    }
+}
+
+/// The string in `bytes` from `offset` to its terminator or the end, and where the next field
+/// starts. Nil when `requireTerminator` and there's none.
+private func string(
+    _ bytes: Bytes, from offset: Int, _ encoding: TextEncoding, requireTerminator: Bool = false
+) throws(ParseFailure) -> (text: String, next: Int)? {
+    let end = bytes.firstIndex(of: terminator(encoding), from: offset)
+    if end == nil, requireTerminator { return nil }
+    let stop = end ?? bytes.count
+    let text = try encoding.decode(
+        try bytes.slice(offset..<max(offset, stop)).array, at: bytes.fileOffset(offset))
+    return (text, end.map { $0 + terminator(encoding).count } ?? bytes.count)
+}
+
+/// An encoding byte, then text. 2.4 separates several values with terminators; the first is used.
+private func textFrame(_ bytes: Bytes) throws(ParseFailure) -> String {
+    let encoding = try encoding(try bytes.uint8(0), at: bytes.fileOffset(0))
+    return try string(bytes, from: 1, encoding)!.text
+}
+
+/// An encoding byte, a language, a description, then the text. Nil unless the description is
+/// empty: players store their own data in described comments.
+private func commentFrame(_ bytes: Bytes) throws(ParseFailure) -> String? {
+    let encoding = try encoding(try bytes.uint8(0), at: bytes.fileOffset(0))
+    guard let description = try string(bytes, from: 4, encoding, requireTerminator: true) else {
+        throw .malformed(at: bytes.fileOffset(0), "ID3v2 comment without a description terminator")
+    }
+    guard description.text.isEmpty else { return nil }
+    return try string(bytes, from: description.next, encoding)!.text
+}
+
+/// "(17)" refers to the ID3v1 list, optionally followed by a refinement that wins; "((" escapes a
+/// literal parenthesis; 2.4 also allows a bare number.
+private func genre(_ text: String, _ version: UInt8, at offset: Int) throws(ParseFailure) -> String
+{
+    if text.hasPrefix("((") { return String(text.dropFirst()) }
+    func named(_ reference: Substring) throws(ParseFailure) -> String {
+        switch reference {
+        case "RX": return "Remix"
+        case "CR": return "Cover"
+        default:
+            guard let index = Int(reference), id3v1Genres.indices.contains(index) else {
+                throw .malformed(at: offset, "ID3v2 genre reference \"\(reference)\"")
+            }
+            return id3v1Genres[index]
+        }
+    }
+    if text.hasPrefix("("), let close = text.firstIndex(of: ")") {
+        let refinement = text[text.index(after: close)...]
+        let reference = try named(text[text.index(after: text.startIndex)..<close])
+        return refinement.isEmpty ? reference : String(refinement)
+    }
+    if version == 4, !text.isEmpty, text.allSatisfy(\.isASCII), text.allSatisfy(\.isNumber) {
+        return try named(Substring(text))
+    }
+    return text
+}
+
+/// `APIC`: an encoding byte, a MIME type, the picture type, a description, then the image.
+/// ID3v2.2's `PIC` has a three-letter format instead of the MIME type. Only the header is read;
+/// the image is recorded by offset. Nil for an empty image or a link ("-->").
+private func picture(
+    _ area: FrameArea, _ contents: Range<Int>, version: UInt8, unsynchronised: Bool, stored: Bool
+) throws(ParseFailure) -> (type: UInt32, art: EmbeddedArt)? {
+    func header(_ length: Int) throws(ParseFailure) -> Bytes {
+        let raw = try area.bytes(contents.lowerBound..<contents.lowerBound + length)
+        guard unsynchronised else { return raw }
+        let (decoded, escapes) = UnsyncEscapes.decode(raw.array)
+        return Bytes(decoded, base: area.fileOffset(contents.lowerBound), escapes: escapes)
+    }
+    var bytes = try header(min(contents.count, pictureHeaderBytes))
+    var parsed = try pictureHeader(bytes, version: version)
+    if parsed == nil, contents.count > pictureHeaderBytes {
+        bytes = try header(contents.count)
+        parsed = try pictureHeader(bytes, version: version)
+    }
+    guard let (mime, type, imageStart) = parsed else {
+        throw .malformed(
+            at: area.fileOffset(contents.lowerBound), "ID3v2 picture frame header is cut off")
+    }
+    guard mime != "-->" else { return nil }
+    let offset = bytes.fileOffset(imageStart)
+    let end = area.fileOffset(contents.upperBound - 1) + 1
+    guard end > offset else { return nil }
+    return (
+        type,
+        EmbeddedArt(offset: offset, byteCount: end - offset, mimeType: mime, unsynchronised: stored)
+    )
+}
+
+/// The MIME type, picture type and where the image starts, or nil when `bytes` ends first.
+private func pictureHeader(_ bytes: Bytes, version: UInt8) throws(ParseFailure)
+    -> (String, UInt32, Int)?
+{
+    guard bytes.count >= 1 else { return nil }
+    let encoding = try encoding(try bytes.uint8(0), at: bytes.fileOffset(0))
+    let mime: String
+    var cursor: Int
+    if version == 2 {
+        guard bytes.count >= 4 else { return nil }
+        let format = latin1(try bytes.slice(1..<4).array)
+        mime = ["JPG": "image/jpeg", "PNG": "image/png"][format] ?? "image/\(format.lowercased())"
+        cursor = 4
+    } else {
+        guard let found = try string(bytes, from: 1, .latin1, requireTerminator: true) else {
+            return nil
+        }
+        mime = found.text
+        cursor = found.next
+    }
+    guard cursor < bytes.count else { return nil }
+    let type = UInt32(try bytes.uint8(cursor))
+    guard let description = try string(bytes, from: cursor + 1, encoding, requireTerminator: true)
+    else { return nil }
+    return (mime, type, description.next)
+}
