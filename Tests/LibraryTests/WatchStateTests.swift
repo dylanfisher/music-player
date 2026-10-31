@@ -89,3 +89,19 @@ private struct FakeEngine {
     state.folderNeedsWholeScan(containing: "/Users/me/Music/A/B")
     #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
 }
+
+@Test func editedDirectoriesAreRescannedInNetworkFoldersToo() {
+    var state = WatchState(folders: [local, nas], pausePollingDuringPlayback: true, now: start)
+    _ = state.start(now: start)
+    state.finished(now: start)
+    _ = state.start(now: start)
+    state.finished(now: start)
+    let engine = FakeEngine(pausePollingDuringPlayback: true)
+    engine.report(.playing, to: &state)
+    state.directoriesEdited(["/Volumes/Music/C", "/Users/me/Music/A", "/Elsewhere/D"])
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: ["/Users/me/Music/A"]))
+    state.finished(now: start)
+    #expect(state.start(now: start) == nil, "the network rescan waits for playback")
+    engine.report(.stopped, to: &state)
+    #expect(state.start(now: start) == WatchJob(folder: nas, subtrees: ["/Volumes/Music/C"]))
+}

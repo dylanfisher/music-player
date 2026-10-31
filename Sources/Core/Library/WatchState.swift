@@ -21,7 +21,8 @@ struct WatchState {
     private var pausePollingDuringPlayback: Bool
     /// Local folders queued for a whole scan, by path.
     private var wholeScans: [String]
-    /// Changed directories under each local folder, by the folder's path.
+    /// Changed directories under each folder, by the folder's path: from FSEvents for local
+    /// folders, and from tag edits for any folder.
     private var changed: [String: Set<String>] = [:]
     /// When each network folder's next poll is due, by path. Absent while it's being scanned.
     private var pollDue: [String: Date] = [:]
@@ -37,6 +38,19 @@ struct WatchState {
     mutating func directoriesChanged(_ paths: [String]) {
         for path in paths {
             guard let folder = localFolder(containing: path) else { continue }
+            changed[folder.path, default: []].insert(path)
+        }
+    }
+
+    /// Directories whose files the tag editor wrote. Network folders get these too, since
+    /// FSEvents reports nothing there; they wait for playback as polls do.
+    mutating func directoriesEdited(_ paths: [String]) {
+        for path in paths {
+            guard
+                let folder = folders.first(where: {
+                    $0.path == path || isPath(path, under: $0.path)
+                })
+            else { continue }
             changed[folder.path, default: []].insert(path)
         }
     }
@@ -72,7 +86,9 @@ struct WatchState {
     mutating func start(now: Date) -> WatchJob? {
         guard running == nil else { return nil }
         let job: WatchJob
-        if let (path, directories) = changed.first(where: { !$0.value.isEmpty }) {
+        if let (path, directories) = changed.first(where: { entry in
+            !entry.value.isEmpty && (folder(entry.key).kind == .local || pollsAllowed)
+        }) {
             changed[path] = nil
             job = WatchJob(folder: folder(path), subtrees: directories.sorted())
         } else if !wholeScans.isEmpty {

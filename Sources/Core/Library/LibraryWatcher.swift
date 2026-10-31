@@ -88,6 +88,15 @@ public final class LibraryWatcher: @unchecked Sendable {
         }
     }
 
+    /// Rescans `directories`, whose files the tag editor just wrote, in local and network
+    /// folders alike.
+    public func rescan(directories: [String]) {
+        queue.async { [self] in
+            state?.directoriesEdited(directories.map(canonicalPath))
+            advance()
+        }
+    }
+
     /// The playback engine's hook. While playback is starting no network scan starts, and a
     /// running one pauses; while playing, the same holds if `library.pausePollingDuringPlayback`
     /// is on.
