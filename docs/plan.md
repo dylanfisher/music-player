@@ -549,6 +549,39 @@ Known limit: ⌘↑ and ⌘↓ stay with the menu even in a text field.
       in files. A play counts after 50% or 4 minutes.
 - [ ] Benchmark: evaluating a complex smart playlist over 43k tracks.
 
+Implementation plan:
+
+1. **Library.** Playlists live beside the stats in the part an index rebuild keeps (ADR 0008):
+   `playlists` (name, smart rules as JSON or null) and `playlist_entries` (playlist, position,
+   path), each track at most once per playlist. `SmartRules` (Core/Library): rules of field,
+   operator and value, all or any, an optional limit picked by an order; decoded strictly at
+   every level and compiled to one SQL condition, with the stats joined by path. A
+   `BrowserSource` (Settings, since the state file saves it) replaces the filter's folder: a
+   watched folder, a playlist or History. New columns: plays, skips, last played, rating and
+   playlist order. Writes for plays, skips, ratings and playlist edits go through
+   `LibraryReader`, off the main thread.
+2. **Playback.** `PlayCounter` turns the engine's updates into plays and skips: a play counts
+   once the track has played (not paused) for half its length or 4 minutes, and a skip when
+   another track starts before that. It gives the app the time the current track would count,
+   so one timer per track does it, nothing polls.
+3. **LibraryBrowser.** The sidebar lists History under Music and the playlists by name; a
+   manual playlist opens sorted by playlist order, History by last played. Tracks dragged from
+   the table onto a manual playlist are added; dragged within a playlist sorted by order, they
+   move. The browser reloads the sidebar after edits, and refreshes after plays and ratings.
+4. **PlaylistEditor** (new feature): the rule editor's model (rows of field, operator and
+   value; all or any; limit and its order) and an AppKit sheet of pop-up buttons and fields.
+5. **App.** Commands for New Playlist (⌘N), New Playlist from Selection (⇧⌘N), New Smart
+   Playlist… (⌥⌘N), Edit Smart Playlist…, Rename Playlist…, Delete Playlist…, Add to
+   Playlist…, ratings 0–5, and ⌘⌫ removing from a playlist as well as the queue. Playlists in
+   ⌘K. Plays recorded from `PlayCounter`. `--snapshot-of playlist` opens the rule editor.
+6. **Bench:** a smart playlist of six mixed rules (text, numbers, stats, dates) with a limit
+   ordered by plays, over the fixture library, p95 < 50 ms on Apple Silicon.
+7. Tests: LibraryTests (rules decode and compile, every field and operator, playlists and
+   entries survive an index rebuild, stats by path, limits), SettingsTests (`BrowserSource`),
+   PlaybackTests (`PlayCounter` thresholds, pauses, skips, repeats), LibraryBrowserTests
+   (playlist sources, default sorts, reorder), PlaylistEditorTests, MusicPlayerTests (menu
+   items, palette playlists). ADR for the playlist and stats choices.
+
 ### 8. System integration
 
 - [ ] Media keys and headphone controls via `MPRemoteCommandCenter`.
