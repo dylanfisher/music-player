@@ -688,7 +688,68 @@ This replaces the read-only boundary in AGENTS.md. Do it first in the phase, wit
 - [ ] **Corpus round trips:** every file in the test corpus below survives every edit and its undo.
 - [ ] **Hardware checkpoint (owner):** open the edited corpus clones in Swinsian and Finder, then
       edit tags on copies of a few NAS files, then on real ones. Confirm both apps read the
-      results.
+      results. Push first; each snippet is for Terminal (zsh) and runs under bash.
+      1. **Corpus clones, on the build Mac.** This makes fresh clones of the corpus (the
+         reference is only read) and opens the app watching them:
+         ```
+         bash <<'EOF'
+         set -euo pipefail
+         clones=~/Library/Caches/MusicPlayer/tag-corpus
+         home=~/Library/Caches/MusicPlayer/tag-editor-check
+         rm -rf "$clones" "$home"
+         mkdir -p "$home"
+         cp -c -Rp /Users/dylanfisher/Music/music-player/test "$clones"
+         printf '{\n  "library.watchedFolders": [{"path": "%s", "kind": "local"}]\n}\n' "$clones" > "$home/config.json"
+         cd ~/projects/music-player
+         ./scripts/dev --home "$home"
+         EOF
+         ```
+         In the app, with Swinsian quit: select the three tracks of Latoma EP, press ⌘I, set
+         Album to "Latoma EP Perälä", Save and confirm. Do the same for Compilation Tracks
+         (AIFF), Alithia A' and Anima (both M4A). On one track of Anima also choose Replace
+         Artwork… with any JPEG, and on one of Latoma EP choose Remove Artwork. Then in Finder,
+         open `~/Library/Caches/MusicPlayer/tag-corpus` (⇧⌘G) and check each edited file's
+         preview pane shows the new album and art. In Swinsian, add those four folders, check
+         the same, then remove them from Swinsian's library. Back in the app, press Undo Tag
+         Edit (File menu) five times and paste any alert it shows.
+      2. **Copies of NAS files, on the DAC Mac.** This copies one random album folder from the
+         library to `/Volumes/music/tag-editor-check` on the NAS, outside the library, and
+         makes an app home that watches the copy:
+         ```
+         bash <<'EOF'
+         set -euo pipefail
+         library=/Volumes/music/library
+         check=/Volumes/music/tag-editor-check
+         home=~/Library/Caches/MusicPlayer/tag-editor-check
+         # A random album folder with at least two audio files.
+         album=$(find "$library" -mindepth 2 -maxdepth 2 -type d -print0 \
+           | while IFS= read -r -d '' dir; do
+               count=$(find "$dir" -maxdepth 1 -type f \( -iname '*.flac' -o -iname '*.m4a' -o -iname '*.mp3' -o -iname '*.aif' -o -iname '*.aiff' -o -iname '*.wav' \) | wc -l)
+               if [ "$count" -ge 2 ]; then printf '%s\n' "$dir"; fi
+             done | awk 'BEGIN { srand() } { line[NR] = $0 } END { print line[int(rand() * NR) + 1] }')
+         [ -n "$album" ] || { echo "no album folder found under $library" >&2; exit 1; }
+         rm -rf "$check" "$home"
+         mkdir -p "$check" "$home"
+         cp -Rp "$album" "$check/"
+         printf '{\n  "library.watchedFolders": [{"path": "%s", "kind": "network"}]\n}\n' "$check" > "$home/config.json"
+         echo "copied: $album"
+         echo "to:     $check"
+         ls -l@ "$check"/*
+         EOF
+         ```
+         In Finder, give the first file of the copy a Red tag. Run
+         `cd ~/projects/music-player && ./scripts/pull --home ~/Library/Caches/MusicPlayer/tag-editor-check`,
+         select every track, press ⌘I, set Comment to "tag editor check" and Replace Artwork…
+         with any JPEG, Save and confirm. Then edit one track's title alone while Swinsian plays that track
+         from the copy. Report: whether Swinsian and Finder show the new comment, title and
+         art; whether the Red tag is still there; any alert; and the output of
+         `bash -c 'ls -la@ /Volumes/music/tag-editor-check/*'` (no `.tagwrite` files should
+         be left).
+      3. **Real files, on the DAC Mac.** Run `cd ~/projects/music-player && ./scripts/pull`,
+         pick one album, press ⌘I, set Comment to "tag editor check", Save and confirm. Check Swinsian shows it, then press
+         Undo Tag Edit and check Swinsian shows the old comment again. Afterwards
+         `rm -rf /Volumes/music/tag-editor-check ~/Library/Caches/MusicPlayer/tag-editor-check`
+         removes the copies.
 
 **Test corpus.** The owner put 159 real files (12 GB) in `/Users/dylanfisher/Music/music-player/test`
 to show how real tags are stored, and to try writes on. That folder is the reference copy. Read it,
