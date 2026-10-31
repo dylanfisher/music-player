@@ -1,0 +1,100 @@
+import Foundation
+import Settings
+import Testing
+
+@testable import SettingsWindow
+
+/// A schema with one setting of each kind the General pane draws, none of which has UI code.
+private struct Schema: SettingsSchema {
+    let flag = Setting("a.flag", title: "Flag", default: false, "A bool.")
+    let count = Setting("a.count", title: "Count", default: 5, range: 1...10, "An integer.")
+    let limit = Setting<Int?>("a.limit", title: "Limit", default: nil, range: 1...9, "Or null.")
+    let gain = Setting("a.gain", title: "Gain", default: 0.5, range: 0...1, "A number.")
+    let name = Setting("a.name", title: "Name", default: "x", "A string.")
+    let look = Setting("a.look", title: "Look", default: Appearance.auto, "A choice.")
+    let folders = Setting<[WatchedFolder]>("a.folders", title: "Folders", default: [], "Folders.")
+}
+
+/// A model over a dictionary standing in for the config file, and the dictionary.
+@MainActor
+private func model() -> (GeneralModel, () -> [String: Any]) {
+    nonisolated(unsafe) var values: [String: Any] = [
+        "a.flag": false, "a.count": 5, "a.limit": NSNull(), "a.gain": 0.5, "a.name": "x",
+        "a.look": "auto", "a.folders": [Any](),
+    ]
+    let model = GeneralModel(
+        settings: Schema().settings, value: { values[$0] },
+        set: { key, json in values[key] = json })
+    return (model, { values })
+}
+
+private var appearanceChoices: [SettingKind.Choice] {
+    guard case .choice(let choices) = Appearance.kind else { preconditionFailure() }
+    return choices
+}
+
+@MainActor @Test func theRowsComeFromTheSchemaInOrder() {
+    let (model, _) = model()
+    #expect(model.rows.map(\.key) == Schema().settings.map(\.key))
+    #expect(
+        model.rows.map(\.control) == [
+            .checkbox,
+            .number(whole: true, optional: false),
+            .number(whole: true, optional: true),
+            .number(whole: false, optional: false),
+            .text(optional: false),
+            .popUp(appearanceChoices),
+            .folders,
+        ])
+    #expect(model.rows[0].title == "Flag")
+    #expect(model.rows[0].summary == "A bool.")
+}
+
+@MainActor @Test func everyAppSettingHasARow() {
+    let model = GeneralModel(
+        settings: AppSettings().settings, value: { _ in nil }, set: { _, _ in })
+    #expect(model.rows.count == AppSettings().settings.count)
+    #expect(!model.rows.contains { $0.control == .readOnly })
+    let appearance = model.rows.first { $0.key == AppSettings().appearance.key }
+    #expect(appearance?.control == .popUp(appearanceChoices))
+}
+
+@MainActor @Test func valuesReadAndWriteAsJSONHoldsThem() throws {
+    let (model, values) = model()
+    #expect(!model.isOn("a.flag"))
+    try model.setOn("a.flag", true)
+    #expect(model.isOn("a.flag"))
+    try model.setChoice("a.look", "dark")
+    #expect(model.choice("a.look") == "dark")
+    #expect(model.text("a.count") == "5")
+    #expect(model.text("a.limit") == "")
+    try model.setText("a.count", " 7 ")
+    #expect(values()["a.count"] as? Int == 7)
+    try model.setText("a.limit", "")
+    #expect(values()["a.limit"] is NSNull)
+    try model.setText("a.gain", "0.25")
+    #expect(values()["a.gain"] as? Double == 0.25)
+    try model.setText("a.name", "y")
+    #expect(model.text("a.name") == "y")
+}
+
+@MainActor @Test func textThatIsntANumberThrowsNamingTheSetting() {
+    let (model, values) = model()
+    #expect(throws: ConfigProblem(line: nil, message: #"Count needs a whole number, not "2.5""#)) {
+        try model.setText("a.count", "2.5")
+    }
+    #expect(throws: ConfigProblem(line: nil, message: #"Gain needs a number, not "half""#)) {
+        try model.setText("a.gain", "half")
+    }
+    #expect(values()["a.count"] as? Int == 5)
+}
+
+@MainActor @Test func theWatchedFoldersAreListedByPath() {
+    let (model, _) = model()
+    #expect(model.folders("a.folders").isEmpty)
+    let listed = GeneralModel(
+        settings: Schema().settings,
+        value: { $0 == "a.folders" ? [["path": "/Music", "kind": "local"]] : nil },
+        set: { _, _ in })
+    #expect(listed.folders("a.folders") == ["/Music"])
+}

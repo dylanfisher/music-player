@@ -109,6 +109,21 @@ private func read(_ url: URL) throws -> String { try String(contentsOf: url, enc
     #expect(!(try read(url)).contains("test.open"))
 }
 
+@MainActor @Test func severalShortcutsChangeAsOne() throws {
+    let url = configURL()
+    let settings = store(url)
+    var changed: [Set<String>] = []
+    settings.changed = { changed.append($0) }
+    let chord = KeyChord("j", .command)
+    settings.setShortcuts([
+        "test.open": ShortcutOverride(primary: .chord(chord)),
+        "test.close": ShortcutOverride(primary: .removed),
+    ])
+    #expect(changed == [[ConfigFile.shortcutsKey]])
+    let reread = try ConfigStore.strict(Schema(), fileURL: url, check: { _, _, _ in nil })
+    #expect(reread.shortcuts.count == 2)
+}
+
 @MainActor @Test func aSymbolicLinkIsWrittenThrough() throws {
     let target = configURL()
     try write(#"{"a.count": 3}"#, to: target)

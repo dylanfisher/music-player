@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let banner = ConfigBanner()
     private(set) var state: StateStore<AppState>?
     var palette: PaletteController?
+    var settingsWindow: SettingsWindowController?
     /// What each ⌘K entry item opens, by its key.
     var paletteEntries: [String: (BrowserModel.Pane, Int64)] = [:]
     /// Looks a track up by path, for counting plays toward frecency.
@@ -188,9 +189,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch snapshotOf {
             case .main: { [weak self] in self?.window?.window }
             case .palette: { [weak self] in self?.palette?.window }
+            case .settings, .shortcuts: { [weak self] in self?.settingsWindow?.window }
             }
         let wait = snapshotOf == .main ? 0 : 1.0
-        if snapshotOf == .palette { dispatcher?.run(.showPalette) }
+        switch snapshotOf {
+        case .main: break
+        case .palette: dispatcher?.run(.showPalette)
+        case .settings: settingsWindowController()?.show(.general)
+        case .shortcuts: settingsWindowController()?.show(.shortcuts)
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
             do {
                 guard let window = target() else { throw SnapshotError(path: url.path) }
@@ -200,6 +207,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 FileHandle.standardError.write(Data("error: \(error)\n".utf8))
             }
         }
+    }
+
+    /// App ▸ Settings…, which the standard item sends up the responder chain.
+    @objc func showSettings(_ sender: Any?) {
+        settingsWindowController()?.show()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

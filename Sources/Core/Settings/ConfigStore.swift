@@ -122,13 +122,24 @@ public final class ConfigStore<Schema: SettingsSchema> {
 
     /// Sets command `id`'s shortcut overrides; an empty override goes back to the defaults.
     public func setShortcut(_ id: String, to override: ShortcutOverride) {
-        apply(.shortcut(id, override))
+        apply([.shortcut(id, override)])
     }
 
-    private func apply(_ patch: Patch) {
-        let keys = take(patch)
-        pending.removeAll { same($0, patch) }
-        pending.append(patch)
+    /// Sets several commands' overrides as one change, so a chord moving from one command to
+    /// another is never seen half done.
+    public func setShortcuts(_ overrides: [String: ShortcutOverride]) {
+        apply(overrides.sorted { $0.key < $1.key }.map { .shortcut($0.key, $0.value) })
+    }
+
+    private func apply(_ patch: Patch) { apply([patch]) }
+
+    private func apply(_ patches: [Patch]) {
+        var keys: Set<String> = []
+        for patch in patches {
+            keys.formUnion(take(patch))
+            pending.removeAll { same($0, patch) }
+            pending.append(patch)
+        }
         if !keys.isEmpty { changed(keys) }
         flush()
     }

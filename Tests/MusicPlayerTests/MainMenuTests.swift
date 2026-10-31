@@ -71,3 +71,8 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     #expect(rules.reserved[KeyChord(",", .command)] == "Settings…")
     #expect(rules.fixed[.selectAll] == KeyChord("a", .command))
 }
+
+@MainActor @Test func settingsReachesTheAppDelegate() {
+    #expect(
+        AppDelegate.instancesRespond(to: NSSelectorFromString(AppMenus.showSettingsAction)))
+}

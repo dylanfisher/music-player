@@ -1,6 +1,7 @@
 import AppKit
 import Commands
 import Settings
+import SettingsWindow
 import UniformTypeIdentifiers
 
 /// How the app follows the config file: setting commands, live changes, the banner, and the
@@ -84,6 +85,7 @@ extension AppDelegate {
                 fail("Couldn't apply the shortcuts", error)
             }
         }
+        if let dispatcher { settingsWindow?.reload(bindings: dispatcher.bindings) }
         if keys.contains(schema.appearance.key) { applyAppearance(settings[\.appearance]) }
         let library = [
             schema.watchedFolders.key, schema.networkScanReaders.key,
@@ -92,6 +94,32 @@ extension AppDelegate {
         if !keys.isDisjoint(with: library) { changedFolders(settings[\.watchedFolders], settings) }
         let output = [schema.outputDeviceUID.key, schema.hogMode.key, schema.digitalVolume.key]
         if !keys.isDisjoint(with: output) { reopenOutput() }
+    }
+
+    /// The Settings window, made on first use.
+    func settingsWindowController() -> SettingsWindowController? {
+        if let settingsWindow { return settingsWindow }
+        guard let settings, let dispatcher else { return nil }
+        let general = GeneralModel(
+            settings: settings.schema.settings,
+            value: { [weak settings] in settings?.json(forKey: $0) },
+            set: { [weak settings] key, json in try settings?.set(key: key, json: json) })
+        let shortcuts = ShortcutsModel(bindings: dispatcher.bindings, appName: appName) {
+            [weak settings] changes in
+            settings?.setShortcuts(
+                Dictionary(uniqueKeysWithValues: changes.map { ($0.key.rawValue, $0.value) }))
+        }
+        let controller = SettingsWindowController(
+            general: general, shortcuts: shortcuts, configPath: settings.fileURL.path,
+            actions: SettingsActions(
+                openConfigFile: { [weak self] in self?.openConfigFile() },
+                revealConfigFile: { [weak settings] in
+                    guard let url = settings?.fileURL else { return }
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                },
+                copyDefaultConfig: { [weak dispatcher] in dispatcher?.run(.copyDefaultConfig) }))
+        settingsWindow = controller
+        return controller
     }
 
     func showConfigProblems() {

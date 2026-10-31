@@ -9,7 +9,7 @@ import Settings
 //   MusicPlayer --play <file or folder>... [--device <part of name>]
 //   MusicPlayer --scan <folder> [--db <file>] [--readers <n>] [--scan-io-hints none|rdahead|all]
 // and the window:
-//   MusicPlayer [--measure-window] [--snapshot <png file> [--snapshot-of main|palette]]
+//   MusicPlayer [--measure-window] [--snapshot <png file> [--snapshot-of <window>]]
 // and in every mode [--home <folder>] [--settings <file>]:
 // --home keeps the config file, library, state file and device record in one folder instead of
 // ~/.config/music-player and Application Support, for tests and runs on the build Mac.

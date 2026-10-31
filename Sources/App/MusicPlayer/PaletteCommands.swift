@@ -110,20 +110,32 @@ extension AppDelegate {
                 $0.action == .toggle
             }
             .map { ($0.command.id, $0.key) })
-        return bindings.registry.commands.compactMap { command in
-            guard RowMove.commands[command.id] == nil, command.id != .showPalette else {
-                return nil
+        // Settings that aren't commands: choosing one opens the Settings window at its row.
+        let settingItems = settings.schema.settings.filter {
+            switch $0.kind {
+            case .bool, .choice: false
+            default: true
             }
-            var title = command.title
-            if let key = toggles[command.id] {
-                title = SettingCommand.paletteTitle(
-                    title, isOn: settings.json(forKey: key) as? Bool == true)
-            }
-            return PaletteItem(
-                kind: .command, key: "command:\(command.id)", title: title,
-                detail: section[command.id],
-                chord: command.chords.first?.symbols, isEnabled: dispatcher.isEnabled(command.id))
+        }.map {
+            PaletteItem(
+                kind: .setting, key: "setting:\($0.key)", title: $0.title, detail: "Setting")
         }
+        return settingItems
+            + bindings.registry.commands.compactMap { command in
+                guard RowMove.commands[command.id] == nil, command.id != .showPalette else {
+                    return nil
+                }
+                var title = command.title
+                if let key = toggles[command.id] {
+                    title = SettingCommand.paletteTitle(
+                        title, isOn: settings.json(forKey: key) as? Bool == true)
+                }
+                return PaletteItem(
+                    kind: .command, key: "command:\(command.id)", title: title,
+                    detail: section[command.id],
+                    chord: command.chords.first?.symbols,
+                    isEnabled: dispatcher.isEnabled(command.id))
+            }
     }
 
     private func kind(_ pane: BrowserModel.Pane) -> PaletteItem.Kind {
@@ -151,7 +163,7 @@ extension AppDelegate {
             else { return }
             browser.showRow(row)
         case .setting:
-            break
+            settingsWindowController()?.show(setting: String(item.key.dropFirst("setting:".count)))
         }
     }
 
