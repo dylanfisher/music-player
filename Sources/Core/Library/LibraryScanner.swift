@@ -74,7 +74,7 @@ public struct LibraryScanner: Sendable {
         // Walk.
         let counter = ProgressCounter(progress)
         var files: [WalkedFile] = []
-        var startEntries = 0
+        var rootEntries: Int?
         let filter = FolderFilter(include: folder.include, exclude: folder.exclude)
         for start in starts {
             let earlier = files.count
@@ -84,13 +84,13 @@ public struct LibraryScanner: Sendable {
             files += walked.files
             summary.otherFiles += walked.otherFiles
             summary.issues += walked.issues
-            if start == root { startEntries = walked.startEntries }
+            if start == root { rootEntries = walked.startEntries }
             if walked.cancelled {
                 summary.cancelled = true
                 return summary
             }
         }
-        if subtrees.isEmpty, startEntries == 0, !known.isEmpty {
+        if rootEntries == 0, !known.isEmpty {
             summary.issues.append(
                 ScanIssue(
                     kind: .rootEmpty, path: root,

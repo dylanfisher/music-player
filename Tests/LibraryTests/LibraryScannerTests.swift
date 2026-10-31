@@ -244,3 +244,14 @@ import Testing
             ScanIssue(kind: .symbolicLink, path: library.root + "/Linked", detail: "not followed")
         ])
 }
+
+@Test func emptyRootRemovesNothingOnASubtreeScanOfTheRoot() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    try FileManager.default.moveItem(atPath: library.root, toPath: library.root + " (away)")
+    try FileManager.default.createDirectory(
+        atPath: library.root, withIntermediateDirectories: false)
+    let summary = try library.scan(only: [library.root])
+    #expect(summary.issues.map(\.kind) == [.rootEmpty])
+    #expect(try library.index().trackCount() == library.readableCount)
+}
