@@ -173,8 +173,8 @@ We take Searcher's model, without the configurable location. Each part was weigh
 - **App state isn't config.** Window frame, splits, column widths, the sort, pane selections, the
   palette's place and frecency are where the user left things, not choices. They go to
   `~/Library/Application Support/MusicPlayer/state.json`, decoded with the same `Setting<Value>`
-  schema and discarded whole on a mismatch (pre-release boundary). Phase 5 saves them through
-  `SettingsStore` as it was planned; phase 6 moves them to the state file.
+  schema and discarded whole on a mismatch (pre-release boundary), and saved through
+  `StateStore`.
 
 ### Palette (0087, 0085, 0079, 0101)
 
@@ -248,8 +248,8 @@ and Reset per row, Reset All in the footer.
 
 ## Consequences
 
-Phase 5 goes on as planned. Phase 6 moves the layout keys out of `AppSettings` into the state
-file, replaces `SettingsStore`'s load and save with the config file's, and removes
-`--export-settings` and `--import-settings`. The player defaults weren't checked against
-Swinsian's menus; correcting one later is a one-line change in its command set and this
-record's table.
+Phase 5 went on as planned. Phase 6 moved the layout keys out of `AppSettings` into the state
+file (`StateStore`), made the config file (`ConfigStore`) the settings in place of
+`SettingsStore`, and removed `--export-settings` and `--import-settings`. The player defaults
+weren't checked against Swinsian's menus; correcting one later is a one-line change in its
+command set and this record's table.

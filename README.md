@@ -6,6 +6,17 @@ renderers such as a Denon AVR.
 
 Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machine.
 
+## Use
+
+- **Settings** live in `~/.config/music-player/config.json`, a JSON file with comments that
+  lists every setting at its default with what it takes. Edit it in any editor and the app picks
+  the change up on save; a mistake shows in a banner across the window and nothing in the file
+  applies until it's fixed. The Settings window (⌘,) edits the same file, with a General pane
+  for the settings and a Shortcuts pane for every command's two chords.
+- **⌘K** opens the command palette: every command, setting, genre, artist and album, ranked by
+  how well they match and how often and recently you chose or played them.
+- **⌘P** is Go to Item: the tracks of the current list, by title.
+
 ## Develop
 
 Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s`.
@@ -14,6 +25,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 |---|---|
 | Install / bootstrap | `./scripts/setup` |
 | Run the app | `./scripts/dev` (`--home <folder>` keeps the config file, library and state in one folder; `--settings <file>` names another config file) |
+| Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|settings\|shortcuts]` |
 | Run tests | `./scripts/test` |
 | Build the `.app` | `./scripts/bundle [debug\|release]` |
 | Update a second Mac's clone, then run the app | `./scripts/pull` |

@@ -108,8 +108,9 @@ This table is the human copy. Each budget is defined in code next to its benchma
 Everything later phases measure and configure against.
 
 - [x] **Settings** module (Core): one typed schema holding every setting's key, type, default and
-      description. Settings are stored as JSON at `~/Library/Application Support/MusicPlayer/
-      settings.json`, and the file holds only the values the user changed. The schema is the
+      description. Settings are stored as JSON, since phase 6 in the config file,
+      `~/.config/music-player/config.json`, which lists every setting
+      ([ADR 0015](decisions/0015-config-file.md)). The schema is the
       single source for defaults, the settings window (phase 6) and the command palette. A file
       that doesn't match the schema fails loudly, naming the bad key; it isn't silently replaced
       with defaults.
@@ -138,8 +139,9 @@ Implementation plan:
 3. **Settings** (Core): `Setting<Value>` declares key, default, summary and an optional range;
    `AppSettings` holds the declarations as stored properties, enumerated in order (ADR 0003).
    Values: Bool, Int, Double, String, string-backed enums, optionals, lists, and `WatchedFolder`.
-   `SettingsStore` loads, validates (unknown key, wrong type, out of range, each naming the key),
+   The store loads, validates (unknown key, wrong type, out of range, each naming the key),
    saves only changed values atomically, exports the effective settings and imports overrides.
+   Phase 6 replaced it with `ConfigStore` and `StateStore`.
    The file URL is injected. Seeded with the output device UID, hog mode, watched folders and
    pausing polls during playback.
 4. **CLI:** `--export-settings <path>` and `--import-settings <path>` next to `--play`.
@@ -394,8 +396,7 @@ during playback, which waits for the phase 5 window.
 **Look and controls** ([ADR 0012](decisions/0012-searcher-conventions.md)): the layout follows
 Swinsian, not Music.app, and behaviour questions go Swinsian's way. Native AppKit controls,
 system colours and materials, and hover, pressed, focused and disabled looks on every control.
-The layout keys are saved through `SettingsStore` as planned; phase 6 moves them to an app state
-file.
+The layout keys were saved with the settings; phase 6 moved them to the state file.
 
 Implementation plan:
 
@@ -427,7 +428,8 @@ Implementation plan:
    (created after the first rows are drawn, never playing on its own) and `LibraryWatcher`,
    including its playback hook. Settings are read once at launch and passed in; layout changes are
    saved through Settings, coalesced. Watched folders are added and removed from the sidebar.
-   `--settings <file>` points the app at another settings file and the library beside it.
+   `--settings <file>` points the app at another config file, and `--home <folder>` keeps every
+   file in one folder.
    `--measure-window` prints launch-to-first-rows and memory, after scrolling the whole table and
    loading art, as JSON and quits, for Bench. `--snapshot <file>` draws the window into a PNG.
 8. **Bench:** launch to interactive and resident memory (the app run as a subprocess against the
@@ -508,7 +510,7 @@ Implementation plan, in six slices, each its own commits:
    banner, Open Config File and Copy Default Config. `--export-settings` and `--import-settings`
    go.
 4. **State file.** The layout keys move to `AppState`, a second schema saved by `StateStore`
-   (the old `SettingsStore`) to `state.json` in Application Support, discarded whole when it
+   to `state.json` in Application Support, discarded whole when it
    doesn't decode.
 5. **Palette.** `Primitives/FuzzyMatch` (0079's scores, top-k without a full sort).
    `Features/Palette`: the model (sources, ranking with kind and frecency bonuses off the main
@@ -518,13 +520,13 @@ Implementation plan, in six slices, each its own commits:
 6. **Settings window.** `Features/SettingsWindow`: a toolbar of panes. General is an
    `NSGridView` generated from the schema with Open Config File, Reveal in Finder and Copy
    Default Config; Shortcuts has a search field, sections as the menus, two recorders and Reset
-   per row, Reset All. `--snapshot` takes `settings` or `palette` to draw those windows.
+   per row, Reset All. `--snapshot-of` takes `main`, `palette`, `settings` or `shortcuts` to draw that window.
 
-Tests: KeyChordTests, FuzzyMatchTests, CommandsTests (clashes, overrides, reserved and fixed,
+Tests: KeyChordTests (spellings, text-editing chords), FuzzyMatchTests, CommandsTests (clashes, overrides, reserved and fixed,
 assign, generated commands, row moves), SettingsTests (config text, patches, errors, store
 reloads, state file), LibraryBrowserTests (type-to-select), PaletteTests (ranking, frecency,
 latest query), SettingsWindowTests (General rows from the schema, the Shortcuts model),
-MusicPlayerTests (every command has a menu item, key equivalents, the search field's keys).
+MusicPlayerTests (every command has a menu item, key equivalents, the palette's library rows).
 ADRs for the decisions 0012 leaves open.
 
 ### 7. Playlists, smart playlists, stats

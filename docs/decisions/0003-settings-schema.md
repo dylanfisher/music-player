@@ -2,14 +2,16 @@
 
 - **Date:** 2026-10-30
 - **Status:** accepted
+- **Amended by:** [0015](0015-config-file.md): the settings are now a config file that lists
+  every setting, and the window layout moved to a state file that holds only changed values.
+  Both are decoded with this schema. Export and import are gone.
 
 ## Context
 
 Every later phase adds settings, and the settings window and command palette (phase 6) are
 generated from the list of them. Adding a setting has to be one declaration, or the list and the
 typed accessors drift apart. Reads have to be typed, so code can't ask for the wrong kind of
-value. The file holds only changed values and must fail loudly, naming the key, when it doesn't
-match.
+value. A file read with it must fail loudly, naming the key, when it doesn't match.
 
 ## Decision
 
@@ -23,7 +25,8 @@ is decoded key by key, and every bad key is reported in one error.
 ## Alternatives considered
 
 - **Static settings plus a hand-written `all` array** — rejected: two edits per setting, and
-  forgetting the second hides the setting from export and the settings window with no error.
+  forgetting the second hides the setting from the config file and the settings window with no
+  error.
 - **String keys with `Any` values, like `UserDefaults`** — rejected: no type checking at the read
   site, and defaults end up repeated at each read.
 - **Decoding the whole file as one `Codable` struct** — rejected: it needs every key present (or
