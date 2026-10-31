@@ -382,7 +382,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
         self.next = nil
         guard stream.fits(next) else {
-            pendingSwitch = next
+            pendingSwitch = predecoded(next, after: stream)
             HALRenderSetDraining(stream.render, true)
             return
         }
@@ -392,6 +392,40 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             emit(.trackFailed(next.item.id, error))
             HALRenderSetDraining(stream.render, true)
         }
+    }
+
+    /// `track` with its first half second decoded, while the current track still has seconds to
+    /// drain, into the format the device will take after the switch: the same layout at the new
+    /// rate. The switch then only has to reconfigure the device and copy it in. A track whose
+    /// channel count differs can't be predicted, and one that fails here is decoded again at the
+    /// switch, which reports the failure.
+    private func predecoded(_ track: Track, after stream: RenderStream) -> Track {
+        guard track.channels == stream.format.stream.mChannelsPerFrame else { return track }
+        var format = stream.decoderFormat
+        format.mSampleRate = track.sampleRateHz
+        let frames = Int(track.sampleRateHz * RenderStream.prefillSeconds)
+        var audio = Data(count: frames * Int(format.mBytesPerFrame))
+        do {
+            try track.decoder.seek(toFrame: 0)
+            try track.decoder.setOutputFormat(format)
+            var decoded = 0
+            try audio.withUnsafeMutableBytes { bytes in
+                while decoded < frames {
+                    let read = try track.decoder.read(
+                        into: bytes.baseAddress! + decoded * Int(format.mBytesPerFrame),
+                        frames: UInt32(frames - decoded))
+                    if read == 0 { break }
+                    decoded += Int(read)
+                }
+            }
+            audio.count = decoded * Int(format.mBytesPerFrame)
+        } catch {
+            logger.info("decoding ahead of a switch failed, retrying at the switch: \(error)")
+            return track
+        }
+        var ahead = track
+        ahead.predecoded = Predecoded(format: format, audio: audio)
+        return ahead
     }
 
     private func service() {
@@ -449,10 +483,25 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         self.stream = nil
         guard device != nil else { return }
         let next: RenderStream
+        var ahead: Data?
         do {
             next = try configure(for: track)
             clock.add(next.format.steps)
-            try clock.time("open") { try feed(track, into: next, atFrame: 0) }
+            if let predecoded = track.predecoded,
+                StoredFormat(predecoded.format) == StoredFormat(next.decoderFormat)
+            {
+                // The decoder is already past what was decoded ahead, in the right format.
+                feeding = track
+                next.dropChunk()
+                segments.append(
+                    Segment(
+                        item: track.item, startByte: 0, startFrame: 0,
+                        durationSeconds: track.durationSeconds))
+                ahead = predecoded.audio
+            } else {
+                try track.decoder.seek(toFrame: 0)
+                try clock.time("open") { try feed(track, into: next, atFrame: 0) }
+            }
         } catch {
             emit(.trackFailed(track.item.id, error))
             unload()
@@ -460,7 +509,11 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             if let last { emit(.finished(last.id)) }
             return
         }
-        clock.time("prefill") { fill(next, upTo: next.prefillBytes) }
+        if let ahead {
+            clock.time("write") { next.write(ahead) }
+        } else {
+            clock.time("prefill") { fill(next, upTo: next.prefillBytes) }
+        }
         clock.time("start") { startIfReady() }
         emit(
             .formatChanged(
@@ -573,6 +626,8 @@ private func uptime() -> Double { ProcessInfo.processInfo.systemUptime }
 private struct Track {
     let item: OutputItem
     let decoder: FileDecoder
+    /// The start of the track, decoded while the track before it drained.
+    var predecoded: Predecoded?
 
     init(_ item: OutputItem) throws {
         self.item = item
@@ -586,6 +641,11 @@ private struct Track {
     func frame(atSeconds seconds: Double) -> Int64 { clamped(Int64(seconds * sampleRateHz)) }
 
     func clamped(_ frame: Int64) -> Int64 { min(max(0, frame), decoder.lengthFrames) }
+}
+
+private struct Predecoded {
+    let format: AudioStreamBasicDescription
+    let audio: Data
 }
 
 /// A track's place in the ring buffer.
@@ -704,6 +764,14 @@ private final class RenderStream {
         chunkOffset += count
         produced += UInt64(count)
         return count
+    }
+
+    /// Queues audio decoded elsewhere. The ring buffer is empty and holds seconds, so it all fits.
+    func write(_ audio: Data) {
+        guard !audio.isEmpty else { return }
+        let count = audio.withUnsafeBytes { RingBufferWrite(ring, $0.baseAddress!, $0.count) }
+        precondition(count == audio.count, "decoded-ahead audio didn't fit an empty ring buffer")
+        produced += UInt64(count)
     }
 
     /// Frames of underrun since the last call, or nil when there were none.

@@ -116,7 +116,8 @@ private func contiguousFrames(of album: RampAlbum, from first: Int = 0, in sampl
     #expect(changes[1].from?.contains("44.1 kHz") == true)
     #expect(changes[1].to.contains("96 kHz"))
     #expect(try #require(changes[1].switchSeconds) < 0.5)
-    #expect(changes[1].steps?.map(\.name) == ["stop", "open", "prefill", "start"])
+    // The next track was decoded ahead, so the switch only copies it in.
+    #expect(changes[1].steps?.map(\.name) == ["stop", "write", "start"])
 }
 
 @Test func seekingPlaysOnFromTheRequestedFrame() async throws {
