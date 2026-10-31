@@ -54,12 +54,13 @@ public final class LibraryWatcher: @unchecked Sendable {
             state = WatchState(
                 folders: folders,
                 pausePollingDuringPlayback: pausePollingDuringPlayback, now: Date())
-            scanQueue.async { [scanner] in
+            scanQueue.async { [scanner, events] in
                 do {
                     let removed = try LibraryIndex(at: scanner.databaseURL).removeFiles(
                         outside: folders.map(\.path))
                     if removed > 0 {
                         logger.notice("removed \(removed) files outside the watched folders")
+                        events(.removed(count: removed))
                     }
                 } catch {
                     logger.error("couldn't remove files outside the watched folders: \(error)")

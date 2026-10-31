@@ -7,4 +7,7 @@ public enum WatcherEvent: Sendable {
     case scanned(folder: String, ScanSummary)
     /// The scan stopped because the database failed. What it stored before then stays.
     case scanFailed(folder: String, reason: String)
+    /// At start, this many files outside every watched folder left the index, such as those of a
+    /// folder no longer watched.
+    case removed(count: Int)
 }

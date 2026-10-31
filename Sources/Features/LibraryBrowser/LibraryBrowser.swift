@@ -164,7 +164,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
             scheduleRefresh()
         case .scanned(_, let summary):
             if summary.read > 0 || summary.removed > 0 { refreshNow() }
-        case .scanFailed:
+        case .scanFailed, .removed:
             refreshNow()
         }
     }

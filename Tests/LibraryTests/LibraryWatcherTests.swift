@@ -71,6 +71,14 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
     let byFolder = Dictionary(uniqueKeysWithValues: received.scanned)
     #expect(byFolder[library.root]?.read == library.manifest.files.count)
     #expect(byFolder[library.root + "-gone"]?.issues.map(\.kind) == [.rootUnavailable])
+    watcher.stop()
+
+    // Watching nothing removes what the folder held.
+    let next = LibraryWatcher(
+        databaseURL: library.databaseURL, networkReaders: nil, events: received.append)
+    next.start(folders: [], pausePollingDuringPlayback: true)
+    defer { next.stop() }
+    #expect(try await eventually(within: 20) { received.removed == [library.manifest.files.count] })
 }
 
 private final class LockedEvents: @unchecked Sendable {
@@ -78,6 +86,15 @@ private final class LockedEvents: @unchecked Sendable {
     private var events: [WatcherEvent] = []
 
     func append(_ event: WatcherEvent) { lock.withLock { events.append(event) } }
+
+    var removed: [Int] {
+        lock.withLock {
+            events.compactMap { event in
+                guard case .removed(let count) = event else { return nil }
+                return count
+            }
+        }
+    }
 
     var scanned: [(String, ScanSummary)] {
         lock.withLock {
