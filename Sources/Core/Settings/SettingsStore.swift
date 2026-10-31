@@ -7,7 +7,7 @@ private let logger = moduleLogger()
 public func defaultSettingsFileURL() throws -> URL {
     try FileManager.default.url(
         for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false
-    ).appendingPathComponent("MusicPlayer/settings.json")
+    ).appendingPathComponent("\(appDirectoryName)/settings.json")
 }
 
 /// The settings in effect: the schema's defaults overridden by the values in a JSON file. The file

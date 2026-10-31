@@ -1,4 +1,5 @@
 import Foundation
+import Log
 
 /// How a FLAC file's Vorbis comments are written, varied so parsers meet what real taggers do.
 struct VorbisStyle: Sendable {
@@ -32,7 +33,7 @@ func flacFile(
 
 /// Where the VORBIS_COMMENT block's header starts: after "fLaC" and STREAMINFO.
 let flacCommentHeaderOffset = 4 + 4 + 34
-let flacVendor = "MusicPlayer fixtures"
+let flacVendor = "\(appDirectoryName) fixtures"
 
 /// Little-endian lengths, unlike the rest of FLAC: the vendor, the count, then `KEY=value`s.
 private func vorbisComment(_ tags: FixtureTags, _ style: VorbisStyle) -> Data {

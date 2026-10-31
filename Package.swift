@@ -54,6 +54,7 @@ let package = Package(
         ),
         .target(
             name: "Fixtures",
+            dependencies: ["Log"],
             path: "Sources/Tools/Fixtures",
             swiftSettings: strictSwift
         ),

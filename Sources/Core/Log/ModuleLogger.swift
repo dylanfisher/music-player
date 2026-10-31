@@ -4,6 +4,9 @@ import os
 /// reads this line to write `CFBundleIdentifier` into the `.app`, so keep it a plain literal.
 public let bundleIdentifier = "com.dylanfisher.MusicPlayer"
 
+/// The app's folder name under Application Support and Caches.
+public let appDirectoryName = "MusicPlayer"
+
 /// A logger for the calling module, with the module's name as its category:
 /// `private let logger = moduleLogger()` at the top of a file. Never call it from the real-time
 /// path.

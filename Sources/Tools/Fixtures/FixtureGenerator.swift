@@ -1,4 +1,5 @@
 import Foundation
+import Log
 
 public enum FixtureGeneration: Equatable, Sendable {
     case generated
@@ -13,7 +14,7 @@ public let fullLibraryFileCount = 43_000
 public func defaultFixturesDirectory() throws -> URL {
     try FileManager.default.url(
         for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: false
-    ).appendingPathComponent("MusicPlayer/fixtures")
+    ).appendingPathComponent("\(appDirectoryName)/fixtures")
 }
 
 /// Writes a library of `count` files under `root`, with `manifest.json` describing each one.
