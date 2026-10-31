@@ -31,8 +31,9 @@ public protocol PCMDevice: AnyObject {
     func stop() throws
     /// Stops, and puts the device back the way it was before this run first opened it.
     func close() throws
-    /// The device has gone away: stop without restoring anything.
-    func abandon()
+    /// The device has gone away: stop without restoring anything. Returns false when stopping
+    /// failed, so the IO proc may still be called and its render state must not be freed.
+    func abandon() -> Bool
 }
 
 /// Finds and opens the one device an output plays to, and says when it comes and goes.

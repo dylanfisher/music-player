@@ -222,3 +222,33 @@ private func samples(of album: RampAlbum, _ ranges: [Range<Int>]) -> [Int32] {
     #expect(captured.count >= expected.count)
     #expect(Array(captured.prefix(expected.count)) == expected)
 }
+
+@Test func aDeviceThatOpensIsNoLongerReportedAsReturning() async throws {
+    let album = try album(44_100, 16)
+    let device = NullDevice(speed: 8)
+    let output = try DeviceOutput(provider: device, digitalVolume: false)
+    defer { output.close() }
+    var events = output.events.makeAsyncIterator()
+    func next() async -> OutputEvent? { await events.next() }
+
+    device.unplug()
+    output.load(OutputItem(id: 1, url: album.tracks[1]), startSeconds: 0, playing: true)
+    guard case .deviceLost = await next() else {
+        Issue.record("expected deviceLost")
+        return
+    }
+    // The change notification is missed, but the next load opens the device anyway.
+    device.plugInUnannounced()
+    output.load(OutputItem(id: 2, url: album.tracks[1]), startSeconds: 0, playing: true)
+    while let event = await next() {
+        if case .finished = event { break }
+    }
+    // Now stopped, an unplug and replug must not report a return: nothing was waiting on it.
+    device.unplug()
+    device.plugIn()
+    output.load(OutputItem(id: 3, url: album.tracks[1]), startSeconds: 0, playing: true)
+    while let event = await next() {
+        if case .deviceReturned = event { Issue.record("reported a return after a clean open") }
+        if case .trackStarted = event { break }
+    }
+}

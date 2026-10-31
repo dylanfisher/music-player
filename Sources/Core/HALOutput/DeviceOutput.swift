@@ -242,6 +242,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                 return false
             }
             device = opened
+            deviceMissing = false
             return true
         } catch {
             emit(.failed(item.id, error))
@@ -524,7 +525,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             guard !provider.isConnected() else { return }
             let item = segments.first?.item.id
             let seconds = positionSeconds() ?? 0
-            device.abandon()
+            if !device.abandon(), let stream { retired.append(stream) }
             self.device = nil
             running = false
             stream = nil

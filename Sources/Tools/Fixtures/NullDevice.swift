@@ -42,6 +42,8 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
 
     public func unplug() { setConnected(false) }
     public func plugIn() { setConnected(true) }
+    /// Connects the device without telling the watcher, as when a change notification is missed.
+    public func plugInUnannounced() { lock.withLock { connected = true } }
 
     private func setConnected(_ connected: Bool) {
         let watcher = lock.withLock {
@@ -153,10 +155,11 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
             end()
         }
 
-        func abandon() {
+        func abandon() -> Bool {
             // Stopping the null device can't fail.
             try! stop()
             end()
+            return true
         }
 
         private func end() {

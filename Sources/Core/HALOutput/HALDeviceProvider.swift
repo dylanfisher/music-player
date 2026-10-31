@@ -253,7 +253,7 @@ private final class RestoringDevice: PCMDevice {
     }
     func start(_ render: OpaquePointer) throws { try device.start(render) }
     func stop() throws { try device.stop() }
-    func abandon() { device.abandon() }
+    func abandon() -> Bool { device.abandon() }
 
     func close() throws {
         try device.close()
