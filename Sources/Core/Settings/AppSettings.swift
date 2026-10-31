@@ -10,6 +10,11 @@ public struct AppSettings: SettingsSchema {
         "output.hogMode", default: true,
         "Take exclusive access to the output device while playing, so no other app can play"
             + " through it or change its format.")
+    public let digitalVolume = Setting(
+        "output.digitalVolume", default: false,
+        "Let the app turn the volume down itself. Output is no longer bit-perfect while the volume"
+            + " is below full, because every sample is scaled. Off means the DAC or amplifier sets"
+            + " the volume.")
     public let watchedFolders = Setting<[WatchedFolder]>(
         "library.watchedFolders", default: [], "Folders the library scans and watches for changes.")
     public let pausePollingDuringPlayback = Setting(

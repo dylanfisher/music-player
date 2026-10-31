@@ -235,4 +235,11 @@ private func problems(_ json: String) -> [SettingProblem] {
     let settings = try SettingsStore(AppSettings(), fileURL: temporaryFile())
     #expect(settings[\.hogMode] == true)
     #expect(settings[\.outputDeviceUID] == nil)
+    #expect(settings[\.digitalVolume] == false)
+}
+
+@Test func digitalVolumeIsOffAndSaysItCostsBitPerfectOutput() {
+    let setting = AppSettings().digitalVolume
+    #expect(setting.defaultValue == false)
+    #expect(setting.summary.contains("no longer bit-perfect"))
 }

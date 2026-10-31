@@ -11,6 +11,7 @@ let settingsBenchmarks = [
             let settings = try SettingsStore(AppSettings(), fileURL: url)
             try settings.set(\.outputDeviceUID, to: "AppleUSBAudioEngine:RME:ADI-2 DAC:1")
             try settings.set(\.hogMode, to: false)
+            try settings.set(\.digitalVolume, to: true)
             try settings.set(\.pausePollingDuringPlayback, to: true)
             try settings.set(\.networkScanReaders, to: 16)
             try settings.set(
