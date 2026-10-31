@@ -198,6 +198,39 @@ untyped covers, and wide AAC layouts. Deferred: DSF to phase 12.
 - [ ] **Hardware checkpoint (owner):** scan the real NAS library on the DAC Mac. Report the time,
       the database size, and any files that failed to parse.
 
+Implementation plan:
+
+1. **SQLite** (Primitives): `Database` and `Statement` over the SDK's `SQLite3` module, linked
+   with `-lsqlite3`. Open flags, `execute`, prepare, bind, step and read columns, `transaction`,
+   and `SQLiteError` carrying the result code, `sqlite3_errmsg` and the SQL. WAL, a busy timeout,
+   foreign keys on. Neither type is `Sendable`: one connection per thread or actor.
+2. **Metadata:** `MetadataWarning.Kind` and `MetadataError.Kind` get `String` raw values, so the
+   index stores each kind by one name.
+3. **Library** (Core), schema: `files` (path, size, mtime, failure), `tracks`, `artists`,
+   `albums`, `genres`, `warnings`, and an FTS5 `track_search` with prefix indexes. Stats tables
+   (`plays`, `ratings`, `history`) are keyed by path and created, not yet written. The SQL of each
+   part is its identity, stored in the database: an index mismatch drops and recreates the index
+   tables only. SQLite features stop at 3.36 (macOS 12). ADR for linking stats by path.
+4. **Library** queries for phase 5: track IDs sorted by any column, FTS prefix search sorted the
+   same way, the genre, artist and album panes, and the list of stored warnings and failures.
+5. **Scanner:** walks each `WatchedFolder` with `contentsOfDirectory` and prefetched resource
+   values (one stat per entry), applies include/exclude globs, compares (path, size, mtime) with
+   the index, reads changed files in parallel (fewer workers on network volumes), and writes in
+   batched transactions. `ScanControl` pauses and cancels; progress goes to an `AsyncStream`
+   continuation buffering only the newest value. A missing, emptied or vanished root, or an
+   unreadable directory, removes nothing under it. ADR for the scan's safety rules.
+6. **Watcher:** `WatchState` decides what to scan and when (FSEvents subtrees, polls due, the
+   playback hook), so tests drive it without timers. `LibraryWatcher` runs it with FSEvents for
+   local roots, a one-shot timer for the next poll, and a serial scan queue. The app starts it
+   with the folders from Settings.
+7. **CLI:** `MusicPlayer --scan <folder> [--db <path>]`, with live progress, a summary, and a
+   text file listing every warned or failed file.
+8. **Bench:** full scan and no-change rescan of the fixture library, search keystroke p95, sort
+   p95, browser pane p95, database size, and resident memory after a scan. Budgets join the table.
+9. Tests: SQLiteTests, LibraryTests (schema rebuild keeps stats, queries, scanner incremental and
+   removal rules, vanished roots, patterns, pause and cancel, watch state with a fake playback
+   engine, one FSEvents round trip).
+
 ### 4. Playback engine
 
 Turns the one-file command into the engine everything else drives.
