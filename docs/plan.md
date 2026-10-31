@@ -149,6 +149,27 @@ so the phase 5 old-Mac run needs a prebuilt universal `Bench`.
       plus a fuzz test over the fixtures with random byte flips.
 - [ ] Benchmark: parse 43k fixture files cold.
 
+Implementation plan:
+
+1. **Metadata** (Core): `readMetadata(at:)` returns `TrackMetadata` (tags, audio properties, and
+   embedded art as offset, length and MIME type) plus the bytes and reads it took. `readArt(_:at:)`
+   reads one picture's bytes. Errors are a typed `MetadataError` with the path, the byte offset and
+   what was wrong. One `ByteReader` per file reads through `pread` with a 16 KiB minimum, checks
+   every length against the file size before reading, and skips art and audio by length.
+2. Parsers, one file each: FLAC (STREAMINFO, Vorbis comment, PICTURE), MP4 (`moov` wherever it
+   sits, `stsd` with the ALAC cookie or the AAC `esds`, `mdhd`, `iTunSMPB`, `ilst`), ID3v2.2–2.4
+   over any byte range (unsynchronisation, extended header, v2.4 frame flags, footer), MPEG audio
+   frames with Xing/Info and VBRI, WAV (`fmt `, `LIST/INFO`, `id3 `) and AIFF/AIFC (`COMM`,
+   `ID3 `). The ID3v1 genre list lives here; Fixtures takes it from here instead of its own copy.
+3. Tests (`MetadataTests`): every file of a 1000-file fixture library against its manifest entry,
+   every malformed file failing with the expected kind, an AudioToolbox cross-check of rate,
+   channels and length, hand-built truncated, oversized and garbage blocks per format, ID3
+   unsynchronisation and art reads, bytes-read bounds for big art and a trailing `moov`, and a
+   seeded byte-flip fuzz over a sample of fixtures.
+4. **Bench:** "metadata: parse 43000 fixture files, first read in this process", reporting
+   throughput, bytes read per file and the second pass. Benchmarks can attach notes to their row.
+5. ADRs for the parser's strictness and I/O, and for what the cold benchmark measures.
+
 ### 3. Library index and watched folders
 
 - [ ] **SQLite** primitive: a thin wrapper over system `libsqlite3` with prepared statements, a
