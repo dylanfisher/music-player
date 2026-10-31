@@ -1,7 +1,11 @@
 import Foundation
 import Library
 import Metadata
+import SQLite
 import Settings
+
+/// Returns to the start of the line and clears it, so progress rewrites one line in place.
+let eraseLine = "\r\u{1B}[K"
 
 /// `MusicPlayer --scan <folder> [--db <path>]`: scans one folder into the library database,
 /// printing progress and a summary, and writes every warned or failed file to a text file beside
@@ -36,7 +40,7 @@ func scanCommand(folder: String, databasePath: String?) throws {
     continuation.finish()
     printed.wait()
     let elapsed = Date().timeIntervalSince(started)
-    print("\r\u{1B}[K", terminator: "")
+    print(eraseLine, terminator: "")
 
     let index = try LibraryIndex(at: databaseURL)
     let issues = try index.fileIssues()
@@ -60,7 +64,8 @@ func scanCommand(folder: String, databasePath: String?) throws {
     ]
     lines += summary.issues.map { "  folder issue: \($0)" }
     lines += [
-        String(format: "  database: %.1f MB", try databaseMegabytes(databaseURL)),
+        String(
+            format: "  database: %.1f MB", Double(try Database.sizeBytes(at: databaseURL)) / 1e6),
         "  every warned or failed file: \(reportURL.path)",
     ]
     print(lines.joined(separator: "\n"))
@@ -76,10 +81,11 @@ private func printProgress(_ progress: ScanProgress, since started: Date) {
                 Double(progress.found) / elapsed)
         case .reading:
             String(
-                format: "reading: %d of %d, %d failed, %.0f files/s", progress.read,
-                progress.toRead, progress.failed, Double(progress.read) / elapsed)
+                format: "reading: %d of %d (%d unchanged), %d failed, %.0f files/s",
+                progress.read, progress.toRead, progress.unchanged, progress.failed,
+                Double(progress.read) / elapsed)
         }
-    print("\r\u{1B}[K" + line, terminator: "")
+    print(eraseLine + line, terminator: "")
     fflush(stdout)
 }
 
@@ -100,13 +106,4 @@ private func report(_ summary: ScanSummary, _ issues: [FileIssue], folder: Strin
     lines += issues.map(\.description)
     if summary.issues.isEmpty && issues.isEmpty { lines.append("none") }
     return lines.joined(separator: "\n") + "\n"
-}
-
-/// The database and its write-ahead log.
-private func databaseMegabytes(_ url: URL) throws -> Double {
-    try [url.path, url.path + "-wal"].reduce(0.0) { total, path in
-        guard FileManager.default.fileExists(atPath: path) else { return total }
-        let size = try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int ?? 0
-        return total + Double(size) / 1e6
-    }
 }

@@ -105,9 +105,9 @@ if let path = value(after: "--play") {
         try withExtendedLifetime(signalSources) {
             try playFile(
                 at: URL(fileURLWithPath: path), deviceName: value(after: "--device"),
-                // Progress rewrites one line in place, so log lines clear it first ("\r" + erase line).
+                // Progress rewrites one line in place, so log lines clear it first.
                 log: {
-                    print("\r\u{1B}[K\($0)")
+                    print(eraseLine + $0)
                     fflush(stdout)
                 },
                 progress: { played, duration in

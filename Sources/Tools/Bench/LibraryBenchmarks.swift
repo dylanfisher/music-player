@@ -2,6 +2,7 @@ import Darwin
 import Fixtures
 import Foundation
 import Library
+import SQLite
 import Settings
 
 /// The fixture library scanned into a fresh database once per run, which every library
@@ -40,7 +41,7 @@ private let scannedLibrary = Result { () throws -> ScannedLibrary in
     return ScannedLibrary(
         folder: folder, databaseURL: databaseURL, scanSeconds: elapsed, summary: summary,
         footprintBeforeMB: before, footprintAfterMB: try footprintMB(),
-        databaseMB: try databaseMB(databaseURL), index: index)
+        databaseMB: Double(try Database.sizeBytes(at: databaseURL)) / 1e6, index: index)
 }
 
 let libraryBenchmarks = [
@@ -150,15 +151,6 @@ private func typedQueries(_ index: LibraryIndex) throws -> [String] {
 }
 
 private func format(_ milliseconds: Double) -> String { String(format: "%.2f", milliseconds) }
-
-/// The database and its write-ahead log, in megabytes.
-private func databaseMB(_ url: URL) throws -> Double {
-    try [url.path, url.path + "-wal"].reduce(0.0) { total, path in
-        guard FileManager.default.fileExists(atPath: path) else { return total }
-        let size = try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int ?? 0
-        return total + Double(size) / 1e6
-    }
-}
 
 /// This process's physical footprint, as Activity Monitor's Memory column shows it.
 private func footprintMB() throws -> Double {

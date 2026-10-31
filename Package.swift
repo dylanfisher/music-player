@@ -66,7 +66,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "MusicPlayer",
-            dependencies: ["HALOutput", "Library", "Metadata", "Playback", "Settings"],
+            dependencies: ["HALOutput", "Library", "Metadata", "Playback", "SQLite", "Settings"],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
         ),
@@ -84,7 +84,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Bench",
-            dependencies: ["Fixtures", "Library", "Metadata", "Settings"],
+            dependencies: ["Fixtures", "Library", "Metadata", "SQLite", "Settings"],
             path: "Sources/Tools/Bench",
             swiftSettings: strictSwift
         ),

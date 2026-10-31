@@ -9,7 +9,7 @@ import SQLite3
 /// connection per thread or actor that needs one; in WAL mode readers run alongside the writer.
 public final class Database {
     /// How long a call waits for another connection's lock before failing with `SQLITE_BUSY`.
-    public static let busyTimeoutMs: Int32 = 5000
+    static let busyTimeoutMs: Int32 = 5000
 
     let connection: OpaquePointer
 
@@ -57,6 +57,17 @@ public final class Database {
         case .failure: try execute("ROLLBACK")
         }
         return try result.get()
+    }
+
+    /// The size of the database file at `url` plus its write-ahead log, which holds commits not
+    /// yet checkpointed into the file.
+    public static func sizeBytes(at url: URL) throws -> Int {
+        try [url.path, url.path + "-wal"].reduce(0) { total, path in
+            guard FileManager.default.fileExists(atPath: path) else { return total }
+            guard let size = try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int
+            else { throw CocoaError(.fileReadUnknown, userInfo: [NSFilePathErrorKey: path]) }
+            return total + size
+        }
     }
 
     /// The rowid of the last row inserted on this connection.

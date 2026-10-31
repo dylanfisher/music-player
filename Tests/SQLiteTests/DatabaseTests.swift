@@ -107,3 +107,16 @@ private struct Boom: Error {}
             try $0.int(0)
         } == [1])
 }
+
+@Test func sizeCountsTheWriteAheadLog() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("sqlite-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appendingPathComponent("size.sqlite")
+    let database = try Database(at: url)
+    try database.execute("CREATE TABLE t (b BLOB); INSERT INTO t VALUES (zeroblob(100000))")
+    let walBytes = try #require(
+        try FileManager.default.attributesOfItem(atPath: url.path + "-wal")[.size] as? Int)
+    #expect(walBytes > 100_000)
+    #expect(try Database.sizeBytes(at: url) > walBytes)
+}
