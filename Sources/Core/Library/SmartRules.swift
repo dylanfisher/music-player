@@ -152,7 +152,7 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
 
     /// The track table column the field compares, which every field but composer and comment
     /// has: the names match.
-    var column: TrackColumn? { TrackColumn(rawValue: rawValue) }
+    public var column: TrackColumn? { TrackColumn(rawValue: rawValue) }
 
     /// The SQL the rule compares, over the tables `TrackColumn.expression` names plus `p` (plays)
     /// and `r` (ratings). The names and titles are the folded sort columns, which a folded value

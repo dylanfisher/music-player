@@ -99,7 +99,7 @@ let package = Package(
         ),
         .target(
             name: "Palette",
-            dependencies: ["FuzzyMatch", "KeyChord", "Settings"],
+            dependencies: ["DisplayText", "FuzzyMatch", "KeyChord", "Settings"],
             path: "Sources/Features/Palette",
             swiftSettings: strictSwift
         ),
@@ -240,7 +240,7 @@ let package = Package(
         ),
         .testTarget(
             name: "PlaylistEditorTests",
-            dependencies: ["Library", "PlaylistEditor"],
+            dependencies: ["Library", "PlaylistEditor", "Settings"],
             swiftSettings: strictSwift
         ),
         .testTarget(

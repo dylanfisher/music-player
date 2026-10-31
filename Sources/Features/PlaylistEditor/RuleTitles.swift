@@ -1,29 +1,16 @@
 import Library
 
 extension SmartField {
-    /// As the field's pop-up button lists it.
+    /// As the field's pop-up button lists it: the column's header, except where that's too
+    /// short to read in a menu.
     public var title: String {
         switch self {
-        case .title: "Title"
-        case .artist: "Artist"
-        case .album: "Album"
-        case .albumArtist: "Album Artist"
-        case .genre: "Genre"
         case .composer: "Composer"
         case .comment: "Comment"
-        case .codec: "Format"
-        case .path: "Path"
-        case .year: "Year"
         case .trackNumber: "Track Number"
         case .discNumber: "Disc Number"
-        case .duration: "Time"
-        case .sampleRate: "Sample Rate"
         case .bitDepth: "Bit Depth"
-        case .playCount: "Plays"
-        case .skipCount: "Skips"
-        case .rating: "Rating"
-        case .dateAdded: "Date Added"
-        case .lastPlayed: "Last Played"
+        default: column!.title
         }
     }
 

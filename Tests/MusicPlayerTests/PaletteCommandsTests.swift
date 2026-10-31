@@ -1,6 +1,7 @@
 import Library
 import LibraryBrowser
 import Palette
+import Settings
 import Testing
 
 @testable import MusicPlayer
@@ -27,4 +28,6 @@ import Testing
     #expect(items.map(\.key) == [LibraryKey.playlist(4), LibraryKey.playlist(9)])
     #expect(items.map(\.kind) == [.playlist, .playlist])
     #expect(items.map(\.detail) == ["Playlist", "Smart Playlist"])
+    // The palette's key reads back as the source the sidebar shows.
+    #expect(items.map { BrowserSource(text: $0.key) } == [.playlist(4), .playlist(9)])
 }

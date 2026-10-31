@@ -10,9 +10,18 @@ public enum BrowserSource: SettingValue, Hashable {
     private static let playlistPrefix = "playlist:"
     private static let historyText = "history"
 
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        let text = try container.decode(String.self)
+    /// The source as one string, which the state file saves and the palette keys a playlist
+    /// by.
+    public var text: String {
+        switch self {
+        case .folder(let path): path
+        case .playlist(let id): Self.playlistPrefix + String(id)
+        case .history: Self.historyText
+        }
+    }
+
+    /// Reads `text`; nil for a string that isn't a path, a playlist or History.
+    public init?(text: String) {
         if text.hasPrefix("/") {
             self = .folder(text)
         } else if text == Self.historyText {
@@ -22,18 +31,23 @@ public enum BrowserSource: SettingValue, Hashable {
         {
             self = .playlist(id)
         } else {
+            return nil
+        }
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let text = try container.decode(String.self)
+        guard let source = BrowserSource(text: text) else {
             throw DecodingError.dataCorruptedError(
                 in: container, debugDescription: "\"\(text)\" isn't a path, playlist or history")
         }
+        self = source
     }
 
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
-        switch self {
-        case .folder(let path): try container.encode(path)
-        case .playlist(let id): try container.encode(Self.playlistPrefix + String(id))
-        case .history: try container.encode(Self.historyText)
-        }
+        try container.encode(text)
     }
 
     public static var typeName: String {

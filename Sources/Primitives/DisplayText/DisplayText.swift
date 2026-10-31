@@ -17,3 +17,8 @@ public func kilohertz(_ hertz: Double) -> String {
 public func stars(_ count: Int) -> String {
     String(repeating: "★", count: max(0, count))
 }
+
+/// SF Symbol names more than one view draws.
+public enum SymbolName {
+    public static let playlist = "music.note.list"
+}

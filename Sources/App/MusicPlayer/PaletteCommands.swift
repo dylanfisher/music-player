@@ -137,7 +137,7 @@ extension AppDelegate {
             guard let (pane, id) = paletteEntries[item.key] else { return }
             Task { await browser.showOnly(pane, id: id) }
         case .playlist:
-            guard let id = Int64(item.key.dropFirst(LibraryKey.playlistPrefix.count)),
+            guard case .playlist(let id) = BrowserSource(text: item.key),
                 browser.playlists.contains(where: { $0.id == id })
             else { return }
             browser.show(.playlist(id))
@@ -176,9 +176,9 @@ extension AppDelegate {
 /// rather than IDs, so frecency survives a rebuilt index (ADR 0016). Genres and artists are
 /// unique by name; an album is unique by its title and artist.
 enum LibraryKey {
-    static let playlistPrefix = "playlist:"
-    /// By ID, which survives a rebuilt index and a rename, since playlists live with the stats.
-    static func playlist(_ id: Int64) -> String { playlistPrefix + String(id) }
+    /// By ID, which survives a rebuilt index and a rename, since playlists live with the stats;
+    /// spelled as the state file saves the playlist as a source.
+    static func playlist(_ id: Int64) -> String { BrowserSource.playlist(id).text }
     static func genre(_ name: String) -> String { "genre:\(name)" }
     static func artist(_ name: String) -> String { "artist:\(name)" }
     /// The title and artist apart by a unit separator, a control character tags don't use.

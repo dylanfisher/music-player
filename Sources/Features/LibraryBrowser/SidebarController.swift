@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import DisplayText
 import KeyChord
 import Library
 import Settings
@@ -303,7 +304,7 @@ private final class SidebarNode {
         case .folder: "folder"
         case .playlist(let playlist):
             switch playlist.kind {
-            case .manual: "music.note.list"
+            case .manual: SymbolName.playlist
             case .smart: "gearshape"
             case .unreadable: "exclamationmark.triangle"
             }

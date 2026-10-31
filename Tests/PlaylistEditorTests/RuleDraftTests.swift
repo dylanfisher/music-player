@@ -1,4 +1,5 @@
 import Library
+import Settings
 import Testing
 
 @testable import PlaylistEditor
@@ -77,4 +78,11 @@ import Testing
     }
     draft.limitCount = "5"
     #expect(try draft.rules().limit == SmartLimit(count: 5, order: .mostPlayed))
+}
+
+@Test func everyFieldHasATitleAndSharesItsColumnsWhereTheyReadAlike() {
+    #expect(SmartField.lastPlayed.title == TrackColumn.lastPlayed.title)
+    #expect(SmartField.rating.title == TrackColumn.rating.title)
+    #expect(SmartField.trackNumber.title == "Track Number")
+    #expect(Set(SmartField.allCases.map(\.title)).count == SmartField.allCases.count)
 }

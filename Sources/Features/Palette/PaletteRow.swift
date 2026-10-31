@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 
 /// A palette row: the kind's icon, the title with its matched letters bold, the detail in
 /// secondary text, and a command's chord right-aligned. A long title wraps and the row grows.
@@ -130,7 +131,7 @@ final class PaletteRow: NSTableCellView {
         switch kind {
         case .command: "command"
         case .setting: "gearshape"
-        case .playlist: "music.note.list"
+        case .playlist: SymbolName.playlist
         case .genre: "guitars"
         case .artist: "music.mic"
         case .album: "square.stack"
