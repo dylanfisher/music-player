@@ -275,3 +275,19 @@ import Testing
     #expect(!paths.contains { isPath($0, under: directory) })
     #expect(paths.contains { isPath($0, under: renamed) })
 }
+
+@Test func changesInsideAnExcludedFolderDoNotIndexIt() throws {
+    let library = try TestLibrary()
+    let file = library.manifest.files.first { $0.malformation == nil }!
+    let directory = (library.path(file) as NSString).deletingLastPathComponent
+    let relative = String(directory.dropFirst(library.root.count + 1))
+    var folder = library.folder
+    folder.exclude = [relative]
+    _ = try library.scan(folder)
+    let before = try library.index().trackCount()
+    try FileManager.default.copyItem(
+        atPath: library.path(file), toPath: directory + "/copy.flac")
+    let summary = try library.scan(folder, only: [directory])
+    #expect(summary.read == 0)
+    #expect(try library.index().trackCount() == before)
+}

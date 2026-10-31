@@ -39,6 +39,9 @@ func walk(
     found: (Int) -> Void
 ) -> DirectoryWalk {
     var result = DirectoryWalk()
+    // A subtree start is checked like the directories the walk descends through, so changes
+    // inside an excluded folder don't get it indexed.
+    guard startIsIncluded(start, root: root, filter: filter) else { return result }
     var pending = [start]
     var isStart = true
     while let directory = pending.popLast() {
@@ -55,6 +58,14 @@ func walk(
         found(result.files.count)
     }
     return result
+}
+
+private func startIsIncluded(_ start: String, root: String, filter: FolderFilter) -> Bool {
+    guard start != root else { return true }
+    let components = start.dropFirst(root.count + 1).split(separator: "/")
+    return components.indices.allSatisfy { end in
+        filter.includesDirectory(components[...end].joined(separator: "/"))
+    }
 }
 
 private func list(
