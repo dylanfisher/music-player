@@ -9,10 +9,14 @@ import Settings
 /// so tests drive it with a simulated NAS.
 struct ReadConcurrency: Sendable, Equatable {
     static let networkRange = 2...AppSettings.networkScanReadersRange.upperBound
-    /// The fixed count network scans used before, which every NAS tried handled.
-    static let networkStart = 4
-    /// How much better a doubling must do to count as better, rather than noise.
-    static let climbGain = 0.15
+    /// Where a network scan starts. A NAS on spinning disks serves many slow requests at once,
+    /// so starting low leaves most of it idle until the climb gets past the noise. The owner's
+    /// cold scan, starting at 4, spent 12 minutes between 3 and 8.
+    static let networkStart = 16
+    /// A doubling that gains no more than this is no gain, so the climb stops. Anything more
+    /// keeps it climbing: a level too high costs the NAS a little, one too low costs the scan
+    /// most of its speed.
+    static let climbGain = 0.05
     /// How much better a probe above the held level must do to replace it.
     static let probeGain = 0.08
     /// How much worse a probe below the held level may do and still replace it, so the level
@@ -21,12 +25,14 @@ struct ReadConcurrency: Sendable, Equatable {
     /// Windows at the held level between probes.
     static let holdWindows = 2
     /// A held level whose throughput falls below this share of its estimate, or whose seconds
-    /// per file rise past `latencyRise` times, means the NAS got slower, so the level halves.
+    /// per file rise past `latencyRise` times, for `collapseWindows` windows in a row, means the
+    /// NAS got slower, so the level halves. One such window is as likely a few slow files.
     static let collapse = 0.6
     static let latencyRise = 2.0
+    static let collapseWindows = 2
 
     enum Phase: Equatable {
-        /// Doubling while each doubling clearly helps. `from` is the level before.
+        /// Doubling while each doubling helps. `from` is the level before.
         case climbing(from: Int?)
         case holding(windowsLeft: Int, probeUp: Bool)
         /// Trying one window at `level` instead of the held `from`.
@@ -47,6 +53,8 @@ struct ReadConcurrency: Sendable, Equatable {
     /// The held level's measurements, smoothed over the windows it was held.
     private var baseline: Window?
     private var lastClimb: Window?
+    /// Held windows in a row that looked like the NAS got slower.
+    private var collapsed = 0
 
     init(range: ClosedRange<Int> = networkRange, start: Int = networkStart) {
         self.range = range
@@ -65,8 +73,8 @@ struct ReadConcurrency: Sendable, Equatable {
             if let from, let previous = lastClimb,
                 window.filesPerSecond <= previous.filesPerSecond * (1 + Self.climbGain)
             {
-                // The doubling didn't clearly help, so the level below is as good and costs the
-                // NAS less.
+                // The doubling didn't help, so the level below is as good and costs the NAS
+                // less.
                 settle(on: from, previous)
             } else if level == range.upperBound {
                 settle(on: level, window)
@@ -81,9 +89,12 @@ struct ReadConcurrency: Sendable, Equatable {
             if window.filesPerSecond < held.filesPerSecond * Self.collapse
                 || window.secondsPerFile > held.secondsPerFile * Self.latencyRise
             {
-                backOff()
+                collapsed += 1
+                if collapsed >= Self.collapseWindows { backOff() }
+                // Kept out of the estimate, which it would drag down.
                 return
             }
+            collapsed = 0
             baseline = Window(
                 filesPerSecond: (held.filesPerSecond + window.filesPerSecond) / 2,
                 secondsPerFile: (held.secondsPerFile + window.secondsPerFile) / 2)
@@ -113,6 +124,7 @@ struct ReadConcurrency: Sendable, Equatable {
         if trace.last != settled { trace.append(settled) }
         baseline = measured
         lastClimb = nil
+        collapsed = 0
         phase = .holding(windowsLeft: Self.holdWindows, probeUp: probeUp)
     }
 
@@ -143,6 +155,7 @@ struct ReadConcurrency: Sendable, Equatable {
         if trace.last != level { trace.append(level) }
         baseline = nil
         lastClimb = nil
+        collapsed = 0
         phase = .climbing(from: nil)
     }
 }

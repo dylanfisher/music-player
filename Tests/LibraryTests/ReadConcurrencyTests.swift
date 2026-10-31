@@ -44,17 +44,17 @@ private struct Noise {
 @Test func climbsToANASThatSaturatesAt12AndSettlesThere() {
     var controller = ReadConcurrency()
     let levels = run(&controller, windows: 60, saturatesAt12)
-    #expect(levels.prefix(4) == [4, 8, 16, 32])
+    #expect(levels.prefix(3) == [16, 32, 16])
     // Probes go one step either side and come back.
     #expect(levels.suffix(30).allSatisfy { (9...15).contains($0) })
-    #expect(controller.trace == [4, 8, 16, 32, 16, 12])
+    #expect(controller.trace == [16, 32, 16, 12])
 }
 
 @Test func findsThePeakOfANASThatDegradesPast8() {
     var controller = ReadConcurrency()
     let levels = run(&controller, windows: 60, degradesPast8)
-    #expect(levels.suffix(30).allSatisfy { (6...10).contains($0) })
-    #expect(controller.trace == [4, 8, 16, 8])
+    #expect(levels.suffix(30).allSatisfy { (7...11).contains($0) })
+    #expect(controller.trace == [16, 32, 16, 12, 9])
 }
 
 @Test func noisyMeasurementsStayNearTheBestLevel() {
@@ -70,9 +70,24 @@ private struct Noise {
         // Throughput within 10% of the best the NAS can do.
         let throughput = late.map(saturatesAt12).reduce(0, +) / Double(late.count)
         #expect(throughput > 0.9 * saturatesAt12(12), "seed \(seed): \(throughput)")
-        // Settled levels move a little at a time, not back and forth across the range.
-        let settled = controller.trace.dropFirst(5)
+        // Once settled, levels move a little at a time, not back and forth across the range.
+        let settled = controller.trace.suffix(10)
         #expect(settled.allSatisfy { (6...32).contains($0) }, "seed \(seed): \(controller.trace)")
+    }
+}
+
+@Test func aColdNASsNoiseDoesntHoldTheLevelDown() {
+    // A cold NAS on spinning disks: 20 files/s per reader up to 24 at once, and windows that
+    // land 40% either side of that, as 15 to 30 files of heavy-tailed latency make them.
+    func cold(_ level: Int) -> Double { 20 * Double(min(level, 24)) }
+    for seed: UInt64 in 1...20 {
+        var noise = Noise(state: seed, spread: 0.4)
+        var controller = ReadConcurrency()
+        let levels = run(&controller, windows: 100, noise: { noise.next() }, cold)
+        let late = levels.suffix(50)
+        #expect(late.allSatisfy { $0 >= 6 }, "seed \(seed): \(controller.trace)")
+        let throughput = late.map(cold).reduce(0, +) / Double(late.count)
+        #expect(throughput > 0.7 * cold(24), "seed \(seed): \(controller.trace)")
     }
 }
 
@@ -82,15 +97,25 @@ private struct Noise {
     #expect(controller.trace.last == 12)
     // Another client takes most of the NAS: it now serves 4 files at once, at 25 files/s each.
     let levels = run(&controller, windows: 60) { 25 * Double(min($0, 4)) }
-    #expect(levels[1] == 6, "the first window after the slowdown halves the level")
+    // The second held window after the slowdown halves the level; a probe may come first.
+    #expect(levels.prefix(4).contains(6))
     #expect(levels.suffix(30).allSatisfy { (3...5).contains($0) })
 }
 
 @Test func backsOffWhenLatencyClimbsWithThroughputHeld() {
     var controller = ReadConcurrency()
     _ = run(&controller, windows: 40, saturatesAt12)
+    // To a window held at 12, between probes.
+    while controller.phase != .holding(windowsLeft: ReadConcurrency.holdWindows, probeUp: false)
+        || controller.level != 12
+    {
+        _ = run(&controller, windows: 1, saturatesAt12)
+    }
+    let slower = ReadConcurrency.Window(filesPerSecond: 600, secondsPerFile: 0.1)
+    // One window could be a few slow files; two in a row is the NAS.
+    controller.observe(slower)
     #expect(controller.level == 12)
-    controller.observe(.init(filesPerSecond: 600, secondsPerFile: 0.1))
+    controller.observe(slower)
     #expect(controller.level == 6)
     #expect(controller.phase == .climbing(from: nil))
 }

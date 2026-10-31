@@ -114,20 +114,22 @@ private func emptyFiles(_ count: Int) throws -> String {
 }
 
 @Test func networkReadersClimbMidScanOnASlowNAS() throws {
-    let root = try emptyFiles(1500)
+    // Enough files that the scan outlasts the first window, at 16 readers, by a second or so.
+    let count = 2500
+    let root = try emptyFiles(count)
     let databaseURL = URL(fileURLWithPath: root + ".sqlite")
     let nas = SimulatedNAS(
-        operationSeconds: 0.003, listingSeconds: 0.003, capacity: 16, fileDelay: nil)
+        operationSeconds: 0.01, listingSeconds: 0.01, capacity: 64, fileDelay: nil)
     let summary = try LibraryScanner(databaseURL: databaseURL, access: nas)
         .scan(WatchedFolder(path: root, kind: .network))
-    #expect(summary.read == 1500)
-    #expect(summary.failed == 1500)
+    #expect(summary.read == count)
+    #expect(summary.failed == count)
     guard case .tuned(let levels, _) = summary.readers else {
         Issue.record("expected tuned readers, got \(String(describing: summary.readers))")
         return
     }
-    #expect(levels.starts(with: [4, 8, 16]))
-    #expect(nas.mostFilesReadAtOnce >= 16)
+    #expect(levels.starts(with: [ReadConcurrency.networkStart, 2 * ReadConcurrency.networkStart]))
+    #expect(nas.mostFilesReadAtOnce >= 2 * ReadConcurrency.networkStart)
     #expect(summary.windows.judged >= levels.count - 1)
 }
 

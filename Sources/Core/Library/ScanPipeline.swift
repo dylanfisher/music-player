@@ -15,8 +15,10 @@ final class ScanPipeline: @unchecked Sendable {
     /// crowding the NAS with directory requests.
     static let listers = 4
     /// A throughput window closes once it's at least this long and each reader has finished
-    /// `windowFilesPerReader` files in it, so one slow file doesn't decide the level.
-    static let windowSeconds = 0.25
+    /// `windowFilesPerReader` files in it, so a few slow files don't decide the level. On a cold
+    /// NAS a file can take ten times the median, and shorter windows of 15 to 30 files hid a
+    /// doubling's gain in that noise.
+    static let windowSeconds = 2.0
     static let windowFilesPerReader = 4
 
     /// What the walk and the reads found.
