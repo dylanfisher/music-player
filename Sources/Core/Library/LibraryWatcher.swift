@@ -5,7 +5,7 @@ import Settings
 
 private let logger = moduleLogger()
 
-/// Keeps the index in line with the watched folders in Settings while the app runs: FSEvents
+/// Keeps the index in line with the watched folders while the app runs: FSEvents
 /// for local folders, a poll for network ones, one scan at a time on its own thread.
 ///
 /// Idle, it costs nothing but FSEvents' own delivery and one one-shot timer for the next poll;
@@ -15,7 +15,6 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// one rescan of its folder rather than one per file.
     static let fsEventsLatencySeconds = 2.0
 
-    private let settings: SettingsStore<AppSettings>
     private let scanner: LibraryScanner
     /// Guards every field below it, and runs FSEvents and timer callbacks.
     private let queue = DispatchQueue(label: "\(bundleIdentifier).watcher")
@@ -28,24 +27,23 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// path as configured.
     private var resolvedFolders: [(resolved: String, configured: String)] = []
 
-    public init(settings: SettingsStore<AppSettings>, databaseURL: URL) {
-        self.settings = settings
+    public init(databaseURL: URL) {
         scanner = LibraryScanner(databaseURL: databaseURL)
     }
 
-    /// Removes files outside the watched folders from the index, scans every folder, and
-    /// starts watching them.
-    public func start() {
+    /// Removes files outside `folders` from the index, scans every folder, and starts watching
+    /// them. The caller reads them from Settings.
+    public func start(folders: [WatchedFolder], pausePollingDuringPlayback: Bool) {
         queue.async { [self] in
             precondition(state == nil, "the watcher is already running")
-            let folders = settings[\.watchedFolders].map { folder in
+            let folders = folders.map { folder in
                 var folder = folder
                 folder.path = canonicalPath(folder.path)
                 return folder
             }
             state = WatchState(
                 folders: folders,
-                pausePollingDuringPlayback: settings[\.pausePollingDuringPlayback], now: Date())
+                pausePollingDuringPlayback: pausePollingDuringPlayback, now: Date())
             scanQueue.async { [scanner] in
                 do {
                     let removed = try LibraryIndex(at: scanner.databaseURL).removeFiles(
@@ -82,10 +80,10 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// The playback engine's hook. While playback is starting no network scan starts, and a
     /// running one pauses; while playing, the same holds if `library.pausePollingDuringPlayback`
     /// is on.
-    public func playbackChanged(_ activity: PlaybackActivity) {
+    public func playbackChanged(_ activity: PlaybackActivity, pausePollingDuringPlayback: Bool) {
         queue.async { [self] in
             state?.playbackChanged(
-                activity, pausePollingDuringPlayback: settings[\.pausePollingDuringPlayback])
+                activity, pausePollingDuringPlayback: pausePollingDuringPlayback)
             advance()
         }
     }

@@ -18,13 +18,8 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
 
 @Test func scansAtStartThenFollowsFSEvents() async throws {
     let library = try TestLibrary()
-    let settings = try SettingsStore(
-        AppSettings(),
-        fileURL: library.databaseURL.deletingLastPathComponent()
-            .appendingPathComponent("settings.json"))
-    try settings.set(\.watchedFolders, to: [library.folder])
-    let watcher = LibraryWatcher(settings: settings, databaseURL: library.databaseURL)
-    watcher.start()
+    let watcher = LibraryWatcher(databaseURL: library.databaseURL)
+    watcher.start(folders: [library.folder], pausePollingDuringPlayback: true)
     defer { watcher.stop() }
 
     let index = try library.index()
@@ -40,13 +35,10 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
 
 @Test func aRootWithATrailingSlashIndexesEachFileOnce() async throws {
     let library = try TestLibrary()
-    let settings = try SettingsStore(
-        AppSettings(),
-        fileURL: library.databaseURL.deletingLastPathComponent()
-            .appendingPathComponent("settings.json"))
-    try settings.set(\.watchedFolders, to: [WatchedFolder(path: library.root + "/", kind: .local)])
-    let watcher = LibraryWatcher(settings: settings, databaseURL: library.databaseURL)
-    watcher.start()
+    let watcher = LibraryWatcher(databaseURL: library.databaseURL)
+    watcher.start(
+        folders: [WatchedFolder(path: library.root + "/", kind: .local)],
+        pausePollingDuringPlayback: true)
     defer { watcher.stop() }
 
     let index = try library.index()

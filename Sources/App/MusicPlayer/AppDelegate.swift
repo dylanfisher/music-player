@@ -30,10 +30,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startLibrary() {
         do {
             let settingsURL = try defaultSettingsFileURL()
+            let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
             let watcher = LibraryWatcher(
-                settings: try SettingsStore(AppSettings(), fileURL: settingsURL),
                 databaseURL: defaultLibraryFileURL(settingsFileURL: settingsURL))
-            watcher.start()
+            watcher.start(
+                folders: settings[\.watchedFolders],
+                pausePollingDuringPlayback: settings[\.pausePollingDuringPlayback])
             self.watcher = watcher
         } catch {
             let alert = NSAlert()
