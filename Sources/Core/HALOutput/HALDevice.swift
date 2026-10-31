@@ -102,7 +102,9 @@ final class HALDevice: PCMDevice {
         let current: AudioStreamBasicDescription = try readScalar(
             stream, address(kAudioStreamPropertyPhysicalFormat))
         let physical = PhysicalFormat(current)
-        logger.info("device \(self.id, privacy: .public): switched to \(physical.summary)")
+        logger.info(
+            "device \(self.id, privacy: .public): switched to \(physical.summary, privacy: .public)"
+        )
         return DeviceFormat(
             stream: try readScalar(stream, address(kAudioStreamPropertyVirtualFormat)),
             summary: "\(name): \(physical.summary)\(hogMode ? ", hog mode" : "")",

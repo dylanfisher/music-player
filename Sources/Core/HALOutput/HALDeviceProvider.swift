@@ -22,7 +22,7 @@ public enum HALDeviceProviderError: Error, CustomStringConvertible {
 /// the way it was before playback. The snapshot is also written to `restoreRecordURL` until a
 /// session restores it, so `recoverAfterCrash` can restore it after a run that never got to.
 public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
-    public let deviceUID: String
+    private let deviceUID: String
     public let deviceName: String
     private let hogMode: Bool
     private let restoreRecordURL: URL
@@ -155,7 +155,8 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
 
     /// Restores a device left changed by a run that ended without restoring it, such as a crash,
     /// and returns what it did, or nil when there was nothing to do. A record that doesn't read
-    /// is deleted; one whose device isn't connected is kept for next time.
+    /// is deleted; one whose device isn't connected, or won't take the restore, is kept for next
+    /// time.
     public static func recoverAfterCrash(restoreRecordURL url: URL) throws -> String? {
         let data: Data
         do {
@@ -174,10 +175,15 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
             return "the device \(snapshot.deviceUID) that an earlier run left changed isn't"
                 + " connected; it will be restored once it is"
         }
-        let device = try HALDevice(
-            id: id, name: try readString(id, address(kAudioObjectPropertyName)), hogMode: false,
-            restoring: snapshot)
-        try device.close()
+        do {
+            let device = try HALDevice(
+                id: id, name: try readString(id, address(kAudioObjectPropertyName)),
+                hogMode: false, restoring: snapshot)
+            try device.close()
+        } catch {
+            return "couldn't restore \(snapshot.deviceUID), which an earlier run left changed:"
+                + " \(error). It will be tried again next time."
+        }
         try FileManager.default.removeItem(at: url)
         return "restored \(snapshot.deviceUID) and the default outputs, which an earlier run"
             + " left changed"
