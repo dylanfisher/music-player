@@ -53,7 +53,7 @@ public actor PlaybackEngine {
         let id = UUID()
         subscribers[id] = continuation
         continuation.onTermination = { [weak self] _ in Task { await self?.unsubscribe(id) } }
-        continuation.yield(PlaybackUpdate(state: state, event: nil))
+        continuation.yield(PlaybackUpdate(state: state, event: nil, positionSeconds: position()))
         return stream
     }
 
@@ -418,7 +418,7 @@ public actor PlaybackEngine {
     }
 
     private func publish(_ event: PlaybackEvent) {
-        let update = PlaybackUpdate(state: state, event: event)
+        let update = PlaybackUpdate(state: state, event: event, positionSeconds: position())
         for continuation in subscribers.values { continuation.yield(update) }
     }
 }

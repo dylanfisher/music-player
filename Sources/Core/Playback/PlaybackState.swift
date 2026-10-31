@@ -35,6 +35,9 @@ public struct PlaybackUpdate: Sendable {
     public var state: PlaybackState
     /// Nil for the first update a subscriber gets, which is the state at the time.
     public var event: PlaybackEvent?
+    /// Seconds into the current track when this was published, as `position()` had it then,
+    /// so it can't belong to a later state.
+    public var positionSeconds: Double? = nil
 }
 
 public enum PlaybackEvent: Sendable, Equatable {

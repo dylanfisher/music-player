@@ -407,3 +407,53 @@ private final class ClosingOutput: Output, @unchecked Sendable {
     #expect(
         events == [nil, .queueChanged, .resumed, .seeked(seconds: 0), .seeked(seconds: 42)])
 }
+
+@Test func eachUpdateCarriesThePositionWhenItWasPublished() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.setQueue(urls)
+    await engine.play()
+    await engine.handle(.trackStarted(1, info))
+    output.setPosition(OutputPosition(item: 1, seconds: 12))
+    let updates = await engine.updates()
+    await engine.pause()
+    output.setPosition(OutputPosition(item: 1, seconds: 99))
+    await engine.play()
+
+    var positions: [Double?] = []
+    for await update in updates {
+        positions.append(update.positionSeconds)
+        if update.event == .resumed { break }
+    }
+    #expect(positions == [12, 12, 99])
+}
+
+@Test func playAndPauseTwiceDoNothingTheSecondTime() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+    await engine.pause()
+    await engine.pause()
+    #expect(output.takeCalls() == [.pause])
+    #expect(await engine.state.status == .paused)
+    await engine.play()
+    await engine.play()
+    #expect(output.takeCalls() == [.play])
+    #expect(await engine.state.status == .playing)
+}
+
+@Test func aSeekWhileTheDeviceIsLostIsPublishedAndKeptForResuming() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    await engine.handle(.deviceLost(1, positionSeconds: 20))
+    let updates = await engine.updates()
+    await engine.seek(toSeconds: 50)
+    #expect(await engine.position() == 50)
+    for await update in updates where update.event != nil {
+        #expect(update.event == .seeked(seconds: 50))
+        #expect(update.positionSeconds == 50)
+        break
+    }
+}
