@@ -189,12 +189,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startWatching(_ folders: [WatchedFolder], _ settings: SettingsStore<AppSettings>) {
         watcher?.stop()
+        guard let browser else { return }
         let watcher = LibraryWatcher(
             databaseURL: defaultLibraryFileURL(settingsFileURL: settingsURL),
-            networkReaders: settings[\.networkScanReaders]
-        ) { [weak self] event in
-            Task { @MainActor in self?.browser?.libraryChanged(event) }
-        }
+            networkReaders: settings[\.networkScanReaders], events: browser.watcherEvents)
         let pause = settings[\.pausePollingDuringPlayback]
         watcher.start(folders: folders, pausePollingDuringPlayback: pause)
         if activity != .stopped {

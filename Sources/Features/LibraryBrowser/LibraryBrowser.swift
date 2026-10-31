@@ -18,6 +18,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
     /// The panes over the track table, with the status line under them.
     public let content: NSViewController
     public let searchField = NSSearchField()
+    /// Takes the watcher's events on any thread and hands them to the browser in the order they
+    /// were sent, so a late progress report never lands after its scan's outcome.
+    public let watcherEvents: @Sendable (WatcherEvent) -> Void
 
     /// Play these files as a new queue.
     public var play: (PlayRequest) -> Void = { _ in }
@@ -41,7 +44,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
     private let split = NSSplitView()
     private let statusLabel = NSTextField(labelWithString: "")
     private let problemsButton = NSButton()
-    private var status = LibraryStatus()
+    private(set) var status = LibraryStatus()
     private var browserHeight: Int
     private var folders: [WatchedFolder]
     private var lastRefresh = Date.distantPast
@@ -81,8 +84,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
             removeFolder: { path in owner?.removeFolder(path) })
         sidebar = sidebarController
         content = NSViewController()
+        let (events, continuation) = AsyncStream.makeStream(of: WatcherEvent.self)
+        watcherEvents = { continuation.yield($0) }
         super.init()
         owner = self
+        Task { [weak self, events] in
+            for await event in events { self?.libraryChanged(event) }
+        }
         content.view = makeContent()
         content.addChild(table)
         content.addChild(panes)
@@ -160,7 +168,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
 
     /// What the watcher reported. Refreshes as rows arrive, at most every
     /// `refreshIntervalSeconds` during a scan and at once when one ends.
-    public func libraryChanged(_ event: WatcherEvent) {
+    private func libraryChanged(_ event: WatcherEvent) {
         status.apply(event)
         showStatus()
         switch event {
