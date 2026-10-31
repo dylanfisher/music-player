@@ -2,7 +2,6 @@ import AppKit
 import HALOutput
 import Library
 import Metadata
-import Playback
 import Settings
 
 // Command-line modes, run from Terminal on the Mac the DAC is attached to:

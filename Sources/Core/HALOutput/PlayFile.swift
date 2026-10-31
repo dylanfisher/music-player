@@ -1,6 +1,5 @@
 import CoreAudio
 import Foundation
-import HALOutput
 import Log
 import RingBuffer
 

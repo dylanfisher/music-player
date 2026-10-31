@@ -1,6 +1,5 @@
 import AudioToolbox
 import Foundation
-import HALOutput
 
 /// Reads any file AudioToolbox can decode (FLAC, ALAC, WAV, AIFF, …) as PCM in a format the
 /// caller chooses. Use from one thread.

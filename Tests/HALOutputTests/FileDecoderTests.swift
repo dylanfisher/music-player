@@ -2,7 +2,7 @@ import AudioToolbox
 import Foundation
 import Testing
 
-@testable import Playback
+@testable import HALOutput
 
 /// 24-bit stereo samples, including both extremes and the values either side of zero.
 private let samples: [Int32] = [0x7F_FFFF, -0x80_0000, 1, -1, 0, 0x12_3456, -0x65_4321, 0x40_0000]
