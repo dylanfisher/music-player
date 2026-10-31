@@ -1,7 +1,6 @@
 # AGENTS.md
 
 Instructions for AI coding agents working in this repo. Humans: see [README.md](README.md).
-
 **Keep this file under ~50 lines.** Anything longer lives in `docs/` and is linked from here.
 
 ## Stack
@@ -19,9 +18,7 @@ Instructions for AI coding agents working in this repo. Humans: see [README.md](
 | Install / bootstrap | `./scripts/setup` |
 | Run locally | `./scripts/dev` |
 | Run tests | `./scripts/test` |
-| **Full gate** | `./scripts/check` |
-
-`./scripts/check` is the gate — see Definition of done.
+| **Full gate** (see Definition of done) | `./scripts/check` |
 
 ## Principles
 
