@@ -1,9 +1,10 @@
 /// How far a scan has got. Counts only grow during a scan.
 public struct ScanProgress: Equatable, Sendable {
     public enum Stage: Equatable, Sendable {
-        /// Listing folders and comparing each audio file's size and mtime with the index.
+        /// Listing folders and comparing each audio file's size and mtime with the index, while
+        /// reading the new and changed files found so far.
         case walking
-        /// Reading the tags of new and changed files.
+        /// Reading the rest of the new and changed files, once every folder is listed.
         case reading
     }
 
@@ -12,7 +13,7 @@ public struct ScanProgress: Equatable, Sendable {
     public var found = 0
     /// Of those, files whose size and mtime match the index.
     public var unchanged = 0
-    /// Files the reading stage has to read, known once the walk is done.
+    /// New and changed files to read, which grows until the walk is done.
     public var toRead = 0
     public var read = 0
     public var failed = 0

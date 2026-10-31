@@ -72,7 +72,7 @@ let package = Package(
         ),
         .target(
             name: "Fixtures",
-            dependencies: ["Log", "Metadata"],
+            dependencies: ["Library", "Log", "Metadata"],
             path: "Sources/Tools/Fixtures",
             swiftSettings: strictSwift
         ),

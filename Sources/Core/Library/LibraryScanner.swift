@@ -13,19 +13,25 @@ private let logger = moduleLogger()
 /// A missing, empty or vanished folder, and any directory that can't be listed, removes nothing
 /// under it (ADR 0009). Music files are only ever opened read-only, by `readMetadata`.
 public struct LibraryScanner: Sendable {
-    /// Files read at once on a local disk.
+    /// Files read at once on a local disk, where parsing, not waiting, is the cost.
     static let localReaders = ProcessInfo.processInfo.activeProcessorCount
-    /// Files read at once on a network volume. A NAS answers a few parallel reads faster than
-    /// one, but more queue behind each other and delay playback's reads from the same share.
-    static let networkReaders = 4
     /// Files stored per transaction: big enough that commits cost little, small enough that
     /// readers see progress and a cancelled scan keeps most of its work.
     static let batchSize = 500
 
     public let databaseURL: URL
+    /// Files read at once on a network volume, or nil to tune it to the volume as the scan runs.
+    public let networkReaders: Int?
+    let access: any ScanFileAccess
 
-    public init(databaseURL: URL) {
+    public init(
+        databaseURL: URL, networkReaders: Int? = nil,
+        access: any ScanFileAccess = SystemFileAccess()
+    ) {
+        precondition(networkReaders.map { $0 > 0 } ?? true, "a scan needs at least one reader")
         self.databaseURL = databaseURL
+        self.networkReaders = networkReaders
+        self.access = access
     }
 
     /// Scans `folder`, or only the directories in `subtrees`, each of which must be inside it.
@@ -49,10 +55,8 @@ public struct LibraryScanner: Sendable {
         let isLocal: Bool
         do {
             // Nil only where the volume doesn't say; reading as a network volume is the safe
-            // guess, since it only means fewer readers.
-            isLocal =
-                try URL(fileURLWithPath: root).resourceValues(forKeys: [.volumeIsLocalKey])
-                .volumeIsLocal ?? false
+            // guess, since it only means tuning the readers.
+            isLocal = try access.volumeIsLocal(root) ?? false
         } catch {
             isLocal = false
             logger.error("can't tell whether \(root) is on a local volume: \(error)")
@@ -65,30 +69,44 @@ public struct LibraryScanner: Sendable {
         }
 
         let index = try LibraryIndex(at: databaseURL)
+        let filter = FolderFilter(include: folder.include, exclude: folder.exclude)
         let starts = subtrees.isEmpty ? [root] : coalesced(subtrees, in: root)
         var known: [String: KnownFile] = [:]
         for start in starts { known.merge(try index.knownFiles(under: start)) { a, _ in a } }
 
-        // Walk.
-        let counter = ProgressCounter(progress)
-        var files: [WalkedFile] = []
-        var rootEntries: Int?
-        let filter = FolderFilter(include: folder.include, exclude: folder.exclude)
-        for start in starts {
-            let earlier = files.count
-            let walked = walk(start, root: root, filter: filter, control: control) { count in
-                counter.update { $0.found = earlier + count }
+        // Walk and read at once.
+        let readers: ScanPipeline.Readers =
+            if isLocal {
+                .fixed(Self.localReaders)
+            } else if let networkReaders {
+                .fixed(networkReaders)
+            } else {
+                .tuned(ReadConcurrency())
             }
-            files += walked.files
-            summary.otherFiles += walked.otherFiles
-            summary.issues += walked.issues
-            if start == root { rootEntries = walked.startEntries }
-            if walked.cancelled {
-                summary.cancelled = true
-                return summary
-            }
+        let pipeline = ScanPipeline(
+            starts.filter { startIsIncluded($0, root: root, filter: filter) }, root: root,
+            filter: filter, known: known, index: index, readers: readers,
+            access: access, control: control, counter: ProgressCounter(progress),
+            rootIsThere: { directoryDevice(root) == device })
+        let outcome = try pipeline.run()
+        summary.read = outcome.read
+        summary.failed = outcome.failed
+        summary.unchanged = outcome.unchanged
+        summary.otherFiles = outcome.otherFiles
+        summary.issues += outcome.issues
+        summary.readers = outcome.readers
+        if outcome.cancelled {
+            summary.cancelled = true
+            return summary
         }
-        if rootEntries == 0, !known.isEmpty {
+        if outcome.rootLost || directoryDevice(root) != device {
+            summary.issues.append(
+                ScanIssue(
+                    kind: .rootVanished, path: root,
+                    detail: "went away during the scan; the index keeps files it didn't see"))
+            return summary
+        }
+        if outcome.rootEntries == 0, !known.isEmpty {
             summary.issues.append(
                 ScanIssue(
                     kind: .rootEmpty, path: root,
@@ -96,44 +114,12 @@ public struct LibraryScanner: Sendable {
                         + " the index keeps them"))
             return summary
         }
-        let changed = files.filter { file in
-            guard let previous = known[file.path] else { return true }
-            return previous.sizeBytes != file.sizeBytes
-                || previous.modifiedSeconds != file.modifiedSeconds
-                || previous.failure == .unreadable
-        }
-        summary.unchanged = files.count - changed.count
-        counter.update {
-            $0.stage = .reading
-            $0.unchanged = summary.unchanged
-            $0.toRead = changed.count
-        }
 
-        // Read.
-        let readers = isLocal ? Self.localReaders : Self.networkReaders
-        let reading = ReadStage(
-            changed, known: known, index: index, readers: readers, control: control,
-            counter: counter, rootIsThere: { directoryDevice(root) == device })
-        try reading.run()
-        summary.read = reading.read
-        summary.failed = reading.failed
-        if reading.cancelled {
-            summary.cancelled = true
-            return summary
-        }
-        if reading.rootLost || directoryDevice(root) != device {
-            summary.issues.append(
-                ScanIssue(
-                    kind: .rootVanished, path: root,
-                    detail: "went away during the scan; the index keeps files it didn't see"))
-            return summary
-        }
-
-        // Remove what's gone, except under anything the walk couldn't see.
+        // The walk finished, so remove what's gone, except under anything it couldn't see.
         let protected = summary.issues.filter { $0.kind == .unreadable }.map(\.path)
-        let seen = Set(files.map(\.path))
         let gone = known.filter { path, _ in
-            !seen.contains(path) && !protected.contains { $0 == path || isPath(path, under: $0) }
+            !outcome.seen.contains(path)
+                && !protected.contains { $0 == path || isPath(path, under: $0) }
         }
         try index.remove(gone.map(\.value.id))
         summary.removed = gone.count

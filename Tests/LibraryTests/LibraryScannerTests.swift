@@ -164,17 +164,29 @@ import Testing
     #expect(stopped.removed == 0)
 }
 
+/// Reads fail with an I/O error, as on a NAS that went away.
+private struct FailingReads: ScanFileAccess {
+    func volumeIsLocal(_ path: String) throws -> Bool? { true }
+
+    func contentsOfDirectory(_ directory: String, keys: [URLResourceKey]) throws -> [URL] {
+        try SystemFileAccess().contentsOfDirectory(directory, keys: keys)
+    }
+
+    func readMetadata(at path: String) throws(MetadataError) -> ParsedFile {
+        throw MetadataError(path: path, kind: .unreadable, offset: nil, detail: "EIO")
+    }
+}
+
 @Test func lostRootStopsReadingAndStoresNothing() throws {
     let library = try TestLibrary()
     let index = try library.index()
-    let missing = (0..<10).map {
-        WalkedFile(path: library.root + "/gone \($0).flac", sizeBytes: 1, modifiedSeconds: 0)
-    }
-    let stage = ReadStage(
-        missing, known: [:], index: index, readers: 2, control: ScanControl(),
-        counter: ProgressCounter(nil), rootIsThere: { false })
-    try stage.run()
-    #expect(stage.rootLost)
+    let pipeline = ScanPipeline(
+        [library.root], root: library.root, filter: FolderFilter(include: [], exclude: []),
+        known: [:], index: index, readers: .fixed(2), access: FailingReads(),
+        control: ScanControl(), counter: ProgressCounter(nil), rootIsThere: { false })
+    let outcome = try pipeline.run()
+    #expect(outcome.rootLost)
+    #expect(outcome.read == 0)
     #expect(try index.fileIssues().isEmpty)
 }
 

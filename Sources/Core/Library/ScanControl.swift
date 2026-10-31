@@ -7,11 +7,21 @@ public final class ScanControl: @unchecked Sendable {
     private let condition = NSCondition()
     private var paused = false
     private var cancelled = false
+    private var pauseCount = 0
 
     public init() {}
 
     /// The scan stops before its next directory or file until `resume` or `cancel`.
-    public func pause() { condition.withLock { paused = true } }
+    public func pause() {
+        condition.withLock {
+            paused = true
+            pauseCount += 1
+        }
+    }
+
+    /// How many times the scan has been paused, so a throughput measurement that spans a pause
+    /// can be thrown away.
+    var pauses: Int { condition.withLock { pauseCount } }
 
     public func resume() {
         condition.withLock {

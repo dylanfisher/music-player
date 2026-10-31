@@ -11,56 +11,29 @@ struct WalkedFile: Sendable {
     var modifiedSeconds: Double
 }
 
-/// What walking one or more directories found.
-struct DirectoryWalk {
+/// What listing one directory found.
+struct DirectoryListing {
     var files: [WalkedFile] = []
+    /// Subdirectories the filter includes, in listing order.
+    var directories: [String] = []
     var otherFiles = 0
-    /// Entries in the first directory listed, to tell an empty mount point from a library.
-    var startEntries = 0
+    /// Every entry listed, to tell an empty mount point from a library.
+    var entries = 0
     var issues: [ScanIssue] = []
-    var cancelled = false
 }
 
 /// Resource values fetched with each directory listing. `contentsOfDirectory` gets them in bulk
-/// with the listing (`getattrlistbulk`), which is the one stat per entry the walk makes; on SMB
-/// that's a round trip per batch of entries rather than per file.
+/// with the listing (`getattrlistbulk`) and makes no stat per entry (measured in ADR 0010), so
+/// on SMB a directory costs a round trip per batch of entries rather than one per file.
 private let walkKeys: [URLResourceKey] = [
     .isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey,
     .contentModificationDateKey,
 ]
 private let walkKeySet = Set(walkKeys)
 
-/// Walks `start` and everything under it that `filter` includes, skipping hidden entries such as
-/// `.DS_Store` and the `._` files macOS leaves on SMB shares. `root` is the watched folder, which
-/// the filter's patterns are relative to. Checks `control` before each directory, and calls
-/// `found` after each one with the audio files found so far.
-func walk(
-    _ start: String, root: String, filter: FolderFilter, control: ScanControl,
-    found: (Int) -> Void
-) -> DirectoryWalk {
-    var result = DirectoryWalk()
-    // A subtree start is checked like the directories the walk descends through, so changes
-    // inside an excluded folder don't get it indexed.
-    guard startIsIncluded(start, root: root, filter: filter) else { return result }
-    var pending = [start]
-    var isStart = true
-    while let directory = pending.popLast() {
-        guard control.proceed() else {
-            result.cancelled = true
-            return result
-        }
-        // Foundation autoreleases each listing's URLs, and a scan thread has no pool of its own
-        // to drain them, so without this a walk holds every URL it has seen.
-        autoreleasepool {
-            list(directory, root: root, filter: filter, isStart: isStart, into: &result, &pending)
-        }
-        isStart = false
-        found(result.files.count)
-    }
-    return result
-}
-
-private func startIsIncluded(_ start: String, root: String, filter: FolderFilter) -> Bool {
+/// Whether a subtree scan may start at `start`. It's checked like the directories the walk
+/// descends through, so changes inside an excluded folder don't get it indexed.
+func startIsIncluded(_ start: String, root: String, filter: FolderFilter) -> Bool {
     guard start != root else { return true }
     let components = start.dropFirst(root.count + 1).split(separator: "/")
     return components.indices.allSatisfy { end in
@@ -68,22 +41,23 @@ private func startIsIncluded(_ start: String, root: String, filter: FolderFilter
     }
 }
 
-private func list(
-    _ directory: String, root: String, filter: FolderFilter, isStart: Bool,
-    into result: inout DirectoryWalk, _ pending: inout [String]
-) {
+/// Lists `directory`, skipping hidden entries such as `.DS_Store` and the `._` files macOS
+/// leaves on SMB shares. `root` is the watched folder, which the filter's patterns are relative
+/// to. Files and subdirectories keep the order the volume lists them in.
+func list(
+    _ directory: String, root: String, filter: FolderFilter, access: any ScanFileAccess
+) -> DirectoryListing {
+    var result = DirectoryListing()
     let entries: [URL]
     do {
-        entries = try FileManager.default.contentsOfDirectory(
-            at: URL(fileURLWithPath: directory, isDirectory: true),
-            includingPropertiesForKeys: walkKeys, options: [.skipsHiddenFiles])
+        entries = try access.contentsOfDirectory(directory, keys: walkKeys)
     } catch {
         result.issues.append(
             ScanIssue(
                 kind: .unreadable, path: directory, detail: "\(error.localizedDescription)"))
-        return
+        return result
     }
-    if isStart { result.startEntries = entries.count }
+    result.entries = entries.count
     for entry in entries {
         // Built from `directory`, not `entry.path`, so every path keeps the root's spelling
         // even where Foundation would resolve a symbolic link such as /var.
@@ -102,7 +76,7 @@ private func list(
             result.issues.append(
                 ScanIssue(kind: .symbolicLink, path: path, detail: "not followed"))
         } else if values.isDirectory == true {
-            if filter.includesDirectory(relative) { pending.append(path) }
+            if filter.includesDirectory(relative) { result.directories.append(path) }
         } else if values.isRegularFile == true {
             guard audioFileExtensions.contains(entry.pathExtension.lowercased()) else {
                 result.otherFiles += 1
@@ -121,4 +95,5 @@ private func list(
                     modifiedSeconds: modified.timeIntervalSince1970))
         }
     }
+    return result
 }

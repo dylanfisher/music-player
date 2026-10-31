@@ -1,5 +1,13 @@
 /// What one scan of a watched folder did.
 public struct ScanSummary: Equatable, Sendable {
+    /// How many files a scan read at once.
+    public enum Readers: Equatable, Sendable {
+        case fixed(Int)
+        /// Tuned to the volume as the scan ran: each level it settled on, in order, and whether
+        /// it was still climbing when the scan ended.
+        case tuned([Int], climbing: Bool)
+    }
+
     /// New or changed files read and stored, including those that failed.
     public var read = 0
     /// Files whose read failed in this scan. Their failures are stored with the file.
@@ -13,4 +21,6 @@ public struct ScanSummary: Equatable, Sendable {
     public var issues: [ScanIssue] = []
     /// Stopped by `ScanControl.cancel`. What was read is kept; nothing was removed.
     public var cancelled = false
+    /// Nil when the scan stopped before reading.
+    public var readers: Readers?
 }
