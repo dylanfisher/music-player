@@ -183,6 +183,37 @@ private func artBytes(_ file: Data) throws -> Data? {
     #expect(failure(mp3(id3Tag(version: 5, []))).map(\.kind) == .unsupported)
 }
 
+/// A v2.4 frame whose size iTunes wrote as a plain integer: for 200 bytes the syncsafe reading
+/// is 328, which lands mid-frame, while the plain reading lands on the next frame.
+private func iTunesFrame(_ id: String, _ body: Data) -> Data {
+    ascii(id) + bigEndian32(body.count) + Data([0, 0]) + body
+}
+
+@Test func readsITunesPlainFrameSizes() throws {
+    let long = String(repeating: "x", count: 199)
+    let tag = id3Tag(
+        version: 4,
+        [
+            iTunesFrame("TIT2", id3Text(long, encoding: 3)),
+            id3Frame("TPE1", id3Text("After", encoding: 3), version: 4),
+        ])
+    let parsed = try parse(mp3(tag))
+    #expect(parsed.metadata.tags.title == long)
+    #expect(parsed.metadata.tags.artist == "After")
+    #expect(parsed.warnings.map(\.kind) == [.nonSyncsafeFrameSize])
+    #expect(parsed.warnings.first?.offset == 14)
+}
+
+@Test func keepsTheSyncsafeSizeWhenItLandsOnAFrame() throws {
+    // 0x0101 as syncsafe is 129: the frame below is exactly that long.
+    let body = id3Text(String(repeating: "y", count: 128), encoding: 3)
+    let frame = ascii("TIT2") + Data([0, 0, 1, 1, 0, 0]) + body
+    let parsed = try parse(
+        mp3(id3Tag(version: 4, [frame, id3Frame("TPE1", id3Text("B"), version: 4)])))
+    #expect(parsed.metadata.tags.artist == "B")
+    #expect(parsed.warnings.isEmpty)
+}
+
 @Test func badFieldValuesAreDroppedOrPartlyReadWithWarnings() throws {
     let tag = id3Tag(
         version: 4,

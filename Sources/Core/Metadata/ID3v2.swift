@@ -121,11 +121,9 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
         case 2: frameSize = Int(try frameHeader.uint24BE(3))
         case 3: frameSize = Int(try frameHeader.uint32BE(4))
         default:
-            guard let syncsafe = try frameHeader.syncsafe(4) else {
-                throw .malformed(
-                    at: area.fileOffset(cursor + 4), "ID3v2.4 frame \(id) size isn't syncsafe")
-            }
-            frameSize = syncsafe
+            frameSize = try id3v24FrameSize(
+                frameHeader, id, area, frameStart: frameStart, at: area.fileOffset(cursor + 4),
+                reader)
         }
         guard frameSize <= area.range.upperBound - frameStart else {
             throw .malformed(
@@ -200,6 +198,40 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
 /// Four characters from A–Z and 0–9.
 private func isFrameID(_ bytes: Bytes) -> Bool {
     bytes.array.allSatisfy { (0x41...0x5A).contains($0) || (0x30...0x39).contains($0) }
+}
+
+/// A 2.4 frame size is syncsafe, but older iTunes wrote plain integers. Use the syncsafe reading
+/// when it lands on the next frame, padding or the end of the tag; otherwise use the plain reading
+/// if that does, with a warning.
+private func id3v24FrameSize(
+    _ header: Bytes, _ id: String, _ area: FrameArea, frameStart: Int, at offset: Int,
+    _ reader: ByteReader
+) throws(ParseFailure) -> Int {
+    let syncsafe = try header.syncsafe(4)
+    let plain = Int(try header.uint32BE(4))
+    if let syncsafe {
+        if syncsafe == plain { return syncsafe }
+        if try landsOnFrame(area, frameStart + syncsafe) { return syncsafe }
+    }
+    if try landsOnFrame(area, frameStart + plain) {
+        reader.warn(
+            .nonSyncsafeFrameSize, at: offset,
+            "ID3v2.4 frame \(id) size is a plain integer, not syncsafe")
+        return plain
+    }
+    guard let syncsafe else {
+        throw .malformed(at: offset, "ID3v2.4 frame \(id) size isn't syncsafe")
+    }
+    return syncsafe
+}
+
+/// Whether a frame ending at `position` is followed by the end of the tag, padding, or another
+/// frame's ID.
+private func landsOnFrame(_ area: FrameArea, _ position: Int) throws(ParseFailure) -> Bool {
+    guard position < area.range.upperBound else { return position == area.range.upperBound }
+    let next = try area.bytes(position..<min(area.range.upperBound, position + 4))
+    if try next.uint8(0) == 0 { return true }
+    return next.count == 4 && isFrameID(next)
 }
 
 /// 2.3 gives the size after its own four bytes; 2.4 gives a syncsafe size that includes them.

@@ -10,6 +10,9 @@ public struct MetadataWarning: Equatable, Sendable, CustomStringConvertible {
         case badValue
         /// An ID3 frame, MP4 item, Vorbis comment or picture that can't be read, and is skipped.
         case unreadableField
+        /// An ID3v2.4 frame size written as a plain integer instead of a syncsafe one, as older
+        /// iTunes versions did.
+        case nonSyncsafeFrameSize
     }
 
     public var kind: Kind
