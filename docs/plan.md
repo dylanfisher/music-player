@@ -259,6 +259,13 @@ Follow-up (3b), scan speed on network volumes:
    fixed 4, budgeted. ADR 0010 for the controller, the pipeline and the measured tricks.
 7. `scripts/bundle release` refuses, with a clear message, a toolchain that can't link x86_64.
 
+Result (3b): shipped as planned. Each full batch is stored outside the lock that readers share.
+Bench on Apple Silicon: a full scan of 43k fixture files takes 1.26 s (was 2.96 s), a no-change
+rescan 0.53 s (was 0.90 s), and a scan through a simulated NAS (2 ms per operation) runs 3.0x
+faster tuned than with 4 fixed readers (2.46 s against 7.28 s, budget 4 s). The review fixed
+pauses leaking into a measurement window, an unbounded `--readers`, and readers spawned at
+scan end. Whether smbfs honours `F_RDAHEAD`/`F_NOCACHE` waits on the NAS checkpoint.
+
 ### 4. Playback engine
 
 Turns the one-file command into the engine everything else drives.
