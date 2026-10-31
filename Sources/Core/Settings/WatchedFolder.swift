@@ -32,6 +32,28 @@ public struct WatchedFolder: SettingValue {
         self.pollIntervalMinutes = pollIntervalMinutes
     }
 
+    private enum CodingKeys: String, CodingKey, CaseIterable {
+        case path, kind, include, exclude, pollIntervalMinutes
+    }
+
+    /// Rejects keys outside `CodingKeys`, so a misspelled field fails instead of being ignored.
+    public init(from decoder: any Decoder) throws {
+        let known = Set(CodingKeys.allCases.map(\.stringValue))
+        let raw = try decoder.container(keyedBy: AnyKey.self)
+        if let key = raw.allKeys.sorted(by: { $0.stringValue < $1.stringValue }).first(where: {
+            !known.contains($0.stringValue)
+        }) {
+            throw DecodingError.dataCorruptedError(
+                forKey: key, in: raw, debugDescription: "unknown key")
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        path = try container.decode(String.self, forKey: .path)
+        kind = try container.decode(Kind.self, forKey: .kind)
+        include = try container.decode([String].self, forKey: .include)
+        exclude = try container.decode([String].self, forKey: .exclude)
+        pollIntervalMinutes = try container.decode(Int.self, forKey: .pollIntervalMinutes)
+    }
+
     public static var typeName: String {
         "a watched folder (path, kind, include, exclude, pollIntervalMinutes)"
     }
@@ -46,4 +68,11 @@ public struct WatchedFolder: SettingValue {
         }
         return nil
     }
+}
+
+private struct AnyKey: CodingKey {
+    let stringValue: String
+    let intValue: Int? = nil
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { nil }
 }

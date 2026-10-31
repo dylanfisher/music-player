@@ -128,6 +128,11 @@ private func problems(_ json: String) -> [SettingProblem] {
             + #" "pollIntervalMinutes": 15}]}"#)
     #expect("\(badKind[0].reason)".contains("[0].kind"))
 
+    let unknown = problems(
+        #"{"folders": [{"path": "/M", "kind": "local", "include": [], "exclude": [],"#
+            + #" "pollIntervalMinutes": 15, "bogus": 1}]}"#)
+    #expect("\(unknown[0].reason)".contains("[0].bogus: unknown key"))
+
     #expect(
         problems(
             #"{"folders": [{"path": "Music", "kind": "local", "include": [], "exclude": [],"#
