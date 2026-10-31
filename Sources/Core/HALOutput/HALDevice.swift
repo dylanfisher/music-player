@@ -145,24 +145,49 @@ final class HALDevice: PCMDevice {
     func close() throws {
         guard isOpen else { return }
         isOpen = false
-        try stop()
-        try writeScalar(
-            stream, address(kAudioStreamPropertyPhysicalFormat),
-            snapshot.physicalFormat.basicDescription)
-        try writeScalar(id, address(kAudioDevicePropertyNominalSampleRate), snapshot.sampleRateHz)
-        if hogMode { try writeScalar(id, address(kAudioDevicePropertyHogMode), pid_t(-1)) }
-        try restoreDefaultOutputs(snapshot)
+        // Every step runs even when an earlier one fails, so one failure doesn't leave hog mode
+        // held or the default output moved.
+        let steps: [() throws -> Void] = [
+            { try self.stop() },
+            {
+                try writeScalar(
+                    self.stream, address(kAudioStreamPropertyPhysicalFormat),
+                    self.snapshot.physicalFormat.basicDescription)
+            },
+            {
+                try writeScalar(
+                    self.id, address(kAudioDevicePropertyNominalSampleRate),
+                    self.snapshot.sampleRateHz)
+            },
+            {
+                if self.hogMode {
+                    try writeScalar(self.id, address(kAudioDevicePropertyHogMode), pid_t(-1))
+                }
+            },
+            { try restoreDefaultOutputs(self.snapshot) },
+        ]
+        var errors: [any Error] = []
+        for step in steps {
+            do {
+                try step()
+            } catch {
+                logger.error("device \(self.id, privacy: .public): restoring failed: \(error)")
+                errors.append(error)
+            }
+        }
+        if let first = errors.first { throw first }
         logger.info("device \(self.id, privacy: .public): restored")
     }
 
-    func abandon() {
-        guard isOpen else { return }
+    func abandon() -> Bool {
+        guard isOpen else { return true }
         isOpen = false
-        // The device is gone, so these fail; the IO proc can't be called any more either way.
         do {
             try stop()
+            return true
         } catch {
             logger.error("device \(self.id, privacy: .public) gone, stopping it failed: \(error)")
+            return false
         }
     }
 }
