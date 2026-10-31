@@ -7,16 +7,25 @@ import Testing
 /// Big enough that the plan uses every seed and tag layout, small enough to build in a second.
 private let libraryCount = 1000
 
-/// One library shared by the tests that only read it.
+/// One library shared by the tests that only read it. It lives in `.build`, so reruns skip
+/// generating it and nothing piles up in the temporary directory.
 private let library = Result { () throws -> (URL, FixtureManifest) in
-    let root = temporaryDirectory()
-    #expect(try generateFixtures(count: libraryCount, in: root) == .generated)
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent(".build/fixture-tests")
+    _ = try generateFixtures(count: libraryCount, in: root)
     return (root, try loadManifest(in: root))
 }
 
-private func temporaryDirectory() -> URL {
-    FileManager.default.temporaryDirectory
+/// Runs `body` with a fresh directory, then deletes it.
+private func withTemporaryDirectory(_ body: (URL) throws -> Void) throws {
+    let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("fixtures-\(UUID().uuidString)")
+    let result = Result { try body(root) }
+    if FileManager.default.fileExists(atPath: root.path) {
+        try FileManager.default.removeItem(at: root)
+    }
+    try result.get()
 }
 
 private func open(_ url: URL) throws -> ExtAudioFileRef {
@@ -161,36 +170,40 @@ private func audioToolboxTags(_ url: URL) throws -> (info: [String: Any], artByt
 }
 
 @Test func rerunningTheSameCountIsSkipped() throws {
-    let root = temporaryDirectory()
-    #expect(try generateFixtures(count: 30, in: root) == .generated)
-    let manifest = root.appendingPathComponent(FixtureManifest.fileName)
-    let written = try FileManager.default.attributesOfItem(atPath: manifest.path)[.modificationDate]
-    #expect(try generateFixtures(count: 30, in: root) == .upToDate)
-    #expect(
-        try FileManager.default.attributesOfItem(atPath: manifest.path)[.modificationDate] as? Date
-            == written as? Date)
+    try withTemporaryDirectory { root in
+        #expect(try generateFixtures(count: 30, in: root) == .generated)
+        let manifest = root.appendingPathComponent(FixtureManifest.fileName).path
+        func modified() throws -> Date? {
+            try FileManager.default.attributesOfItem(atPath: manifest)[.modificationDate] as? Date
+        }
+        let written = try modified()
+        #expect(try generateFixtures(count: 30, in: root) == .upToDate)
+        #expect(try modified() == written)
 
-    #expect(try generateFixtures(count: 30, in: root, force: true) == .generated)
-    #expect(try generateFixtures(count: 31, in: root) == .generated)
-    #expect(try loadManifest(in: root).files.count == 31)
+        #expect(try generateFixtures(count: 30, in: root, force: true) == .generated)
+        #expect(try generateFixtures(count: 31, in: root) == .generated)
+        #expect(try loadManifest(in: root).files.count == 31)
+    }
 }
 
 @Test func aMissingFileMakesTheLibraryStale() throws {
-    let root = temporaryDirectory()
-    #expect(try generateFixtures(count: 30, in: root) == .generated)
-    let victim = try loadManifest(in: root).files[0].path
-    try FileManager.default.removeItem(at: root.appendingPathComponent(victim))
-    #expect(try generateFixtures(count: 30, in: root) == .generated)
-    #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent(victim).path))
+    try withTemporaryDirectory { root in
+        #expect(try generateFixtures(count: 30, in: root) == .generated)
+        let victim = try loadManifest(in: root).files[0].path
+        try FileManager.default.removeItem(at: root.appendingPathComponent(victim))
+        #expect(try generateFixtures(count: 30, in: root) == .generated)
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent(victim).path))
+    }
 }
 
 @Test func refusesToClearADirectoryItDidntWrite() throws {
-    let root = temporaryDirectory()
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    let keep = root.appendingPathComponent("song.flac")
-    try Data("not ours".utf8).write(to: keep)
-    #expect(throws: FixtureError.self) { try generateFixtures(count: 5, in: root) }
-    #expect(FileManager.default.fileExists(atPath: keep.path))
+    try withTemporaryDirectory { root in
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let keep = root.appendingPathComponent("song.flac")
+        try Data("not ours".utf8).write(to: keep)
+        #expect(throws: FixtureError.self) { try generateFixtures(count: 5, in: root) }
+        #expect(FileManager.default.fileExists(atPath: keep.path))
+    }
 }
 
 @Test func planIsDeterministic() {
