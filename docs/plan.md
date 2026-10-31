@@ -595,9 +595,9 @@ is not "more than 200"; the dialogs and drag and drop are tested only through th
 
 ### 8. System integration
 
-- [ ] Media keys and headphone controls via `MPRemoteCommandCenter`.
-- [ ] Now Playing in Control Center via `MPNowPlayingInfoCenter`, with art.
-- [ ] Dock menu with the current track and transport controls.
+- [x] Media keys and headphone controls via `MPRemoteCommandCenter`.
+- [x] Now Playing in Control Center via `MPNowPlayingInfoCenter`, with art.
+- [x] Dock menu with the current track and transport controls.
 - [ ] **Hardware checkpoint (owner):** on the DAC Mac, after pushing, run `./scripts/pull` and
       play an album with art to the ADI-2. Then check each of these and report which work:
       1. Press F8 (play/pause) twice, then F9 (next) and F7 (previous), with another app in
@@ -635,6 +635,14 @@ Implementation plan:
    remote command runs its registry command, play and pause by state, seek clamped, info on
    start, pause, resume, seek and stop, no update for events that change nothing, elapsed
    extrapolated when art arrives, art sizes, the Dock menu's items).
+
+Result: shipped up to the owner's checkpoint, which is pending. Bench on Apple Silicon: playback
+CPU 2.77% (budget 3%; Now Playing adds no timer), launch 0.62 s. The review made remote Play and
+Pause absolute (new Play and Pause commands) so a double press can't flip state through a lagging
+model, ran off-main remote calls synchronously on main so they report their real status, checked
+commands live, refused NaN seeks and clamped seeks inside the track, and carried the position in
+each engine update so Control Center's time can't pair with a newer state. Untested until the
+checkpoint: the MediaPlayer adapters' off-main path.
 
 ### 9. UPnP/DLNA output (Denon AVR-X1800H)
 
