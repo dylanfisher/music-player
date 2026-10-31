@@ -48,9 +48,18 @@ public struct LibraryScanner: Sendable {
             logger.error("\(root) is unavailable; skipping it")
             return summary
         }
-        let isLocal = try? URL(fileURLWithPath: root).resourceValues(forKeys: [.volumeIsLocalKey])
-            .volumeIsLocal
-        if folder.kind == .local, isLocal == false {
+        let isLocal: Bool
+        do {
+            // Nil only where the volume doesn't say; reading as a network volume is the safe
+            // guess, since it only means fewer readers.
+            isLocal =
+                try URL(fileURLWithPath: root).resourceValues(forKeys: [.volumeIsLocalKey])
+                .volumeIsLocal ?? false
+        } catch {
+            isLocal = false
+            logger.error("can't tell whether \(root) is on a local volume: \(error)")
+        }
+        if folder.kind == .local, !isLocal {
             summary.issues.append(
                 ScanIssue(
                     kind: .networkFolderMarkedLocal, path: root,
@@ -103,7 +112,7 @@ public struct LibraryScanner: Sendable {
         }
 
         // Read.
-        let readers = isLocal == false ? Self.networkReaders : Self.localReaders
+        let readers = isLocal ? Self.localReaders : Self.networkReaders
         let reading = ReadStage(
             changed, known: known, index: index, readers: readers, control: control,
             counter: counter, rootIsThere: { directoryDevice(root) == device })
