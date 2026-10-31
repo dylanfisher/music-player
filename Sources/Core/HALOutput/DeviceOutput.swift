@@ -388,7 +388,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     private func service() {
         guard let stream else { return }
-        fill(stream)
+        if stream.isHalfEmpty { fill(stream) }
         let consumed = HALRenderConsumedBytes(stream.render)
         while segments.count > 1, consumed >= segments[1].startByte {
             let ended = segments.removeFirst()
@@ -587,7 +587,7 @@ private struct Segment {
 
 /// The ring buffer and render state for one device format, and the decode chunk that feeds them.
 private final class RenderStream {
-    static let chunkFrames = 4096
+    static let chunkFrames = 32768
     /// Four seconds of audio. The control thread refills it every 10 ms, so nearly all of it is
     /// margin: for a NAS read that stalls, and for opening the next track on the same thread
     /// while this drains. A seek doesn't wait for it to empty (`HALRenderDiscardBefore`), so its
@@ -662,6 +662,11 @@ private final class RenderStream {
     }
 
     var chunkIsEmpty: Bool { chunkOffset == chunkBytes }
+
+    /// Refilling only from half empty decodes in bursts of two seconds instead of a few
+    /// milliseconds every tick. The CPU then runs the work at full clock and goes back to sleep,
+    /// which measured a third of the CPU time of topping up every tick.
+    var isHalfEmpty: Bool { RingBufferReadable(ring) <= RingBufferCapacity(ring) / 2 }
 
     func dropChunk() {
         chunkBytes = 0
