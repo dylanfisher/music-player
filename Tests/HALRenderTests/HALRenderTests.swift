@@ -78,7 +78,7 @@ private final class Fixture {
     #expect(render(fixture.state, bytes: 2) == [1, 1])
 
     // Seek: drop the 4 old bytes still queued; the new audio is written straight after.
-    HALRenderDiscardBefore(fixture.state, 6, HALRenderNoContinuation)
+    HALRenderDiscard(fixture.state, 0, 6)
     fixture.write([2, 2, 2, 2])
 
     #expect(render(fixture.state, bytes: 4) == [2, 2, 2, 2])
@@ -86,25 +86,34 @@ private final class Fixture {
     #expect(HALRenderUnderrunBytes(fixture.state) == 0)
 }
 
-@Test func aContinuingDiscardSkipsWhatPlayedAfterThePositionWasRead() throws {
+@Test func aDiscardAheadPlaysUpToItThenSkipsMidBuffer() throws {
     let fixture = try Fixture()
+    // The current track's tail (1-4) and an old next track (5-8) are queued.
     fixture.write([1, 2, 3, 4, 5, 6, 7, 8])
     #expect(render(fixture.state, bytes: 2) == [1, 2])
-    let read = HALRenderConsumedBytes(fixture.state)
-    // An IO cycle runs before the producer posts the discard.
-    #expect(render(fixture.state, bytes: 2) == [3, 4])
 
-    // The replacement audio carries on from where `read` was: byte 3.
-    HALRenderDiscardBefore(fixture.state, 8, read)
-    fixture.write([3, 4, 5, 6, 7, 8])
-    #expect(render(fixture.state, bytes: 4) == [5, 6, 7, 8])
+    // Replace the next track: drop bytes 4..<8 and queue its replacement after them.
+    HALRenderDiscard(fixture.state, 4, 8)
+    fixture.write([9, 10, 11, 12])
+    #expect(render(fixture.state, bytes: 6) == [3, 4, 9, 10, 11, 12])
+    #expect(HALRenderConsumedBytes(fixture.state) == 12)
     #expect(HALRenderUnderrunBytes(fixture.state) == 0)
+}
+
+@Test func aNewerDiscardReplacesOneNotYetReached() throws {
+    let fixture = try Fixture()
+    fixture.write([1, 2, 3, 4, 5, 6])
+    HALRenderDiscard(fixture.state, 4, 6)
+    // A seek before the IO proc reaches byte 4 drops everything instead.
+    HALRenderDiscard(fixture.state, 0, 6)
+    fixture.write([7, 8])
+    #expect(render(fixture.state, bytes: 2) == [7, 8])
 }
 
 @Test func refillAfterADiscardIsNotAnUnderrunUntilABufferIsFull() throws {
     let fixture = try Fixture()
     fixture.write([1, 1, 1, 1])
-    HALRenderDiscardBefore(fixture.state, 4, HALRenderNoContinuation)
+    HALRenderDiscard(fixture.state, 0, 4)
 
     #expect(render(fixture.state) == [0, 0, 0, 0, 0, 0, 0, 0])
     fixture.write([2, 2, 2, 2, 2, 2, 2, 2])

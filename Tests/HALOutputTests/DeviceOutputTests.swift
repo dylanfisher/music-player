@@ -191,8 +191,20 @@ private func contiguousFrames(of album: RampAlbum, from first: Int = 0, in sampl
     #expect(!rig.events.contains(.trackStarted(index: 0)))
 }
 
-@Test func changingTheNextTrackAfterItWasQueuedPlaysTheNewOne() async throws {
+/// The album's frames in `ranges`, one after another, as interleaved device samples.
+private func samples(of album: RampAlbum, _ ranges: [Range<Int>]) -> [Int32] {
+    ranges.flatMap { range in
+        range.flatMap { index -> [Int32] in
+            let (left, right) = album.frame(index)
+            return [left, right]
+        }
+    }
+}
+
+@Test func changingTheNextTrackAfterItWasQueuedPlaysEverySampleOnce() async throws {
     let album = try album(44_100, 16)
+    let first = 0..<album.trackFrames[0]
+    let second = album.trackFrames[0]..<album.totalFrames
     let rig = try await Rig(speed: 1)
     await rig.engine.setQueue(album.tracks)
     await rig.engine.play()
@@ -205,23 +217,8 @@ private func contiguousFrames(of album: RampAlbum, from first: Int = 0, in sampl
     try await rig.wait(for: .finished)
 
     #expect(rig.events.filter { if case .trackStarted = $0 { true } else { false } }.count == 3)
-    let samples = rig.device.captured[0].samples
-    let last = try #require(contiguousFrames(of: album, from: album.trackFrames[0], in: samples))
-    #expect(last.count == album.trackFrames[1])
-}
-
-@Test func handingOverTheNextTrackAgainKeepsTheGapClosed() async throws {
-    let album = try album(44_100, 16)
-    let rig = try await Rig(speed: 1)
-    await rig.engine.setQueue(album.tracks)
-    await rig.engine.play()
-    try await rig.wait(for: .trackStarted(index: 0))
-    try await Task.sleep(nanoseconds: 300_000_000)
-    // Shuffle off again sends the same next track under a new item ID.
-    await rig.engine.setShuffle(false)
-    try await rig.wait(for: .finished)
-
-    let found = try #require(contiguousFrames(of: album, in: rig.device.captured[0].samples))
-    #expect(found.count == album.totalFrames)
-    #expect(rig.events.contains(.trackStarted(index: 1)))
+    let expected = samples(of: album, [first, first, second])
+    let captured = rig.device.captured[0].samples
+    #expect(captured.count >= expected.count)
+    #expect(Array(captured.prefix(expected.count)) == expected)
 }

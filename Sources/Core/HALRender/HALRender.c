@@ -11,11 +11,11 @@ struct HALRender {
     HALRenderSampleKind samples;
     _Atomic uint64_t underrunBytes;
     _Atomic uint64_t consumedBytes;
-    /// A sequence lock around `discardBefore` and `continuingFrom`, so the IO proc never reads one
-    /// discard's target with another's continuation: odd while the producer writes them.
+    /// A sequence lock around `postedFrom` and `postedTo`, so the IO proc never pairs one
+    /// discard's start with another's end: odd while the producer writes them.
     _Atomic uint32_t discardSequence;
-    _Atomic uint64_t discardBefore;
-    _Atomic uint64_t continuingFrom;
+    _Atomic uint64_t postedFrom;
+    _Atomic uint64_t postedTo;
     _Atomic bool draining;
     /// The bits of a float, because C11 doesn't promise `_Atomic float` is lock-free.
     _Atomic uint32_t gainBits;
@@ -23,8 +23,10 @@ struct HALRender {
     float appliedGain;
     /// IO proc only: the sequence number of the last discard it acted on.
     uint32_t discardSeen;
-    /// IO proc only: new bytes still to skip because their audio already played.
-    uint64_t pendingSkip;
+    /// IO proc only: the discard it is waiting to reach, if `discarding`.
+    bool discarding;
+    uint64_t discardFrom;
+    uint64_t discardTo;
     /// IO proc only: set by a discard, cleared once a whole buffer comes from `source`.
     bool refilling;
 };
@@ -49,13 +51,15 @@ HALRender *HALRenderCreate(RingBuffer *source, HALRenderSampleKind samples) {
     atomic_init(&render->underrunBytes, 0);
     atomic_init(&render->consumedBytes, 0);
     atomic_init(&render->discardSequence, 0);
-    atomic_init(&render->discardBefore, 0);
-    atomic_init(&render->continuingFrom, HALRenderNoContinuation);
+    atomic_init(&render->postedFrom, 0);
+    atomic_init(&render->postedTo, 0);
     atomic_init(&render->draining, false);
     atomic_init(&render->gainBits, bitsOf(1.0f));
     render->appliedGain = 1.0f;
     render->discardSeen = 0;
-    render->pendingSkip = 0;
+    render->discarding = false;
+    render->discardFrom = 0;
+    render->discardTo = 0;
     render->refilling = false;
     return render;
 }
@@ -70,35 +74,54 @@ uint64_t HALRenderConsumedBytes(const HALRender *render) {
     return atomic_load_explicit(&((HALRender *)render)->consumedBytes, memory_order_acquire);
 }
 
-void HALRenderDiscardBefore(HALRender *render, uint64_t producedBytes, uint64_t continuingFrom) {
+void HALRenderDiscard(HALRender *render, uint64_t fromByte, uint64_t toByte) {
     uint32_t sequence = atomic_load_explicit(&render->discardSequence, memory_order_relaxed);
     atomic_store_explicit(&render->discardSequence, sequence + 1, memory_order_relaxed);
     atomic_thread_fence(memory_order_release);
-    atomic_store_explicit(&render->discardBefore, producedBytes, memory_order_relaxed);
-    atomic_store_explicit(&render->continuingFrom, continuingFrom, memory_order_relaxed);
-    // Release also orders this after the producer's writes of the bytes being discarded, so the IO
+    atomic_store_explicit(&render->postedFrom, fromByte, memory_order_relaxed);
+    atomic_store_explicit(&render->postedTo, toByte, memory_order_relaxed);
+    // Release also orders this after the producer's writes of the bytes being skipped, so the IO
     // proc sees them as readable and skips exactly those.
     atomic_store_explicit(&render->discardSequence, sequence + 2, memory_order_release);
 }
 
-/// Acts on a discard the producer has posted since the last cycle. A discard caught mid-write is
+/// Takes up a discard the producer has posted since the last cycle. One caught mid-write is
 /// picked up on the next cycle instead.
-static void applyDiscard(HALRender *render, uint64_t *consumed) {
+static void takeDiscard(HALRender *render) {
     uint32_t before = atomic_load_explicit(&render->discardSequence, memory_order_acquire);
     if (before == render->discardSeen || (before & 1) != 0) return;
-    uint64_t target = atomic_load_explicit(&render->discardBefore, memory_order_relaxed);
-    uint64_t continuingFrom = atomic_load_explicit(&render->continuingFrom, memory_order_relaxed);
+    uint64_t from = atomic_load_explicit(&render->postedFrom, memory_order_relaxed);
+    uint64_t to = atomic_load_explicit(&render->postedTo, memory_order_relaxed);
     atomic_thread_fence(memory_order_acquire);
     if (atomic_load_explicit(&render->discardSequence, memory_order_relaxed) != before) return;
-
     render->discardSeen = before;
-    render->refilling = true;
-    render->pendingSkip = continuingFrom != HALRenderNoContinuation && *consumed > continuingFrom
-                              ? *consumed - continuingFrom
-                              : 0;
-    if (*consumed < target) {
-        *consumed += RingBufferSkip(render->source, (size_t)(target - *consumed));
+    render->discarding = true;
+    render->discardFrom = from;
+    render->discardTo = to;
+}
+
+/// Reads up to `size` bytes into `destination`, skipping the pending discard when it reaches it.
+static size_t readSource(HALRender *render, uint8_t *destination, size_t size,
+                         uint64_t *consumed) {
+    size_t filled = 0;
+    while (filled < size) {
+        if (render->discarding && *consumed >= render->discardFrom) {
+            if (*consumed < render->discardTo) {
+                *consumed += RingBufferSkip(render->source, (size_t)(render->discardTo - *consumed));
+            }
+            render->discarding = false;
+            render->refilling = true;
+        }
+        size_t wanted = size - filled;
+        if (render->discarding && render->discardFrom - *consumed < wanted) {
+            wanted = (size_t)(render->discardFrom - *consumed);
+        }
+        size_t copied = RingBufferRead(render->source, destination + filled, wanted);
+        *consumed += copied;
+        filled += copied;
+        if (copied < wanted) break;
     }
+    return filled;
 }
 
 void HALRenderSetDraining(HALRender *render, bool draining) {
@@ -163,13 +186,7 @@ OSStatus HALRenderIOProc(AudioObjectID device, const AudioTimeStamp *now,
     HALRender *render = clientData;
     uint64_t consumed = atomic_load_explicit(&render->consumedBytes, memory_order_relaxed);
 
-    applyDiscard(render, &consumed);
-    // The new audio may not all be written yet, so this can take more than one cycle.
-    if (render->pendingSkip > 0) {
-        size_t skipped = RingBufferSkip(render->source, (size_t)render->pendingSkip);
-        consumed += skipped;
-        render->pendingSkip -= skipped;
-    }
+    takeDiscard(render);
 
     float gain = floatOf(atomic_load_explicit(&render->gainBits, memory_order_relaxed));
     bool draining = atomic_load_explicit(&render->draining, memory_order_relaxed);
@@ -178,9 +195,8 @@ OSStatus HALRenderIOProc(AudioObjectID device, const AudioTimeStamp *now,
     for (UInt32 i = 0; i < output->mNumberBuffers; i++) {
         AudioBuffer *buffer = &output->mBuffers[i];
         size_t size = buffer->mDataByteSize;
-        size_t copied = i == 0 ? RingBufferRead(render->source, buffer->mData, size) : 0;
+        size_t copied = i == 0 ? readSource(render, buffer->mData, size, &consumed) : 0;
         if (i == 0) {
-            consumed += copied;
             // At unity the samples pass through untouched, which is what keeps output bit-perfect.
             if (gain != 1.0f || render->appliedGain != 1.0f) {
                 applyGain(render->samples, buffer->mData, copied, render->appliedGain, gain);

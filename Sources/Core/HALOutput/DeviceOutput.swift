@@ -274,13 +274,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 
     /// Replaces everything queued with `track` from `frame`, without stopping the device: the IO
-    /// proc discards what was written so far at the start of its next cycle. `continuingFrom` is
-    /// the consumed count `frame` was read at, when the new audio carries on from there.
-    private func restart(
-        _ stream: RenderStream, with track: Track, atFrame frame: Int64,
-        continuingFrom: UInt64 = HALRenderNoContinuation
-    ) throws {
-        HALRenderDiscardBefore(stream.render, stream.produced, continuingFrom)
+    /// proc discards what was written so far at the start of its next cycle.
+    private func restart(_ stream: RenderStream, with track: Track, atFrame frame: Int64) throws {
+        HALRenderDiscard(stream.render, 0, stream.produced)
         segments = []
         pendingSwitch = nil
         try feed(track, into: stream, atFrame: frame)
@@ -292,16 +288,13 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         seekTrack(toFrame: Int64(seconds * stream.sampleRateHz))
     }
 
-    private func seekTrack(
-        toFrame frame: Int64, continuingFrom: UInt64 = HALRenderNoContinuation
-    ) {
+    private func seekTrack(toFrame frame: Int64) {
         guard let stream, let current = segments.first else { return }
         do {
             // Whatever was queued after the current track goes back to being the next track.
             if let committed = try committedNext() { next = committed }
             let track = try reusableTrack(for: current.item)
-            try restart(
-                stream, with: track, atFrame: track.clamped(frame), continuingFrom: continuingFrom)
+            try restart(stream, with: track, atFrame: track.clamped(frame))
         } catch {
             cannotPlay(current.item, error)
         }
@@ -323,24 +316,31 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 
     private func replaceNext(_ item: OutputItem?) {
-        guard let stream, let current = segments.first else { return }
-        if segments.count > 1 || pendingSwitch != nil {
-            // The old next track is already queued: drop it by seeking to the frame playing now.
-            // The IO proc skips whatever it plays between this read and the discard, so the track
-            // carries on without a gap or a repeat.
-            let consumed = HALRenderConsumedBytes(stream.render)
-            seekTrack(toFrame: positionFrame(consumed: consumed), continuingFrom: consumed)
-            if segments.first?.item.id != current.item.id { return }
+        guard let stream, !segments.isEmpty else { return }
+        // A boundary the IO proc has already played belongs to the track playing now, so announce
+        // it rather than cut that track off.
+        announceBoundaries(stream)
+        if segments.count > 1 {
+            // The old next track is already queued after the current one. The IO proc plays the
+            // current track to its last byte, then skips the old next, so nothing is lost and the
+            // replacement follows without a gap. Should the IO proc cross the boundary in the
+            // microseconds before the discard lands, it cuts the old next track off a few
+            // milliseconds in.
+            HALRenderDiscard(stream.render, segments[1].startByte, stream.produced)
+            segments.removeSubrange(1...)
+            feeding = nil
+            stream.dropChunk()
         }
+        pendingSwitch = nil
         next = nil
-        guard let item else { return }
-        do {
-            next = try Track(item)
-        } catch {
-            emit(.trackFailed(item.id, error))
-            return
+        if let item {
+            do {
+                next = try Track(item)
+            } catch {
+                emit(.trackFailed(item.id, error))
+            }
         }
-        if feeding == nil, pendingSwitch == nil { advanceFeed(stream) }
+        if feeding == nil { advanceFeed(stream) }
     }
 
     // MARK: Decoding and boundaries
@@ -399,12 +399,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             return
         }
         if stream.isHalfEmpty { fill(stream) }
+        announceBoundaries(stream)
         let consumed = HALRenderConsumedBytes(stream.render)
-        while segments.count > 1, consumed >= segments[1].startByte {
-            let ended = segments.removeFirst()
-            emit(.trackEnded(ended.item.id))
-            emit(.trackStarted(segments[0].item.id, segments[0].info(stream)))
-        }
         if let frames = stream.newUnderrunFrames() { emit(.underrun(frames: frames)) }
         if running, feeding == nil, consumed >= stream.produced {
             drained(stream)
@@ -412,6 +408,16 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             drainedAt = nil
         }
         publishPosition()
+    }
+
+    /// Ends the tracks whose last byte the IO proc has taken and starts the ones after them.
+    private func announceBoundaries(_ stream: RenderStream) {
+        let consumed = HALRenderConsumedBytes(stream.render)
+        while segments.count > 1, consumed >= segments[1].startByte {
+            let ended = segments.removeFirst()
+            emit(.trackEnded(ended.item.id))
+            emit(.trackStarted(segments[0].item.id, segments[0].info(stream)))
+        }
     }
 
     /// The IO proc has taken everything. Once the device has had time to play it, end the track
@@ -535,19 +541,13 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     // MARK: Position and events
 
-    /// The frame of the current track the IO proc had reached when it had consumed `consumed`.
-    private func positionFrame(consumed: UInt64) -> Int64 {
-        guard let stream, let segment = segments.first else { return 0 }
+    private func positionSeconds() -> Double? {
+        guard let stream, let segment = segments.first else { return nil }
+        let consumed = HALRenderConsumedBytes(stream.render)
         let played =
             consumed > segment.startByte
             ? Int64((consumed - segment.startByte) / UInt64(stream.bytesPerFrame)) : 0
-        return segment.startFrame + played
-    }
-
-    private func positionSeconds() -> Double? {
-        guard let stream, !segments.isEmpty else { return nil }
-        return Double(positionFrame(consumed: HALRenderConsumedBytes(stream.render)))
-            / stream.sampleRateHz
+        return Double(segment.startFrame + played) / stream.sampleRateHz
     }
 
     private func publishPosition() {
@@ -600,7 +600,7 @@ private final class RenderStream {
     static let chunkFrames = 32768
     /// Four seconds of audio. The control thread refills it every 10 ms, so nearly all of it is
     /// margin: for a NAS read that stalls, and for opening the next track on the same thread
-    /// while this drains. A seek doesn't wait for it to empty (`HALRenderDiscardBefore`), so its
+    /// while this drains. A seek doesn't wait for it to empty (`HALRenderDiscard`), so its
     /// size costs memory, not responsiveness: 1.4 MB at 44.1 kHz stereo 32-bit, 6 MB at 192 kHz,
     /// 24 MB at 768 kHz, each rounded up to a power of two.
     static let bufferSeconds = 4.0
