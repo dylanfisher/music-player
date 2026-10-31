@@ -19,9 +19,10 @@ let settingsBenchmarks = [
                         path: "/Volumes/Music/Share \(index)", kind: .network,
                         include: ["*.flac", "*.m4a"], exclude: ["**/Scans/**"])
                 })
-            return try medianMilliseconds(iterations: 200) {
-                _ = try SettingsStore(AppSettings(), fileURL: url)
-            }
+            return Measured(
+                value: try medianMilliseconds(iterations: 200) {
+                    _ = try SettingsStore(AppSettings(), fileURL: url)
+                })
         }
     }
 ]

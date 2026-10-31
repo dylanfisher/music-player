@@ -7,7 +7,10 @@ let fixtureBenchmarks = [
         budget: Budget(appleSilicon: 30, oldMac: 120, unit: .seconds)
     ) {
         try withScratchDirectory("fixtures") { root in
-            try seconds { _ = try generateFixtures(count: fullLibraryFileCount, in: root) }
+            Measured(
+                value: try seconds {
+                    _ = try generateFixtures(count: fullLibraryFileCount, in: root)
+                })
         }
     },
     Benchmark(
@@ -23,7 +26,7 @@ let fixtureBenchmarks = [
             guard outcome == .upToDate else {
                 throw BenchError.expected("the rerun to skip writing")
             }
-            return elapsed
+            return Measured(value: elapsed)
         }
     },
 ]

@@ -34,11 +34,18 @@ struct Budget: Sendable {
     }
 }
 
-/// One named measurement and its budget. `measure` returns a value in the budget's unit.
+/// One named measurement and its budget.
 struct Benchmark: Sendable {
     var name: String
     var budget: Budget
-    var measure: @Sendable () throws -> Double
+    var measure: @Sendable () throws -> Measured
+}
+
+/// What a benchmark measured, in its budget's unit, and any other numbers worth printing under
+/// its row.
+struct Measured {
+    var value: Double
+    var notes: [String] = []
 }
 
 enum BenchError: Error, CustomStringConvertible {
@@ -62,6 +69,7 @@ struct BenchmarkResult {
     var limit: Double
     var unit: Budget.Unit
     var outcome: Outcome
+    var notes: [String] = []
 
     var passed: Bool {
         if case .withinBudget = outcome { return true }
@@ -78,14 +86,19 @@ func run(
         progress(benchmark.name)
         let limit = benchmark.budget.limit(on: machine)
         let outcome: BenchmarkResult.Outcome
+        var notes: [String] = []
         do {
-            let value = try benchmark.measure()
-            outcome = value < limit ? .withinBudget(value) : .overBudget(value)
+            let measured = try benchmark.measure()
+            notes = measured.notes
+            outcome =
+                measured.value < limit
+                ? .withinBudget(measured.value) : .overBudget(measured.value)
         } catch {
             outcome = .failed(error)
         }
         return BenchmarkResult(
-            name: benchmark.name, limit: limit, unit: benchmark.budget.unit, outcome: outcome)
+            name: benchmark.name, limit: limit, unit: benchmark.budget.unit, outcome: outcome,
+            notes: notes)
     }
 }
 
@@ -113,6 +126,7 @@ func table(_ results: [BenchmarkResult], machine: MachineClass) -> String {
         lines.append(
             pad(result.name, nameWidth) + "  " + pad(measured, 14) + "  "
                 + pad("< " + amount(result.limit, result.unit), 16) + "  " + verdict)
+        lines += result.notes.map { "    " + $0 }
     }
     return lines.joined(separator: "\n")
 }

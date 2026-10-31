@@ -17,18 +17,21 @@ private let budget = Budget(appleSilicon: 10, oldMac: 40, unit: .milliseconds)
 @Test func reportsMissesAndErrorsWithoutStopping() {
     let results = run(
         [
-            Benchmark(name: "fast", budget: budget) { 3 },
-            Benchmark(name: "slow", budget: budget) { 25 },
+            Benchmark(name: "fast", budget: budget) { Measured(value: 3, notes: ["3 of 10"]) },
+            Benchmark(name: "slow", budget: budget) { Measured(value: 25) },
             Benchmark(name: "broken", budget: budget) { throw Boom() },
         ], on: .appleSilicon)
     #expect(results.map(\.passed) == [true, false, false])
-    #expect(run([Benchmark(name: "slow", budget: budget) { 25 }], on: .oldMac)[0].passed)
+    #expect(
+        run([Benchmark(name: "slow", budget: budget) { Measured(value: 25) }], on: .oldMac)[0]
+            .passed)
 
     let report = table(results, machine: .appleSilicon)
     #expect(report.contains("Apple Silicon"))
     #expect(report.contains("OVER BUDGET"))
     #expect(report.contains("error: boom"))
     #expect(report.contains("< 10.00 ms"))
+    #expect(report.contains("\n    3 of 10\n"))
 }
 
 @Test func benchmarkNamesAreUnique() {
