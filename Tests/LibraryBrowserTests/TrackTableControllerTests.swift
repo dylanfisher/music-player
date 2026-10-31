@@ -15,7 +15,7 @@ import Testing
         failed: { Issue.record("\($0)") })
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },
-        layout: AppSettings().trackTable.defaultValue, actions: actions)
+        layout: AppState().trackTable.defaultValue, actions: actions)
     _ = controller.view
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
@@ -36,7 +36,7 @@ import Testing
         play: { _, _ in }, playNext: { _ in }, sort: { _, _ in }, layoutChanged: { _ in },
         failed: { _ in })
     let controller = TrackTableController(
-        model: model, cache: RowCache { _ in [] }, layout: AppSettings().trackTable.defaultValue,
+        model: model, cache: RowCache { _ in [] }, layout: AppState().trackTable.defaultValue,
         actions: actions)
     _ = controller.view
     controller.table.tableColumns[0].width = 9000

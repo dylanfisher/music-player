@@ -148,8 +148,8 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
     }
 }
 
-private let sidebarRange = AppSettings.sidebarWidthRange
-private let queueRange = AppSettings.queueWidthRange
+private let sidebarRange = AppState.sidebarWidthRange
+private let queueRange = AppState.queueWidthRange
 
 /// Where the dividers may go in a split view `width` points wide, so the sidebar (divider 0) and
 /// the queue (divider 1) stay within the widths Settings accepts.

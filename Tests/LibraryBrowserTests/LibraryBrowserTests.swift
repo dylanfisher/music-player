@@ -9,7 +9,7 @@ import Testing
     let databaseURL = try browserLibrary.get().databaseURL
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
-        index: try LibraryIndex(at: databaseURL), layout: AppSettings().trackTable.defaultValue,
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
         browserHeight: 100, folders: [])
     let send = browser.watcherEvents
     let folders = (0..<200).map { "/Music/\($0)" }

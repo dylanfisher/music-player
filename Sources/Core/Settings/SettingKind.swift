@@ -5,12 +5,17 @@ public indirect enum SettingKind: Sendable, Equatable {
     case integer(ClosedRange<Int>?)
     case number(ClosedRange<Double>?)
     case string
-    /// One of these raw values.
-    case choice([String])
+    /// One of these values.
+    case choice([Choice])
     /// The value or null.
     case optional(SettingKind)
     case list(SettingKind)
     case watchedFolder
     /// Window layout the app saves as it changes; the settings window shows no control for it.
     case windowState
+
+    public struct Choice: Sendable, Equatable {
+        public var rawValue: String
+        public var title: String
+    }
 }

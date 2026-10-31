@@ -1,23 +1,26 @@
 import Foundation
 
-/// One setting: its key in the JSON file, its default, and the line the settings window shows
-/// for it. Declare it as a stored property of a `SettingsSchema`.
+/// One setting: its key in the JSON file, its default, its title in the settings window and the
+/// menus, and the line that explains it. Declare it as a stored property of a `SettingsSchema`.
 public struct Setting<Value: SettingValue>: Sendable {
     public let key: String
+    /// Title case, as a label or a menu item reads: "Hog Mode".
+    public let title: String
     public let defaultValue: Value
     public let summary: String
     public let kind: SettingKind
     private let check: @Sendable (Value) -> SettingProblem.Reason?
 
-    public init(_ key: String, default defaultValue: Value, _ summary: String) {
-        self.init(key, defaultValue, summary, Value.kind) { _ in nil }
+    public init(_ key: String, title: String, default defaultValue: Value, _ summary: String) {
+        self.init(key, title, defaultValue, summary, Value.kind) { _ in nil }
     }
 
     private init(
-        _ key: String, _ defaultValue: Value, _ summary: String, _ kind: SettingKind,
-        check: @escaping @Sendable (Value) -> SettingProblem.Reason?
+        _ key: String, _ title: String, _ defaultValue: Value, _ summary: String,
+        _ kind: SettingKind, check: @escaping @Sendable (Value) -> SettingProblem.Reason?
     ) {
         self.key = key
+        self.title = title
         self.defaultValue = defaultValue
         self.summary = summary
         self.kind = kind
@@ -50,18 +53,20 @@ public struct Setting<Value: SettingValue>: Sendable {
 
 extension Setting where Value == Int {
     public init(
-        _ key: String, default defaultValue: Int, range: ClosedRange<Int>, _ summary: String
+        _ key: String, title: String, default defaultValue: Int, range: ClosedRange<Int>,
+        _ summary: String
     ) {
-        self.init(key, defaultValue, summary, .integer(range)) { outside(range, $0) }
+        self.init(key, title, defaultValue, summary, .integer(range)) { outside(range, $0) }
     }
 }
 
 extension Setting where Value == Int? {
     /// An integer in `range`, or null.
     public init(
-        _ key: String, default defaultValue: Int?, range: ClosedRange<Int>, _ summary: String
+        _ key: String, title: String, default defaultValue: Int?, range: ClosedRange<Int>,
+        _ summary: String
     ) {
-        self.init(key, defaultValue, summary, .optional(.integer(range))) { value in
+        self.init(key, title, defaultValue, summary, .optional(.integer(range))) { value in
             value.flatMap { outside(range, $0) }
         }
     }
@@ -69,9 +74,10 @@ extension Setting where Value == Int? {
 
 extension Setting where Value == Double {
     public init(
-        _ key: String, default defaultValue: Double, range: ClosedRange<Double>, _ summary: String
+        _ key: String, title: String, default defaultValue: Double, range: ClosedRange<Double>,
+        _ summary: String
     ) {
-        self.init(key, defaultValue, summary, .number(range)) { outside(range, $0) }
+        self.init(key, title, defaultValue, summary, .number(range)) { outside(range, $0) }
     }
 }
 
@@ -83,6 +89,7 @@ private func outside<Bound>(_ range: ClosedRange<Bound>, _ value: Bound) -> Sett
 /// A setting with its value type erased, so a schema's settings can be listed together.
 public struct SettingDescriptor: Sendable {
     public let key: String
+    public let title: String
     public let summary: String
     public let kind: SettingKind
     public let defaultValue: any SettingValue
@@ -97,7 +104,7 @@ protocol DescribedSetting {
 extension Setting: DescribedSetting {
     var descriptor: SettingDescriptor {
         SettingDescriptor(
-            key: key, summary: summary, kind: kind, defaultValue: defaultValue,
+            key: key, title: title, summary: summary, kind: kind, defaultValue: defaultValue,
             decode: { json in decode(json: json).map { $0 } })
     }
 }

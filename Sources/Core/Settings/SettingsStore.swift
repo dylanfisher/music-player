@@ -10,6 +10,20 @@ public func defaultSettingsFileURL() throws -> URL {
     ).appendingPathComponent("\(appDirectoryName)/settings.json")
 }
 
+/// `state.json` beside the settings file, in `~/Library/Application Support/MusicPlayer`.
+public func stateFileURL(settingsFileURL: URL) -> URL {
+    settingsFileURL.deletingLastPathComponent().appendingPathComponent("state.json")
+}
+
+/// What a store does with a file that doesn't match its schema.
+public enum MismatchPolicy: Sendable {
+    /// Throw, naming every bad key: the file holds choices the user made.
+    case fail
+    /// Log it and start from the defaults, which the next save writes over it: the file holds
+    /// only where the user left things, and stored data has one shape before release.
+    case discard
+}
+
 /// The settings in effect: the schema's defaults overridden by the values in a JSON file. The file
 /// holds only values that differ from their defaults. Safe to use from any thread.
 public final class SettingsStore<Schema: SettingsSchema>: @unchecked Sendable {
@@ -21,8 +35,8 @@ public final class SettingsStore<Schema: SettingsSchema>: @unchecked Sendable {
     private var overrides: [String: any SettingValue]
 
     /// Reads `fileURL`. A missing file means nothing has been changed; a file that doesn't match
-    /// the schema throws, naming every bad key.
-    public init(_ schema: Schema, fileURL: URL) throws {
+    /// the schema throws, naming every bad key, or is discarded, as `mismatch` says.
+    public init(_ schema: Schema, fileURL: URL, mismatch: MismatchPolicy = .fail) throws {
         self.schema = schema
         self.fileURL = fileURL
         descriptors = schema.settings
@@ -39,7 +53,14 @@ public final class SettingsStore<Schema: SettingsSchema>: @unchecked Sendable {
         } catch {
             throw SettingsError.unreadable(path: fileURL.path, reason: "\(error)")
         }
-        overrides = try parse(data, path: fileURL.path, settings: byKey)
+        do {
+            overrides = try parse(data, path: fileURL.path, settings: byKey)
+        } catch {
+            guard mismatch == .discard else { throw error }
+            logger.error("discarded \(fileURL.path), which doesn't match this build: \(error)")
+            overrides = [:]
+            return
+        }
         logger.info("loaded \(self.overrides.count) changed settings from \(fileURL.path)")
     }
 

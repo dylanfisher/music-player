@@ -56,9 +56,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func openWindow() throws {
         let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
         self.settings = settings
-        let saver = LayoutSaver(settings)
+        let state = try SettingsStore(
+            AppState(), fileURL: stateFileURL(settingsFileURL: settingsURL), mismatch: .discard)
+        let saver = LayoutSaver(state)
         self.saver = saver
-        let layout = WindowSettings(settings)
+        let layout = WindowSettings(settings, state: state)
         let databaseURL = defaultLibraryFileURL(settingsFileURL: settingsURL)
         // Rows for the table come from a connection of the main thread's own.
         let index = try LibraryIndex(at: databaseURL)
@@ -84,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         browser.tableLayoutChanged = { saver.set(\.trackTable, $0) }
         browser.browserHeightChanged = { height in
-            if AppSettings.browserHeightRange.contains(height) {
+            if AppState.browserHeightRange.contains(height) {
                 saver.set(\.browserHeight, height)
             }
         }

@@ -5,19 +5,24 @@ import Testing
 
 private enum Theme: String, SettingChoice {
     case light, dark
+
+    var title: String { rawValue.capitalized }
 }
 
 /// One setting of each kind, so the store is tested apart from the app's real settings.
 private struct TestSchema: SettingsSchema {
-    let flag = Setting("flag", default: false, "A bool.")
-    let count = Setting("count", default: 5, range: 1...10, "An integer with a range.")
-    let gain = Setting("gain", default: 0.5, range: 0...1, "A number with a range.")
-    let name = Setting("name", default: "", "A string.")
-    let theme = Setting("theme", default: Theme.light, "A choice.")
-    let device = Setting<String?>("device", default: "built-in", "An optional.")
-    let tags = Setting<[String]>("tags", default: [], "A list.")
-    let folders = Setting<[WatchedFolder]>("folders", default: [], "A structured list.")
-    let limit = Setting<Int?>("limit", default: nil, range: 1...4, "An optional with a range.")
+    let flag = Setting("flag", title: "Flag", default: false, "A bool.")
+    let count = Setting(
+        "count", title: "Count", default: 5, range: 1...10, "An integer with a range.")
+    let gain = Setting("gain", title: "Gain", default: 0.5, range: 0...1, "A number with a range.")
+    let name = Setting("name", title: "Name", default: "", "A string.")
+    let theme = Setting("theme", title: "Theme", default: Theme.light, "A choice.")
+    let device = Setting<String?>("device", title: "Device", default: "built-in", "An optional.")
+    let tags = Setting<[String]>("tags", title: "Tags", default: [], "A list.")
+    let folders = Setting<[WatchedFolder]>(
+        "folders", title: "Folders", default: [], "A structured list.")
+    let limit = Setting<Int?>(
+        "limit", title: "Limit", default: nil, range: 1...4, "An optional with a range.")
 }
 
 /// A settings file in a fresh temporary directory that nothing else touches.
@@ -223,7 +228,12 @@ private func problems(_ json: String) -> [SettingProblem] {
             "flag", "count", "gain", "name", "theme", "device", "tags", "folders", "limit",
         ])
     #expect(settings[1].kind == .integer(1...10))
-    #expect(settings[4].kind == .choice(["light", "dark"]))
+    #expect(
+        settings[4].kind
+            == .choice([
+                SettingKind.Choice(rawValue: "light", title: "Light"),
+                SettingKind.Choice(rawValue: "dark", title: "Dark"),
+            ]))
     #expect(settings[5].kind == .optional(.string))
     #expect(settings[7].kind == .list(.watchedFolder))
     #expect(settings[8].kind == .optional(.integer(1...4)))
@@ -246,7 +256,7 @@ private func problems(_ json: String) -> [SettingProblem] {
 
 @Test func windowLayoutSurvivesAReloadAndRejectsBadValues() throws {
     let url = temporaryFile()
-    let settings = try SettingsStore(AppSettings(), fileURL: url)
+    let settings = try SettingsStore(AppState(), fileURL: url, mismatch: .discard)
     let layout = TrackTableLayout(
         columns: [
             ColumnLayout(column: .path, width: 300), ColumnLayout(column: .title, width: 90),
@@ -254,7 +264,7 @@ private func problems(_ json: String) -> [SettingProblem] {
         sortColumn: .dateAdded, sortAscending: false)
     try settings.set(\.trackTable, to: layout)
     try settings.set(\.windowFrame, to: WindowFrame(x: 10, y: 20, width: 800, height: 500))
-    let reloaded = try SettingsStore(AppSettings(), fileURL: url)
+    let reloaded = try SettingsStore(AppState(), fileURL: url, mismatch: .discard)
     #expect(reloaded[\.trackTable] == layout)
     #expect(reloaded[\.windowFrame] == WindowFrame(x: 10, y: 20, width: 800, height: 500))
 
@@ -283,7 +293,7 @@ private func problems(_ json: String) -> [SettingProblem] {
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(json.utf8).write(to: url)
         do {
-            _ = try SettingsStore(AppSettings(), fileURL: url)
+            _ = try SettingsStore(AppState(), fileURL: url)
         } catch SettingsError.invalid(_, let problems) {
             return problems.map { "\($0.key) \($0.reason)" }.joined()
         }
@@ -308,4 +318,14 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(
         try reason(#"{"window.frame": {"x": 0, "y": 0, "width": 9, "height": 9, "z": 0}}"#)
             .contains("z: unknown key"))
+}
+
+@Test func aStateFileThatDoesntMatchIsDiscarded() throws {
+    let url = temporaryFile()
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(#"{"window.sidebarWidth": 250, "window.old": 1}"#.utf8).write(to: url)
+    #expect(throws: SettingsError.self) { try SettingsStore(AppState(), fileURL: url) }
+    let state = try SettingsStore(AppState(), fileURL: url, mismatch: .discard)
+    #expect(state[\.sidebarWidth] == AppState().sidebarWidth.defaultValue)
 }

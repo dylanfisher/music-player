@@ -8,7 +8,7 @@ import Testing
 private let tableExtraPoints = 6.0 + 15.0
 
 @MainActor @Test func theDefaultColumnsFitBesideTheSidebarAndQueue() {
-    let settings = AppSettings()
+    let settings = AppState()
     let columns = settings.trackTable.defaultValue.columns
     let needed = columns.reduce(0) { $0 + $1.width + 6 } + tableExtraPoints
     let room =

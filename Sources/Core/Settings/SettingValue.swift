@@ -17,13 +17,18 @@ extension SettingValue {
 }
 
 /// A setting with a fixed set of values, stored as their raw strings.
-public protocol SettingChoice: SettingValue, CaseIterable, RawRepresentable<String> {}
+public protocol SettingChoice: SettingValue, CaseIterable, RawRepresentable<String> {
+    /// Title case, as a menu item or a pop-up button shows it: "Dark".
+    var title: String { get }
+}
 
 extension SettingChoice {
     public static var typeName: String {
         "one of " + allCases.map { "\"\($0.rawValue)\"" }.joined(separator: ", ")
     }
-    public static var kind: SettingKind { .choice(allCases.map(\.rawValue)) }
+    public static var kind: SettingKind {
+        .choice(allCases.map { SettingKind.Choice(rawValue: $0.rawValue, title: $0.title) })
+    }
 }
 
 extension Bool: SettingValue {

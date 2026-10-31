@@ -4,9 +4,9 @@ import Testing
 
 @testable import MusicPlayer
 
-private func store() throws -> SettingsStore<AppSettings> {
+private func store() throws -> SettingsStore<AppState> {
     try SettingsStore(
-        AppSettings(),
+        AppState(),
         fileURL: FileManager.default.temporaryDirectory
             .appendingPathComponent("saver-\(UUID().uuidString)/settings.json"))
 }
@@ -18,7 +18,7 @@ private func store() throws -> SettingsStore<AppSettings> {
     saver.set(\.sidebarWidth, 300)
     saver.set(\.queueVisible, true)
     saver.flush()
-    let reloaded = try SettingsStore(AppSettings(), fileURL: settings.fileURL)
+    let reloaded = try SettingsStore(AppState(), fileURL: settings.fileURL)
     #expect(reloaded[\.sidebarWidth] == 300)
     #expect(reloaded[\.queueVisible])
 }
@@ -39,6 +39,6 @@ private func store() throws -> SettingsStore<AppSettings> {
     saver.set(\.sidebarWidth, 5000)
     saver.set(\.queueWidth, 300)
     saver.flush()
-    #expect(settings[\.sidebarWidth] == AppSettings().sidebarWidth.defaultValue)
+    #expect(settings[\.sidebarWidth] == AppState().sidebarWidth.defaultValue)
     #expect(settings[\.queueWidth] == 300)
 }
