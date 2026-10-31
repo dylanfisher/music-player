@@ -317,3 +317,34 @@ import Testing
     vbri.append(Data(count: 417 - vbri.count))
     #expect(try parse(vbri + mpegFrames(3)).metadata.audio.lengthFrames == 77 * 1152)
 }
+
+@Test func mp4UsesTheSampleEntrysChannelsForALayoutTheConfigDoesNotCount() throws {
+    // AAC LC, 48 kHz, channel configuration 12 (7.1): 00010 0011 1100 000.
+    let entry = mp4aEntry(audioSpecificConfig: [0x11, 0xE0], channels: 8)
+    let audio = try parse(
+        mp4File(moov(entry: entry, timescale: 48_000, duration: 96_000, items: nil))
+    ).metadata.audio
+    #expect(audio.channels == 8)
+    #expect(audio.sampleRateHz == 48_000)
+}
+
+@Test func mp4ReadsGIFAndImplicitCovers() throws {
+    let gif = ascii("GIF89a") + Data(count: 10)
+    let jpeg = Data([0xFF, 0xD8, 0xFF, 0xE0]) + Data(count: 10)
+    let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) + Data(count: 10)
+    let bmp = ascii("BM") + Data(count: 10)
+    let cases: [(Int, Data, String?)] = [
+        (12, gif, gifMIMEType), (0, gif, gifMIMEType), (0, jpeg, jpegMIMEType),
+        (0, png, pngMIMEType), (0, bmp, "image/bmp"), (0, Data(count: 10), nil),
+    ]
+    for (code, image, mime) in cases {
+        let file = mp4File(
+            moov(
+                entry: alacEntry(rate: 44_100, channels: 2, bits: 16), timescale: 44_100,
+                duration: 10, items: ilstItem("covr", code: code, image)))
+        let parsed = try parse(file)
+        #expect(parsed.metadata.art?.mimeType == mime, "type \(code)")
+        #expect(parsed.metadata.art?.byteCount == (mime == nil ? nil : image.count), "type \(code)")
+        #expect(parsed.warnings.map(\.kind) == (mime == nil ? [.unreadableField] : []))
+    }
+}

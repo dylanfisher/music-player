@@ -54,13 +54,11 @@ func audioSpecificConfig(_ esds: Bytes) throws(ParseFailure) -> AudioSpecificCon
     let channelConfiguration = Int(try bits.read(4))
     let channels: Int? =
         switch channelConfiguration {
-        case 0: nil
         case 1...6: channelConfiguration
         case 7: 8
-        default:
-            throw .unsupported(
-                at: decoderConfig.fileOffset(13),
-                "AAC channel configuration \(channelConfiguration)")
+        // 0 puts the layout in-band, and 8 and up are reserved or have no plain count; the sample
+        // entry's count stands.
+        default: nil
         }
     return AudioSpecificConfig(sampleRateHz: rate, channels: channels)
 }

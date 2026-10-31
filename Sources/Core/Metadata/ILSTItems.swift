@@ -23,8 +23,21 @@ private let itemKinds: [String: ItemKind] = [
     "cpil": .compilation, "gnre": .genreIndex, "----": .freeform, "covr": .cover,
 ]
 
-/// `data` atom type codes for cover art.
-private let artTypes: [UInt32: String] = [13: jpegMIMEType, 14: pngMIMEType, 27: "image/bmp"]
+private let bmpMIMEType = "image/bmp"
+
+/// `data` atom type codes for cover art. Type 0 is "implicit", so the image is sniffed.
+private let artTypes: [UInt32: String] = [
+    12: gifMIMEType, 13: jpegMIMEType, 14: pngMIMEType, 27: bmpMIMEType,
+]
+
+/// The image format a picture's first bytes announce, for covers whose type code says nothing.
+private func sniffedMIMEType(_ head: [UInt8]) -> String? {
+    if head.starts(with: [0xFF, 0xD8, 0xFF]) { return jpegMIMEType }
+    if head.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) { return pngMIMEType }
+    if head.starts(with: Array("GIF8".utf8)) { return gifMIMEType }
+    if head.starts(with: Array("BM".utf8)) { return bmpMIMEType }
+    return nil
+}
 
 /// The items in `udta`. `meta` is a full box in iTunes files, with four bytes of version and flags
 /// before its children; QuickTime writes it without them.
@@ -79,7 +92,8 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
     let offset = valueRange.lowerBound
     if case .cover = kind {
         guard items.art == nil else { return }
-        guard let mime = artTypes[type] else {
+        let head = try reader.bytes(valueRange.lowerBound..<min(valueRange.upperBound, offset + 8))
+        guard let mime = artTypes[type] ?? (type == 0 ? sniffedMIMEType(head.array) : nil) else {
             throw .unsupported(at: data.start, "MP4 cover art with data type \(type)")
         }
         items.art = EmbeddedArt(
