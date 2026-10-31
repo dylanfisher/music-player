@@ -41,6 +41,16 @@ struct Benchmark: Sendable {
     var measure: @Sendable () throws -> Double
 }
 
+enum BenchError: Error, CustomStringConvertible {
+    case expected(String)
+
+    var description: String {
+        switch self {
+        case .expected(let what): "expected \(what)"
+        }
+    }
+}
+
 struct BenchmarkResult {
     enum Outcome {
         case withinBudget(Double)

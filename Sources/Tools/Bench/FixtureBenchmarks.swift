@@ -27,13 +27,3 @@ let fixtureBenchmarks = [
         }
     },
 ]
-
-enum BenchError: Error, CustomStringConvertible {
-    case expected(String)
-
-    var description: String {
-        switch self {
-        case .expected(let what): "expected \(what)"
-        }
-    }
-}
