@@ -20,9 +20,6 @@ struct Budget: Sendable {
     enum Unit: String, Sendable {
         case milliseconds = "ms"
         case seconds = "s"
-        case megabytes = "MB"
-        case percentOfCore = "% of a core"
-        case count = ""
     }
 
     var appleSilicon: Double
@@ -89,7 +86,7 @@ func table(_ results: [BenchmarkResult], machine: MachineClass) -> String {
     }
     func amount(_ value: Double, _ unit: Budget.Unit) -> String {
         let number = value >= 100 ? String(format: "%.0f", value) : String(format: "%.2f", value)
-        return unit == .count ? number : "\(number) \(unit.rawValue)"
+        return "\(number) \(unit.rawValue)"
     }
     var lines = [
         "Budgets for \(machine.rawValue)", "",
