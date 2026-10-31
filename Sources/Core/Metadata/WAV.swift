@@ -14,9 +14,9 @@ private let extensibleFormat: UInt16 = 0xFFFE
 func parseWAV(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     let header = try reader.bytes(0..<12)
     let formEnd = 8 + Int(try header.uint32LE(4))
-    guard formEnd <= reader.size + 1 else {
+    guard formEnd >= 12, formEnd <= reader.size + 1 else {
         throw .malformed(
-            at: 4, "RIFF size \(formEnd - 8) runs past the end of the file (\(reader.size) bytes)")
+            at: 4, "RIFF size \(formEnd - 8) doesn't fit the file (\(reader.size) bytes)")
     }
     var format: Bytes?
     var dataBytes: Int?

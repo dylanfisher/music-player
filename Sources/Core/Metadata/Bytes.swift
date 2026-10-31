@@ -34,7 +34,8 @@ struct Bytes {
 
     /// From `offset` to the end.
     func suffix(from offset: Int) throws(ParseFailure) -> Bytes {
-        try slice(offset..<count)
+        try check(offset, 0)
+        return try slice(offset..<count)
     }
 
     var array: [UInt8] { Array(storage[start..<start + count]) }

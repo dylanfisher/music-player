@@ -9,9 +9,9 @@ func parseAIFF(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     let header = try reader.bytes(0..<12)
     let isAIFC = header.matches("AIFC", at: 8)
     let formEnd = 8 + Int(try header.uint32BE(4))
-    guard formEnd <= reader.size + 1 else {
+    guard formEnd >= 12, formEnd <= reader.size + 1 else {
         throw .malformed(
-            at: 4, "FORM size \(formEnd - 8) runs past the end of the file (\(reader.size) bytes)")
+            at: 4, "FORM size \(formEnd - 8) doesn't fit the file (\(reader.size) bytes)")
     }
     var audio: TrackAudio?
     var id3: ID3v2Tag?

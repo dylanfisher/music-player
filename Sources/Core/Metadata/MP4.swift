@@ -77,9 +77,13 @@ func forEachAtom(
 private func child(_ reader: ByteReader, _ parent: Atom, _ type: String, at start: Int? = nil)
     throws(ParseFailure) -> Atom?
 {
+    let start = start ?? parent.body.lowerBound
+    guard start <= parent.body.upperBound else {
+        throw .malformed(at: parent.start, "MP4 '\(parent.type)' is too short for its fields")
+    }
     var found: Atom?
     try forEachAtom(
-        reader, in: (start ?? parent.body.lowerBound)..<parent.body.upperBound, parent: parent
+        reader, in: start..<parent.body.upperBound, parent: parent
     ) {
         atom throws(ParseFailure) in
         if atom.type == type { found = atom }
@@ -119,7 +123,7 @@ private func soundTrack(_ reader: ByteReader, _ trak: Atom) throws(ParseFailure)
     let stsd = try require(reader, stbl, "stsd")
     let entries = try reader.bytes(
         stsd.body.lowerBound..<min(stsd.body.upperBound, stsd.body.lowerBound + 8))
-    guard try entries.uint32BE(4) >= 1 else {
+    guard stsd.body.count >= 8, try entries.uint32BE(4) >= 1 else {
         throw .malformed(at: stsd.start, "MP4 stsd has no sample entries")
     }
     var entry: Atom?

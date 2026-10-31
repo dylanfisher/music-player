@@ -32,8 +32,8 @@ func metadataItems(_ reader: ByteReader, _ udta: Atom) throws(ParseFailure) -> I
     var items = ILSTItems()
     try forEachAtom(reader, in: udta.body, parent: udta) { meta throws(ParseFailure) in
         guard meta.type == "meta" else { return true }
-        let isFullBox =
-            try reader.bytes(meta.body.lowerBound..<meta.body.lowerBound + 4).uint32BE(0) == 0
+        let first = meta.body.lowerBound..<min(meta.body.upperBound, meta.body.lowerBound + 4)
+        let isFullBox = try reader.bytes(first).uint32BE(0) == 0
         let children = (meta.body.lowerBound + (isFullBox ? 4 : 0))..<meta.body.upperBound
         try forEachAtom(reader, in: children, parent: meta) { ilst throws(ParseFailure) in
             guard ilst.type == "ilst" else { return true }
@@ -67,6 +67,9 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
         return true
     }
     guard let data else { return }
+    guard data.body.count >= 8 else {
+        throw .malformed(at: data.start, "MP4 '\(item.type)' data atom is too short")
+    }
     let header = try reader.bytes(data.body.lowerBound..<data.body.lowerBound + 8)
     let type = try header.uint32BE(0) & 0xFF_FFFF
     let valueRange = data.body.lowerBound + 8..<data.body.upperBound
