@@ -61,7 +61,7 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
 
 @MainActor @Test func theLatestQueryWins() async {
     let model = PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 })
-    await model.setItems((0..<2000).map { item("Artist \($0)") } + [item("Zappa")])
+    _ = model.open((0..<2000).map { item("Artist \($0)") } + [item("Zappa")])
     async let first: Void = model.setQuery("a")
     async let second: Void = model.setQuery("zap")
     _ = await (first, second)
@@ -83,4 +83,37 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     #expect(
         PaletteController.place(
             of: NSRect(x: 5000, y: 0, width: 640, height: 420), screens: [screen]) == nil)
+}
+
+@MainActor @Test func itemsAppendedBeforeTheFirstRankingAreKept() async {
+    let model = PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 })
+    let stale = model.open([item("Old")])
+    let session = model.open([item("Abba", .command)])
+    // An earlier open's items arrive late, and this one's before its ranking ran.
+    async let late: Void = model.append([item("Old")], to: stale)
+    async let more: Void = model.append([item("Queen")], to: session)
+    async let first: Void = model.rank()
+    _ = await (late, more, first)
+    #expect(model.items.map(\.title) == ["Abba", "Queen"])
+    #expect(model.results.map(\.item.title) == ["Abba", "Queen"])
+}
+
+@MainActor @Test func theSelectionStaysOnItsItemWhenItemsArrive() async throws {
+    let palette = PaletteController(
+        model: PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 }))
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    let session = palette.show(
+        .commands, items: ["A", "B", "C"].map { item($0, .album) }, over: window, place: nil)
+    // The ranking `show` started.
+    while palette.shown.isEmpty { await Task.yield() }
+    palette.table.selectRowIndexes([1], byExtendingSelection: false)
+    // Commands rank before albums, so these push "B" down a row.
+    await palette.model.append([item("Play", .command)], to: session)
+    #expect(palette.shown[palette.table.selectedRow].item.title == "B")
+    // A new query selects its best match.
+    await palette.model.setQuery("c")
+    #expect(palette.table.selectedRow == 0)
+    palette.close()
 }

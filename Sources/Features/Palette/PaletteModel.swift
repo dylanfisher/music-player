@@ -11,9 +11,14 @@ public final class PaletteModel {
     public private(set) var query = ""
     public private(set) var results: [RankedItem] = []
     public private(set) var frecency: Frecency
-    /// Called after `results` changes.
-    public var resultsChanged: () -> Void = {}
+    /// Counts the listings `open` starts, so items read for one aren't added to the next.
+    public private(set) var session = 0
+    /// Called after `results` changes, with whether they rank the same query of the same
+    /// listing as before, as when items were appended.
+    public var resultsChanged: (_ sameQuery: Bool) -> Void = { _ in }
     private var generation = 0
+    /// The session and query `results` were ranked for.
+    private var ranked: (session: Int, query: String)?
     private let now: () -> Double
 
     public init(frecency: Frecency, now: @escaping () -> Double = { Date().timeIntervalSince1970 })
@@ -22,14 +27,20 @@ public final class PaletteModel {
         self.now = now
     }
 
-    /// Replaces the items, as when the palette opens, and ranks them for the current query.
-    public func setItems(_ items: [PaletteItem]) async {
+    /// Starts a listing of `items` with an empty query, as when the palette opens, and returns
+    /// its session. The change is made before this returns, so an `append` made after builds on
+    /// it. Call `rank` to rank it.
+    public func open(_ items: [PaletteItem]) -> Int {
+        session += 1
         self.items = items
-        await rank()
+        query = ""
+        return session
     }
 
-    /// Adds items that arrived later, such as the library's artists.
-    public func append(_ more: [PaletteItem]) async {
+    /// Adds items that arrived later for listing `session`, such as the library's artists.
+    /// Items for a listing that has since been replaced are dropped.
+    public func append(_ more: [PaletteItem], to session: Int) async {
+        guard session == self.session else { return }
         items += more
         await rank()
     }
@@ -44,15 +55,18 @@ public final class PaletteModel {
         frecency.record(key, now: now())
     }
 
-    private func rank() async {
+    /// Ranks the items for the query. Only the latest call's results are kept.
+    public func rank() async {
         generation += 1
         let mine = generation
-        let (items, query, scores) = (items, query, frecency.scores(now: now()))
-        let ranked = await Task.detached(priority: .userInitiated) {
+        let (items, query, session, scores) = (items, query, session, frecency.scores(now: now()))
+        let results = await Task.detached(priority: .userInitiated) {
             rankPalette(items, query: query, frecency: scores, limit: Self.limit)
         }.value
         guard mine == generation else { return }
-        results = ranked
-        resultsChanged()
+        let sameQuery = ranked.map { $0 == (session, query) } ?? false
+        self.results = results
+        ranked = (session, query)
+        resultsChanged(sameQuery)
     }
 }

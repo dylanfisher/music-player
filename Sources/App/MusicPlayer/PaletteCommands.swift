@@ -52,20 +52,22 @@ extension AppDelegate {
         }
         switch mode {
         case .commands:
-            palette.show(
+            let session = palette.show(
                 .commands, items: commandItems(), over: window, place: state[\.palettePlace])
             Task {
                 do {
                     let (items, entries) = libraryItems(try await browser.allEntries())
-                    guard palette.mode == .commands else { return }
+                    // A listing the palette has replaced since keeps none of these.
+                    guard palette.model.session == session else { return }
                     paletteEntries = entries
-                    palette.append(items)
+                    palette.append(items, to: session)
                 } catch {
                     logger.error("couldn't list the library for the palette: \(error)")
                 }
             }
         case .goToItem:
-            palette.show(.goToItem, items: [], over: window, place: state[\.palettePlace])
+            let session = palette.show(
+                .goToItem, items: [], over: window, place: state[\.palettePlace])
             Task {
                 do {
                     guard let names = try await browser.trackNames() else { return }
@@ -79,8 +81,7 @@ extension AppDelegate {
                                     separator: " — "))
                         }
                     }.value
-                    guard palette.mode == .goToItem else { return }
-                    palette.append(items)
+                    palette.append(items, to: session)
                 } catch {
                     logger.error("couldn't list the tracks for Go to Item: \(error)")
                 }

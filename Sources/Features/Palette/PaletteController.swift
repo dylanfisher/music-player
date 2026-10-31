@@ -38,6 +38,9 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
     let table = NSTableView()
     private var previousResponder: NSResponder?
     private var shownAt: NSRect?
+    /// The results the table shows, kept apart from the model's so the selected row's item can
+    /// be read after the model has new ones.
+    private(set) var shown: [RankedItem] = []
 
     public init(model: PaletteModel) {
         self.model = model
@@ -46,7 +49,7 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
             styleMask: [.borderless], backing: .buffered, defer: true)
         super.init()
         build()
-        model.resultsChanged = { [weak self] in self?.showResults() }
+        model.resultsChanged = { [weak self] in self?.showResults(sameQuery: $0) }
     }
 
     public var isShowing: Bool { panel.isVisible }
@@ -57,10 +60,11 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
     // MARK: Opening and closing
 
     /// Opens over `window` in `mode`, listing `items`, at `place` when the user dragged it
-    /// before.
+    /// before. Returns the listing's session, which `append` names.
+    @discardableResult
     public func show(
         _ mode: PaletteMode, items: [PaletteItem], over window: NSWindow, place: PalettePlace?
-    ) {
+    ) -> Int {
         if isShowing { close(restoringKeys: false) }
         self.mode = mode
         previousResponder = window.firstResponder
@@ -74,15 +78,15 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         shownAt = frame
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(field)
-        Task {
-            await model.setQuery("")
-            await model.setItems(items)
-        }
+        let session = model.open(items)
+        Task { await model.rank() }
+        return session
     }
 
-    /// Adds items that arrived after the palette opened.
-    public func append(_ items: [PaletteItem]) {
-        Task { await model.append(items) }
+    /// Adds items that arrived after the palette opened `session`. They're dropped when it has
+    /// opened again since.
+    public func append(_ items: [PaletteItem], to session: Int) {
+        Task { await model.append(items, to: session) }
     }
 
     public func close() { close(restoringKeys: true) }
@@ -181,7 +185,7 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
     }
 
     private func moveSelection(by step: Int) {
-        let count = model.results.count
+        let count = shown.count
         guard count > 0 else { return }
         let row = min(max(0, table.selectedRow + step), count - 1)
         table.selectRowIndexes([row], byExtendingSelection: false)
@@ -190,8 +194,8 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
 
     func runSelected() {
         let row = table.selectedRow
-        guard model.results.indices.contains(row) else { return }
-        let item = model.results[row].item
+        guard shown.indices.contains(row) else { return }
+        let item = shown[row].item
         guard item.isEnabled else {
             NSSound.beep()
             return
@@ -293,15 +297,22 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
             NSColor.white.withAlphaComponent(dark ? 0.2 : 0.6).cgColor
     }
 
-    private func showResults() {
+    /// Shows the model's new results. When they rank the same query, as when items were
+    /// appended, the selected item stays selected; otherwise the best match is.
+    private func showResults(sameQuery: Bool) {
+        let selected = shown.indices.contains(table.selectedRow) ? shown[table.selectedRow] : nil
+        shown = model.results
         table.reloadData()
-        if !model.results.isEmpty {
-            table.selectRowIndexes([0], byExtendingSelection: false)
-            table.scrollRowToVisible(0)
-        }
+        guard !shown.isEmpty else { return }
+        let row =
+            sameQuery
+            ? selected.flatMap { old in shown.firstIndex { $0.item.key == old.item.key } }
+            : nil
+        table.selectRowIndexes([row ?? 0], byExtendingSelection: false)
+        table.scrollRowToVisible(row ?? 0)
     }
 
-    public func numberOfRows(in tableView: NSTableView) -> Int { model.results.count }
+    public func numberOfRows(in tableView: NSTableView) -> Int { shown.count }
 
     public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int)
         -> NSView?
@@ -309,12 +320,12 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         let cell =
             tableView.makeView(withIdentifier: PaletteRow.identifier, owner: nil) as? PaletteRow
             ?? PaletteRow()
-        cell.show(model.results[row])
+        cell.show(shown[row])
         return cell
     }
 
     public func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        PaletteRow.height(of: model.results[row], width: tableView.bounds.width)
+        PaletteRow.height(of: shown[row], width: tableView.bounds.width)
     }
 
     public func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
