@@ -31,13 +31,14 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 ### Current run order
 
-Set by the owner on 2026-10-30:
+Set by the owner on 2026-10-30 and 2026-10-31:
 
 1. Finish phase 5. Its 2015 MacBook Pro checkpoint stays pending.
 2. Phases 6, 7, 8 and then 11, each through its gate.
-3. Then write the [hardening sub-plan](#14-hardening): only the plan, committed as
-   `docs: plan phase 14`.
-4. If time is left, the code for phase 9 against a simulated renderer. Its Denon checkpoint stays
+3. Write the [hardening sub-plan](#14-hardening), committed as `docs: plan phase 14`, then run
+   14a onward, each through its gate.
+4. Phase 9 last, if time is left, against a simulated renderer only. Nothing contacts the Denon
+   or any real device: no SSDP on the LAN, no HTTP to real addresses. Its Denon checkpoint stays
    pending.
 5. Skip 10, 12 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
@@ -620,8 +621,8 @@ How the phase uses it:
 
 ### 14. Hardening
 
-A sub-plan, written after phase 11 and before phase 9. It's a set of separate phases, 14a onward,
-each run and gated like any other. Each one gets a goal, a scope, a method, the tools it uses, and
+A sub-plan, written and run after phase 11 and before phase 9. It's a set of separate phases,
+14a onward, each run and gated like any other. Each one gets a goal, a scope, a method, the tools it uses, and
 an exit criterion that a script or a number can check. A sub-phase finds problems and fixes them
 in its own commits. Anything it can't fix goes in its Result line. The sub-plan covers at least:
 
