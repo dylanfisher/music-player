@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The now-playing bar's art: twice its point size, for Retina displays.
     static let artPixels = Int(NowPlayingBar.artPoints) * 2
     static let artCacheImages = 64
+    /// Now Playing's art: the current track's and the one before, for going back.
+    static let systemArtCacheImages = 2
 
     private let paths: AppPaths
     private let measuring: Bool
@@ -43,6 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var window: MainWindow?
     private(set) var browser: LibraryBrowser?
     private var nowPlaying: NowPlayingBar?
+    /// Media keys, headphone buttons, Now Playing in Control Center, and the Dock menu.
+    private var mediaControls: MediaControls?
+    private var dockMenu: DockMenu?
     private(set) var queue: QueuePanel?
     private var watcher: LibraryWatcher?
     private(set) var output: DeviceOutput?
@@ -130,6 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
+        if let dispatcher { makeMediaControls(dispatcher, lookup: lookup) }
         let queue = QueuePanel(model: QueueModel(lookup: lookup))
         let window = MainWindow(
             settings: layout, banner: banner.view, browser: browser, nowPlaying: nowPlaying,
@@ -157,7 +163,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             saver.set(\.selectedArtist, state.artist)
             saver.set(\.selectedAlbum, state.album)
         }
-        browser.libraryRefreshed = {
+        browser.libraryRefreshed = { [weak self] in
+            self?.mediaControls?.libraryChanged()
             nowPlaying.libraryChanged()
             queue.libraryChanged()
         }
@@ -234,6 +241,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         output?.close()
     }
 
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        dockMenu?.menu()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
@@ -258,6 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.output = output
             self.engine = engine
             nowPlaying?.connect(engine)
+            mediaControls?.connect(engine)
             queue?.connect(engine)
             playbackUpdates = Task { [weak self] in
                 for await update in await engine.updates() {
@@ -273,6 +285,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             logger.error("no output: \(error)")
             nowPlaying?.showUnavailable("No output device: \(error)")
         }
+    }
+
+    private func makeMediaControls(
+        _ dispatcher: CommandDispatcher, lookup: @escaping (String) throws -> TrackRow?
+    ) {
+        let controls = MediaControls(
+            model: NowPlayingModel(lookup: lookup), dispatcher: dispatcher,
+            remote: SystemRemoteCommands(), center: SystemNowPlaying(),
+            artwork: ArtworkLoader(
+                maxPixelSize: MediaControls.artPixels, capacity: Self.systemArtCacheImages),
+            seek: { [weak self] seconds in
+                guard let engine = self?.engine else { return }
+                Task { await engine.seek(toSeconds: seconds) }
+            })
+        mediaControls = controls
+        dockMenu = DockMenu(model: controls.model, dispatcher: dispatcher)
     }
 
     private func play(_ request: PlayRequest) {
