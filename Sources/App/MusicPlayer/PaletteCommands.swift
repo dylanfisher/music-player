@@ -62,7 +62,7 @@ extension AppDelegate {
                     paletteEntries = entries
                     palette.append(items, to: session)
                 } catch {
-                    logger.error("couldn't list the library for the palette: \(error)")
+                    browser.report("couldn't list the library for the palette: \(error)")
                 }
             }
         case .goToItem:
@@ -70,7 +70,7 @@ extension AppDelegate {
                 .goToItem, items: [], over: window, place: state[\.palettePlace])
             Task {
                 do {
-                    guard let names = try await browser.trackNames() else { return }
+                    let names = try await browser.trackNames()
                     // Preparing 43k titles for matching takes a while, so it runs off the main
                     // actor; the empty query's first rows show meanwhile.
                     let items = await Task.detached(priority: .userInitiated) {
@@ -83,7 +83,7 @@ extension AppDelegate {
                     }.value
                     palette.append(items, to: session)
                 } catch {
-                    logger.error("couldn't list the tracks for Go to Item: \(error)")
+                    browser.report("couldn't list the tracks for Go to Item: \(error)")
                 }
             }
         }

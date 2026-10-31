@@ -376,14 +376,14 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
     private func typeToSelect(_ query: String) {
         let column = model.sortColumn
         Task {
-            let names: [TrackName]?
+            let names: [TrackName]
             do {
                 names = try await model.trackNames()
             } catch {
                 actions.failed("couldn't read the tracks' names: \(error)")
                 return
             }
-            guard let names, query == typeSelect?.query else { return }
+            guard query == typeSelect?.query else { return }
             let texts = names.lazy.map { name in
                 switch column {
                 case .artist: name.artist ?? ""

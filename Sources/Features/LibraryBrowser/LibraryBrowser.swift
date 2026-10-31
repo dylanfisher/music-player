@@ -235,7 +235,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         problemsButton.isHidden = !status.hasProblems
     }
 
-    private func report(_ message: String) {
+    /// Logs a failure and shows it in the status bar.
+    public func report(_ message: String) {
         logger.error("\(message)")
         show(failure: message)
     }
@@ -414,7 +415,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// The shown tracks' names in table order; nil when the list changed while they were read.
-    public func trackNames() async throws -> [TrackName]? { try await model.trackNames() }
+    public func trackNames() async throws -> [TrackName] { try await model.trackNames() }
 
     /// Esc clears the search and gives the keys back to the table; ↑ and ↓ move the table's
     /// selection while the field keeps the keys.

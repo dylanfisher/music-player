@@ -73,6 +73,19 @@ import Testing
     let model = BrowserModel(
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: false)
     await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
-    let names = try #require(try await model.trackNames())
+    let names = try await model.trackNames()
     #expect(names.map(\.id) == model.trackIDs)
+}
+
+/// A sort that lands while the names are read makes them stale; they're read again.
+@MainActor @Test func trackNamesReadAgainWhenTheListChangesMeanwhile() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: false)
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    async let sorted: Void = model.setSort(.artist, ascending: true)
+    async let read = { @MainActor in (try await model.trackNames(), model.trackIDs) }()
+    let (names, shown) = try await read
+    await sorted
+    #expect(names.map(\.id) == shown)
 }

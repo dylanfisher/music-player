@@ -146,15 +146,27 @@ public final class BrowserModel {
         return genres + artists + albums
     }
 
-    /// The shown tracks' names in table order, read once per change of the list. Nil when the
-    /// list changed while they were read.
-    public func trackNames() async throws -> [TrackName]? {
-        if let names, names.applied == applied { return names.list }
-        let mine = applied
-        let list = try await reader.trackNames(filter, sortedBy: sortColumn, ascending: ascending)
-        guard mine == applied else { return nil }
-        names = (mine, list)
-        return list
+    /// The track list changed during every read of its names.
+    public struct NamesKeptChanging: Error, CustomStringConvertible {
+        public var description: String { "the track list kept changing while it was read" }
+    }
+
+    /// How many times `trackNames` reads before it gives up on a list that keeps changing.
+    static let nameReads = 3
+
+    /// The shown tracks' names in table order, read once per change of the list. A list that
+    /// changed while they were read is read again.
+    public func trackNames() async throws -> [TrackName] {
+        for _ in 0..<Self.nameReads {
+            if let names, names.applied == applied { return names.list }
+            let mine = applied
+            let list = try await reader.trackNames(
+                filter, sortedBy: sortColumn, ascending: ascending)
+            guard mine == applied else { continue }
+            names = (mine, list)
+            return list
+        }
+        throw NamesKeptChanging()
     }
 
     public func setSearch(_ text: String) async {
