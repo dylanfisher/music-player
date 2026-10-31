@@ -71,12 +71,10 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
         }
         window.contentView = stack
 
-        let saved = settings.frame.map {
-            NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height)
-        }
-        // A frame on a display that's no longer connected would put the window out of sight.
-        if let saved, NSScreen.screens.contains(where: { $0.visibleFrame.intersects(saved) }) {
-            window.setFrame(saved, display: false)
+        if let frame = restoredFrame(
+            settings.frame, screens: NSScreen.screens.map(\.visibleFrame))
+        {
+            window.setFrame(frame, display: false)
         } else {
             window.center()
         }
@@ -135,20 +133,37 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
         _ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat,
         ofSubviewAt dividerIndex: Int
     ) -> CGFloat {
-        dividerIndex == 0
-            ? CGFloat(sidebarRange.lowerBound)
-            : max(proposedMinimumPosition, splitView.bounds.width - CGFloat(queueRange.upperBound))
+        max(
+            proposedMinimumPosition,
+            dividerLimits(dividerIndex, width: splitView.bounds.width).lowerBound)
     }
 
     func splitView(
         _ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat,
         ofSubviewAt dividerIndex: Int
     ) -> CGFloat {
-        dividerIndex == 0
-            ? CGFloat(sidebarRange.upperBound)
-            : splitView.bounds.width - CGFloat(queueRange.lowerBound)
+        min(
+            proposedMaximumPosition,
+            dividerLimits(dividerIndex, width: splitView.bounds.width).upperBound)
     }
 }
 
 private let sidebarRange = AppSettings.sidebarWidthRange
 private let queueRange = AppSettings.queueWidthRange
+
+/// Where the dividers may go in a split view `width` points wide, so the sidebar (divider 0) and
+/// the queue (divider 1) stay within the widths Settings accepts.
+func dividerLimits(_ divider: Int, width: CGFloat) -> ClosedRange<CGFloat> {
+    if divider == 0 {
+        return CGFloat(sidebarRange.lowerBound)...CGFloat(sidebarRange.upperBound)
+    }
+    return (width - CGFloat(queueRange.upperBound))...(width - CGFloat(queueRange.lowerBound))
+}
+
+/// The saved frame, unless no screen in `screens` (their visible frames) shows any of it, as when
+/// the display it was on is gone. Nil means center the window.
+func restoredFrame(_ saved: WindowFrame?, screens: [NSRect]) -> NSRect? {
+    guard let saved else { return nil }
+    let frame = NSRect(x: saved.x, y: saved.y, width: saved.width, height: saved.height)
+    return screens.contains { $0.intersects(frame) } ? frame : nil
+}

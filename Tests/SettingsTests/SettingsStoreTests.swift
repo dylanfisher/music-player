@@ -269,6 +269,11 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(throws: SettingsError.self) {
         try settings.set(\.windowFrame, to: WindowFrame(x: 0, y: 0, width: 0, height: 5))
     }
+    let wide = TrackTableLayout(
+        columns: [ColumnLayout(column: .title, width: TrackTableLayout.widthRange.upperBound + 1)],
+        sortColumn: .title, sortAscending: true)
+    #expect(wide.problem()?.contains("width") == true)
+    #expect(twice.problem() == "columns[1]: title is listed twice")
 }
 
 @Test func windowLayoutRejectsUnknownKeysAtEveryLevel() throws {
