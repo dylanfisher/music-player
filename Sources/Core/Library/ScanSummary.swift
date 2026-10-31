@@ -23,4 +23,30 @@ public struct ScanSummary: Equatable, Sendable {
     public var cancelled = false
     /// Nil when the scan stopped before reading.
     public var readers: Readers?
+    public var readCost = ReadCost()
+    /// Seconds readers spent waiting for the walk to queue a file, summed over readers.
+    public var idleReaderSeconds = 0.0
+    public var windows = Windows()
+
+    /// What reading cost, summed over the files read without failing, to compare with what the
+    /// volume reports serving.
+    public struct ReadCost: Equatable, Sendable {
+        public var files = 0
+        /// Bytes the reads asked for.
+        public var bytes = 0
+        public var calls = 0
+        public var openSeconds = 0.0
+        public var readSeconds = 0.0
+        /// Each file's whole time in a reader, from opening to closing.
+        public var fileSeconds = 0.0
+    }
+
+    /// The throughput windows a tuned scan measured: judged by the controller, or dropped
+    /// because they say nothing about the volume.
+    public struct Windows: Equatable, Sendable {
+        public var judged = 0
+        /// A reader waited for the walk, so more readers couldn't have helped.
+        public var waitedForWalk = 0
+        public var paused = 0
+    }
 }

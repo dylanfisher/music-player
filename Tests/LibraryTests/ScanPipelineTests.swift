@@ -68,6 +68,12 @@ private func emptyFiles(_ count: Int) throws -> String {
     #expect(summary.read == library.manifest.files.count)
     #expect(summary.readers == .fixed(3))
     #expect(nas.mostFilesReadAtOnce == 3)
+    let cost = summary.readCost
+    #expect(cost.files == summary.read - summary.failed)
+    #expect(cost.bytes > 0 && cost.calls >= cost.files)
+    #expect(cost.fileSeconds > cost.openSeconds + cost.readSeconds)
+    // Fixed readers aren't tuned, so no window is measured.
+    #expect(summary.windows == ScanSummary.Windows())
 }
 
 @Test func aSimulatedNASDelaysEachFileByItsDiskDelay() throws {
@@ -93,8 +99,10 @@ private func emptyFiles(_ count: Int) throws -> String {
     // Slow listings, so readers wait for the walk.
     let nas = SimulatedNAS(
         operationSeconds: 0.001, listingSeconds: 0.02, capacity: 64, fileDelay: nil)
-    _ = try LibraryScanner(databaseURL: library.databaseURL, networkReaders: 3, access: nas)
-        .scan(WatchedFolder(path: library.root, kind: .network), progress: continuation)
+    let summary = try LibraryScanner(
+        databaseURL: library.databaseURL, networkReaders: 3, access: nas
+    ).scan(WatchedFolder(path: library.root, kind: .network), progress: continuation)
+    #expect(summary.idleReaderSeconds > 0)
     continuation.finish()
     var loads: [ScanProgress.Load] = []
     for await progress in stream { loads.append(progress.load) }
@@ -120,6 +128,7 @@ private func emptyFiles(_ count: Int) throws -> String {
     }
     #expect(levels.starts(with: [4, 8, 16]))
     #expect(nas.mostFilesReadAtOnce >= 16)
+    #expect(summary.windows.judged >= levels.count - 1)
 }
 
 @Test func aPauseIsNeverMeasuredInAWindow() {

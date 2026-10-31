@@ -1,3 +1,5 @@
+import Darwin
+
 /// Serves byte ranges of one file, and collects the file's warnings, since every parser holds it. A range outside the last read costs a new read of at least
 /// `minimumReadBytes`, so the fields of one header arrive together and a file whose tags fit in
 /// the first read costs one round trip. ADR 0010 weighs that size against a second round trip. Every read may be a slow trip to a NAS, so callers skip
@@ -11,6 +13,8 @@ final class ByteReader {
     let size: Int
     private(set) var bytesRead = 0
     private(set) var readCount = 0
+    /// Spent waiting in the source's reads.
+    private(set) var readSeconds = 0.0
     var warnings: [MetadataWarning] = []
     private let source: any ByteSource
     private var window: [UInt8] = []
@@ -50,7 +54,9 @@ final class ByteReader {
         }
         if range.lowerBound < windowStart || range.upperBound > windowStart + window.count {
             let end = min(size, max(range.upperBound, range.lowerBound + Self.minimumReadBytes))
+            let started = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
             window = try source.read(range.lowerBound..<end)
+            readSeconds += Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - started) / 1e9
             windowStart = range.lowerBound
             bytesRead += window.count
             readCount += 1

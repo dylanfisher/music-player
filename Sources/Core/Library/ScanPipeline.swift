@@ -33,6 +33,9 @@ final class ScanPipeline: @unchecked Sendable {
         var cancelled = false
         var rootLost = false
         var readers = ScanSummary.Readers.fixed(0)
+        var readCost = ScanSummary.ReadCost()
+        var idleReaderSeconds = 0.0
+        var windows = ScanSummary.Windows()
     }
 
     private let root: String
@@ -250,7 +253,10 @@ final class ScanPipeline: @unchecked Sendable {
                 if walkFinished { break }
                 window.starved = true
                 idleReaders += 1
+                let waited = DispatchTime.now().uptimeNanoseconds
                 condition.wait()
+                outcome.idleReaderSeconds +=
+                    Double(DispatchTime.now().uptimeNanoseconds - waited) / 1e9
                 idleReaders -= 1
             }
             readerThreads -= 1
@@ -261,7 +267,16 @@ final class ScanPipeline: @unchecked Sendable {
     private func finish(_ file: ScannedFile, seconds: Double) {
         let full: [ScannedFile]? = condition.withLock {
             outcome.read += 1
-            if case .failure = file.outcome { outcome.failed += 1 }
+            switch file.outcome {
+            case .success(let parsed):
+                outcome.readCost.files += 1
+                outcome.readCost.bytes += parsed.bytesRead
+                outcome.readCost.calls += parsed.readCount
+                outcome.readCost.openSeconds += parsed.openSeconds
+                outcome.readCost.readSeconds += parsed.readSeconds
+                outcome.readCost.fileSeconds += seconds
+            case .failure: outcome.failed += 1
+            }
             batch.append(file)
             var full: [ScannedFile]?
             if batch.count >= LibraryScanner.batchSize {
@@ -309,9 +324,14 @@ final class ScanPipeline: @unchecked Sendable {
         let now = DispatchTime.now().uptimeNanoseconds
         guard window.isDue(at: now, readers: limit) else { return }
         if let measured = window.measurement(at: now, pause: pause) {
+            outcome.windows.judged += 1
             tuning.observe(measured)
             controller = tuning
             setLimit(tuning.level)
+        } else if window.starved {
+            outcome.windows.waitedForWalk += 1
+        } else {
+            outcome.windows.paused += 1
         }
         window = Window(start: now, pauseChanges: pause.changes)
     }

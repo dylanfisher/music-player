@@ -7,11 +7,13 @@ import Settings
 /// Returns to the start of the line and clears it, so progress rewrites one line in place.
 let eraseLine = "\r\u{1B}[K"
 
-/// `MusicPlayer --scan <folder> [--db <path>] [--readers <n>]`: scans one folder into the
-/// library database, printing progress and a summary, and writes every warned or failed file to
-/// a text file beside the database. Safe to rerun; the second run measures a rescan with no
-/// changes. `readers` fixes how many files a network scan reads at once, instead of tuning it.
-func scanCommand(folder: String, databasePath: String?, readers: Int?) throws {
+/// `MusicPlayer --scan <folder> [--db <path>] [--readers <n>] [--scan-io-hints <hints>]`: scans
+/// one folder into the library database, printing progress and a summary, and writes every
+/// warned or failed file to a text file beside the database. Safe to rerun; the second run
+/// measures a rescan with no changes. `readers` fixes how many files a network scan reads at
+/// once, instead of tuning it. `hints` picks the caching hints each read gives the volume, so
+/// they can be compared on a NAS.
+func scanCommand(folder: String, databasePath: String?, readers: Int?, hints: ReadHints) throws {
     let path = URL(fileURLWithPath: folder).standardizedFileURL.path
     // Unknown only when the folder is missing.
     let isLocal = (try? URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeIsLocalKey]))?
@@ -53,7 +55,9 @@ func scanCommand(folder: String, databasePath: String?, readers: Int?) throws {
         }
         printed.signal()
     }
-    let summary = try LibraryScanner(databaseURL: databaseURL, networkReaders: readers).scan(
+    let summary = try LibraryScanner(
+        databaseURL: databaseURL, networkReaders: readers, access: SystemFileAccess(hints: hints)
+    ).scan(
         WatchedFolder(path: path, kind: isLocal == false ? .network : .local),
         progress: continuation)
     continuation.finish()
@@ -80,6 +84,12 @@ func scanCommand(folder: String, databasePath: String?, readers: Int?) throws {
             Double(summary.read + summary.unchanged) / max(elapsed, 0.001), summary.otherFiles),
         "  " + describe(summary.readers)
             + String(format: ", %.0f files/s read", Double(summary.read) / max(elapsed, 0.001)),
+        "  " + describe(summary.readCost, hints: hints),
+        String(
+            format: "  readers idle %.1f s waiting for the walk; windows: %d judged, %d dropped"
+                + " because readers waited for the walk, %d dropped for a pause",
+            summary.idleReaderSeconds, summary.windows.judged, summary.windows.waitedForWalk,
+            summary.windows.paused),
         "  warnings by kind: " + counts(issues, MetadataWarning.Kind.allCases) { .warning($0) },
         "  failures by kind: " + counts(issues, MetadataError.Kind.allCases) { .failure($0) },
     ]
@@ -128,6 +138,18 @@ private func describe(_ readers: ScanSummary.Readers?) -> String {
         return "readers: " + shown.joined(separator: "→")
             + (climbing ? " (still climbing)" : " (held)")
     }
+}
+
+/// "read hints all; asked for 312.4 MB, 7.3 KB per file in 1.10 reads; per file 12.3 ms
+/// opening, 30.1 ms reading, 50.2 ms in all", over the files read without failing.
+private func describe(_ cost: ScanSummary.ReadCost, hints: ReadHints) -> String {
+    let files = Double(max(cost.files, 1))
+    return String(
+        format: "read hints %@; asked for %.1f MB, %.1f KB per file in %.2f reads; per file"
+            + " %.1f ms opening, %.1f ms reading, %.1f ms in all",
+        hints.rawValue, Double(cost.bytes) / 1e6, Double(cost.bytes) / files / 1e3,
+        Double(cost.calls) / files, cost.openSeconds / files * 1e3,
+        cost.readSeconds / files * 1e3, cost.fileSeconds / files * 1e3)
 }
 
 /// "badNumber 3, badText 1", or "none".

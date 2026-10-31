@@ -1,13 +1,24 @@
 import Darwin
 
+/// The caching hints a tag read gives the volume. Each is a hint the volume may ignore, and on
+/// SMB only the NAS can show what they save, so the scan can be run with each (ADR 0010).
+public enum ReadHints: String, CaseIterable, Sendable {
+    /// The volume reads ahead and caches as it likes.
+    case none
+    /// No read-ahead.
+    case rdahead
+    /// No read-ahead and no caching.
+    case all
+}
+
 /// A file opened once and read with `pread`, never mapped, so a slow NAS read stalls only the
 /// caller and a file that shrinks fails the read instead of raising SIGBUS. Reads get exactly
-/// the bytes asked for, with no read-ahead and no caching (ADR 0010).
+/// the bytes asked for, and by default no read-ahead and no caching (ADR 0010).
 final class FileSource: ByteSource {
     let size: Int
     let descriptor: Int32
 
-    init(path: String) throws(ParseFailure) {
+    init(path: String, hints: ReadHints = .all) throws(ParseFailure) {
         let descriptor = open(path, O_RDONLY | O_CLOEXEC)
         guard descriptor >= 0 else { throw unreadable(nil, "can't open") }
         var info = stat()
@@ -24,8 +35,8 @@ final class FileSource: ByteSource {
         // bytes the parser skips, and on a NAS that's transfer time, not a saved round trip.
         // Uncached, a full scan doesn't fill memory with every file's first 16 KiB. Both are
         // hints a volume may refuse, which costs nothing but the saving, so failure is ignored.
-        _ = fcntl(descriptor, F_RDAHEAD, 0)
-        _ = fcntl(descriptor, F_NOCACHE, 1)
+        if hints != .none { _ = fcntl(descriptor, F_RDAHEAD, 0) }
+        if hints == .all { _ = fcntl(descriptor, F_NOCACHE, 1) }
         self.descriptor = descriptor
         size = Int(info.st_size)
     }

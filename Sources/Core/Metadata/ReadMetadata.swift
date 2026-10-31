@@ -3,9 +3,14 @@ import Foundation
 /// Reads the tags, audio properties and art location of the file at `url`, without decoding
 /// audio or reading art. Reads FLAC, MP4 (ALAC and AAC), MP3, WAV and AIFF, choosing by content,
 /// not extension.
-public func readMetadata(at url: URL) throws(MetadataError) -> ParsedFile {
+public func readMetadata(at url: URL, hints: ReadHints = .all) throws(MetadataError) -> ParsedFile {
     do throws(ParseFailure) {
-        return try parse(ByteReader(try FileSource(path: url.path)))
+        let started = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+        let source = try FileSource(path: url.path, hints: hints)
+        let opened = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+        var parsed = try parse(ByteReader(source))
+        parsed.openSeconds = Double(opened - started) / 1e9
+        return parsed
     } catch {
         throw error.error(path: url.path)
     }
@@ -55,5 +60,5 @@ func parse(_ reader: ByteReader) throws(ParseFailure) -> ParsedFile {
     }
     return ParsedFile(
         metadata: metadata, warnings: reader.warnings, bytesRead: reader.bytesRead,
-        readCount: reader.readCount)
+        readCount: reader.readCount, readSeconds: reader.readSeconds)
 }

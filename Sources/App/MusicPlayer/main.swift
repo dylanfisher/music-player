@@ -1,5 +1,7 @@
 import AppKit
 import HALOutput
+import Library
+import Metadata
 import Playback
 import Settings
 
@@ -8,7 +10,7 @@ import Settings
 //   MusicPlayer --play <file> [--device <part of name>]
 //   MusicPlayer --export-settings <file>
 //   MusicPlayer --import-settings <file>
-//   MusicPlayer --scan <folder> [--db <file>] [--readers <n>]
+//   MusicPlayer --scan <folder> [--db <file>] [--readers <n>] [--scan-io-hints none|rdahead|all]
 let arguments = CommandLine.arguments
 
 func value(after flag: String) -> String? {
@@ -34,17 +36,21 @@ func runAndExit(_ command: () throws -> Void) -> Never {
     }
 }
 
+let ioHintsChoices = ReadHints.allCases.map(\.rawValue).joined(separator: ", ")
+
 // A flag with nothing after it would otherwise fall through to launching the GUI.
 for (flag, what) in [
     ("--export-settings", "a file"), ("--import-settings", "a file"), ("--play", "a file"),
     ("--device", "part of a device name"), ("--scan", "a folder"), ("--db", "a database file"),
     ("--readers", "a number of files to read at once"),
+    ("--scan-io-hints", ioHintsChoices),
 ] where arguments.contains(flag) && value(after: flag) == nil {
     FileHandle.standardError.write(Data("error: \(flag) needs \(what)\n".utf8))
     exit(1)
 }
 
-for flag in ["--db", "--readers"] where arguments.contains(flag) && !arguments.contains("--scan") {
+for flag in ["--db", "--readers", "--scan-io-hints"]
+where arguments.contains(flag) && !arguments.contains("--scan") {
     FileHandle.standardError.write(Data("error: \(flag) only goes with --scan\n".utf8))
     exit(1)
 }
@@ -58,6 +64,15 @@ let readers = value(after: "--readers").map { text in
         exit(1)
     }
     return count
+}
+
+let ioHints = value(after: "--scan-io-hints").map { text in
+    guard let hints = ReadHints(rawValue: text) else {
+        FileHandle.standardError.write(
+            Data("error: --scan-io-hints needs one of \(ioHintsChoices), not \(text)\n".utf8))
+        exit(1)
+    }
+    return hints
 }
 
 if arguments.contains("--list-devices") {
@@ -79,7 +94,9 @@ if let path = value(after: "--import-settings") {
 }
 if let folder = value(after: "--scan") {
     runAndExit {
-        try scanCommand(folder: folder, databasePath: value(after: "--db"), readers: readers)
+        try scanCommand(
+            folder: folder, databasePath: value(after: "--db"), readers: readers,
+            hints: ioHints ?? SystemFileAccess().hints)
     }
 }
 /// Set from signal handlers on another thread, read by the playback loop.

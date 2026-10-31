@@ -97,10 +97,17 @@ import Testing
         .appendingPathComponent("source-\(UUID().uuidString)")
     try Data(count: 64).write(to: url)
     defer { try? FileManager.default.removeItem(at: url) }
-    let source = try FileSource(path: url.path)
     // XNU's FNOCACHE and FNORDAHEAD, which F_GETFL reports though no SDK header names them.
-    let noCacheNoReadAhead: Int32 = 0x40000 | 0x80000
-    #expect(fcntl(source.descriptor, F_GETFL) & noCacheNoReadAhead == noCacheNoReadAhead)
+    let noCache: Int32 = 0x40000
+    let noReadAhead: Int32 = 0x80000
+    func flags(_ hints: ReadHints) throws -> Int32 {
+        let source = try FileSource(path: url.path, hints: hints)
+        return withExtendedLifetime(source) { fcntl(source.descriptor, F_GETFL) }
+            & (noCache | noReadAhead)
+    }
+    #expect(try flags(.all) == noCache | noReadAhead)
+    #expect(try flags(.rdahead) == noReadAhead)
+    #expect(try flags(.none) == 0)
 }
 
 @Test func mp4FindsMoovAfterALargeMdatWithFewReads() throws {

@@ -12,7 +12,11 @@ public protocol ScanFileAccess: Sendable {
 }
 
 public struct SystemFileAccess: ScanFileAccess {
-    public init() {}
+    public let hints: ReadHints
+
+    public init(hints: ReadHints = .all) {
+        self.hints = hints
+    }
 
     public func volumeIsLocal(_ path: String) throws -> Bool? {
         try URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal
@@ -25,6 +29,6 @@ public struct SystemFileAccess: ScanFileAccess {
     }
 
     public func readMetadata(at path: String) throws(MetadataError) -> ParsedFile {
-        try Metadata.readMetadata(at: URL(fileURLWithPath: path))
+        try Metadata.readMetadata(at: URL(fileURLWithPath: path), hints: hints)
     }
 }

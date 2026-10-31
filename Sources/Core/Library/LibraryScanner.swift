@@ -97,6 +97,9 @@ public struct LibraryScanner: Sendable {
         summary.otherFiles = outcome.otherFiles
         summary.issues += outcome.issues
         summary.readers = outcome.readers
+        summary.readCost = outcome.readCost
+        summary.idleReaderSeconds = outcome.idleReaderSeconds
+        summary.windows = outcome.windows
         if outcome.cancelled {
             summary.cancelled = true
             return summary
