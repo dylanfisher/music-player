@@ -25,7 +25,9 @@ enum TagLayout: Sendable {
 extension Malformation {
     var seed: SeedKind {
         switch self {
-        case .truncated, .garbage, .flacBlockPastEnd, .vorbisCommentPastBlock: .flac16
+        case .truncated, .garbage, .flacBlockPastEnd, .vorbisCommentPastBlock,
+            .unreadableTrackNumber:
+            .flac16
         case .empty, .id3TagPastEnd, .id3FramePastTag: .mp3
         case .mp4AtomTooSmall, .mp4AtomPastParent: .alac16
         case .riffChunkPastEnd: .wav16
@@ -74,7 +76,11 @@ func planLibrary(count: Int) -> [PlannedFile] {
                 path:
                     "\(directory)/\(90 + index) \(fileName(title)).\(malformation.seed.fileExtension)",
                 seed: malformation.seed,
-                tags: FixtureTags(title: title, artist: "Broken", compilation: false),
+                tags: FixtureTags(
+                    title: title, artist: "Broken",
+                    // Something for the damage to land on.
+                    trackNumber: malformation == .unreadableTrackNumber ? 1 : nil,
+                    compilation: false),
                 art: nil, layout: brokenLayout(malformation), malformation: malformation))
     }
     return files

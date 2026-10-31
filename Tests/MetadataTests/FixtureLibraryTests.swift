@@ -24,11 +24,16 @@ private func expectedAudio(_ audio: AudioProperties) -> TrackAudio? {
     }
 }
 
+/// The warnings a fixture must produce: one per bad field.
+private func expectedWarnings(_ file: FixtureFile) -> [MetadataWarning.Kind] {
+    file.malformation == .unreadableTrackNumber ? [.badNumber] : []
+}
+
 /// What reading a broken fixture must do: nil when it parses, because the damage is in audio
-/// that tag reading never touches.
+/// that tag reading never touches or in a single field.
 private func expectedFailure(_ malformation: Malformation) -> MetadataError.Kind? {
     switch malformation {
-    case .truncated: nil
+    case .truncated, .unreadableTrackNumber: nil
     case .empty, .garbage: .unrecognizedFormat
     case .flacBlockPastEnd, .vorbisCommentPastBlock, .id3TagPastEnd, .id3FramePastTag,
         .mp4AtomTooSmall, .mp4AtomPastParent, .riffChunkPastEnd:
@@ -36,10 +41,11 @@ private func expectedFailure(_ malformation: Malformation) -> MetadataError.Kind
     }
 }
 
-@Test func everyValidFixtureMatchesItsManifestEntry() throws {
+@Test func everyReadableFixtureMatchesItsManifestEntry() throws {
     let (root, manifest) = try fixtureLibrary.get()
-    for file in manifest.files where file.malformation == nil {
+    for file in manifest.files where file.malformation?.isFieldLevel ?? true {
         let parsed = try readMetadata(at: root.appendingPathComponent(file.path))
+        #expect(parsed.warnings.map(\.kind) == expectedWarnings(file), "\(file.path)")
         let metadata = parsed.metadata
         #expect(metadata.tags == expectedTags(file), "\(file.path)")
         #expect(metadata.audio == file.audio.flatMap(expectedAudio), "\(file.path)")

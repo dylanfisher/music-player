@@ -43,7 +43,8 @@ private struct Pass {
     }
 }
 
-/// Parses every file in order on one thread. Every valid file must parse; broken ones may fail.
+/// Parses every file in order on one thread. Every file must parse except those broken in their
+/// structure.
 private func parseAll(_ files: [FixtureFile], in root: URL) throws -> Pass {
     var pass = Pass()
     pass.seconds = try seconds {
@@ -55,7 +56,7 @@ private func parseAll(_ files: [FixtureFile], in root: URL) throws -> Pass {
                 pass.mostBytesRead = max(pass.mostBytesRead, parsed.bytesRead)
                 pass.parsed += 1
             } catch {
-                if file.malformation == nil { throw error }
+                if file.malformation?.isFieldLevel ?? true { throw error }
             }
         }
     }

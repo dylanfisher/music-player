@@ -21,16 +21,18 @@ public struct FixtureFile: Codable, Equatable, Sendable {
     public var path: String
     public var byteCount: Int
     public var container: Container
-    /// Nil for malformed files.
+    /// Nil for files broken in their structure.
     public var audio: AudioProperties?
     /// The tag blocks in the file, in file order. Each holds the same values.
     public var tagFormats: [TagFormat]
-    /// What a parser should read. Nil when the file is untagged or malformed. Fields a format
-    /// can't hold are nil, and ID3v2.2 and 2.3 hold only the year of `date`.
+    /// What a parser should read. Nil when the file is untagged or broken in its structure; for a
+    /// file with a bad field, the tags without that field. Fields a format can't hold are nil,
+    /// and ID3v2.2 and 2.3 hold only the year of `date`.
     public var tags: FixtureTags?
     public var art: FixtureArt?
     /// Set for a file that's broken on purpose. A parser must reject it or read what it can,
-    /// without crashing or hanging.
+    /// without crashing or hanging. A file whose damage `isFieldLevel` must read, without the
+    /// bad field.
     public var malformation: Malformation?
 }
 
@@ -90,6 +92,11 @@ public enum Malformation: String, Codable, Sendable, CaseIterable {
     case mp4AtomPastParent
     /// A WAV chunk whose size runs past the end of the file.
     case riffChunkPastEnd
+    /// A FLAC whose Vorbis TRACKNUMBER is "A" instead of a number, in an otherwise valid file.
+    case unreadableTrackNumber
+
+    /// Damage to one tag field, not to the file's structure.
+    public var isFieldLevel: Bool { self == .unreadableTrackNumber }
 }
 
 /// Reads the manifest of a generated fixture library.

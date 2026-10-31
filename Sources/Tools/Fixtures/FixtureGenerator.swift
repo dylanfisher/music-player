@@ -159,6 +159,17 @@ private struct Renderer: Sendable {
             art: carriesArt ? art?.manifestEntry : nil, malformation: nil)
         guard let malformation = file.malformation else { return (data, entry) }
         let broken = breakFile(data, malformation, path: file.path)
+        if malformation.isFieldLevel {
+            var tags = entry.tags
+            tags?.trackNumber = nil
+            return (
+                broken,
+                FixtureFile(
+                    path: file.path, byteCount: broken.count, container: entry.container,
+                    audio: entry.audio, tagFormats: entry.tagFormats, tags: tags, art: entry.art,
+                    malformation: malformation)
+            )
+        }
         return (
             broken,
             FixtureFile(
@@ -197,6 +208,10 @@ private func breakFile(_ data: Data, _ malformation: Malformation, path: String)
     case .riffChunkPastEnd:
         let size = data.offset(of: "LIST")! + 4
         data.replaceSubrange(size..<size + 4, with: [0xF0, 0xFF, 0xFF, 0x7F])
+    case .unreadableTrackNumber:
+        let key = "TRACKNUMBER="
+        let value = data.offset(of: key)! + key.utf8.count
+        data[data.startIndex + value] = UInt8(ascii: "A")
     }
     return data
 }
