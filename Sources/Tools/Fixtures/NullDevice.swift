@@ -25,7 +25,6 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
         public var sampleRateHz: Double
         /// Interleaved stereo. Empty unless the device keeps samples.
         public var samples: [Int32]
-        public var frames: Int
     }
 
     public init(speed: Double = 1, ioFrames: Int = 512, keepsSamples: Bool = false) {
@@ -69,15 +68,13 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
 
     fileprivate func began(sampleRateHz: Double) {
         lock.withLock {
-            runs.append(CapturedRun(sampleRateHz: sampleRateHz, samples: [], frames: 0))
+            runs.append(CapturedRun(sampleRateHz: sampleRateHz, samples: []))
         }
     }
 
     fileprivate func pulled(_ buffer: UnsafeRawBufferPointer) {
-        lock.withLock {
-            runs[runs.count - 1].frames += buffer.count / 8
-            if keepsSamples { runs[runs.count - 1].samples += buffer.bindMemory(to: Int32.self) }
-        }
+        guard keepsSamples else { return }
+        lock.withLock { runs[runs.count - 1].samples += buffer.bindMemory(to: Int32.self) }
     }
 
     fileprivate func ended() { lock.withLock { openSessions -= 1 } }
