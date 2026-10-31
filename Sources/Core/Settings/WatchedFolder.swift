@@ -36,16 +36,8 @@ public struct WatchedFolder: SettingValue {
         case path, kind, include, exclude, pollIntervalMinutes
     }
 
-    /// Rejects keys outside `CodingKeys`, so a misspelled field fails instead of being ignored.
     public init(from decoder: any Decoder) throws {
-        let known = Set(CodingKeys.allCases.map(\.stringValue))
-        let raw = try decoder.container(keyedBy: AnyKey.self)
-        if let key = raw.allKeys.sorted(by: { $0.stringValue < $1.stringValue }).first(where: {
-            !known.contains($0.stringValue)
-        }) {
-            throw DecodingError.dataCorruptedError(
-                forKey: key, in: raw, debugDescription: "unknown key")
-        }
+        try rejectUnknownKeys(decoder, CodingKeys.self)
         let container = try decoder.container(keyedBy: CodingKeys.self)
         path = try container.decode(String.self, forKey: .path)
         kind = try container.decode(Kind.self, forKey: .kind)
@@ -68,11 +60,4 @@ public struct WatchedFolder: SettingValue {
         }
         return nil
     }
-}
-
-private struct AnyKey: CodingKey {
-    let stringValue: String
-    let intValue: Int? = nil
-    init?(stringValue: String) { self.stringValue = stringValue }
-    init?(intValue: Int) { nil }
 }
