@@ -283,6 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } catch {
             logger.error("no output: \(error)")
+            mediaControls?.refreshCommands()
             nowPlaying?.showUnavailable("No output device: \(error)")
         }
     }
