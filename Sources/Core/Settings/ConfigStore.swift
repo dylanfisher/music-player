@@ -184,14 +184,16 @@ public final class ConfigStore<Schema: SettingsSchema> {
     func read(confirmed: Bool) {
         let bytes: [UInt8]?
         do {
-            bytes = try Data(contentsOf: fileURL).map { $0 }
-        } catch CocoaError.fileReadNoSuchFile {
-            bytes = nil
+            bytes = try currentBytes()
         } catch {
             setProblems([ConfigProblem(line: nil, message: "can't read the file: \(error)")])
             return
         }
-        if bytes == lastBytes, !confirmed || lastBytes != nil { return }
+        if bytes == lastBytes, !confirmed || lastBytes != nil {
+            // Changes made while an empty read waited for confirmation go in now.
+            flush()
+            return
+        }
         let vanished = bytes == nil || bytes!.allSatisfy { [0x20, 0x09, 0x0A, 0x0D].contains($0) }
         if vanished, !confirmed, lastBytes != nil {
             guard !confirming else { return }
@@ -219,6 +221,15 @@ public final class ConfigStore<Schema: SettingsSchema> {
         } catch {
             for problem in error.problems { logger.error("\(self.fileURL.path): \(problem)") }
             setProblems(error.problems)
+        }
+    }
+
+    /// The file's bytes; nil when there is no file. Throws when there is one it can't read.
+    private func currentBytes() throws -> [UInt8]? {
+        do {
+            return try Data(contentsOf: fileURL).map { $0 }
+        } catch CocoaError.fileReadNoSuchFile {
+            return nil
         }
     }
 
@@ -252,7 +263,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
     private func flush() {
         guard !pending.isEmpty, problems.isEmpty, !confirming, !retryScheduled else { return }
         do {
-            let current = try? Data(contentsOf: fileURL).map { $0 }
+            let current = try currentBytes()
             if current != lastBytes {
                 // An edit not read yet; it applies first, and the changes go on top.
                 read(confirmed: true)
@@ -266,7 +277,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
             for patch in pending { text = try patched(text, patch) }
             try write(text.bytes)
         } catch {
-            failed(error)
+            failed(error) { $0.flush() }
         }
     }
 
@@ -279,7 +290,21 @@ public final class ConfigStore<Schema: SettingsSchema> {
             try write(text.bytes)
             logger.info("wrote a new config file at \(self.fileURL.path)")
         } catch {
-            failed(error)
+            // There may be no changes waiting, so the retry writes the new file itself, unless
+            // one has appeared meanwhile.
+            failed(error) { $0.retryNewFile() }
+        }
+    }
+
+    private func retryNewFile() {
+        do {
+            if try currentBytes() == nil {
+                writeNewFile()
+            } else {
+                read(confirmed: true)
+            }
+        } catch {
+            failed(error) { $0.retryNewFile() }
         }
     }
 
@@ -304,8 +329,8 @@ public final class ConfigStore<Schema: SettingsSchema> {
         }
     }
 
-    /// Keeps the changes waiting and tries again later, waiting longer each time.
-    private func failed(_ error: any Error) {
+    /// Keeps the changes waiting and runs `retry` later, waiting longer each time.
+    private func failed(_ error: any Error, retry: @escaping (ConfigStore) -> Void) {
         logger.error("couldn't write \(self.fileURL.path): \(error)")
         writeFailure = "\(error)"
         problemsChanged()
@@ -314,8 +339,9 @@ public final class ConfigStore<Schema: SettingsSchema> {
         retrySeconds = wait
         retryScheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
-            self?.retryScheduled = false
-            self?.flush()
+            guard let self else { return }
+            retryScheduled = false
+            retry(self)
         }
     }
 

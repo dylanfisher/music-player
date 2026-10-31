@@ -144,3 +144,63 @@ private func read(_ url: URL) throws -> String { try String(contentsOf: url, enc
         try ConfigStore.strict(Schema(), fileURL: url, check: { _, _, _ in nil })
     }
 }
+
+/// Waits on the main actor, so the store's timers can fire, until `done` or `seconds` pass.
+@MainActor
+private func wait(seconds: Double, until done: () throws -> Bool) async rethrows {
+    let deadline = Date().addingTimeInterval(seconds)
+    while try !done(), Date() < deadline { try? await Task.sleep(nanoseconds: 20_000_000) }
+}
+
+@MainActor @Test func aChangeMadeWhileAnEmptyReadIsConfirmedIsWritten() async throws {
+    let url = configURL()
+    try write(#"{"a.count": 3}"#, to: url)
+    let settings = store(url)
+    // An editor's save in place passes through an empty file.
+    try write("", to: url)
+    settings.read(confirmed: false)
+    try settings.set(\.flag, to: true)
+    try write(#"{"a.count": 3}"#, to: url)
+    try await wait(seconds: 2) { try read(url).contains("a.flag") }
+    #expect(try read(url) == #"{"a.count": 3, "a.flag": true}"#)
+}
+
+@MainActor @Test func aFileDeletedAndRecreatedIsReadAsRecreated() async throws {
+    let url = configURL()
+    try write(#"{"a.count": 3}"#, to: url)
+    let settings = store(url)
+    try FileManager.default.removeItem(at: url)
+    settings.read(confirmed: false)
+    try write(#"{"a.count": 7}"#, to: url)
+    await wait(seconds: 2) { settings[\.count] == 7 }
+    #expect(settings[\.count] == 7)
+    #expect(settings.problems.isEmpty)
+}
+
+@MainActor @Test func aNewFileThatCouldntBeWrittenIsRetried() async throws {
+    let url = configURL()
+    // A folder that can't be written to.
+    let folder = url.deletingLastPathComponent()
+    try FileManager.default.createDirectory(
+        at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o555])
+    let settings = store(url)
+    #expect(settings.writeFailure != nil)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+    await wait(seconds: 3) { FileManager.default.fileExists(atPath: url.path) }
+    #expect(try read(url) == settings.defaultText)
+    #expect(settings.writeFailure == nil)
+}
+
+@MainActor @Test func aFileThatCantBeReadIsNeverWrittenOver() throws {
+    let url = configURL()
+    let settings = store(url, creating: false)
+    try write(#"{"a.count": 3}"#, to: url)
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: url.path)
+    defer {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+    }
+    try settings.set(\.flag, to: true)
+    #expect(settings.writeFailure != nil)
+    try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+    #expect(try read(url) == #"{"a.count": 3}"#)
+}
