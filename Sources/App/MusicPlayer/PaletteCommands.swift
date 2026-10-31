@@ -153,7 +153,8 @@ extension AppDelegate {
         do {
             guard let track = try trackLookup(path) else { return }
             for key in [
-                track.artist.map(LibraryKey.artist), track.albumID.map(LibraryKey.album),
+                track.artist.map(LibraryKey.artist),
+                track.album.map { LibraryKey.album($0, by: track.albumEntryArtist) },
                 track.genre.map(LibraryKey.genre),
             ].compactMap({ $0 }) {
                 palette.model.record(key)
@@ -165,12 +166,16 @@ extension AppDelegate {
     }
 }
 
-/// The palette keys of the library's entries, as both the listing and a play count them. Genres
-/// and artists are unique by name, but two albums can share a title, so albums go by ID.
+/// The palette keys of the library's entries, as both the listing and a play count them. Names
+/// rather than IDs, so frecency survives a rebuilt index (ADR 0016). Genres and artists are
+/// unique by name; an album is unique by its title and artist.
 enum LibraryKey {
     static func genre(_ name: String) -> String { "genre:\(name)" }
     static func artist(_ name: String) -> String { "artist:\(name)" }
-    static func album(_ id: Int64) -> String { "album:\(id)" }
+    /// The title and artist apart by a unit separator, a control character tags don't use.
+    static func album(_ title: String, by artist: String?) -> String {
+        "album:\(title)\u{1F}\(artist ?? "")"
+    }
 }
 
 /// The palette rows for the library's genres, artists and albums, and the entry each key shows.
@@ -184,7 +189,7 @@ func libraryItems(_ entries: [(BrowserModel.Pane, BrowserEntry)]) -> (
             switch pane {
             case .genre: (.genre, LibraryKey.genre(entry.name))
             case .artist: (.artist, LibraryKey.artist(entry.name))
-            case .album: (.album, LibraryKey.album(entry.id))
+            case .album: (.album, LibraryKey.album(entry.name, by: entry.artist))
             }
         guard shown[key] == nil else { continue }
         shown[key] = (pane, entry.id)

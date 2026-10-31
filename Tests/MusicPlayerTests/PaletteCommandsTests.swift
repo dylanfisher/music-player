@@ -11,9 +11,10 @@ import Testing
         (.album, BrowserEntry(id: 7, name: "Greatest Hits", artist: "Abba")),
         (.album, BrowserEntry(id: 8, name: "Greatest Hits", artist: "Queen")),
     ])
-    #expect(items.map(\.key) == ["artist:Abba", "album:7", "album:8"])
+    let queen = LibraryKey.album("Greatest Hits", by: "Queen")
+    #expect(
+        items.map(\.key) == ["artist:Abba", LibraryKey.album("Greatest Hits", by: "Abba"), queen])
+    #expect(Set(items.map(\.key)).count == 3)
     #expect(items.map(\.detail) == ["Artist", "Album — Abba", "Album — Queen"])
-    #expect(shown["album:8"]?.1 == 8)
-    // A play counts toward the album by the same key the listing uses.
-    #expect(LibraryKey.album(8) == "album:8")
+    #expect(shown[queen]?.1 == 8)
 }

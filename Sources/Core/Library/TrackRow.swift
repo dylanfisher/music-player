@@ -12,6 +12,9 @@ public struct TrackRow: Equatable, Sendable {
     public var album: String?
     public var albumID: Int64?
     public var albumArtist: String?
+    /// The artist the album is listed under, as `BrowserEntry.artist` names it: the album
+    /// artist, else the track artist; nil for a compilation without one.
+    public var albumEntryArtist: String? = nil
     public var genre: String?
     /// The date tag as written, such as "1969" or "1969-09-26".
     public var date: String?

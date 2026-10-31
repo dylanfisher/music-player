@@ -159,6 +159,12 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
                 tagged.compactMap { tags in
                     tags.album.map { "\($0)|\(tags.albumArtist ?? tags.artist ?? "")" }
                 }))
+    // Each track names its album's artist as the album pane does.
+    let albums = Dictionary(uniqueKeysWithValues: try index.albums().map { ($0.id, $0) })
+    for row in try index.rows(ids: try index.trackIDs(sortedBy: .path)) {
+        guard let id = row.albumID else { continue }
+        #expect(row.albumEntryArtist == albums[id]?.artist, "\(row.path)")
+    }
 }
 
 @Test func unknownStoredKindFailsLoudly() throws {

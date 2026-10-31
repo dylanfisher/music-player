@@ -192,12 +192,13 @@ private let rowSelect = """
     SELECT t.file_id, f.path, t.title, ar.name, al.title, t.album_id, aa.name, g.name, t.date,
         t.track_number, t.disc_number, t.codec, t.sample_rate_hz, t.bits_per_sample,
         t.length_frames, f.added_seconds, t.art_offset, t.art_byte_count, t.art_mime_type,
-        t.art_unsynchronised
+        t.art_unsynchronised, al_ar.name
     FROM tracks t
     JOIN files f ON f.id = t.file_id
     LEFT JOIN artists ar ON ar.id = t.artist_id
     LEFT JOIN artists aa ON aa.id = t.album_artist_id
     LEFT JOIN albums al ON al.id = t.album_id
+    LEFT JOIN artists al_ar ON al_ar.id = al.artist_id
     LEFT JOIN genres g ON g.id = t.genre_id
     """
 
@@ -213,7 +214,8 @@ private func trackRow(_ row: Row) throws -> TrackRow {
         id: try row.int64(0), path: path,
         title: row.optionalText(2) ?? displayName(path), artist: row.optionalText(3),
         album: row.optionalText(4), albumID: row.optionalInt(5).map(Int64.init),
-        albumArtist: row.optionalText(6), genre: row.optionalText(7), date: row.optionalText(8),
+        albumArtist: row.optionalText(6), albumEntryArtist: row.optionalText(20),
+        genre: row.optionalText(7), date: row.optionalText(8),
         trackNumber: row.optionalInt(9), discNumber: row.optionalInt(10), codec: try row.text(11),
         sampleRateHz: rate, bitsPerSample: row.optionalInt(13),
         durationSeconds: rate > 0 ? Double(try row.int(14)) / Double(rate) : 0,

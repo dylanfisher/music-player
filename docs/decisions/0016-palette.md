@@ -13,8 +13,9 @@ settings and the library. A few choices follow from that.
 ## Decision
 
 - **Items are keyed by what they name**, not by row ID: `command:<id>`, `artist:<name>`,
-  `album:<name>`, `genre:<name>`. IDs change when the index is rebuilt; names survive, so
-  frecency does too. Go to Item's rows are `track:<row>:<id>` and choosing one does nothing if the
+  `genre:<name>`, and `album:<title>␟<artist>` (a unit separator between), since the index
+  holds one album per title and artist. IDs change when the index is rebuilt; names survive, so
+  frecency does too. An album's row names its artist. Go to Item's rows are `track:<row>:<id>` and choosing one does nothing if the
   row no longer shows that track.
 - **Frecency counts palette choices and plays.** A track starting counts once for its artist, its
   album and its genre. Go to Item's rows are ranked by the match alone, as Searcher's are, so
@@ -45,5 +46,5 @@ settings and the library. A few choices follow from that.
 
 ## Consequences
 
-Two artists with one name share a palette row and its frecency, as the album pane already lists
-one row per album title (phase 5's known limit).
+Two artists with one name share a palette row and its frecency, as they share a row of the
+artists table. Two albums with one title and different artists are two rows.
