@@ -52,8 +52,10 @@ private func read(_ url: URL) throws -> String { try String(contentsOf: url, enc
     #expect(changed == [["a.count"], ["a.flag"]])
     #expect(throws: ConfigError.self) { try settings.set(\.count, to: 11) }
     #expect(settings[\.count] == 4)
+    #expect(settings.isOn("a.flag"))
     try settings.set(key: "a.flag", json: false)
     #expect(settings[\.flag] == false)
+    #expect(!settings.isOn("a.flag"))
 }
 
 @MainActor @Test func aBrokenFileAppliesNothingAndIsNeverWrittenOver() throws {

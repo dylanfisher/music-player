@@ -4,10 +4,13 @@ import Log
 
 private let logger = moduleLogger()
 
+/// The config file's name, in `~/.config/music-player` or a `--home` folder.
+public let configFileName = "config.json"
+
 /// `~/.config/music-player/config.json`.
 public func defaultConfigFileURL() -> URL {
     FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".config/music-player/config.json")
+        .appendingPathComponent(".config/music-player").appendingPathComponent(configFileName)
 }
 
 /// The settings in effect, read from and written to the config file, which is the settings:
@@ -91,6 +94,9 @@ public final class ConfigStore<Schema: SettingsSchema> {
         return try! JSONSerialization.jsonObject(
             with: Data(jsonText(value).utf8), options: .fragmentsAllowed)
     }
+
+    /// Whether the bool setting `key` is on.
+    public func isOn(_ key: String) -> Bool { json(forKey: key) as? Bool == true }
 
     /// The text of a new file, and of Copy Default Config.
     public var defaultText: String { ConfigFile.defaultText(settings: descriptors) }

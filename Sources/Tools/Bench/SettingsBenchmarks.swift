@@ -8,7 +8,7 @@ let settingsBenchmarks = [
         budget: Budget(appleSilicon: 5, oldMac: 20, unit: .milliseconds)
     ) {
         try withScratchDirectory("settings") { directory in
-            let url = directory.appendingPathComponent("config.json")
+            let url = directory.appendingPathComponent(configFileName)
             let bindings = try KeyBindings(
                 AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "Bench"))
             let check: ShortcutCheck = { bindings.problem(id: $0, position: $1, slot: $2) }

@@ -32,16 +32,12 @@ extension AppDelegate {
         }
         palette.choose = { [weak self] item in self?.choose(item) }
         self.palette = palette
-        dispatcher.handle(
-            .showPalette, enabled: { [weak self] in self?.window != nil },
-            run: { [weak self] in
-                self?.showPalette(.commands)
-            })
-        dispatcher.handle(
-            .goToItem, enabled: { [weak self] in self?.window != nil },
-            run: { [weak self] in
-                self?.showPalette(.goToItem)
-            })
+        dispatcher.handle(.showPalette, enabled: hasWindow) { [weak self] in
+            self?.showPalette(.commands)
+        }
+        dispatcher.handle(.goToItem, enabled: hasWindow) { [weak self] in
+            self?.showPalette(.goToItem)
+        }
     }
 
     private func showPalette(_ mode: PaletteMode) {
@@ -120,7 +116,7 @@ extension AppDelegate {
                 var title = command.title
                 if let key = toggles[command.id] {
                     title = SettingCommand.paletteTitle(
-                        title, isOn: settings.json(forKey: key) as? Bool == true)
+                        title, isOn: settings.isOn(key))
                 }
                 return PaletteItem(
                     kind: .command, key: "command:\(command.id)", title: title,

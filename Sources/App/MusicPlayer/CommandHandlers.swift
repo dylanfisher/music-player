@@ -13,14 +13,11 @@ extension AppDelegate {
         registerListCommands(dispatcher)
         registerViewCommands(dispatcher)
         registerPlaybackCommands(dispatcher)
-        dispatcher.handle(
-            .addFolder, enabled: { [weak self] in self?.window != nil },
-            run: {
-                [weak self] in self?.addFolder()
-            })
+        dispatcher.handle(.addFolder, enabled: hasWindow) { [weak self] in self?.addFolder() }
     }
 
-    private var hasWindow: () -> Bool { { [weak self] in self?.window != nil } }
+    /// Whether the main window is open, for the commands that need it.
+    var hasWindow: () -> Bool { { [weak self] in self?.window != nil } }
 
     private func registerListCommands(_ dispatcher: CommandDispatcher) {
         for (id, move) in RowMove.commands {

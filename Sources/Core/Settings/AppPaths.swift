@@ -14,7 +14,7 @@ public struct AppPaths: Sendable {
 
     /// Everything in one folder, for tests, Bench and runs that must not touch the real files.
     public init(home: URL) {
-        self.init(configFile: home.appendingPathComponent("config.json"), dataDirectory: home)
+        self.init(configFile: home.appendingPathComponent(configFileName), dataDirectory: home)
     }
 
     /// `~/.config/music-player/config.json` and `~/Library/Application Support/MusicPlayer`.

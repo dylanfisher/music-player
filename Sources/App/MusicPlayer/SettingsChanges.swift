@@ -22,10 +22,10 @@ extension AppDelegate {
             case .toggle:
                 dispatcher.handle(
                     generated.command.id,
-                    isOn: { [weak settings] in settings?.json(forKey: key) as? Bool == true },
+                    isOn: { [weak settings] in settings?.isOn(key) == true },
                     run: { [weak self] in
                         guard let settings = self?.settings else { return }
-                        self?.change(key, to: !(settings.json(forKey: key) as? Bool ?? false))
+                        self?.change(key, to: !settings.isOn(key))
                     })
             case .choose(let raw):
                 dispatcher.handle(
