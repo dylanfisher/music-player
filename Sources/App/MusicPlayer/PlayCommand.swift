@@ -95,6 +95,22 @@ private final class Player: @unchecked Sendable {
             source.resume()
             return source
         }
+        // Ctrl-Z: hand the terminal back to the shell before stopping, and take it again on fg.
+        // Playback stops with the process, so the device plays silence meanwhile.
+        signals += [SIGTSTP, SIGCONT].map { number in
+            signal(number, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: number, queue: .global())
+            source.setEventHandler {
+                if number == SIGTSTP {
+                    restoreTerminal()
+                    kill(getpid(), SIGSTOP)
+                } else {
+                    resumeKeyMode()
+                }
+            }
+            source.resume()
+            return source
+        }
         Thread.detachNewThread { readKeys { pressed.yield($0) } }
         let engine = engine
         let files = files
@@ -183,10 +199,10 @@ private final class Player: @unchecked Sendable {
         case .failed(let reason):
             log("error: \(reason)")
             if beginQuitting() { finish(status: 1) }
-        case .finished:
-            log("done")
+        case .finished, .stopped:
+            log(update.event == .finished ? "done" : "stopped")
             if beginQuitting() { finish(status: 0) }
-        case .queueChanged, .trackEnded, .stopped, nil: break
+        case .queueChanged, .trackEnded, nil: break
         }
     }
 

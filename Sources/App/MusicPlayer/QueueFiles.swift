@@ -79,9 +79,13 @@ private func metadata(of url: URL, _ warnings: inout [String]) -> TrackMetadata?
     }
 }
 
-private func albumOrder(_ a: (URL, TrackMetadata?), _ b: (URL, TrackMetadata?)) -> Bool {
-    func key(_ metadata: TrackMetadata?) -> (Int, Int) {
-        (metadata?.tags.discNumber ?? 0, metadata?.tags.trackNumber ?? Int.max)
+/// Disc and track order from the tags, then file name.
+func albumOrder(_ a: (URL, TrackMetadata?), _ b: (URL, TrackMetadata?)) -> Bool {
+    // Files without a track number go after the numbered ones, by name. A numbered file with no
+    // disc number counts as disc 1.
+    func key(_ metadata: TrackMetadata?) -> (Int, Int, Int) {
+        guard let track = metadata?.tags.trackNumber else { return (1, 0, 0) }
+        return (0, metadata?.tags.discNumber ?? 1, track)
     }
     let (left, right) = (key(a.1), key(b.1))
     if left != right { return left < right }
