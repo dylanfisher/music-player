@@ -62,7 +62,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 | What | Apple Silicon | Old Mac |
 |---|---|---|
-| Cold launch to an interactive library window | < 1.0 s | < 2.5 s |
+| Cold launch to an interactive library window | < 1 s | < 2.5 s |
 | Search-as-you-type, per keystroke (p95) | < 30 ms | < 80 ms |
 | Re-sort the track table by any column | < 100 ms | < 250 ms |
 | Full scan of the fixture library, local SSD | < 60 s | < 180 s |
@@ -363,6 +363,46 @@ during playback, which waits for the phase 5 window.
 - [ ] **Hardware checkpoint (owner):** run the release build on the 2015 MacBook Pro (macOS 12,
       Intel) with the real library. Report launch time and how scrolling and searching feel, and
       run `./scripts/bench` there.
+
+Implementation plan:
+
+1. **SQLite:** bind a parameter list as well as variadic values, for queries whose filters vary.
+2. **Settings:** `TrackColumn` (every column the table can show and sort by) moves here from
+   Library's `TrackSortColumn`, since Settings stores the layout and Library can import Settings
+   but not the reverse. New values `WindowFrame` and `ColumnLayout`, strict about keys like
+   `WatchedFolder` (the third such type, so the unknown-key check is shared). Keys for the window
+   frame, split positions, queue panel, visible columns with order and widths, sort, the sidebar
+   source and the pane selections (by name, since IDs change on a rebuild).
+3. **Library:** `files.added_seconds` for "date added". `TrackFilter` (watched folder, genre,
+   artist, album, search) narrows `trackIDs` and the panes, each pane by the panes to its left.
+   `TrackRow` and `rows(ids:)` fetch a page of rows by ID in one statement; `track(path:)` for the
+   queue and now playing. `LibraryReader`, an actor with its own connection, runs the ID, search
+   and pane queries off the main thread. `LibraryWatcher` reports each scan's progress and summary
+   through a callback, so the window refreshes and shows scan problems.
+4. **Playback:** queue edits on the engine: play next, move and remove, in play order, keeping the
+   current track playing (removing it moves on). `PlaybackState.order` exposes the play order.
+5. **Artwork** (Core): `ArtworkLoader` reads art with `readArt`, decodes it straight to a thumbnail
+   at display size with ImageIO, and keeps a bounded cache. Never holds a full-size image.
+6. **Features:** `LibraryBrowser` (sidebar, Genre | Artist | Album panes, the track table with a
+   paged row cache, search, the play-selection order), `NowPlaying` (the bar: art, title, artist,
+   transport, seek, times, format line) and `QueueView` (the side panel). View models hold the
+   logic and are tested; the AppKit views stay thin. Features never import each other.
+7. **App:** the window composes the three, and wires `PlaybackEngine`, `DeviceOutput`
+   (created after the first rows are drawn, never playing on its own) and `LibraryWatcher`,
+   including its playback hook. Settings are read once at launch and passed in; layout changes are
+   saved through Settings, coalesced. Watched folders are added and removed from the sidebar.
+   `--settings <file>` points the app at another settings file and the library beside it.
+   `--measure-window <seconds>` prints launch-to-first-rows and memory, after scrolling the whole
+   table and loading art, as JSON and quits, for Bench.
+8. **Bench:** launch to interactive and resident memory (the app run as a subprocess against the
+   fixture library), search keystroke p95 and re-sort through the view model. `scripts/bundle
+   release` also writes a universal `Bench` beside the `.app`, which builds its own fixtures.
+9. Tests: SQLiteTests (list binding), SettingsTests (new values and keys), LibraryTests (filters
+   across panes, search with panes, every sort column, rows by ID, date added, watcher events),
+   PlaybackTests (queue edits), ArtworkTests (thumbnail size, cache bound), LibraryBrowserTests
+   (pane cascade, search plus panes, sort, row cache eviction, play-selection order, selection kept
+   across a refresh), NowPlayingTests, QueueViewTests, MusicPlayerTests (the watcher hook).
+   ADRs for the window's data flow and the launch measurement.
 
 ### 6. Commands, shortcuts, command palette, settings window
 
