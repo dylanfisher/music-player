@@ -27,3 +27,19 @@ import Testing
     #expect(selected == picked)
     #expect(controller.table.selectedRowIndexes != [2, 7])
 }
+
+@MainActor @Test func theReportedLayoutAlwaysPassesSettingsChecks() throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, sort: { _, _ in }, layoutChanged: { _ in },
+        failed: { _ in })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { _ in [] }, layout: AppSettings().trackTable.defaultValue,
+        actions: actions)
+    _ = controller.view
+    controller.table.tableColumns[0].width = 9000
+    controller.table.tableColumns[1].width = 1
+    #expect(controller.layout.problem() == nil)
+}

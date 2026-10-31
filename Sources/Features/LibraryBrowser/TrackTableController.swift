@@ -63,6 +63,7 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
             tableColumn.title = column.title
             tableColumn.width = layout.columns.first { $0.column == column }?.width ?? 100
             tableColumn.minWidth = TrackTableLayout.widthRange.lowerBound
+            tableColumn.maxWidth = TrackTableLayout.widthRange.upperBound
             tableColumn.isHidden = !shown.contains(column)
             tableColumn.sortDescriptorPrototype = NSSortDescriptor(
                 key: column.rawValue, ascending: true)
@@ -223,10 +224,16 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
 
     /// The visible columns as they stand, and the model's sort.
     var layout: TrackTableLayout {
-        TrackTableLayout(
+        let widths = TrackTableLayout.widthRange
+        return TrackTableLayout(
             columns: table.tableColumns.filter { !$0.isHidden }.compactMap { tableColumn in
                 TrackColumn(rawValue: tableColumn.identifier.rawValue).map {
-                    ColumnLayout(column: $0, width: Double(tableColumn.width.rounded()))
+                    // Clamped, since Settings refuses a width outside the range.
+                    ColumnLayout(
+                        column: $0,
+                        width: min(
+                            max(Double(tableColumn.width.rounded()), widths.lowerBound),
+                            widths.upperBound))
                 }
             }, sortColumn: model.sortColumn, sortAscending: model.ascending)
     }
