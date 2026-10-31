@@ -275,21 +275,21 @@ scan end. Whether smbfs honours `F_RDAHEAD`/`F_NOCACHE` waits on the NAS checkpo
 
 Turns the one-file command into the engine everything else drives.
 
-- [ ] An **output** protocol with two implementations: `HALOutput` now, UPnP in phase 9. The
+- [x] An **output** protocol with two implementations: `HALOutput` now, UPnP in phase 9. The
       engine never knows which one it's driving.
-- [ ] **Queue** and a state machine: play, pause, stop, next, previous, seek, repeat and shuffle.
+- [x] **Queue** and a state machine: play, pause, stop, next, previous, seek, repeat and shuffle.
       State changes go out as one observable stream that the UI, media keys and the remote all
       read.
-- [ ] **Gapless:** the next track decodes ahead. Same format means no reconfigure and zero gap.
+- [x] **Gapless:** the next track decodes ahead. Same format means no reconfigure and zero gap.
       A rate change reconfigures the device between tracks.
-- [ ] **Device handling:** pick the output device in settings, by UID so it survives renames. If
+- [x] **Device handling:** pick the output device in settings, by UID so it survives renames. If
       the device is unplugged, pause and report it rather than switching to the speakers. When it
       reappears, offer to resume.
-- [ ] **Volume:** none in the bit-perfect path. An optional digital volume, off by default, says
+- [x] **Volume:** none in the bit-perfect path. An optional digital volume, off by default, says
       plainly that it stops the output being bit-perfect.
-- [ ] Restores the device and default outputs on every exit path, as `ExclusiveDevice.close()`
+- [x] Restores the device and default outputs on every exit path, as `ExclusiveDevice.close()`
       does today.
-- [ ] Benchmarks: playback CPU, a 1-hour soak with underrun count, and gap measurement.
+- [x] Benchmarks: playback CPU, a 1-hour soak with underrun count, and gap measurement.
 - [ ] **Hardware checkpoint (owner):** on the ADI-2, play a gapless album, a playlist mixing
       44.1 and 96 kHz tracks, unplug the DAC during playback, and quit with Ctrl-C. Confirm the
       macOS default output is restored after each.
@@ -337,6 +337,15 @@ Implementation plan:
    PlaybackTests (queue rules, engine state machine), HALOutputTests (sample-exact gapless
    continuity, rate-change sequencing, seek, pause, device loss and return, restore record).
    ADR 0011 for the output protocol and the HAL output's design.
+
+Result: shipped up to the owner's checkpoint, which is pending. Bench on Apple Silicon: same-format gap 0
+samples, a rate-change track switch 29 ms on the output path (budget 500 ms), soak underruns 0, CPU
+while playing 24/192 FLAC 2.78% of a core. That budget went from 2% to 3% by the owner's choice:
+AudioToolbox's FLAC packet scan costs about a quarter of decode time. If the 2015 MacBook Pro misses
+its 5% at phase 5, we write our own FLAC decoder (ADR 0011). The review fixed silence inserted
+when a queued next track changed, stale or overwritten crash-restore records, a restore that
+stopped at its first error, and engine subscriber leaks. Not wired yet: pausing library polls
+during playback, which waits for the phase 5 window.
 
 ### 5. Main window
 
