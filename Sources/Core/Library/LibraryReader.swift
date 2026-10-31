@@ -71,6 +71,10 @@ public actor LibraryReader {
         try index.removeFromPlaylist(id, paths: paths)
     }
 
+    public func missingEntryCount(_ id: Int64) throws -> Int {
+        try index.missingEntryCount(id)
+    }
+
     public func recordPlay(_ path: String, at seconds: Double) throws {
         try index.recordPlay(path, at: seconds)
     }

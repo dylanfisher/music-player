@@ -152,3 +152,31 @@ private func smartPaths(_ index: LibraryIndex, _ rules: SmartRules) throws -> Se
         try smartPaths(index, SmartRules(match: .all, rules: [.init(.rating, .is, .number(4))]))
             == [paths[5]])
 }
+
+@Test func aTrackWithoutAYearHasNoneToCompareOrSort() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    let untagged = Set(rows.filter { $0.year == nil }.map(\.path))
+    try #require(!untagged.isEmpty, "the fixtures have tracks without a year")
+    let early = try smartPaths(
+        index, SmartRules(match: .all, rules: [.init(.year, .lessThan, .number(3000))]))
+    #expect(early == Set(rows.map(\.path)).subtracting(untagged))
+    // Untagged tracks sort first, ahead of every year.
+    let sorted = try index.rows(ids: try index.trackIDs(sortedBy: .year))
+    #expect(Set(sorted.prefix(untagged.count).map(\.path)) == untagged)
+}
+
+@Test func durationsCompareInWholeSeconds() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    let row = try #require(rows.first { $0.durationSeconds != $0.durationSeconds.rounded(.down) })
+    let seconds = Int(row.durationSeconds)
+    #expect(
+        try smartPaths(
+            index, SmartRules(match: .all, rules: [.init(.duration, .is, .number(seconds))]))
+            == Set(rows.filter { Int($0.durationSeconds) == seconds }.map(\.path)))
+}

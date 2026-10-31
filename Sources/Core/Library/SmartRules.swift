@@ -150,32 +150,22 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// The track table column the field compares, which every field but composer and comment
+    /// has: the names match.
+    var column: TrackColumn? { TrackColumn(rawValue: rawValue) }
+
     /// The SQL the rule compares, over the tables `TrackColumn.expression` names plus `p` (plays)
     /// and `r` (ratings). The names and titles are the folded sort columns, which a folded value
-    /// matches whatever its case and accents.
+    /// matches whatever its case and accents. Numbers compare as whole numbers, so a duration of
+    /// 200.4 seconds "is 200", as the table shows it.
     var expression: String {
-        switch self {
-        case .composer: "t.composer"
-        case .comment: "t.comment"
-        case .title: TrackColumn.title.expression
-        case .artist: TrackColumn.artist.expression
-        case .album: TrackColumn.album.expression
-        case .albumArtist: TrackColumn.albumArtist.expression
-        case .genre: TrackColumn.genre.expression
-        case .codec: TrackColumn.codec.expression
-        case .path: TrackColumn.path.expression
-        case .year: TrackColumn.year.expression
-        case .trackNumber: TrackColumn.trackNumber.expression
-        case .discNumber: TrackColumn.discNumber.expression
-        case .duration: TrackColumn.duration.expression
-        case .sampleRate: TrackColumn.sampleRate.expression
-        case .bitDepth: TrackColumn.bitDepth.expression
-        case .playCount: TrackColumn.playCount.expression
-        case .skipCount: TrackColumn.skipCount.expression
-        case .rating: TrackColumn.rating.expression
-        case .dateAdded: TrackColumn.dateAdded.expression
-        case .lastPlayed: TrackColumn.lastPlayed.expression
-        }
+        let expression =
+            switch self {
+            case .composer: "t.composer"
+            case .comment: "t.comment"
+            default: column!.expression
+            }
+        return kind == .number ? "CAST(\(expression) AS INTEGER)" : expression
     }
 
     /// Whether `expression` is a folded sort key, so the typed value is folded the same way.
@@ -215,6 +205,9 @@ public struct SmartLimit: Codable, Equatable, Sendable {
         self.order = order
     }
 
+    /// Why the limit can't be stored, or nil when it can.
+    public var problem: String? { count > 0 ? nil : "a limit needs at least 1 track" }
+
     private enum CodingKeys: String, CodingKey, CaseIterable {
         case count, order
     }
@@ -224,9 +217,9 @@ public struct SmartLimit: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         count = try container.decode(Int.self, forKey: .count)
         order = try container.decode(SmartOrder.self, forKey: .order)
-        guard count > 0 else {
+        if let problem {
             throw DecodingError.dataCorruptedError(
-                forKey: .count, in: container, debugDescription: "a limit needs at least 1 track")
+                forKey: .count, in: container, debugDescription: problem)
         }
     }
 }
@@ -236,21 +229,25 @@ public enum SmartOrder: String, Codable, CaseIterable, Sendable {
     case title, artist, album, recentlyAdded, recentlyPlayed, mostPlayed, leastPlayed,
         highestRated
 
+    /// The column a limit picks by, and whether the smallest values come first. SQLite puts
+    /// nulls, never played, last in a descending order.
+    private var column: (TrackColumn, ascending: Bool) {
+        switch self {
+        case .title: (.title, true)
+        case .artist: (.artist, true)
+        case .album: (.album, true)
+        case .recentlyAdded: (.dateAdded, false)
+        case .recentlyPlayed: (.lastPlayed, false)
+        case .mostPlayed: (.playCount, false)
+        case .leastPlayed: (.playCount, true)
+        case .highestRated: (.rating, false)
+        }
+    }
+
     /// Ties go by path, which an index rebuild keeps, so the same tracks are picked after one.
     var sql: String {
-        let order =
-            switch self {
-            case .title: "\(TrackColumn.title.expression) ASC"
-            case .artist: "\(TrackColumn.artist.expression) ASC"
-            case .album: "\(TrackColumn.album.expression) ASC"
-            case .recentlyAdded: "\(TrackColumn.dateAdded.expression) DESC"
-            // SQLite puts nulls, never played, last in a descending order.
-            case .recentlyPlayed: "\(TrackColumn.lastPlayed.expression) DESC"
-            case .mostPlayed: "\(TrackColumn.playCount.expression) DESC"
-            case .leastPlayed: "\(TrackColumn.playCount.expression) ASC"
-            case .highestRated: "\(TrackColumn.rating.expression) DESC"
-            }
-        return order + ", f.path"
+        let (column, ascending) = column
+        return "\(column.expression) \(ascending ? "ASC" : "DESC"), f.path"
     }
 }
 

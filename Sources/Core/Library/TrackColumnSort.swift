@@ -13,7 +13,10 @@ extension TrackColumn {
         case .trackNumber: "t.track_number"
         case .discNumber: "t.disc_number"
         case .genre: "g.sort_name"
-        case .year: "CAST(substr(t.date, 1, 4) AS INTEGER)"
+        // Null unless the date starts with four digits, so an untagged track has no year.
+        case .year:
+            "CASE WHEN substr(t.date, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'"
+                + " THEN CAST(substr(t.date, 1, 4) AS INTEGER) END"
         case .duration: "CAST(t.length_frames AS REAL) / t.sample_rate_hz"
         case .codec: "t.codec"
         case .sampleRate: "t.sample_rate_hz"

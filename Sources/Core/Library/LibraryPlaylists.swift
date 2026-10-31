@@ -78,19 +78,37 @@ extension LibraryIndex {
     }
 
     /// Moves `paths` of a manual playlist, in their current order, to just before `target`, or
-    /// to the end when `target` is nil or one of the moved paths.
+    /// to the end when `target` is nil. A target among the moved paths keeps them where they
+    /// are, before the next path that isn't moving.
     public func movePlaylistEntries(_ id: Int64, paths: [String], before target: String?) throws {
         try database.transaction {
             let order = try playlistPaths(id)
             let moving = Set(paths)
             let moved = order.filter { moving.contains($0) }
             var kept = order.filter { !moving.contains($0) }
-            let at = target.flatMap { kept.firstIndex(of: $0) } ?? kept.count
+            // A target among the moved rows means the first row after it that stays.
+            let anchor = target.flatMap { target in
+                order.firstIndex(of: target).flatMap { start in
+                    order[start...].first { !moving.contains($0) }
+                }
+            }
+            let at = anchor.flatMap { kept.firstIndex(of: $0) } ?? kept.count
             kept.insert(contentsOf: moved, at: at)
             let update = try statement(
                 "UPDATE playlist_entries SET position = ? WHERE playlist_id = ? AND path = ?")
             for (position, path) in kept.enumerated() { try update.run(position, id, path) }
         }
+    }
+
+    /// How many of a manual playlist's entries have no track in the index, such as files moved
+    /// or no longer watched. The table can't show them.
+    public func missingEntryCount(_ id: Int64) throws -> Int {
+        try statement(
+            """
+            SELECT count(*) FROM playlist_entries e WHERE e.playlist_id = ? AND NOT EXISTS
+                (SELECT 1 FROM files f JOIN tracks t ON t.file_id = f.id WHERE f.path = e.path)
+            """
+        ).map(id) { try $0.int(0) }[0]
     }
 
     /// Takes `paths` out of a manual playlist. The files and tracks stay.
@@ -110,7 +128,7 @@ extension LibraryIndex {
     }
 
     private func checkedJSON(_ rules: SmartRules) throws -> String {
-        if let problem = rules.rules.lazy.compactMap(\.problem).first {
+        if let problem = rules.rules.lazy.compactMap(\.problem).first ?? rules.limit?.problem {
             throw LibraryError.invalidRule(problem)
         }
         return try rules.json()

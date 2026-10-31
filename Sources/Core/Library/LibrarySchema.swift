@@ -121,8 +121,10 @@ private let statsSchema = """
         played_seconds REAL NOT NULL
     );
     CREATE INDEX history_path ON history (path);
+    -- AUTOINCREMENT, so a deleted playlist's ID is never reused: the state file and the
+    -- palette's frecency name playlists by ID.
     CREATE TABLE playlists (
-        id INTEGER PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         -- A smart playlist's SmartRules as JSON; NULL for a manual playlist.
         rules TEXT

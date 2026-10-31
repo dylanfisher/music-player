@@ -40,7 +40,9 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let database = try Database(at: directory.appendingPathComponent("stats.sqlite"))
     try database.execute(SchemaPart.stats.sql)
-    let tables = try database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").map {
+    let tables = try database.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+    ).map {
         try $0.text(0)
     }
     #expect(Set(tables) == statsTables)

@@ -145,3 +145,40 @@ private func shownPaths(_ index: LibraryIndex, _ source: BrowserSource, by colum
         try index.trackIDs(sortedBy: .playlistOrder)
             == (try index.trackIDs(sortedBy: .playlistOrder, ascending: false)))
 }
+
+@Test func rowsDroppedOnTheirOwnBlockStayPut() throws {
+    let (_, index, paths) = try scanned()
+    let id = try index.createPlaylist(named: "Mix")
+    _ = try index.addToPlaylist(id, paths: Array(paths[0..<6]))
+    // Rows 3 to 5 dropped above row 4, which is one of them.
+    try index.movePlaylistEntries(id, paths: Array(paths[2..<5]), before: paths[3])
+    #expect(try index.playlistPaths(id) == Array(paths[0..<6]))
+    // Dropped above the first of them, they gather before the next row that isn't moving.
+    try index.movePlaylistEntries(id, paths: [paths[2], paths[4]], before: paths[2])
+    #expect(
+        try index.playlistPaths(id) == [paths[0], paths[1], paths[2], paths[4], paths[3], paths[5]])
+}
+
+@Test func aDeletedPlaylistsIDIsNeverReused() throws {
+    let (_, index, _) = try scanned()
+    _ = try index.createPlaylist(named: "a")
+    let last = try index.createPlaylist(named: "b")
+    try index.deletePlaylist(last)
+    #expect(try index.createPlaylist(named: "c") != last)
+}
+
+@Test func aLimitOfNoTracksIsRefusedWhenWritten() throws {
+    let (_, index, _) = try scanned()
+    let rules = SmartRules(match: .all, rules: [], limit: SmartLimit(count: 0, order: .title))
+    #expect(throws: LibraryError.invalidRule("a limit needs at least 1 track")) {
+        try index.createPlaylist(named: "x", rules: rules)
+    }
+}
+
+@Test func entriesWhoseFileLeftTheIndexAreCounted() throws {
+    let (_, index, paths) = try scanned()
+    let id = try index.createPlaylist(named: "Mix")
+    _ = try index.addToPlaylist(id, paths: [paths[0], "/gone/a.flac", "/gone/b.flac"])
+    #expect(try index.missingEntryCount(id) == 2)
+    #expect(try shownPaths(index, .playlist(id), by: .playlistOrder) == [paths[0]])
+}
