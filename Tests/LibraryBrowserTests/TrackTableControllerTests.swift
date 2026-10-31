@@ -11,7 +11,8 @@ import Testing
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
     let index = try LibraryIndex(at: databaseURL)
     let actions = BrowserActions(
-        play: { _, _ in }, playNext: { _ in }, sort: { _, _ in }, layoutChanged: { _ in },
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in }, sort: { _, _ in },
+        layoutChanged: { _ in },
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },
@@ -33,7 +34,8 @@ import Testing
     let model = BrowserModel(
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
     let actions = BrowserActions(
-        play: { _, _ in }, playNext: { _ in }, sort: { _, _ in }, layoutChanged: { _ in },
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in }, sort: { _, _ in },
+        layoutChanged: { _ in },
         failed: { _ in }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { _ in [] }, layout: AppState().trackTable.defaultValue,
@@ -50,7 +52,8 @@ import Testing
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
     let index = try LibraryIndex(at: databaseURL)
     let actions = BrowserActions(
-        play: { _, _ in }, playNext: { _ in }, sort: { _, _ in }, layoutChanged: { _ in },
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in }, sort: { _, _ in },
+        layoutChanged: { _ in },
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },

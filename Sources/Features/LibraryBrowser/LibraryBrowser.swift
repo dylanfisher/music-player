@@ -78,6 +78,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         let actions = BrowserActions(
             play: { rows, clicked in owner?.playRows(rows, clicked: clicked) },
             playNext: { rows in owner?.queueNext(rows) },
+            move: { ids, row in
+                owner?.edit("couldn't move the tracks") { try await model.move(ids, toRow: row) }
+            },
             sort: { column, ascending in
                 Task { await model.setSort(column, ascending: ascending) }
             },
@@ -94,6 +97,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             removeFolder: { path in owner?.removeFolder(path) },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         sidebar = sidebarController
+        sidebarController.dropTracks = { playlist, ids in
+            owner?.edit("couldn't add the tracks to the playlist") {
+                _ = try await model.add(ids, to: playlist)
+            }
+        }
         content = NSViewController()
         let (events, continuation) = AsyncStream.makeStream(of: WatcherEvent.self)
         watcherEvents = { continuation.yield($0) }
@@ -156,8 +164,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Loads everything, selecting what `saved` names where it still exists.
     public func load(_ saved: BrowserState) async {
-        sidebarController.show(folders: folders, source: saved.source)
         await model.load(saved)
+        showSource()
         if model.trackIDs.isEmpty, let firstRowsDrawn {
             self.firstRowsDrawn = nil
             firstRowsDrawn()
@@ -178,7 +186,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         if case .folder(let path) = source, !folders.contains(where: { $0.path == path }) {
             source = nil
         }
-        sidebarController.show(folders: folders, source: source)
+        sidebarController.show(folders: folders, playlists: model.playlists, source: source)
         if source != model.filter.source { await model.setSource(source) }
     }
 
@@ -370,7 +378,101 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     public func forward() { Task { if await model.forward() { showSource() } } }
 
-    private func showSource() { sidebarController.show(source: model.filter.source) }
+    /// Selects the model's source in the sidebar, listing the playlists as they are now.
+    private func showSource() {
+        sidebarController.show(
+            folders: folders, playlists: model.playlists, source: model.filter.source)
+    }
+
+    // MARK: Playlists and stats
+
+    /// Every playlist, by name.
+    public var playlists: [Playlist] { model.playlists }
+
+    /// The playlist the sidebar shows, if it shows one.
+    public var shownPlaylist: Playlist? { model.shownPlaylist }
+
+    /// Shows a source, as the sidebar would, from the palette or after a new playlist.
+    public func show(_ source: BrowserSource?) {
+        Task {
+            await model.setSource(source)
+            showSource()
+            focusTracks()
+        }
+    }
+
+    /// Makes a playlist, smart when `rules` are given, holding the selected tracks when
+    /// `withSelection` is set, and shows it.
+    public func createPlaylist(named name: String, rules: SmartRules?, withSelection: Bool) {
+        let rows = withSelection ? table.table.selectedRowIndexes : []
+        edit("couldn't make the playlist \"\(name)\"") {
+            try await self.model.createPlaylist(named: name, rules: rules, rows: rows)
+        }
+    }
+
+    public func renamePlaylist(_ id: Int64, to name: String) {
+        edit("couldn't rename the playlist") { try await self.model.renamePlaylist(id, to: name) }
+    }
+
+    public func deletePlaylist(_ id: Int64) {
+        edit("couldn't delete the playlist") { try await self.model.deletePlaylist(id) }
+    }
+
+    public func setRules(_ rules: SmartRules, of id: Int64) {
+        edit("couldn't change the playlist's rules") {
+            try await self.model.setRules(rules, of: id)
+        }
+    }
+
+    /// Adds the selected tracks to a manual playlist.
+    public func addSelection(to playlist: Int64) {
+        let ids = model.ids(ofRows: table.table.selectedRowIndexes)
+        edit("couldn't add the tracks to the playlist") {
+            _ = try await self.model.add(ids, to: playlist)
+        }
+    }
+
+    /// Whether the selection can be taken out of the playlist shown.
+    public var canRemoveFromPlaylist: Bool {
+        model.shownPlaylist?.isManual == true && hasSelectedTracks
+    }
+
+    public func removeSelectionFromPlaylist() {
+        let rows = table.table.selectedRowIndexes
+        edit("couldn't remove the tracks from the playlist") {
+            try await self.model.removeFromShownPlaylist(rows: rows)
+        }
+    }
+
+    /// Rates the selected tracks; 0 stars clears their rating.
+    public func rateSelection(_ stars: Int) {
+        let rows = table.table.selectedRowIndexes
+        edit("couldn't rate the tracks") { try await self.model.rate(rows: rows, stars: stars) }
+    }
+
+    /// Counts a play of the track at `path`, at `seconds` since 1970.
+    public func recordPlay(_ path: String, at seconds: Double) {
+        edit("couldn't count the play of \(path)") {
+            try await self.model.recordPlay(path, at: seconds)
+        }
+    }
+
+    public func recordSkip(_ path: String) {
+        edit("couldn't count the skip of \(path)") { try await self.model.recordSkip(path) }
+    }
+
+    /// Runs an edit, then lists the playlists and selects the source as they now are. A failure
+    /// is logged and shown in the status bar.
+    private func edit(_ failure: String, _ body: @escaping @MainActor () async throws -> Void) {
+        Task {
+            do {
+                try await body()
+            } catch {
+                report("\(failure): \(error)")
+            }
+            showSource()
+        }
+    }
 
     public var isStatusBarVisible: Bool { !statusBar.isHidden }
 

@@ -64,6 +64,10 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         table.target = self
         table.doubleAction = #selector(playClicked)
         table.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
+        table.registerForDraggedTypes([trackIDsType])
+        // Rows go only to the sidebar and to other rows, never to another app.
+        table.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
+        table.setDraggingSourceOperationMask([], forLocal: false)
         let shown = layout.columns.map(\.column)
         let order = shown + TrackColumn.allCases.filter { !shown.contains($0) }
         for column in order {
@@ -220,6 +224,34 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
             text.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])
         return cell
+    }
+
+    // MARK: Dragging
+
+    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int)
+        -> (any NSPasteboardWriting)?
+    {
+        model.trackIDs.indices.contains(row) ? trackDragItem(model.trackIDs[row]) : nil
+    }
+
+    /// Rows move only within a manual playlist shown in its own order, between rows.
+    func tableView(
+        _ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int,
+        proposedDropOperation dropOperation: NSTableView.DropOperation
+    ) -> NSDragOperation {
+        guard info.draggingSource as? NSTableView === table, model.canReorder else { return [] }
+        tableView.setDropRow(row, dropOperation: .above)
+        return .move
+    }
+
+    func tableView(
+        _ tableView: NSTableView, acceptDrop info: any NSDraggingInfo, row: Int,
+        dropOperation: NSTableView.DropOperation
+    ) -> Bool {
+        let ids = draggedTrackIDs(info.draggingPasteboard)
+        guard !ids.isEmpty, model.canReorder else { return false }
+        actions.move(ids, row)
+        return true
     }
 
     func tableView(_ tableView: NSTableView, sortDescriptorsDidChange old: [NSSortDescriptor]) {

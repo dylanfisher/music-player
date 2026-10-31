@@ -1,17 +1,22 @@
 import AppKit
 import Commands
 import KeyChord
+import Library
 import Settings
 
-/// The source list: the library, playlists (none until there are any) and the watched folders,
-/// with buttons to add and remove folders.
+/// The source list: the library and History, the playlists and the watched folders, with
+/// buttons to add and remove folders. Tracks dragged from the table onto a manual playlist are
+/// added to it.
 @MainActor
 final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate {
     let outline = KeyOutlineView()
     private let library = SidebarNode(.library, title: "Music")
     private let groups: [SidebarNode]
+    private let playlistGroup = SidebarNode(.group, title: "Playlists")
     private let folderGroup = SidebarNode(.group, title: "Watched Folders")
     private let selectSource: (BrowserSource?) -> Void
+    /// Tracks, by ID, dropped on the manual playlist with this ID.
+    var dropTracks: (Int64, [Int64]) -> Void = { _, _ in }
     private let addFolder: () -> Void
     private let removeFolder: (String) -> Void
     private let keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
@@ -19,6 +24,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     private var applying = false
     private var typeSelect: TypeSelect?
     private var folders: [WatchedFolder] = []
+    private var playlists: [Playlist] = []
 
     init(
         selectSource: @escaping (BrowserSource?) -> Void, addFolder: @escaping () -> Void,
@@ -30,8 +36,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         self.removeFolder = removeFolder
         self.keyCommand = keyCommand
         let libraryGroup = SidebarNode(.group, title: "Library")
-        libraryGroup.children = [library]
-        groups = [libraryGroup, SidebarNode(.group, title: "Playlists"), folderGroup]
+        libraryGroup.children = [library, SidebarNode(.history, title: "History")]
+        groups = [libraryGroup, playlistGroup, folderGroup]
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -49,6 +55,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.dataSource = self
         outline.delegate = self
         outline.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
+        outline.registerForDraggedTypes([trackIDsType])
         let scroll = NSScrollView()
         scroll.documentView = outline
         scroll.hasVerticalScroller = true
@@ -91,11 +98,17 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         for group in groups { outline.expandItem(group) }
     }
 
-    /// Lists `folders` and selects `source`, the library for nil.
-    func show(folders: [WatchedFolder], source: BrowserSource?) {
+    /// Lists `folders` and `playlists` and selects `source`, the library for nil.
+    func show(folders: [WatchedFolder], playlists: [Playlist], source: BrowserSource?) {
         self.folders = folders
+        self.playlists = playlists
         applying = true
         defer { applying = false }
+        playlistGroup.children = playlists.map { playlist in
+            let node = SidebarNode(.playlist(playlist), title: playlist.name)
+            if case .unreadable(let reason) = playlist.kind { node.toolTip = reason }
+            return node
+        }
         folderGroup.children = folders.map { folder in
             let node = SidebarNode(.folder(folder.path), title: displayName(folder.path))
             node.toolTip =
@@ -105,14 +118,17 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.reloadData()
         for group in groups { outline.expandItem(group) }
         let selected =
-            source.flatMap { source in folderGroup.children.first { $0.source == source } }
-            ?? library
+            source.flatMap { source in
+                groups.lazy.flatMap(\.children).first { $0.source == source }
+            } ?? library
         outline.selectRowIndexes([outline.row(forItem: selected)], byExtendingSelection: false)
         updateRemoveButton()
     }
 
     /// Selects `source` without reporting it, for Back and Forward.
-    func show(source: BrowserSource?) { show(folders: folders, source: source) }
+    func show(source: BrowserSource?) {
+        show(folders: folders, playlists: playlists, source: source)
+    }
 
     /// The outline moves through its own rows, skipping the group headings; every other key
     /// goes through the registry.
@@ -182,6 +198,9 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             ? .boldSystemFont(ofSize: NSFont.smallSystemFontSize)
             : .systemFont(ofSize: NSFont.systemFontSize)
         cell.textField?.textColor = isGroup ? .secondaryLabelColor : .labelColor
+        cell.imageView?.image = node.symbol.flatMap {
+            NSImage(systemSymbolName: $0, accessibilityDescription: nil)
+        }
         cell.toolTip = node.toolTip
         return cell
     }
@@ -194,21 +213,60 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         text.translatesAutoresizingMaskIntoConstraints = false
         cell.addSubview(text)
         cell.textField = text
+        var leading = cell.leadingAnchor
+        if identifier.rawValue == "DataCell" {
+            let image = NSImageView()
+            image.translatesAutoresizingMaskIntoConstraints = false
+            cell.addSubview(image)
+            cell.imageView = image
+            NSLayoutConstraint.activate([
+                image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
+                image.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                image.widthAnchor.constraint(equalToConstant: 16),
+            ])
+            leading = image.trailingAnchor
+        }
         NSLayoutConstraint.activate([
-            text.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
+            text.leadingAnchor.constraint(equalTo: leading, constant: 4),
             text.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
             text.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])
         return cell
     }
 
+    // MARK: Dropping tracks on a playlist
+
+    func outlineView(
+        _ outlineView: NSOutlineView, validateDrop info: any NSDraggingInfo,
+        proposedItem item: Any?,
+        proposedChildIndex index: Int
+    ) -> NSDragOperation {
+        guard index == NSOutlineViewDropOnItemIndex,
+            case .playlist(let playlist) = (item as? SidebarNode)?.kind,
+            playlist.isManual
+        else { return [] }
+        return .copy
+    }
+
+    func outlineView(
+        _ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?,
+        childIndex index: Int
+    ) -> Bool {
+        guard case .playlist(let playlist) = (item as? SidebarNode)?.kind, playlist.isManual
+        else { return false }
+        let ids = draggedTrackIDs(info.draggingPasteboard)
+        guard !ids.isEmpty else { return false }
+        dropTracks(playlist.id, ids)
+        return true
+    }
+
     func outlineViewSelectionDidChange(_ notification: Notification) {
         updateRemoveButton()
         guard !applying else { return }
         switch selectedNode?.kind {
-        case .folder(let path): selectSource(.folder(path))
         case .library: selectSource(nil)
         case .group, nil: break
+        case .folder, .history, .playlist: selectSource(selectedNode?.source)
         }
     }
 }
@@ -216,8 +274,9 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 /// A row of the source list. A class, since NSOutlineView tells items apart by identity.
 private final class SidebarNode {
     enum Kind: Equatable {
-        case group, library
+        case group, library, history
         case folder(String)
+        case playlist(Playlist)
     }
 
     let kind: Kind
@@ -229,7 +288,25 @@ private final class SidebarNode {
     var source: BrowserSource? {
         switch kind {
         case .folder(let path): .folder(path)
+        case .playlist(let playlist): .playlist(playlist.id)
+        case .history: .history
         case .group, .library: nil
+        }
+    }
+
+    /// The row's SF Symbol.
+    var symbol: String? {
+        switch kind {
+        case .group: nil
+        case .library: "music.note"
+        case .history: "clock"
+        case .folder: "folder"
+        case .playlist(let playlist):
+            switch playlist.kind {
+            case .manual: "music.note.list"
+            case .smart: "gearshape"
+            case .unreadable: "exclamationmark.triangle"
+            }
         }
     }
 

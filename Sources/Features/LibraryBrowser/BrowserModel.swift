@@ -26,6 +26,8 @@ public final class BrowserModel {
     public private(set) var trackIDs: [Int64] = []
     public private(set) var sortColumn: TrackColumn
     public private(set) var ascending: Bool
+    /// Every playlist, by name, as the sidebar lists them.
+    public private(set) var playlists: [Playlist] = []
     /// Called after each change is applied.
     public var changed: (BrowserChange) -> Void = { _ in }
     /// Called when a query fails. What the browser showed stays.
@@ -62,8 +64,20 @@ public final class BrowserModel {
             artist: name(filter.artist, in: artists), album: name(filter.album, in: albums))
     }
 
-    /// Loads the panes and tracks, selecting what `saved` names where it still exists.
+    /// Loads the playlists, panes and tracks, selecting what `saved` names where it still
+    /// exists.
     public func load(_ saved: BrowserState) async {
+        var saved = saved
+        do {
+            playlists = try await reader.playlists()
+        } catch {
+            logger.error("couldn't read the playlists: \(error)")
+            failed("couldn't read the playlists: \(error)")
+        }
+        if case .playlist(let id) = saved.source, !playlists.contains(where: { $0.id == id }) {
+            logger.notice("the saved playlist \(id) is gone; showing the library")
+            saved.source = nil
+        }
         history = SourceHistory(start: saved.source)
         pending = TrackFilter(source: saved.source, search: pending.search)
         await reload(panesFrom: .genre, saved: saved, reason: .loaded)
@@ -84,7 +98,120 @@ public final class BrowserModel {
     /// Back can undo.
     public func setSource(_ source: BrowserSource?) async {
         history.visit(source)
+        if let sort = defaultSort(source) { pendingSort = sort }
         await showSource(source)
+    }
+
+    /// A manual playlist opens in its own order, and History with the latest play first. Other
+    /// sources keep the sort the table has.
+    func defaultSort(_ source: BrowserSource?) -> (column: TrackColumn, ascending: Bool)? {
+        switch source {
+        case .playlist(let id):
+            playlists.first { $0.id == id }?.isManual == true ? (.playlistOrder, true) : nil
+        case .history: (.lastPlayed, false)
+        case .folder, nil: nil
+        }
+    }
+
+    /// The playlist the sidebar shows, if it shows one.
+    public var shownPlaylist: Playlist? {
+        guard case .playlist(let id) = filter.source else { return nil }
+        return playlists.first { $0.id == id }
+    }
+
+    /// Whether dragging rows moves them: only in a manual playlist shown in its own order.
+    public var canReorder: Bool {
+        shownPlaylist?.isManual == true && sortColumn == .playlistOrder && ascending
+    }
+
+    // MARK: Playlist and stats edits. Each refreshes what it changed.
+
+    /// Reads the playlists again. If the one shown has gone, the library is shown.
+    public func reloadPlaylists() async throws {
+        playlists = try await reader.playlists()
+        if case .playlist(let id) = pending.source, !playlists.contains(where: { $0.id == id }) {
+            await setSource(nil)
+        }
+    }
+
+    /// Makes a playlist, manual unless `rules` are given, holding the tracks at `rows`, and
+    /// shows it.
+    public func createPlaylist(named name: String, rules: SmartRules?, rows: IndexSet = [])
+        async throws
+    {
+        let paths = try await self.paths(ofRows: rows)
+        let id = try await reader.createPlaylist(named: name, rules: rules)
+        if !paths.isEmpty { _ = try await reader.addToPlaylist(id, paths: paths) }
+        try await reloadPlaylists()
+        await setSource(.playlist(id))
+    }
+
+    public func renamePlaylist(_ id: Int64, to name: String) async throws {
+        try await reader.renamePlaylist(id, to: name)
+        try await reloadPlaylists()
+    }
+
+    public func deletePlaylist(_ id: Int64) async throws {
+        try await reader.deletePlaylist(id)
+        try await reloadPlaylists()
+    }
+
+    public func setRules(_ rules: SmartRules, of id: Int64) async throws {
+        try await reader.setRules(rules, of: id)
+        try await reloadPlaylists()
+        if shownPlaylist?.id == id { await refresh() }
+    }
+
+    /// Adds the tracks with `ids` to a manual playlist and returns how many it didn't have.
+    public func add(_ ids: [Int64], to playlist: Int64) async throws -> Int {
+        let paths = try await reader.paths(ids: ids)
+        let added = try await reader.addToPlaylist(
+            playlist, paths: ids.compactMap { paths[$0] })
+        if shownPlaylist?.id == playlist { await refresh() }
+        return added
+    }
+
+    /// The track IDs at `rows`, in table order.
+    public func ids(ofRows rows: IndexSet) -> [Int64] {
+        rows.filter { trackIDs.indices.contains($0) }.map { trackIDs[$0] }
+    }
+
+    /// Takes the tracks at `rows` out of the manual playlist shown.
+    public func removeFromShownPlaylist(rows: IndexSet) async throws {
+        guard let playlist = shownPlaylist else { return }
+        try await reader.removeFromPlaylist(playlist.id, paths: try await paths(ofRows: rows))
+        await refresh()
+    }
+
+    /// Moves the tracks with `ids` to just before table row `row`, or to the end of the
+    /// playlist past the last row. Only while `canReorder`.
+    public func move(_ ids: [Int64], toRow row: Int) async throws {
+        guard canReorder, let playlist = shownPlaylist else { return }
+        let target = trackIDs.indices.contains(row) ? trackIDs[row] : nil
+        let paths = try await reader.paths(ids: ids + (target.map { [$0] } ?? []))
+        try await reader.movePlaylistEntries(
+            playlist.id, paths: ids.compactMap { paths[$0] }, before: target.flatMap { paths[$0] })
+        await refresh()
+    }
+
+    /// Rates the tracks at `rows`; 0 stars clears their rating.
+    public func rate(rows: IndexSet, stars: Int) async throws {
+        try await reader.setRating(stars, paths: try await paths(ofRows: rows))
+        await refresh()
+    }
+
+    public func recordPlay(_ path: String, at seconds: Double) async throws {
+        try await reader.recordPlay(path, at: seconds)
+        await refresh()
+    }
+
+    public func recordSkip(_ path: String) async throws {
+        try await reader.recordSkip(path)
+        await refresh()
+    }
+
+    private func paths(ofRows rows: IndexSet) async throws -> [String] {
+        try await urls(ofRows: rows).map(\.path)
     }
 
     /// Shows the source before the current one; false when there is none.
