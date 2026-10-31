@@ -74,6 +74,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "TagWriter",
+            dependencies: ["Log", "Metadata"],
+            path: "Sources/Core/TagWriter",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Artwork",
             dependencies: ["Metadata"],
             path: "Sources/Core/Artwork",
@@ -147,6 +153,12 @@ let package = Package(
             name: "GenerateFixtures",
             dependencies: ["Fixtures"],
             path: "Sources/Tools/GenerateFixtures",
+            swiftSettings: strictSwift
+        ),
+        .executableTarget(
+            name: "TagCorpus",
+            dependencies: ["Metadata", "TagWriter"],
+            path: "Sources/Tools/TagCorpus",
             swiftSettings: strictSwift
         ),
         .executableTarget(
