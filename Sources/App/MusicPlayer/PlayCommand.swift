@@ -21,6 +21,11 @@ enum PlayCommandError: Error, CustomStringConvertible {
     }
 }
 
+/// How far a seek key moves, in the terminal and the window.
+let seekStepSeconds = 10.0
+/// How much a volume key changes the digital volume.
+let volumeStepDecibels = 3.0
+
 /// What the keys do, printed when playback starts.
 private let keyHelp =
     "keys: space pause/resume, n next, p previous, ←/→ seek 10 s, r repeat, s shuffle,"
@@ -74,8 +79,6 @@ private final class Player: @unchecked Sendable {
     private var signals: [DispatchSourceSignal] = []
     /// The digital volume, in dB below full.
     private var volumeDecibels = 0.0
-    private static let volumeStepDecibels = 3.0
-    private static let seekStepSeconds = 10.0
 
     init(engine: PlaybackEngine, output: DeviceOutput, files: [QueuedFile]) {
         self.engine = engine
@@ -149,7 +152,7 @@ private final class Player: @unchecked Sendable {
         case .next: await engine.next()
         case .previous: await engine.previous()
         case .forward, .back:
-            let step = key == .forward ? Self.seekStepSeconds : -Self.seekStepSeconds
+            let step = key == .forward ? seekStepSeconds : -seekStepSeconds
             if let position = await engine.position() {
                 await engine.seek(toSeconds: position + step)
             }
@@ -159,7 +162,7 @@ private final class Player: @unchecked Sendable {
             await engine.setRepeat(modes[(modes.firstIndex(of: now)! + 1) % modes.count])
         case .shuffle: await engine.setShuffle(!(await engine.state.shuffle))
         case .volumeDown, .volumeUp:
-            let step = key == .volumeUp ? Self.volumeStepDecibels : -Self.volumeStepDecibels
+            let step = key == .volumeUp ? volumeStepDecibels : -volumeStepDecibels
             let decibels = min(0, volumeDecibels + step)
             do {
                 try await engine.setVolume(pow(10, decibels / 20))

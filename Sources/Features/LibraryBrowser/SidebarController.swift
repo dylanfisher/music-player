@@ -1,27 +1,34 @@
 import AppKit
+import Commands
+import KeyChord
 import Settings
 
 /// The source list: the library, playlists (none until there are any) and the watched folders,
 /// with buttons to add and remove folders.
 @MainActor
 final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate {
-    private let outline = NSOutlineView()
+    let outline = KeyOutlineView()
     private let library = SidebarNode(.library, title: "Music")
     private let groups: [SidebarNode]
     private let folderGroup = SidebarNode(.group, title: "Watched Folders")
     private let selectSource: (String?) -> Void
     private let addFolder: () -> Void
     private let removeFolder: (String) -> Void
+    private let keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
     private let removeButton = NSButton()
     private var applying = false
+    private var typeSelect: TypeSelect?
+    private var folders: [WatchedFolder] = []
 
     init(
         selectSource: @escaping (String?) -> Void, addFolder: @escaping () -> Void,
-        removeFolder: @escaping (String) -> Void
+        removeFolder: @escaping (String) -> Void,
+        keyCommand: @escaping ([KeyChord]) -> CommandDispatcher.KeyOutcome
     ) {
         self.selectSource = selectSource
         self.addFolder = addFolder
         self.removeFolder = removeFolder
+        self.keyCommand = keyCommand
         let libraryGroup = SidebarNode(.group, title: "Library")
         libraryGroup.children = [library]
         groups = [libraryGroup, SidebarNode(.group, title: "Playlists"), folderGroup]
@@ -41,6 +48,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.rowSizeStyle = .default
         outline.dataSource = self
         outline.delegate = self
+        outline.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
         let scroll = NSScrollView()
         scroll.documentView = outline
         scroll.hasVerticalScroller = true
@@ -85,6 +93,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 
     /// Lists `folders` and selects `source`, the library for nil.
     func show(folders: [WatchedFolder], source: String?) {
+        self.folders = folders
         applying = true
         defer { applying = false }
         folderGroup.children = folders.map { folder in
@@ -100,6 +109,21 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             ?? library
         outline.selectRowIndexes([outline.row(forItem: selected)], byExtendingSelection: false)
         updateRemoveButton()
+    }
+
+    /// Selects `source` without reporting it, for Back and Forward.
+    func show(source: String?) { show(folders: folders, source: source) }
+
+    /// The outline moves through its own rows, skipping the group headings; every other key
+    /// goes through the registry.
+    private func takeKey(_ event: NSEvent) -> Bool {
+        let own: [KeyChord.Key] = [.up, .down, .home, .end, .pageUp, .pageDown]
+        if let chord = KeyChord(event: event), own.contains(chord.key),
+            chord.modifiers.isSubset(of: .shift)
+        {
+            return false
+        }
+        return routeKey(event, typeSelect: &typeSelect, keyCommand: keyCommand) { _ in }
     }
 
     private var selectedNode: SidebarNode? {

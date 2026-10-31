@@ -1,4 +1,6 @@
+import Commands
 import Foundation
+import KeyChord
 import Settings
 
 /// What the browser's views report, wired up by `LibraryBrowser`.
@@ -10,4 +12,6 @@ struct BrowserActions {
     var sort: (TrackColumn, Bool) -> Void
     var layoutChanged: (TrackTableLayout) -> Void
     var failed: (String) -> Void
+    /// A key press for the registry: runs its command, if it has one.
+    var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
 }

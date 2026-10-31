@@ -1,5 +1,7 @@
 import AppKit
+import Commands
 import DisplayText
+import KeyChord
 import Log
 import Playback
 
@@ -9,9 +11,13 @@ import Playback
 @MainActor
 public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     public let model: QueueModel
+    /// Runs the command a key press in the queue is bound to.
+    public var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
     private var engine: PlaybackEngine?
     private var updates: Task<Void, Never>?
     private let table = QueueTable()
+    private var cursor: Int?
+    private var anchor: Int?
     private let summary = NSTextField(labelWithString: "")
     private static let rowType = NSPasteboard.PasteboardType("\(bundleIdentifier).queue-rows")
 
@@ -69,6 +75,7 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
         table.doubleAction = #selector(playClicked)
         table.registerForDraggedTypes([Self.rowType])
         table.deleteSelection = { [weak self] in self?.removeSelection() }
+        table.keyCommand = { [weak self] chords in self?.keyCommand(chords) ?? .unbound }
         let menu = NSMenu()
         menu.addItem(withTitle: "Play", action: #selector(playClicked), keyEquivalent: "")
         menu.addItem(
@@ -159,7 +166,32 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
         }
     }
 
-    private func removeSelection() { remove(table.selectedRowIndexes) }
+    /// The queue's list, for moving the keys to it.
+    public var list: NSView { table }
+
+    public var hasSelection: Bool { !table.selectedRowIndexes.isEmpty }
+
+    public func removeSelection() { remove(table.selectedRowIndexes) }
+
+    /// Moves the selection, as the browser's lists do.
+    public func move(_ move: RowMove, extending: Bool) {
+        let rows = table.selectedRowIndexes
+        let next = ListSelection(rows: rows, cursor: cursor ?? rows.last, anchor: anchor).moved(
+            move, extending: extending, rowCount: table.numberOfRows,
+            pageRows: Int(table.visibleRect.height / max(1, table.rowHeight)))
+        table.selectRowIndexes(next.rows, byExtendingSelection: false)
+        cursor = next.cursor
+        anchor = next.anchor
+        if let cursor { table.scrollRowToVisible(cursor) }
+    }
+
+    public func selectAll() { table.selectAll(nil) }
+
+    /// Plays the first selected track.
+    public func playSelection() {
+        guard let engine, let row = table.selectedRowIndexes.first else { return }
+        Task { await engine.play(at: row) }
+    }
 
     private func remove(_ rows: IndexSet) {
         guard let engine, !rows.isEmpty else { return }
@@ -168,15 +200,33 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
     }
 }
 
-/// Reports the Delete key, which a plain NSTableView ignores.
+/// Sends key presses to the registry first, as the browser's lists do, and takes plain Delete
+/// and forward delete, which a plain NSTableView ignores.
 private final class QueueTable: NSTableView {
     var deleteSelection: () -> Void = {}
+    var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
 
     override func keyDown(with event: NSEvent) {
+        let chords = KeyChord.candidates(for: event)
+        switch keyCommand(chords) {
+        case .ran: return
+        case .refused:
+            NSSound.beep()
+            return
+        case .unbound: break
+        }
         let delete = event.charactersIgnoringModifiers?.unicodeScalars.first.map {
             Int($0.value) == NSDeleteCharacter || Int($0.value) == NSDeleteFunctionKey
         }
-        if delete == true { deleteSelection() } else { super.keyDown(with: event) }
+        if delete == true {
+            deleteSelection()
+        } else if let chord = chords.first,
+            !chord.modifiers.isDisjoint(with: [.command, .control, .option])
+        {
+            NSSound.beep()
+        } else {
+            super.keyDown(with: event)
+        }
     }
 }
 

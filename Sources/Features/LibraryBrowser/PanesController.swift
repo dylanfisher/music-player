@@ -1,18 +1,26 @@
 import AppKit
+import Commands
+import KeyChord
 import Library
 
 /// The genre, artist and album panes, side by side, each with an All row first.
 @MainActor
 final class PanesController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     private let model: BrowserModel
-    private var tables: [BrowserModel.Pane: NSTableView] = [:]
+    private(set) var tables: [BrowserModel.Pane: KeyTableView] = [:]
     private let select: (BrowserModel.Pane, Int64?) -> Void
+    private let keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
     /// Set while selections are set from the model, so they don't count as clicks.
     private var applying = false
+    private var typeSelect: TypeSelect? = TypeSelect()
 
-    init(model: BrowserModel, select: @escaping (BrowserModel.Pane, Int64?) -> Void) {
+    init(
+        model: BrowserModel, select: @escaping (BrowserModel.Pane, Int64?) -> Void,
+        keyCommand: @escaping ([KeyChord]) -> CommandDispatcher.KeyOutcome
+    ) {
         self.model = model
         self.select = select
+        self.keyCommand = keyCommand
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -25,7 +33,8 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
         row.distribution = .fillEqually
         row.spacing = 1
         for pane in BrowserModel.Pane.allCases {
-            let table = NSTableView()
+            let table = KeyTableView()
+            table.takeKey = { [weak self] event in self?.takeKey(event, in: pane) ?? false }
             let column = NSTableColumn(identifier: entryIdentifier)
             column.title = pane.title
             column.resizingMask = .autoresizingMask
@@ -46,6 +55,7 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
     }
 
     func reload() {
+        typeSelect?.reset()
         applying = true
         defer { applying = false }
         for pane in BrowserModel.Pane.allCases {
@@ -58,6 +68,37 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
             table.selectRowIndexes([row], byExtendingSelection: false)
             table.scrollRowToVisible(row)
         }
+    }
+
+    private func takeKey(_ event: NSEvent, in pane: BrowserModel.Pane) -> Bool {
+        routeKey(event, typeSelect: &typeSelect, keyCommand: keyCommand) { [weak self] query in
+            guard let self else { return }
+            // Row 0 is All.
+            guard
+                let index = TypeSelect.firstIndex(
+                    startingWith: query, in: self.entries(pane).lazy.map(\.name))
+            else {
+                NSSound.beep()
+                return
+            }
+            self.selectRow(index + 1, in: pane)
+        }
+    }
+
+    /// Moves a pane's selection. Panes select one row, so an extending move is a plain one.
+    func move(_ move: RowMove, in pane: BrowserModel.Pane) {
+        guard let table = tables[pane] else { return }
+        let row = table.selectedRow >= 0 ? table.selectedRow : nil
+        let next = ListSelection(rows: row.map { [$0] } ?? [], cursor: row, anchor: row).moved(
+            move, extending: false, rowCount: table.numberOfRows,
+            pageRows: Int(table.visibleRect.height / max(1, table.rowHeight)))
+        if let cursor = next.cursor { selectRow(cursor, in: pane) }
+    }
+
+    private func selectRow(_ row: Int, in pane: BrowserModel.Pane) {
+        guard let table = tables[pane] else { return }
+        table.selectRowIndexes([row], byExtendingSelection: false)
+        table.scrollRowToVisible(row)
     }
 
     private func pane(of table: NSTableView) -> BrowserModel.Pane? {
@@ -121,6 +162,7 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
         guard !applying, let table = notification.object as? NSTableView,
             let pane = pane(of: table)
         else { return }
+        typeSelect?.reset()
         let row = table.selectedRow
         let entries = self.entries(pane)
         // No selection, or the All row, means All.

@@ -1,4 +1,5 @@
 import AppKit
+import Commands
 import Library
 import Log
 import Settings
@@ -11,7 +12,7 @@ private let logger = moduleLogger()
 final class TrackTableController: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
     NSMenuDelegate
 {
-    let table = NSTableView()
+    let table = KeyTableView()
     private let model: BrowserModel
     private let cache: RowCache
     private let actions: BrowserActions
@@ -22,6 +23,11 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
     private var reportedFetchFailure = false
     /// The first time rows are drawn, for the launch measurement.
     var firstRowsDrawn: (() -> Void)?
+    /// The row the keys move from, and the one an extending move keeps.
+    private var cursor: Int?
+    private var anchor: Int?
+    private var movingByKey = false
+    private var typeSelect: TypeSelect? = TypeSelect()
 
     init(model: BrowserModel, cache: RowCache, layout: TrackTableLayout, actions: BrowserActions) {
         self.model = model
@@ -57,6 +63,7 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         table.delegate = self
         table.target = self
         table.doubleAction = #selector(playClicked)
+        table.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
         let shown = layout.columns.map(\.column)
         let order = shown + TrackColumn.allCases.filter { !shown.contains($0) }
         for column in order {
@@ -99,9 +106,10 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
             change.reason == .libraryChanged ? scrollAnchor(in: change.previousIDs) : nil
         cache.setIDs(model.trackIDs)
         showSort()
+        typeSelect?.reset()
         table.reloadData()
         let rows = model.rows(holding: selection)
-        table.selectRowIndexes(rows, byExtendingSelection: false)
+        select(ListSelection(rows: rows, cursor: rows.first, anchor: rows.first))
         if let anchor {
             restore(anchor)
         } else if let first = rows.first {
@@ -298,13 +306,103 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         actions.playNext(rows)
     }
 
-    override func keyDown(with event: NSEvent) {
-        // Return plays the selection, as in Finder's open.
-        if event.keyCode == 36, let first = table.selectedRowIndexes.first {
-            actions.play(table.selectedRowIndexes, first)
-        } else {
-            super.keyDown(with: event)
+    /// Plays the selected rows from the first, or every row when none is selected.
+    func playSelected() {
+        guard model.trackIDs.count > 0 else { return }
+        actions.play(table.selectedRowIndexes, table.selectedRowIndexes.first ?? 0)
+    }
+
+    func playSelectedNext() {
+        guard !table.selectedRowIndexes.isEmpty else { return }
+        actions.playNext(table.selectedRowIndexes)
+    }
+
+    // MARK: Keys
+
+    private func takeKey(_ event: NSEvent) -> Bool {
+        routeKey(event, typeSelect: &typeSelect, keyCommand: actions.keyCommand) {
+            [weak self] query in
+            self?.typeToSelect(query)
         }
+    }
+
+    func move(_ move: RowMove, extending: Bool) {
+        let current = ListSelection(
+            rows: table.selectedRowIndexes, cursor: cursor, anchor: anchor)
+        select(
+            current.moved(
+                move, extending: extending, rowCount: table.numberOfRows, pageRows: pageRows))
+        if let cursor { table.scrollRowToVisible(cursor) }
+    }
+
+    /// Selects the row at the middle of the visible rows, as Go to Item asks.
+    func selectCentered(_ row: Int) {
+        guard row >= 0, row < table.numberOfRows else { return }
+        select(ListSelection(rows: [row], cursor: row, anchor: row))
+        guard let clip else { return }
+        let visible = clip.bounds.height - clip.contentInsets.top
+        let y = table.rect(ofRow: row).midY - visible / 2 - clip.contentInsets.top
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: max(-clip.contentInsets.top, y)))
+        table.enclosingScrollView?.reflectScrolledClipView(clip)
+    }
+
+    private func select(_ selection: ListSelection) {
+        movingByKey = true
+        table.selectRowIndexes(selection.rows, byExtendingSelection: false)
+        movingByKey = false
+        cursor = selection.cursor
+        anchor = selection.anchor
+    }
+
+    /// Whole rows on screen below the header.
+    private var pageRows: Int {
+        guard let clip else { return 1 }
+        let height = clip.bounds.height - clip.contentInsets.top
+        return max(1, Int(height / (table.rowHeight + table.intercellSpacing.height)))
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard !movingByKey else { return }
+        // A click: the clicked row is the cursor, and a Shift-click keeps the anchor.
+        let row = table.selectedRow >= 0 ? table.selectedRow : nil
+        let shift = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
+        cursor = row
+        if !shift || anchor == nil { anchor = row }
+        typeSelect?.reset()
+    }
+
+    /// Selects the first row whose sort column starts with `query`: the artist, album or genre
+    /// when the table sorts by one, else the title.
+    private func typeToSelect(_ query: String) {
+        let column = model.sortColumn
+        Task {
+            let names: [TrackName]?
+            do {
+                names = try await model.trackNames()
+            } catch {
+                actions.failed("couldn't read the tracks' names: \(error)")
+                return
+            }
+            guard let names, query == typeSelect?.query else { return }
+            let texts = names.lazy.map { name in
+                switch column {
+                case .artist: name.artist ?? ""
+                case .album: name.album ?? ""
+                case .genre: name.genre ?? ""
+                default: name.title
+                }
+            }
+            guard let row = TypeSelect.firstIndex(startingWith: query, in: texts) else {
+                NSSound.beep()
+                return
+            }
+            move(to: row)
+        }
+    }
+
+    private func move(to row: Int) {
+        select(ListSelection(rows: [row], cursor: row, anchor: row))
+        table.scrollRowToVisible(row)
     }
 }
 

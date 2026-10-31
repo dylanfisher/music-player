@@ -1,6 +1,8 @@
 import AppKit
 import Artwork
+import Commands
 import HALOutput
+import KeyChord
 import Library
 import LibraryBrowser
 import Log
@@ -25,15 +27,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// How long after the first rows the snapshot waits, for the scan and art to show.
     static let snapshotDelaySeconds = 4.0
     private var settings: SettingsStore<AppSettings>?
-    private var saver: LayoutSaver?
-    private var window: MainWindow?
-    private var browser: LibraryBrowser?
+    private(set) var saver: LayoutSaver?
+    private(set) var window: MainWindow?
+    private(set) var browser: LibraryBrowser?
     private var nowPlaying: NowPlayingBar?
-    private var queue: QueuePanel?
+    private(set) var queue: QueuePanel?
     private var watcher: LibraryWatcher?
     private var output: DeviceOutput?
-    private var engine: PlaybackEngine?
+    private(set) var engine: PlaybackEngine?
     private var activity = PlaybackActivity.stopped
+    /// The engine's latest state, for the menus' check marks.
+    private(set) var playback = PlaybackState()
+    /// Whether the output has a volume, from the setting read at launch.
+    private(set) var digitalVolume = false
+    /// The digital volume, in dB below full.
+    var volumeDecibels = 0.0
+    private var dispatcher: CommandDispatcher?
+    private var menu: MainMenu?
     private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
@@ -45,12 +55,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.mainMenu = mainMenu()
         do {
+            let dispatcher = CommandDispatcher(
+                bindings: try KeyBindings(
+                    AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: appName)))
+            let menu = MainMenu(dispatcher: dispatcher, appName: appName, settings: AppSettings())
+            dispatcher.bindingsChanged = { [weak menu] in menu?.showChords() }
+            NSApp.mainMenu = menu.bar
+            NSApp.windowsMenu = menu.windowsMenu
+            NSApp.helpMenu = menu.helpMenu
+            self.dispatcher = dispatcher
+            self.menu = menu
             try openWindow()
+            registerCommands(dispatcher)
         } catch {
             fail("The library couldn't open", error)
         }
+    }
+
+    /// The file of the track the engine has loaded.
+    var currentTrackPath: String? {
+        playback.currentIndex.map { playback.queue[$0].path }
     }
 
     private func openWindow() throws {
@@ -103,6 +128,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         browser.addFolder = { [weak self] in self?.addFolder() }
         browser.removeFolder = { [weak self] path in self?.confirmRemoving(path) }
         browser.firstRowsDrawn = { [weak self] in self?.interactive() }
+        let keyCommand = { [weak self] (chords: [KeyChord]) in
+            self?.dispatcher?.key(chords) ?? .unbound
+        }
+        browser.keyCommand = keyCommand
+        queue.keyCommand = keyCommand
+        if !layout.statusBarVisible { browser.toggleStatusBar() }
 
         window.show()
         NSApp.activate(ignoringOtherApps: true)
@@ -159,12 +190,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let output = try DeviceOutput(
                 provider: provider, digitalVolume: settings[\.digitalVolume])
             let engine = PlaybackEngine(output: output)
+            digitalVolume = settings[\.digitalVolume]
             self.output = output
             self.engine = engine
             nowPlaying?.connect(engine)
             queue?.connect(engine)
             Task { [weak self] in
                 for await update in await engine.updates() {
+                    self?.playback = update.state
                     self?.playbackChanged(update.state)
                 }
             }
@@ -207,7 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.watcher = watcher
     }
 
-    private func addFolder() {
+    func addFolder() {
         guard let settings, let window = window?.window else { return }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -264,7 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let browser { Task { await browser.setFolders(folders) } }
     }
 
-    // MARK: Menus and errors
+    // MARK: Errors
 
     private func fail(_ message: String, _ error: any Error) {
         logger.error("\(message): \(error)")
@@ -274,50 +307,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.runModal()
         if window == nil { NSApp.terminate(nil) }
     }
-
-    private func mainMenu() -> NSMenu {
-        let name = appName
-        let app = NSMenu()
-        app.addItem(
-            withTitle: "Hide \(name)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"
-        )
-        app.addItem(.separator())
-        app.addItem(
-            withTitle: "Quit \(name)", action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q")
-        let edit = NSMenu(title: "Edit")
-        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
-        edit.addItem(.separator())
-        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(
-            withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        edit.addItem(.separator())
-        let find = edit.addItem(
-            withTitle: "Find", action: #selector(focusSearch), keyEquivalent: "f")
-        find.target = self
-        let view = NSMenu(title: "View")
-        let queueItem = view.addItem(
-            withTitle: "Show or Hide Queue", action: #selector(toggleQueue), keyEquivalent: "u")
-        queueItem.keyEquivalentModifierMask = [.command, .option]
-        queueItem.target = self
-        let windowMenu = NSMenu(title: "Window")
-        windowMenu.addItem(
-            withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)),
-            keyEquivalent: "m")
-        NSApp.windowsMenu = windowMenu
-        let bar = NSMenu()
-        for submenu in [app, edit, view, windowMenu] {
-            bar.addItem(withTitle: submenu.title, action: nil, keyEquivalent: "").submenu = submenu
-        }
-        return bar
-    }
-
-    @objc private func focusSearch() {
-        guard let field = browser?.searchField else { return }
-        window?.window.makeFirstResponder(field)
-    }
-
-    @objc private func toggleQueue() { window?.toggleQueue() }
 }

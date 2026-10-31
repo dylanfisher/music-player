@@ -19,6 +19,12 @@ public struct AppState: SettingsSchema {
         range: browserHeightRange,
         "Height of the genre, artist and album panes above the track table, in points. 0 hides"
             + " them.")
+    public let sidebarVisible = Setting(
+        "window.sidebarVisible", title: "Show Sidebar", default: true,
+        "Show the sidebar beside the browser.")
+    public let statusBarVisible = Setting(
+        "window.statusBarVisible", title: "Show Status Bar", default: true,
+        "Show the status line under the track table.")
     public let queueVisible = Setting(
         "window.queueVisible", title: "Show Queue", default: false,
         "Show the queue beside the track table.")

@@ -12,7 +12,7 @@ import Testing
     let index = try LibraryIndex(at: databaseURL)
     let actions = BrowserActions(
         play: { _, _ in }, playNext: { _ in }, sort: { _, _ in }, layoutChanged: { _ in },
-        failed: { Issue.record("\($0)") })
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },
         layout: AppState().trackTable.defaultValue, actions: actions)
@@ -34,7 +34,7 @@ import Testing
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
     let actions = BrowserActions(
         play: { _, _ in }, playNext: { _ in }, sort: { _, _ in }, layoutChanged: { _ in },
-        failed: { _ in })
+        failed: { _ in }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { _ in [] }, layout: AppState().trackTable.defaultValue,
         actions: actions)
@@ -42,4 +42,37 @@ import Testing
     controller.table.tableColumns[0].width = 9000
     controller.table.tableColumns[1].width = 1
     #expect(controller.layout.problem() == nil)
+}
+
+@MainActor @Test func keysMoveTheSelectionFromTheCursor() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
+    let index = try LibraryIndex(at: databaseURL)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, sort: { _, _ in }, layoutChanged: { _ in },
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { try index.rows(ids: $0) },
+        layout: AppState().trackTable.defaultValue, actions: actions)
+    _ = controller.view
+    model.changed = { controller.reload($0) }
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+
+    controller.move(.down, extending: false)
+    #expect(controller.table.selectedRowIndexes == [0])
+    controller.move(.down, extending: true)
+    controller.move(.down, extending: true)
+    #expect(controller.table.selectedRowIndexes == [0, 1, 2])
+    controller.move(.last, extending: false)
+    #expect(controller.table.selectedRowIndexes == [model.trackIDs.count - 1])
+}
+
+@MainActor @Test func trackNamesFollowTheTablesOrder() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: false)
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    let names = try #require(try await model.trackNames())
+    #expect(names.map(\.id) == model.trackIDs)
 }

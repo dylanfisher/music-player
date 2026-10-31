@@ -21,6 +21,7 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
     private let queue: QueuePanel
     private let saver: LayoutSaver
     private var queueWidth: Int
+    private var sidebarWidth: Int
     private var restoring = true
 
     init(
@@ -31,6 +32,7 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
         self.queue = queue
         self.saver = saver
         queueWidth = settings.queueWidth
+        sidebarWidth = settings.sidebarWidth
         window = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
@@ -59,6 +61,7 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
         split.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 0)
         split.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 2)
         queue.view.isHidden = !settings.queueVisible
+        browser.sidebar.view.isHidden = !settings.sidebarVisible
 
         let line = NSBox()
         line.boxType = .separator
@@ -87,6 +90,21 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
 
     func show() {
         window.makeKeyAndOrderFront(nil)
+    }
+
+    var isSidebarVisible: Bool { !browser.sidebar.view.isHidden }
+    var isQueueVisible: Bool { !queue.view.isHidden }
+
+    func toggleSidebar() {
+        browser.sidebar.view.isHidden.toggle()
+        split.adjustSubviews()
+        if isSidebarVisible { split.setPosition(CGFloat(sidebarWidth), ofDividerAt: 0) }
+        placeQueueDivider()
+        saver.set(\.sidebarVisible, isSidebarVisible)
+    }
+
+    func showSidebar() {
+        if !isSidebarVisible { toggleSidebar() }
     }
 
     func toggleQueue() {
@@ -119,7 +137,10 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
     func splitViewDidResizeSubviews(_ notification: Notification) {
         guard !restoring, window.isVisible else { return }
         let sidebar = Int(browser.sidebar.view.frame.width.rounded())
-        if sidebarRange.contains(sidebar) { saver.set(\.sidebarWidth, sidebar) }
+        if isSidebarVisible, sidebarRange.contains(sidebar), sidebar != sidebarWidth {
+            sidebarWidth = sidebar
+            saver.set(\.sidebarWidth, sidebar)
+        }
         if !queue.view.isHidden {
             let width = Int(queue.view.frame.width.rounded())
             if queueRange.contains(width), width != queueWidth {

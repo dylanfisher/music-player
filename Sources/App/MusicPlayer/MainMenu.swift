@@ -1,0 +1,144 @@
+import AppKit
+import Commands
+import KeyChord
+import Settings
+
+/// The menu bar, built from `AppMenus`. Each command's item shows the first of its chords that
+/// can be a key equivalent, and a hidden item beside it carries the second, so both work from
+/// the menu bar. Items run their commands through the dispatcher, which also decides whether
+/// they're on.
+@MainActor
+final class MainMenu: NSObject, NSMenuItemValidation {
+    let bar = NSMenu()
+    /// For `NSApp.windowsMenu` and `NSApp.helpMenu`, which the app sets.
+    private(set) var windowsMenu: NSMenu?
+    private(set) var helpMenu: NSMenu?
+    private let dispatcher: CommandDispatcher
+    /// Each command's shown item and its hidden alternate, and whether its menu shows chords.
+    private var items: [(id: CommandID, shown: NSMenuItem, hidden: NSMenuItem, chords: Bool)] =
+        []
+
+    init(dispatcher: CommandDispatcher, appName: String, settings: AppSettings) {
+        self.dispatcher = dispatcher
+        super.init()
+        let generated = SettingCommand.all(settings)
+        let descriptors = Dictionary(uniqueKeysWithValues: settings.settings.map { ($0.key, $0) })
+        for section in AppMenus.sections(appName: appName) {
+            let menu = NSMenu(title: section.title)
+            add(section.entries, to: menu, chords: true, generated, descriptors)
+            bar.addItem(withTitle: section.title, action: nil, keyEquivalent: "").submenu = menu
+            switch section.role {
+            case .window: windowsMenu = menu
+            case .help: helpMenu = menu
+            case .app, .plain: break
+            }
+        }
+        showChords()
+    }
+
+    private func add(
+        _ entries: [MenuEntry], to menu: NSMenu, chords: Bool, _ generated: [SettingCommand],
+        _ descriptors: [String: SettingDescriptor]
+    ) {
+        for entry in entries {
+            switch entry {
+            case .command(let id):
+                addCommand(id, to: menu, chords: chords)
+            case .standard(let item):
+                let shown = NSMenuItem(
+                    title: item.title, action: NSSelectorFromString(item.action),
+                    keyEquivalent: "")
+                item.chord.map { setChord($0, of: shown) }
+                menu.addItem(shown)
+                if let id = item.runs {
+                    // The alternate of the command an Edit item runs sends the item's action.
+                    let hidden = hiddenItem(action: shown.action, id: id)
+                    menu.addItem(hidden)
+                    items.append((id, shown, hidden, false))
+                }
+            case .submenu(let title, let entries, let showsChords):
+                let submenu = NSMenu(title: title)
+                add(entries, to: submenu, chords: showsChords, generated, descriptors)
+                menu.addItem(withTitle: title, action: nil, keyEquivalent: "").submenu = submenu
+            case .setting(let key):
+                let commands = generated.filter { $0.key == key }
+                guard let descriptor = descriptors[key], !commands.isEmpty else {
+                    preconditionFailure("the menus list \(key), which makes no commands")
+                }
+                if case .choice = descriptor.kind {
+                    let submenu = NSMenu(title: descriptor.title)
+                    for command in commands {
+                        addCommand(command.command.id, to: submenu, chords: chords)
+                    }
+                    menu.addItem(withTitle: descriptor.title, action: nil, keyEquivalent: "")
+                        .submenu = submenu
+                } else {
+                    for command in commands {
+                        addCommand(command.command.id, to: menu, chords: chords)
+                    }
+                }
+            case .separator:
+                menu.addItem(.separator())
+            }
+        }
+    }
+
+    private func addCommand(_ id: CommandID, to menu: NSMenu, chords: Bool) {
+        guard let command = dispatcher.bindings.defaults.command(id) else {
+            preconditionFailure("the menus list \(id), which isn't a registered command")
+        }
+        let shown = NSMenuItem(
+            title: command.title, action: #selector(runCommand(_:)), keyEquivalent: "")
+        shown.target = self
+        shown.representedObject = id
+        let hidden = hiddenItem(action: #selector(runCommand(_:)), id: id)
+        hidden.target = self
+        menu.addItem(shown)
+        menu.addItem(hidden)
+        items.append((id, shown, hidden, chords))
+    }
+
+    private func hiddenItem(action: Selector?, id: CommandID) -> NSMenuItem {
+        let item = NSMenuItem(title: "", action: action, keyEquivalent: "")
+        item.representedObject = id
+        item.isHidden = true
+        item.allowsKeyEquivalentWhenHidden = true
+        return item
+    }
+
+    /// Sets every command item's key equivalent from the dispatcher's bindings, after they
+    /// change. An Edit item's own chord is fixed, so only its hidden alternate changes.
+    func showChords() {
+        let bindings = dispatcher.bindings
+        for (id, shown, hidden, showsChords) in items {
+            let usable = (bindings.registry.command(id)?.chords ?? []).filter(\.canBeKeyEquivalent)
+            if shown.action == #selector(runCommand(_:)) {
+                setChord(showsChords ? usable.first : nil, of: shown)
+                setChord(usable.dropFirst().first, of: hidden)
+            } else {
+                setChord(usable.first { $0 != bindings.rules.fixed[id] }, of: hidden)
+            }
+        }
+    }
+
+    private func setChord(_ chord: KeyChord?, of item: NSMenuItem) {
+        item.keyEquivalent = chord?.keyEquivalent ?? ""
+        item.keyEquivalentModifierMask = chord?.keyEquivalentModifierMask ?? []
+    }
+
+    @objc func runCommand(_ item: NSMenuItem) {
+        guard let id = item.representedObject as? CommandID else { return }
+        if !dispatcher.run(id) { NSSound.beep() }
+    }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        guard let id = item.representedObject as? CommandID else { return true }
+        item.state = dispatcher.isOn(id) == true ? .on : .off
+        return dispatcher.isEnabled(id)
+    }
+
+    /// The commands the visible items run, for the test that every command has one.
+    var listedCommands: [CommandID] {
+        items.filter { !$0.shown.isHidden }.map(\.id)
+    }
+}

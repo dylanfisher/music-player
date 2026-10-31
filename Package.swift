@@ -82,13 +82,13 @@ let package = Package(
         ),
         .target(
             name: "Commands",
-            dependencies: ["KeyChord", "Settings"],
+            dependencies: ["KeyChord", "Log", "Settings"],
             path: "Sources/Core/Commands",
             swiftSettings: strictSwift
         ),
         .target(
             name: "LibraryBrowser",
-            dependencies: ["DisplayText", "Library", "Log", "Settings"],
+            dependencies: ["Commands", "DisplayText", "KeyChord", "Library", "Log", "Settings"],
             path: "Sources/Features/LibraryBrowser",
             swiftSettings: strictSwift
         ),
@@ -100,15 +100,16 @@ let package = Package(
         ),
         .target(
             name: "QueueView",
-            dependencies: ["DisplayText", "Library", "Log", "Playback"],
+            dependencies: ["Commands", "DisplayText", "KeyChord", "Library", "Log", "Playback"],
             path: "Sources/Features/QueueView",
             swiftSettings: strictSwift
         ),
         .executableTarget(
             name: "MusicPlayer",
             dependencies: [
-                "Artwork", "DisplayText", "HALOutput", "Library", "LibraryBrowser", "Log",
-                "Metadata", "NowPlaying", "Playback", "QueueView", "SQLite", "Settings",
+                "Artwork", "Commands", "DisplayText", "HALOutput", "KeyChord", "Library",
+                "LibraryBrowser", "Log", "Metadata", "NowPlaying", "Playback", "QueueView",
+                "SQLite", "Settings",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift

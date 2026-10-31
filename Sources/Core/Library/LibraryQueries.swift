@@ -12,10 +12,34 @@ extension LibraryIndex {
         _ filter: TrackFilter = TrackFilter(), sortedBy column: TrackColumn,
         ascending: Bool = true
     ) throws -> [Int64] {
+        try orderedTracks("t.file_id", filter, column, ascending) { try $0.int64(0) }
+    }
+
+    /// The names of the tracks `trackIDs` gives, in the same order, for Go to Item and
+    /// type-to-select.
+    public func trackNames(
+        _ filter: TrackFilter = TrackFilter(), sortedBy column: TrackColumn,
+        ascending: Bool = true
+    ) throws -> [TrackName] {
+        try orderedTracks(
+            "t.file_id, f.path, t.title, ar.name, al.title, g.name", filter, column, ascending
+        ) { row in
+            let path = try row.text(1)
+            return TrackName(
+                id: try row.int64(0), title: row.optionalText(2) ?? displayName(path),
+                artist: row.optionalText(3), album: row.optionalText(4),
+                genre: row.optionalText(5))
+        }
+    }
+
+    private func orderedTracks<T>(
+        _ columns: String, _ filter: TrackFilter, _ column: TrackColumn, _ ascending: Bool,
+        _ read: (Row) throws -> T
+    ) throws -> [T] {
         let (conditions, values) = trackConditions(
             filter, panes: [.folder, .genre, .artist, .album, .search])
         let sql = """
-            SELECT t.file_id FROM tracks t
+            SELECT \(columns) FROM tracks t
             JOIN files f ON f.id = t.file_id
             LEFT JOIN artists ar ON ar.id = t.artist_id
             LEFT JOIN artists aa ON aa.id = t.album_artist_id
@@ -25,7 +49,7 @@ extension LibraryIndex {
             ORDER BY \(column.expression) \(ascending ? "ASC" : "DESC"), ar.sort_name,
                 al.sort_title, t.disc_number, t.track_number, t.sort_title, t.file_id
             """
-        return try statement(sql).map(binding: values) { try $0.int64(0) }
+        return try statement(sql).map(binding: values, row: read)
     }
 
     /// The genres of the tracks in `filter`'s folder.

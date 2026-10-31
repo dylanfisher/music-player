@@ -16,6 +16,12 @@ public actor LibraryReader {
         try index.trackIDs(filter, sortedBy: column, ascending: ascending)
     }
 
+    public func trackNames(_ filter: TrackFilter, sortedBy column: TrackColumn, ascending: Bool)
+        throws -> [TrackName]
+    {
+        try index.trackNames(filter, sortedBy: column, ascending: ascending)
+    }
+
     public func genres(_ filter: TrackFilter) throws -> [BrowserEntry] {
         try index.genres(filter)
     }

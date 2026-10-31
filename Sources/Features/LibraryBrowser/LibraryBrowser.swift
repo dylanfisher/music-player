@@ -1,4 +1,6 @@
 import AppKit
+import Commands
+import KeyChord
 import Library
 import Log
 import Settings
@@ -9,7 +11,7 @@ private let logger = moduleLogger()
 /// table, the search field, and the status line. The app places the views and handles what they
 /// report; the logic is in `BrowserModel`.
 @MainActor
-public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
+public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldDelegate {
     /// The longest the window waits between refreshes while a scan stores rows.
     public static let refreshIntervalSeconds = 2.0
 
@@ -17,7 +19,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
     public let sidebar: NSViewController
     /// The panes over the track table, with the status line under them.
     public let content: NSViewController
-    public let searchField = NSSearchField()
+    public let searchField: NSSearchField = SearchField()
     /// Takes the watcher's events on any thread and hands them to the browser in the order they
     /// were sent, so a late progress report never lands after its scan's outcome.
     public let watcherEvents: @Sendable (WatcherEvent) -> Void
@@ -33,6 +35,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
     public var libraryRefreshed: () -> Void = {}
     public var addFolder: () -> Void = {}
     public var removeFolder: (String) -> Void = { _ in }
+    /// Runs the command a key press in one of the browser's lists is bound to.
+    public var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
     /// Called once, when the table first draws rows, or once loading finds none to draw.
     public var firstRowsDrawn: (() -> Void)? {
         get { table.firstRowsDrawn }
@@ -40,10 +44,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
     }
 
     private let reader: LibraryReader
+    private let index: LibraryIndex
     private let table: TrackTableController
     private let panes: PanesController
     private let sidebarController: SidebarController
     private let split = NSSplitView()
+    private let statusBar = NSStackView()
     private let statusLabel = NSTextField(labelWithString: "")
     private let problemsButton = NSButton()
     private(set) var status = LibraryStatus()
@@ -60,6 +66,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
         folders: [WatchedFolder]
     ) {
         self.reader = reader
+        self.index = index
         self.browserHeight = browserHeight
         self.folders = folders
         model = BrowserModel(
@@ -75,15 +82,17 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
                 Task { await model.setSort(column, ascending: ascending) }
             },
             layoutChanged: { layout in owner?.tableLayoutChanged(layout) },
-            failed: { message in owner?.show(failure: message) })
+            failed: { message in owner?.show(failure: message) },
+            keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         table = TrackTableController(model: model, cache: cache, layout: layout, actions: actions)
-        panes = PanesController(model: model) { pane, id in
-            Task { await model.select(pane, id: id) }
-        }
+        panes = PanesController(
+            model: model, select: { pane, id in Task { await model.select(pane, id: id) } },
+            keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         sidebarController = SidebarController(
             selectSource: { folder in Task { await model.setSource(folder) } },
             addFolder: { owner?.addFolder() },
-            removeFolder: { path in owner?.removeFolder(path) })
+            removeFolder: { path in owner?.removeFolder(path) },
+            keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         sidebar = sidebarController
         content = NSViewController()
         let (events, continuation) = AsyncStream.makeStream(of: WatcherEvent.self)
@@ -101,6 +110,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
         searchField.sendsSearchStringImmediately = true
         searchField.target = self
         searchField.action = #selector(searchChanged)
+        searchField.delegate = self
 
         model.changed = { [weak self] change in self?.apply(change) }
         model.failed = { [weak self] message in self?.show(failure: message) }
@@ -123,7 +133,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
         problemsButton.target = self
         problemsButton.action = #selector(showProblems)
         problemsButton.isHidden = true
-        let bar = NSStackView(views: [statusLabel, problemsButton])
+        let bar = statusBar
+        for view in [statusLabel, problemsButton] { bar.addArrangedSubview(view) }
         bar.edgeInsets = NSEdgeInsets(top: 3, left: 8, bottom: 3, right: 8)
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let stack = NSStackView(views: [split, bar])
@@ -275,6 +286,135 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
         }
     }
 
+    // MARK: Commands
+
+    /// The list that has the keys.
+    private enum List: Equatable {
+        case tracks
+        case pane(BrowserModel.Pane)
+    }
+
+    private var focusedList: List? {
+        let responder = table.table.window?.firstResponder
+        if responder === table.table { return .tracks }
+        return panes.tables.first { $0.value === responder }.map { .pane($0.key) }
+    }
+
+    /// The browser's lists in the order Tab moves through them: the sidebar, the panes, the
+    /// track table.
+    public var focusAreas: [NSView] {
+        [sidebarController.outline]
+            + BrowserModel.Pane.allCases.compactMap { panes.tables[$0] } + [table.table]
+    }
+
+    /// Moves the selection of the list with the keys; false when none of them has the keys.
+    public func moveSelection(_ move: RowMove, extending: Bool) -> Bool {
+        switch focusedList {
+        case .tracks: table.move(move, extending: extending)
+        case .pane(let pane): panes.move(move, in: pane)
+        case nil: return false
+        }
+        return true
+    }
+
+    /// Focuses the next pane to the right (or left), from the genre pane to the track table.
+    public func focusPane(forward: Bool) {
+        let order: [List] = BrowserModel.Pane.allCases.map { .pane($0) } + [.tracks]
+        let index = focusedList.flatMap { order.firstIndex(of: $0) } ?? (order.count - 1)
+        let next = order[(index + (forward ? 1 : order.count - 1)) % order.count]
+        switch next {
+        case .tracks: focusTracks()
+        case .pane(let pane): table.table.window?.makeFirstResponder(panes.tables[pane])
+        }
+    }
+
+    public func focusTracks() { table.table.window?.makeFirstResponder(table.table) }
+
+    public func focusSidebar() {
+        sidebarController.outline.window?.makeFirstResponder(sidebarController.outline)
+    }
+
+    /// Focuses the search field with its text selected.
+    public func focusSearch() {
+        searchField.window?.makeFirstResponder(searchField)
+        searchField.selectText(nil)
+    }
+
+    public var hasSelectedTracks: Bool { !table.table.selectedRowIndexes.isEmpty }
+
+    public func selectAllTracks() { table.table.selectAll(nil) }
+
+    public func playSelection() { table.playSelected() }
+
+    public func playSelectionNext() { table.playSelectedNext() }
+
+    /// The paths of the selected tracks, in table order.
+    public func selectedPaths() async throws -> [String] {
+        try await model.urls(ofRows: table.table.selectedRowIndexes).map(\.path)
+    }
+
+    public var sortColumn: TrackColumn { model.sortColumn }
+
+    public func sort(by column: TrackColumn) { Task { await model.sort(by: column) } }
+
+    public func reverseSort() { Task { await model.reverseSort() } }
+
+    public var canGoBack: Bool { model.history.canGoBack }
+    public var canGoForward: Bool { model.history.canGoForward }
+
+    public func back() { Task { if await model.back() { showSource() } } }
+
+    public func forward() { Task { if await model.forward() { showSource() } } }
+
+    private func showSource() { sidebarController.show(source: model.filter.folder) }
+
+    public var isStatusBarVisible: Bool { !statusBar.isHidden }
+
+    public func toggleStatusBar() { statusBar.isHidden.toggle() }
+
+    /// Selects the track at `path` in the table, centered, showing the whole library first if
+    /// the source, a pane or the search hides it.
+    public func reveal(path: String) async {
+        let id: Int64
+        do {
+            guard let track = try index.track(path: path) else { return }
+            id = track.id
+        } catch {
+            report("couldn't find \(path) in the library: \(error)")
+            return
+        }
+        guard let row = await model.reveal(id) else { return }
+        if model.filter.search.isEmpty { searchField.stringValue = "" }
+        showSource()
+        showRow(row)
+    }
+
+    /// Selects `row` alone, centered, and gives the table the keys.
+    public func showRow(_ row: Int) {
+        table.selectCentered(row)
+        focusTracks()
+    }
+
+    /// The shown tracks' names in table order; nil when the list changed while they were read.
+    public func trackNames() async throws -> [TrackName]? { try await model.trackNames() }
+
+    /// Esc clears the search and gives the keys back to the table; ↑ and ↓ move the table's
+    /// selection while the field keeps the keys.
+    public func control(
+        _ control: NSControl, textView: NSTextView, doCommandBy selector: Selector
+    ) -> Bool {
+        switch selector {
+        case #selector(NSResponder.cancelOperation(_:)):
+            searchField.stringValue = ""
+            searchChanged()
+            focusTracks()
+        case #selector(NSResponder.moveUp(_:)): table.move(.up, extending: false)
+        case #selector(NSResponder.moveDown(_:)): table.move(.down, extending: false)
+        default: return false
+        }
+        return true
+    }
+
     // MARK: Split view
 
     public func splitViewDidResizeSubviews(_ notification: Notification) {
@@ -291,6 +431,21 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
     ) -> CGFloat {
         // The table keeps room for a few rows.
         min(proposedMaximumPosition, splitView.bounds.height - 120)
+    }
+}
+
+/// The search field takes ⌘← and ⌘→ (with or without ⇧) while it's edited, before the menu bar,
+/// whose Next and Previous Track have them, so the caret still moves to the ends of the text.
+final class SearchField: NSSearchField {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if let editor = currentEditor(), window?.firstResponder === editor,
+            let chord = KeyChord(event: event), [.left, .right].contains(chord.key),
+            chord.modifiers == .command || chord.modifiers == [.command, .shift]
+        {
+            editor.keyDown(with: event)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }
 

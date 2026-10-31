@@ -42,6 +42,11 @@ public final class BrowserModel {
     /// not yet applied restores.
     private var pendingPanes: Pane?
     private var pendingSaved: BrowserState?
+    /// Counts applied changes, so names read for one list aren't used for the next.
+    private var applied = 0
+    private var names: (applied: Int, list: [TrackName])?
+    /// The sources the sidebar showed, for Back and Forward.
+    public private(set) var history = SourceHistory()
 
     public init(reader: LibraryReader, sortColumn: TrackColumn, ascending: Bool) {
         self.reader = reader
@@ -59,6 +64,7 @@ public final class BrowserModel {
 
     /// Loads the panes and tracks, selecting what `saved` names where it still exists.
     public func load(_ saved: BrowserState) async {
+        history = SourceHistory(start: saved.source)
         pending = TrackFilter(folder: saved.source, search: pending.search)
         await reload(panesFrom: .genre, saved: saved, reason: .loaded)
     }
@@ -74,10 +80,59 @@ public final class BrowserModel {
         await reload(panesFrom: Pane(rawValue: pane.rawValue + 1), reason: .user)
     }
 
-    /// Shows one watched folder, or the whole library for nil.
+    /// Shows one watched folder, or the whole library for nil, as a step Back can undo.
     public func setSource(_ folder: String?) async {
+        history.visit(folder)
+        await showSource(folder)
+    }
+
+    /// Shows the source before the current one; false when there is none.
+    public func back() async -> Bool {
+        guard let source = history.back() else { return false }
+        await showSource(source)
+        return true
+    }
+
+    public func forward() async -> Bool {
+        guard let source = history.forward() else { return false }
+        await showSource(source)
+        return true
+    }
+
+    private func showSource(_ folder: String?) async {
         pending.folder = folder
         await reload(panesFrom: .genre, reason: .user)
+    }
+
+    /// Sorts by `column`, ascending, unless the table already sorts by it.
+    public func sort(by column: TrackColumn) async {
+        guard column != pendingSort.column else { return }
+        await setSort(column, ascending: true)
+    }
+
+    public func reverseSort() async {
+        await setSort(pendingSort.column, ascending: !pendingSort.ascending)
+    }
+
+    /// The row of track `id`, clearing the source, panes and search first when they hide it.
+    /// Nil when the library has no such track.
+    public func reveal(_ id: Int64) async -> Int? {
+        if let row = trackIDs.firstIndex(of: id) { return row }
+        history.visit(nil)
+        pending = TrackFilter()
+        await reload(panesFrom: .genre, reason: .user)
+        return trackIDs.firstIndex(of: id)
+    }
+
+    /// The shown tracks' names in table order, read once per change of the list. Nil when the
+    /// list changed while they were read.
+    public func trackNames() async throws -> [TrackName]? {
+        if let names, names.applied == applied { return names.list }
+        let mine = applied
+        let list = try await reader.trackNames(filter, sortedBy: sortColumn, ascending: ascending)
+        guard mine == applied else { return nil }
+        names = (mine, list)
+        return list
     }
 
     public func setSearch(_ text: String) async {
@@ -172,6 +227,7 @@ public final class BrowserModel {
             self.artists = artists
             self.albums = albums
             trackIDs = ids
+            applied += 1
             changed(BrowserChange(reason: reason, panes: first != nil, previousIDs: previousIDs))
         } catch {
             guard mine == generation else { return }
@@ -203,6 +259,41 @@ public final class BrowserModel {
 
     private func name(_ id: Int64?, in entries: [BrowserEntry]) -> String? {
         id.flatMap { id in entries.first { $0.id == id }?.name }
+    }
+}
+
+/// The sources shown, oldest first, and where Back and Forward are in them. Nil is the whole
+/// library.
+public struct SourceHistory: Equatable, Sendable {
+    private(set) var visited: [String?]
+    private(set) var position = 0
+
+    public init(start: String? = nil) {
+        visited = [start]
+    }
+
+    public var canGoBack: Bool { position > 0 }
+    public var canGoForward: Bool { position < visited.count - 1 }
+
+    /// A new source drops the ones Forward would have gone to; the source already shown adds
+    /// nothing.
+    mutating func visit(_ source: String?) {
+        guard source != visited[position] else { return }
+        visited = Array(visited[...position]) + [source]
+        position += 1
+    }
+
+    /// The source to show, or nil at the start.
+    mutating func back() -> String?? {
+        guard canGoBack else { return nil }
+        position -= 1
+        return .some(visited[position])
+    }
+
+    mutating func forward() -> String?? {
+        guard canGoForward else { return nil }
+        position += 1
+        return .some(visited[position])
     }
 }
 
