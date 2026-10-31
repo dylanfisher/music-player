@@ -298,3 +298,22 @@ import Testing
         #expect(try parse(file).metadata.tags.title == "Song")
     }
 }
+
+@Test func mp3TreatsAZeroXingFrameCountAsAbsent() throws {
+    var first =
+        Data(mpeg1Header) + Data(count: 32) + ascii("Info") + bigEndian32(1) + bigEndian32(0)
+    first.append(Data(count: 417 - first.count))
+    #expect(try parse(first + mpegFrames(3)).metadata.audio.lengthFrames == 4 * 1152)
+}
+
+@Test func mp3SkipsTheCRCBeforeTheXingAndVBRIHeaders() throws {
+    let protected: [UInt8] = [0xFF, 0xFA, 0x90, 0x00]
+    var xing =
+        Data(protected) + Data(count: 2 + 32) + ascii("Xing") + bigEndian32(1) + bigEndian32(1000)
+    xing.append(Data(count: 417 - xing.count))
+    #expect(try parse(xing + mpegFrames(3)).metadata.audio.lengthFrames == 1000 * 1152)
+    var vbri =
+        Data(protected) + Data(count: 2 + 32) + ascii("VBRI") + Data(count: 10) + bigEndian32(77)
+    vbri.append(Data(count: 417 - vbri.count))
+    #expect(try parse(vbri + mpegFrames(3)).metadata.audio.lengthFrames == 77 * 1152)
+}

@@ -8,6 +8,8 @@ struct MPEGFrameHeader {
     var byteCount: Int
     /// Bytes of side information after the header, where a Xing/Info header starts.
     var sideInfoBytes: Int
+    /// Two CRC bytes sit between the header and the side information when the protection bit is 0.
+    var crcBytes: Int
 
     /// Nil unless `bytes` at `offset` hold a valid Layer III header: an 11-bit sync, a known
     /// version, and a bit rate and sample rate that aren't reserved or "free".
@@ -31,6 +33,7 @@ struct MPEGFrameHeader {
         samplesPerFrame = isMPEG1 ? 1152 : 576
         byteCount = samplesPerFrame / 8 * bitRate / sampleRateHz + Int(b2 >> 1 & 1)
         sideInfoBytes = isMPEG1 ? (mono ? 17 : 32) : (mono ? 9 : 17)
+        crcBytes = b1 & 1 == 0 ? 2 : 0
     }
 
     /// The average frame length, since padding adds a byte to some frames.
@@ -78,7 +81,7 @@ func parseMP3(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
 
     let frame = try area.suffix(from: frameOffset)
     var frameCount = try xingFrameCount(frame, header)
-    if frameCount == nil { frameCount = try vbriFrameCount(frame) }
+    if frameCount == nil { frameCount = try vbriFrameCount(frame, header) }
     let audioBytes = reader.size - (audioStart + frameOffset)
     let frames = frameCount ?? Int((Double(audioBytes) / header.averageByteCount).rounded())
     return TrackMetadata(
@@ -90,20 +93,24 @@ func parseMP3(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
 }
 
 /// "Xing" (VBR) or "Info" (CBR) after the side information: flags, then the frame count when
-/// flag 1 is set. The count excludes this frame, which decodes as silence.
+/// flag 1 is set. The count excludes this frame, which decodes as silence. A count of 0 is a
+/// writer that never filled it in, so it counts as absent.
 private func xingFrameCount(_ frame: Bytes, _ header: MPEGFrameHeader) throws(ParseFailure) -> Int?
 {
-    let offset = 4 + header.sideInfoBytes
+    let offset = 4 + header.crcBytes + header.sideInfoBytes
     guard frame.matches("Xing", at: offset) || frame.matches("Info", at: offset) else {
         return nil
     }
     guard try frame.uint32BE(offset + 4) & 1 != 0 else { return nil }
-    return Int(try frame.uint32BE(offset + 8))
+    let count = Int(try frame.uint32BE(offset + 8))
+    return count == 0 ? nil : count
 }
 
 /// Fraunhofer's "VBRI", 32 bytes after the header: version, delay, quality, byte count, then the
 /// frame count.
-private func vbriFrameCount(_ frame: Bytes) throws(ParseFailure) -> Int? {
-    guard frame.matches("VBRI", at: 36) else { return nil }
-    return Int(try frame.uint32BE(36 + 14))
+private func vbriFrameCount(_ frame: Bytes, _ header: MPEGFrameHeader) throws(ParseFailure) -> Int?
+{
+    let offset = 36 + header.crcBytes
+    guard frame.matches("VBRI", at: offset) else { return nil }
+    return Int(try frame.uint32BE(offset + 14))
 }
