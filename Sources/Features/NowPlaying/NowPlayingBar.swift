@@ -58,6 +58,13 @@ public final class NowPlayingBar: NSViewController {
         setEnabled(true)
     }
 
+    /// A rescan may have changed the current track's tags or art.
+    public func libraryChanged() {
+        model.libraryChanged()
+        loadArt()
+        show()
+    }
+
     /// No output could be opened, so nothing can play. Says why in the format line.
     public func showUnavailable(_ reason: String) {
         setEnabled(false)

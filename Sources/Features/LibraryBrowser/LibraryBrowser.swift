@@ -29,6 +29,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
     public var tableLayoutChanged: (TrackTableLayout) -> Void = { _ in }
     public var browserHeightChanged: (Int) -> Void = { _ in }
     public var stateChanged: (BrowserState) -> Void = { _ in }
+    /// Called after each refresh for a library change, so other views can read their rows again.
+    public var libraryRefreshed: () -> Void = {}
     public var addFolder: () -> Void = {}
     public var removeFolder: (String) -> Void = { _ in }
     /// Called once, when the table first draws rows, or once loading finds none to draw.
@@ -195,6 +197,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
         lastRefresh = Date()
         Task {
             await model.refresh()
+            libraryRefreshed()
             await countIssues()
         }
     }

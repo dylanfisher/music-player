@@ -39,6 +39,12 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
         }
     }
 
+    /// A rescan may have changed the queued tracks' tags.
+    public func libraryChanged() {
+        model.libraryChanged()
+        table.reloadData()
+    }
+
     private static func concernsQueue(_ event: PlaybackEvent) -> Bool {
         switch event {
         case .queueChanged, .trackStarted, .shuffleChanged, .finished, .stopped, .failed,

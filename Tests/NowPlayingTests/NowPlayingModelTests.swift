@@ -71,3 +71,18 @@ private func update(
     #expect(model.times(positionSeconds: 400) == ("4:19", "-0:00"))
     #expect(model.times(positionSeconds: nil) == ("", ""))
 }
+
+@MainActor @Test func aLibraryChangeReadsTheCurrentRowAgain() {
+    var title = "Old"
+    let model = NowPlayingModel { path in
+        var track = row(path)
+        track.title = title
+        return track
+    }
+    model.apply(update(.trackStarted(index: 0)))
+    title = "New"
+    model.apply(update(.paused, status: .paused))
+    #expect(model.title == "Old")
+    model.libraryChanged()
+    #expect(model.title == "New")
+}

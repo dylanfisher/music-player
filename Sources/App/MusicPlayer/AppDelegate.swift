@@ -94,6 +94,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             saver.set(\.selectedArtist, state.artist)
             saver.set(\.selectedAlbum, state.album)
         }
+        browser.libraryRefreshed = {
+            nowPlaying.libraryChanged()
+            queue.libraryChanged()
+        }
         browser.addFolder = { [weak self] in self?.addFolder() }
         browser.removeFolder = { [weak self] path in self?.confirmRemoving(path) }
         browser.firstRowsDrawn = { [weak self] in self?.interactive() }

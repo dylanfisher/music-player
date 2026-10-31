@@ -43,6 +43,15 @@ public final class NowPlayingModel {
         default: break
         }
         guard currentURL != before else { return }
+        lookUpTrack()
+    }
+
+    /// Reads the current file's row again, after a rescan may have changed its tags.
+    public func libraryChanged() {
+        lookUpTrack()
+    }
+
+    private func lookUpTrack() {
         track = nil
         guard let url = currentURL else { return }
         do {

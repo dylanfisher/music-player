@@ -25,6 +25,11 @@ public final class QueueModel {
         self.state = state
     }
 
+    /// Forgets every row it described, after a rescan may have changed their tags.
+    public func libraryChanged() {
+        described = [:]
+    }
+
     public var count: Int { state.order.count }
 
     /// Where the current track is in play order.

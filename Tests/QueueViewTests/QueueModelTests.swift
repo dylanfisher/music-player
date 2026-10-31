@@ -46,3 +46,20 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
     model.apply(state(order: [0], current: 0))
     #expect(model.item(at: 0).title == "0")
 }
+
+@MainActor @Test func aLibraryChangeDescribesRowsAgain() {
+    var title = "Old"
+    let model = QueueModel { path in
+        TrackRow(
+            id: 1, path: path, title: title, artist: nil, album: nil, albumID: nil,
+            albumArtist: nil, genre: nil, date: nil, trackNumber: nil, discNumber: nil,
+            codec: "flac", sampleRateHz: 44100, bitsPerSample: 16, durationSeconds: 1,
+            addedSeconds: 0, art: nil)
+    }
+    model.apply(state(order: [0], current: 0))
+    #expect(model.item(at: 0).title == "Old")
+    title = "New"
+    #expect(model.item(at: 0).title == "Old")
+    model.libraryChanged()
+    #expect(model.item(at: 0).title == "New")
+}
