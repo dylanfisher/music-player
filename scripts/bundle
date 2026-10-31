@@ -9,7 +9,17 @@ cd "$(dirname "$0")/.."
 
 config="${1:-debug}"
 flags=(-c "$config")
-[ "$config" = release ] && flags+=(--arch arm64 --arch x86_64)
+if [ "$config" = release ]; then
+  # SwiftPM builds more than one architecture only through Xcode's build system, so with only
+  # the Command Line Tools the x86_64 half fails to link deep in the build.
+  if ! xcodebuild -version >/dev/null 2>&1; then
+    echo "a universal release build needs Xcode, and $(xcode-select -p) is only the Command Line Tools." >&2
+    echo "Install or select Xcode (xcode-select -s), or build for this Mac alone:" >&2
+    echo "  swift build -c release --product MusicPlayer" >&2
+    exit 1
+  fi
+  flags+=(--arch arm64 --arch x86_64)
+fi
 swift build "${flags[@]}" --product MusicPlayer >&2
 bin="$(swift build "${flags[@]}" --show-bin-path)"
 app="$bin/MusicPlayer.app"
