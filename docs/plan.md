@@ -290,9 +290,12 @@ Turns the one-file command into the engine everything else drives.
 - [x] Restores the device and default outputs on every exit path, as `ExclusiveDevice.close()`
       does today.
 - [x] Benchmarks: playback CPU, a 1-hour soak with underrun count, and gap measurement.
-- [ ] **Hardware checkpoint (owner):** on the ADI-2, play a gapless album, a playlist mixing
+- [x] **Hardware checkpoint (owner):** on the ADI-2, play a gapless album, a playlist mixing
       44.1 and 96 kHz tracks, unplug the DAC during playback, and quit with Ctrl-C. Confirm the
       macOS default output is restored after each.
+      Done 2026-10-30 on the ADI-2 and approved by the owner: the gapless album, Ctrl-C and restore
+      all worked, and the DAC took each file's exact rate in 32-bit non-mixable hog mode. Rate
+      changes measured 839–843 ms against the 500 ms budget, so the fix is on `fix/rate-switch-time`.
 
 Implementation plan:
 
