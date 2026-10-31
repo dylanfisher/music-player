@@ -20,7 +20,7 @@ against a codebase you haven't searched.
 | a module | `ls Sources/*/` — or `swift package describe` |
 | a primitive | `ls Sources/Primitives/` |
 | a helper / extension | `rg '^(public )?(func\|extension) ' Sources/` |
-| a preference key | `rg '<key>' Sources/Core/` — preferences are read in one Core module only |
+| a setting key | `rg '<key>' Sources/Core/Settings/` — settings are read in one Core module only |
 | a type | `rg '(struct\|enum\|class\|actor\|protocol\|typealias) <Name>' Sources/` |
 
 If a search turns up something close but not identical, that's the second occurrence. Use it or
@@ -34,9 +34,9 @@ the dependency direction.
 
 | Tier | Path | What belongs here | May import from |
 |---|---|---|---|
-| **primitives** | `Sources/Primitives` | Portable units with no knowledge of music or this app: ring buffer, SQLite wrapper, HTTP server, SSDP. No preference reads. | nothing in this table |
-| **core** | `Sources/Core` | The domain: library index and scanner, tag reading, decoders, DSD/DoP, outputs (CoreAudio HAL device, UPnP renderer), preferences. | primitives, other core modules |
-| **features** | `Sources/Features` | User-facing slices: library browser, now playing, preferences window, and later remote control. | core, primitives |
+| **primitives** | `Sources/Primitives` | Portable units with no knowledge of music or this app: ring buffer, SQLite wrapper, HTTP server, SSDP. No settings reads. | nothing in this table |
+| **core** | `Sources/Core` | The domain: library index and scanner, tag reading, decoders, DSD/DoP, outputs (CoreAudio HAL device, UPnP renderer), settings, logging. | primitives, other core modules |
+| **features** | `Sources/Features` | User-facing slices: library browser, now playing, settings window, and later remote control. | core, primitives |
 | **app** | `Sources/App` | The composition root: `main`, app delegate, menus. Wires features together; holds no logic of its own. | features, core, primitives |
 | **tools** | `Sources/Tools` | Development tooling that never ships in the app: the fixture generator and benchmarks. | tools, features, core, primitives |
 
@@ -70,7 +70,7 @@ Things move between tiers deliberately, never by accident:
 
 - **Third occurrence** → extract to the lowest tier that all three callers can reach (principle 3).
 - **Core module loses its domain knowledge** → it's a primitive now; move it down.
-- **Primitive grows a preference read or a domain type** → it was never a primitive; move it up.
+- **Primitive grows a settings read or a domain type** → it was never a primitive; move it up.
 
 A promotion is its own commit, separate from whatever work revealed it (principle 4).
 
