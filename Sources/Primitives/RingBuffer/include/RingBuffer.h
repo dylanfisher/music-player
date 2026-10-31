@@ -24,6 +24,10 @@ size_t RingBufferWrite(RingBuffer *buffer, const void *source, size_t count);
 /// Consumer side. Copies up to `count` bytes and returns how many were copied.
 size_t RingBufferRead(RingBuffer *buffer, void *destination, size_t count);
 
+/// Consumer side. Discards up to `count` bytes without copying them and returns how many were
+/// discarded.
+size_t RingBufferSkip(RingBuffer *buffer, size_t count);
+
 /// Bytes the consumer can read now. Exact when called from the consumer thread.
 size_t RingBufferReadable(const RingBuffer *buffer);
 

@@ -72,6 +72,15 @@ size_t RingBufferRead(RingBuffer *buffer, void *destination, size_t count) {
     return n;
 }
 
+size_t RingBufferSkip(RingBuffer *buffer, size_t count) {
+    size_t tail = atomic_load_explicit(&buffer->tail, memory_order_relaxed);
+    size_t head = atomic_load_explicit(&buffer->head, memory_order_acquire);
+    size_t available = head - tail;
+    size_t n = count < available ? count : available;
+    atomic_store_explicit(&buffer->tail, tail + n, memory_order_release);
+    return n;
+}
+
 size_t RingBufferReadable(const RingBuffer *buffer) {
     size_t head = atomic_load_explicit(&((RingBuffer *)buffer)->head, memory_order_acquire);
     size_t tail = atomic_load_explicit(&((RingBuffer *)buffer)->tail, memory_order_relaxed);

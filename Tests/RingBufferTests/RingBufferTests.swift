@@ -34,3 +34,19 @@ import Testing
     #expect(Array(sink.prefix(5)) == source)
     #expect(RingBufferReadable(buffer) == 0)
 }
+
+@Test func skipDiscardsOnlyWhatIsReadable() throws {
+    let buffer = try #require(RingBufferCreate(8))
+    defer { RingBufferDestroy(buffer) }
+    var sink = [UInt8](repeating: 0, count: 8)
+
+    #expect(RingBufferWrite(buffer, [UInt8]([1, 2, 3, 4, 5]), 5) == 5)
+    #expect(RingBufferSkip(buffer, 3) == 3)
+    #expect(RingBufferSkip(buffer, 10) == 2)
+    #expect(RingBufferReadable(buffer) == 0)
+
+    // The skipped bytes are free again, and what follows reads back in order.
+    #expect(RingBufferWrite(buffer, [UInt8]([6, 7, 8, 9, 10, 11, 12, 13]), 8) == 8)
+    #expect(RingBufferRead(buffer, &sink, 8) == 8)
+    #expect(sink == [6, 7, 8, 9, 10, 11, 12, 13])
+}
