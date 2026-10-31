@@ -225,11 +225,7 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         panel.level = .floating
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
 
-        let clip = NSView()
-        clip.wantsLayer = true
-        clip.layer?.cornerRadius = 20
-        clip.layer?.masksToBounds = true
-        clip.layer?.borderWidth = 1
+        let clip = PaletteClip()
         let backdrop = NSVisualEffectView()
         backdrop.material = .popover
         backdrop.blendingMode = .behindWindow
@@ -287,14 +283,6 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
             ])
         }
         panel.contentView = clip
-        updateEdge()
-    }
-
-    /// The hairline edge, white at 60% in light mode and 20% in dark, as Spotlight's.
-    func updateEdge() {
-        let dark = panel.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        panel.contentView?.layer?.borderColor =
-            NSColor.white.withAlphaComponent(dark ? 0.2 : 0.6).cgColor
     }
 
     /// Shows the model's new results. When they rank the same query, as when items were
@@ -342,6 +330,32 @@ final class PalettePanel: NSPanel {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if controller?.takeKeyEquivalent(event) == true { return true }
         return super.performKeyEquivalent(with: event)
+    }
+}
+
+/// The panel's rounded content, with a hairline edge that follows the appearance as it changes:
+/// white at 60% in light mode and 20% in dark, as Spotlight's.
+final class PaletteClip: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 20
+        layer?.masksToBounds = true
+        layer?.borderWidth = 1
+        updateEdge()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateEdge()
+    }
+
+    private func updateEdge() {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        layer?.borderColor = NSColor.white.withAlphaComponent(dark ? 0.2 : 0.6).cgColor
     }
 }
 

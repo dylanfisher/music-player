@@ -117,3 +117,15 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     #expect(palette.table.selectedRow == 0)
     palette.close()
 }
+
+@MainActor @Test func theEdgeFollowsTheAppearanceAsItChanges() throws {
+    let palette = PaletteController(
+        model: PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 }))
+    func alpha() throws -> CGFloat {
+        try #require(palette.window.contentView?.layer?.borderColor?.alpha)
+    }
+    palette.window.appearance = NSAppearance(named: .darkAqua)
+    #expect(try alpha() == 0.2)
+    palette.window.appearance = NSAppearance(named: .aqua)
+    #expect(try alpha() == 0.6)
+}
