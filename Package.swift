@@ -104,6 +104,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "PlaylistEditor",
+            dependencies: ["Library"],
+            path: "Sources/Features/PlaylistEditor",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SettingsWindow",
             dependencies: ["Commands", "KeyChord", "Log", "Settings"],
             path: "Sources/Features/SettingsWindow",
@@ -125,8 +131,8 @@ let package = Package(
             name: "MusicPlayer",
             dependencies: [
                 "Artwork", "Commands", "DisplayText", "HALOutput", "KeyChord", "Library",
-                "LibraryBrowser", "Log", "Metadata", "NowPlaying", "Playback", "QueueView",
-                "Palette", "SQLite", "Settings", "SettingsWindow",
+                "LibraryBrowser", "Log", "Metadata", "NowPlaying", "Playback", "PlaylistEditor",
+                "QueueView", "Palette", "SQLite", "Settings", "SettingsWindow",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
@@ -230,6 +236,11 @@ let package = Package(
         .testTarget(
             name: "PaletteTests",
             dependencies: ["FuzzyMatch", "Palette", "Settings"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "PlaylistEditorTests",
+            dependencies: ["Library", "PlaylistEditor"],
             swiftSettings: strictSwift
         ),
         .testTarget(
