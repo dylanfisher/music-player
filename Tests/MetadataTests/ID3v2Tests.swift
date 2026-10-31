@@ -71,6 +71,19 @@ private func artBytes(_ file: Data) throws -> Data? {
     #expect(bad.warnings.map(\.kind) == [.unreadableField])
 }
 
+@Test func usesTheFirstOfSeveralGenreReferencesAndKeepsCustomNumbers() throws {
+    let cases: [(UInt8, String, String)] = [
+        (3, "(51)(39)", id3v1Genres[51]), (3, "(51)(39)Noisy", "Noisy"),
+        (3, "(51)(RX)", id3v1Genres[51]), (4, "2000", "2000"), (4, "256", "256"),
+    ]
+    for (version, text, expected) in cases {
+        let tag = id3Tag(version: version, [id3Frame("TCON", id3Text(text), version: version)])
+        let parsed = try parse(mp3(tag))
+        #expect(parsed.metadata.tags.genre == expected, "\(text)")
+        #expect(parsed.warnings.isEmpty, "\(text)")
+    }
+}
+
 @Test func readsOnlyTheUndescribedComment() throws {
     let described = Data([0]) + ascii("engiTunNORM\0 000001")
     let plain = Data([0]) + ascii("eng\0Liner notes")

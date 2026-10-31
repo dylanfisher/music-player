@@ -310,7 +310,8 @@ private func commentFrame(_ bytes: Bytes, _ warnings: inout [MetadataWarning])
     return try string(bytes, from: description.next, encoding, &warnings)!.text
 }
 
-/// "(17)" refers to the ID3v1 list, optionally followed by a refinement that wins; "((" escapes a
+/// "(17)" refers to the ID3v1 list (the first of several references counts), optionally followed
+/// by a refinement that wins; "((" escapes a
 /// literal parenthesis; 2.4 also allows a bare number.
 private func genre(_ text: String, _ version: UInt8, at offset: Int) throws(ParseFailure) -> String
 {
@@ -326,13 +327,19 @@ private func genre(_ text: String, _ version: UInt8, at offset: Int) throws(Pars
             return id3v1Genres[index]
         }
     }
-    if text.hasPrefix("("), let close = text.firstIndex(of: ")") {
-        let refinement = text[text.index(after: close)...]
-        let reference = try named(text[text.index(after: text.startIndex)..<close])
-        return refinement.isEmpty ? reference : String(refinement)
+    var rest = Substring(text)
+    var first: String?
+    while rest.hasPrefix("("), !rest.hasPrefix("(("), let close = rest.firstIndex(of: ")") {
+        let reference = try named(rest[rest.index(after: rest.startIndex)..<close])
+        first = first ?? reference
+        rest = rest[rest.index(after: close)...]
     }
-    if version == 4, !text.isEmpty, text.allSatisfy(\.isASCII), text.allSatisfy(\.isNumber) {
-        return try named(Substring(text))
+    if let first { return rest.isEmpty ? first : String(rest) }
+    // A bare number outside the ID3v1 list is the user's own genre text.
+    if version == 4, let index = Int(text), text.allSatisfy(\.isASCII), text.allSatisfy(\.isNumber),
+        id3v1Genres.indices.contains(index)
+    {
+        return id3v1Genres[index]
     }
     return text
 }
