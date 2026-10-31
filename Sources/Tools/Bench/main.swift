@@ -1,9 +1,18 @@
 import Foundation
 
 // Runs the benchmarks and exits non-zero if any misses its budget or fails:
-//   Bench [--list] [<part of a name>...]
+//   Bench [--list] [--soak <seconds>] [<part of a name>...]
 
-let arguments = Array(CommandLine.arguments.dropFirst())
+var arguments = Array(CommandLine.arguments.dropFirst())
+if let index = arguments.firstIndex(of: "--soak") {
+    guard index + 1 < arguments.count, let seconds = Double(arguments[index + 1]), seconds > 0
+    else {
+        FileHandle.standardError.write(Data("error: --soak needs a number of seconds\n".utf8))
+        exit(1)
+    }
+    soakSeconds = seconds
+    arguments.removeSubrange(index...index + 1)
+}
 if arguments.contains("--list") {
     for benchmark in benchmarks { print(benchmark.name) }
     exit(0)

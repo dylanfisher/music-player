@@ -74,9 +74,9 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Memory a scan of the fixture library adds, at its peak | < 50 MB | < 50 MB |
 | Browser pane query: genres, artists, albums (p95) | < 20 ms | < 60 ms |
 | Resident memory with the library loaded | < 250 MB | < 250 MB |
-| CPU while playing 24/192 FLAC | < 2% of a core | < 5% of a core |
-| Underruns in a 1-hour playback soak | 0 | 0 |
-| Gap between same-format tracks | 0 samples | 0 samples |
+| CPU while playing 24/192 FLAC | < 2 percent of a core | < 5 percent of a core |
+| Underruns in a 1-hour playback soak (`--soak 3600`; 20 s by default) | < 1 samples | < 1 samples |
+| Gap between same-format tracks | < 1 samples | < 1 samples |
 | Track change that switches sample rate | < 500 ms | < 500 ms |
 | CPU when idle (not playing) | ~0%, no timers firing faster than settings allow | same |
 | Load and validate settings, every key changed | < 5 ms | < 20 ms |

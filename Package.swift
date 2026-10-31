@@ -84,7 +84,9 @@ let package = Package(
         ),
         .executableTarget(
             name: "Bench",
-            dependencies: ["Fixtures", "Library", "Metadata", "SQLite", "Settings"],
+            dependencies: [
+                "Fixtures", "HALOutput", "Library", "Metadata", "Playback", "SQLite", "Settings",
+            ],
             path: "Sources/Tools/Bench",
             swiftSettings: strictSwift
         ),

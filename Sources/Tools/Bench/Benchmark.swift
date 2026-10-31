@@ -21,6 +21,9 @@ struct Budget: Sendable {
         case milliseconds = "ms"
         case seconds = "s"
         case megabytes = "MB"
+        case percentOfCore = "percent of a core"
+        /// Sample frames: one sample per channel.
+        case samples
     }
 
     var appleSilicon: Double
