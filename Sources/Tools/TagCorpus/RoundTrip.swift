@@ -13,7 +13,14 @@ struct RoundTrip {
     var writer: TagWriter
     var files = 0
     var edits = 0
-    var failures: [String] = []
+    /// Printed as each is found, so a run cut short still shows them.
+    var failures: [String] = [] {
+        didSet {
+            for failure in failures.dropFirst(oldValue.count) {
+                print("FAILED \(failure)", to: &standardError)
+            }
+        }
+    }
     /// Containers whose metadata AVFoundation doesn't read, so it can't confirm their edits.
     var unreadByAVFoundation: Set<String> = []
 
@@ -34,13 +41,16 @@ struct RoundTrip {
             files += 1
             let clone = cloneURL(original)
             folders[clone.deletingLastPathComponent(), default: []].append(clone)
-            do {
-                try checkClone(original, clone)
-                for (name, edit) in try plannedEdits(original) {
-                    try roundTrip(name, edit, [clone])
+            // Each file's images and AVFoundation objects go before the next, over hours of run.
+            autoreleasepool {
+                do {
+                    try checkClone(original, clone)
+                    for (name, edit) in try plannedEdits(original) {
+                        try roundTrip(name, edit, [clone])
+                    }
+                } catch {
+                    failures.append("\(relative(original)): \(error)")
                 }
-            } catch {
-                failures.append("\(relative(original)): \(error)")
             }
             print("\(files)/\(originals.count) \(relative(original))", to: &standardError)
         }

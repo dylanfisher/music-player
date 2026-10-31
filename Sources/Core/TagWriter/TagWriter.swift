@@ -33,15 +33,18 @@ public struct TagWriter: Sendable {
             return report
         }
         for path in paths {
-            do throws(TagWriteError) {
-                if try write(edit, to: path, entry: &entry) {
-                    report.changed.append(path)
-                } else {
-                    report.unchanged.append(path)
+            // A batch can run over an album of large files; each file's buffers go before the next.
+            autoreleasepool {
+                do throws(TagWriteError) {
+                    if try write(edit, to: path, entry: &entry) {
+                        report.changed.append(path)
+                    } else {
+                        report.unchanged.append(path)
+                    }
+                } catch {
+                    logger.error("\(error.description)")
+                    report.failures.append(error)
                 }
-            } catch {
-                logger.error("\(error.description)")
-                report.failures.append(error)
             }
         }
         return report

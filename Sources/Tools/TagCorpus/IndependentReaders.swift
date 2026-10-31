@@ -54,26 +54,29 @@ func sameBytes(_ a: URL, _ b: URL) throws -> Bool {
     return process.terminationStatus == 0
 }
 
-/// SHA-256 of `ranges` of the file at `url`, in order.
+/// SHA-256 of `ranges` of the file at `url`, in order. Reads into one buffer with `pread`, so
+/// a long run over gigabytes allocates nothing per read.
 func sha256(_ url: URL, ranges: [Range<Int>]) throws -> [UInt8] {
-    let handle = try FileHandle(forReadingFrom: url)
+    let descriptor = open(url.path, O_RDONLY | O_CLOEXEC)
+    guard descriptor >= 0 else { throw CorpusError("can't open \(url.path)") }
+    defer { close(descriptor) }
     var context = CC_SHA256_CTX()
     CC_SHA256_Init(&context)
-    let step = 8 * 1024 * 1024
+    var buffer = [UInt8](repeating: 0, count: 8 * 1024 * 1024)
     for range in ranges {
         var offset = range.lowerBound
-        try handle.seek(toOffset: UInt64(offset))
         while offset < range.upperBound {
-            guard let data = try handle.read(upToCount: min(step, range.upperBound - offset)),
-                !data.isEmpty
-            else { throw CorpusError("\(url.path) ended at \(offset)") }
-            data.withUnsafeBytes {
-                _ = CC_SHA256_Update(&context, $0.baseAddress, CC_LONG(data.count))
+            let want = min(buffer.count, range.upperBound - offset)
+            let count = buffer.withUnsafeMutableBytes {
+                pread(descriptor, $0.baseAddress, want, off_t(offset))
             }
-            offset += data.count
+            guard count > 0 else { throw CorpusError("can't read \(url.path) at \(offset)") }
+            buffer.withUnsafeBytes {
+                _ = CC_SHA256_Update(&context, $0.baseAddress, CC_LONG(count))
+            }
+            offset += count
         }
     }
-    try handle.close()
     var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
     CC_SHA256_Final(&digest, &context)
     return digest
