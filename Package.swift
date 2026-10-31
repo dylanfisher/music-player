@@ -23,6 +23,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "KeyChord",
+            path: "Sources/Primitives/KeyChord",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SQLite",
             path: "Sources/Primitives/SQLite",
             swiftSettings: strictSwift,
@@ -71,8 +76,14 @@ let package = Package(
         ),
         .target(
             name: "Settings",
-            dependencies: ["Log"],
+            dependencies: ["KeyChord", "Log"],
             path: "Sources/Core/Settings",
+            swiftSettings: strictSwift
+        ),
+        .target(
+            name: "Commands",
+            dependencies: ["KeyChord", "Settings"],
+            path: "Sources/Core/Commands",
             swiftSettings: strictSwift
         ),
         .target(
@@ -134,6 +145,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .testTarget(
+            name: "CommandsTests",
+            dependencies: ["Commands", "KeyChord", "Settings"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
             name: "DisplayTextTests",
             dependencies: ["DisplayText"],
             swiftSettings: strictSwift
@@ -151,6 +167,11 @@ let package = Package(
         .testTarget(
             name: "HALRenderTests",
             dependencies: ["HALRender", "RingBuffer"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "KeyChordTests",
+            dependencies: ["KeyChord"],
             swiftSettings: strictSwift
         ),
         .testTarget(

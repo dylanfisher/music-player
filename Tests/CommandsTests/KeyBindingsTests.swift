@@ -1,0 +1,156 @@
+import KeyChord
+import Settings
+import Testing
+
+@testable import Commands
+
+private let open = CommandID("test.open")
+private let close = CommandID("test.close")
+private let selectAll = CommandID("test.selectAll")
+private let cmd: KeyChord.Modifiers = .command
+
+private let commands = [
+    Command(open, "Open", [KeyChord("o", cmd), KeyChord(.down, cmd)]),
+    Command(close, "Close", [KeyChord("e", cmd)]),
+    Command(selectAll, "Select All", [KeyChord("a", cmd)]),
+]
+private let rules = ChordRules(
+    reserved: [KeyChord("q", cmd): "Quit"], fixed: [selectAll: KeyChord("a", cmd)])
+
+private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBindings {
+    try KeyBindings(commands, overrides: overrides, rules: rules)
+}
+
+@Test func twoDefaultsOnOneChordThrow() {
+    #expect(throws: CommandConflict.self) {
+        try CommandRegistry([
+            Command(open, "Open", [KeyChord("o", cmd)]),
+            Command(close, "Close", [KeyChord("o", cmd)]),
+        ])
+    }
+    #expect(throws: ReservedDefault.self) {
+        try KeyBindings(
+            [Command(open, "Open", [KeyChord("q", cmd)])], overrides: [:], rules: rules)
+    }
+}
+
+@Test func theAppsDefaultsRegister() throws {
+    let all = AppCommands.all()
+    let bindings = try KeyBindings(all, overrides: [:], rules: AppMenus.rules(appName: "App"))
+    #expect(bindings.dropped.isEmpty)
+    #expect(bindings.registry.command(for: KeyChord("k", cmd)) == .showPalette)
+    #expect(bindings.registry.command(for: KeyChord(.space)) == .playPause)
+    #expect(Set(all.map(\.id)).count == all.count)
+}
+
+@Test func theUsersChordBeatsADefault() throws {
+    let bindings = try bindings([
+        close.rawValue: ShortcutOverride(alternate: .chord(KeyChord("o", cmd)))
+    ])
+    #expect(bindings.registry.command(for: KeyChord("o", cmd)) == close)
+    #expect(bindings.chord(of: open, at: .primary) == nil)
+    #expect(bindings.chord(of: open, at: .alternate) == KeyChord(.down, cmd))
+    #expect(
+        bindings.dropped == [
+            KeyBindings.Dropped(
+                command: open, position: .primary, chord: KeyChord("o", cmd), loss: .takenBy(close))
+        ])
+    // The alternate is now the menus' chord.
+    #expect(bindings.menuChord(of: open) == KeyChord(.down, cmd))
+}
+
+@Test func storedDataNeverTakesReservedOrFixedChords() throws {
+    let bindings = try bindings([
+        close.rawValue: ShortcutOverride(primary: .chord(KeyChord("q", cmd))),
+        open.rawValue: ShortcutOverride(alternate: .chord(KeyChord("a", cmd))),
+        selectAll.rawValue: ShortcutOverride(primary: .removed),
+    ])
+    #expect(bindings.registry.command(for: KeyChord("q", cmd)) == nil)
+    #expect(bindings.registry.command(for: KeyChord("a", cmd)) == selectAll)
+    #expect(bindings.chord(of: close, at: .primary) == nil)
+    #expect(
+        Set(bindings.dropped.map(\.loss)) == [
+            .reserved("Quit"), .fixedTo(selectAll), .fixedPrimary,
+        ])
+}
+
+@Test func assigningFollowsTheRules() throws {
+    let bindings = try bindings()
+    #expect(
+        bindings.assign(KeyChord("q", cmd), to: open, at: .primary, replacing: false)
+            == .reserved("Quit"))
+    #expect(
+        bindings.assign(KeyChord("a", cmd), to: open, at: .alternate, replacing: false)
+            == .fixed(to: selectAll))
+    #expect(
+        bindings.assign(KeyChord("x", cmd), to: selectAll, at: .primary, replacing: false)
+            == .fixedPrimary)
+    #expect(
+        bindings.assign(KeyChord("e", cmd), to: open, at: .primary, replacing: false)
+            == .taken(by: close))
+    #expect(
+        bindings.assign(KeyChord("e", cmd), to: open, at: .primary, replacing: true)
+            == .assigned([
+                close: ShortcutOverride(primary: .removed),
+                open: ShortcutOverride(primary: .chord(KeyChord("e", cmd))),
+            ]))
+}
+
+@Test func aSlotEqualToItsDefaultIsStoredAsNoChange() throws {
+    let changed = try bindings([
+        open.rawValue: ShortcutOverride(primary: .chord(KeyChord("y", cmd)))
+    ])
+    #expect(
+        changed.assign(KeyChord("o", cmd), to: open, at: .primary, replacing: false)
+            == .assigned([open: ShortcutOverride()]))
+    // A chord the command has in its other slot moves.
+    #expect(
+        try bindings().assign(KeyChord(.down, cmd), to: open, at: .primary, replacing: false)
+            == .assigned([
+                open: ShortcutOverride(primary: .chord(KeyChord(.down, cmd)), alternate: .removed)
+            ]))
+    #expect(
+        try bindings().remove(from: close, at: .alternate) == .assigned([close: ShortcutOverride()])
+    )
+    #expect(
+        try bindings().remove(from: close, at: .primary)
+            == .assigned([close: ShortcutOverride(primary: .removed)]))
+    #expect(try bindings().remove(from: selectAll, at: .primary) == .fixedPrimary)
+}
+
+@Test func theConfigFileIsCheckedAgainstTheRules() throws {
+    let bindings = try bindings()
+    #expect(bindings.problem(id: "test.nope", position: .primary, slot: .removed) != nil)
+    #expect(
+        bindings.problem(id: "test.open", position: .primary, slot: .chord(KeyChord("q", cmd)))
+            != nil)
+    #expect(
+        bindings.problem(id: "test.open", position: .alternate, slot: .chord(KeyChord("a", cmd)))
+            != nil)
+    #expect(bindings.problem(id: "test.selectAll", position: .primary, slot: .removed) != nil)
+    #expect(
+        bindings.problem(id: "test.selectAll", position: .primary, slot: .chord(KeyChord("a", cmd)))
+            == nil)
+    #expect(
+        bindings.problem(id: "test.open", position: .primary, slot: .chord(KeyChord("e", cmd)))
+            == nil)
+}
+
+@Test func booleanAndChoiceSettingsBecomeCommands() {
+    let generated = SettingCommand.all(AppSettings())
+    let hog = generated.first { $0.key == "output.hogMode" }
+    #expect(hog?.action == .toggle)
+    #expect(hog?.command.id == CommandID("setting.output.hogMode"))
+    #expect(
+        generated.filter { $0.key == "appearance" }.map(\.command.title) == [
+            "Auto Appearance", "Light Appearance", "Dark Appearance",
+        ])
+    // Numbers, lists and folders aren't commands.
+    #expect(!generated.contains { $0.key == "library.watchedFolders" })
+}
+
+@Test func everyCommandIsInTheMenus() {
+    let listed = AppMenus.commandsByMenu(appName: "App").flatMap(\.commands)
+    #expect(Set(listed) == Set(AppCommands.all().map(\.id)))
+    #expect(listed.count == Set(listed).count)
+}
