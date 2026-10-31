@@ -44,7 +44,7 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
     }
 
     private func configure(_ layout: TrackTableLayout) {
-        if #available(macOS 11.0, *) { table.style = .fullWidth }
+        table.style = .fullWidth
         table.rowHeight = 18
         table.intercellSpacing = NSSize(width: 6, height: 0)
         table.usesAlternatingRowBackgroundColors = true

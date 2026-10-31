@@ -26,12 +26,12 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
         row.spacing = 1
         for pane in BrowserModel.Pane.allCases {
             let table = NSTableView()
-            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("entry"))
+            let column = NSTableColumn(identifier: entryIdentifier)
             column.title = pane.title
             column.resizingMask = .autoresizingMask
             table.addTableColumn(column)
             table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
-            if #available(macOS 11.0, *) { table.style = .fullWidth }
+            table.style = .fullWidth
             table.rowHeight = 18
             table.dataSource = self
             table.delegate = self
@@ -88,7 +88,7 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
         -> NSView?
     {
         guard let pane = pane(of: tableView) else { return nil }
-        let identifier = NSUserInterfaceItemIdentifier("entry")
+        let identifier = entryIdentifier
         let cell =
             tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
             ?? {
@@ -127,6 +127,9 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
         select(pane, row > 0 && row <= entries.count ? entries[row - 1].id : nil)
     }
 }
+
+/// Each pane's one column, and its cells.
+private let entryIdentifier = NSUserInterfaceItemIdentifier("entry")
 
 extension BrowserModel.Pane {
     var title: String {

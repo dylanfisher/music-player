@@ -13,7 +13,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
     /// The longest the window waits between refreshes while a scan stores rows.
     public static let refreshIntervalSeconds = 2.0
 
-    public let model: BrowserModel
+    private let model: BrowserModel
     public let sidebar: NSViewController
     /// The panes over the track table, with the status line under them.
     public let content: NSViewController

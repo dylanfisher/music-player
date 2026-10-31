@@ -62,7 +62,7 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
         table.rowHeight = 34
         table.allowsMultipleSelection = true
         table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
-        if #available(macOS 11.0, *) { table.style = .fullWidth }
+        table.style = .fullWidth
         table.dataSource = self
         table.delegate = self
         table.target = self

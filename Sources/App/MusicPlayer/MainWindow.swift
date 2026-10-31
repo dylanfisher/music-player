@@ -4,6 +4,9 @@ import NowPlaying
 import QueueView
 import Settings
 
+/// The app's name, as the window title and the app menu show it.
+let appName = ProcessInfo.processInfo.processName
+
 /// The main window: the now-playing bar and search field across the top, then the sidebar, the
 /// browser and the queue side by side. It places the features' views and reports layout
 /// changes; it holds no logic of its own.
@@ -33,7 +36,7 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
             defer: false)
         super.init()
-        window.title = ProcessInfo.processInfo.processName
+        window.title = appName
         window.minSize = NSSize(width: 720, height: 420)
         window.delegate = self
         window.isReleasedWhenClosed = false

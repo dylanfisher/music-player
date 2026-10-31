@@ -4,8 +4,8 @@ import Library
 /// most `capacityPages` pages, so the table holds a few thousand rows however long the library.
 /// The least recently used page goes first.
 public final class RowCache {
-    public let pageSize: Int
-    public let capacityPages: Int
+    private let pageSize: Int
+    private let capacityPages: Int
     private let fetch: ([Int64]) throws -> [TrackRow]
     private var ids: [Int64] = []
     /// Rows by ID, per page of `ids`.
@@ -27,11 +27,6 @@ public final class RowCache {
     /// The table's rows are now these IDs. Cached pages no longer line up, so they go.
     public func setIDs(_ ids: [Int64]) {
         self.ids = ids
-        invalidate()
-    }
-
-    /// Drops every cached row, after a rescan may have changed them.
-    public func invalidate() {
         pages = [:]
         recency = []
     }

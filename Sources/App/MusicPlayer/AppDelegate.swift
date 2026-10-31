@@ -274,7 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func mainMenu() -> NSMenu {
-        let name = ProcessInfo.processInfo.processName
+        let name = appName
         let app = NSMenu()
         app.addItem(
             withTitle: "Hide \(name)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"

@@ -30,7 +30,7 @@ private func row(_ id: Int64) -> TrackRow {
     #expect(fetched.count == 4)
 }
 
-@Test func newIDsOrAnInvalidationDropTheCache() throws {
+@Test func newIDsDropTheCache() throws {
     var fetches = 0
     let cache = RowCache(pageSize: 4, capacityPages: 4) { ids in
         fetches += 1
@@ -39,7 +39,7 @@ private func row(_ id: Int64) -> TrackRow {
     cache.setIDs([1, 2, 3])
     #expect(try cache.row(at: 1) == nil)  // gone from the index since the IDs were loaded
     #expect(try cache.row(at: 2)?.id == 3)
-    cache.invalidate()
+    cache.setIDs([1, 2, 3])
     _ = try cache.row(at: 0)
     cache.setIDs([3, 1])
     #expect(try cache.row(at: 0)?.id == 3)
