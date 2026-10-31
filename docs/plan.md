@@ -141,14 +141,14 @@ so the phase 5 old-Mac run needs a prebuilt universal `Bench`.
 
 ### 2. Tag and format reading
 
-- [ ] Our own parsers (no dependencies) for FLAC/Vorbis comments, MP4 atoms (ALAC, AAC), ID3v2.2,
+- [x] Our own parsers (no dependencies) for FLAC/Vorbis comments, MP4 atoms (ALAC, AAC), ID3v2.2,
       2.3 and 2.4 (MP3, AIFF, WAV, and DSF later), and WAV `LIST/INFO`. They read the common
       fields, track and disc numbers, compilation and album-artist flags, and embedded art.
-- [ ] Audio properties from the container: codec, sample rate, bit depth, channels and duration,
+- [x] Audio properties from the container: codec, sample rate, bit depth, channels and duration,
       without decoding audio.
-- [ ] Malformed input never crashes or hangs: tests with truncated, oversized and garbage blocks,
+- [x] Malformed input never crashes or hangs: tests with truncated, oversized and garbage blocks,
       plus a fuzz test over the fixtures with random byte flips.
-- [ ] Benchmark: parse 43k fixture files cold.
+- [x] Benchmark: parse 43k fixture files cold.
 
 Implementation plan:
 
@@ -170,6 +170,14 @@ Implementation plan:
 4. **Bench:** "metadata: parse 43000 fixture files, first read in this process", reporting
    throughput, bytes read per file and the second pass. Benchmarks can attach notes to their row.
 5. ADRs for the parser's strictness and I/O, and for what the cold benchmark measures.
+
+Result: shipped as planned. Bench on Apple Silicon: 43k fixture files parsed in 2.29 s (budget 5 s),
+about 19k files/s, 8.9 KB read per file in 1.11 reads on average. The second pass matches because
+the page cache is warm; a truly cold read needs `sudo purge` (ADR 0007). After the first pass, a
+bad field (such as track "A1", bad text encoding, or an iTunes non-syncsafe ID3v2.4 size) became a
+per-file warning, not a failure, so messy real tags don't drop tracks. The review fixed truncated
+WAV/AIFF bodies, QuickTime `udta` terminators, multi-reference TCON, Xing after a CRC, GIF and
+untyped covers, and wide AAC layouts. Deferred: DSF to phase 12.
 
 ### 3. Library index and watched folders
 
