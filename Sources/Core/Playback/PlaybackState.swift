@@ -45,6 +45,9 @@ public enum PlaybackEvent: Sendable, Equatable {
     case resumed
     case paused
     case stopped
+    /// The current track moved to this many seconds in. The output may not have caught up yet,
+    /// so this is where it will be, not where it is.
+    case seeked(seconds: Double)
     case repeatChanged
     case shuffleChanged
     case formatChanged(FormatChange)

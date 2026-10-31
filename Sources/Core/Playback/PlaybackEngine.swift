@@ -156,6 +156,7 @@ public actor PlaybackEngine {
         } else {
             output.seek(toSeconds: seconds)
         }
+        publish(.seeked(seconds: seconds))
     }
 
     public func setRepeat(_ mode: RepeatMode) {

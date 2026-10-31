@@ -388,3 +388,22 @@ private final class ClosingOutput: Output, @unchecked Sendable {
     #expect(await engine.state.status == .playing)
     #expect(await engine.state.currentIndex == 2)
 }
+
+@Test func aSeekIsPublishedWithWhereItWentAndNothingLoadedPublishesNothing() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    let updates = await engine.updates()
+    await engine.setQueue(urls)
+    await engine.seek(toSeconds: 30)
+    await engine.play()
+    await engine.seek(toSeconds: -5)
+    await engine.seek(toSeconds: 42)
+
+    var events: [PlaybackEvent?] = []
+    for await update in updates {
+        events.append(update.event)
+        if update.event == .seeked(seconds: 42) { break }
+    }
+    #expect(
+        events == [nil, .queueChanged, .resumed, .seeked(seconds: 0), .seeked(seconds: 42)])
+}

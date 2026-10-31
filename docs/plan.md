@@ -609,7 +609,7 @@ is not "more than 200"; the dialogs and drag and drop are tested only through th
          buttons work.
       4. Right-click the Dock icon: the current track and artist show above Play/Pause, Next
          Track and Previous Track, and each works.
-      5. Choose Playback ▸ Stop: Now Playing in Control Center goes back to empty.
+      5. Choose Controls ▸ Stop: Now Playing in Control Center goes back to empty.
 
 Implementation plan:
 
