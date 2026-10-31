@@ -38,6 +38,7 @@ the dependency direction.
 | **core** | `Sources/Core` | The domain: library index and scanner, tag reading, decoders, DSD/DoP, outputs (CoreAudio HAL device, UPnP renderer), preferences. | primitives, other core modules |
 | **features** | `Sources/Features` | User-facing slices: library browser, now playing, preferences window, and later remote control. | core, primitives |
 | **app** | `Sources/App` | The composition root: `main`, app delegate, menus. Wires features together; holds no logic of its own. | features, core, primitives |
+| **tools** | `Sources/Tools` | Development tooling that never ships in the app: the fixture generator and benchmarks. | tools, features, core, primitives |
 
 Each SwiftPM target is one module at `Sources/<Tier>/<Name>`, and its tests are at
 `Tests/<Name>Tests`. `Support/` holds bundle resources such as `Info.plist`, which
@@ -46,6 +47,9 @@ Each SwiftPM target is one module at `Sources/<Tier>/<Name>`, and its tests are 
 **Dependency direction is one-way: app → features → core → primitives.** Never upward, never
 sideways between features. Core modules may import each other; SwiftPM rejects cycles. If a
 primitive needs something from core, it isn't a primitive.
+
+Tools sit beside app: they may import any tier but app, and nothing outside tools imports them, so
+test-only code can't end up in the shipped binary.
 
 `scripts/arch.swift` enforces this from `Package.swift`, and `./scripts/check` runs it. The
 compiler already rejects any import a target hasn't declared, so checking the declared
@@ -70,6 +74,6 @@ Things move between tiers deliberately, never by accident:
 
 A promotion is its own commit, separate from whatever work revealed it (principle 4).
 
-<!-- paths: Sources/Primitives Sources/Core Sources/Features Sources/App -->
+<!-- paths: Sources/Primitives Sources/Core Sources/Features Sources/App Sources/Tools -->
 <!-- ↑ scripts/check verifies every path above exists. Keep it in sync with the Tiers table;
      a rename that misses this line fails the gate, which is the point. -->

@@ -7,6 +7,7 @@
       "Bash(./scripts/test:*)",
       "Bash(swift scripts/arch.swift)",
       "Bash(./scripts/bundle:*)",
+      "Bash(./scripts/fixtures:*)",
       "Bash(swift build:*)",
       "Bash(swift test:*)",
       "Bash(swift format lint:*)",

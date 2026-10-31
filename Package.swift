@@ -52,6 +52,22 @@ let package = Package(
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
         ),
+        .target(
+            name: "Fixtures",
+            path: "Sources/Tools/Fixtures",
+            swiftSettings: strictSwift
+        ),
+        .executableTarget(
+            name: "GenerateFixtures",
+            dependencies: ["Fixtures"],
+            path: "Sources/Tools/GenerateFixtures",
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "FixturesTests",
+            dependencies: ["Fixtures"],
+            swiftSettings: strictSwift
+        ),
         .testTarget(
             name: "HALOutputTests",
             dependencies: ["HALOutput"],

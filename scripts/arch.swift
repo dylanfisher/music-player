@@ -9,6 +9,7 @@ let allowed: [String: Set<String>] = [
     "Core": ["Primitives", "Core"],
     "Features": ["Primitives", "Core"],
     "App": ["Primitives", "Core", "Features"],
+    "Tools": ["Primitives", "Core", "Features", "Tools"],
 ]
 
 let dump = Process()

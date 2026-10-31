@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Build the fixture library that tests and benchmarks run against: 43k tagged files in
+# ~/Library/Caches/MusicPlayer/fixtures by default. Rerunning with the same count is skipped.
+#   ./scripts/fixtures [--count <files>] [--output <directory>] [--force]
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+swift build -c release --product GenerateFixtures >&2
+exec "$(swift build -c release --show-bin-path)/GenerateFixtures" "$@"
