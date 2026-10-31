@@ -228,3 +228,19 @@ import Testing
     #expect(!filter.includesDirectory("A/Live"))
     #expect(filter.includesDirectory("A/Studio"))
 }
+
+@Test func skipsHiddenFilesAndReportsSymbolicLinks() throws {
+    let library = try TestLibrary()
+    let file = library.manifest.files.first { $0.malformation == nil }!
+    let directory = (library.path(file) as NSString).deletingLastPathComponent
+    // The AppleDouble file macOS writes beside each file on an SMB share.
+    try Data(count: 4096).write(to: URL(fileURLWithPath: directory + "/._copy.flac"))
+    try FileManager.default.createSymbolicLink(
+        atPath: library.root + "/Linked", withDestinationPath: directory)
+    let summary = try library.scan()
+    #expect(summary.read == library.manifest.files.count)
+    #expect(
+        summary.issues == [
+            ScanIssue(kind: .symbolicLink, path: library.root + "/Linked", detail: "not followed")
+        ])
+}
