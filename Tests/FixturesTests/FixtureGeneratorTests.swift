@@ -4,16 +4,13 @@ import Testing
 
 @testable import Fixtures
 
-/// Big enough that the plan uses every seed and tag layout, small enough to build in a second.
-private let libraryCount = 1000
-
 /// One library shared by the tests that only read it. It lives in `.build`, so reruns skip
 /// generating it and nothing piles up in the temporary directory.
 private let library = Result { () throws -> (URL, FixtureManifest) in
     let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent(".build/fixture-tests")
-    _ = try generateFixtures(count: libraryCount, in: root)
+    _ = try generateFixtures(count: coveringLibraryFileCount, in: root)
     return (root, try loadManifest(in: root))
 }
 
@@ -100,8 +97,8 @@ private func audioToolboxTags(_ url: URL) throws -> (info: [String: Any], artByt
 
 @Test func manifestMatchesTheFilesOnDisk() throws {
     let (root, manifest) = try library.get()
-    #expect(manifest.fileCount == libraryCount)
-    #expect(manifest.files.count == libraryCount)
+    #expect(manifest.fileCount == coveringLibraryFileCount)
+    #expect(manifest.files.count == coveringLibraryFileCount)
     #expect(manifest.files.map(\.path) == manifest.files.map(\.path).sorted())
     for file in manifest.files {
         let attributes = try FileManager.default.attributesOfItem(

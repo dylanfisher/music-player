@@ -10,6 +10,10 @@ public enum FixtureGeneration: Equatable, Sendable {
 /// The size of the real library the budgets are set for.
 public let fullLibraryFileCount = 43_000
 
+/// Big enough that the plan uses every seed, tag layout and malformation, small enough for tests
+/// to build in a second.
+public let coveringLibraryFileCount = 1000
+
 /// `~/Library/Caches/MusicPlayer/fixtures`.
 public func defaultFixturesDirectory() throws -> URL {
     try FileManager.default.url(
