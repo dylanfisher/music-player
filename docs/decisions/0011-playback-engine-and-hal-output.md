@@ -47,7 +47,11 @@ decoded. Position comes from the same count.
   converter pads 16 or 24 bits into the device's 32 exactly.
 - **Format change:** a next track that differs waits until the ring buffer is empty and the
   device's latency (buffer, safety offset, device and stream latency) has passed. Then the device
-  is stopped, reconfigured and restarted with half a second queued.
+  is stopped, reconfigured and restarted. The next track's first half second is decoded while
+  the old one drains, into the device's layout at the new rate, so after the drain only the
+  device's own steps remain (stop, rate, format, start) and copying that audio in. Settling waits
+  on property listeners for the rate and format rather than polling. The switch is timed from the
+  old track's last sample playing, and `FormatChange.steps` says where the time went.
 - **Discard handshake:** `HALRenderDiscard(from, to)` tells the IO proc to skip the bytes from
   `from` up to `to`. The producer writes what follows straight after `to`, so neither side waits,
   and nothing resets the ring buffer under the reader. Only the IO proc moves the read index
