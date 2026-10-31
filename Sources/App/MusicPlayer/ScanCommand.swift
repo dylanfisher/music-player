@@ -7,10 +7,11 @@ import Settings
 /// Returns to the start of the line and clears it, so progress rewrites one line in place.
 let eraseLine = "\r\u{1B}[K"
 
-/// `MusicPlayer --scan <folder> [--db <path>]`: scans one folder into the library database,
-/// printing progress and a summary, and writes every warned or failed file to a text file beside
-/// the database. Safe to rerun; the second run measures a rescan with no changes.
-func scanCommand(folder: String, databasePath: String?) throws {
+/// `MusicPlayer --scan <folder> [--db <path>] [--readers <n>]`: scans one folder into the
+/// library database, printing progress and a summary, and writes every warned or failed file to
+/// a text file beside the database. Safe to rerun; the second run measures a rescan with no
+/// changes. `readers` fixes how many files a network scan reads at once, instead of tuning it.
+func scanCommand(folder: String, databasePath: String?, readers: Int?) throws {
     let path = URL(fileURLWithPath: folder).standardizedFileURL.path
     // Unknown only when the folder is missing, which the scan reports as such.
     let isLocal = (try? URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeIsLocalKey]))?
@@ -25,6 +26,12 @@ func scanCommand(folder: String, databasePath: String?) throws {
         let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
         try requireWatched(path, in: settings[\.watchedFolders])
         databaseURL = defaultLibraryFileURL(settingsFileURL: settingsURL)
+    }
+    if readers != nil, isLocal != false {
+        // A local scan always reads on every core, so the flag would silently do nothing.
+        FileHandle.standardError.write(
+            Data("error: --readers only applies to a folder on a network volume\n".utf8))
+        exit(1)
     }
     print(
         "scanning \(path) (\(isLocal == false ? "network" : "local") volume) into \(databaseURL.path)"
@@ -42,7 +49,7 @@ func scanCommand(folder: String, databasePath: String?) throws {
         }
         printed.signal()
     }
-    let summary = try LibraryScanner(databaseURL: databaseURL).scan(
+    let summary = try LibraryScanner(databaseURL: databaseURL, networkReaders: readers).scan(
         WatchedFolder(path: path, kind: isLocal == false ? .network : .local),
         progress: continuation)
     continuation.finish()
@@ -67,6 +74,8 @@ func scanCommand(folder: String, databasePath: String?) throws {
         String(
             format: "  %.0f files/s; %d other files skipped",
             Double(summary.read + summary.unchanged) / max(elapsed, 0.001), summary.otherFiles),
+        "  " + describe(summary.readers)
+            + String(format: ", %.0f files/s read", Double(summary.read) / max(elapsed, 0.001)),
         "  warnings by kind: " + counts(issues, MetadataWarning.Kind.allCases) { .warning($0) },
         "  failures by kind: " + counts(issues, MetadataError.Kind.allCases) { .failure($0) },
     ]
@@ -85,8 +94,8 @@ private func printProgress(_ progress: ScanProgress, since started: Date) {
         switch progress.stage {
         case .walking:
             String(
-                format: "walking: %d audio files found, %.0f files/s", progress.found,
-                Double(progress.found) / elapsed)
+                format: "walking: %d audio files found, %d of %d read, %.0f files/s",
+                progress.found, progress.read, progress.toRead, Double(progress.found) / elapsed)
         case .reading:
             String(
                 format: "reading: %d of %d (%d unchanged), %d failed, %.0f files/s",
@@ -95,6 +104,21 @@ private func printProgress(_ progress: ScanProgress, since started: Date) {
         }
     print(eraseLine + line, terminator: "")
     fflush(stdout)
+}
+
+/// "readers: 4→8→16→12 (held)", with a long trace cut to its start and end.
+private func describe(_ readers: ScanSummary.Readers?) -> String {
+    switch readers {
+    case nil: return "readers: none, the scan stopped before reading"
+    case .fixed(let count): return "readers: \(count) (fixed)"
+    case .tuned(let levels, let climbing):
+        let shown =
+            levels.count > 12
+            ? levels.prefix(6).map(String.init) + ["…"] + levels.suffix(5).map(String.init)
+            : levels.map(String.init)
+        return "readers: " + shown.joined(separator: "→")
+            + (climbing ? " (still climbing)" : " (held)")
+    }
 }
 
 /// "badNumber 3, badText 1", or "none".

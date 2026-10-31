@@ -27,8 +27,9 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// path as configured.
     private var resolvedFolders: [(resolved: String, configured: String)] = []
 
-    public init(databaseURL: URL) {
-        scanner = LibraryScanner(databaseURL: databaseURL)
+    /// `networkReaders` is the files a network scan reads at once, or nil to tune it per scan.
+    public init(databaseURL: URL, networkReaders: Int?) {
+        scanner = LibraryScanner(databaseURL: databaseURL, networkReaders: networkReaders)
     }
 
     /// Removes files outside `folders` from the index, scans every folder, and starts watching

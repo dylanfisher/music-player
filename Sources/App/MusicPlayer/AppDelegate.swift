@@ -32,7 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let settingsURL = try defaultSettingsFileURL()
             let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
             let watcher = LibraryWatcher(
-                databaseURL: defaultLibraryFileURL(settingsFileURL: settingsURL))
+                databaseURL: defaultLibraryFileURL(settingsFileURL: settingsURL),
+                networkReaders: settings[\.networkScanReaders])
             watcher.start(
                 folders: settings[\.watchedFolders],
                 pausePollingDuringPlayback: settings[\.pausePollingDuringPlayback])

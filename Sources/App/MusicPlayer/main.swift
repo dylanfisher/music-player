@@ -8,7 +8,7 @@ import Settings
 //   MusicPlayer --play <file> [--device <part of name>]
 //   MusicPlayer --export-settings <file>
 //   MusicPlayer --import-settings <file>
-//   MusicPlayer --scan <folder> [--db <file>]
+//   MusicPlayer --scan <folder> [--db <file>] [--readers <n>]
 let arguments = CommandLine.arguments
 
 func value(after flag: String) -> String? {
@@ -38,14 +38,23 @@ func runAndExit(_ command: () throws -> Void) -> Never {
 for (flag, what) in [
     ("--export-settings", "a file"), ("--import-settings", "a file"), ("--play", "a file"),
     ("--device", "part of a device name"), ("--scan", "a folder"), ("--db", "a database file"),
+    ("--readers", "a number of files to read at once"),
 ] where arguments.contains(flag) && value(after: flag) == nil {
     FileHandle.standardError.write(Data("error: \(flag) needs \(what)\n".utf8))
     exit(1)
 }
 
-if arguments.contains("--db") && !arguments.contains("--scan") {
-    FileHandle.standardError.write(Data("error: --db only goes with --scan\n".utf8))
+for flag in ["--db", "--readers"] where arguments.contains(flag) && !arguments.contains("--scan") {
+    FileHandle.standardError.write(Data("error: \(flag) only goes with --scan\n".utf8))
     exit(1)
+}
+let readers = value(after: "--readers").map { text in
+    guard let count = Int(text), count > 0 else {
+        FileHandle.standardError.write(
+            Data("error: --readers needs a whole number above 0, not \(text)\n".utf8))
+        exit(1)
+    }
+    return count
 }
 
 if arguments.contains("--list-devices") {
@@ -66,7 +75,9 @@ if let path = value(after: "--import-settings") {
     }
 }
 if let folder = value(after: "--scan") {
-    runAndExit { try scanCommand(folder: folder, databasePath: value(after: "--db")) }
+    runAndExit {
+        try scanCommand(folder: folder, databasePath: value(after: "--db"), readers: readers)
+    }
 }
 /// Set from signal handlers on another thread, read by the playback loop.
 final class StopRequest: @unchecked Sendable {

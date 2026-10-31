@@ -18,7 +18,7 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
 
 @Test func scansAtStartThenFollowsFSEvents() async throws {
     let library = try TestLibrary()
-    let watcher = LibraryWatcher(databaseURL: library.databaseURL)
+    let watcher = LibraryWatcher(databaseURL: library.databaseURL, networkReaders: nil)
     watcher.start(folders: [library.folder], pausePollingDuringPlayback: true)
     defer { watcher.stop() }
 
@@ -35,7 +35,7 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
 
 @Test func aRootWithATrailingSlashIndexesEachFileOnce() async throws {
     let library = try TestLibrary()
-    let watcher = LibraryWatcher(databaseURL: library.databaseURL)
+    let watcher = LibraryWatcher(databaseURL: library.databaseURL, networkReaders: nil)
     watcher.start(
         folders: [WatchedFolder(path: library.root + "/", kind: .local)],
         pausePollingDuringPlayback: true)
