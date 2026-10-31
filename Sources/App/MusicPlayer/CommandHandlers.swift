@@ -51,19 +51,21 @@ extension AppDelegate {
                 NSPasteboard.general.setString(paths.joined(separator: "\n"), forType: .string)
             }
         }
-        // The list with the keys decides: the queue, or else a manual playlist the table shows.
+        let removal = { [weak self] () -> Removal? in
+            guard let self, let window = self.window?.window else { return nil }
+            return removalTarget(
+                queueFocused: window.firstResponder === self.queue?.list,
+                queueHasSelection: self.queue?.hasSelection == true,
+                tracksFocused: self.browser?.tracksHaveFocus == true,
+                canRemoveFromPlaylist: self.browser?.canRemoveFromPlaylist == true)
+        }
         dispatcher.handle(
-            .removeFromQueue,
-            enabled: { [weak self] in
-                self?.queue?.hasSelection == true || self?.browser?.canRemoveFromPlaylist == true
-            },
+            .removeFromQueue, enabled: { removal() != nil },
             run: { [weak self] in
-                guard let self else { return }
-                let inQueue = self.window?.window.firstResponder === self.queue?.list
-                if inQueue || self.browser?.canRemoveFromPlaylist != true {
-                    self.queue?.removeSelection()
-                } else {
-                    self.browser?.removeSelectionFromPlaylist()
+                switch removal() {
+                case .queue: self?.queue?.removeSelection()
+                case .playlist: self?.browser?.removeSelectionFromPlaylist()
+                case nil: break
                 }
             })
     }
@@ -232,4 +234,19 @@ extension AppDelegate {
 private func seek(_ engine: PlaybackEngine, by seconds: Double) async {
     guard let position = await engine.position() else { return }
     await engine.seek(toSeconds: max(0, position + seconds))
+}
+
+/// What Remove from Queue or Playlist takes from.
+enum Removal: Equatable {
+    case queue, playlist
+}
+
+/// The list with the keys decides: the queue's selection when the queue has them, the selected
+/// tracks of a manual playlist when the track table has them, nothing anywhere else.
+func removalTarget(
+    queueFocused: Bool, queueHasSelection: Bool, tracksFocused: Bool, canRemoveFromPlaylist: Bool
+) -> Removal? {
+    if queueFocused { return queueHasSelection ? .queue : nil }
+    if tracksFocused, canRemoveFromPlaylist { return .playlist }
+    return nil
 }

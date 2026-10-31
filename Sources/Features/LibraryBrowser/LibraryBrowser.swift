@@ -361,6 +361,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     public var hasSelectedTracks: Bool { !table.table.selectedRowIndexes.isEmpty }
 
+    /// Whether the track table has the keys.
+    public var tracksHaveFocus: Bool { focusedList == .tracks }
+
     public func selectAllTracks() { table.table.selectAll(nil) }
 
     public func playSelection() { table.playSelected() }
