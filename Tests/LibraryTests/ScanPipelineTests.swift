@@ -84,3 +84,29 @@ private func emptyFiles(_ count: Int) throws -> String {
     #expect(levels.starts(with: [4, 8, 16]))
     #expect(nas.mostFilesReadAtOnce >= 16)
 }
+
+@Test func aPauseIsNeverMeasuredInAWindow() {
+    let control = ScanControl()
+    var window = ScanPipeline.Window(start: 0, pauseChanges: control.pauseState.changes)
+    window.files = 10
+    window.seconds = 1
+    let second: UInt64 = 1_000_000_000
+    #expect(window.measurement(at: second, pause: control.pauseState) != nil)
+
+    // Closing while paused.
+    control.pause()
+    #expect(window.measurement(at: second, pause: control.pauseState) == nil)
+
+    // The window that began during the pause and ends after the resume includes the pause.
+    var after = ScanPipeline.Window(start: 0, pauseChanges: control.pauseState.changes)
+    after.files = 10
+    after.seconds = 1
+    control.resume()
+    #expect(after.measurement(at: second, pause: control.pauseState) == nil)
+
+    // The next one is clean.
+    var clean = ScanPipeline.Window(start: 0, pauseChanges: control.pauseState.changes)
+    clean.files = 10
+    clean.seconds = 1
+    #expect(clean.measurement(at: second, pause: control.pauseState) != nil)
+}

@@ -66,14 +66,32 @@ final class ScanPipeline: @unchecked Sendable {
     private var batch: [ScannedFile] = []
     private var storeError: (any Error)?
 
-    /// Files finished since `start`, and whether readers waited for the walk or the scan was
-    /// paused during it, either of which makes its throughput say nothing about the NAS.
-    private struct Window {
+    /// Files finished since `start`, and whether readers waited for the walk or the scan paused
+    /// during it, either of which makes its throughput say nothing about the NAS.
+    struct Window {
         var start: UInt64
-        var pauses: Int
+        var pauseChanges: Int
         var files = 0
         var seconds = 0.0
         var starved = false
+
+        /// Whether it's long enough, and has enough files for `readers`, to close.
+        func isDue(at now: UInt64, readers: Int) -> Bool {
+            Double(now - start) / 1e9 >= ScanPipeline.windowSeconds
+                && files >= ScanPipeline.windowFilesPerReader * readers
+        }
+
+        /// What the controller should see, or nil for a window that says nothing about the NAS:
+        /// one that waited for the walk, or that spans or ends in a pause. `pause` was read
+        /// before `now`, so a pause that begins in between only drops the next window.
+        func measurement(at now: UInt64, pause: (isPaused: Bool, changes: Int))
+            -> ReadConcurrency.Window?
+        {
+            guard !starved, !pause.isPaused, pause.changes == pauseChanges else { return nil }
+            let elapsed = Double(now - start) / 1e9
+            return .init(
+                filesPerSecond: Double(files) / elapsed, secondsPerFile: seconds / Double(files))
+        }
     }
 
     /// Scans `starts`, each `root` or a directory inside it that the filter includes.
@@ -99,7 +117,8 @@ final class ScanPipeline: @unchecked Sendable {
             controller = tuning
             limit = tuning.level
         }
-        window = Window(start: DispatchTime.now().uptimeNanoseconds, pauses: control.pauses)
+        window = Window(
+            start: DispatchTime.now().uptimeNanoseconds, pauseChanges: control.pauseState.changes)
     }
 
     /// Returns once the walk has finished and every changed file is read and stored, or the scan
@@ -263,20 +282,15 @@ final class ScanPipeline: @unchecked Sendable {
         guard var tuning = controller else { return }
         window.files += 1
         window.seconds += seconds
+        let pause = control.pauseState
         let now = DispatchTime.now().uptimeNanoseconds
-        let elapsed = Double(now - window.start) / 1e9
-        guard elapsed >= Self.windowSeconds, window.files >= Self.windowFilesPerReader * limit
-        else { return }
-        let pauses = control.pauses
-        if !window.starved, window.pauses == pauses {
-            tuning.observe(
-                .init(
-                    filesPerSecond: Double(window.files) / elapsed,
-                    secondsPerFile: window.seconds / Double(window.files)))
+        guard window.isDue(at: now, readers: limit) else { return }
+        if let measured = window.measurement(at: now, pause: pause) {
+            tuning.observe(measured)
             controller = tuning
             setLimit(tuning.level)
         }
-        window = Window(start: now, pauses: pauses)
+        window = Window(start: now, pauseChanges: pause.changes)
     }
 
     /// Called with `condition` held. Readers above a lowered limit stop at their next file.

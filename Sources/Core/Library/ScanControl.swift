@@ -19,13 +19,16 @@ public final class ScanControl: @unchecked Sendable {
         }
     }
 
-    /// How many times the scan has been paused, so a throughput measurement that spans a pause
-    /// can be thrown away.
-    var pauses: Int { condition.withLock { pauseCount } }
+    /// Whether the scan is paused now, and how many times it has paused or resumed, so a
+    /// throughput measurement that spans or ends in a pause can be thrown away.
+    var pauseState: (isPaused: Bool, changes: Int) {
+        condition.withLock { (paused, pauseCount) }
+    }
 
     public func resume() {
         condition.withLock {
             paused = false
+            pauseCount += 1
             condition.broadcast()
         }
     }
