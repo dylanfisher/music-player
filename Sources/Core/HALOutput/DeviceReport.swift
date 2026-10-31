@@ -1,3 +1,5 @@
+import DisplayText
+
 /// Plain-text listing of devices and the formats they offer, for `--list-devices`.
 public func deviceReport(_ devices: [AudioDevice]) -> String {
     var lines: [String] = []
@@ -19,12 +21,6 @@ public func deviceReport(_ devices: [AudioDevice]) -> String {
         lines.append("")
     }
     return lines.joined(separator: "\n")
-}
-
-/// 44100 -> "44.1", 96000 -> "96", 705600 -> "705.6".
-public func kilohertz(_ hertz: Double) -> String {
-    let khz = hertz / 1000
-    return khz.rounded() == khz ? String(Int(khz)) : String(khz)
 }
 
 func kilohertz(_ range: ClosedRange<Double>) -> String {

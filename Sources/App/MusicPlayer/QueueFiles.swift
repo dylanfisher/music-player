@@ -1,3 +1,4 @@
+import DisplayText
 import Foundation
 import HALOutput
 import Library

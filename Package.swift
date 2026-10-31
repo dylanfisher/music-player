@@ -18,6 +18,11 @@ let package = Package(
             cSettings: strictC
         ),
         .target(
+            name: "DisplayText",
+            path: "Sources/Primitives/DisplayText",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SQLite",
             path: "Sources/Primitives/SQLite",
             swiftSettings: strictSwift,
@@ -37,7 +42,7 @@ let package = Package(
         ),
         .target(
             name: "HALOutput",
-            dependencies: ["HALRender", "Log", "Playback", "RingBuffer"],
+            dependencies: ["DisplayText", "HALRender", "Log", "Playback", "RingBuffer"],
             path: "Sources/Core/HALOutput",
             swiftSettings: strictSwift
         ),
@@ -72,7 +77,9 @@ let package = Package(
         ),
         .executableTarget(
             name: "MusicPlayer",
-            dependencies: ["HALOutput", "Library", "Metadata", "Playback", "SQLite", "Settings"],
+            dependencies: [
+                "DisplayText", "HALOutput", "Library", "Metadata", "Playback", "SQLite", "Settings",
+            ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
         ),
@@ -91,7 +98,8 @@ let package = Package(
         .executableTarget(
             name: "Bench",
             dependencies: [
-                "Fixtures", "HALOutput", "Library", "Metadata", "Playback", "SQLite", "Settings",
+                "DisplayText", "Fixtures", "HALOutput", "Library", "Metadata", "Playback", "SQLite",
+                "Settings",
             ],
             path: "Sources/Tools/Bench",
             swiftSettings: strictSwift
@@ -104,6 +112,11 @@ let package = Package(
         .testTarget(
             name: "BenchTests",
             dependencies: ["Bench"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "DisplayTextTests",
+            dependencies: ["DisplayText"],
             swiftSettings: strictSwift
         ),
         .testTarget(

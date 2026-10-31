@@ -3,13 +3,6 @@ import Testing
 
 @testable import HALOutput
 
-@Test(arguments: [
-    (44_100.0, "44.1"), (96_000.0, "96"), (705_600.0, "705.6"), (768_000.0, "768"),
-])
-func formatsKilohertz(hertz: Double, expected: String) {
-    #expect(kilohertz(hertz) == expected)
-}
-
 @Test func rendersFourCharCodes() {
     #expect(fourCharCode(kAudioDeviceTransportTypeUSB) == "usb ")
     #expect(fourCharCode(kAudioFormatLinearPCM) == "lpcm")

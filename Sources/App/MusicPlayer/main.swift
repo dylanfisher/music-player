@@ -25,12 +25,6 @@ func values(after flag: String) -> [String] {
     return Array(arguments[(index + 1)...].prefix { !$0.hasPrefix("--") })
 }
 
-/// 312.4 -> "5:12".
-func clock(_ seconds: Double) -> String {
-    let whole = Int(seconds)
-    return "\(whole / 60):" + String(format: "%02d", whole % 60)
-}
-
 func runAndExit(_ command: () throws -> Void) -> Never {
     do {
         try command()

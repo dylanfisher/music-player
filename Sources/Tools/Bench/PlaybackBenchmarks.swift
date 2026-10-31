@@ -1,4 +1,5 @@
 import Darwin
+import DisplayText
 import Fixtures
 import Foundation
 import HALOutput

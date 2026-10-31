@@ -1,4 +1,5 @@
 import CoreAudio
+import DisplayText
 
 /// A format an output stream can run the hardware in, as opposed to the virtual format the HAL
 /// mixes in. Bit-perfect playback means choosing one of these to match the track.

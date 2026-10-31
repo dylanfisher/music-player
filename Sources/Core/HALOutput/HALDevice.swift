@@ -1,4 +1,5 @@
 import CoreAudio
+import DisplayText
 import Foundation
 import HALRender
 import Log
