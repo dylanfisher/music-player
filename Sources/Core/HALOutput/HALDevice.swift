@@ -92,13 +92,18 @@ final class HALDevice: PCMDevice {
         // it was.
         try clock.time("rate") {
             try writeScalar(id, address(kAudioDevicePropertyNominalSampleRate), sampleRateHz)
-            try waitUntil("\(kilohertz(sampleRateHz)) kHz") {
+            try waitUntil(
+                "\(kilohertz(sampleRateHz)) kHz", id, address(kAudioDevicePropertyNominalSampleRate)
+            ) {
                 try readScalar(id, address(kAudioDevicePropertyNominalSampleRate)) == sampleRateHz
             }
         }
         try clock.time("format") {
             try writeScalar(stream, address(kAudioStreamPropertyPhysicalFormat), format)
-            try waitUntil(PhysicalFormat(format).summary) {
+            try waitUntil(
+                PhysicalFormat(format).summary, stream,
+                address(kAudioStreamPropertyPhysicalFormat)
+            ) {
                 let now: AudioStreamBasicDescription = try readScalar(
                     stream, address(kAudioStreamPropertyPhysicalFormat))
                 return PhysicalFormat(now) == PhysicalFormat(format)
@@ -223,12 +228,29 @@ func deviceID(uid: String) throws -> AudioObjectID? {
     return try ids.first { try readString($0, address(kAudioDevicePropertyDeviceUID)) == uid }
 }
 
-/// Polls until `condition` holds. Devices apply rate and format changes asynchronously, and
-/// playing before they finish produces a click or the wrong rate.
-private func waitUntil(_ what: String, _ condition: () throws -> Bool) throws {
+/// Waits until `condition` holds, for up to 3 seconds. Devices apply rate and format changes
+/// asynchronously, and playing before they finish produces a click or the wrong rate. A listener on
+/// `property` wakes the check as soon as the device reports a change, instead of up to one poll
+/// interval later; it still rechecks every 50 ms in case a notification never comes.
+private func waitUntil(
+    _ what: String, _ object: AudioObjectID, _ property: AudioObjectPropertyAddress,
+    _ condition: () throws -> Bool
+) throws {
+    if try condition() { return }
+    let changed = DispatchSemaphore(value: 0)
+    let listener: AudioObjectPropertyListenerBlock = { _, _ in changed.signal() }
+    let queue = DispatchQueue.global(qos: .userInteractive)
+    var address = property
+    try throwIfError(
+        "AudioObjectAddPropertyListenerBlock",
+        AudioObjectAddPropertyListenerBlock(object, &address, queue, listener))
+    defer {
+        let status = AudioObjectRemovePropertyListenerBlock(object, &address, queue, listener)
+        if status != noErr { logger.error("removing the \(what) listener failed: \(status)") }
+    }
     let deadline = Date().addingTimeInterval(3)
     while try !condition() {
         guard Date() < deadline else { throw HALDeviceError.didNotSettle(what) }
-        Thread.sleep(forTimeInterval: 0.01)
+        _ = changed.wait(timeout: .now() + 0.05)
     }
 }
