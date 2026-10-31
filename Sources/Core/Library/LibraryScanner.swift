@@ -28,7 +28,6 @@ public struct LibraryScanner: Sendable {
         databaseURL: URL, networkReaders: Int? = nil,
         access: any ScanFileAccess = SystemFileAccess()
     ) {
-        precondition(networkReaders.map { $0 > 0 } ?? true, "a scan needs at least one reader")
         self.databaseURL = databaseURL
         self.networkReaders = networkReaders
         self.access = access

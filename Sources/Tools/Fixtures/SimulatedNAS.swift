@@ -7,8 +7,7 @@ import Metadata
 /// at most `capacity` are served at once while the rest wait. It tells the scanner the volume is
 /// a network one, so the scan tunes its readers as it would on the NAS.
 public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
-    public let latencySeconds: Double
-    public let capacity: Int
+    private let latencySeconds: Double
     private let slots: DispatchSemaphore
     private let system = SystemFileAccess()
     // Guarded by `lock`.
@@ -19,7 +18,6 @@ public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
     public init(latencySeconds: Double, capacity: Int) {
         precondition(latencySeconds >= 0 && capacity > 0, "a NAS that can't serve anything")
         self.latencySeconds = latencySeconds
-        self.capacity = capacity
         slots = DispatchSemaphore(value: capacity)
     }
 
