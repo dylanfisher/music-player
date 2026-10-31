@@ -352,14 +352,14 @@ during playback, which waits for the phase 5 window.
 
 ### 5. Main window
 
-- [ ] AppKit window: a sidebar (library, playlists, watched folders), Swinsian-style column
+- [x] AppKit window: a sidebar (library, playlists, watched folders), Swinsian-style column
       browser panes (genre, artist, album), and an `NSTableView` of tracks with configurable,
       sortable and reorderable columns. A now-playing bar with art, seek and time.
-- [ ] Search field filtering through FTS5 as you type.
-- [ ] Queue view: reorder, remove, and "play next".
-- [ ] Album art loaded lazily and cached at display size. No full-size images held in memory.
-- [ ] Window layout and column state are saved through Settings.
-- [ ] Benchmarks: launch to interactive, search keystroke, re-sort, and memory.
+- [x] Search field filtering through FTS5 as you type.
+- [x] Queue view: reorder, remove, and "play next".
+- [x] Album art loaded lazily and cached at display size. No full-size images held in memory.
+- [x] Window layout and column state are saved through Settings.
+- [x] Benchmarks: launch to interactive, search keystroke, re-sort, and memory.
 - [ ] **Hardware checkpoint (owner):** run the release build on the 2015 MacBook Pro (macOS 12,
       Intel) with the real library. Report launch time and how scrolling and searching feel, and
       run `./scripts/bench` there.
@@ -412,6 +412,15 @@ Implementation plan:
    (pane cascade, search plus panes, sort, row cache eviction, play-selection order, selection kept
    across a refresh), NowPlayingTests, QueueViewTests, MusicPlayerTests (the watcher hook).
    ADRs for the window's data flow and the launch measurement.
+
+Result: shipped as planned; the 2015 MacBook Pro checkpoint is pending. Bench on Apple Silicon: launch
+to the first rows drawn 0.60 s (budget 1 s), memory after scrolling all 43k rows with art 53 MB
+(250 MB), search keystroke p95 12.7 ms (30 ms), re-sort p95 42.5 ms (100 ms). The review fixed the
+selection and scroll anchor following row numbers instead of tracks, overlapping filter changes
+dropping one another, sort state committed before its query, oversized column widths stopping
+layout saves, watcher events applied out of order, and stale queue and now-playing rows. The default
+layout now fits 1440x900 with the queue open. Known limit: the album pane lists one row per album,
+so albums that share a title by different artists repeat by name.
 
 ### 6. Commands, shortcuts, command palette, settings window
 
