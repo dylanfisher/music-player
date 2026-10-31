@@ -108,7 +108,7 @@ private func makeSeed(_ kind: SeedKind, in directory: URL) throws -> Seed {
     }
 }
 
-private func runAfconvert(_ arguments: [String]) throws {
+func runAfconvert(_ arguments: [String]) throws {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
     process.arguments = arguments

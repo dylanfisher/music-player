@@ -37,7 +37,7 @@ let package = Package(
         ),
         .target(
             name: "HALOutput",
-            dependencies: ["HALRender", "Log", "RingBuffer"],
+            dependencies: ["HALRender", "Log", "Playback", "RingBuffer"],
             path: "Sources/Core/HALOutput",
             swiftSettings: strictSwift
         ),
@@ -66,13 +66,13 @@ let package = Package(
         ),
         .executableTarget(
             name: "MusicPlayer",
-            dependencies: ["HALOutput", "Library", "Metadata", "SQLite", "Settings"],
+            dependencies: ["HALOutput", "Library", "Metadata", "Playback", "SQLite", "Settings"],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
         ),
         .target(
             name: "Fixtures",
-            dependencies: ["Library", "Log", "Metadata"],
+            dependencies: ["HALOutput", "HALRender", "Library", "Log", "Metadata"],
             path: "Sources/Tools/Fixtures",
             swiftSettings: strictSwift
         ),
@@ -100,7 +100,7 @@ let package = Package(
         ),
         .testTarget(
             name: "HALOutputTests",
-            dependencies: ["HALOutput"],
+            dependencies: ["Fixtures", "HALOutput", "Playback"],
             swiftSettings: strictSwift
         ),
         .testTarget(

@@ -47,6 +47,11 @@ final class FileDecoder {
         bytesPerFrame = format.mBytesPerFrame
     }
 
+    /// Makes the next `read` start at `frame`, counted at the file's rate.
+    func seek(toFrame frame: Int64) throws {
+        try throwIfError("ExtAudioFileSeek", ExtAudioFileSeek(file, frame))
+    }
+
     /// Decodes up to `frames` frames into `buffer`. Returns how many were decoded: 0 at the end.
     func read(into buffer: UnsafeMutableRawPointer, frames: UInt32) throws -> UInt32 {
         precondition(bytesPerFrame > 0, "setOutputFormat must be called before read")
