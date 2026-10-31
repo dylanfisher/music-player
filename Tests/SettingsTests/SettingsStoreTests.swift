@@ -17,6 +17,7 @@ private struct TestSchema: SettingsSchema {
     let device = Setting<String?>("device", default: "built-in", "An optional.")
     let tags = Setting<[String]>("tags", default: [], "A list.")
     let folders = Setting<[WatchedFolder]>("folders", default: [], "A structured list.")
+    let limit = Setting<Int?>("limit", default: nil, range: 1...4, "An optional with a range.")
 }
 
 /// A settings file in a fresh temporary directory that nothing else touches.
@@ -112,10 +113,16 @@ private func problems(_ json: String) -> [SettingProblem] {
 
 @Test func rejectsValuesOutOfRange() {
     #expect(
-        problems(#"{"count": 11, "gain": -0.5}"#) == [
+        problems(#"{"count": 11, "gain": -0.5, "limit": 5}"#) == [
             SettingProblem(key: "count", reason: .outOfRange("11 is outside 1...10")),
             SettingProblem(key: "gain", reason: .outOfRange("-0.5 is outside 0.0...1.0")),
+            SettingProblem(key: "limit", reason: .outOfRange("5 is outside 1...4")),
         ])
+}
+
+@Test func acceptsAnOptionalInsideItsRangeOrNull() throws {
+    #expect(try store(#"{"limit": 4}"#)[\.limit] == 4)
+    #expect(try store(#"{"limit": null}"#)[\.limit] == nil)
 }
 
 @Test func namesTheBadFieldInsideAStructuredValue() throws {
@@ -213,12 +220,13 @@ private func problems(_ json: String) -> [SettingProblem] {
     let settings = TestSchema().settings
     #expect(
         settings.map(\.key) == [
-            "flag", "count", "gain", "name", "theme", "device", "tags", "folders",
+            "flag", "count", "gain", "name", "theme", "device", "tags", "folders", "limit",
         ])
     #expect(settings[1].kind == .integer(1...10))
     #expect(settings[4].kind == .choice(["light", "dark"]))
     #expect(settings[5].kind == .optional(.string))
     #expect(settings[7].kind == .list(.watchedFolder))
+    #expect(settings[8].kind == .optional(.integer(1...4)))
 }
 
 @Test func appSettingsHaveUniqueKeysAndLoad() throws {

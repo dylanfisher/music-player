@@ -52,9 +52,17 @@ extension Setting where Value == Int {
     public init(
         _ key: String, default defaultValue: Int, range: ClosedRange<Int>, _ summary: String
     ) {
-        self.init(key, defaultValue, summary, .integer(range)) { value in
-            range.contains(value)
-                ? nil : .outOfRange("\(value) is outside \(range.lowerBound)...\(range.upperBound)")
+        self.init(key, defaultValue, summary, .integer(range)) { outside(range, $0) }
+    }
+}
+
+extension Setting where Value == Int? {
+    /// An integer in `range`, or null.
+    public init(
+        _ key: String, default defaultValue: Int?, range: ClosedRange<Int>, _ summary: String
+    ) {
+        self.init(key, defaultValue, summary, .optional(.integer(range))) { value in
+            value.flatMap { outside(range, $0) }
         }
     }
 }
@@ -63,11 +71,13 @@ extension Setting where Value == Double {
     public init(
         _ key: String, default defaultValue: Double, range: ClosedRange<Double>, _ summary: String
     ) {
-        self.init(key, defaultValue, summary, .number(range)) { value in
-            range.contains(value)
-                ? nil : .outOfRange("\(value) is outside \(range.lowerBound)...\(range.upperBound)")
-        }
+        self.init(key, defaultValue, summary, .number(range)) { outside(range, $0) }
     }
+}
+
+private func outside<Bound>(_ range: ClosedRange<Bound>, _ value: Bound) -> SettingProblem.Reason? {
+    range.contains(value)
+        ? nil : .outOfRange("\(value) is outside \(range.lowerBound)...\(range.upperBound)")
 }
 
 /// A setting with its value type erased, so a schema's settings can be listed together.

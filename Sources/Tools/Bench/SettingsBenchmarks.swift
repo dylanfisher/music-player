@@ -12,6 +12,7 @@ let settingsBenchmarks = [
             try settings.set(\.outputDeviceUID, to: "AppleUSBAudioEngine:RME:ADI-2 DAC:1")
             try settings.set(\.hogMode, to: false)
             try settings.set(\.pausePollingDuringPlayback, to: true)
+            try settings.set(\.networkScanReaders, to: 16)
             try settings.set(
                 \.watchedFolders,
                 to: (0..<20).map { index in
