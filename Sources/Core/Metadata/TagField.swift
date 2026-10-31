@@ -12,8 +12,11 @@ enum TagField: String {
 
 extension TrackTags {
     /// Sets `field` from its text form unless it already has a value. Empty text counts as no
-    /// value. `offset` is where the value sits in the file, for the error when it doesn't parse.
-    mutating func set(_ field: TagField, _ text: String, at offset: Int) throws(ParseFailure) {
+    /// value. A value that doesn't parse is read in part or dropped, with a warning naming
+    /// `offset`, where the value sits in the file.
+    mutating func set(
+        _ field: TagField, _ text: String, at offset: Int, warnings: inout [MetadataWarning]
+    ) {
         guard !text.isEmpty else { return }
         switch field {
         case .title: title = title ?? text
@@ -25,22 +28,26 @@ extension TrackTags {
         case .composer: composer = composer ?? text
         case .comment: comment = comment ?? text
         case .track:
-            let (number, total) = try numberPair(text, field, at: offset)
+            let (number, total) = numberPair(text, field, at: offset, &warnings)
             trackNumber = trackNumber ?? number
             trackTotal = trackTotal ?? total
         case .disc:
-            let (number, total) = try numberPair(text, field, at: offset)
+            let (number, total) = numberPair(text, field, at: offset, &warnings)
             discNumber = discNumber ?? number
             discTotal = discTotal ?? total
         case .trackTotal:
-            if trackTotal == nil { trackTotal = try wholeNumber(text, field, at: offset) }
+            trackTotal = trackTotal ?? wholeNumber(text, field, at: offset, &warnings)
         case .discTotal:
-            if discTotal == nil { discTotal = try wholeNumber(text, field, at: offset) }
+            discTotal = discTotal ?? wholeNumber(text, field, at: offset, &warnings)
         case .compilation:
             switch text {
             case "1": compilation = true
             case "0": break
-            default: throw .malformed(at: offset, "compilation flag \"\(text)\" isn't 1 or 0")
+            default:
+                warnings.append(
+                    MetadataWarning(
+                        kind: .badValue, offset: offset,
+                        detail: "compilation flag \"\(text)\" isn't 1 or 0; ignored"))
             }
         }
     }
@@ -61,23 +68,29 @@ extension TrackTags {
 
 /// "3" or "3/12", with spaces around either number allowed. A missing total is nil, and so is a
 /// zero, which taggers write for "not set" as MP4 does.
-private func numberPair(_ text: String, _ field: TagField, at offset: Int) throws(ParseFailure)
-    -> (Int?, Int?)
-{
+private func numberPair(
+    _ text: String, _ field: TagField, at offset: Int, _ warnings: inout [MetadataWarning]
+) -> (Int?, Int?) {
     let parts = text.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
-    let number = try wholeNumber(String(parts[0]), field, at: offset)
+    let number = wholeNumber(String(parts[0]), field, at: offset, &warnings)
     guard parts.count == 2 else { return (number, nil) }
-    return (number, try wholeNumber(String(parts[1]), field, at: offset))
+    return (number, wholeNumber(String(parts[1]), field, at: offset, &warnings))
 }
 
-/// Nil for zero.
-private func wholeNumber(_ text: String, _ field: TagField, at offset: Int) throws(ParseFailure)
-    -> Int?
-{
+/// The leading digits of `text` once trimmed, so "3 of 10" reads as 3 and "A1" as nothing, each
+/// with a warning. Nil for zero.
+private func wholeNumber(
+    _ text: String, _ field: TagField, at offset: Int, _ warnings: inout [MetadataWarning]
+) -> Int? {
     let trimmed = text.trimmingCharacters(in: .whitespaces)
-    guard trimmed.allSatisfy(\.isASCII), trimmed.allSatisfy(\.isNumber), let value = Int(trimmed)
-    else {
-        throw .malformed(at: offset, "\(field.rawValue) \"\(text)\" isn't a number")
+    let digits = trimmed.prefix { $0.isASCII && $0.isNumber }
+    let value = Int(digits)
+    if digits.count != trimmed.count || (!digits.isEmpty && value == nil) {
+        warnings.append(
+            MetadataWarning(
+                kind: .badNumber, offset: offset,
+                detail: "\(field.rawValue) \"\(text)\" isn't a number; "
+                    + (value.map { "read as \($0)" } ?? "dropped")))
     }
     return value == 0 ? nil : value
 }

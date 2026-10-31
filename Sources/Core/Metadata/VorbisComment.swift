@@ -10,7 +10,7 @@ private let vorbisFields: [String: TagField] = [
 
 /// Little-endian lengths, unlike the rest of FLAC: the vendor string, the comment count, then each
 /// comment as `KEY=value` in UTF-8. Unknown keys are skipped; they're the user's own fields.
-func parseVorbisComment(_ block: Bytes) throws(ParseFailure) -> TrackTags {
+func parseVorbisComment(_ block: Bytes, _ reader: ByteReader) throws(ParseFailure) -> TrackTags {
     var tags = TrackTags()
     var cursor = 4 + Int(try block.uint32LE(0))
     let count = Int(try block.uint32LE(cursor))
@@ -33,13 +33,14 @@ func parseVorbisComment(_ block: Bytes) throws(ParseFailure) -> TrackTags {
         cursor += 4 + length
         let bytes = comment.array
         guard let equals = bytes.firstIndex(of: UInt8(ascii: "=")) else {
-            throw .malformed(at: offset, "Vorbis comment without \"=\"")
+            reader.warn(.unreadableField, at: offset, "Vorbis comment without \"=\"; skipped")
+            continue
         }
         let key = latin1(bytes[..<equals]).uppercased()
         guard let field = vorbisFields[key] else { continue }
-        try tags.set(
-            field, try TextEncoding.utf8.decode(Array(bytes[(equals + 1)...]), at: offset),
-            at: offset)
+        let text = TextEncoding.utf8.decode(
+            Array(bytes[(equals + 1)...]), at: offset, warnings: &reader.warnings)
+        tags.set(field, text, at: offset, warnings: &reader.warnings)
     }
     return tags
 }

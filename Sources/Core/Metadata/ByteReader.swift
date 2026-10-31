@@ -1,4 +1,4 @@
-/// Serves byte ranges of one file. A range outside the last read costs a new read of at least
+/// Serves byte ranges of one file, and collects the file's warnings, since every parser holds it. A range outside the last read costs a new read of at least
 /// `minimumReadBytes`, so the fields of one header arrive together and a file whose tags fit in
 /// the first read costs one round trip. Every read may be a slow trip to a NAS, so callers skip
 /// art and audio by length instead of reading through them.
@@ -11,9 +11,24 @@ final class ByteReader {
     let size: Int
     private(set) var bytesRead = 0
     private(set) var readCount = 0
+    var warnings: [MetadataWarning] = []
     private let source: any ByteSource
     private var window: [UInt8] = []
     private var windowStart = 0
+
+    func warn(_ kind: MetadataWarning.Kind, at offset: Int, _ detail: String) {
+        warnings.append(MetadataWarning(kind: kind, offset: offset, detail: detail))
+    }
+
+    /// Runs `body`, which reads one field bounded inside a block that's already been checked.
+    /// A failure there spoils only that field, so it becomes a warning and the field is skipped.
+    func skippingUnreadableField(at offset: Int, _ body: () throws(ParseFailure) -> Void) {
+        do throws(ParseFailure) {
+            try body()
+        } catch {
+            warn(.unreadableField, at: error.offset ?? offset, error.detail)
+        }
+    }
 
     init(_ source: any ByteSource) {
         self.source = source

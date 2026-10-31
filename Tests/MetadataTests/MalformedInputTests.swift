@@ -29,7 +29,7 @@ private let samples = Result { () throws -> [(path: String, data: Data)] in
     }
 }
 
-@Test func oversizedLengthsAreMalformedNotAllocated() {
+@Test func oversizedLengthsAreMalformedNotAllocated() throws {
     let huge = 0x7FFF_FFF0
     let cases: [(String, Data)] = [
         ("FLAC picture", flac([(0, streamInfo()), (6, bigEndian32(3) + bigEndian32(huge))])),
@@ -73,8 +73,14 @@ private let samples = Result { () throws -> [(path: String, data: Data)] in
         } catch {
             thrown = error
         }
-        #expect(thrown?.kind == .malformed, "\(name): \(String(describing: thrown))")
-        #expect(thrown?.offset != nil, "\(name)")
+        // A picture's lengths spoil only the picture; every other length is structure.
+        if name.hasPrefix("FLAC picture") {
+            #expect(thrown == nil, "\(name)")
+            #expect(try warnings(data).map(\.kind) == [.unreadableField], "\(name)")
+        } else {
+            #expect(thrown?.kind == .malformed, "\(name): \(String(describing: thrown))")
+            #expect(thrown?.offset != nil, "\(name)")
+        }
         #expect(
             source.reads.allSatisfy { $0.count <= max(data.count, ByteReader.minimumReadBytes) })
     }
@@ -183,7 +189,7 @@ private let handBuilt: [Data] = [
 }
 
 /// Fields too short for the ranges computed from them: each once trapped on an inverted range.
-@Test func blocksTooShortForTheirFieldsAreMalformed() {
+@Test func blocksTooShortForTheirFieldsAreMalformed() throws {
     let alac = alacEntry(rate: 44_100, channels: 2, bits: 16)
     func withItems(_ items: Data) -> Data {
         mp4File(moov(entry: alac, timescale: 44_100, duration: 10, items: items))
@@ -212,6 +218,11 @@ private let handBuilt: [Data] = [
         ("short AIFF form", ascii("FORM") + bigEndian32(2) + ascii("AIFF")),
     ]
     for (name, data) in cases {
-        #expect(failure(data)?.kind == .malformed, "\(name)")
+        // A short atom inside an ilst item spoils only that item.
+        if name.hasPrefix("short data") || name.hasPrefix("short mean") {
+            #expect(try warnings(data).map(\.kind) == [.unreadableField], "\(name)")
+        } else {
+            #expect(failure(data)?.kind == .malformed, "\(name)")
+        }
     }
 }

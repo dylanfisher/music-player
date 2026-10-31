@@ -24,11 +24,15 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         case 0: audio = try streamInfo(try reader.bytes(body))
         case 4:
             guard tags == nil else {
-                throw .malformed(at: offset, "a second FLAC VORBIS_COMMENT block")
+                reader.warn(.unreadableField, at: offset, "a second FLAC VORBIS_COMMENT; ignored")
+                break
             }
-            tags = try parseVorbisComment(try reader.bytes(body))
+            tags = try parseVorbisComment(try reader.bytes(body), reader)
         case 6:
-            if let picture = try flacPicture(reader, body) { pictures.append(picture) }
+            // The block is inside the file, so a bad picture spoils only the picture.
+            reader.skippingUnreadableField(at: offset) { () throws(ParseFailure) in
+                if let picture = try flacPicture(reader, body) { pictures.append(picture) }
+            }
         case 127: throw .malformed(at: offset, "FLAC metadata block type 127 is invalid")
         default: break
         }

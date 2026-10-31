@@ -107,12 +107,15 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
     while area.range.upperBound - cursor >= headerSize {
         let frameHeader = try area.bytes(cursor..<cursor + headerSize)
         if try frameHeader.uint8(0) == 0 { break }  // padding
-        let idBytes = try frameHeader.slice(0..<idLength).array
-        let id = latin1(idBytes)
-        guard idBytes.allSatisfy({ (0x41...0x5A).contains($0) || (0x30...0x39).contains($0) })
-        else {
-            throw .malformed(at: area.fileOffset(cursor), "invalid ID3v2 frame ID \"\(id)\"")
+        let id = latin1(try frameHeader.slice(0..<idLength).array)
+        guard isFrameID(try frameHeader.slice(0..<idLength)) else {
+            // Without a valid ID the size can't be trusted either, so nothing after it can be.
+            reader.warn(
+                .unreadableField, at: area.fileOffset(cursor),
+                "invalid ID3v2 frame ID \"\(id)\"; the rest of the tag is skipped")
+            break
         }
+        let frameStart = cursor + headerSize
         let frameSize: Int
         switch version {
         case 2: frameSize = Int(try frameHeader.uint24BE(3))
@@ -124,7 +127,6 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
             }
             frameSize = syncsafe
         }
-        let frameStart = cursor + headerSize
         guard frameSize <= area.range.upperBound - frameStart else {
             throw .malformed(
                 at: area.fileOffset(cursor),
@@ -134,54 +136,70 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
         cursor = frame.upperBound
         guard let kind = frameKinds[id] else { continue }
 
-        var data = frame.lowerBound
-        var frameUnsynchronised = false
-        if version >= 3 {
-            let format = try frameHeader.uint8(9)
-            let (compressed, encrypted, grouped): (UInt8, UInt8, UInt8) =
-                version == 3 ? (0x80, 0x40, 0x20) : (0x08, 0x04, 0x40)
-            if format & (compressed | encrypted) != 0 {
-                throw .unsupported(
-                    at: area.fileOffset(frame.lowerBound - headerSize),
-                    "compressed or encrypted ID3v2 frame \(id)")
+        // The frame lies inside the tag, so damage within it spoils only this field.
+        reader.skippingUnreadableField(at: area.fileOffset(frameStart - headerSize)) {
+            () throws(ParseFailure) in
+            var data = frame.lowerBound
+            var frameUnsynchronised = false
+            if version >= 3 {
+                let format = try frameHeader.uint8(9)
+                let (compressed, encrypted, grouped): (UInt8, UInt8, UInt8) =
+                    version == 3 ? (0x80, 0x40, 0x20) : (0x08, 0x04, 0x40)
+                if format & (compressed | encrypted) != 0 {
+                    throw .unsupported(
+                        at: area.fileOffset(frame.lowerBound - headerSize),
+                        "compressed or encrypted ID3v2 frame \(id) skipped")
+                }
+                if format & grouped != 0 { data += 1 }
+                if version == 4 {
+                    if format & 0x01 != 0 { data += 4 }  // data length indicator
+                    frameUnsynchronised = format & 0x02 != 0 || tagUnsynchronised
+                }
             }
-            if format & grouped != 0 { data += 1 }
-            if version == 4 {
-                if format & 0x01 != 0 { data += 4 }  // data length indicator
-                frameUnsynchronised = format & 0x02 != 0 || tagUnsynchronised
+            guard data <= frame.upperBound else {
+                throw .malformed(
+                    at: area.fileOffset(frame.lowerBound), "ID3v2 frame \(id) is too short")
             }
-        }
-        guard data <= frame.upperBound else {
-            throw .malformed(
-                at: area.fileOffset(frame.lowerBound), "ID3v2 frame \(id) is too short")
-        }
-        let contents = data..<frame.upperBound
-        if case .picture = kind {
-            if let picture = try picture(
-                area, contents, version: version, unsynchronised: frameUnsynchronised,
-                stored: tagUnsynchronised || frameUnsynchronised)
-            {
-                pictures.append(picture)
+            let contents = data..<frame.upperBound
+            if case .picture = kind {
+                if let picture = try picture(
+                    area, contents, version: version, unsynchronised: frameUnsynchronised,
+                    stored: tagUnsynchronised || frameUnsynchronised, &reader.warnings)
+                {
+                    pictures.append(picture)
+                }
+                return
             }
-            continue
-        }
 
-        var bytes = try area.bytes(contents)
-        if frameUnsynchronised {
-            let (decoded, escapes) = UnsyncEscapes.decode(bytes.array)
-            bytes = Bytes(decoded, base: area.fileOffset(contents.lowerBound), escapes: escapes)
-        }
-        let offset = bytes.fileOffset(0)
-        switch kind {
-        case .text(let field): try tags.set(field, try textFrame(bytes), at: offset)
-        case .genre:
-            try tags.set(.genre, try genre(try textFrame(bytes), version, at: offset), at: offset)
-        case .comment:
-            if let comment = try commentFrame(bytes) { try tags.set(.comment, comment, at: offset) }
-        case .picture: break
+            var bytes = try area.bytes(contents)
+            if frameUnsynchronised {
+                let (decoded, escapes) = UnsyncEscapes.decode(bytes.array)
+                bytes = Bytes(decoded, base: area.fileOffset(contents.lowerBound), escapes: escapes)
+            }
+            let offset = bytes.fileOffset(0)
+            let field: TagField
+            let text: String?
+            switch kind {
+            case .text(let textField):
+                field = textField
+                text = try textFrame(bytes, &reader.warnings)
+            case .genre:
+                field = .genre
+                text = try genre(try textFrame(bytes, &reader.warnings), version, at: offset)
+            case .comment:
+                field = .comment
+                text = try commentFrame(bytes, &reader.warnings)
+            case .picture: return
+            }
+            if let text { tags.set(field, text, at: offset, warnings: &reader.warnings) }
         }
     }
     return ID3v2Tag(tags: tags, art: preferredPicture(pictures), byteCount: byteCount)
+}
+
+/// Four characters from A–Z and 0–9.
+private func isFrameID(_ bytes: Bytes) -> Bool {
+    bytes.array.allSatisfy { (0x41...0x5A).contains($0) || (0x30...0x39).contains($0) }
 }
 
 /// 2.3 gives the size after its own four bytes; 2.4 gives a syncsafe size that includes them.
@@ -226,31 +244,38 @@ private func terminator(_ encoding: TextEncoding) -> [UInt8] {
 /// The string in `bytes` from `offset` to its terminator or the end, and where the next field
 /// starts. Nil when `requireTerminator` and there's none.
 private func string(
-    _ bytes: Bytes, from offset: Int, _ encoding: TextEncoding, requireTerminator: Bool = false
+    _ bytes: Bytes, from offset: Int, _ encoding: TextEncoding,
+    _ warnings: inout [MetadataWarning], requireTerminator: Bool = false
 ) throws(ParseFailure) -> (text: String, next: Int)? {
     let end = bytes.firstIndex(of: terminator(encoding), from: offset)
     if end == nil, requireTerminator { return nil }
     let stop = end ?? bytes.count
-    let text = try encoding.decode(
-        try bytes.slice(offset..<max(offset, stop)).array, at: bytes.fileOffset(offset))
+    let text = encoding.decode(
+        try bytes.slice(offset..<max(offset, stop)).array, at: bytes.fileOffset(offset),
+        warnings: &warnings)
     return (text, end.map { $0 + terminator(encoding).count } ?? bytes.count)
 }
 
 /// An encoding byte, then text. 2.4 separates several values with terminators; the first is used.
-private func textFrame(_ bytes: Bytes) throws(ParseFailure) -> String {
+private func textFrame(_ bytes: Bytes, _ warnings: inout [MetadataWarning]) throws(ParseFailure)
+    -> String
+{
     let encoding = try encoding(try bytes.uint8(0), at: bytes.fileOffset(0))
-    return try string(bytes, from: 1, encoding)!.text
+    return try string(bytes, from: 1, encoding, &warnings)!.text
 }
 
 /// An encoding byte, a language, a description, then the text. Nil unless the description is
 /// empty: players store their own data in described comments.
-private func commentFrame(_ bytes: Bytes) throws(ParseFailure) -> String? {
+private func commentFrame(_ bytes: Bytes, _ warnings: inout [MetadataWarning])
+    throws(ParseFailure) -> String?
+{
     let encoding = try encoding(try bytes.uint8(0), at: bytes.fileOffset(0))
-    guard let description = try string(bytes, from: 4, encoding, requireTerminator: true) else {
+    guard let description = try string(bytes, from: 4, encoding, &warnings, requireTerminator: true)
+    else {
         throw .malformed(at: bytes.fileOffset(0), "ID3v2 comment without a description terminator")
     }
     guard description.text.isEmpty else { return nil }
-    return try string(bytes, from: description.next, encoding)!.text
+    return try string(bytes, from: description.next, encoding, &warnings)!.text
 }
 
 /// "(17)" refers to the ID3v1 list, optionally followed by a refinement that wins; "((" escapes a
@@ -284,7 +309,8 @@ private func genre(_ text: String, _ version: UInt8, at offset: Int) throws(Pars
 /// ID3v2.2's `PIC` has a three-letter format instead of the MIME type. Only the header is read;
 /// the image is recorded by offset. Nil for an empty image or a link.
 private func picture(
-    _ area: FrameArea, _ contents: Range<Int>, version: UInt8, unsynchronised: Bool, stored: Bool
+    _ area: FrameArea, _ contents: Range<Int>, version: UInt8, unsynchronised: Bool, stored: Bool,
+    _ warnings: inout [MetadataWarning]
 ) throws(ParseFailure) -> (type: UInt32, art: EmbeddedArt)? {
     func header(_ length: Int) throws(ParseFailure) -> Bytes {
         let raw = try area.bytes(contents.lowerBound..<contents.lowerBound + length)
@@ -293,10 +319,10 @@ private func picture(
         return Bytes(decoded, base: area.fileOffset(contents.lowerBound), escapes: escapes)
     }
     var bytes = try header(min(contents.count, pictureHeaderBytes))
-    var parsed = try pictureHeader(bytes, version: version)
+    var parsed = try pictureHeader(bytes, version: version, &warnings)
     if parsed == nil, contents.count > pictureHeaderBytes {
         bytes = try header(contents.count)
-        parsed = try pictureHeader(bytes, version: version)
+        parsed = try pictureHeader(bytes, version: version, &warnings)
     }
     guard let (mime, type, imageStart) = parsed else {
         throw .malformed(
@@ -313,7 +339,8 @@ private func picture(
 }
 
 /// The MIME type, picture type and where the image starts, or nil when `bytes` ends first.
-private func pictureHeader(_ bytes: Bytes, version: UInt8) throws(ParseFailure)
+private func pictureHeader(_ bytes: Bytes, version: UInt8, _ warnings: inout [MetadataWarning])
+    throws(ParseFailure)
     -> (String, UInt32, Int)?
 {
     guard bytes.count >= 1 else { return nil }
@@ -326,7 +353,8 @@ private func pictureHeader(_ bytes: Bytes, version: UInt8) throws(ParseFailure)
         mime = ["JPG": jpegMIMEType, "PNG": pngMIMEType][format] ?? "image/\(format.lowercased())"
         cursor = 4
     } else {
-        guard let found = try string(bytes, from: 1, .latin1, requireTerminator: true) else {
+        guard let found = try string(bytes, from: 1, .latin1, &warnings, requireTerminator: true)
+        else {
             return nil
         }
         mime = found.text
@@ -334,7 +362,9 @@ private func pictureHeader(_ bytes: Bytes, version: UInt8) throws(ParseFailure)
     }
     guard cursor < bytes.count else { return nil }
     let type = UInt32(try bytes.uint8(cursor))
-    guard let description = try string(bytes, from: cursor + 1, encoding, requireTerminator: true)
+    guard
+        let description = try string(
+            bytes, from: cursor + 1, encoding, &warnings, requireTerminator: true)
     else { return nil }
     return (mime, type, description.next)
 }

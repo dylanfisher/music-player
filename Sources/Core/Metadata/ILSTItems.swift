@@ -38,7 +38,10 @@ func metadataItems(_ reader: ByteReader, _ udta: Atom) throws(ParseFailure) -> I
         try forEachAtom(reader, in: children, parent: meta) { ilst throws(ParseFailure) in
             guard ilst.type == "ilst" else { return true }
             try forEachAtom(reader, in: ilst.body, parent: ilst) { item throws(ParseFailure) in
-                try read(item, reader, into: &items)
+                // The item is inside `ilst`, so damage within it spoils only that field.
+                reader.skippingUnreadableField(at: item.start) { () throws(ParseFailure) in
+                    try read(item, reader, into: &items)
+                }
                 return true
             }
             return false
@@ -87,7 +90,8 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
     let value = try reader.bytes(valueRange)
     switch kind {
     case .text(let field):
-        try items.tags.set(field, try text(value, type, at: offset), at: offset)
+        let text = try text(value, type, at: offset, &reader.warnings)
+        items.tags.set(field, text, at: offset, warnings: &reader.warnings)
     case .track, .disc:
         // Two reserved bytes, the number, the total, and for trkn two more reserved bytes.
         let number = Int(try value.uint16BE(2))
@@ -106,19 +110,22 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
         guard id3v1Genres.indices.contains(index) else {
             throw .malformed(at: offset, "MP4 gnre \(index + 1) isn't an ID3v1 genre")
         }
-        try items.tags.set(.genre, id3v1Genres[index], at: offset)
+        items.tags.set(.genre, id3v1Genres[index], at: offset, warnings: &reader.warnings)
     case .freeform:
         guard mean == "com.apple.iTunes", name == "iTunSMPB" else { return }
-        items.gaplessLength = try gaplessLength(try text(value, type, at: offset), at: offset)
+        let text = try text(value, type, at: offset, &reader.warnings)
+        items.gaplessLength = try gaplessLength(text, at: offset)
     case .cover:
         break
     }
 }
 
-private func text(_ value: Bytes, _ type: UInt32, at offset: Int) throws(ParseFailure) -> String {
+private func text(
+    _ value: Bytes, _ type: UInt32, at offset: Int, _ warnings: inout [MetadataWarning]
+) throws(ParseFailure) -> String {
     switch type {
-    case 1: try TextEncoding.utf8.decode(value.array, at: offset)
-    case 2: try TextEncoding.utf16BigEndian.decode(value.array, at: offset)
+    case 1: TextEncoding.utf8.decode(value.array, at: offset, warnings: &warnings)
+    case 2: TextEncoding.utf16BigEndian.decode(value.array, at: offset, warnings: &warnings)
     default: throw .malformed(at: offset, "MP4 text item with data type \(type)")
     }
 }

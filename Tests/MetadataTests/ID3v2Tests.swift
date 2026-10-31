@@ -66,8 +66,9 @@ private func artBytes(_ file: Data) throws -> Data? {
         let tag = id3Tag(version: version, [id3Frame("TCON", id3Text(text), version: version)])
         #expect(try parse(mp3(tag)).metadata.tags.genre == expected, "\(text)")
     }
-    let bad = id3Tag([id3Frame("TCON", id3Text("(999)"))])
-    #expect(failure(mp3(bad))?.kind == .malformed)
+    let bad = try parse(mp3(id3Tag([id3Frame("TCON", id3Text("(999)"))])))
+    #expect(bad.metadata.tags.genre == nil)
+    #expect(bad.warnings.map(\.kind) == [.unreadableField])
 }
 
 @Test func readsOnlyTheUndescribedComment() throws {
@@ -149,19 +150,59 @@ private func artBytes(_ file: Data) throws -> Data? {
     #expect(try parse(file).metadata.tags.title == "In a chunk")
 }
 
-@Test func rejectsCompressedFramesItNeeds() throws {
-    let compressed = id3Tag([id3Frame("TIT2", id3Text("x"), flags: 0x0080)])
-    #expect(failure(mp3(compressed))?.kind == .unsupported)
+@Test func skipsCompressedFramesWithAWarning() throws {
+    let compressed = try parse(
+        mp3(
+            id3Tag([id3Frame("TIT2", id3Text("x"), flags: 0x0080), id3Frame("TPE1", id3Text("A"))]))
+    )
+    #expect(compressed.metadata.tags.title == nil)
+    #expect(compressed.metadata.tags.artist == "A")
+    #expect(compressed.warnings.map(\.kind) == [.unreadableField])
+    #expect(compressed.warnings.first?.offset == 10)
     let unneeded = id3Tag([
         id3Frame("TXXX", id3Text("x"), flags: 0x0080), id3Frame("TIT2", id3Text("Kept")),
     ])
-    #expect(try parse(mp3(unneeded)).metadata.tags.title == "Kept")
+    #expect(try warnings(mp3(unneeded)).isEmpty)
 }
 
-@Test func rejectsBadFrameIDsAndSizes() {
-    #expect(failure(mp3(id3Tag([id3Frame("ti!2", id3Text("x"))])))?.kind == .malformed)
+@Test func anInvalidFrameIDEndsTheTagWithAWarning() throws {
+    let tag = id3Tag([id3Frame("TIT2", id3Text("Kept")), id3Frame("ti!2", id3Text("x"))])
+    let parsed = try parse(mp3(tag))
+    #expect(parsed.metadata.tags.title == "Kept")
+    #expect(parsed.metadata.audio.lengthFrames == 4 * 1152)
+    #expect(parsed.warnings.map(\.kind) == [.unreadableField])
+}
+
+@Test func structuralID3DamageStillFails() {
     var notSyncsafe = id3Tag(version: 4, [id3Frame("TIT2", id3Text("x"), version: 4)])
     notSyncsafe[14] = 0x80
     #expect(failure(mp3(notSyncsafe))?.kind == .malformed)
+    var pastTag = id3Tag([id3Frame("TIT2", id3Text("x"))])
+    pastTag.replaceBigEndian(1000, at: 14)
+    #expect(failure(mp3(pastTag))?.kind == .malformed)
     #expect(failure(mp3(id3Tag(version: 5, []))).map(\.kind) == .unsupported)
+}
+
+@Test func badFieldValuesAreDroppedOrPartlyReadWithWarnings() throws {
+    let tag = id3Tag(
+        version: 4,
+        [
+            id3Frame("TRCK", id3Text("A1"), version: 4),
+            id3Frame("TPOS", id3Text(" 01/12 "), version: 4),
+            id3Frame("TCMP", id3Text("yes"), version: 4),
+            id3Frame("TIT2", Data([3, 0x43, 0x61, 0x66, 0xE9]), version: 4),
+            id3Frame("TPE1", Data([1, 0x41, 0x00, 0x42, 0x00]), version: 4),
+            id3Frame("TALB", Data([2, 0xD8, 0x00]), version: 4),
+        ])
+    let parsed = try parse(mp3(tag))
+    let tags = parsed.metadata.tags
+    #expect(tags.trackNumber == nil)
+    #expect(tags.discNumber == 1)
+    #expect(tags.discTotal == 12)
+    #expect(!tags.compilation)
+    #expect(tags.title == "Café")
+    #expect(tags.artist == "AB")
+    #expect(tags.album == "\u{FFFD}")
+    #expect(parsed.warnings.map(\.kind) == [.badNumber, .badValue, .badText, .badText, .badText])
+    #expect(parsed.warnings.allSatisfy { $0.offset > 10 })
 }

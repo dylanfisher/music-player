@@ -54,5 +54,6 @@ func parse(_ reader: ByteReader) throws(ParseFailure) -> ParsedFile {
             detail: "doesn't start like a FLAC, MP4, MP3, WAV or AIFF file")
     }
     return ParsedFile(
-        metadata: metadata, bytesRead: reader.bytesRead, readCount: reader.readCount)
+        metadata: metadata, warnings: reader.warnings, bytesRead: reader.bytesRead,
+        readCount: reader.readCount)
 }

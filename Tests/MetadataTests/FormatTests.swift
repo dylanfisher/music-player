@@ -199,6 +199,32 @@ import Testing
     #expect(failure(aifc("ima4"))?.kind == .unsupported)
 }
 
+@Test func vorbisAndMP4FieldsDegradeToWarnings() throws {
+    let vorbis = try parse(
+        flac([
+            (0, streamInfo()),
+            (4, vorbisComment(["TRACKNUMBER=3 of 10", "NOEQUALS", "TITLE=Kept"])),
+        ]))
+    #expect(vorbis.metadata.tags.trackNumber == 3)
+    #expect(vorbis.metadata.tags.trackTotal == nil)
+    #expect(vorbis.metadata.tags.title == "Kept")
+    #expect(vorbis.warnings.map(\.kind) == [.badNumber, .unreadableField])
+
+    let items =
+        ilstItem("\u{A9}nam", code: 21, ascii("x")) + ilstItem("gnre", code: 0, Data([0x7F, 0]))
+        + ilstItem("covr", code: 99, Data(count: 4)) + ilstItem("\u{A9}ART", code: 1, ascii("Kept"))
+    let mp4 = try parse(
+        mp4File(
+            moov(
+                entry: alacEntry(rate: 44_100, channels: 2, bits: 16), timescale: 44_100,
+                duration: 10, items: items)))
+    #expect(mp4.metadata.tags.title == nil)
+    #expect(mp4.metadata.tags.genre == nil)
+    #expect(mp4.metadata.art == nil)
+    #expect(mp4.metadata.tags.artist == "Kept")
+    #expect(mp4.warnings.map(\.kind) == [.unreadableField, .unreadableField, .unreadableField])
+}
+
 @Test func errorsNameThePathAndOffset() throws {
     let error = try withFile(flac([(0, streamInfo()), (4, Data(count: 3))])) { url in
         #expect(throws: MetadataError.self) { try readMetadata(at: url) }

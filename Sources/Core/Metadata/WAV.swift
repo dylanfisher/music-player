@@ -84,9 +84,9 @@ private func infoTags(_ reader: ByteReader, _ list: RIFFChunk) throws(ParseFailu
         guard let tagField = infoFields[field.id] else { return }
         var bytes = try reader.bytes(field.body).array
         while bytes.last == 0 { bytes.removeLast() }
-        try tags.set(
+        tags.set(
             tagField, String(bytes: bytes, encoding: .utf8) ?? latin1(bytes),
-            at: field.body.lowerBound)
+            at: field.body.lowerBound, warnings: &reader.warnings)
     }
     return tags
 }

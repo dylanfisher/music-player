@@ -34,6 +34,9 @@ func parse(_ data: Data) throws(ParseFailure) -> ParsedFile {
     try parse(ByteReader(MemorySource(data)))
 }
 
+/// The warnings from parsing `data`, which must succeed.
+func warnings(_ data: Data) throws -> [MetadataWarning] { try parse(data).warnings }
+
 /// What parsing `data` throws, or nil when it succeeds.
 func failure(_ data: Data) -> ParseFailure? {
     do throws(ParseFailure) {
