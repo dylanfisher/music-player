@@ -543,12 +543,12 @@ Known limit: ⌘↑ and ⌘↓ stay with the menu even in a text field.
 
 ### 7. Playlists, smart playlists, stats
 
-- [ ] Manual playlists: create, rename, reorder, and add with drag and drop or a command.
-- [ ] Smart playlists: a rule editor (field, operator, value; any or all; limit and sort) that
+- [x] Manual playlists: create, rename, reorder, and add with drag and drop or a command.
+- [x] Smart playlists: a rule editor (field, operator, value; any or all; limit and sort) that
       compiles to SQL. They update live as the library changes.
-- [ ] Play counts, skip counts, last played, ratings and a history view, all in SQLite and never
+- [x] Play counts, skip counts, last played, ratings and a history view, all in SQLite and never
       in files. A play counts after 50% or 4 minutes.
-- [ ] Benchmark: evaluating a complex smart playlist over 43k tracks.
+- [x] Benchmark: evaluating a complex smart playlist over 43k tracks.
 
 Implementation plan:
 
@@ -582,6 +582,16 @@ Implementation plan:
    PlaybackTests (`PlayCounter` thresholds, pauses, skips, repeats), LibraryBrowserTests
    (playlist sources, default sorts, reorder), PlaylistEditorTests, MusicPlayerTests (menu
    items, palette playlists). ADR for the playlist and stats choices.
+
+Result: shipped as planned. Bench on Apple Silicon: a six-rule smart playlist over 43k tracks p95
+37 ms (budget 50 ms; the old Mac's 150 ms is an estimate until its checkpoint), re-sort 42 ms,
+launch 0.62 s. Stats and playlists are keyed by path, so they survive an index rebuild. The review
+fixed rows dropped onto their own block jumping to the end, untagged tracks matching year rules as
+year 0, the Order sort leaking out of manual playlists, ⌘⌫ removing playlist rows while another
+list had focus, a play lost when its timer woke early, Stop counting as a skip, history recording a
+playlist whose rules can't be read, and reused playlist IDs. The play timer moved to
+`Core/Playback/PlayTracker`. Known limits: number rules compare whole numbers, so a 200.4 s track
+is not "more than 200"; the dialogs and drag and drop are tested only through their models.
 
 ### 8. System integration
 
