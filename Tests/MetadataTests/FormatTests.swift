@@ -80,6 +80,29 @@ import Testing
     #expect(Array(file[art.offset..<art.offset + art.byteCount]) == Array(repeating: 7, count: 33))
 }
 
+/// The first read's size is the one most files cost: a FLAC whose tags fit in it takes that one
+/// read and no other (ADR 0010 weighs the size).
+@Test func tagsThatFitInTheFirstReadCostOneRead() throws {
+    let file =
+        flac([(0, streamInfo()), (4, vorbisComment(["TITLE=Short"]))])
+        + Data(count: 1 << 20)
+    let source = MemorySource(file)
+    let parsed = try parse(ByteReader(source))
+    #expect(parsed.metadata.tags.title == "Short")
+    #expect(source.reads == [0..<ByteReader.minimumReadBytes])
+}
+
+@Test func filesAreReadWithoutReadAheadOrCaching() throws {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("source-\(UUID().uuidString)")
+    try Data(count: 64).write(to: url)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let source = try FileSource(path: url.path)
+    // XNU's FNOCACHE and FNORDAHEAD, which F_GETFL reports though no SDK header names them.
+    let noCacheNoReadAhead: Int32 = 0x40000 | 0x80000
+    #expect(fcntl(source.descriptor, F_GETFL) & noCacheNoReadAhead == noCacheNoReadAhead)
+}
+
 @Test func mp4FindsMoovAfterALargeMdatWithFewReads() throws {
     let file = mp4File(
         moov(

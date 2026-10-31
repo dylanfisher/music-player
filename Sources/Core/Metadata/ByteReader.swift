@@ -1,6 +1,6 @@
 /// Serves byte ranges of one file, and collects the file's warnings, since every parser holds it. A range outside the last read costs a new read of at least
 /// `minimumReadBytes`, so the fields of one header arrive together and a file whose tags fit in
-/// the first read costs one round trip. Every read may be a slow trip to a NAS, so callers skip
+/// the first read costs one round trip. ADR 0010 weighs that size against a second round trip. Every read may be a slow trip to a NAS, so callers skip
 /// art and audio by length instead of reading through them.
 final class ByteReader {
     static let minimumReadBytes = 16 * 1024

@@ -1,10 +1,11 @@
 import Darwin
 
 /// A file opened once and read with `pread`, never mapped, so a slow NAS read stalls only the
-/// caller and a file that shrinks fails the read instead of raising SIGBUS.
+/// caller and a file that shrinks fails the read instead of raising SIGBUS. Reads get exactly
+/// the bytes asked for, with no read-ahead and no caching (ADR 0010).
 final class FileSource: ByteSource {
     let size: Int
-    private let descriptor: Int32
+    let descriptor: Int32
 
     init(path: String) throws(ParseFailure) {
         let descriptor = open(path, O_RDONLY | O_CLOEXEC)
@@ -19,6 +20,12 @@ final class FileSource: ByteSource {
             close(descriptor)
             throw ParseFailure(kind: .unreadable, offset: nil, detail: "not a regular file")
         }
+        // Tags are read in a few short reads spread over the file, so read-ahead would fetch
+        // bytes the parser skips, and on a NAS that's transfer time, not a saved round trip.
+        // Uncached, a full scan doesn't fill memory with every file's first 16 KiB. Both are
+        // hints a volume may refuse, which costs nothing but the saving, so failure is ignored.
+        _ = fcntl(descriptor, F_RDAHEAD, 0)
+        _ = fcntl(descriptor, F_NOCACHE, 1)
         self.descriptor = descriptor
         size = Int(info.st_size)
     }
