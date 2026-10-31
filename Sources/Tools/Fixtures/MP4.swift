@@ -1,4 +1,5 @@
 import Foundation
+import Metadata
 
 /// An MP4 seed split so a new `udta/meta/ilst` can go into `moov`. Growing `moov` moves `mdat`,
 /// so the chunk offsets in `stco` are rewritten for each file.
@@ -166,7 +167,7 @@ func mp4Items(_ tags: FixtureTags, art: Artwork?, genreAsIndex: Bool) -> Data {
     if tags.compilation { items.append(atom("cpil", dataAtom(21, Data([1])))) }
     text("\u{A9}cmt", tags.comment)
     if let art {
-        items.append(atom("covr", dataAtom(art.mimeType == "image/png" ? 14 : 13, art.data)))
+        items.append(atom("covr", dataAtom(art.mimeType == pngMIMEType ? 14 : 13, art.data)))
     }
     return items
 }

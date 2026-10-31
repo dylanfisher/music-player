@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import Metadata
 
 /// An embedded cover image.
 struct Artwork: Sendable {
@@ -17,8 +18,8 @@ struct Artwork: Sendable {
 /// A few small covers in both formats taggers embed, rendered once per run.
 func makeArtwork() throws -> [Artwork] {
     try [
-        (64, "public.jpeg", "image/jpeg"), (300, "public.jpeg", "image/jpeg"),
-        (120, "public.png", "image/png"),
+        (64, "public.jpeg", jpegMIMEType), (300, "public.jpeg", jpegMIMEType),
+        (120, "public.png", pngMIMEType),
     ].enumerated().map { index, spec in
         let (side, type, mime) = spec
         return Artwork(

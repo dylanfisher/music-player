@@ -1,4 +1,5 @@
 import Foundation
+import Metadata
 
 enum ID3Version: UInt8, Sendable {
     case v22 = 2
@@ -65,7 +66,7 @@ func id3Tag(_ tags: FixtureTags, art: Artwork?, style: ID3Style) -> Data {
     if let art {
         var body = Data([0])
         if version == .v22 {
-            body.append(ascii: art.mimeType == "image/png" ? "PNG" : "JPG")
+            body.append(ascii: art.mimeType == pngMIMEType ? "PNG" : "JPG")
         } else {
             body.append(ascii: art.mimeType)
             body.append(0)
