@@ -13,24 +13,32 @@ MediaPlayer is a system framework, available on macOS 12 for everything used her
 
 ## Decision
 
-- **The logic is in `Features/NowPlaying`**, beside the bar's `NowPlayingModel`, which it reuses
-  for the title, artist and album. `MediaControls` works through two protocols,
+- **The logic is in `Features/NowPlaying`**, beside the bar's `NowPlayingModel`, whose title,
+  artist and album rules it reuses. It has a model of its own rather than the bar's: each
+  follows its own subscription to the engine, and sharing one would let the two apply updates
+  out of order. The cost is one indexed lookup per track change. `MediaControls` works through two protocols,
   `RemoteCommandCenter` and `NowPlayingCenter`, which `SystemRemoteCommands` and
   `SystemNowPlaying` implement on MediaPlayer; tests use fakes. The App tier only builds them,
   connects the engine and answers `applicationDockMenu`.
-- **Remote commands run registry commands.** Toggle, play and pause run Play/Pause (play while
-  playing and pause while paused do nothing and report success); stop, next and previous run
-  Stop, Next Track and Previous Track. A command is offered only while the dispatcher has it on
-  and the state allows it, and the set is sent to the system only when it changes.
+- **Remote commands run registry commands.** Toggle runs Play/Pause, and the engine decides
+  which. Play and pause run the Play and Pause commands, added for this, which call the engine's
+  `play()` and `pause()`; those do nothing when it's already so. Deciding them from the model,
+  which trails the engine, let a second pause press resume. Stop, next and previous run Stop,
+  Next Track and Previous Track. A command is offered while the dispatcher has it on and the
+  state allows it, sent to the system only when that set changes, and checked again when it
+  arrives.
 - **The scrubber seeks the engine directly**, as the bar's slider does. Commands take no
-  argument, and a position needs one.
+  argument, and a position needs one. Times that aren't finite are refused; the rest are clamped
+  to the track, stopping 0.1 s short of its end. Success means the seek was sent: the engine
+  doesn't confirm it, and the `.seeked` update follows.
 - **No skip-by-interval commands.** With `skipForward` and `skipBackward` on, Control Center and
   headphones offer ±seconds in place of next and previous track, and the owner's keys skip
   tracks.
 - **The time is set only on state changes.** The engine publishes `.seeked(seconds:)` after a
   seek. Now Playing is set on track start, pause, resume, seek and device changes, with the
   position read from the output, and cleared on stop, on failure and at the end of the queue.
-  The system extrapolates the time from the last value and the rate (1 playing, 0 paused).
+  Each update carries the position as the engine published it, so it can't belong to a later
+  state. The system extrapolates the time from the last value and the rate (1 playing, 0 paused).
   Other events set nothing unless what's shown changed, such as art arriving or a rescan
   retitling the track; then the time carries on from the last value by an injected clock. Since
   every state change re-reads the output's position, which runs on the DAC's clock, the system's
@@ -58,4 +66,6 @@ MediaPlayer is a system framework, available on macOS 12 for everything used her
 
 Anything else that shows the time can follow `.seeked` instead of polling. The MediaPlayer
 adapters are tested only on the owner's DAC Mac (the phase 8 checkpoint). If a remote command
-arrives off the main thread, it's run on the main actor afterwards and reported as done.
+arrives off the main thread, the adapter runs it on the main thread with `DispatchQueue.main.sync`
+and returns its real status; the main thread never waits on MediaPlayer's, so this can't
+deadlock. A refused or malformed command is logged.
