@@ -57,9 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The output settings changed while playing; the output reopens once playback stops.
     var outputChanged = false
     private var playbackUpdates: Task<Void, Never>?
-    /// Plays and skips, counted from the engine's updates, and the wake-up for the next play.
-    var playCounter = PlayCounter()
-    var playTick: Task<Void, Never>?
+    /// Plays and skips, counted from the engine's updates.
+    private lazy var playTracker = PlayTracker { [weak self] in self?.record($0) }
     /// The smart playlist editor while it's open.
     var ruleEditor: RuleEditorSheet?
     private(set) var dispatcher: CommandDispatcher?
@@ -264,7 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 for await update in await engine.updates() {
                     self?.playback = update.state
                     self?.playbackChanged(update.state)
-                    self?.countPlays(update)
+                    self?.playTracker.handle(update)
                     if case .trackStarted(let index) = update.event {
                         self?.countPlay(update.state.queue[index].path)
                     }

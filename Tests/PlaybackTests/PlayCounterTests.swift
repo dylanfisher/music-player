@@ -99,3 +99,17 @@ private struct Feed {
     _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
     #expect(feed.counter.deadline == start.addingTimeInterval(PlayCounter.playSeconds))
 }
+
+@Test func stoppingEndsTheListenWithoutASkip() {
+    var feed = Feed(durations: [100, 600, 100])
+    _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
+    #expect(feed.send(.stopped, status: .stopped, at: 10).isEmpty)
+    #expect(feed.counter.deadline == nil)
+    #expect(feed.send(.trackStarted(index: 1), status: .playing, at: 20).isEmpty)
+}
+
+@Test func stoppingAfterThePlayCountedStillCountsIt() {
+    var feed = Feed(durations: [100, 600, 100])
+    _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
+    #expect(feed.send(.stopped, status: .stopped, at: 60) == [.played(urls[0])])
+}

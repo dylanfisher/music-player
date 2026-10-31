@@ -2,7 +2,7 @@ import Foundation
 
 /// Turns the engine's updates into plays and skips. A track counts as played once it has played,
 /// not paused, for half its length or `playSeconds`, whichever comes first; it counts as skipped
-/// when another track starts before that. Seeking doesn't count toward either, since the time is
+/// when another track starts before that. Stopping is neither. Seeking doesn't count toward either, since the time is
 /// what was heard.
 ///
 /// It reads only the updates the engine already sends, and the caller's clock, so the IO proc
@@ -61,6 +61,12 @@ public struct PlayCounter: Sendable {
         }
         if case .trackEnded = update.event { listen?.ended = true }
         guard var current = listen else { return events }
+        if update.event == .stopped {
+            // Stopping ends the listen without a skip; a play it reached still counts.
+            events += count(&current, at: now)
+            listen = nil
+            return events
+        }
         events += count(&current, at: now)
         let playing = update.state.status == .playing
         if playing, current.playingSince == nil {

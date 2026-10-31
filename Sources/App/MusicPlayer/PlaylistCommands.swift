@@ -145,26 +145,8 @@ extension AppDelegate {
 
     // MARK: Counting plays
 
-    /// Counts plays and skips from each engine update, and wakes once when the current track
-    /// would count.
-    func countPlays(_ update: PlaybackUpdate) {
-        record(playCounter.handle(update, at: Date()))
-        playTick?.cancel()
-        guard let deadline = playCounter.deadline else { return }
-        let waitNanoseconds = UInt64(max(0, deadline.timeIntervalSinceNow) * 1e9)
-        playTick = Task { [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: waitNanoseconds)
-            } catch {
-                // Cancelled: a newer update scheduled its own tick.
-                return
-            }
-            guard let self else { return }
-            self.record(self.playCounter.tick(at: Date()))
-        }
-    }
-
-    private func record(_ events: [PlayCounter.Event]) {
+    /// Writes each play and skip `PlayTracker` counts to the library.
+    func record(_ events: [PlayCounter.Event]) {
         for event in events {
             switch event {
             case .played(let url): browser?.recordPlay(url.path, at: Date().timeIntervalSince1970)
