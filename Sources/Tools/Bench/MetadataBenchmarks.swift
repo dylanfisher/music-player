@@ -17,6 +17,7 @@ let metadataBenchmarks = [
         let second = try parseAll(files, in: root)
         var notes = [
             first.summary(files.count),
+            first.readsPerFile(),
             String(
                 format: "second pass: %.2f s, %.0f files/s", second.seconds,
                 Double(files.count) / second.seconds),
@@ -34,12 +35,22 @@ private struct Pass {
     var readCount = 0
     var mostBytesRead = 0
     var parsed = 0
+    /// Files by how many reads each took.
+    var filesByReads: [Int: Int] = [:]
 
     func summary(_ fileCount: Int) -> String {
         String(
             format: "%.0f files/s, %.1f MB/s; per file %.0f bytes in %.2f reads, at most %d bytes",
             Double(fileCount) / seconds, Double(bytesRead) / seconds / 1e6,
             Double(bytesRead) / Double(parsed), Double(readCount) / Double(parsed), mostBytesRead)
+    }
+
+    /// "files by reads: 1 read 38000, 2 reads 4900, 3 reads 64".
+    func readsPerFile() -> String {
+        "files by reads: "
+            + filesByReads.keys.sorted().map { reads in
+                "\(reads) read\(reads == 1 ? "" : "s") \(filesByReads[reads]!)"
+            }.joined(separator: ", ")
     }
 }
 
@@ -55,6 +66,7 @@ private func parseAll(_ files: [FixtureFile], in root: URL) throws -> Pass {
                 pass.readCount += parsed.readCount
                 pass.mostBytesRead = max(pass.mostBytesRead, parsed.bytesRead)
                 pass.parsed += 1
+                pass.filesByReads[parsed.readCount, default: 0] += 1
             } catch {
                 if file.malformation?.isFieldLevel ?? true { throw error }
             }

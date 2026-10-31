@@ -79,6 +79,37 @@ let libraryBenchmarks = [
             notes: [String(format: "%.0f files/s", Double(summary.unchanged) / elapsed)])
     },
     Benchmark(
+        name: "library: scan \(simulatedScanFileCount) fixture files on a simulated NAS, tuned",
+        budget: Budget(appleSilicon: 4, oldMac: 8, unit: .seconds)
+    ) {
+        let fixed = try simulatedNetworkScan(readers: fixedNetworkReaders)
+        let tuned = try simulatedNetworkScan(readers: nil)
+        let speedup = fixed.seconds / tuned.seconds
+        // The point of tuning: a NAS that serves 16 at once is wasted on 4 readers.
+        guard speedup >= 2 else {
+            throw BenchError.expected(
+                String(
+                    format: "tuned readers to beat a fixed %d by 2x, not %.2fx",
+                    fixedNetworkReaders, speedup))
+        }
+        guard case .tuned(let levels, _) = tuned.summary.readers else {
+            throw BenchError.expected("tuned readers: \(String(describing: tuned.summary.readers))")
+        }
+        let rate = { (scan: (seconds: Double, summary: ScanSummary)) in
+            Double(scan.summary.read) / scan.seconds
+        }
+        return Measured(
+            value: tuned.seconds,
+            notes: [
+                String(
+                    format: "%.0f ms per operation, %d at once; %.0f files/s tuned, %.0f files/s"
+                        + " with %d readers (%.2f s), %.1fx faster",
+                    simulatedLatencySeconds * 1e3, simulatedCapacity, rate(tuned), rate(fixed),
+                    fixedNetworkReaders, fixed.seconds, speedup),
+                "readers " + levels.map(String.init).joined(separator: "→"),
+            ])
+    },
+    Benchmark(
         name: "library: index database size",
         budget: Budget(appleSilicon: 60, oldMac: 60, unit: .megabytes)
     ) {
@@ -149,6 +180,47 @@ let libraryBenchmarks = [
             ])
     },
 ]
+
+/// The NAS the network scan benchmark simulates: every operation takes 2 ms, and it serves 16
+/// at once, so more readers than that only queue.
+private let simulatedLatencySeconds = 0.002
+private let simulatedCapacity = 16
+private let simulatedScanFileCount = 3000
+/// What the tuning is measured against: the fixed count network scans read before it.
+private let fixedNetworkReaders = 4
+
+/// Scans the first artists' folders of the fixture library, about `simulatedScanFileCount`
+/// files, through a simulated NAS into a new index, and returns the seconds and the summary.
+private func simulatedNetworkScan(readers: Int?) throws -> (seconds: Double, summary: ScanSummary) {
+    let root = try defaultFixturesDirectory()
+    _ = try generateFixtures(count: fullLibraryFileCount, in: root)
+    let byArtist = Dictionary(grouping: try loadManifest(in: root).files) {
+        String($0.path.prefix { $0 != "/" })
+    }
+    var artists: [String] = []
+    var files = 0
+    for artist in byArtist.keys.sorted() where files < simulatedScanFileCount {
+        artists.append(root.path + "/" + artist)
+        files += byArtist[artist]!.count
+    }
+    return try withScratchDirectory("simulated-nas") { directory in
+        let scanner = LibraryScanner(
+            databaseURL: directory.appendingPathComponent("library.sqlite"),
+            networkReaders: readers,
+            access: SimulatedNAS(
+                latencySeconds: simulatedLatencySeconds, capacity: simulatedCapacity))
+        var scanned: ScanSummary?
+        let elapsed = try seconds {
+            scanned = try scanner.scan(
+                WatchedFolder(path: root.path, kind: .network), only: artists)
+        }
+        guard let summary = scanned, summary.read == files, summary.issues.isEmpty else {
+            throw BenchError.expected(
+                "the scan to read all \(files) files: \(String(describing: scanned))")
+        }
+        return (elapsed, summary)
+    }
+}
 
 /// Every prefix of a few artist, album and title words, as someone typing them would send.
 private func typedQueries(_ index: LibraryIndex) throws -> [String] {

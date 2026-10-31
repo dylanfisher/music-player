@@ -67,6 +67,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Re-sort the track table by any column | < 100 ms | < 250 ms |
 | Full scan of the fixture library, local SSD | < 60 s | < 180 s |
 | Rescan with no changes, on the NAS | < 30 s | < 60 s |
+| Scan 3,000 fixture files on a simulated NAS (2 ms per operation, 16 at once), tuned readers | < 4 s | < 8 s |
 | Rescan with no changes, fixture library, local SSD | < 5 s | < 15 s |
 | Library database for the fixture library | < 60 MB | < 60 MB |
 | Memory a scan of the fixture library adds, at its peak | < 50 MB | < 50 MB |
