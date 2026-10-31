@@ -216,3 +216,10 @@ private let fsEventsCallback: FSEventStreamCallback = { _, info, count, paths, f
     let paths = Unmanaged<CFArray>.fromOpaque(paths).takeUnretainedValue() as? [String] ?? []
     watcher.received((0..<count).map { (paths[$0], flags[$0]) })
 }
+
+/// Throws `LibraryError.notWatched` unless `path` is one of `folders`.
+public func requireWatched(_ path: String, in folders: [WatchedFolder]) throws {
+    guard folders.contains(where: { canonicalPath($0.path) == canonicalPath(path) }) else {
+        throw LibraryError.notWatched(path)
+    }
+}

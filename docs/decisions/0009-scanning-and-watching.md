@@ -67,6 +67,6 @@ paths. Names a network share lists precomposed are stored as listed.
 A no-change rescan of the fixture library takes under a second locally; on the NAS it costs
 one listing round trip per directory batch. A folder emptied on purpose keeps its files until it
 is removed from Settings. A dead SMB mount that lists directories as empty without an error
-would read as deletions; the device check catches an unmount, not that. Running
-`MusicPlayer --scan` on a folder that isn't watched adds files that the app removes at its next
-launch.
+would read as deletions; the device check catches an unmount, not that. `MusicPlayer --scan`
+on a folder that isn't watched refuses to write to the app's own index, since the app would
+remove those files at its next launch; `--db <file>` scans into a separate index.

@@ -15,9 +15,17 @@ func scanCommand(folder: String, databasePath: String?) throws {
     // Unknown only when the folder is missing, which the scan reports as such.
     let isLocal = (try? URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeIsLocalKey]))?
         .volumeIsLocal
-    let databaseURL =
-        try databasePath.map { URL(fileURLWithPath: $0) }
-        ?? defaultLibraryFileURL(settingsFileURL: try defaultSettingsFileURL())
+    let databaseURL: URL
+    if let databasePath {
+        databaseURL = URL(fileURLWithPath: databasePath)
+    } else {
+        // The app removes files outside its watched folders at launch, so a scan into its own
+        // index of anything else would be undone.
+        let settingsURL = try defaultSettingsFileURL()
+        let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
+        try requireWatched(path, in: settings[\.watchedFolders])
+        databaseURL = defaultLibraryFileURL(settingsFileURL: settingsURL)
+    }
     print(
         "scanning \(path) (\(isLocal == false ? "network" : "local") volume) into \(databaseURL.path)"
     )

@@ -334,3 +334,15 @@ import Testing
     #expect(paths.allSatisfy { Array($0.utf8).starts(with: Array(decomposed.utf8)) })
     #expect(paths.allSatisfy { FileManager.default.fileExists(atPath: $0) })
 }
+
+@Test func onlyWatchedFoldersMayBeScannedIntoTheAppIndex() throws {
+    let folders = [WatchedFolder(path: "/Volumes/Music/", kind: .network)]
+    try requireWatched("/Volumes/Music", in: folders)
+    #expect(throws: LibraryError.notWatched("/Volumes/Other")) {
+        try requireWatched("/Volumes/Other", in: folders)
+    }
+    #expect(
+        LibraryError.notWatched("/x").description
+            == "/x isn't a watched folder; add it in settings,"
+            + " or pass --db <file> to scan into a separate index")
+}
