@@ -17,12 +17,7 @@ import Settings
 // --snapshot draws the window into a PNG a few seconds after its first rows, to check the layout.
 let arguments = CommandLine.arguments
 
-func value(after flag: String) -> String? {
-    guard let index = arguments.firstIndex(of: flag), index + 1 < arguments.count else {
-        return nil
-    }
-    return arguments[index + 1]
-}
+func value(after flag: String) -> String? { value(after: flag, in: arguments) }
 
 /// Everything after `flag` up to the next flag.
 func values(after flag: String) -> [String] {
@@ -40,26 +35,11 @@ func runAndExit(_ command: () throws -> Void) -> Never {
     }
 }
 
-let ioHintsChoices = ReadHints.allCases.map(\.rawValue).joined(separator: ", ")
-
-// A flag with nothing after it would otherwise fall through to launching the GUI.
-for (flag, what) in [
-    ("--export-settings", "a file"), ("--import-settings", "a file"),
-    ("--play", "a file or folder"),
-    ("--device", "part of a device name"), ("--scan", "a folder"), ("--db", "a database file"),
-    ("--readers", "a number of files to read at once"),
-    ("--scan-io-hints", ioHintsChoices), ("--settings", "a settings file"),
-    ("--snapshot", "a PNG file to write"),
-] where arguments.contains(flag) && value(after: flag) == nil {
-    FileHandle.standardError.write(Data("error: \(flag) needs \(what)\n".utf8))
+if let problem = argumentProblem(Array(arguments.dropFirst())) {
+    FileHandle.standardError.write(Data("error: \(problem)\n".utf8))
     exit(1)
 }
 
-for flag in ["--db", "--readers", "--scan-io-hints"]
-where arguments.contains(flag) && !arguments.contains("--scan") {
-    FileHandle.standardError.write(Data("error: \(flag) only goes with --scan\n".utf8))
-    exit(1)
-}
 let readers = value(after: "--readers").map { text in
     let range = AppSettings.networkScanReadersRange
     guard let count = Int(text), range.contains(count) else {
