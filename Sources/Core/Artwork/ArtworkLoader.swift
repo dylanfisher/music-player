@@ -78,6 +78,11 @@ public final class ArtworkLoader: @unchecked Sendable {
 public struct ArtworkKey: Hashable, Sendable {
     public var path: String
     public var offset: Int
+
+    public init(path: String, offset: Int) {
+        self.path = path
+        self.offset = offset
+    }
 }
 
 public enum ArtworkError: Error, Equatable, CustomStringConvertible {

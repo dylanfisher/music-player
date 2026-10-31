@@ -81,6 +81,12 @@ let package = Package(
             path: "Sources/Features/LibraryBrowser",
             swiftSettings: strictSwift
         ),
+        .target(
+            name: "NowPlaying",
+            dependencies: ["Artwork", "DisplayText", "Library", "Log", "Playback"],
+            path: "Sources/Features/NowPlaying",
+            swiftSettings: strictSwift
+        ),
         .executableTarget(
             name: "MusicPlayer",
             dependencies: [
@@ -163,6 +169,11 @@ let package = Package(
         .testTarget(
             name: "MusicPlayerTests",
             dependencies: ["Metadata", "MusicPlayer"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "NowPlayingTests",
+            dependencies: ["Library", "Metadata", "NowPlaying", "Playback"],
             swiftSettings: strictSwift
         ),
         .testTarget(
