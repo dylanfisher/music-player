@@ -110,3 +110,14 @@ private func emptyFiles(_ count: Int) throws -> String {
     clean.seconds = 1
     #expect(clean.measurement(at: second, pause: control.pauseState) != nil)
 }
+
+@Test func noReadersStartOnceThereIsNothingLeftToRead() {
+    func spawned(stopped: Bool = false, walkFinished: Bool = false, queued: Int = 0) -> Int {
+        ScanPipeline.readersToSpawn(
+            running: 2, limit: 5, stopped: stopped, walkFinished: walkFinished, queued: queued)
+    }
+    #expect(spawned() == 3)
+    #expect(spawned(stopped: true, queued: 9) == 0)
+    #expect(spawned(walkFinished: true) == 0)
+    #expect(spawned(walkFinished: true, queued: 1) == 3)
+}

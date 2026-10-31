@@ -293,10 +293,23 @@ final class ScanPipeline: @unchecked Sendable {
         window = Window(start: now, pauseChanges: pause.changes)
     }
 
+    /// How many readers to start so `running` reaches `limit`. None once the scan has stopped,
+    /// or the walk has finished and nothing is queued, since they would only exit.
+    static func readersToSpawn(
+        running: Int, limit: Int, stopped: Bool, walkFinished: Bool, queued: Int
+    ) -> Int {
+        guard !stopped, !walkFinished || queued > 0 else { return 0 }
+        return max(limit - running, 0)
+    }
+
     /// Called with `condition` held. Readers above a lowered limit stop at their next file.
     private func setLimit(_ level: Int) {
         limit = level
-        while readerThreads < limit {
+        for _
+            in 0..<Self.readersToSpawn(
+                running: readerThreads, limit: limit, stopped: stopped, walkFinished: walkFinished,
+                queued: queued.count - nextQueued)
+        {
             readerThreads += 1
             spawn(reader)
         }
