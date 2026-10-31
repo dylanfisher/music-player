@@ -22,12 +22,20 @@ codec, rate, bit depth, channels, length in frames, and art as offset, length an
   unknown blocks are skipped by length. A trailing `moov` costs one more read. Parsing never
   reads more than 16 MiB at once, and every length from the file is checked against the file (and its parent
   block) before anything is read or allocated.
-- **Strictness.** Structure that breaks the format fails the file with a typed `MetadataError`:
-  the path, the byte offset, and what was wrong. So do values that don't parse: a track number
-  that isn't a number, text that isn't valid in its declared encoding, an ID3 frame ID with
-  characters outside A–Z and 0–9.
-  The scanner reports these to the owner instead of showing guessed data. Unknown tag fields
-  (Vorbis keys, ID3 frames, MP4 items) are skipped: they are the user's own data, not a schema.
+- **Strictness.** Damage that stops the container being walked or the audio properties being
+  found fails the file with a typed `MetadataError`: the path, the byte offset, and what was
+  wrong. A block or frame whose length runs past its parent counts, since nothing after it can
+  be located. Damage to one field doesn't fail the file: the field is dropped, read in part, or
+  decoded leniently, and `ParsedFile.warnings` records a typed `MetadataWarning` with the kind,
+  the offset and what happened, which the scanner reports to the owner. Numbers keep their
+  leading digits ("3 of 10" is 3, "A1" is dropped). Invalid UTF-8 reads as Latin-1, which a
+  mislabelled tag almost always is; invalid UTF-16 gets U+FFFD; UTF-16 without a byte-order mark
+  reads as little-endian. An ID3 frame, MP4 item or FLAC picture that can't be read inside its
+  checked bounds is skipped, including compressed or encrypted ID3 frames. An invalid ID3 frame
+  ID ends the tag, because its size can't be trusted. ID3v2.4 frame sizes that iTunes wrote as
+  plain integers are read when the syncsafe reading doesn't land on the next frame and the plain
+  one does. Unknown tag fields (Vorbis keys, ID3 frames, MP4 items) are skipped without a warning:
+  they are the user's own data, not a schema.
 - **Values.** When a field appears twice, the first wins, including multi-valued Vorbis and
   ID3v2.4 fields. Empty values count as absent, and so do zero track and disc numbers. In WAV,
   ID3 wins over `LIST/INFO` field by field. RIFF INFO text that isn't UTF-8 is read as Latin-1,
@@ -44,8 +52,8 @@ codec, rate, bit depth, channels, length in frames, and art as offset, length an
 
 Not read: DSF (phase 12), Ogg, APE, WavPack, RF64; ID3v1 and APE tags at the end of an MP3, an
 ID3v2 tag in front of FLAC, a second ID3v2 tag in a row; AIFF `NAME`/`AUTH`/`ANNO`; RIFF `bext`;
-MP4 freeform items other than `iTunSMPB`, ID3 `TXXX`; compressed or encrypted ID3 frames, which
-fail the file when they're a frame this reads; MPEG Layer I and II; fragmented MP4. LAME's
+MP4 freeform items other than `iTunSMPB`, ID3 `TXXX`; compressed or encrypted ID3 frames,
+which are skipped with a warning; MPEG Layer I and II; fragmented MP4. LAME's
 encoder delay is counted in an MP3's length, AAC without `iTunSMPB` includes priming, and HE-AAC
 reports its core rate.
 
@@ -58,12 +66,13 @@ reports its core rate.
   control over reads.
 - **`mmap` the whole file** — rejected: a NAS read fault stalls in the kernel with no error, and
   a file truncated while mapped raises SIGBUS.
-- **Lenient parsing (skip bad frames, keep going)** — rejected for now: it shows partly wrong
-  tags with no signal. Loosen per case if the owner's library has many files that fail.
+- **Fail the file on any bad value** — rejected: one junk track number in a real library would
+  hide every other field of the file. Warnings keep the signal without losing the file.
+- **Skip bad fields silently** — rejected: it shows partly wrong tags with no signal.
 
 ## Consequences
 
 The scanner can store art references for every file without reading art, and bytes read per
-file stay near 16 KiB on a typical library. A file with one bad value fails as a whole, so the
-first scan of a real library may report files that other players read; each report names the
-offset to look at. Every new format adds a parser here and a case in `parse`.
+file stay near 16 KiB on a typical library. A file with bad fields still enters the library,
+with each warning naming the offset to look at; only structural damage keeps a file out.
+Every new format adds a parser here and a case in `parse`.
