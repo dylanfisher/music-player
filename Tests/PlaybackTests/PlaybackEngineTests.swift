@@ -76,7 +76,8 @@ private func playing(_ urls: [URL], _ output: FakeOutput) async -> PlaybackEngin
     #expect(await engine.state.durationSeconds == 200)
 
     await engine.handle(.trackStarted(3, info))
-    #expect(output.takeCalls() == [.setNext(nil, nil)])
+    // The output's next track was used up, so there's nothing to clear.
+    #expect(output.takeCalls() == [])
     await engine.handle(.finished(3))
     #expect(await engine.state.status == .stopped)
     #expect(await engine.state.currentIndex == 0)
@@ -169,7 +170,7 @@ private func playing(_ urls: [URL], _ output: FakeOutput) async -> PlaybackEngin
     for _ in 0..<2 {
         await engine.handle(.trackFailed(id, Broken()))
         await engine.handle(.finished(id))
-        id += 4  // the skip, the load and its next
+        id += 3  // the skip, then the load and its next
     }
     #expect(await engine.state.status == .stopped)
 }
@@ -250,4 +251,79 @@ private func playing(_ urls: [URL], _ output: FakeOutput) async -> PlaybackEngin
     _ = output.takeCalls()
     await engine.play()
     #expect(output.takeCalls().first == .load(3, urls[0], startSeconds: 0, playing: true))
+}
+
+@Test func aRepeatOrShuffleChangeThatKeepsTheNextTrackSendsNothing() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    _ = output.takeCalls()
+    let updates = await engine.updates()
+    await engine.setRepeat(.all)
+    await engine.setRepeat(.all)
+    await engine.setShuffle(false)
+    #expect(output.takeCalls() == [])
+    var events: [PlaybackEvent?] = []
+    for await update in updates {
+        events.append(update.event)
+        if events.count == 2 { break }
+    }
+    #expect(events == [nil, .repeatChanged])
+}
+
+@Test func losingTheDeviceRightAfterTheNextTrackStartedResumesThatTrack() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    // The output started item 2 and lost the device before the engine heard of the start.
+    await engine.handle(.deviceLost(2, positionSeconds: 5))
+    #expect(await engine.state.currentIndex == 1)
+    _ = output.takeCalls()
+    await engine.play()
+    #expect(output.takeCalls().first == .load(3, urls[1], startSeconds: 5, playing: true))
+}
+
+@Test func choosingATrackGivesTheQueueAnotherChanceAfterFailures() async {
+    let output = FakeOutput()
+    let engine = await playing(Array(urls.prefix(2)), output)
+    await engine.setRepeat(.all)
+    // Track 1 fails, and so does the next one queued after it.
+    await engine.handle(.trackFailed(1, Broken()))
+    await engine.handle(.trackFailed(2, Broken()))
+    _ = output.takeCalls()
+    // Choosing a track starts the count again, so a failure there still moves on.
+    await engine.next()
+    let loaded = output.takeCalls()
+    guard case .load(let id, _, _, _) = loaded.first else {
+        Issue.record("expected a load, got \(loaded)")
+        return
+    }
+    await engine.handle(.trackFailed(id, Broken()))
+    await engine.handle(.finished(id))
+    #expect(output.takeCalls().contains { if case .load = $0 { true } else { false } })
+}
+
+@Test func updatesEndWhenTheOutputCloses() async {
+    let (events, continuation) = AsyncStream.makeStream(of: OutputEvent.self)
+    let output = ClosingOutput(events: events)
+    let engine = PlaybackEngine(output: output)
+    let updates = await engine.updates()
+    continuation.finish()
+    var count = 0
+    for await _ in updates { count += 1 }
+    #expect(count == 1)
+}
+
+/// An output whose event stream the test ends.
+private final class ClosingOutput: Output, @unchecked Sendable {
+    let events: AsyncStream<OutputEvent>
+    let hasVolume = false
+    init(events: AsyncStream<OutputEvent>) { self.events = events }
+    func load(_ item: OutputItem, startSeconds: Double, playing: Bool) {}
+    func setNext(_ item: OutputItem?) {}
+    func play() {}
+    func pause() {}
+    func stop() {}
+    func seek(toSeconds seconds: Double) {}
+    func setVolume(_ gain: Double) {}
+    func position() -> OutputPosition? { nil }
+    func close() {}
 }

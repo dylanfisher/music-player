@@ -15,7 +15,9 @@ public actor PlaybackEngine {
     /// What the output has loaded, and what it has been told comes next, as positions in the
     /// queue's play order.
     private var currentItem: (id: OutputItem.ID, position: Int)?
-    private var nextItem: (id: OutputItem.ID, position: Int)?
+    /// Mirrors what the output was last told comes next. `entry` is the index into the queue, so
+    /// a change of order that leaves the same track next isn't sent again.
+    private var nextItem: (id: OutputItem.ID, position: Int, entry: Int)?
     /// Set when the current item failed, so its end skips on rather than repeating it.
     private var currentFailed = false
     /// Where to pick up after the device was lost, since the output dropped everything.
@@ -40,6 +42,7 @@ public actor PlaybackEngine {
             for await event in events {
                 await self?.handle(event)
             }
+            await self?.finishUpdates()
         }
     }
 
@@ -49,16 +52,23 @@ public actor PlaybackEngine {
             of: PlaybackUpdate.self, bufferingPolicy: .bufferingNewest(256))
         let id = UUID()
         subscribers[id] = continuation
-        continuation.onTermination = { _ in Task { await self.unsubscribe(id) } }
+        continuation.onTermination = { [weak self] _ in Task { await self?.unsubscribe(id) } }
         continuation.yield(PlaybackUpdate(state: state, event: nil))
         return stream
     }
 
     private func unsubscribe(_ id: UUID) { subscribers[id] = nil }
 
+    /// The output has closed, so nothing will change again.
+    private func finishUpdates() {
+        for continuation in subscribers.values { continuation.finish() }
+        subscribers = [:]
+    }
+
     /// Stops playback and replaces the queue. `first` is the index `play()` starts at.
     public func setQueue(_ urls: [URL], first: Int = 0) {
         unload()
+        failuresInARow = 0
         cursor = queue.replace(with: urls, first: first, shuffled: shuffled) ?? 0
         state.queue = urls
         state.currentIndex = urls.isEmpty ? nil : queue.entry(at: cursor)
@@ -73,6 +83,7 @@ public actor PlaybackEngine {
             output.play()
         case .paused, .stopped:
             guard !queue.order.isEmpty else { return }
+            failuresInARow = 0
             load(currentItem?.position ?? cursor, startSeconds: resumeSeconds ?? 0, playing: true)
         }
         state.status = .playing
@@ -125,6 +136,7 @@ public actor PlaybackEngine {
     /// Loads the track at `position`, playing if playback was, or just points the queue at it when
     /// stopped.
     private func move(to position: Int) {
+        failuresInARow = 0
         switch state.status {
         case .stopped:
             cursor = position
@@ -146,6 +158,7 @@ public actor PlaybackEngine {
     }
 
     public func setRepeat(_ mode: RepeatMode) {
+        guard mode != queue.repeatMode else { return }
         queue.repeatMode = mode
         state.repeatMode = mode
         sendNext()
@@ -153,6 +166,7 @@ public actor PlaybackEngine {
     }
 
     public func setShuffle(_ on: Bool) {
+        guard on != queue.shuffle else { return }
         let position = queue.setShuffle(
             on, keeping: currentItem?.position ?? (queue.order.isEmpty ? nil : cursor),
             shuffled: shuffled)
@@ -194,16 +208,28 @@ public actor PlaybackEngine {
         sendNext()
     }
 
-    /// Tells the output what follows the current item, as the queue stands now.
+    /// Tells the output what follows the current item as the queue stands now, unless it already
+    /// has that track: replacing a next track the output has queued costs it work.
     private func sendNext() {
         guard let currentItem, resumeSeconds == nil else { return }
         guard let position = queue.position(after: currentItem.position, natural: true) else {
+            guard nextItem != nil else { return }
             nextItem = nil
             output.setNext(nil)
             return
         }
+        let entry = queue.entry(at: position)
+        if let nextItem, nextItem.entry == entry {
+            self.nextItem = (nextItem.id, position, entry)
+            return
+        }
+        handOver(position)
+    }
+
+    /// Makes the track at `position` the output's next one.
+    private func handOver(_ position: Int) {
         lastItemID += 1
-        nextItem = (lastItemID, position)
+        nextItem = (lastItemID, position, queue.entry(at: position))
         output.setNext(OutputItem(id: lastItemID, url: queue.url(at: position)))
     }
 
@@ -219,7 +245,7 @@ public actor PlaybackEngine {
         switch event {
         case .trackStarted(let id, let info):
             if let nextItem, id == nextItem.id {
-                currentItem = nextItem
+                currentItem = (nextItem.id, nextItem.position)
                 self.nextItem = nil
                 currentFailed = false
                 sendNext()
@@ -278,6 +304,12 @@ public actor PlaybackEngine {
         case .underrun(let frames):
             publish(.underrun(frames: frames))
         case .deviceLost(let id, let seconds):
+            // The output may have moved on to the next item before the engine heard it start.
+            if let nextItem, id == nextItem.id {
+                currentItem = (nextItem.id, nextItem.position)
+                cursor = nextItem.position
+                state.currentIndex = nextItem.entry
+            }
             if let currentItem, id == currentItem.id {
                 resumeSeconds = seconds
             } else if currentItem != nil {
@@ -313,9 +345,7 @@ public actor PlaybackEngine {
             output.setNext(nil)
             return
         }
-        lastItemID += 1
-        nextItem = (lastItemID, following)
-        output.setNext(OutputItem(id: lastItemID, url: queue.url(at: following)))
+        handOver(following)
     }
 
     private func publish(_ event: PlaybackEvent) {
