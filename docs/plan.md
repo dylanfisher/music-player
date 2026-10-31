@@ -375,7 +375,7 @@ Implementation plan:
 1. **SQLite:** bind a parameter list as well as variadic values, for queries whose filters vary.
 2. **Settings:** `TrackColumn` (every column the table can show and sort by) moves here from
    Library's `TrackSortColumn`, since Settings stores the layout and Library can import Settings
-   but not the reverse. New values `WindowFrame` and `ColumnLayout`, strict about keys like
+   but not the reverse. New values `WindowFrame` and `TrackTableLayout`, strict about keys like
    `WatchedFolder` (the third such type, so the unknown-key check is shared). Keys for the window
    frame, split positions, queue panel, visible columns with order and widths, sort, the sidebar
    source and the pane selections (by name, since IDs change on a rebuild).
@@ -387,6 +387,8 @@ Implementation plan:
    through a callback, so the window refreshes and shows scan problems.
 4. **Playback:** queue edits on the engine: play next, move and remove, in play order, keeping the
    current track playing (removing it moves on). `PlaybackState.order` exposes the play order.
+   `clock` and `kilohertz` move to a `DisplayText` primitive, since three features show times and
+   rates.
 5. **Artwork** (Core): `ArtworkLoader` reads art with `readArt`, decodes it straight to a thumbnail
    at display size with ImageIO, and keeps a bounded cache. Never holds a full-size image.
 6. **Features:** `LibraryBrowser` (sidebar, Genre | Artist | Album panes, the track table with a
@@ -398,8 +400,8 @@ Implementation plan:
    including its playback hook. Settings are read once at launch and passed in; layout changes are
    saved through Settings, coalesced. Watched folders are added and removed from the sidebar.
    `--settings <file>` points the app at another settings file and the library beside it.
-   `--measure-window <seconds>` prints launch-to-first-rows and memory, after scrolling the whole
-   table and loading art, as JSON and quits, for Bench.
+   `--measure-window` prints launch-to-first-rows and memory, after scrolling the whole table and
+   loading art, as JSON and quits, for Bench. `--snapshot <file>` draws the window into a PNG.
 8. **Bench:** launch to interactive and resident memory (the app run as a subprocess against the
    fixture library), search keystroke p95 and re-sort through the view model. `scripts/bundle
    release` also writes a universal `Bench` beside the `.app`, which builds its own fixtures.
