@@ -1,6 +1,6 @@
 /// Why a file's metadata couldn't be read, and where in the file the problem is.
 public struct MetadataError: Error, Equatable, CustomStringConvertible {
-    public enum Kind: Equatable, Sendable {
+    public enum Kind: String, CaseIterable, Sendable {
         /// The file couldn't be opened or read.
         case unreadable
         /// Empty, or not one of the formats this reads.

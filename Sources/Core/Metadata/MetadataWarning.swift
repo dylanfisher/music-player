@@ -1,7 +1,7 @@
 /// A field that couldn't be read as written. The file still parses: the field is dropped, read in
 /// part, or decoded leniently, and the warning says which and where.
 public struct MetadataWarning: Equatable, Sendable, CustomStringConvertible {
-    public enum Kind: Equatable, Sendable {
+    public enum Kind: String, CaseIterable, Sendable {
         /// A track or disc number or total that isn't a plain number. Leading digits are kept.
         case badNumber
         /// Text that isn't valid in its declared encoding, decoded as Latin-1 or with U+FFFD.
