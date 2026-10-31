@@ -337,15 +337,29 @@ private struct AlbumKey: Hashable {
     var artist: Int64?
 }
 
+/// `path` without trailing slashes, except that "/" stays. Every path the library compares or
+/// stores goes through this, so "/a/b/" and "/a/b" name one folder.
+func trimmingTrailingSlashes(_ path: String) -> String {
+    var trimmed = Substring(path)
+    while trimmed.count > 1, trimmed.hasSuffix("/") { trimmed = trimmed.dropLast() }
+    return String(trimmed)
+}
+
+/// `directory` as a prefix of the paths under it: "dir" becomes "dir", and "/" becomes "".
+private func stem(_ directory: String) -> String {
+    let base = trimmingTrailingSlashes(directory)
+    return base == "/" ? "" : base
+}
+
 /// Paths strictly under `directory`: from "dir/" up to, not including, "dir0", since "0" follows
 /// "/" in byte order. The index on `files.path` serves the range.
 func pathRange(under directory: String) -> Range<String> {
-    let base = directory.hasSuffix("/") ? String(directory.dropLast()) : directory
+    let base = stem(directory)
     return (base + "/")..<(base + "0")
 }
 
 func isPath(_ path: String, under directory: String) -> Bool {
-    path.hasPrefix(directory.hasSuffix("/") ? directory : directory + "/")
+    path.hasPrefix(stem(directory) + "/")
 }
 
 /// Case, diacritic and width folded, so "élan", "Elan" and "ELAN" sort together.

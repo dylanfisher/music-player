@@ -155,3 +155,11 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
         "UPDATE files SET failure_kind = 'gremlins' WHERE failure_kind IS NOT NULL")
     #expect(throws: LibraryError.unknownKind("gremlins")) { try index.fileIssues() }
 }
+
+@Test func trailingSlashesComeOffEveryPathButTheRoot() {
+    #expect(trimmingTrailingSlashes("/a/b//") == "/a/b")
+    #expect(trimmingTrailingSlashes("/a/b") == "/a/b")
+    #expect(trimmingTrailingSlashes("/") == "/")
+    #expect(isPath("/a/b/c", under: "/a/b/"))
+    #expect(pathRange(under: "/a/b//") == "/a/b/"..<"/a/b0")
+}

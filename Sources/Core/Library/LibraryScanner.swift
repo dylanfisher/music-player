@@ -36,9 +36,7 @@ public struct LibraryScanner: Sendable {
         _ folder: WatchedFolder, only subtrees: [String] = [], control: ScanControl = ScanControl(),
         progress: AsyncStream<ScanProgress>.Continuation? = nil
     ) throws -> ScanSummary {
-        let root =
-            folder.path.count > 1 && folder.path.hasSuffix("/")
-            ? String(folder.path.dropLast()) : folder.path
+        let root = trimmingTrailingSlashes(folder.path)
         var summary = ScanSummary()
         guard let device = directoryDevice(root) else {
             summary.issues.append(

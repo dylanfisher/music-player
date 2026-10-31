@@ -38,7 +38,11 @@ public final class LibraryWatcher: @unchecked Sendable {
     public func start() {
         queue.async { [self] in
             precondition(state == nil, "the watcher is already running")
-            let folders = settings[\.watchedFolders]
+            let folders = settings[\.watchedFolders].map { folder in
+                var folder = folder
+                folder.path = trimmingTrailingSlashes(folder.path)
+                return folder
+            }
             state = WatchState(
                 folders: folders,
                 pausePollingDuringPlayback: settings[\.pausePollingDuringPlayback], now: Date())
@@ -197,9 +201,7 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// An FSEvents path, which has symbolic links resolved and ends in "/", spelled as the
     /// watched folder is configured, since the index stores paths that way.
     private func configuredPath(_ eventPath: String) -> String {
-        let path =
-            eventPath.count > 1 && eventPath.hasSuffix("/")
-            ? String(eventPath.dropLast()) : eventPath
+        let path = trimmingTrailingSlashes(eventPath)
         for folder in resolvedFolders {
             if path == folder.resolved { return folder.configured }
             if isPath(path, under: folder.resolved) {
