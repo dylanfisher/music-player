@@ -40,6 +40,12 @@ let package = Package(
             path: "Sources/Core/Playback",
             swiftSettings: strictSwift
         ),
+        .target(
+            name: "Settings",
+            dependencies: ["Log"],
+            path: "Sources/Core/Settings",
+            swiftSettings: strictSwift
+        ),
         .executableTarget(
             name: "MusicPlayer",
             dependencies: ["HALOutput", "Playback"],
@@ -64,6 +70,11 @@ let package = Package(
         .testTarget(
             name: "PlaybackTests",
             dependencies: ["Playback"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "SettingsTests",
+            dependencies: ["Settings"],
             swiftSettings: strictSwift
         ),
         .testTarget(
