@@ -59,6 +59,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Artwork",
+            dependencies: ["Metadata"],
+            path: "Sources/Core/Artwork",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Settings",
             dependencies: ["Log"],
             path: "Sources/Core/Settings",
@@ -88,6 +94,11 @@ let package = Package(
                 "Fixtures", "HALOutput", "Library", "Metadata", "Playback", "SQLite", "Settings",
             ],
             path: "Sources/Tools/Bench",
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "ArtworkTests",
+            dependencies: ["Artwork", "Metadata"],
             swiftSettings: strictSwift
         ),
         .testTarget(
