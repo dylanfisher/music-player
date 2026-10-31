@@ -6,16 +6,6 @@ import Testing
 @testable import Fixtures
 @testable import Metadata
 
-/// A library of its own, apart from FixturesTests' copy, because the two test targets run in one
-/// process and would otherwise generate into the same directory at once.
-private let library = Result { () throws -> (URL, FixtureManifest) in
-    let root = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent(".build/metadata-tests")
-    _ = try generateFixtures(count: coveringLibraryFileCount, in: root)
-    return (root, try loadManifest(in: root))
-}
-
 /// The manifest's tags in the parser's shape. The fixtures write no composer.
 private func expectedTags(_ file: FixtureFile) -> TrackTags {
     guard let tags = file.tags else { return TrackTags() }
@@ -47,7 +37,7 @@ private func expectedFailure(_ malformation: Malformation) -> MetadataError.Kind
 }
 
 @Test func everyValidFixtureMatchesItsManifestEntry() throws {
-    let (root, manifest) = try library.get()
+    let (root, manifest) = try fixtureLibrary.get()
     for file in manifest.files where file.malformation == nil {
         let parsed = try readMetadata(at: root.appendingPathComponent(file.path))
         let metadata = parsed.metadata
@@ -60,7 +50,7 @@ private func expectedFailure(_ malformation: Malformation) -> MetadataError.Kind
 }
 
 @Test func everyMalformedFixtureFailsAsFlagged() throws {
-    let (root, manifest) = try library.get()
+    let (root, manifest) = try fixtureLibrary.get()
     for file in manifest.files {
         guard let malformation = file.malformation else { continue }
         let url = root.appendingPathComponent(file.path)
@@ -78,7 +68,7 @@ private func expectedFailure(_ malformation: Malformation) -> MetadataError.Kind
 }
 
 @Test func artReadsBackAsTheImageTheManifestDescribes() throws {
-    let (root, manifest) = try library.get()
+    let (root, manifest) = try fixtureLibrary.get()
     for file in manifest.files {
         guard let expected = file.art else { continue }
         let url = root.appendingPathComponent(file.path)
@@ -96,7 +86,7 @@ private func expectedFailure(_ malformation: Malformation) -> MetadataError.Kind
 /// AudioToolbox's own parsers, as an independent check of rate, channels and length wherever
 /// they read the file, broken fixtures included.
 @Test func audioPropertiesAgreeWithAudioToolbox() throws {
-    let (root, manifest) = try library.get()
+    let (root, manifest) = try fixtureLibrary.get()
     var compared = 0
     for file in manifest.files {
         let url = root.appendingPathComponent(file.path)
