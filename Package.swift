@@ -48,7 +48,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "MusicPlayer",
-            dependencies: ["HALOutput", "Playback"],
+            dependencies: ["HALOutput", "Playback", "Settings"],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
         ),

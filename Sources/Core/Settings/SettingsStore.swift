@@ -143,4 +143,5 @@ private func json(_ value: some SettingValue) throws -> Any {
 private func serialize(_ entries: [String: Any]) throws -> Data {
     try JSONSerialization.data(
         withJSONObject: entries, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        + Data("\n".utf8)
 }

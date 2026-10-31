@@ -1,10 +1,13 @@
 import AppKit
 import HALOutput
 import Playback
+import Settings
 
 // Command-line modes, run from Terminal on the Mac the DAC is attached to:
 //   MusicPlayer --list-devices
 //   MusicPlayer --play <file> [--device <part of name>]
+//   MusicPlayer --export-settings <file>
+//   MusicPlayer --import-settings <file>
 let arguments = CommandLine.arguments
 
 func value(after flag: String) -> String? {
@@ -32,6 +35,20 @@ func runAndExit(_ command: () throws -> Void) -> Never {
 
 if arguments.contains("--list-devices") {
     runAndExit { print(deviceReport(try AudioDevice.outputDevices())) }
+}
+if let path = value(after: "--export-settings") {
+    runAndExit {
+        let settings = try SettingsStore(AppSettings(), fileURL: try defaultSettingsFileURL())
+        try settings.export(to: URL(fileURLWithPath: path))
+        print("exported every setting to \(path)")
+    }
+}
+if let path = value(after: "--import-settings") {
+    runAndExit {
+        let settings = try SettingsStore(AppSettings(), fileURL: try defaultSettingsFileURL())
+        let count = try settings.importSettings(from: URL(fileURLWithPath: path))
+        print("imported \(count) settings into \(settings.fileURL.path)")
+    }
 }
 /// Set from signal handlers on another thread, read by the playback loop.
 final class StopRequest: @unchecked Sendable {
