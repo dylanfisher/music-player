@@ -13,7 +13,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 | Task | Command |
 |---|---|
 | Install / bootstrap | `./scripts/setup` |
-| Run the app | `./scripts/dev` |
+| Run the app | `./scripts/dev` (`--settings <file>` for another settings file and library) |
 | Run tests | `./scripts/test` |
 | Build the `.app` | `./scripts/bundle [debug\|release]` |
 | Update a second Mac's clone, then run the app | `./scripts/pull` |

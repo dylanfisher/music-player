@@ -7,7 +7,7 @@ import Settings
 
 /// The fixture library scanned into a fresh database once per run, which every library
 /// benchmark then measures against.
-private struct ScannedLibrary: @unchecked Sendable {
+struct ScannedLibrary: @unchecked Sendable {
     var folder: WatchedFolder
     var databaseURL: URL
     var scanSeconds: Double
@@ -19,7 +19,7 @@ private struct ScannedLibrary: @unchecked Sendable {
     var index: LibraryIndex
 }
 
-private let scannedLibrary = Result { () throws -> ScannedLibrary in
+let scannedLibrary = Result { () throws -> ScannedLibrary in
     let root = try defaultFixturesDirectory()
     _ = try generateFixtures(count: fullLibraryFileCount, in: root)
     let directory = root.deletingLastPathComponent().appendingPathComponent("bench-library")
@@ -289,7 +289,7 @@ private func simulatedNetworkScan(_ profile: SimulatedProfile, readers: Int?) th
 }
 
 /// Every prefix of a few artist, album and title words, as someone typing them would send.
-private func typedQueries(_ index: LibraryIndex) throws -> [String] {
+func typedQueries(_ index: LibraryIndex) throws -> [String] {
     let names = try index.artists().prefix(10).map(\.name) + index.albums().prefix(10).map(\.name)
     return names.flatMap { name in
         name.indices.map { String(name[...$0]) }

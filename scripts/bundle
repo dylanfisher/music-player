@@ -3,7 +3,9 @@
 # Info.plist (bundle ID, minimum macOS, and later the usage strings). Prints the .app path.
 #   ./scripts/bundle [debug|release]
 # Release builds are universal, because they get copied to other Macs, including the
-# Intel 2015 MacBook Pro. Debug builds are native only, for speed.
+# Intel 2015 MacBook Pro. Debug builds are native only, for speed. A release build also leaves a
+# universal Bench beside the .app: copied together, Bench builds its own fixture library and
+# launches the app beside it for the window benchmarks.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -21,6 +23,7 @@ if [ "$config" = release ]; then
   flags+=(--arch arm64 --arch x86_64)
 fi
 swift build "${flags[@]}" --product MusicPlayer >&2
+if [ "$config" = release ]; then swift build "${flags[@]}" --product Bench >&2; fi
 bin="$(swift build "${flags[@]}" --show-bin-path)"
 app="$bin/MusicPlayer.app"
 
@@ -44,4 +47,5 @@ fi
 
 # Ad-hoc signature for local runs. Release signing and notarization come later.
 codesign --force --sign - "$app" >&2
+if [ "$config" = release ]; then echo "universal Bench: $bin/Bench" >&2; fi
 echo "$app"

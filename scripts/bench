@@ -5,5 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# The window benchmarks launch the app, which Bench finds beside itself.
+swift build -c release --product MusicPlayer >&2
 swift build -c release --product Bench >&2
 exec "$(swift build -c release --show-bin-path)/Bench" "$@"

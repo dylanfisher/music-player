@@ -48,6 +48,10 @@ Each SwiftPM target is one module at `Sources/<Tier>/<Name>`, and its tests are 
 sideways between features. Core modules may import each other; SwiftPM rejects cycles. If a
 primitive needs something from core, it isn't a primitive.
 
+A feature puts its logic in a view model or data source with no AppKit in it, which its tests
+drive, and keeps its AppKit views thin. It reports what the user does through closures, and the
+app wires them to other features and to core.
+
 Tools sit beside app: they may import any tier but app, and nothing outside tools imports them, so
 test-only code can't end up in the shipped binary.
 
