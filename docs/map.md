@@ -55,6 +55,10 @@ app wires them to other features and to core.
 Tools sit beside app: they may import any tier but app, and nothing outside tools imports them, so
 test-only code can't end up in the shipped binary.
 
+When one module has to walk another's internals, as the tag writer walks the tag reader's atoms
+and frames, mark those internals `package` rather than `public`, so the public API stays what
+features and the app call, and the shared code stays one copy.
+
 `scripts/arch.swift` enforces this from `Package.swift`, and `./scripts/check` runs it. The
 compiler already rejects any import a target hasn't declared, so checking the declared
 dependencies covers every import. Its tier map has to match the table above.
