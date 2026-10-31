@@ -150,14 +150,22 @@ public final class LibraryIndex {
             ).run(values[0], values[1], values[2], values[3], values[4], known.id)
             return known.id
         }
+        // An upsert, since another scan (the command line beside the app) may have added the
+        // path since this one listed what the index knew.
         try statement(
             """
             INSERT INTO files (path, size_bytes, modified_seconds, failure_kind, failure_offset,
                 failure_detail)
             VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (path) DO UPDATE SET size_bytes = excluded.size_bytes,
+                modified_seconds = excluded.modified_seconds,
+                failure_kind = excluded.failure_kind, failure_offset = excluded.failure_offset,
+                failure_detail = excluded.failure_detail
             """
         ).run(file.path, values[0], values[1], values[2], values[3], values[4])
-        return database.lastInsertRowID
+        return try statement("SELECT id FROM files WHERE path = ?").map(file.path) {
+            try $0.int64(0)
+        }[0]
     }
 
     private func clearTrack(_ id: Int64) throws {
