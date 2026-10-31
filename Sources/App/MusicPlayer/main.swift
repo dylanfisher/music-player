@@ -33,6 +33,15 @@ func runAndExit(_ command: () throws -> Void) -> Never {
     }
 }
 
+// A flag with nothing after it would otherwise fall through to launching the GUI.
+for (flag, what) in [
+    ("--export-settings", "a file"), ("--import-settings", "a file"), ("--play", "a file"),
+    ("--device", "part of a device name"),
+] where arguments.contains(flag) && value(after: flag) == nil {
+    FileHandle.standardError.write(Data("error: \(flag) needs \(what)\n".utf8))
+    exit(1)
+}
+
 if arguments.contains("--list-devices") {
     runAndExit { print(deviceReport(try AudioDevice.outputDevices())) }
 }
