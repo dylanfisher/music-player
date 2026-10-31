@@ -67,6 +67,10 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Re-sort the track table by any column | < 100 ms | < 250 ms |
 | Full scan of the fixture library, local SSD | < 60 s | < 180 s |
 | Rescan with no changes, on the NAS | < 30 s | < 60 s |
+| Rescan with no changes, fixture library, local SSD | < 5 s | < 15 s |
+| Library database for the fixture library | < 60 MB | < 60 MB |
+| Resident memory after scanning the fixture library | < 150 MB | < 150 MB |
+| Browser pane query: genres, artists, albums (p95) | < 20 ms | < 60 ms |
 | Resident memory with the library loaded | < 250 MB | < 250 MB |
 | CPU while playing 24/192 FLAC | < 2% of a core | < 5% of a core |
 | Underruns in a 1-hour playback soak | 0 | 0 |

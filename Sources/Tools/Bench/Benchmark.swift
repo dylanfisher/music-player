@@ -20,6 +20,7 @@ struct Budget: Sendable {
     enum Unit: String, Sendable {
         case milliseconds = "ms"
         case seconds = "s"
+        case megabytes = "MB"
     }
 
     var appleSilicon: Double
@@ -146,6 +147,23 @@ func medianMilliseconds(
         samples.append(Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6)
     }
     return samples.sorted()[samples.count / 2]
+}
+
+/// Milliseconds for each run of each body, in order, for benchmarks that report a percentile
+/// over many different inputs.
+func millisecondSamples(_ bodies: [() throws -> Void]) throws -> [Double] {
+    try bodies.map { body in
+        let start = DispatchTime.now().uptimeNanoseconds
+        try body()
+        return Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
+    }
+}
+
+/// The value 95% of `samples` are at or below.
+func p95(_ samples: [Double]) -> Double {
+    precondition(!samples.isEmpty, "no samples")
+    let sorted = samples.sorted()
+    return sorted[min(sorted.count - 1, Int((Double(sorted.count) * 0.95).rounded(.up)) - 1)]
 }
 
 /// Seconds for a single run of `body`, for benchmarks too slow to repeat.
