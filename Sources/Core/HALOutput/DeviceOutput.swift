@@ -394,7 +394,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 
     private func service() {
-        guard let stream else { return }
+        guard let stream else {
+            publishPosition()
+            return
+        }
         if stream.isHalfEmpty { fill(stream) }
         let consumed = HALRenderConsumedBytes(stream.render)
         while segments.count > 1, consumed >= segments[1].startByte {
