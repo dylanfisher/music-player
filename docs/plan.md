@@ -235,6 +235,29 @@ Implementation plan:
    removal rules, vanished roots, patterns, pause and cancel, watch state with a fake playback
    engine, one FSEvents round trip).
 
+Follow-up (3b), scan speed on network volumes:
+
+1. **Controller** (Library): `ReadConcurrency`, a pure state machine fed one measured window at
+   a time (files/s and seconds per file). Doubles from 4 while throughput rises clearly, then
+   holds and probes ±25%, keeping the lowest level that matches the best, and halves when a held
+   level's throughput collapses or its latency doubles. Clamped to 2…64 on network volumes;
+   local volumes keep the core count. Tests drive it with simulated NAS curves.
+2. **Pipeline** (Library): `ScanPipeline` replaces the walk-then-read sequence and
+   `concurrentPerform`. Four lister threads walk directories depth-first and queue changed files
+   in listing order; reader threads take them under a limit the controller changes mid-scan.
+   The empty-root, vanished-root, unreadable-directory and filter rules stay, and removal still
+   waits for a walk that finished.
+3. **File access seam:** `ScanFileAccess` (list a directory, read tags, volume locality), so the
+   bench and tests can scan through `SimulatedNAS` (Fixtures), which adds a fixed latency per
+   operation and serves a bounded number at once.
+4. **Fewer round trips:** measure Foundation's listing syscalls, `F_RDAHEAD`/`F_NOCACHE` on a
+   disk image, and the reads-per-file distribution against the first read size; keep what helps.
+5. **Settings and CLI:** `library.networkScanReaders` (null for automatic, or 1…64);
+   `--scan … --readers <n>`; the summary prints the readers trace and files/s.
+6. **Bench:** a fixture subset through `SimulatedNAS` at 2 ms per operation, adaptive against
+   fixed 4, budgeted. ADR 0010 for the controller, the pipeline and the measured tricks.
+7. `scripts/bundle release` refuses, with a clear message, a toolchain that can't link x86_64.
+
 ### 4. Playback engine
 
 Turns the one-file command into the engine everything else drives.
