@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# The tag writer's run on the owner's reference corpus (ADR 0020). Not part of ./scripts/check.
+#   ./scripts/tag-corpus [<folder>]   lists every file's tag layout, read only
+#   ./scripts/tag-corpus --round-trip makes APFS clones of the reference, edits, checks and
+#                                     undoes each, then injects failures, one on a full disk
+# The reference is only read. Every write goes to the clone folder, which is deleted and made
+# again first; the full-disk image is attached inside it and detached on exit.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+swift build -c release --product TagCorpus >&2
+tool="$(swift build -c release --show-bin-path)/TagCorpus"
+
+if [ "${1:-}" != "--round-trip" ]; then
+  exec "$tool" "$@"
+fi
+[ $# -eq 1 ] || { echo "error: --round-trip takes nothing else" >&2; exit 1; }
+
+paths=$("$tool" --paths)
+reference=$(printf '%s\n' "$paths" | sed -n 1p)
+clones=$(printf '%s\n' "$paths" | sed -n 2p)
+case "$clones" in
+  "$HOME"/Library/Caches/*/tag-corpus) ;;
+  *) echo "error: the clone folder $clones isn't under ~/Library/Caches" >&2; exit 1 ;;
+esac
+
+rm -rf "$clones"
+mkdir -p "$(dirname "$clones")"
+cp -c -Rp "$reference" "$clones"
+
+image=.build/tag-corpus-disk.dmg
+mount="$clones/.full-disk"
+mkdir -p "$mount" .build
+hdiutil create -quiet -ov -size 32m -fs HFS+ -volname TagCorpusFullDisk "$image"
+hdiutil attach -quiet -nobrowse -noautoopen -mountpoint "$mount" "$image"
+trap 'hdiutil detach -quiet "$mount" || hdiutil detach -quiet -force "$mount"' EXIT
+
+"$tool" --round-trip --full-disk "$mount"
