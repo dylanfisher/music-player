@@ -13,7 +13,7 @@ let eraseLine = "\r\u{1B}[K"
 /// changes. `readers` fixes how many files a network scan reads at once, instead of tuning it.
 func scanCommand(folder: String, databasePath: String?, readers: Int?) throws {
     let path = URL(fileURLWithPath: folder).standardizedFileURL.path
-    // Unknown only when the folder is missing, which the scan reports as such.
+    // Unknown only when the folder is missing.
     let isLocal = (try? URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeIsLocalKey]))?
         .volumeIsLocal
     let databaseURL: URL
@@ -26,6 +26,10 @@ func scanCommand(folder: String, databasePath: String?, readers: Int?) throws {
         let settings = try SettingsStore(AppSettings(), fileURL: settingsURL)
         try requireWatched(path, in: settings[\.watchedFolders])
         databaseURL = defaultLibraryFileURL(settingsFileURL: settingsURL)
+    }
+    if readers != nil, isLocal == nil {
+        FileHandle.standardError.write(Data("error: \(path) doesn't exist\n".utf8))
+        exit(1)
     }
     if readers != nil, isLocal != false {
         // A local scan always reads on every core, so the flag would silently do nothing.

@@ -1,3 +1,5 @@
+import Settings
+
 /// Picks how many files a scan of a network volume reads at once, from the throughput it
 /// measures. The best number depends on the NAS's disks and the network between, and too many
 /// reads queue behind each other and delay playback's reads from the same share, so it looks for
@@ -6,7 +8,7 @@
 /// It reads no clock and does no I/O: the scan measures each window and passes it to `observe`,
 /// so tests drive it with a simulated NAS.
 struct ReadConcurrency: Sendable, Equatable {
-    static let networkRange = 2...64
+    static let networkRange = 2...AppSettings.networkScanReadersRange.upperBound
     /// The fixed count network scans used before, which every NAS tried handled.
     static let networkStart = 4
     /// How much better a doubling must do to count as better, rather than noise.

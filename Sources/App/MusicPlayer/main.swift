@@ -49,9 +49,12 @@ for flag in ["--db", "--readers"] where arguments.contains(flag) && !arguments.c
     exit(1)
 }
 let readers = value(after: "--readers").map { text in
-    guard let count = Int(text), count > 0 else {
+    let range = AppSettings.networkScanReadersRange
+    guard let count = Int(text), range.contains(count) else {
         FileHandle.standardError.write(
-            Data("error: --readers needs a whole number above 0, not \(text)\n".utf8))
+            Data(
+                "error: --readers needs a whole number from \(range.lowerBound) to \(range.upperBound), not \(text)\n"
+                    .utf8))
         exit(1)
     }
     return count

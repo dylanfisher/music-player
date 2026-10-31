@@ -15,8 +15,10 @@ public struct AppSettings: SettingsSchema {
     public let pausePollingDuringPlayback = Setting(
         "library.pausePollingDuringPlayback", default: false,
         "Don't rescan network folders while music is playing.")
+    /// What `networkScanReaders` and `--scan --readers` accept; a scan starts that many threads.
+    public static let networkScanReadersRange = 1...64
     public let networkScanReaders = Setting<Int?>(
-        "library.networkScanReaders", default: nil, range: 1...64,
+        "library.networkScanReaders", default: nil, range: networkScanReadersRange,
         "Files a scan of a network folder reads at once. Null tunes the number to the network"
             + " and NAS while each scan runs.")
 }

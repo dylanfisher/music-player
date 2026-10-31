@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Library
+@testable import Settings
 
 /// Runs the controller for `windows` windows against a NAS whose throughput at each level is
 /// `filesPerSecond`, with each measurement scaled by `noise`. Returns the level of each window.
@@ -106,4 +107,10 @@ private struct Noise {
 
     var single = ReadConcurrency(range: 3...3, start: 8)
     #expect(run(&single, windows: 10, saturatesAt12).allSatisfy { $0 == 3 })
+}
+
+@Test func theReaderCountRangeIsDefinedOnce() {
+    let range = AppSettings.networkScanReadersRange
+    #expect(range == 1...64)
+    #expect(ReadConcurrency.networkRange.upperBound == range.upperBound)
 }
