@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Settings
 import Testing
@@ -97,4 +98,31 @@ private var appearanceChoices: [SettingKind.Choice] {
         value: { $0 == "a.folders" ? [["path": "/Music", "kind": "local"]] : nil },
         set: { _, _ in })
     #expect(listed.folders("a.folders") == ["/Music"])
+}
+
+@MainActor @Test func aRefusedValueIsPutBackInItsField() throws {
+    let (model, values) = model()
+    let pane = GeneralPane(
+        model: model, configPath: "/tmp/config.json",
+        actions: SettingsActions(
+            openConfigFile: {}, revealConfigFile: {}, copyDefaultConfig: {}))
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 700, height: 700), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = pane.view
+    func find(_ view: NSView) -> NSTextField? {
+        if let field = view as? NSTextField, field.identifier?.rawValue == "a.count" {
+            return field
+        }
+        return view.subviews.lazy.compactMap(find).first
+    }
+    let field = try #require(find(pane.view))
+    #expect(window.makeFirstResponder(field))
+    let editor = try #require(field.currentEditor() as? NSTextView)
+    editor.string = "2.5"
+    // Return ends the edit but leaves the field being edited.
+    pane.controlTextDidEndEditing(
+        Notification(name: NSControl.textDidEndEditingNotification, object: field))
+    #expect(field.stringValue == "5")
+    #expect(values()["a.count"] as? Int == 5)
 }

@@ -165,15 +165,20 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
         view.window?.makeFirstResponder(control)
     }
 
-    private func attempt(_ change: () throws -> Void) {
+    /// Makes the change, or shows why it was refused and the values in effect. False when it
+    /// was refused.
+    @discardableResult
+    private func attempt(_ change: () throws -> Void) -> Bool {
         do {
             try change()
             errorLabel.isHidden = true
+            return true
         } catch {
             logger.error("\(error)")
             errorLabel.stringValue = "\(error)"
             errorLabel.isHidden = false
             reload()
+            return false
         }
     }
 
@@ -192,7 +197,11 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
     func controlTextDidEndEditing(_ notification: Notification) {
         guard let field = notification.object as? NSTextField, let key = field.identifier?.rawValue
         else { return }
-        attempt { try model.setText(key, field.stringValue) }
+        // The field may still be the one being edited, which `reload` leaves alone, so a value
+        // the setting refused is put back here.
+        if !attempt({ try model.setText(key, field.stringValue) }) {
+            field.stringValue = model.text(key)
+        }
     }
 
     @objc private func openConfig() { actions.openConfigFile() }
