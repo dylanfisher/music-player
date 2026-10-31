@@ -152,6 +152,13 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
         }
     }
     #expect(Set(try index.albums().map(\.name)) == Set(tagged.compactMap(\.album)))
+    // An album's artist is its album artist, else its track artist.
+    #expect(
+        Set(try index.albums().map { "\($0.name)|\($0.artist ?? "")" })
+            == Set(
+                tagged.compactMap { tags in
+                    tags.album.map { "\($0)|\(tags.albumArtist ?? tags.artist ?? "")" }
+                }))
 }
 
 @Test func unknownStoredKindFailsLoudly() throws {

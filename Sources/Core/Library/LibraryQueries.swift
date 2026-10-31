@@ -66,8 +66,8 @@ extension LibraryIndex {
     /// The albums of the tracks in `filter`'s folder, genre and artist.
     public func albums(_ filter: TrackFilter = TrackFilter()) throws -> [BrowserEntry] {
         try pane(
-            "SELECT id, title FROM albums", "album_id", "sort_title", filter,
-            [.folder, .genre, .artist])
+            "SELECT id, title, (SELECT name FROM artists WHERE id = albums.artist_id) FROM albums",
+            "album_id", "sort_title", filter, [.folder, .genre, .artist], row: albumEntry)
     }
 
     /// The rows for `ids`, in the same order. An ID with no track, such as one a rescan just
@@ -129,7 +129,7 @@ extension LibraryIndex {
     /// `panes` let through.
     private func pane(
         _ rowSQL: String, _ column: String, _ order: String, _ filter: TrackFilter,
-        _ panes: [FilterPart]
+        _ panes: [FilterPart], row read: (Row) throws -> BrowserEntry = entry
     ) throws -> [BrowserEntry] {
         let (conditions, values) = trackConditions(filter, panes: panes)
         // Joined to files only when a folder needs it, since the join costs a lookup per track.
@@ -138,7 +138,7 @@ extension LibraryIndex {
             "\(rowSQL) WHERE id IN (SELECT t.\(column) FROM tracks t\(files)"
             + "\(whereClause(conditions).isEmpty ? "" : " " + whereClause(conditions)))"
             + " ORDER BY \(order), id"
-        return try statement(sql).map(binding: values, row: entry)
+        return try statement(sql).map(binding: values, row: read)
     }
 }
 
@@ -222,6 +222,10 @@ private func trackRow(_ row: Row) throws -> TrackRow {
 
 private func entry(_ row: Row) throws -> BrowserEntry {
     BrowserEntry(id: try row.int64(0), name: try row.text(1))
+}
+
+private func albumEntry(_ row: Row) throws -> BrowserEntry {
+    BrowserEntry(id: try row.int64(0), name: try row.text(1), artist: row.optionalText(2))
 }
 
 /// Each typed word as an FTS5 prefix phrase, so "beat abb" finds "The Beatles, Abbey Road".

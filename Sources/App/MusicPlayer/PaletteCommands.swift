@@ -56,18 +56,9 @@ extension AppDelegate {
                 .commands, items: commandItems(), over: window, place: state[\.palettePlace])
             Task {
                 do {
-                    let entries = try await browser.allEntries()
-                    var items: [PaletteItem] = []
-                    paletteEntries = [:]
-                    for (pane, entry) in entries {
-                        let key = "\(pane.title.lowercased()):\(entry.name)"
-                        guard paletteEntries[key] == nil else { continue }
-                        paletteEntries[key] = (pane, entry.id)
-                        items.append(
-                            PaletteItem(
-                                kind: kind(pane), key: key, title: entry.name, detail: pane.title))
-                    }
+                    let (items, entries) = libraryItems(try await browser.allEntries())
                     guard palette.mode == .commands else { return }
+                    paletteEntries = entries
                     palette.append(items)
                 } catch {
                     logger.error("couldn't list the library for the palette: \(error)")
@@ -138,14 +129,6 @@ extension AppDelegate {
             }
     }
 
-    private func kind(_ pane: BrowserModel.Pane) -> PaletteItem.Kind {
-        switch pane {
-        case .genre: .genre
-        case .artist: .artist
-        case .album: .album
-        }
-    }
-
     private func choose(_ item: PaletteItem) {
         guard let browser, let dispatcher else { return }
         switch item.kind {
@@ -173,8 +156,8 @@ extension AppDelegate {
         do {
             guard let track = try trackLookup(path) else { return }
             for key in [
-                track.artist.map { "artist:\($0)" }, track.album.map { "album:\($0)" },
-                track.genre.map { "genre:\($0)" },
+                track.artist.map(LibraryKey.artist), track.albumID.map(LibraryKey.album),
+                track.genre.map(LibraryKey.genre),
             ].compactMap({ $0 }) {
                 palette.model.record(key)
             }
@@ -183,4 +166,35 @@ extension AppDelegate {
             logger.error("couldn't count the play of \(path): \(error)")
         }
     }
+}
+
+/// The palette keys of the library's entries, as both the listing and a play count them. Genres
+/// and artists are unique by name, but two albums can share a title, so albums go by ID.
+enum LibraryKey {
+    static func genre(_ name: String) -> String { "genre:\(name)" }
+    static func artist(_ name: String) -> String { "artist:\(name)" }
+    static func album(_ id: Int64) -> String { "album:\(id)" }
+}
+
+/// The palette rows for the library's genres, artists and albums, and the entry each key shows.
+func libraryItems(_ entries: [(BrowserModel.Pane, BrowserEntry)]) -> (
+    [PaletteItem], [String: (BrowserModel.Pane, Int64)]
+) {
+    var items: [PaletteItem] = []
+    var shown: [String: (BrowserModel.Pane, Int64)] = [:]
+    for (pane, entry) in entries {
+        let (kind, key): (PaletteItem.Kind, String) =
+            switch pane {
+            case .genre: (.genre, LibraryKey.genre(entry.name))
+            case .artist: (.artist, LibraryKey.artist(entry.name))
+            case .album: (.album, LibraryKey.album(entry.id))
+            }
+        guard shown[key] == nil else { continue }
+        shown[key] = (pane, entry.id)
+        items.append(
+            PaletteItem(
+                kind: kind, key: key, title: entry.name,
+                detail: [pane.title, entry.artist].compactMap { $0 }.joined(separator: " — ")))
+    }
+    return (items, shown)
 }
