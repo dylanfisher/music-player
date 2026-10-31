@@ -113,3 +113,16 @@ extension KeyChord {
         return .character(lower)
     }
 }
+
+extension NSWindow {
+    /// Gives a text-editing chord (`KeyChord.isTextEditing`) to the field being edited, before
+    /// any menu item with that key equivalent, so typing ⌘⌫ deletes text rather than running
+    /// Remove from Queue. False, leaving the event alone, when no field is being edited.
+    public func editTextFirst(_ event: NSEvent) -> Bool {
+        guard let editor = firstResponder as? NSTextView, editor.isFieldEditor,
+            KeyChord(event: event)?.isTextEditing == true
+        else { return false }
+        editor.keyDown(with: event)
+        return true
+    }
+}

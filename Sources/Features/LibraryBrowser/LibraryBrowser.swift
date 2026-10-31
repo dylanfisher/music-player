@@ -19,7 +19,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public let sidebar: NSViewController
     /// The panes over the track table, with the status line under them.
     public let content: NSViewController
-    public let searchField: NSSearchField = SearchField()
+    public let searchField = NSSearchField()
     /// Takes the watcher's events on any thread and hands them to the browser in the order they
     /// were sent, so a late progress report never lands after its scan's outcome.
     public let watcherEvents: @Sendable (WatcherEvent) -> Void
@@ -449,21 +449,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     ) -> CGFloat {
         // The table keeps room for a few rows.
         min(proposedMaximumPosition, splitView.bounds.height - 120)
-    }
-}
-
-/// The search field takes ⌘← and ⌘→ (with or without ⇧) while it's edited, before the menu bar,
-/// whose Next and Previous Track have them, so the caret still moves to the ends of the text.
-final class SearchField: NSSearchField {
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if let editor = currentEditor(), window?.firstResponder === editor,
-            let chord = KeyChord(event: event), [.left, .right].contains(chord.key),
-            chord.modifiers == .command || chord.modifiers == [.command, .shift]
-        {
-            editor.keyDown(with: event)
-            return true
-        }
-        return super.performKeyEquivalent(with: event)
     }
 }
 

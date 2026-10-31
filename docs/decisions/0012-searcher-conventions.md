@@ -114,7 +114,7 @@ The player's own:
 | Play/Pause | Space | |
 | Play the selection | Return, alternate ⌘↓ | ⌘↓ is Searcher's Open |
 | Play Next | ⌥Return | |
-| Next / Previous Track | ⌘→ / ⌘← | A test checks the search field still moves its caret with ⌘←/⌘→. If the menu takes them first, the field takes them before the menu, as Searcher's filter field takes its own keys (0037) |
+| Next / Previous Track | ⌘→ / ⌘← | A field being edited takes ⌘ or ⌥ with ←, → or ⌫ (± ⇧) before the menu, in every window, as Searcher's filter field takes its own keys (0037). A test checks it |
 | Seek Forward / Back | ⌥⌘→ / ⌥⌘← | |
 | Volume Up / Down | ⌃⌘↑ / ⌃⌘↓ | Enabled only while digital volume is on |
 | Show Current Track | ⌘L | |

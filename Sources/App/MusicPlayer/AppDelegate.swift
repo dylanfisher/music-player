@@ -80,6 +80,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let menu = MainMenu(dispatcher: dispatcher, appName: appName, settings: AppSettings())
             dispatcher.bindingsChanged = { [weak menu] in menu?.showChords() }
             NSApp.mainMenu = menu.bar
+            // In every window, the field being edited takes the text-editing chords before the
+            // menu bar does.
+            _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                event.window?.editTextFirst(event) == true ? nil : event
+            }
             NSApp.windowsMenu = menu.windowsMenu
             NSApp.helpMenu = menu.helpMenu
             self.dispatcher = dispatcher

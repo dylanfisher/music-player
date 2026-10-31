@@ -66,6 +66,15 @@ public struct KeyChord: Hashable, Sendable, CustomStringConvertible {
         return !modifiers.isDisjoint(with: [.command, .control, .option])
     }
 
+    /// Whether a text field's standard key bindings move the caret or delete with the chord: ⌘
+    /// or ⌥ with ←, → or Delete, with or without ⇧. A field being edited takes these before the
+    /// menu bar. ⌘↑ and ⌘↓ aren't among them: a one-line field has no lines to move by, and ⌘↓
+    /// plays the selection.
+    public var isTextEditing: Bool {
+        [.left, .right, .delete].contains(key)
+            && [.command, [.command, .shift], .option, [.option, .shift]].contains(modifiers)
+    }
+
     public var description: String { stored }
 
     // MARK: Stored spelling
