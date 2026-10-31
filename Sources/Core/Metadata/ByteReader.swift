@@ -4,18 +4,18 @@ import Darwin
 /// `minimumReadBytes`, so the fields of one header arrive together and a file whose tags fit in
 /// the first read costs one round trip. ADR 0010 weighs that size against a second round trip. Every read may be a slow trip to a NAS, so callers skip
 /// art and audio by length instead of reading through them.
-final class ByteReader {
+package final class ByteReader {
     static let minimumReadBytes = 16 * 1024
     /// The most this holds in memory at once. Only tag text and unsynchronised ID3 tags come near
     /// it; art and audio are never read.
     static let maximumRangeBytes = 16 * 1024 * 1024
 
-    let size: Int
+    package let size: Int
     private(set) var bytesRead = 0
     private(set) var readCount = 0
     /// Spent waiting in the source's reads.
     private(set) var readSeconds = 0.0
-    var warnings: [MetadataWarning] = []
+    package var warnings: [MetadataWarning] = []
     private let source: any ByteSource
     private var window: [UInt8] = []
     private var windowStart = 0
@@ -34,14 +34,14 @@ final class ByteReader {
         }
     }
 
-    init(_ source: any ByteSource) {
+    package init(_ source: any ByteSource) {
         self.source = source
         size = source.size
     }
 
     /// Bytes `range` of the file. Fails without reading when the range runs past the end, so a
     /// length from the file never sizes an allocation larger than the file.
-    func bytes(_ range: Range<Int>) throws(ParseFailure) -> Bytes {
+    package func bytes(_ range: Range<Int>) throws(ParseFailure) -> Bytes {
         guard range.lowerBound >= 0, range.upperBound <= size else {
             throw .malformed(
                 at: range.lowerBound,

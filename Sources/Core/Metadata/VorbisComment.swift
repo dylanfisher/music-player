@@ -8,6 +8,11 @@ private let vorbisFields: [String: TagField] = [
     "COMPOSER": .composer, "COMMENT": .comment, "DESCRIPTION": .comment,
 ]
 
+/// The keys, uppercased, that the reader maps onto `field`, so a writer replaces exactly those.
+package func vorbisKeys(for field: TagField) -> Set<String> {
+    Set(vorbisFields.compactMap { key, each in each == field ? key : nil })
+}
+
 /// Little-endian lengths, unlike the rest of FLAC: the vendor string, the comment count, then each
 /// comment as `KEY=value` in UTF-8. Unknown keys are skipped; they're the user's own fields.
 func parseVorbisComment(_ block: Bytes, _ reader: ByteReader) throws(ParseFailure) -> TrackTags {

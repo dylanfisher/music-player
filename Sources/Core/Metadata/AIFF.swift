@@ -1,4 +1,4 @@
-let aiffFormID = "FORM"
+package let aiffFormID = "FORM"
 
 /// AIFC compression types that are plain PCM: big-endian, little-endian ("sowt"), and float.
 private let pcmCompressionTypes: Set<String> = [

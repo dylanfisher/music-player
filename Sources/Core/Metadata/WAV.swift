@@ -1,6 +1,6 @@
 import Foundation
 
-let riffFormID = "RIFF"
+package let riffFormID = "RIFF"
 
 /// `LIST/INFO` fields and what they set. INFO has no album artist, totals or compilation flag.
 private let infoFields: [String: TagField] = [

@@ -1,7 +1,7 @@
 import Foundation
 
 /// A field every tag format maps its own keys onto, so the rules for values live in one place.
-enum TagField: String {
+package enum TagField: String, CaseIterable, Sendable {
     case title, artist, album, albumArtist, genre, date, composer, comment
     /// "3" or "3/12".
     case track, disc

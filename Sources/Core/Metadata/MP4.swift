@@ -1,9 +1,9 @@
 /// An MP4 atom: a 32-bit size (1 means a 64-bit size follows, 0 means "to the end of the file" at
 /// the top level), a four-character type, then the body.
-struct Atom {
-    var type: String
-    var start: Int
-    var body: Range<Int>
+package struct Atom {
+    package var type: String
+    package var start: Int
+    package var body: Range<Int>
 }
 
 /// MP4 and M4A: walks the top-level atoms to `moov`, wherever it sits, then reads the first sound
@@ -36,7 +36,7 @@ func parseMP4(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
 /// Calls `body` with each atom that tiles `range`, until it returns false. QuickTime ends a
 /// container with a 32-bit zero terminator, so inside a parent fewer than 8 bytes left, or an
 /// atom of size 0, ends the walk.
-func forEachAtom(
+package func forEachAtom(
     _ reader: ByteReader, in range: Range<Int>, parent: Atom?,
     _ body: (Atom) throws(ParseFailure) -> Bool
 ) throws(ParseFailure) {

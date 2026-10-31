@@ -23,6 +23,26 @@ private let itemKinds: [String: ItemKind] = [
     "cpil": .compilation, "gnre": .genreIndex, "----": .freeform, "covr": .cover,
 ]
 
+/// The item types the reader maps onto `field`, so a writer replaces exactly those.
+package func mp4ItemTypes(for field: TagField) -> Set<String> {
+    Set(
+        itemKinds.compactMap { type, kind in
+            switch kind {
+            case .text(let each): each == field ? type : nil
+            case .track: field == .track ? type : nil
+            case .disc: field == .disc ? type : nil
+            case .compilation: field == .compilation ? type : nil
+            case .genreIndex: field == .genre ? type : nil
+            case .freeform, .cover: nil
+            }
+        })
+}
+
+/// The item the reader takes art from.
+package let mp4CoverItemType = itemKinds.first {
+    if case .cover = $0.value { true } else { false }
+}!.key
+
 private let bmpMIMEType = "image/bmp"
 
 /// `data` atom type codes for cover art. Type 0 is "implicit", so the image is sniffed.

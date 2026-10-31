@@ -1,7 +1,7 @@
 /// Bytes from one place in a file. Every accessor takes an offset into these bytes and throws,
 /// rather than trapping, when the field runs past the end, naming the field's place in the file.
-struct Bytes {
-    let count: Int
+package struct Bytes {
+    package let count: Int
     private let storage: [UInt8]
     private let start: Int
     /// The file offset of `storage[0]`.
@@ -20,12 +20,17 @@ struct Bytes {
         self.escapes = escapes
     }
 
+    /// `storage` read from file offset `base`.
+    package init(_ storage: [UInt8], base: Int) {
+        self.init(storage, start: 0, count: nil, base: base)
+    }
+
     /// Where byte `index` came from in the file.
-    func fileOffset(_ index: Int) -> Int {
+    package func fileOffset(_ index: Int) -> Int {
         base + (escapes?.rawIndex(start + index) ?? start + index)
     }
 
-    func slice(_ range: Range<Int>) throws(ParseFailure) -> Bytes {
+    package func slice(_ range: Range<Int>) throws(ParseFailure) -> Bytes {
         try check(range.lowerBound, range.count)
         return Bytes(
             storage, start: start + range.lowerBound, count: range.count, base: base,
@@ -33,31 +38,37 @@ struct Bytes {
     }
 
     /// From `offset` to the end.
-    func suffix(from offset: Int) throws(ParseFailure) -> Bytes {
+    package func suffix(from offset: Int) throws(ParseFailure) -> Bytes {
         try check(offset, 0)
         return try slice(offset..<count)
     }
 
-    var array: [UInt8] { Array(storage[start..<start + count]) }
+    package var array: [UInt8] { Array(storage[start..<start + count]) }
 
-    func uint8(_ offset: Int) throws(ParseFailure) -> UInt8 {
+    package func uint8(_ offset: Int) throws(ParseFailure) -> UInt8 {
         try check(offset, 1)
         return storage[start + offset]
     }
 
-    func uint16BE(_ offset: Int) throws(ParseFailure) -> UInt16 { UInt16(try bigEndian(offset, 2)) }
-    func uint24BE(_ offset: Int) throws(ParseFailure) -> UInt32 { UInt32(try bigEndian(offset, 3)) }
-    func uint32BE(_ offset: Int) throws(ParseFailure) -> UInt32 { UInt32(try bigEndian(offset, 4)) }
-    func uint64BE(_ offset: Int) throws(ParseFailure) -> UInt64 { try bigEndian(offset, 8) }
-    func uint16LE(_ offset: Int) throws(ParseFailure) -> UInt16 {
+    package func uint16BE(_ offset: Int) throws(ParseFailure) -> UInt16 {
+        UInt16(try bigEndian(offset, 2))
+    }
+    package func uint24BE(_ offset: Int) throws(ParseFailure) -> UInt32 {
+        UInt32(try bigEndian(offset, 3))
+    }
+    package func uint32BE(_ offset: Int) throws(ParseFailure) -> UInt32 {
+        UInt32(try bigEndian(offset, 4))
+    }
+    package func uint64BE(_ offset: Int) throws(ParseFailure) -> UInt64 { try bigEndian(offset, 8) }
+    package func uint16LE(_ offset: Int) throws(ParseFailure) -> UInt16 {
         UInt16(try littleEndian(offset, 2))
     }
-    func uint32LE(_ offset: Int) throws(ParseFailure) -> UInt32 {
+    package func uint32LE(_ offset: Int) throws(ParseFailure) -> UInt32 {
         UInt32(try littleEndian(offset, 4))
     }
 
     /// ID3v2's 28-bit integer, seven bits per byte. Nil when a byte has its top bit set.
-    func syncsafe(_ offset: Int) throws(ParseFailure) -> Int? {
+    package func syncsafe(_ offset: Int) throws(ParseFailure) -> Int? {
         try check(offset, 4)
         var value = 0
         for byte in storage[start + offset..<start + offset + 4] {
@@ -68,13 +79,13 @@ struct Bytes {
     }
 
     /// Four bytes as Latin-1, the way MP4 atom types and RIFF chunk IDs are written.
-    func fourCC(_ offset: Int) throws(ParseFailure) -> String {
+    package func fourCC(_ offset: Int) throws(ParseFailure) -> String {
         try check(offset, 4)
         return latin1(storage[start + offset..<start + offset + 4])
     }
 
     /// Whether the bytes at `offset` are `ascii`; false when they'd run past the end.
-    func matches(_ ascii: String, at offset: Int) -> Bool {
+    package func matches(_ ascii: String, at offset: Int) -> Bool {
         let expected = Array(ascii.utf8)
         guard offset >= 0, offset + expected.count <= count else { return false }
         return storage[start + offset..<start + offset + expected.count].elementsEqual(expected)
@@ -114,7 +125,7 @@ struct Bytes {
 }
 
 /// Bytes as Latin-1, which maps each byte to the code point of the same value.
-func latin1(_ bytes: some Sequence<UInt8>) -> String {
+package func latin1(_ bytes: some Sequence<UInt8>) -> String {
     var text = ""
     text.unicodeScalars.append(contentsOf: bytes.map { Unicode.Scalar($0) })
     return text

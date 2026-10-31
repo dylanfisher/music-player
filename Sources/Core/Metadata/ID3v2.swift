@@ -1,5 +1,5 @@
 /// The first bytes of an ID3v2 tag.
-let id3v2Identifier = "ID3"
+package let id3v2Identifier = "ID3"
 
 /// An ID3v2 tag's fields and art, and how many bytes the tag takes.
 struct ID3v2Tag {
@@ -30,6 +30,23 @@ private let frameKinds: [String: FrameKind] = [
     "TRCK": .text(.track), "TPOS": .text(.disc), "TCMP": .text(.compilation),
     "TCOM": .text(.composer), "COMM": .comment, "APIC": .picture,
 ]
+
+/// The frame IDs the reader maps onto `field`, so a writer replaces exactly those.
+package func id3FrameIDs(for field: TagField) -> Set<String> {
+    Set(
+        frameKinds.compactMap { id, kind in
+            switch kind {
+            case .text(let each): each == field ? id : nil
+            case .genre: field == .genre ? id : nil
+            case .comment: field == .comment ? id : nil
+            case .picture: nil
+            }
+        })
+}
+
+/// The frame IDs the reader takes art from.
+package let id3PictureFrameIDs = Set(
+    frameKinds.compactMap { id, kind in if case .picture = kind { id } else { nil } })
 
 /// How far into a picture frame to read for its MIME type and description. Longer headers are
 /// read whole.

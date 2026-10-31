@@ -1,11 +1,11 @@
 /// A WAV (RIFF) or AIFF (IFF) chunk: a four-character ID, a 32-bit size, the body, and a pad byte
 /// when the size is odd.
-struct RIFFChunk {
-    var id: String
-    var start: Int
-    var body: Range<Int>
+package struct RIFFChunk {
+    package var id: String
+    package var start: Int
+    package var body: Range<Int>
     /// The size the header states, which exceeds `body.count` for a clamped audio chunk.
-    var declaredSize: Int
+    package var declaredSize: Int
 }
 
 /// A streamed writer that couldn't know the size leaves all ones.
@@ -14,7 +14,7 @@ private let streamedSize = 0xFFFF_FFFF
 /// Where the form ends: its declared end, clamped to the file. A form that claims more than the
 /// file holds is a truncated download, not damage to the structure, so it warns. A streamed size
 /// reads to the end of the file without a warning.
-func formEnd(_ reader: ByteReader, size: Int, form: String) throws(ParseFailure) -> Int {
+package func formEnd(_ reader: ByteReader, size: Int, form: String) throws(ParseFailure) -> Int {
     guard size >= 4 else {
         throw .malformed(at: 4, "\(form) size \(size) is too short for its form type")
     }
@@ -31,7 +31,7 @@ func formEnd(_ reader: ByteReader, size: Int, form: String) throws(ParseFailure)
 /// in IFF. A last chunk may omit its pad byte, which many writers do. The chunk `audioID` names
 /// is the audio body: one that runs past the end is clamped to it, with a warning unless the form
 /// already warned or the size is the streamed one.
-func forEachChunk(
+package func forEachChunk(
     _ reader: ByteReader, in range: Range<Int>, littleEndian: Bool, form: String,
     audioID: String? = nil,
     _ body: (RIFFChunk) throws(ParseFailure) -> Void

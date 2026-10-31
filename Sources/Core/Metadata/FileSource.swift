@@ -14,11 +14,11 @@ public enum ReadHints: String, CaseIterable, Sendable {
 /// A file opened once and read with `pread`, never mapped, so a slow NAS read stalls only the
 /// caller and a file that shrinks fails the read instead of raising SIGBUS. Reads get exactly
 /// the bytes asked for, and by default no read-ahead and no caching (ADR 0010).
-final class FileSource: ByteSource {
-    let size: Int
+package final class FileSource: ByteSource {
+    package let size: Int
     let descriptor: Int32
 
-    init(path: String, hints: ReadHints = .all) throws(ParseFailure) {
+    package init(path: String, hints: ReadHints = .all) throws(ParseFailure) {
         let descriptor = open(path, O_RDONLY | O_CLOEXEC)
         guard descriptor >= 0 else { throw unreadable(nil, "can't open") }
         var info = stat()
@@ -43,7 +43,7 @@ final class FileSource: ByteSource {
 
     deinit { close(descriptor) }
 
-    func read(_ range: Range<Int>) throws(ParseFailure) -> [UInt8] {
+    package func read(_ range: Range<Int>) throws(ParseFailure) -> [UInt8] {
         var buffer = [UInt8](repeating: 0, count: range.count)
         var done = 0
         var failure: ParseFailure?
