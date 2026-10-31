@@ -11,13 +11,16 @@ func value(after flag: String, in arguments: [String]) -> String? {
 /// What `--scan-io-hints` accepts, for its error messages.
 let ioHintsChoices = ReadHints.allCases.map(\.rawValue).joined(separator: ", ")
 
+/// What `--snapshot-of` accepts, for its error messages.
+private let snapshotChoices = SnapshotTarget.allCases.map(\.rawValue).joined(separator: ", ")
+
 /// Each flag that takes a value, and what the value is.
 private let valueFlags = [
     ("--play", "a file or folder"), ("--device", "part of a device name"),
     ("--scan", "a folder"), ("--db", "a database file"),
     ("--readers", "a number of files to read at once"), ("--scan-io-hints", ioHintsChoices),
     ("--settings", "a config file"), ("--home", "a folder"), ("--snapshot", "a PNG file to write"),
-    ("--snapshot-of", SnapshotTarget.allCases.map(\.rawValue).joined(separator: ", ")),
+    ("--snapshot-of", snapshotChoices),
 ]
 /// The command-line modes, which run and exit without the window.
 private let modeFlags = [
@@ -40,6 +43,14 @@ func argumentProblem(_ arguments: [String]) -> String? {
     }
     if let flag = scanOnlyFlags.first(where: arguments.contains), !arguments.contains("--scan") {
         return "\(flag) only goes with --scan"
+    }
+    if arguments.contains("--snapshot-of"), !arguments.contains("--snapshot") {
+        return "--snapshot-of only goes with --snapshot"
+    }
+    if let text = value(after: "--snapshot-of", in: arguments),
+        SnapshotTarget(rawValue: text) == nil
+    {
+        return "--snapshot-of needs one of \(snapshotChoices), not \(text)"
     }
     if let window = windowFlags.first(where: arguments.contains),
         let mode = modeFlags.first(where: arguments.contains)

@@ -14,6 +14,8 @@ import Testing
     #expect(argumentProblem(["--settings", "/s.json", "--measure-window"]) == nil)
     #expect(argumentProblem(["--home", "/tmp/h", "--scan", "/m"]) == nil)
     #expect(argumentProblem(["--home"]) == "--home needs a folder")
+    #expect(argumentProblem(["--home", "--measure-window"]) == "--home needs a folder")
+    #expect(argumentProblem(["--home", "--x"]) == "--x isn't an option")
     #expect(
         argumentProblem(["--export-settings", "/x.json"]) == "--export-settings isn't an option")
     // macOS adds single-dash arguments of its own when it launches an app.
@@ -28,4 +30,19 @@ import Testing
         argumentProblem(["--snapshot", "/s.png", "--list-devices"])
             == "--snapshot is for the window, so it can't go with --list-devices")
     #expect(argumentProblem(["--readers", "4"]) == "--readers only goes with --scan")
+}
+
+@Test func aSnapshotTargetNeedsASnapshotAndAKnownWindow() {
+    #expect(argumentProblem(["--snapshot", "/s.png", "--snapshot-of", "palette"]) == nil)
+    #expect(
+        argumentProblem(["--snapshot", "/s.png", "--snapshot-of"])
+            == "--snapshot-of needs main, palette, settings, shortcuts")
+    #expect(
+        argumentProblem(["--snapshot", "/s.png", "--snapshot-of", "--measure-window"])
+            == "--snapshot-of needs main, palette, settings, shortcuts")
+    #expect(
+        argumentProblem(["--snapshot", "/s.png", "--snapshot-of", "queue"])
+            == "--snapshot-of needs one of main, palette, settings, shortcuts, not queue")
+    #expect(
+        argumentProblem(["--snapshot-of", "palette"]) == "--snapshot-of only goes with --snapshot")
 }

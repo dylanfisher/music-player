@@ -16,6 +16,7 @@ import Settings
 // --settings reads another config file.
 // --measure-window prints the launch time and memory as JSON and quits, for Bench.
 // --snapshot draws the window into a PNG a few seconds after its first rows, to check the layout.
+// --snapshot-of draws the palette, or the Settings window's General or Shortcuts pane, instead.
 let arguments = CommandLine.arguments
 
 func value(after flag: String) -> String? { value(after: flag, in: arguments) }
@@ -90,11 +91,7 @@ if arguments.contains("--play") {
 let snapshotTarget =
     value(after: "--snapshot-of").map { text in
         guard let target = SnapshotTarget(rawValue: text) else {
-            FileHandle.standardError.write(
-                Data(
-                    "error: --snapshot-of needs one of \(SnapshotTarget.allCases.map(\.rawValue)), not \(text)\n"
-                        .utf8))
-            exit(1)
+            preconditionFailure("argumentProblem lets only a snapshot target through, not \(text)")
         }
         return target
     } ?? .main
