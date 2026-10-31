@@ -52,16 +52,21 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
 
     public func open() throws -> (any PCMDevice)? {
         guard let id = try liveDeviceID() else { return nil }
-        let snapshot = try lock.withLock {
-            let taken = try self.snapshot ?? HALDevice.snapshot(of: id, uid: deviceUID)
-            self.snapshot = taken
-            return taken
+        return try lock.withLock {
+            // A record an earlier run couldn't restore holds the state from before that run, which
+            // is the one to put back.
+            let records = try readRestoreRecords(restoreRecordURL)
+            let snapshot =
+                try self.snapshot ?? records.first { $0.deviceUID == deviceUID }
+                ?? HALDevice.snapshot(of: id, uid: deviceUID)
+            let device = try HALDevice(
+                id: id, name: deviceName, hogMode: hogMode, restoring: snapshot)
+            // Written only once the device is held, and for every session, since closing the last
+            // one removed it.
+            try writeRestoreRecords(adding(snapshot, to: records), to: restoreRecordURL)
+            self.snapshot = snapshot
+            return RestoringDevice(device, uid: deviceUID, recordURL: restoreRecordURL)
         }
-        // Written for every session, since closing the last one deleted it.
-        try writeRestoreRecord(snapshot, to: restoreRecordURL)
-        return try RestoringDevice(
-            HALDevice(id: id, name: deviceName, hogMode: hogMode, restoring: snapshot),
-            recordURL: restoreRecordURL)
     }
 
     public func isConnected() -> Bool {
@@ -153,40 +158,46 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
         }
     }
 
-    /// Restores a device left changed by a run that ended without restoring it, such as a crash,
-    /// and returns what it did, or nil when there was nothing to do. A record that doesn't read
-    /// is deleted; one whose device isn't connected, or won't take the restore, is kept for next
-    /// time.
+    /// Restores each device left changed by a run that ended without restoring it, such as a
+    /// crash, and returns what it did, or nil when there was nothing to do. A record file that
+    /// doesn't read is deleted; a device that isn't connected, or won't take the restore, keeps its
+    /// record for next time.
     public static func recoverAfterCrash(restoreRecordURL url: URL) throws -> String? {
-        let data: Data
+        let records: [DeviceSnapshot]
         do {
-            data = try Data(contentsOf: url)
-        } catch CocoaError.fileReadNoSuchFile {
-            return nil
-        }
-        let snapshot: DeviceSnapshot
-        do {
-            snapshot = try JSONDecoder().decode(DeviceSnapshot.self, from: data)
-        } catch {
+            records = try readRestoreRecords(url)
+        } catch let error as DecodingError {
             try FileManager.default.removeItem(at: url)
             return "discarded \(url.path), which didn't read: \(error)"
         }
-        guard let id = try deviceID(uid: snapshot.deviceUID) else {
-            return "the device \(snapshot.deviceUID) that an earlier run left changed isn't"
-                + " connected; it will be restored once it is"
+        guard !records.isEmpty else { return nil }
+        var kept: [DeviceSnapshot] = []
+        var report: [String] = []
+        for snapshot in records {
+            let uid = snapshot.deviceUID
+            guard let id = try deviceID(uid: uid) else {
+                kept.append(snapshot)
+                report.append(
+                    "the device \(uid) that an earlier run left changed isn't connected; it will be"
+                        + " restored once it is")
+                continue
+            }
+            do {
+                let device = try HALDevice(
+                    id: id, name: try readString(id, address(kAudioObjectPropertyName)),
+                    hogMode: false, restoring: snapshot)
+                try device.close()
+                report.append(
+                    "restored \(uid) and the default outputs, which an earlier run left changed")
+            } catch {
+                kept.append(snapshot)
+                report.append(
+                    "couldn't restore \(uid), which an earlier run left changed: \(error). It will"
+                        + " be tried again next time.")
+            }
         }
-        do {
-            let device = try HALDevice(
-                id: id, name: try readString(id, address(kAudioObjectPropertyName)),
-                hogMode: false, restoring: snapshot)
-            try device.close()
-        } catch {
-            return "couldn't restore \(snapshot.deviceUID), which an earlier run left changed:"
-                + " \(error). It will be tried again next time."
-        }
-        try FileManager.default.removeItem(at: url)
-        return "restored \(snapshot.deviceUID) and the default outputs, which an earlier run"
-            + " left changed"
+        try writeRestoreRecords(kept, to: url)
+        return report.joined(separator: "\n")
     }
 }
 
@@ -195,19 +206,45 @@ public func defaultRestoreRecordURL(settingsFileURL: URL) -> URL {
     settingsFileURL.deletingLastPathComponent().appendingPathComponent("device-restore.json")
 }
 
-private func writeRestoreRecord(_ snapshot: DeviceSnapshot, to url: URL) throws {
-    try FileManager.default.createDirectory(
-        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try JSONEncoder().encode(snapshot).write(to: url, options: .atomic)
+/// The snapshots in the record file, one per device UID; none when there is no file.
+func readRestoreRecords(_ url: URL) throws -> [DeviceSnapshot] {
+    let data: Data
+    do {
+        data = try Data(contentsOf: url)
+    } catch CocoaError.fileReadNoSuchFile {
+        return []
+    }
+    return try JSONDecoder().decode([DeviceSnapshot].self, from: data)
 }
 
-/// Deletes the restore record once the device has been put back.
+/// Deletes the file once nothing is left to restore.
+func writeRestoreRecords(_ records: [DeviceSnapshot], to url: URL) throws {
+    guard !records.isEmpty else {
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+        return
+    }
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try JSONEncoder().encode(records).write(to: url, options: .atomic)
+}
+
+/// `records` with `snapshot` added, unless its device already has one: a record not yet restored
+/// is never overwritten, since it holds the older and truer state.
+func adding(_ snapshot: DeviceSnapshot, to records: [DeviceSnapshot]) -> [DeviceSnapshot] {
+    records.contains { $0.deviceUID == snapshot.deviceUID } ? records : records + [snapshot]
+}
+
+/// Removes the device's restore record once the device has been put back.
 private final class RestoringDevice: PCMDevice {
     private let device: HALDevice
+    private let uid: String
     private let recordURL: URL
 
-    init(_ device: HALDevice, recordURL: URL) {
+    init(_ device: HALDevice, uid: String, recordURL: URL) {
         self.device = device
+        self.uid = uid
         self.recordURL = recordURL
     }
 
@@ -220,8 +257,7 @@ private final class RestoringDevice: PCMDevice {
 
     func close() throws {
         try device.close()
-        if FileManager.default.fileExists(atPath: recordURL.path) {
-            try FileManager.default.removeItem(at: recordURL)
-        }
+        let records = try readRestoreRecords(recordURL)
+        try writeRestoreRecords(records.filter { $0.deviceUID != uid }, to: recordURL)
     }
 }

@@ -49,13 +49,31 @@ private func temporaryRecord() -> URL {
     #expect(!FileManager.default.fileExists(atPath: url.path))
 }
 
-@Test func aRecordForADisconnectedDeviceIsKeptForLater() throws {
+@Test func recordsForDisconnectedDevicesAreKeptForLater() throws {
     let url = temporaryRecord()
     defer { try? FileManager.default.removeItem(at: url) }
-    try JSONEncoder().encode(snapshot).write(to: url)
+    var other = snapshot
+    other.deviceUID = "another-device-that-is-never-connected"
+    try writeRestoreRecords([snapshot, other], to: url)
     let report = try #require(try HALDeviceProvider.recoverAfterCrash(restoreRecordURL: url))
-    #expect(report.contains("isn't connected"))
-    #expect(FileManager.default.fileExists(atPath: url.path))
+    #expect(report.components(separatedBy: "isn't connected").count == 3)
+    #expect(try readRestoreRecords(url) == [snapshot, other])
+}
+
+@Test func aNewSessionNeverOverwritesAnUnrestoredRecord() {
+    var later = snapshot
+    later.sampleRateHz = 96_000
+    #expect(adding(later, to: [snapshot]) == [snapshot])
+    var other = snapshot
+    other.deviceUID = "other"
+    #expect(adding(other, to: [snapshot]) == [snapshot, other])
+}
+
+@Test func writingNoRecordsDeletesTheFile() throws {
+    let url = temporaryRecord()
+    try writeRestoreRecords([snapshot], to: url)
+    try writeRestoreRecords([], to: url)
+    #expect(!FileManager.default.fileExists(atPath: url.path))
 }
 
 @Test func noRecordMeansNothingToRecover() throws {
