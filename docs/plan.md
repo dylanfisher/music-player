@@ -456,34 +456,34 @@ so albums that share a title by different artists repeat by name.
 Ported from Searcher's decisions, not its code ([ADR 0012](decisions/0012-searcher-conventions.md)).
 Read 0012 and the Searcher records it lists before planning this phase.
 
-- [ ] A **command registry**: every user action is one command with an ID, a title, and up to
+- [x] A **command registry**: every user action is one command with an ID, a title, and up to
       two default chords, primary and alternate. A chord has one spelling (`cmd+shift+k`). Two
       defaults on one chord throw at registration. Menus, key handling, the palette, the
       Shortcuts pane, the config file and the remote API all read from it. No action exists
       outside it. Boolean and choice settings get generated commands.
-- [ ] **Menus from command IDs:** every command has a menu item, its primary as the key
+- [x] **Menus from command IDs:** every command has a menu item, its primary as the key
       equivalent and a hidden item for the alternate. Reserved chords (Quit, Hide, Minimize,
       Settings…) can't be rebound; the Edit items' chords stay fixed. Unbound ⌘/⌃/⌥ chords beep.
       Row movement and type-to-select as Searcher's 0029 and 0034.
-- [ ] **Default chords** from 0012's tables: player conventions (Space, Return, ⌘←/⌘→ …), with
+- [x] **Default chords** from 0012's tables: player conventions (Space, Return, ⌘←/⌘→ …), with
       Searcher's keys where the job is the same (⌘K, ⌘P, row movement, ⌘F …).
-- [ ] **Configurable shortcuts** for every command, with a recorder per slot in a Shortcuts
+- [x] **Configurable shortcuts** for every command, with a recorder per slot in a Shortcuts
       pane. A clash names the other command, with Replace and Cancel; the user's chord beats a
       default, and the loss is logged and shown.
-- [ ] **Config file** at `~/.config/music-player/config.json`: JSON with comments, every
+- [x] **Config file** at `~/.config/music-player/config.json`: JSON with comments, every
       preference listed with a comment when the file is created, patches that keep the user's
       text, live reload, and an error banner that applies nothing from a broken file. Open
       Config File and Copy Default Config commands. `--export-settings` and `--import-settings`
       go.
-- [ ] **App state** (window layout, sort, pane selections, the palette's place, frecency) moves
+- [x] **App state** (window layout, sort, pane selections, the palette's place, frecency) moves
       from the settings to `state.json` in Application Support.
-- [ ] **⌘K palette** (commands, settings, artists, albums, genres, playlists) and **⌘P Go to
+- [x] **⌘K palette** (commands, settings, artists, albums, genres, playlists) and **⌘P Go to
       Item** (rows of the current track list): one panel, Searcher's keys, fuzzy matching (0079)
       and ranking with frecency (0085), driven only by the keyboard. Results in < 30 ms per
       keystroke (< 80 ms on the old Mac) at 43k rows.
-- [ ] **Settings window** in AppKit: General generated from the settings schema, so a new
+- [x] **Settings window** in AppKit: General generated from the settings schema, so a new
       setting appears there without any UI code, and a Shortcuts pane.
-- [ ] **Appearance** setting: auto, light or dark.
+- [x] **Appearance** setting: auto, light or dark.
 
 Implementation plan, in six slices, each its own commits:
 
@@ -528,6 +528,17 @@ reloads, state file), LibraryBrowserTests (type-to-select), PaletteTests (rankin
 latest query), SettingsWindowTests (General rows from the schema, the Shortcuts model),
 MusicPlayerTests (every command has a menu item, key equivalents, the palette's library rows).
 ADRs for the decisions 0012 leaves open.
+
+Result: shipped as planned. Bench on Apple Silicon: Go to Item keystroke p95 6.75 ms over 43k rows
+(budget 30 ms), launch 0.61 s, search p95 12.5 ms, re-sort p95 41.8 ms, playback CPU 2.81% (3%,
+close to the limit). The review fixed the palette merging same-titled albums by different artists
+(albums are now keyed by title and album artist), menu chords such as ⌘⌫ firing while a text field
+was being edited (one key-down monitor now hands text-editing chords to the field editor first),
+late palette items lost to a race and resetting the selection, config patches left waiting after a
+confirmed re-read, a refused value staying in its General field, inserting a key into an object
+whose `}` shares the last member's line, the palette edge ignoring live appearance changes, and
+silent failures in config, layout and state writes. `--snapshot-of` without `--snapshot` now fails.
+Known limit: ⌘↑ and ⌘↓ stay with the menu even in a text field.
 
 ### 7. Playlists, smart playlists, stats
 
