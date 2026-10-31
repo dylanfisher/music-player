@@ -13,13 +13,17 @@ private let logger = moduleLogger()
 ///
 /// Nothing ticks. The system works out the elapsed time from the last value and the rate, so the
 /// info is set again only when playback starts, pauses, resumes, seeks or stops, or what it
-/// shows changes. Each of those takes the position from the output, whose clock is the DAC's, so
+/// shows changes. Each of those takes the position the update carries, from the output, whose
+/// clock is the DAC's, so
 /// the system's count can't drift from it for longer than one stretch of uninterrupted playing.
 @MainActor
 public final class MediaControls {
     /// The art's longest side in pixels: Control Center's largest view of it on a Retina display,
     /// with room to spare.
     public static let artPixels = 512
+    /// How far before the end a scrub may go: at the very end nothing is left to play, and the
+    /// track would end before Now Playing showed the time.
+    static let endMarginSeconds = 0.1
 
     public let model: NowPlayingModel
     private let dispatcher: CommandDispatcher
@@ -59,12 +63,24 @@ public final class MediaControls {
     /// Follows `engine` from now on.
     public func connect(_ engine: PlaybackEngine) {
         updates?.cancel()
+        refreshCommands()
         updates = Task { [weak self] in
             for await update in await engine.updates() {
-                let position = await engine.position()
-                self?.apply(update, positionSeconds: position)
+                self?.apply(update)
             }
         }
+    }
+
+    /// Offers the system the commands that can run now. Every update calls this; call it too
+    /// when the dispatcher's checks change without one, such as the engine going away.
+    public func refreshCommands() {
+        let now = Set(
+            RemoteCommand.allCases.filter {
+                $0.isEnabled(model.state, commandIsEnabled: dispatcher.isEnabled)
+            })
+        guard now != enabled else { return }
+        enabled = now
+        remote.setEnabled(now)
     }
 
     /// A rescan may have changed the current track's tags or art.
@@ -74,19 +90,12 @@ public final class MediaControls {
         show(elapsedSeconds: nil)
     }
 
-    /// `positionSeconds` is the engine's position just after the update.
-    func apply(_ update: PlaybackUpdate, positionSeconds: Double?) {
+    func apply(_ update: PlaybackUpdate) {
         let before = model.currentURL
         model.apply(update)
         if model.currentURL != before { loadArt() }
-        let now = Set(
-            RemoteCommand.allCases.filter {
-                $0.isEnabled(model.state, commandIsEnabled: dispatcher.isEnabled)
-            })
-        if now != enabled {
-            enabled = now
-            remote.setEnabled(now)
-        }
+        refreshCommands()
+        let positionSeconds = update.positionSeconds
         switch update.event {
         case .seeked(let seconds): show(elapsedSeconds: seconds)
         // The output may not report the new track's position yet.
@@ -97,20 +106,22 @@ public final class MediaControls {
         }
     }
 
-    /// Runs what the system sent; false when it's off now.
+    /// Runs what the system sent; false when it's off now. Checked again here rather than
+    /// trusting what was last offered, which can be out of date.
     func handle(_ action: RemoteAction) -> Bool {
-        guard enabled.contains(action.command) else { return false }
-        switch action {
-        // Play/Pause is one command, so these do nothing when it's already so.
-        case .play where model.isPlaying, .pause where !model.isPlaying: return true
-        case .seek(let seconds):
-            guard let duration = model.state.durationSeconds else { return false }
-            seek(min(max(0, seconds), duration))
-            return true
-        default:
-            guard let id = action.command.commandID else { return false }
-            return dispatcher.run(id)
-        }
+        guard action.command.isEnabled(model.state, commandIsEnabled: dispatcher.isEnabled)
+        else { return false }
+        guard let id = action.command.commandID else { return seek(toSeconds: action.seconds) }
+        return dispatcher.run(id)
+    }
+
+    /// True once the seek is sent; the engine doesn't confirm it, and an update follows.
+    private func seek(toSeconds seconds: Double?) -> Bool {
+        guard let seconds, seconds.isFinite, let duration = model.state.durationSeconds,
+            duration.isFinite
+        else { return false }
+        seek(min(max(0, seconds), max(0, duration - Self.endMarginSeconds)))
+        return true
     }
 
     /// Sets Now Playing from the model. With `elapsedSeconds` nil, the time goes on from the

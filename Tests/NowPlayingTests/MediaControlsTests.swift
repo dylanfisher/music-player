@@ -24,7 +24,10 @@ private final class FakeRemote: RemoteCommandCenter {
 
     func setEnabled(_ enabled: Set<RemoteCommand>) { enabledSets.append(enabled) }
 
-    func send(_ action: RemoteAction) -> Bool { handler?(action) ?? false }
+    func send(_ command: RemoteCommand, seconds: Double? = nil) -> Bool {
+        guard let action = RemoteAction(command, seconds: seconds) else { return false }
+        return handler?(action) ?? false
+    }
 }
 
 @MainActor
@@ -41,10 +44,13 @@ private final class World {
     var now = 100.0
     var title = "Come Together"
     var art: (path: String, art: EmbeddedArt)?
+    /// The one queued file that has `art`, or nil for all of them.
+    var artOnly: URL?
     var hasEngine = true
 
     func row(_ path: String) -> TrackRow {
-        TrackRow(
+        let art = artOnly.map { $0.path == path } ?? true ? art : nil
+        return TrackRow(
             id: 1, path: art?.path ?? path, title: title, artist: "The Beatles",
             album: "Abbey Road", albumID: 1, albumArtist: nil, genre: "Rock", date: "1969",
             trackNumber: 1, discNumber: 1, codec: "flac", sampleRateHz: 96000, bitsPerSample: 24,
@@ -60,7 +66,7 @@ private func controls(
     let center = FakeCenter()
     let dispatcher = CommandDispatcher(
         bindings: try KeyBindings(AppCommands.all(), overrides: [:], rules: ChordRules()))
-    for id in [CommandID.playPause, .stop, .nextTrack, .previousTrack] {
+    for id in [CommandID.playPause, .play, .pause, .stop, .nextTrack, .previousTrack] {
         dispatcher.handle(id, enabled: { world.hasEngine }, run: { world.ran.append(id) })
     }
     let controls = MediaControls(
@@ -72,7 +78,7 @@ private func controls(
 
 private func update(
     _ event: PlaybackEvent?, status: PlaybackState.Status = .playing, current: Int? = 0,
-    duration: Double? = 259
+    duration: Double? = 259, position: Double? = nil
 ) -> PlaybackUpdate {
     var state = PlaybackState()
     state.queue = urls
@@ -80,71 +86,105 @@ private func update(
     state.currentIndex = current
     state.status = status
     state.durationSeconds = duration
-    return PlaybackUpdate(state: state, event: event)
+    return PlaybackUpdate(state: state, event: event, positionSeconds: position)
 }
 
 @MainActor @Test func offersOnlyTheCommandsThatCanRunNow() throws {
     let world = World()
     let (controls, remote, _, _) = try controls(world)
     #expect(remote.enabledSets == [[]])
-    controls.apply(update(.queueChanged, status: .stopped, duration: nil), positionSeconds: nil)
+    controls.apply(update(.queueChanged, status: .stopped, duration: nil, position: nil))
     #expect(
         remote.enabledSets.last == [.togglePlayPause, .play, .pause, .nextTrack, .previousTrack])
-    controls.apply(update(.trackStarted(index: 0)), positionSeconds: 0)
+    controls.apply(update(.trackStarted(index: 0), position: 0))
     #expect(remote.enabledSets.last == Set(RemoteCommand.allCases))
     // The same set again isn't sent again.
-    controls.apply(update(.paused, status: .paused), positionSeconds: 5)
+    controls.apply(update(.paused, status: .paused, position: 5))
     #expect(remote.enabledSets.count == 3)
     world.hasEngine = false
-    controls.apply(update(.resumed), positionSeconds: 5)
+    controls.apply(update(.resumed, position: 5))
     #expect(remote.enabledSets.last == [.changePlaybackPosition])
-    controls.apply(update(.queueChanged, status: .stopped, current: nil), positionSeconds: nil)
+    controls.apply(update(.queueChanged, status: .stopped, current: nil, position: nil))
     #expect(remote.enabledSets.last == [])
 }
 
 @MainActor @Test func eachRemoteCommandRunsItsRegistryCommand() throws {
     let world = World()
     let (controls, remote, _, _) = try controls(world)
-    controls.apply(update(.trackStarted(index: 0)), positionSeconds: 0)
-    #expect(remote.send(.togglePlayPause))
-    #expect(remote.send(.nextTrack))
-    #expect(remote.send(.previousTrack))
-    #expect(remote.send(.stop))
-    #expect(world.ran == [.playPause, .nextTrack, .previousTrack, .stop])
+    controls.apply(update(.trackStarted(index: 0), position: 0))
+    for command in [
+        RemoteCommand.togglePlayPause, .play, .pause, .nextTrack, .previousTrack, .stop,
+    ] {
+        #expect(remote.send(command))
+    }
+    #expect(world.ran == [.playPause, .play, .pause, .nextTrack, .previousTrack, .stop])
+}
 
-    // Play while playing and pause while paused do nothing, and say they're done.
-    world.ran = []
-    #expect(remote.send(.play))
-    controls.apply(update(.paused, status: .paused), positionSeconds: 5)
+@MainActor @Test func playAndPauseRunTheEnginesOwnCommandsWhateverTheModelLastSaw() throws {
+    let world = World()
+    let (controls, remote, _, _) = try controls(world)
+    // The model still says playing, though the first pause has already reached the engine.
+    controls.apply(update(.trackStarted(index: 0), position: 0))
     #expect(remote.send(.pause))
-    #expect(world.ran == [])
+    #expect(remote.send(.pause))
     #expect(remote.send(.play))
-    #expect(world.ran == [.playPause])
+    #expect(remote.send(.play))
+    #expect(world.ran == [.pause, .pause, .play, .play])
+}
 
-    // Off commands fail rather than run.
-    controls.apply(update(.queueChanged, status: .stopped, current: nil), positionSeconds: nil)
+@MainActor @Test func whetherACommandIsOnIsCheckedWhenItArrives() throws {
+    let world = World()
+    let (controls, remote, _, _) = try controls(world)
+    world.hasEngine = false
+    controls.apply(update(.trackStarted(index: 0), position: 0))
+    #expect(remote.enabledSets.last == [.changePlaybackPosition])
+    // The engine is back, though no update has said so.
+    world.hasEngine = true
+    #expect(remote.send(.nextTrack))
+    world.hasEngine = false
+    #expect(!remote.send(.previousTrack))
+    #expect(world.ran == [.nextTrack])
+    // Offered again once asked.
+    world.hasEngine = true
+    controls.refreshCommands()
+    #expect(remote.enabledSets.last == Set(RemoteCommand.allCases))
+
+    // Nothing loaded: off.
+    controls.apply(update(.queueChanged, status: .stopped, current: nil, position: nil))
     #expect(!remote.send(.togglePlayPause))
-    #expect(world.ran == [.playPause])
+    #expect(world.ran == [.nextTrack])
+}
+
+@Test func theScrubberNeedsATimeAndOtherCommandsDropOne() throws {
+    #expect(RemoteAction(.changePlaybackPosition, seconds: nil) == nil)
+    let scrub = try #require(RemoteAction(.changePlaybackPosition, seconds: 12))
+    #expect(scrub.command == .changePlaybackPosition)
+    #expect(scrub.seconds == 12)
+    let next = try #require(RemoteAction(.nextTrack, seconds: 12))
+    #expect(next.command == .nextTrack)
+    #expect(next.seconds == nil)
 }
 
 @MainActor @Test func theScrubberSeeksWithinTheTrack() throws {
     let world = World()
     let (controls, remote, _, _) = try controls(world)
-    #expect(!remote.send(.seek(toSeconds: 10)))
-    controls.apply(update(.trackStarted(index: 0)), positionSeconds: 0)
-    #expect(remote.send(.seek(toSeconds: 61.5)))
-    #expect(remote.send(.seek(toSeconds: -3)))
-    #expect(remote.send(.seek(toSeconds: 999)))
-    #expect(world.seeks == [61.5, 0, 259])
+    #expect(!remote.send(.changePlaybackPosition, seconds: 10))
+    controls.apply(update(.trackStarted(index: 0), position: 0))
+    #expect(remote.send(.changePlaybackPosition, seconds: 61.5))
+    #expect(remote.send(.changePlaybackPosition, seconds: -3))
+    #expect(remote.send(.changePlaybackPosition, seconds: 999))
+    #expect(!remote.send(.changePlaybackPosition, seconds: .nan))
+    #expect(!remote.send(.changePlaybackPosition, seconds: .infinity))
+    #expect(world.seeks == [61.5, 0, 259 - MediaControls.endMarginSeconds])
 }
 
 @MainActor @Test func nowPlayingFollowsStartPauseResumeSeekAndStop() throws {
     let world = World()
     let (controls, _, center, _) = try controls(world)
-    controls.apply(update(.queueChanged, status: .stopped), positionSeconds: nil)
+    controls.apply(update(.queueChanged, status: .stopped, position: nil))
     #expect(center.shown.isEmpty)
 
-    controls.apply(update(.trackStarted(index: 0)), positionSeconds: nil)
+    controls.apply(update(.trackStarted(index: 0), position: nil))
     let started = try #require(center.shown.last ?? nil)
     #expect(started.title == "Come Together")
     #expect(started.artist == "The Beatles")
@@ -154,40 +194,40 @@ private func update(
     #expect(started.rate == 1)
 
     world.now += 30
-    controls.apply(update(.paused, status: .paused), positionSeconds: 29.9)
+    controls.apply(update(.paused, status: .paused, position: 29.9))
     #expect(center.shown.last??.elapsedSeconds == 29.9)
     #expect(center.shown.last??.rate == 0)
 
     world.now += 60
-    controls.apply(update(.resumed), positionSeconds: 29.9)
+    controls.apply(update(.resumed, position: 29.9))
     #expect(center.shown.last??.elapsedSeconds == 29.9)
     #expect(center.shown.last??.rate == 1)
 
     // The seek's target, since the output may not have caught up.
-    controls.apply(update(.seeked(seconds: 120)), positionSeconds: 31)
+    controls.apply(update(.seeked(seconds: 120), position: 31))
     #expect(center.shown.last??.elapsedSeconds == 120)
 
-    controls.apply(update(.trackStarted(index: 1), current: 1), positionSeconds: 0.01)
+    controls.apply(update(.trackStarted(index: 1), current: 1, position: 0.01))
     #expect(center.shown.last??.elapsedSeconds == 0.01)
 
-    controls.apply(update(.stopped, status: .stopped), positionSeconds: nil)
+    controls.apply(update(.stopped, status: .stopped, position: nil))
     #expect(center.shown.count == 6)
     #expect(center.shown.last == .some(nil))
     // Cleared once.
-    controls.apply(update(.queueChanged, status: .stopped), positionSeconds: nil)
+    controls.apply(update(.queueChanged, status: .stopped, position: nil))
     #expect(center.shown.count == 6)
 }
 
 @MainActor @Test func eventsThatChangeNothingShownSetNothing() throws {
     let world = World()
     let (controls, _, center, _) = try controls(world)
-    controls.apply(update(.trackStarted(index: 0)), positionSeconds: 0)
+    controls.apply(update(.trackStarted(index: 0), position: 0))
     world.now += 10
     for event: PlaybackEvent in [
         .repeatChanged, .shuffleChanged, .queueChanged, .underrun(frames: 10),
         .trackEnded(index: 0),
     ] {
-        controls.apply(update(event), positionSeconds: 10)
+        controls.apply(update(event, position: 10))
     }
     #expect(center.shown.count == 1)
 }
@@ -195,7 +235,7 @@ private func update(
 @MainActor @Test func aChangeBetweenStateChangesCarriesTheTimeOn() throws {
     let world = World()
     let (controls, _, center, _) = try controls(world)
-    controls.apply(update(.trackStarted(index: 0)), positionSeconds: 10)
+    controls.apply(update(.trackStarted(index: 0), position: 10))
     world.now += 5
     world.title = "Something"
     controls.libraryChanged()
@@ -203,7 +243,7 @@ private func update(
     #expect(center.shown.last??.elapsedSeconds == 15)
 
     // Paused, the time stands still.
-    controls.apply(update(.paused, status: .paused), positionSeconds: 15)
+    controls.apply(update(.paused, status: .paused, position: 15))
     world.now += 100
     world.title = "Else"
     controls.libraryChanged()
@@ -216,7 +256,7 @@ private func update(
     world.art = try fileWithArt(width: 1200, height: 800)
     let artwork = ArtworkLoader(maxPixelSize: MediaControls.artPixels, capacity: 2)
     let (controls, _, center, _) = try controls(world, artwork: artwork)
-    controls.apply(update(.trackStarted(index: 0)), positionSeconds: 2)
+    controls.apply(update(.trackStarted(index: 0), position: 2))
     #expect(center.shown.count == 1)
     #expect(center.shown.last??.art == nil)
     world.now += 3
@@ -229,9 +269,44 @@ private func update(
     #expect(shown.elapsedSeconds == 5)
 
     // The next time it's the same track, the cached art comes with the first info.
-    controls.apply(update(.stopped, status: .stopped), positionSeconds: nil)
-    controls.apply(update(.trackStarted(index: 1), current: 1), positionSeconds: 0)
+    controls.apply(update(.stopped, status: .stopped, position: nil))
+    controls.apply(update(.trackStarted(index: 1), current: 1, position: 0))
     #expect(center.shown.last??.art != nil)
+}
+
+@MainActor @Test func artDecodedForATrackThatsGoneIsntShown() async throws {
+    let world = World()
+    let file = try fileWithArt(width: 1200, height: 800)
+    world.art = file
+    world.artOnly = urls[0]
+    let artwork = ArtworkLoader(maxPixelSize: MediaControls.artPixels, capacity: 2)
+    let (controls, _, center, _) = try controls(world, artwork: artwork)
+    controls.apply(update(.trackStarted(index: 0), position: 0))
+    controls.apply(update(.trackStarted(index: 1), current: 1, position: 0))
+    let key = ArtworkKey(path: file.path, offset: file.art.offset)
+    let deadline = Date().addingTimeInterval(5)
+    while artwork.cached(key) == nil, Date() < deadline {
+        try await Task.sleep(for: .milliseconds(5))
+    }
+    #expect(artwork.cached(key) != nil)
+    try await Task.sleep(for: .milliseconds(50))
+    #expect(center.shown.count == 2)
+    #expect(center.shown.allSatisfy { $0?.art == nil })
+}
+
+@MainActor @Test func aLibraryChangeReadsTheArtAgain() async throws {
+    let world = World()
+    let artwork = ArtworkLoader(maxPixelSize: MediaControls.artPixels, capacity: 2)
+    let (controls, _, center, _) = try controls(world, artwork: artwork)
+    controls.apply(update(.trackStarted(index: 0), position: 0))
+    #expect(center.shown.last??.art == nil)
+    world.art = try fileWithArt(width: 64, height: 64)
+    controls.libraryChanged()
+    let deadline = Date().addingTimeInterval(5)
+    while center.shown.last??.art == nil, Date() < deadline {
+        try await Task.sleep(for: .milliseconds(5))
+    }
+    #expect(center.shown.last??.art?.width == 64)
 }
 
 @Test func artFitsTheBoxItsAskedForWithoutGrowing() {
@@ -254,7 +329,7 @@ private func update(
         .command(.previousTrack, title: "Previous Track", enabled: true),
     ]
     #expect(dock.entries() == transport)
-    controls.apply(update(.trackStarted(index: 0)), positionSeconds: 0)
+    controls.apply(update(.trackStarted(index: 0), position: 0))
     #expect(
         dock.entries()
             == [.label("Come Together"), .label("The Beatles — Abbey Road"), .separator]

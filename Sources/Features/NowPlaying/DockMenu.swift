@@ -6,7 +6,7 @@ import Commands
 @MainActor
 public final class DockMenu: NSObject {
     /// One row of the menu.
-    public enum Entry: Equatable {
+    enum Entry: Equatable {
         /// Shown, not chosen: the track's title, or its artist and album.
         case label(String)
         case separator

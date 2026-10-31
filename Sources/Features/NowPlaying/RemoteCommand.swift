@@ -12,10 +12,14 @@ public enum RemoteCommand: CaseIterable, Hashable, Sendable {
     /// Control Center's scrubber.
     case changePlaybackPosition
 
-    /// The registry command this runs; nil for the scrubber, which seeks the engine.
-    public var commandID: CommandID? {
+    /// The registry command this runs; nil for the scrubber, which seeks the engine. Play and
+    /// pause run the absolute commands, so a press decided from a state that's out of date
+    /// can't do the opposite.
+    var commandID: CommandID? {
         switch self {
-        case .togglePlayPause, .play, .pause: .playPause
+        case .togglePlayPause: .playPause
+        case .play: .play
+        case .pause: .pause
         case .stop: .stop
         case .nextTrack: .nextTrack
         case .previousTrack: .previousTrack
@@ -34,19 +38,15 @@ public enum RemoteCommand: CaseIterable, Hashable, Sendable {
 }
 
 /// One press or drag, as the system sends it.
-public enum RemoteAction: Equatable, Sendable {
-    case togglePlayPause, play, pause, stop, nextTrack, previousTrack
-    case seek(toSeconds: Double)
+public struct RemoteAction: Equatable, Sendable {
+    let command: RemoteCommand
+    /// Where the scrubber went; nil for every other command.
+    let seconds: Double?
 
-    public var command: RemoteCommand {
-        switch self {
-        case .togglePlayPause: .togglePlayPause
-        case .play: .play
-        case .pause: .pause
-        case .stop: .stop
-        case .nextTrack: .nextTrack
-        case .previousTrack: .previousTrack
-        case .seek: .changePlaybackPosition
-        }
+    /// Nil for the scrubber without a time. `seconds` is dropped for the other commands.
+    public init?(_ command: RemoteCommand, seconds: Double?) {
+        if command == .changePlaybackPosition, seconds == nil { return nil }
+        self.command = command
+        self.seconds = command == .changePlaybackPosition ? seconds : nil
     }
 }
