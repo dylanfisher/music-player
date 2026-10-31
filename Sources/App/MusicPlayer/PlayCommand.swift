@@ -183,9 +183,8 @@ private final class Player: @unchecked Sendable {
                     + " → \(state.outputFormat ?? "?")")
         case .formatChanged(let change):
             if let from = change.from, from != change.to {
-                log(
-                    "rate change: \(from) → \(change.to) in"
-                        + " \(Int((change.switchSeconds * 1000).rounded())) ms")
+                let took = change.switchSeconds.map { " in \(Int(($0 * 1000).rounded())) ms" } ?? ""
+                log("rate change: \(from) → \(change.to)\(took)")
             }
         case .trackFailed(let url, let reason): log("✗ couldn't play \(url.path): \(reason)")
         case .underrun(let frames): log("! underrun: \(frames) frames of silence")

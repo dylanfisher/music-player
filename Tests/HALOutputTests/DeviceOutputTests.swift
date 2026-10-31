@@ -115,7 +115,7 @@ private func contiguousFrames(of album: RampAlbum, from first: Int = 0, in sampl
     #expect(changes.count == 2)
     #expect(changes[1].from?.contains("44.1 kHz") == true)
     #expect(changes[1].to.contains("96 kHz"))
-    #expect(changes[1].switchSeconds < 0.5)
+    #expect(try #require(changes[1].switchSeconds) < 0.5)
 }
 
 @Test func seekingPlaysOnFromTheRequestedFrame() async throws {

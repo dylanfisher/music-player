@@ -26,10 +26,11 @@ public enum OutputEvent: Sendable {
 public struct TrackInfo: Sendable, Equatable {
     public var durationSeconds: Double
     /// What the output is running while it plays, for display, such as
-    /// `ADI-2 DAC: 'lpcm' 2 ch 32-bit int @ 96 kHz, non-mixable, hog mode`.
-    public var outputFormat: String
+    /// `ADI-2 DAC: 'lpcm' 2 ch 32-bit int @ 96 kHz, non-mixable, hog mode`. Nil for an output
+    /// that doesn't know, such as a renderer that decodes the file itself.
+    public var outputFormat: String?
 
-    public init(durationSeconds: Double, outputFormat: String) {
+    public init(durationSeconds: Double, outputFormat: String?) {
         self.durationSeconds = durationSeconds
         self.outputFormat = outputFormat
     }
@@ -40,10 +41,10 @@ public struct FormatChange: Sendable, Equatable {
     public var from: String?
     public var to: String
     /// From the old track's last sample leaving the output to the new track's first one, or from
-    /// the load for the first track.
-    public var switchSeconds: Double
+    /// the load for the first track. Nil for an output that can't measure it.
+    public var switchSeconds: Double?
 
-    public init(from: String?, to: String, switchSeconds: Double) {
+    public init(from: String?, to: String, switchSeconds: Double?) {
         self.from = from
         self.to = to
         self.switchSeconds = switchSeconds

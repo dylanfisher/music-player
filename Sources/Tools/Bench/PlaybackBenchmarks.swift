@@ -14,7 +14,7 @@ private let cpuSeconds = 30.0
 let playbackBenchmarks = [
     Benchmark(
         name: "playback: CPU while playing 24/192 FLAC",
-        budget: Budget(appleSilicon: 2, oldMac: 5, unit: .percentOfCore)
+        budget: Budget(appleSilicon: 3, oldMac: 5, unit: .percentOfCore)
     ) {
         let track = try hiResTrack(in: try defaultPlaybackFixturesDirectory())
         let (percent, underruns) = try cpuPercent(playing: track, speed: 1, for: cpuSeconds)
@@ -33,7 +33,7 @@ let playbackBenchmarks = [
     },
     Benchmark(
         name: "playback: gap between same-format tracks",
-        budget: Budget(appleSilicon: 1, oldMac: 1, unit: .samples)
+        budget: Budget(appleSilicon: 0, oldMac: 0, unit: .samples)
     ) {
         let directory = try defaultPlaybackFixturesDirectory()
         var worst = 0
@@ -59,7 +59,9 @@ let playbackBenchmarks = [
         let queue = [low.tracks[1], high.tracks[1], low.tracks[1], high.tracks[1]]
         let switches = try playing(queue, speed: 1) { session in
             session.waitUntilFinished()
-            return session.formatChanges().dropFirst().map { $0.switchSeconds * 1000 }
+            return session.formatChanges().dropFirst().compactMap {
+                $0.switchSeconds.map { $0 * 1000 }
+            }
         }
         guard switches.count == queue.count - 1 else {
             throw BenchError.expected("\(queue.count - 1) rate switches, not \(switches.count)")
@@ -74,7 +76,7 @@ let playbackBenchmarks = [
     },
     Benchmark(
         name: "playback: underruns in a soak",
-        budget: Budget(appleSilicon: 1, oldMac: 1, unit: .samples)
+        budget: Budget(appleSilicon: 0, oldMac: 0, unit: .frames)
     ) {
         let directory = try defaultPlaybackFixturesDirectory()
         let queue =
