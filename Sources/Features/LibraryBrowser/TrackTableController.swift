@@ -51,7 +51,8 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         table.allowsMultipleSelection = true
         table.allowsColumnReordering = true
         table.allowsColumnResizing = true
-        table.columnAutoresizingStyle = .noColumnAutoresizing
+        // Only the title column has the autoresizing mask, so it takes up a change of width.
+        table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         table.dataSource = self
         table.delegate = self
         table.target = self
@@ -65,6 +66,8 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
             tableColumn.minWidth = TrackTableLayout.widthRange.lowerBound
             tableColumn.maxWidth = TrackTableLayout.widthRange.upperBound
             tableColumn.isHidden = !shown.contains(column)
+            tableColumn.resizingMask =
+                column == .title ? [.autoresizingMask, .userResizingMask] : .userResizingMask
             tableColumn.sortDescriptorPrototype = NSSortDescriptor(
                 key: column.rawValue, ascending: true)
             if column.isNumeric { tableColumn.headerCell.alignment = .right }

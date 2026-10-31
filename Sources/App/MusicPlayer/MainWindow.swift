@@ -9,6 +9,9 @@ import Settings
 /// changes; it holds no logic of its own.
 @MainActor
 final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
+    /// The window's size before it has a saved frame: inside a 1440 by 900 screen, the 2015
+    /// MacBook Pro's, with room for the default columns beside the sidebar and the queue.
+    static let defaultSize = NSSize(width: 1280, height: 760)
     let window: NSWindow
     private let split = NSSplitView()
     private let browser: LibraryBrowser
@@ -26,7 +29,7 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
         self.saver = saver
         queueWidth = settings.queueWidth
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1180, height: 720),
+            contentRect: NSRect(origin: .zero, size: Self.defaultSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
             defer: false)
         super.init()

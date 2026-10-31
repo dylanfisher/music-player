@@ -44,18 +44,19 @@ public struct AppSettings: SettingsSchema {
     public let queueVisible = Setting(
         "window.queueVisible", default: false, "Show the queue beside the track table.")
     public let queueWidth = Setting(
-        "window.queueWidth", default: 280, range: queueWidthRange, "Width of the queue, in points.")
+        "window.queueWidth", default: 220, range: queueWidthRange, "Width of the queue, in points.")
     public let trackTable = Setting(
         "browser.trackTable",
         default: TrackTableLayout(
+            // About 810 points with spacing, which fits beside the sidebar and the queue in the
+            // default window, itself smaller than a 1440 by 900 screen. Format, rate and depth
+            // are in the header's menu.
             columns: [
-                ColumnLayout(column: .title, width: 240), ColumnLayout(column: .artist, width: 170),
-                ColumnLayout(column: .album, width: 190),
-                ColumnLayout(column: .trackNumber, width: 44),
-                ColumnLayout(column: .duration, width: 56), ColumnLayout(column: .year, width: 50),
-                ColumnLayout(column: .genre, width: 110), ColumnLayout(column: .codec, width: 56),
-                ColumnLayout(column: .sampleRate, width: 70),
-                ColumnLayout(column: .bitDepth, width: 44),
+                ColumnLayout(column: .title, width: 220), ColumnLayout(column: .artist, width: 150),
+                ColumnLayout(column: .album, width: 170),
+                ColumnLayout(column: .trackNumber, width: 34),
+                ColumnLayout(column: .duration, width: 50), ColumnLayout(column: .year, width: 44),
+                ColumnLayout(column: .genre, width: 100),
             ], sortColumn: .artist, sortAscending: true),
         "The track table's columns, left to right, with their widths, and the column it sorts by.")
     public let source = Setting<String?>(
