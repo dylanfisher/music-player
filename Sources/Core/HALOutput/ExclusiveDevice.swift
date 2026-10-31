@@ -98,7 +98,13 @@ public final class ExclusiveDevice {
     /// Starts the IO proc, which plays bytes from `source` (a `RingBuffer *`) as they are. The
     /// ring buffer must outlive `stop()`.
     public func start(reading source: OpaquePointer) throws {
-        guard let render = HALRenderCreate(source) else { throw ExclusiveDeviceError.outOfMemory }
+        let format: AudioStreamBasicDescription = try readScalar(
+            stream, address(kAudioStreamPropertyVirtualFormat))
+        // The gain stays at unity here, so the kind only has to be valid.
+        let samples = renderSampleKind(format) ?? HALRenderSamplesInt32
+        guard let render = HALRenderCreate(source, samples) else {
+            throw ExclusiveDeviceError.outOfMemory
+        }
         self.render = render
         var procID: AudioDeviceIOProcID?
         try throwIfError(
