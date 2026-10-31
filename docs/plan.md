@@ -83,22 +83,22 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 Everything later phases measure and configure against.
 
-- [ ] **Settings** module (Core): one typed schema holding every setting's key, type, default and
+- [x] **Settings** module (Core): one typed schema holding every setting's key, type, default and
       description. Settings are stored as JSON at `~/Library/Application Support/MusicPlayer/
       settings.json`, and the file holds only the values the user changed. The schema is the
       single source for defaults, the settings window (phase 6) and the command palette. A file
       that doesn't match the schema fails loudly, naming the bad key; it isn't silently replaced
       with defaults.
-- [ ] **Settings export and import:** export the full effective settings as JSON. Import a JSON
+- [x] **Settings export and import:** export the full effective settings as JSON. Import a JSON
       file as overrides, validating it the same way.
-- [ ] **Logging** through `os.Logger`, with one subsystem and a category per module. Nothing logs
+- [x] **Logging** through `os.Logger`, with one subsystem and a category per module. Nothing logs
       from the real-time path.
-- [ ] **Fixture library generator** (`scripts/fixtures`): builds a 43k-file tree on local disk in
+- [x] **Fixture library generator** (`scripts/fixtures`): builds a 43k-file tree on local disk in
       the shape of a real library (artists, albums, mixed FLAC, ALAC, AAC, WAV, AIFF, MP3, varied
       tags, some with embedded art, a few malformed files). It takes a handful of real tiny
       encoded files (afconvert) and clones them with rewritten tag blocks. Fixture files go in
       `.build/` or `~/Library/Caches`, never in git.
-- [ ] **Benchmark harness:** a `Bench` executable target and `scripts/bench`. It runs named
+- [x] **Benchmark harness:** a `Bench` executable target and `scripts/bench`. It runs named
       benchmarks, prints a table, and exits non-zero on a budget miss. Each later phase adds its
       own benchmarks. Bench stays out of `./scripts/check`, because it takes too long.
 
@@ -130,6 +130,13 @@ Implementation plan:
    generation for 43k files, and the up-to-date rerun. Budgets join the table above.
 7. Tests: LogTests, SettingsTests, FixturesTests (AudioToolbox decodes every valid fixture to the
    seed's samples and reads its tags back), BenchTests (budget selection and miss reporting).
+
+Result: shipped as planned. Bench on Apple Silicon: settings load 0.18 ms (budget 5 ms), generating
+43k fixture files 4.49 s (30 s), the up-to-date rerun 1.17 s (10 s). The fixture library is about
+550 MB. The review added strict watched-folder keys, CLI errors for flags with no value, one
+app-directory constant, and a test that keeps code budgets and this file's table in step. Deferred:
+the CLI settings flags have no automated test, and `scripts/bench` builds only for the native arch,
+so the phase 5 old-Mac run needs a prebuilt universal `Bench`.
 
 ### 2. Tag and format reading
 
