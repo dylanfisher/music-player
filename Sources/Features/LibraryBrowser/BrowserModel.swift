@@ -34,11 +34,20 @@ public final class BrowserModel {
     private let reader: LibraryReader
     /// Counts changes, so a change's results are applied only if no newer one started.
     private var generation = 0
+    /// The newest change's filter and sort, applied or still running. Each change builds on
+    /// these, so one that overtakes another carries it along instead of losing it.
+    private var pending = TrackFilter()
+    private var pendingSort: (column: TrackColumn, ascending: Bool)
+    /// The leftmost pane a change not yet applied reloads from, and the saved selections a load
+    /// not yet applied restores.
+    private var pendingPanes: Pane?
+    private var pendingSaved: BrowserState?
 
     public init(reader: LibraryReader, sortColumn: TrackColumn, ascending: Bool) {
         self.reader = reader
         self.sortColumn = sortColumn
         self.ascending = ascending
+        pendingSort = (sortColumn, ascending)
     }
 
     /// The selections the window saves, by name.
@@ -50,47 +59,41 @@ public final class BrowserModel {
 
     /// Loads the panes and tracks, selecting what `saved` names where it still exists.
     public func load(_ saved: BrowserState) async {
-        var next = TrackFilter(folder: saved.source)
-        next.search = filter.search
-        await reload(next, panesFrom: .genre, saved: saved, reason: .loaded)
+        pending = TrackFilter(folder: saved.source, search: pending.search)
+        await reload(panesFrom: .genre, saved: saved, reason: .loaded)
     }
 
     /// Selects an entry of `pane` by ID, or All for nil. The panes to its right are narrowed, and
     /// lose a selection they no longer list.
     public func select(_ pane: Pane, id: Int64?) async {
-        var next = filter
         switch pane {
-        case .genre: next.genre = id
-        case .artist: next.artist = id
-        case .album: next.album = id
+        case .genre: pending.genre = id
+        case .artist: pending.artist = id
+        case .album: pending.album = id
         }
-        let following = Pane(rawValue: pane.rawValue + 1)
-        await reload(next, panesFrom: following, reason: .user)
+        await reload(panesFrom: Pane(rawValue: pane.rawValue + 1), reason: .user)
     }
 
     /// Shows one watched folder, or the whole library for nil.
     public func setSource(_ folder: String?) async {
-        var next = filter
-        next.folder = folder
-        await reload(next, panesFrom: .genre, reason: .user)
+        pending.folder = folder
+        await reload(panesFrom: .genre, reason: .user)
     }
 
     public func setSearch(_ text: String) async {
-        var next = filter
-        next.search = text
-        await reload(next, panesFrom: nil, reason: .user)
+        pending.search = text
+        await reload(panesFrom: nil, reason: .user)
     }
 
     public func setSort(_ column: TrackColumn, ascending: Bool) async {
-        sortColumn = column
-        self.ascending = ascending
-        await reload(filter, panesFrom: nil, reason: .user)
+        pendingSort = (column, ascending)
+        await reload(panesFrom: nil, reason: .user)
     }
 
     /// Runs every query again after the library changed, keeping each selection that's still
     /// there.
     public func refresh() async {
-        await reload(filter, panesFrom: .genre, reason: .libraryChanged)
+        await reload(panesFrom: .genre, reason: .libraryChanged)
     }
 
     /// The queue a double-click plays, as file URLs, and where in it to start. Rows whose track
@@ -126,18 +129,24 @@ public final class BrowserModel {
         return rows
     }
 
+    /// Runs the queries for the pending filter and sort, reloading the panes from the leftmost
+    /// one any pending change needs, and applies the results unless a newer change started.
     private func reload(
-        _ proposed: TrackFilter, panesFrom first: Pane?, saved: BrowserState? = nil,
-        reason: BrowserChange.Reason
+        panesFrom pane: Pane?, saved: BrowserState? = nil, reason: BrowserChange.Reason
     ) async {
         generation += 1
         let mine = generation
-        var next = proposed
+        if let pane { pendingPanes = min(pendingPanes ?? pane, pane) }
+        if let saved { pendingSaved = saved }
+        let first = pendingPanes
+        let saved = pendingSaved
+        let sort = pendingSort
+        var next = pending
         var genres = self.genres
         var artists = self.artists
         var albums = self.albums
         do {
-            if let first, first <= .genre {
+            if first == .genre {
                 genres = try await reader.genres(next)
                 next.genre = resolve(next.genre, saved?.genre, in: genres, "genre")
             }
@@ -145,21 +154,32 @@ public final class BrowserModel {
                 artists = try await reader.artists(next)
                 next.artist = resolve(next.artist, saved?.artist, in: artists, "artist")
             }
-            if let first, first <= .album {
+            if first != nil {
                 albums = try await reader.albums(next)
                 next.album = resolve(next.album, saved?.album, in: albums, "album")
             }
             let ids = try await reader.trackIDs(
-                next, sortedBy: sortColumn, ascending: ascending)
+                next, sortedBy: sort.column, ascending: sort.ascending)
             guard mine == generation else { return }
+            let previousIDs = trackIDs
             filter = next
+            pending = next
+            sortColumn = sort.column
+            ascending = sort.ascending
+            pendingPanes = nil
+            pendingSaved = nil
             self.genres = genres
             self.artists = artists
             self.albums = albums
             trackIDs = ids
-            changed(BrowserChange(reason: reason, panes: first != nil))
+            changed(BrowserChange(reason: reason, panes: first != nil, previousIDs: previousIDs))
         } catch {
             guard mine == generation else { return }
+            // What failed never showed, so the next change starts from what the views show.
+            pending = filter
+            pendingSort = (sortColumn, ascending)
+            pendingPanes = nil
+            pendingSaved = nil
             logger.error("a library query failed: \(error)")
             failed("\(error)")
         }
@@ -199,6 +219,8 @@ public struct BrowserChange: Equatable, Sendable {
     public var reason: Reason
     /// Whether the panes' entries were reloaded, not just the tracks.
     public var panes: Bool
+    /// The track IDs the views showed before, for finding the selected tracks again.
+    public var previousIDs: [Int64]
 }
 
 /// The selections the window saves: the sidebar's watched folder, and each pane's entry by name,

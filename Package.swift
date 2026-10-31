@@ -160,7 +160,7 @@ let package = Package(
         ),
         .testTarget(
             name: "LibraryBrowserTests",
-            dependencies: ["Fixtures", "Library", "LibraryBrowser", "Settings"],
+            dependencies: ["Fixtures", "Library", "LibraryBrowser", "SQLite", "Settings"],
             swiftSettings: strictSwift
         ),
         .testTarget(

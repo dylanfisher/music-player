@@ -201,9 +201,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate {
     }
 
     private func apply(_ change: BrowserChange) {
-        let selection = table.selectedIDs
         if change.panes { panes.reload() }
-        table.reload(change, keeping: selection)
+        table.reload(change)
         showStatus()
         stateChanged(model.state)
     }

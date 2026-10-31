@@ -82,11 +82,17 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
 
     // MARK: Model to view
 
-    /// Reloads after the model changed, keeping the selection, and the scroll position when the
-    /// library changed under the user.
-    func reload(_ change: BrowserChange, keeping selection: Set<Int64>) {
+    /// Reloads after the model changed, keeping the selected tracks selected, and the first
+    /// visible track in place when the library changed under the user. The table still shows
+    /// `change.previousIDs`, so the selection and position are read through those.
+    func reload(_ change: BrowserChange) {
         reportedFetchFailure = false
-        let anchor = change.reason == .libraryChanged ? scrollAnchor() : nil
+        let selection = Set(
+            table.selectedRowIndexes.compactMap {
+                change.previousIDs.indices.contains($0) ? change.previousIDs[$0] : nil
+            })
+        let anchor =
+            change.reason == .libraryChanged ? scrollAnchor(in: change.previousIDs) : nil
         cache.setIDs(model.trackIDs)
         showSort()
         table.reloadData()
@@ -99,13 +105,6 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         } else if !model.trackIDs.isEmpty {
             table.scrollRowToVisible(0)
         }
-    }
-
-    var selectedIDs: Set<Int64> {
-        Set(
-            table.selectedRowIndexes.compactMap {
-                model.trackIDs.indices.contains($0) ? model.trackIDs[$0] : nil
-            })
     }
 
     private func showSort() {
@@ -124,12 +123,13 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         return clip.bounds.minY + clip.contentInsets.top
     }
 
-    /// The first visible row's track and how far it sits from the top of the visible area.
-    private func scrollAnchor() -> (id: Int64, offset: CGFloat)? {
+    /// The first visible row's track, among the `ids` the table shows, and how far it sits from
+    /// the top of the visible area.
+    private func scrollAnchor(in ids: [Int64]) -> (id: Int64, offset: CGFloat)? {
         let top = visibleTop
         let row = table.row(at: NSPoint(x: table.visibleRect.minX, y: top))
-        guard row >= 0, model.trackIDs.indices.contains(row) else { return nil }
-        return (model.trackIDs[row], table.rect(ofRow: row).minY - top)
+        guard row >= 0, ids.indices.contains(row) else { return nil }
+        return (ids[row], table.rect(ofRow: row).minY - top)
     }
 
     private func restore(_ anchor: (id: Int64, offset: CGFloat)) {

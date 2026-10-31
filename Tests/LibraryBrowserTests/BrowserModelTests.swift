@@ -1,5 +1,6 @@
 import Foundation
 import Library
+import SQLite
 import Settings
 import Testing
 
@@ -146,4 +147,41 @@ private func loadedModel(
     let paths = try index.paths(ids: model.trackIDs)
     #expect(several.urls.prefix(3).map(\.path) == [2, 4, 5].map { paths[model.trackIDs[$0]]! })
     #expect(several.urls.count == model.trackIDs.count - 3)
+}
+
+@MainActor @Test func aChangeThatOvertakesAnotherCarriesItAlong() async throws {
+    let (model, index) = try await loadedModel()
+    let genre = try #require(model.genres.first)
+    let word = String(
+        try #require(
+            try index.rows(ids: try index.trackIDs(TrackFilter(genre: genre.id), sortedBy: .artist))
+                .compactMap(\.artist).first?.split(separator: " ").first))
+    async let picked: Void = model.select(.genre, id: genre.id)
+    async let typed: Void = model.setSearch(word)
+    _ = await (picked, typed)
+    #expect(model.filter.genre == genre.id)
+    #expect(model.filter.search == word)
+    #expect(model.artists == (try index.artists(TrackFilter(genre: genre.id))))
+    #expect(
+        model.trackIDs
+            == (try index.trackIDs(TrackFilter(genre: genre.id, search: word), sortedBy: .artist)))
+}
+
+@MainActor @Test func aSortThatFailsLeavesTheSortAsShown() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("browser-failing-\(UUID().uuidString)")
+    let databaseURL = directory.appendingPathComponent("library.sqlite")
+    _ = try LibraryIndex(at: databaseURL)
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
+    var failures: [String] = []
+    model.failed = { failures.append($0) }
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    #expect(failures.isEmpty)
+    let breaker = try SQLite.Database(at: databaseURL)
+    try breaker.execute("DROP TABLE tracks")
+    await model.setSort(.title, ascending: false)
+    #expect(failures.count == 1)
+    #expect(model.sortColumn == .artist)
+    #expect(model.ascending)
 }
