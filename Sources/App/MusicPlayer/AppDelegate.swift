@@ -13,6 +13,8 @@ import PlaylistEditor
 import QueueView
 import Settings
 import SettingsWindow
+import TagEditor
+import TagWriter
 
 private let logger = moduleLogger()
 
@@ -66,6 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var playTracker = PlayTracker { [weak self] in self?.record($0) }
     /// The smart playlist editor while it's open.
     var ruleEditor: RuleEditorSheet?
+    /// The tag editor, which writes music files only after the user saves an edit (ADR 0020).
+    private(set) lazy var tagEditing = makeTagEditing()
     private(set) var dispatcher: CommandDispatcher?
     private var menu: MainMenu?
     private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
@@ -208,13 +212,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .main: { [weak self] in self?.window?.window }
             case .palette: { [weak self] in self?.palette?.window }
             case .playlist: { [weak self] in self?.ruleEditor?.window }
+            case .tags: { [weak self] in self?.tagEditing.sheet?.window }
             case .settings, .shortcuts: { [weak self] in self?.settingsWindow?.window }
             }
-        let wait = snapshotOf == .main ? 0 : 1.0
+        // The palette lists its items, and the tag editor reads its files, first.
+        let wait = snapshotOf == .main ? 0 : snapshotOf == .tags ? 3.0 : 1.0
         switch snapshotOf {
         case .main: break
         case .palette: dispatcher?.run(.showPalette)
         case .playlist: dispatcher?.run(.newSmartPlaylist)
+        case .tags:
+            browser?.selectAllTracks()
+            dispatcher?.run(.editTags)
         case .settings: settingsWindowController()?.show(.general)
         case .shortcuts: settingsWindowController()?.show(.shortcuts)
         }
@@ -286,6 +295,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mediaControls?.refreshCommands()
             nowPlaying?.showUnavailable("No output device: \(error)")
         }
+    }
+
+    private func makeTagEditing() -> TagEditing {
+        let editing = TagEditing(
+            writer: TagWriter(journal: TagUndoJournal(dataDirectory: paths.dataDirectory)))
+        editing.written = { [weak self] paths in
+            let folders = Set(paths.map { ($0 as NSString).deletingLastPathComponent })
+            self?.watcher?.rescan(directories: folders.sorted())
+        }
+        editing.replaceArtwork = { [weak self] in self?.dispatcher?.run(.replaceArtwork) }
+        editing.removeArtwork = { [weak self] in self?.dispatcher?.run(.removeArtwork) }
+        return editing
     }
 
     private func makeMediaControls(
@@ -362,7 +383,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.prompt = "Watch"
-        panel.message = "Choose a folder of music to add to the library. Its files are only read."
+        panel.message =
+            "Choose a folder of music to add to the library. Its files are written only when"
+            + " you edit their tags."
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             self?.watch(url, settings)

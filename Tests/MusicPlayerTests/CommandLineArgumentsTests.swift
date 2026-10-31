@@ -36,13 +36,14 @@ import Testing
     #expect(argumentProblem(["--snapshot", "/s.png", "--snapshot-of", "palette"]) == nil)
     #expect(
         argumentProblem(["--snapshot", "/s.png", "--snapshot-of"])
-            == "--snapshot-of needs main, palette, playlist, settings, shortcuts")
+            == "--snapshot-of needs main, palette, playlist, tags, settings, shortcuts")
     #expect(
         argumentProblem(["--snapshot", "/s.png", "--snapshot-of", "--measure-window"])
-            == "--snapshot-of needs main, palette, playlist, settings, shortcuts")
+            == "--snapshot-of needs main, palette, playlist, tags, settings, shortcuts")
     #expect(
         argumentProblem(["--snapshot", "/s.png", "--snapshot-of", "queue"])
-            == "--snapshot-of needs one of main, palette, playlist, settings, shortcuts, not queue")
+            == "--snapshot-of needs one of main, palette, playlist, tags, settings, shortcuts, not queue"
+    )
     #expect(
         argumentProblem(["--snapshot-of", "palette"]) == "--snapshot-of only goes with --snapshot")
 }

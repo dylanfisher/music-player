@@ -39,6 +39,10 @@ extension CommandID {
     public static let addFolder = CommandID("library.addFolder")
     public static let revealInFinder = CommandID("track.revealInFinder")
     public static let copyPath = CommandID("track.copyPath")
+    public static let editTags = CommandID("track.editTags")
+    public static let undoTagEdit = CommandID("track.undoTagEdit")
+    public static let replaceArtwork = CommandID("tags.replaceArtwork")
+    public static let removeArtwork = CommandID("tags.removeArtwork")
     public static let removeFromQueue = CommandID("queue.remove")
     public static let addToPlaylist = CommandID("playlist.addSelection")
     /// Rate the selection 0 (no rating) to 5 stars, by index.
@@ -122,6 +126,10 @@ public enum AppCommands {
             Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
             Command(.revealInFinder, "Reveal in Finder", [.init("r", [opt, cmd])]),
             Command(.copyPath, "Copy Path", [.init("c", [opt, cmd])]),
+            Command(.editTags, "Edit Tags…", [.init("i", cmd)]),
+            Command(.undoTagEdit, "Undo Tag Edit"),
+            Command(.replaceArtwork, "Replace Artwork…"),
+            Command(.removeArtwork, "Remove Artwork"),
             Command(.removeFromQueue, "Remove from Queue or Playlist", [.init(.delete, cmd)]),
             Command(.addToPlaylist, "Add to Playlist…"),
 

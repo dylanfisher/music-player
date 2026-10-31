@@ -116,6 +116,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "TagEditor",
+            dependencies: ["Log", "Metadata", "TagWriter"],
+            path: "Sources/Features/TagEditor",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SettingsWindow",
             dependencies: ["Commands", "KeyChord", "Log", "Settings"],
             path: "Sources/Features/SettingsWindow",
@@ -138,7 +144,8 @@ let package = Package(
             dependencies: [
                 "Artwork", "Commands", "DisplayText", "HALOutput", "KeyChord", "Library",
                 "LibraryBrowser", "Log", "Metadata", "NowPlaying", "Playback", "PlaylistEditor",
-                "QueueView", "Palette", "SQLite", "Settings", "SettingsWindow",
+                "QueueView", "Palette", "SQLite", "Settings", "SettingsWindow", "TagEditor",
+                "TagWriter",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
@@ -280,6 +287,11 @@ let package = Package(
         .testTarget(
             name: "TagCorpusTests",
             dependencies: ["TagCorpus"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "TagEditorTests",
+            dependencies: ["Metadata", "TagEditor", "TagWriter"],
             swiftSettings: strictSwift
         ),
         .testTarget(

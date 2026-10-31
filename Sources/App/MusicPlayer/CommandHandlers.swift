@@ -14,6 +14,7 @@ extension AppDelegate {
         registerViewCommands(dispatcher)
         registerPlaybackCommands(dispatcher)
         registerPlaylistCommands(dispatcher)
+        registerTagCommands(dispatcher)
         dispatcher.handle(.addFolder, enabled: hasWindow) { [weak self] in self?.addFolder() }
     }
 
@@ -197,7 +198,7 @@ extension AppDelegate {
         }
     }
 
-    private func withSelectedPaths(_ use: @escaping ([String]) -> Void) {
+    func withSelectedPaths(_ use: @escaping ([String]) -> Void) {
         guard let browser else { return }
         Task {
             do {
