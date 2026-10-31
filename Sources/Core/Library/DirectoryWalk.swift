@@ -46,59 +46,68 @@ func walk(
             result.cancelled = true
             return result
         }
-        let entries: [URL]
-        do {
-            entries = try FileManager.default.contentsOfDirectory(
-                at: URL(fileURLWithPath: directory, isDirectory: true),
-                includingPropertiesForKeys: walkKeys, options: [.skipsHiddenFiles])
-        } catch {
-            result.issues.append(
-                ScanIssue(
-                    kind: .unreadable, path: directory, detail: "\(error.localizedDescription)"))
-            continue
+        // Foundation autoreleases each listing's URLs, and a scan thread has no pool of its own
+        // to drain them, so without this a walk holds every URL it has seen.
+        autoreleasepool {
+            list(directory, root: root, filter: filter, isStart: isStart, into: &result, &pending)
         }
-        if isStart {
-            result.startEntries = entries.count
-            isStart = false
-        }
-        for entry in entries {
-            // Built from `directory`, not `entry.path`, so every path keeps the root's spelling
-            // even where Foundation would resolve a symbolic link such as /var.
-            let path = directory + "/" + entry.lastPathComponent
-            let relative = String(path.dropFirst(root.count + 1))
-            let values: URLResourceValues
-            do {
-                values = try entry.resourceValues(forKeys: walkKeySet)
-            } catch {
-                result.issues.append(
-                    ScanIssue(
-                        kind: .unreadable, path: path, detail: "\(error.localizedDescription)"))
-                continue
-            }
-            if values.isSymbolicLink == true {
-                result.issues.append(
-                    ScanIssue(kind: .symbolicLink, path: path, detail: "not followed"))
-            } else if values.isDirectory == true {
-                if filter.includesDirectory(relative) { pending.append(path) }
-            } else if values.isRegularFile == true {
-                guard audioFileExtensions.contains(entry.pathExtension.lowercased()) else {
-                    result.otherFiles += 1
-                    continue
-                }
-                guard filter.includesFile(relative) else { continue }
-                guard let size = values.fileSize, let modified = values.contentModificationDate
-                else {
-                    result.issues.append(
-                        ScanIssue(kind: .unreadable, path: path, detail: "no size or mtime"))
-                    continue
-                }
-                result.files.append(
-                    WalkedFile(
-                        path: path, sizeBytes: size,
-                        modifiedSeconds: modified.timeIntervalSince1970))
-            }
-        }
+        isStart = false
         found(result.files.count)
     }
     return result
+}
+
+private func list(
+    _ directory: String, root: String, filter: FolderFilter, isStart: Bool,
+    into result: inout DirectoryWalk, _ pending: inout [String]
+) {
+    let entries: [URL]
+    do {
+        entries = try FileManager.default.contentsOfDirectory(
+            at: URL(fileURLWithPath: directory, isDirectory: true),
+            includingPropertiesForKeys: walkKeys, options: [.skipsHiddenFiles])
+    } catch {
+        result.issues.append(
+            ScanIssue(
+                kind: .unreadable, path: directory, detail: "\(error.localizedDescription)"))
+        return
+    }
+    if isStart { result.startEntries = entries.count }
+    for entry in entries {
+        // Built from `directory`, not `entry.path`, so every path keeps the root's spelling
+        // even where Foundation would resolve a symbolic link such as /var.
+        let path = directory + "/" + entry.lastPathComponent
+        let relative = String(path.dropFirst(root.count + 1))
+        let values: URLResourceValues
+        do {
+            values = try entry.resourceValues(forKeys: walkKeySet)
+        } catch {
+            result.issues.append(
+                ScanIssue(
+                    kind: .unreadable, path: path, detail: "\(error.localizedDescription)"))
+            continue
+        }
+        if values.isSymbolicLink == true {
+            result.issues.append(
+                ScanIssue(kind: .symbolicLink, path: path, detail: "not followed"))
+        } else if values.isDirectory == true {
+            if filter.includesDirectory(relative) { pending.append(path) }
+        } else if values.isRegularFile == true {
+            guard audioFileExtensions.contains(entry.pathExtension.lowercased()) else {
+                result.otherFiles += 1
+                continue
+            }
+            guard filter.includesFile(relative) else { continue }
+            guard let size = values.fileSize, let modified = values.contentModificationDate
+            else {
+                result.issues.append(
+                    ScanIssue(kind: .unreadable, path: path, detail: "no size or mtime"))
+                continue
+            }
+            result.files.append(
+                WalkedFile(
+                    path: path, sizeBytes: size,
+                    modifiedSeconds: modified.timeIntervalSince1970))
+        }
+    }
 }
