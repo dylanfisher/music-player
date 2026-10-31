@@ -298,3 +298,21 @@ private func problems(_ json: String) -> [SettingProblem] {
     let state = try StateStore(AppState(), fileURL: url)
     #expect(state[\.sidebarWidth] == AppState().sidebarWidth.defaultValue)
 }
+
+@Test func paletteVisitsSurviveAReloadAndRejectUnknownKeys() throws {
+    let url = temporaryFile()
+    let state = try StateStore(AppState(), fileURL: url)
+    let log = VisitLog(visits: [
+        VisitLog.Visit(key: "album:7", count: 3, lastSeconds: 100),
+        VisitLog.Visit(key: "artist:Abba", count: 1, lastSeconds: 50),
+    ])
+    try state.set(\.paletteVisits, to: log)
+    #expect(try StateStore(AppState(), fileURL: url)[\.paletteVisits] == log)
+    #expect(throws: SettingsError.self) {
+        try parse(
+            Data(#"{"palette.visits": [{"key": "a", "count": 1, "lastSeconds": 0, "x": 1}]}"#.utf8),
+            path: url.path, settings: keyed(AppState()))
+    }
+    let unsorted = VisitLog(visits: log.visits.reversed())
+    #expect(throws: SettingsError.self) { try state.set(\.paletteVisits, to: unsorted) }
+}
