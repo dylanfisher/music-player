@@ -15,17 +15,14 @@ private let extensibleFormat: UInt16 = 0xFFFE
 /// tags in `LIST/INFO` and `id3 `. Where both hold a field, ID3 wins, since it holds more.
 func parseWAV(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     let header = try reader.bytes(0..<12)
-    let formEnd = 8 + Int(try header.uint32LE(4))
-    guard formEnd >= 12, formEnd <= reader.size + 1 else {
-        throw .malformed(
-            at: 4, "RIFF size \(formEnd - 8) doesn't fit the file (\(reader.size) bytes)")
-    }
+    let end = try formEnd(reader, size: Int(try header.uint32LE(4)), form: riffFormID)
     var format: Bytes?
     var dataBytes: Int?
     var info = TrackTags()
     var id3: ID3v2Tag?
     try forEachChunk(
-        reader, in: 12..<min(formEnd, reader.size), littleEndian: true, form: riffFormID
+        reader, in: 12..<end, littleEndian: true, form: riffFormID,
+        audioID: "data"
     ) {
         chunk throws(ParseFailure) in
         switch chunk.id {

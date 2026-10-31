@@ -13,6 +13,9 @@ public struct MetadataWarning: Equatable, Sendable, CustomStringConvertible {
         /// An ID3v2.4 frame size written as a plain integer instead of a syncsafe one, as older
         /// iTunes versions did.
         case nonSyncsafeFrameSize
+        /// A WAV or AIFF form or audio chunk that claims more bytes than the file holds. The length
+        /// is counted from the bytes present.
+        case truncated
     }
 
     public var kind: Kind

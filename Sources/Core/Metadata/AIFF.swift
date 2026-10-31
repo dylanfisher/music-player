@@ -10,24 +10,29 @@ private let pcmCompressionTypes: Set<String> = [
 func parseAIFF(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     let header = try reader.bytes(0..<12)
     let isAIFC = header.matches("AIFC", at: 8)
-    let formEnd = 8 + Int(try header.uint32BE(4))
-    guard formEnd >= 12, formEnd <= reader.size + 1 else {
-        throw .malformed(
-            at: 4, "FORM size \(formEnd - 8) doesn't fit the file (\(reader.size) bytes)")
-    }
+    let end = try formEnd(reader, size: Int(try header.uint32BE(4)), form: aiffFormID)
     var audio: TrackAudio?
     var id3: ID3v2Tag?
+    var presentBytes: Int?
     try forEachChunk(
-        reader, in: 12..<min(formEnd, reader.size), littleEndian: false, form: aiffFormID
+        reader, in: 12..<end, littleEndian: false, form: aiffFormID,
+        audioID: "SSND"
     ) {
         chunk throws(ParseFailure) in
         if chunk.id == "COMM" {
             audio = try commonChunk(try reader.bytes(chunk.body), isAIFC: isAIFC)
+        } else if chunk.id == "SSND" {
+            // An offset and a block size precede the samples.
+            if chunk.body.count < chunk.declaredSize { presentBytes = max(0, chunk.body.count - 8) }
         } else if id3 == nil {
             id3 = try id3Chunk(reader, chunk)
         }
     }
-    guard let audio else { throw .malformed(at: 12, "AIFF without a COMM chunk") }
+    guard var audio else { throw .malformed(at: 12, "AIFF without a COMM chunk") }
+    if let presentBytes, let bits = audio.bitsPerSample {
+        audio.lengthFrames = min(
+            audio.lengthFrames, presentBytes / (audio.channels * ((bits + 7) / 8)))
+    }
     return TrackMetadata(tags: id3?.tags ?? TrackTags(), audio: audio, art: id3?.art)
 }
 

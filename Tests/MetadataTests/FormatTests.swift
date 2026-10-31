@@ -241,3 +241,49 @@ import Testing
     }
     #expect(error?.kind == .unreadable)
 }
+
+@Test func wavWithAFormSizeBeyondTheFileParsesWithAWarning() throws {
+    var file = riffForm(
+        "WAVE",
+        chunks: riffChunk("fmt ", wavFormat(), .little)
+            + riffChunk("data", Data(count: 400), .little),
+        .little)
+    file.replaceSubrange(4..<8, with: [0x00, 0x10, 0x00, 0x00])
+    let parsed = try parse(file)
+    #expect(parsed.metadata.audio.lengthFrames == 100)
+    #expect(parsed.warnings.map(\.kind) == [.truncated])
+}
+
+@Test func wavWithADataChunkPastTheEndIsClampedToTheBytesPresent() throws {
+    // The form claims 0x1000 bytes and the data chunk 1000; the file holds 400 of them.
+    var file =
+        ascii("RIFF") + Data([0x00, 0x10, 0x00, 0x00]) + ascii("WAVE")
+        + riffChunk("fmt ", wavFormat(), .little) + ascii("data")
+    file.appendLittleEndian(UInt32(1000))
+    file.append(Data(count: 400))
+    let parsed = try parse(file)
+    #expect(parsed.metadata.audio.lengthFrames == 100)
+    #expect(parsed.warnings.map(\.kind) == [.truncated])
+}
+
+@Test func streamedWavSizesReadToTheEndOfTheFileWithoutAWarning() throws {
+    var file =
+        ascii("RIFF") + Data([0xFF, 0xFF, 0xFF, 0xFF]) + ascii("WAVE")
+        + riffChunk("fmt ", wavFormat(), .little) + ascii("data") + Data([0xFF, 0xFF, 0xFF, 0xFF])
+    file.append(Data(count: 400))
+    let parsed = try parse(file)
+    #expect(parsed.metadata.audio.lengthFrames == 100)
+    #expect(parsed.warnings.isEmpty)
+}
+
+@Test func aiffWithASoundChunkPastTheEndCountsTheFramesPresent() throws {
+    var file =
+        ascii("FORM") + Data(count: 4) + ascii("AIFF")
+        + riffChunk("COMM", aiffCommon(frames: 1000), .big) + ascii("SSND")
+    file.appendBigEndian(UInt32(8 + 4000))
+    file.append(Data(count: 8 + 400))
+    file.replaceSubrange(4..<8, with: Data([0, 0, 0x20, 0]))
+    let parsed = try parse(file)
+    #expect(parsed.metadata.audio.lengthFrames == 100)
+    #expect(parsed.warnings.map(\.kind) == [.truncated])
+}

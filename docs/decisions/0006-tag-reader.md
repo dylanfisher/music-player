@@ -48,7 +48,10 @@ codec, rate, bit depth, channels, length in frames, and art as offset, length an
   remainder frames. MP3: the Xing/Info or VBRI frame count, else the file size at the first
   frame's bit rate. WAV: `data` size over block align. AIFF: `COMM` frames.
 - **A truncated file whose damage is in the audio parses**: tag reading never looks at audio, so
-  phase 4's decoder reports it.
+  phase 4's decoder reports it. For WAV and AIFF that includes a form size or a `data`/`SSND`
+  chunk running past the end of the file: the sizes are clamped to the file, the length counts the
+  bytes present, and a `truncated` warning says so. A streamed size of `0xFFFFFFFF` reads to the
+  end of the file without a warning.
 
 Not read: DSF (phase 12), Ogg, APE, WavPack, RF64; ID3v1 and APE tags at the end of an MP3, an
 ID3v2 tag in front of FLAC, a second ID3v2 tag in a row; AIFF `NAME`/`AUTH`/`ANNO`; RIFF `bext`;
