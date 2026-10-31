@@ -16,7 +16,7 @@ func parseMP4(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     }
     guard let moov else { throw .malformed(at: 0, "MP4 without a moov atom") }
 
-    var track: SoundTrack?
+    var track: TrackAudio?
     var items = ILSTItems()
     try forEachAtom(reader, in: moov.body, parent: moov) { child throws(ParseFailure) in
         switch child.type {
@@ -26,8 +26,9 @@ func parseMP4(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         }
         return true
     }
-    guard let track else { throw .malformed(at: moov.start, "MP4 without a sound track") }
-    var audio = track.audio
+    guard var audio = track else {
+        throw .malformed(at: moov.start, "MP4 without a sound track")
+    }
     if audio.codec == .aac, let length = items.gaplessLength { audio.lengthFrames = length }
     return TrackMetadata(tags: items.tags, audio: audio, art: items.art)
 }
@@ -101,14 +102,10 @@ private func require(_ reader: ByteReader, _ parent: Atom, _ type: String) throw
     return atom
 }
 
-private struct SoundTrack {
-    var audio: TrackAudio
-}
-
 /// Nil when the track isn't sound. `mdhd` gives the length in its own timescale; `stsd` gives
 /// the codec, and for ALAC and AAC the real rate, which the sample entry's 16.16 field can't hold
 /// above 65535 Hz.
-private func soundTrack(_ reader: ByteReader, _ trak: Atom) throws(ParseFailure) -> SoundTrack? {
+private func soundTrack(_ reader: ByteReader, _ trak: Atom) throws(ParseFailure) -> TrackAudio? {
     let mdia = try require(reader, trak, "mdia")
     let handler = try reader.bytes(try require(reader, mdia, "hdlr").body)
     guard try handler.fourCC(8) == "soun" else { return nil }
@@ -121,10 +118,9 @@ private func soundTrack(_ reader: ByteReader, _ trak: Atom) throws(ParseFailure)
 
     let stbl = try require(reader, try require(reader, mdia, "minf"), "stbl")
     let stsd = try require(reader, stbl, "stsd")
-    let entries = try reader.bytes(
-        stsd.body.lowerBound..<min(stsd.body.upperBound, stsd.body.lowerBound + 8))
-    guard stsd.body.count >= 8, try entries.uint32BE(4) >= 1 else {
-        throw .malformed(at: stsd.start, "MP4 stsd has no sample entries")
+    // Version and flags, then the entry count, then the entries.
+    guard stsd.body.count >= 8 else {
+        throw .malformed(at: stsd.start, "MP4 stsd is too short for its entry count")
     }
     var entry: Atom?
     try forEachAtom(reader, in: stsd.body.lowerBound + 8..<stsd.body.upperBound, parent: stsd) {
@@ -139,7 +135,7 @@ private func soundTrack(_ reader: ByteReader, _ trak: Atom) throws(ParseFailure)
         throw .malformed(at: mdhd.fileOffset(0), "MP4 mdhd duration \(duration) is too large")
     }
     audio.lengthFrames = Int(duration) * audio.sampleRateHz / timescale
-    return SoundTrack(audio: audio)
+    return audio
 }
 
 /// An audio sample entry: 8 reserved bytes, version, revision, vendor, channels, sample size,

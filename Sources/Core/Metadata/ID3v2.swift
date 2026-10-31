@@ -1,3 +1,6 @@
+/// The first bytes of an ID3v2 tag.
+let id3v2Identifier = "ID3"
+
 /// An ID3v2 tag's fields and art, and how many bytes the tag takes.
 struct ID3v2Tag {
     var tags: TrackTags
@@ -57,7 +60,7 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
         throw .malformed(at: start, "ID3v2 header cut off by the end of \(container)")
     }
     let header = try reader.bytes(start..<start + 10)
-    guard header.matches("ID3", at: 0) else {
+    guard header.matches(id3v2Identifier, at: 0) else {
         throw .malformed(at: start, "\(container) doesn't start with an ID3v2 tag")
     }
     let version = try header.uint8(3)
@@ -279,7 +282,7 @@ private func genre(_ text: String, _ version: UInt8, at offset: Int) throws(Pars
 
 /// `APIC`: an encoding byte, a MIME type, the picture type, a description, then the image.
 /// ID3v2.2's `PIC` has a three-letter format instead of the MIME type. Only the header is read;
-/// the image is recorded by offset. Nil for an empty image or a link ("-->").
+/// the image is recorded by offset. Nil for an empty image or a link.
 private func picture(
     _ area: FrameArea, _ contents: Range<Int>, version: UInt8, unsynchronised: Bool, stored: Bool
 ) throws(ParseFailure) -> (type: UInt32, art: EmbeddedArt)? {
@@ -299,7 +302,7 @@ private func picture(
         throw .malformed(
             at: area.fileOffset(contents.lowerBound), "ID3v2 picture frame header is cut off")
     }
-    guard mime != "-->" else { return nil }
+    guard mime != linkedPictureMIMEType else { return nil }
     let offset = bytes.fileOffset(imageStart)
     let end = area.fileOffset(contents.upperBound - 1) + 1
     guard end > offset else { return nil }
@@ -320,7 +323,7 @@ private func pictureHeader(_ bytes: Bytes, version: UInt8) throws(ParseFailure)
     if version == 2 {
         guard bytes.count >= 4 else { return nil }
         let format = latin1(try bytes.slice(1..<4).array)
-        mime = ["JPG": "image/jpeg", "PNG": "image/png"][format] ?? "image/\(format.lowercased())"
+        mime = ["JPG": jpegMIMEType, "PNG": pngMIMEType][format] ?? "image/\(format.lowercased())"
         cursor = 4
     } else {
         guard let found = try string(bytes, from: 1, .latin1, requireTerminator: true) else {

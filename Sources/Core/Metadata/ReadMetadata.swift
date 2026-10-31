@@ -40,13 +40,13 @@ func parse(_ reader: ByteReader) throws(ParseFailure) -> ParsedFile {
         metadata = try parseFLAC(reader)
     } else if start.matches("ftyp", at: 4) {
         metadata = try parseMP4(reader)
-    } else if start.matches("RIFF", at: 0), start.matches("WAVE", at: 8) {
+    } else if start.matches(riffFormID, at: 0), start.matches("WAVE", at: 8) {
         metadata = try parseWAV(reader)
-    } else if start.matches("FORM", at: 0),
+    } else if start.matches(aiffFormID, at: 0),
         start.matches("AIFF", at: 8) || start.matches("AIFC", at: 8)
     {
         metadata = try parseAIFF(reader)
-    } else if start.matches("ID3", at: 0) || MPEGFrameHeader(start, at: 0) != nil {
+    } else if start.matches(id3v2Identifier, at: 0) || MPEGFrameHeader(start, at: 0) != nil {
         metadata = try parseMP3(reader)
     } else {
         throw ParseFailure(

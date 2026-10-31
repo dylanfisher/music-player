@@ -8,7 +8,6 @@ struct MPEGFrameHeader {
     var byteCount: Int
     /// Bytes of side information after the header, where a Xing/Info header starts.
     var sideInfoBytes: Int
-    var isMPEG1: Bool
 
     /// Nil unless `bytes` at `offset` hold a valid Layer III header: an 11-bit sync, a known
     /// version, and a bit rate and sample rate that aren't reserved or "free".
@@ -23,7 +22,7 @@ struct MPEGFrameHeader {
         let rateIndex = Int(b2 >> 2 & 3)
         guard version != 1, layer == 1, bitRateIndex != 0, bitRateIndex != 15, rateIndex != 3
         else { return nil }
-        isMPEG1 = version == 3
+        let isMPEG1 = version == 3
         let mono = b3 >> 6 == 3
         bitRate = (isMPEG1 ? mpeg1BitRates : mpeg2BitRates)[bitRateIndex] * 1000
         sampleRateHz =
@@ -52,7 +51,7 @@ private let frameSearchBytes = 64 * 1024
 func parseMP3(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     var tag: ID3v2Tag?
     var audioStart = 0
-    if try reader.bytes(0..<min(3, reader.size)).matches("ID3", at: 0) {
+    if try reader.bytes(0..<min(3, reader.size)).matches(id3v2Identifier, at: 0) {
         tag = try parseID3v2(reader, at: 0, end: reader.size, container: "the file")
         audioStart = tag!.byteCount
     }

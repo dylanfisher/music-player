@@ -41,6 +41,9 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         tags: tags ?? TrackTags(), audio: audio, art: preferredPicture(pictures))
 }
 
+/// The MIME type FLAC PICTURE and ID3 APIC give a picture that's a URL, not embedded.
+let linkedPictureMIMEType = "-->"
+
 /// The front cover (picture type 3) if there is one, otherwise the first picture. FLAC PICTURE and
 /// ID3 APIC share the type numbers.
 func preferredPicture(_ pictures: [(type: UInt32, art: EmbeddedArt)]) -> EmbeddedArt? {
@@ -89,8 +92,7 @@ private func flacPicture(_ reader: ByteReader, _ body: Range<Int>) throws(ParseF
         throw .malformed(
             at: imageOffset, "FLAC picture of \(length) bytes runs past the end of its block")
     }
-    // "-->" means the picture is a URL, not embedded.
-    if mime == "-->" { return nil }
+    if mime == linkedPictureMIMEType { return nil }
     return (
         type,
         EmbeddedArt(offset: imageOffset, byteCount: length, mimeType: mime, unsynchronised: false)

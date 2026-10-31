@@ -1,3 +1,6 @@
+let jpegMIMEType = "image/jpeg"
+let pngMIMEType = "image/png"
+
 /// Where a picture sits in its file, so the scanner can record it without reading it and the UI
 /// can load it later with `readArt(_:at:)`.
 public struct EmbeddedArt: Equatable, Sendable {

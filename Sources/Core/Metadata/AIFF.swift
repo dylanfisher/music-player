@@ -1,3 +1,5 @@
+let aiffFormID = "FORM"
+
 /// AIFC compression types that are plain PCM: big-endian, little-endian ("sowt"), and float.
 private let pcmCompressionTypes: Set<String> = [
     "NONE", "twos", "sowt", "fl32", "FL32", "fl64", "FL64",
@@ -15,15 +17,14 @@ func parseAIFF(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     }
     var audio: TrackAudio?
     var id3: ID3v2Tag?
-    try forEachChunk(reader, in: 12..<min(formEnd, reader.size), littleEndian: false, form: "FORM")
-    {
+    try forEachChunk(
+        reader, in: 12..<min(formEnd, reader.size), littleEndian: false, form: aiffFormID
+    ) {
         chunk throws(ParseFailure) in
         if chunk.id == "COMM" {
             audio = try commonChunk(try reader.bytes(chunk.body), isAIFC: isAIFC)
-        } else if isID3Chunk(chunk.id), id3 == nil {
-            id3 = try parseID3v2(
-                reader, at: chunk.body.lowerBound, end: chunk.body.upperBound,
-                container: "its chunk")
+        } else if id3 == nil {
+            id3 = try id3Chunk(reader, chunk)
         }
     }
     guard let audio else { throw .malformed(at: 12, "AIFF without a COMM chunk") }

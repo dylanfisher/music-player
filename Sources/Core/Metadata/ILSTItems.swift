@@ -24,7 +24,7 @@ private let itemKinds: [String: ItemKind] = [
 ]
 
 /// `data` atom type codes for cover art.
-private let artTypes: [UInt32: String] = [13: "image/jpeg", 14: "image/png", 27: "image/bmp"]
+private let artTypes: [UInt32: String] = [13: jpegMIMEType, 14: pngMIMEType, 27: "image/bmp"]
 
 /// The items in `udta`. `meta` is a full box in iTunes files, with four bytes of version and flags
 /// before its children; QuickTime writes it without them.

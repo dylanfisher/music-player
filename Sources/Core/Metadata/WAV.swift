@@ -1,5 +1,7 @@
 import Foundation
 
+let riffFormID = "RIFF"
+
 /// `LIST/INFO` fields and what they set. INFO has no album artist, totals or compilation flag.
 private let infoFields: [String: TagField] = [
     "INAM": .title, "IART": .artist, "IPRD": .album, "IGNR": .genre, "ICRD": .date,
@@ -22,7 +24,9 @@ func parseWAV(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     var dataBytes: Int?
     var info = TrackTags()
     var id3: ID3v2Tag?
-    try forEachChunk(reader, in: 12..<min(formEnd, reader.size), littleEndian: true, form: "RIFF") {
+    try forEachChunk(
+        reader, in: 12..<min(formEnd, reader.size), littleEndian: true, form: riffFormID
+    ) {
         chunk throws(ParseFailure) in
         switch chunk.id {
         case "fmt ": format = try reader.bytes(chunk.body)
@@ -32,11 +36,7 @@ func parseWAV(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
                 chunk.body.lowerBound..<min(chunk.body.upperBound, chunk.body.lowerBound + 4))
             guard type.matches("INFO", at: 0) else { return }
             info = try infoTags(reader, chunk)
-        case let id where isID3Chunk(id) && id3 == nil:
-            id3 = try parseID3v2(
-                reader, at: chunk.body.lowerBound, end: chunk.body.upperBound,
-                container: "its chunk")
-        default: break
+        default: if id3 == nil { id3 = try id3Chunk(reader, chunk) }
         }
     }
     guard let format else { throw .malformed(at: 12, "WAV without a fmt chunk") }
@@ -79,7 +79,7 @@ private func infoTags(_ reader: ByteReader, _ list: RIFFChunk) throws(ParseFailu
     var tags = TrackTags()
     try forEachChunk(
         reader, in: list.body.lowerBound + 4..<list.body.upperBound, littleEndian: true,
-        form: "LIST"
+        form: list.id
     ) { field throws(ParseFailure) in
         guard let tagField = infoFields[field.id] else { return }
         var bytes = try reader.bytes(field.body).array
