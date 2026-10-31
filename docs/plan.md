@@ -21,11 +21,26 @@ a workflow to run phases N–M of docs/plan.md". For each phase, the orchestrati
    It fixes every confirmed finding, then reruns the gate.
 4. **Records.** It ticks the phase's boxes, adds a "Result" line with measured numbers, commits,
    and fast-forwards `main` to the branch. It never pushes.
-5. **Stops or continues.** At a hardware checkpoint it stops and lists what to push, what to run,
-   and what to paste back. Otherwise it moves on to the next phase.
+5. **Continues.** A hardware checkpoint doesn't stop the run. It's recorded as pending in the
+   Result line, and the run moves on to the next phase that doesn't depend on its result. When
+   the run ends, it lists every pending checkpoint at once: what to push, what to run on which
+   machine, and what to paste back.
 
 If something blocks a phase that only the owner can resolve (a product decision, missing
 hardware, an Apple API that can't do what the phase assumes), stop and ask. Don't work around it.
+
+### Current run order
+
+Set by the owner on 2026-10-30:
+
+1. Finish phase 5. Its 2015 MacBook Pro checkpoint stays pending.
+2. Phases 6, 7, 8 and then 11, each through its gate.
+3. Then write the [hardening sub-plan](#14-hardening): only the plan, committed as
+   `docs: plan phase 14`.
+4. If time is left, the code for phase 9 against a simulated renderer. Its Denon checkpoint stays
+   pending.
+5. Skip 10, 12 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
+   they're stored first (AGENTS.md).
 
 ## Phase gate
 
@@ -240,6 +255,16 @@ Implementation plan:
 9. Tests: SQLiteTests, LibraryTests (schema rebuild keeps stats, queries, scanner incremental and
    removal rules, vanished roots, patterns, pause and cancel, watch state with a fake playback
    engine, one FSEvents round trip).
+
+Result: shipped as planned, apart from the owner's checkpoint, which is pending. Bench on Apple Silicon: a full
+scan of 43k fixture files takes 2.96 s (budget 60 s), a no-change rescan 0.90 s (5 s), search
+keystroke p95 12.6 ms (30 ms), sort p95 43.7 ms (100 ms), pane query p95 0.56 ms (20 ms). The
+database is 30 MB (60 MB) and a scan adds 17 MB at its peak (50 MB). The memory row now measures
+what a scan adds; the whole-app budget is measured in phase 5. The review fixed an ejected root
+emptying the index, a trailing "/" making duplicate tracks, case-only renames, excluded subtrees,
+stale ID caches with two scanners, and roots spelled precomposed (ADR 0009). The App now hands
+Library its watched folders. Known limit: one subfolder that lists as empty without an error has
+its files dropped from the index until it lists again; stats survive.
 
 Follow-up (3b), scan speed on network volumes:
 
@@ -504,15 +529,71 @@ This replaces the read-only boundary in AGENTS.md. Do it first in the phase, wit
 
 - [ ] **New boundary:** music files are written only through the tag-writer module, only for a
       tag edit the user confirmed, and never by tests against real libraries.
-- [ ] **Writers** for FLAC/Vorbis, MP4 and ID3v2.3/2.4, reusing the phase 2 parsers.
+- [ ] **Writers** for FLAC/Vorbis, MP4, ID3v2.3/2.4 (MP3, and the AIFF and WAV `ID3 ` chunk),
+      reusing the phase 2 parsers.
 - [ ] **Safety:** write to a temp file next to the original, then re-read it and check that the
       audio payload is byte-identical (hash before and after) and that the tags read back as
       written. Replace atomically. Keep an undo journal of the old tag blocks for the last N
       edits. Any check failing leaves the original untouched.
 - [ ] **UI:** an editor for one track or a batch, with mixed-value display for multiple
       selection, and art replace and remove.
-- [ ] **Hardware checkpoint (owner):** edit tags on copies of a few NAS files first, then on real
-      ones. Confirm Swinsian and Finder read the results.
+- [ ] **Corpus round trips:** every file in the test corpus below survives every edit and its undo.
+- [ ] **Hardware checkpoint (owner):** open the edited corpus clones in Swinsian and Finder, then
+      edit tags on copies of a few NAS files, then on real ones. Confirm both apps read the
+      results.
+
+**Test corpus.** The owner put 159 real files (12 GB) in `/Users/dylanfisher/Music/music-player/test`
+to show how real tags are stored, and to try writes on. That folder is the reference copy. Read it,
+never write to it. Every write goes to a copy made with `cp -c` (an APFS clone, so it's quick and
+takes no extra space) in `~/Library/Caches/MusicPlayer/tag-corpus/`. A copy is recreated from the
+reference before each run. The new boundary's ADR names both paths.
+
+What it holds (surveyed 2026-10-30):
+
+- **99 `.m4a`:** 97 ALAC and 2 AAC. 61 have `moov` after `mdat`, and 38 have it before, with
+  1.9–4 KB of `free` padding. All use `stco`. Their `ilst` holds `©nam ©ART ©alb aART ©day ©gen
+  ©grp ©wrt ©cmt ©too cprt trkn disk rtng soar covr` plus iTunes `----` freeform atoms.
+- **24 `.mp3`:** all ID3v2.4 with padding and no ID3v1. Besides the common frames, they have
+  `APIC TXXX WXXX TIPL TMOO TMED TPUB TDOR TSO2 TSOP GRP1 PRIV UFID RGAD`.
+- **36 `.aiff`:** chunks `COMT COMM SSND ID3 `, with the ID3 chunk *after* the audio.
+- **No FLAC, and no ID3v2.2 or 2.3.** Those writers are tested against the generated fixtures only.
+
+How the phase uses it:
+
+1. **Survey first.** Before writing any writer code, `TagCorpus` (Tools, `scripts/tag-corpus
+   [folder]`, defaulting to the path above) lists every file's tag layout: atoms and frames, sizes,
+   padding, where the audio payload starts and ends, and art. Record the surprises in the phase 11
+   ADR.
+2. **Writers for these layouts:**
+   - MP4 `ilst` both ways round. With `moov` before `mdat`, grow into `free` first. Past that,
+     rewrite `moov` and shift every `stco`/`co64` offset.
+   - ID3v2.4 in MP3: use the padding first, then rewrite.
+   - The AIFF `ID3 ` chunk: fix the chunk and `FORM` sizes and the pad byte.
+3. **Keep what we don't edit.** Every atom, frame or chunk the edit doesn't name stays
+   byte-identical: `----`, `rtng`, `soar`, `©too`, `PRIV`, `UFID`, `RGAD`, `TXXX` and the rest.
+   That includes their order where the format allows it.
+4. **Round trips over every corpus file:** `scripts/tag-corpus --round-trip` edits each clone and
+   checks it.
+   - Edits:
+     - a title of the same length, shorter, and long enough to outgrow the padding
+     - non-ASCII text ("Perälä")
+     - clearing a field, and adding one the file lacks
+     - replacing the art with larger and smaller art, and removing it
+     - a batch album edit across one album folder
+     - undoing each edit
+   - Checks after every edit:
+     - The audio payload hash is unchanged.
+     - Our reader reads back exactly what was written.
+     - An independent reader agrees: `AVAsset` metadata, plus `afinfo` for duration and format.
+     - Every untouched atom or frame is byte-identical.
+     - Undo restores the file byte for byte, compared with `cmp` against the reference.
+5. **Failure injection** on clones: a read-only file, a full disk (a small disk image), a crash
+   between writing the temp file and renaming it, and a file changed between read and write. Each
+   leaves the original byte-identical.
+6. **Keep the file's attributes:** permissions (the corpus is `0700`), extended attributes and
+   Finder tags. Only mtime changes.
+7. `./scripts/check` stays hermetic: the corpus run isn't part of it. The phase gate runs
+   `scripts/tag-corpus --round-trip`, and the Result line reports files, edits and failures.
 
 ### 12. DSD over DoP
 
@@ -537,12 +618,45 @@ This replaces the read-only boundary in AGENTS.md. Do it first in the phase, wit
 - [ ] **Hardware checkpoint (owner):** a clean install on the 2015 MacBook Pro and the DAC Mac
       from a notarized build.
 
-Result: shipped as planned, apart from the owner's checkpoint, which is pending. Bench on Apple Silicon: a full
-scan of 43k fixture files takes 2.96 s (budget 60 s), a no-change rescan 0.90 s (5 s), search
-keystroke p95 12.6 ms (30 ms), sort p95 43.7 ms (100 ms), pane query p95 0.56 ms (20 ms). The
-database is 30 MB (60 MB) and a scan adds 17 MB at its peak (50 MB). The memory row now measures
-what a scan adds; the whole-app budget is measured in phase 5. The review fixed an ejected root
-emptying the index, a trailing "/" making duplicate tracks, case-only renames, excluded subtrees,
-stale ID caches with two scanners, and roots spelled precomposed (ADR 0009). The App now hands
-Library its watched folders. Known limit: one subfolder that lists as empty without an error has
-its files dropped from the index until it lists again; stats survive.
+### 14. Hardening
+
+A sub-plan, written after phase 11 and before phase 9. It's a set of separate phases, 14a onward,
+each run and gated like any other. Each one gets a goal, a scope, a method, the tools it uses, and
+an exit criterion that a script or a number can check. A sub-phase finds problems and fixes them
+in its own commits. Anything it can't fix goes in its Result line. The sub-plan covers at least:
+
+- **14a Robustness:**
+  - Every failure path the app can meet: the NAS dropping mid-scan and mid-playback, the DAC
+    unplugged at each step of a rate switch, a full disk, a locked or corrupt database, a corrupt
+    settings file, and killing the process at any point.
+  - Each one ends in a reported state the user can recover from, never a crash or a silent loss.
+  - Soaks under load: hours of playback while scanning and searching.
+- **14b Single source of truth and DRY:**
+  - A sweep across modules for re-declared constants, re-derived facts, repeated literals, and
+    near-duplicate code that has reached its third occurrence.
+  - Turn the checks that caught them into a script in `./scripts/check`, so they stay caught.
+- **14c Security:**
+  - A threat model in an ADR covering:
+    - tag and container parsers fed hostile files
+    - the tag writer
+    - SQL built from smart-playlist rules and search text
+    - paths from settings and from files
+    - the phase 9 HTTP server's exposure on the LAN
+    - the crash-restore and settings files
+    - hardened runtime and entitlements
+  - Each threat gets a test or a check.
+- **14d Adversarial testing:**
+  - Coverage-guided fuzzing of every parser and the tag writer, with a corpus seeded from the
+    fixtures and the tag corpus.
+  - Address, thread and undefined-behavior sanitizer runs of the whole test suite.
+  - Property tests for the queue, the scanner's rescan rules and writer round trips.
+  - Mutation testing on the core state machines, to find tests that pass no matter what.
+- **14e Performance:**
+  - Profile the hot paths (launch, search, sort, scroll, scan, decode) with Instruments.
+  - Idle CPU and timer wakeups, memory growth over a long session, and energy impact.
+  - Re-check every budget on Apple Silicon and, at a checkpoint, on the 2015 MacBook Pro.
+  - Tighten any budget the code now beats by a wide margin.
+- **14f Architecture and docs:**
+  - `docs/map.md`, the ADRs, the README and AGENTS.md checked against the code.
+  - Module boundaries and public surface cut to what's used.
+  - Dead code removed.
