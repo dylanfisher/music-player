@@ -76,6 +76,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Load and validate settings, every key changed | < 5 ms | < 20 ms |
 | Generate the fixture library | < 30 s | < 120 s |
 | Rerun the fixture generator with nothing to do | < 10 s | < 30 s |
+| Parse every fixture file's tags, first read in a fresh process | < 5 s | < 20 s |
 
 ## Phases
 

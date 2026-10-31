@@ -71,7 +71,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Bench",
-            dependencies: ["Fixtures", "Settings"],
+            dependencies: ["Fixtures", "Metadata", "Settings"],
             path: "Sources/Tools/Bench",
             swiftSettings: strictSwift
         ),
