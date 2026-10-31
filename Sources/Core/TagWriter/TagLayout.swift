@@ -49,6 +49,9 @@ public struct TagBlock: Equatable, Sendable {
     }
 }
 
+/// The layout's name for audio frames after the tags, in MP3 and FLAC.
+let audioFramesPath = "frames"
+
 /// How a new file is put together: new bytes and ranges of the file it replaces, in order.
 enum Segment: Equatable {
     case bytes([UInt8])

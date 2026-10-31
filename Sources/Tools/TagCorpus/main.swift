@@ -18,16 +18,16 @@ func fail(_ message: String) -> Never {
 
 do {
     if let problem = argumentProblem(arguments) { fail(problem) }
-    if arguments == ["--paths"] {
+    if arguments == [pathsFlag] {
         print(referenceCorpusPath)
         print(try cloneFolder().path)
         exit(0)
     }
-    guard arguments.first == "--round-trip" else {
+    guard arguments.first == roundTripFlag else {
         let folder = URL(fileURLWithPath: arguments.first ?? referenceCorpusPath)
         exit(try survey(folder) == 0 ? 0 : 1)
     }
-    let fullDisk = arguments.firstIndex(of: "--full-disk").map {
+    let fullDisk = arguments.firstIndex(of: fullDiskFlag).map {
         URL(fileURLWithPath: arguments[$0 + 1])
     }
     var run = try RoundTrip(
@@ -46,30 +46,4 @@ do {
     exit(run.failures.isEmpty ? 0 : 1)
 } catch {
     fail("\(error)")
-}
-
-/// Why `arguments` can't run, or nil.
-func argumentProblem(_ arguments: [String]) -> String? {
-    if let unknown = arguments.first(where: {
-        $0.hasPrefix("--") && !["--round-trip", "--full-disk", "--paths"].contains($0)
-    }) {
-        return "\(unknown) isn't an option"
-    }
-    if let index = arguments.firstIndex(of: "--full-disk") {
-        guard arguments.first == "--round-trip" else {
-            return "--full-disk only goes with --round-trip"
-        }
-        guard index + 1 < arguments.count, !arguments[index + 1].hasPrefix("--") else {
-            return "--full-disk needs a mount point"
-        }
-        guard arguments.count == 3 else { return "--round-trip takes only --full-disk" }
-        return nil
-    }
-    if arguments.contains("--paths") {
-        return arguments.count == 1 ? nil : "--paths takes nothing else"
-    }
-    if arguments.first == "--round-trip" {
-        return arguments.count == 1 ? nil : "--round-trip takes only --full-disk"
-    }
-    return arguments.count <= 1 ? nil : "takes at most one folder"
 }

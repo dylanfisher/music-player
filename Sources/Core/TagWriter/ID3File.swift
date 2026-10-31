@@ -21,7 +21,7 @@ struct ID3File {
         switch container {
         case .mp3:
             host = .mp3
-            let head = try reader.bytes(0..<min(Self.headerProbe, reader.size))
+            let head = try reader.bytes(0..<min(ID3Tag.headerBytes, reader.size))
             if head.matches(id3v2Identifier, at: 0) {
                 guard let body = try head.syncsafe(6) else {
                     throw .malformed(at: 6, "ID3v2 tag size isn't a syncsafe integer")
@@ -54,7 +54,7 @@ struct ID3File {
                 throw .malformed(at: 12, "\(form) without a '\(audioID)' chunk")
             }
             payload = audio.body
-            let chunk = chunks.first { $0.id == "ID3 " || $0.id == "id3 " }
+            let chunk = chunks.first { $0.id == aiffID3ChunkID || $0.id == wavID3ChunkID }
             if let chunk {
                 tag = try ID3Tag(try reader.bytes(chunk.body).array, at: chunk.body.lowerBound)
             } else {
@@ -65,8 +65,6 @@ struct ID3File {
             preconditionFailure("\(container) has no ID3 tag")
         }
     }
-
-    private static let headerProbe = ID3Tag.headerBytes
 
     func rewrite(
         _ groups: [TagGroup], from tags: TrackTags, art: ArtChange?, artOffset: Int?
@@ -81,7 +79,7 @@ struct ID3File {
             let order = { (value: Int) in
                 littleEndian ? littleEndianBytes(value, 4) : bigEndianBytes(value, 4)
             }
-            let id = chunk?.id ?? (littleEndian ? "id3 " : "ID3 ")
+            let id = chunk?.id ?? (littleEndian ? wavID3ChunkID : aiffID3ChunkID)
             var segments: [Segment] = []
             var replacedStart = formEnd
             var replacedEnd = formEnd
@@ -121,8 +119,8 @@ struct ID3File {
         if tag.byteCount == 0 { notes = ["no ID3v2 tag"] }
         switch host {
         case .mp3:
-            var blocks = tag.byteCount > 0 ? tag.blocks(prefix: "ID3") : []
-            blocks.append(TagBlock("frames", payload, .audio))
+            var blocks = tag.byteCount > 0 ? tag.blocks(prefix: id3v2Identifier) : []
+            blocks.append(TagBlock(audioFramesPath, payload, .audio))
             return TagLayout(container: .mp3, blocks: blocks, payload: [payload], notes: notes)
         case .form(_, let chunk, let chunks, let formEnd):
             let form = container == .wav ? riffFormID : aiffFormID

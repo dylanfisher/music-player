@@ -76,14 +76,6 @@ enum TagGroup: CaseIterable {
             group.fields.contains { edit.values[$0] != nil } && !group.same(old, new)
         }
     }
-
-    /// The group a reader field's keys belong to.
-    static func of(_ field: TagField) -> TagGroup {
-        guard let group = allCases.first(where: { $0.readerFields.contains(field) }) else {
-            preconditionFailure("no group holds \(field)")
-        }
-        return group
-    }
 }
 
 /// "3", "3/12", or "0/12" when only the total is set, as ID3 and Vorbis write a number pair.

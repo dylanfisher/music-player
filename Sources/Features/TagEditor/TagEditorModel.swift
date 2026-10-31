@@ -95,8 +95,6 @@ public struct TagEditorModel: Equatable, Sendable {
         return edit
     }
 
-    public var paths: [String] { tracks.map(\.path) }
-
     private func text(_ field: TagEditField, in tags: TrackTags) -> String {
         let value: String? =
             switch field {

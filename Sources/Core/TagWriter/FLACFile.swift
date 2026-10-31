@@ -184,7 +184,7 @@ struct FLACFile {
     // MARK: Layout
 
     func layout() throws(ParseFailure) -> TagLayout {
-        var blocks = [TagBlock("fLaC", 0..<4, .header)]
+        var blocks = [TagBlock(String(decoding: Self.marker, as: UTF8.self), 0..<4, .header)]
         for block in self.blocks {
             let range = block.original!
             let name = BlockType(rawValue: block.type).map { "\($0)" } ?? "block\(block.type)"
@@ -215,7 +215,7 @@ struct FLACFile {
                 blocks.append(TagBlock(name, body, .other))
             }
         }
-        blocks.append(TagBlock("frames", audioStart..<size, .audio))
+        blocks.append(TagBlock(audioFramesPath, audioStart..<size, .audio))
         return TagLayout(container: .flac, blocks: blocks, payload: [audioStart..<size], notes: [])
     }
 }

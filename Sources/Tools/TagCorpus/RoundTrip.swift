@@ -222,8 +222,7 @@ struct RoundTrip {
             if try !sameBytes(original, clone) {
                 failures.append("\(container) crash: the original changed")
             }
-            let temp = clone.deletingLastPathComponent().appendingPathComponent(
-                ".\(clone.lastPathComponent).tagwrite")
+            let temp = URL(fileURLWithPath: tempPath(for: clone.path))
             if !FileManager.default.fileExists(atPath: temp.path) {
                 failures.append("\(container) crash: no temp file was left to show the crash")
             }
@@ -321,7 +320,7 @@ struct RoundTrip {
             print("full disk: \(report.failures[0].detail)", to: &standardError)
         }
         if try !sameBytes(original, copy) { failures.append("full disk: the file changed") }
-        let temp = mount.appendingPathComponent(".\(copy.lastPathComponent).tagwrite")
+        let temp = URL(fileURLWithPath: tempPath(for: copy.path))
         if FileManager.default.fileExists(atPath: temp.path) {
             failures.append("full disk: a temp file was left")
         }

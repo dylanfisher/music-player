@@ -72,10 +72,14 @@ package func forEachChunk(
     }
 }
 
+/// The ID3 chunk's ID as WAV and AIFF taggers usually spell it; the reader takes either in both.
+package let wavID3ChunkID = "id3 "
+package let aiffID3ChunkID = "ID3 "
+
 /// The ID3v2 tag in an `id3 ` or `ID3 ` chunk, which WAV and AIFF taggers spell either way. Nil
 /// for any other chunk.
 func id3Chunk(_ reader: ByteReader, _ chunk: RIFFChunk) throws(ParseFailure) -> ID3v2Tag? {
-    guard chunk.id == "id3 " || chunk.id == "ID3 " else { return nil }
+    guard chunk.id == wavID3ChunkID || chunk.id == aiffID3ChunkID else { return nil }
     return try parseID3v2(
         reader, at: chunk.body.lowerBound, end: chunk.body.upperBound, container: "its chunk")
 }

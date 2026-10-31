@@ -85,8 +85,9 @@ public final class TagEditing {
 
     private func confirm(_ edit: TagEdit, _ paths: [String], over window: NSWindow) {
         guard !edit.isEmpty else { return }
+        let action = "write the tags"
         guard paths.count > 1 else {
-            run(over: window, "write the tags") { $0.write(edit, to: paths) }
+            run(over: window, action) { $0.write(edit, to: paths) }
             return
         }
         let alert = NSAlert()
@@ -97,7 +98,7 @@ public final class TagEditing {
         alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
-            self?.run(over: window, "write the tags") { $0.write(edit, to: paths) }
+            self?.run(over: window, action) { $0.write(edit, to: paths) }
         }
     }
 

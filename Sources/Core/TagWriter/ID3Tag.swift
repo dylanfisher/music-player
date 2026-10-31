@@ -101,7 +101,7 @@ struct ID3Tag {
     func serialized(byteCount total: Int) -> [UInt8]? {
         let body = total - Self.headerBytes
         guard body >= framesByteCount, body < 1 << 28 else { return nil }
-        var bytes = Array("ID3".utf8) + [version, 0, flags] + syncsafeBytes(body)
+        var bytes = Array(id3v2Identifier.utf8) + [version, 0, flags] + syncsafeBytes(body)
         bytes.reserveCapacity(total)
         for frame in frames { bytes += frame.raw }
         bytes += [UInt8](repeating: 0, count: total - bytes.count)

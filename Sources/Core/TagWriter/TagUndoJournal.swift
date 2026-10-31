@@ -7,6 +7,9 @@ public struct TagUndoJournal: Sendable {
     /// Edits kept; an older one is dropped when a new one is saved.
     public static let capacity = 50
     static let folderName = "tag-undo"
+    /// Entry files are the sequence number, zero-padded so they sort by name, then this.
+    private static let sequenceDigits = 8
+    private static let entrySuffix = ".json"
 
     public let directory: URL
 
@@ -108,8 +111,10 @@ public struct TagUndoJournal: Sendable {
         do {
             return try FileManager.default.contentsOfDirectory(atPath: directory.path)
                 .compactMap { name in
-                    guard name.hasSuffix(".json"), name.count == entryNameLength else { return nil }
-                    return Int(name.dropLast(5))
+                    guard name.hasSuffix(Self.entrySuffix),
+                        name.count == Self.sequenceDigits + Self.entrySuffix.count
+                    else { return nil }
+                    return Int(name.dropLast(Self.entrySuffix.count))
                 }
                 .sorted()
         } catch CocoaError.fileReadNoSuchFile {
@@ -120,12 +125,10 @@ public struct TagUndoJournal: Sendable {
     }
 
     private func fileURL(_ sequence: Int) -> URL {
-        directory.appendingPathComponent(String(format: "%08d.json", sequence))
-    }
-
-    /// Eight digits and ".json".
-    private var entryNameLength: Int {
-        13
+        let digits = String(sequence)
+        return directory.appendingPathComponent(
+            String(repeating: "0", count: max(0, Self.sequenceDigits - digits.count)) + digits
+                + Self.entrySuffix)
     }
 
     private func journalError(_ detail: String) -> TagWriteError {

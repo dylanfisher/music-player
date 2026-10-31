@@ -7,7 +7,7 @@ struct MP4File {
     /// `meta/hdlr` as iTunes writes it: the "mdir" handler from "appl", with an empty name.
     static let metadataHandler: [UInt8] =
         [0, 0, 0, 0, 0, 0, 0, 0] + Array("mdirappl".utf8) + [UInt8](repeating: 0, count: 9)
-    static let ilstPath = ["udta", "meta", "ilst"]
+    static let ilstPath = [MP4Type.udta, MP4Type.meta, MP4Type.ilst]
 
     var size: Int
     /// The top-level atoms in file order; only `moov` is read.
@@ -20,7 +20,7 @@ struct MP4File {
         var moovIndex: Int?
         try forEachAtom(reader, in: 0..<reader.size, parent: nil) { atom throws(ParseFailure) in
             switch atom.type {
-            case "moov":
+            case MP4Type.moov:
                 guard moovIndex == nil else {
                     throw .unsupported(at: atom.start, "an MP4 file with two moov atoms")
                 }
@@ -40,7 +40,7 @@ struct MP4File {
 
     var moov: MP4Box { top[moovIndex].box! }
     var moovAtom: Atom { top[moovIndex].atom }
-    var mdats: [Atom] { top.map(\.atom).filter { $0.type == "mdat" } }
+    var mdats: [Atom] { top.map(\.atom).filter { $0.type == MP4Type.mdat } }
     var payload: [Range<Int>] { mdats.map(\.body) }
     /// Whether audio follows `moov`, so a `moov` that changes size moves it.
     var audioAfterMoov: Bool { mdats.contains { $0.start > moovAtom.start } }
@@ -110,18 +110,18 @@ struct MP4File {
     /// The path to `udta/meta/ilst` under `moov`, made with an iTunes `hdlr` when missing.
     private func ensureItemList(_ moov: inout MP4Box) throws(ParseFailure) -> [Int] {
         if let path = moov.indexPath(Self.ilstPath) { return path }
-        if moov.child("udta") == nil {
-            moov.children!.append(MP4Box(type: "udta", children: []))
+        if moov.child(MP4Type.udta) == nil {
+            moov.children!.append(MP4Box(type: MP4Type.udta, children: []))
         }
-        var udtaPath = moov.indexPath(["udta"])!
-        if moov[udtaPath].child("meta") == nil {
+        var udtaPath = moov.indexPath([MP4Type.udta])!
+        if moov[udtaPath].child(MP4Type.meta) == nil {
             moov[udtaPath].children!.append(
                 MP4Box(
-                    type: "meta", prefix: [0, 0, 0, 0],
+                    type: MP4Type.meta, prefix: [0, 0, 0, 0],
                     children: [MP4Box(type: "hdlr", body: Self.metadataHandler)]))
         }
-        udtaPath += [moov[udtaPath].children!.firstIndex { $0.type == "meta" }!]
-        moov[udtaPath].children!.append(MP4Box(type: "ilst", children: []))
+        udtaPath += [moov[udtaPath].children!.firstIndex { $0.type == MP4Type.meta }!]
+        moov[udtaPath].children!.append(MP4Box(type: MP4Type.ilst, children: []))
         return udtaPath + [moov[udtaPath].children!.count - 1]
     }
 
@@ -157,7 +157,7 @@ struct MP4File {
             moov[meta].children![index].body += zeros(bytes)
         } else {
             moov[meta].children!.insert(
-                MP4Box(type: "free", body: zeros(bytes - 8)), at: ilstPath.last! + 1)
+                MP4Box(type: MP4Type.free, body: zeros(bytes - 8)), at: ilstPath.last! + 1)
         }
     }
 
@@ -221,7 +221,7 @@ struct MP4File {
             while cursor + 8 <= body.count {
                 let size = Int(bigEndianValue(body[cursor..<cursor + 4]))
                 guard size >= 8, cursor + size <= body.count else { break }
-                if body[cursor + 4..<cursor + 8].elementsEqual("data".utf8) {
+                if body[cursor + 4..<cursor + 8].elementsEqual(MP4Type.data.utf8) {
                     body.replaceSubrange(cursor..<cursor + size, with: data)
                     ilst.children![index].body = body
                     return
@@ -240,9 +240,9 @@ struct MP4File {
         for (atom, box) in top {
             let range = atom.start..<atom.body.upperBound
             if let box {
-                blocks += boxBlocks(box, path: "moov", at: atom.start)
-            } else if atom.type == "mdat" {
-                blocks.append(TagBlock("mdat", range, .audio))
+                blocks += boxBlocks(box, path: MP4Type.moov, at: atom.start)
+            } else if atom.type == MP4Type.mdat {
+                blocks.append(TagBlock(MP4Type.mdat, range, .audio))
             } else if MP4Box.paddingTypes.contains(atom.type) {
                 blocks.append(TagBlock(atom.type, range, .padding))
             } else {
@@ -253,7 +253,7 @@ struct MP4File {
         let tables = Set(moov.chunkOffsetTables().map { moov[$0].type })
         notes.append("chunk offsets: \(tables.sorted().joined(separator: ", "))")
         if moov.indexPath(Self.ilstPath) == nil { notes.append("no udta/meta/ilst") }
-        if let meta = moov.indexPath(["udta", "meta"]), moov[meta].prefix.isEmpty {
+        if let meta = moov.indexPath([MP4Type.udta, MP4Type.meta]), moov[meta].prefix.isEmpty {
             notes.append("meta isn't a full box")
         }
         if mdats.count != 1 { notes.append("\(mdats.count) mdat atoms") }
@@ -298,7 +298,8 @@ struct MP4File {
 
 /// A `data` atom: a type code, a zero locale, then the value.
 private func dataAtom(_ type: UInt32, _ value: [UInt8]) -> [UInt8] {
-    MP4Box(type: "data", body: bigEndianBytes(Int(type), 4) + [0, 0, 0, 0] + value).serialized()
+    MP4Box(type: MP4Type.data, body: bigEndianBytes(Int(type), 4) + [0, 0, 0, 0] + value)
+        .serialized()
 }
 
 func zeros(_ count: Int) -> [UInt8] { [UInt8](repeating: 0, count: max(0, count)) }

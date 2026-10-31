@@ -19,10 +19,10 @@ struct MP4Box {
 
     /// The containers opened under `moov`, and under them `ilst`'s items stay whole.
     static let opened: Set<String> = [
-        "moov", "trak", "mdia", "minf", "stbl", "udta", "meta", "ilst",
+        MP4Type.moov, "trak", "mdia", "minf", "stbl", MP4Type.udta, MP4Type.meta, MP4Type.ilst,
     ]
-    static let paddingTypes: Set<String> = ["free", "skip"]
-    static let chunkOffsetTypes: Set<String> = ["stco", "co64"]
+    static let paddingTypes: Set<String> = [MP4Type.free, "skip"]
+    static let chunkOffsetTypes: Set<String> = ["stco", MP4Type.co64]
 
     init(type: String, body: [UInt8]) {
         self.type = type
@@ -45,7 +45,7 @@ struct MP4Box {
             return
         }
         var start = atom.body.lowerBound
-        if type == "meta" {
+        if type == MP4Type.meta {
             // iTunes writes `meta` as a full box, with version and flags before its children.
             let first = try reader.bytes(start..<min(atom.body.upperBound, start + 4))
             if first.count == 4, try first.uint32BE(0) == 0 {
@@ -131,7 +131,7 @@ struct MP4Box {
     /// offsets.
     func chunkOffsets() throws(ParseFailure) -> [Int] {
         let table = Bytes(body, base: 0)
-        let width = type == "co64" ? 8 : 4
+        let width = type == MP4Type.co64 ? 8 : 4
         let count = Int(try table.uint32BE(4))
         guard count <= (body.count - 8) / width else {
             throw .malformed(
@@ -150,7 +150,7 @@ struct MP4Box {
     /// Adds `delta` to every entry at or after `from`. Throws when an `stco` entry would no
     /// longer fit in 32 bits.
     mutating func shiftChunkOffsets(by delta: Int, from: Int) throws(ParseFailure) {
-        let width = type == "co64" ? 8 : 4
+        let width = type == MP4Type.co64 ? 8 : 4
         let offsets = try chunkOffsets()
         for (index, offset) in offsets.enumerated() where offset >= from {
             let shifted = offset + delta
@@ -183,4 +183,16 @@ func mp4ItemKey(_ item: MP4Box) -> String {
 
 func bigEndianValue(_ bytes: some Collection<UInt8>) -> UInt64 {
     bytes.reduce(0) { $0 << 8 | UInt64($1) }
+}
+
+/// The atom types the writer names more than once.
+enum MP4Type {
+    static let moov = "moov"
+    static let udta = "udta"
+    static let meta = "meta"
+    static let ilst = "ilst"
+    static let mdat = "mdat"
+    static let free = "free"
+    static let data = "data"
+    static let co64 = "co64"
 }

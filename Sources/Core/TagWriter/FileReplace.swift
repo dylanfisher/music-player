@@ -42,7 +42,7 @@ package struct WriteFaults: Sendable {
 
 /// The temp file beside `path`: hidden, so the scanner skips one a crash leaves, and the same
 /// name each time, so the next write replaces it.
-func tempPath(for path: String) -> String {
+package func tempPath(for path: String) -> String {
     let url = URL(fileURLWithPath: path)
     return url.deletingLastPathComponent()
         .appendingPathComponent(".\(url.lastPathComponent).tagwrite").path
