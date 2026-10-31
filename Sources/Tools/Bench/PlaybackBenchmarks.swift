@@ -57,11 +57,14 @@ let playbackBenchmarks = [
         let low = try rampAlbum(sampleRateHz: 44_100, bitsPerSample: 16, in: directory)
         let high = try rampAlbum(sampleRateHz: 96_000, bitsPerSample: 24, in: directory)
         let queue = [low.tracks[1], high.tracks[1], low.tracks[1], high.tracks[1]]
-        let switches = try playing(queue, speed: 1) { session in
+        let changes = try playing(queue, speed: 1) { session in
             session.waitUntilFinished()
-            return session.formatChanges().dropFirst().compactMap {
-                $0.switchSeconds.map { $0 * 1000 }
-            }
+            return Array(session.formatChanges().dropFirst())
+        }
+        let switches = changes.compactMap { $0.switchSeconds.map { $0 * 1000 } }
+        let slowest = changes.max { ($0.switchSeconds ?? 0) < ($1.switchSeconds ?? 0) }
+        let steps = (slowest?.steps ?? []).map {
+            String(format: "%@ %.1f ms", $0.name, $0.seconds * 1000)
         }
         guard switches.count == queue.count - 1 else {
             throw BenchError.expected("\(queue.count - 1) rate switches, not \(switches.count)")
@@ -71,7 +74,9 @@ let playbackBenchmarks = [
             notes: [
                 "switches: "
                     + switches.map { String(format: "%.0f ms", $0) }.joined(separator: ", "),
-                "measured on the output path; the real device adds its own settling time",
+                "slowest: " + steps.joined(separator: ", "),
+                "from the old track's last sample played to the new one's first queued; the real"
+                    + " device adds setting its rate and format",
             ])
     },
     Benchmark(
