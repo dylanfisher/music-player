@@ -33,7 +33,9 @@ func parseMP4(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     return TrackMetadata(tags: items.tags, audio: audio, art: items.art)
 }
 
-/// Calls `body` with each atom that tiles `range`, until it returns false.
+/// Calls `body` with each atom that tiles `range`, until it returns false. QuickTime ends a
+/// container with a 32-bit zero terminator, so inside a parent fewer than 8 bytes left, or an
+/// atom of size 0, ends the walk.
 func forEachAtom(
     _ reader: ByteReader, in range: Range<Int>, parent: Atom?,
     _ body: (Atom) throws(ParseFailure) -> Bool
@@ -42,12 +44,14 @@ func forEachAtom(
     var offset = range.lowerBound
     while offset < range.upperBound {
         guard range.upperBound - offset >= 8 else {
+            if parent != nil { return }
             throw .malformed(
                 at: offset, "\(range.upperBound - offset) stray bytes at the end of \(parentName)")
         }
         let header = try reader.bytes(offset..<offset + 8)
         let type = try header.fourCC(4)
         var size = Int(try header.uint32BE(0))
+        if size == 0, parent != nil { return }
         var headerSize = 8
         if size == 1 {
             let large = try reader.bytes(offset + 8..<offset + 16).uint64BE(0)
@@ -56,7 +60,7 @@ func forEachAtom(
             }
             size = Int(large)
             headerSize = 16
-        } else if size == 0, parent == nil {
+        } else if size == 0 {
             size = range.upperBound - offset
         }
         guard size >= headerSize else {

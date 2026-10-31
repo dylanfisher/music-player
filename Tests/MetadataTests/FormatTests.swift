@@ -287,3 +287,14 @@ import Testing
     #expect(parsed.metadata.audio.lengthFrames == 100)
     #expect(parsed.warnings.map(\.kind) == [.truncated])
 }
+
+@Test func mp4StopsAtQuickTimeZeroTerminators() throws {
+    let items = ilstItem("\u{A9}nam", code: 1, ascii("Song"))
+    let alac = alacEntry(rate: 44_100, channels: 2, bits: 16)
+    let children = moov(entry: alac, timescale: 44_100, duration: 10, items: items).dropFirst(8)
+    // A 32-bit zero terminator, or an atom of size 0, ends the children of moov.
+    for terminator in [Data(count: 4), Data(count: 8)] {
+        let file = mp4File(atom("moov", Data(children) + terminator))
+        #expect(try parse(file).metadata.tags.title == "Song")
+    }
+}
