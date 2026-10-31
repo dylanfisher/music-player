@@ -53,6 +53,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Library",
+            dependencies: ["Log", "Metadata", "Settings", "SQLite"],
+            path: "Sources/Core/Library",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Settings",
             dependencies: ["Log"],
             path: "Sources/Core/Settings",
@@ -100,6 +106,11 @@ let package = Package(
         .testTarget(
             name: "HALRenderTests",
             dependencies: ["HALRender", "RingBuffer"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "LibraryTests",
+            dependencies: ["Fixtures", "Library", "Metadata", "Settings", "SQLite"],
             swiftSettings: strictSwift
         ),
         .testTarget(
