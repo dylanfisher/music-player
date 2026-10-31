@@ -294,6 +294,50 @@ Turns the one-file command into the engine everything else drives.
       44.1 and 96 kHz tracks, unplug the DAC during playback, and quit with Ctrl-C. Confirm the
       macOS default output is restored after each.
 
+Implementation plan:
+
+1. **RingBuffer:** `RingBufferSkip`, a consumer-side discard, so a seek never resets the buffer
+   under the reader.
+2. **HALRender** (C): atomics the IO proc shares with the decode thread. A consumed-bytes
+   counter times track boundaries and position. `HALRenderDiscardBefore` is the seek handshake:
+   the producer names a byte position, and the IO proc skips everything before it on its next
+   cycle while the producer keeps writing after it. A draining flag and the refill after a
+   discard keep expected silence out of the underrun count. An atomic gain, ramped per buffer, for
+   the optional digital volume; at unity the samples are copied untouched.
+3. **Playback** (no CoreAudio): the `Output` protocol at the track level (load, set next, play,
+   pause, stop, seek, position, volume, and an event stream naming each item), `PlayQueue`
+   (order, shuffle, repeat off/one/all), and the `PlaybackEngine` actor, whose `updates()`
+   streams every state change with the event that caused it. Tests drive it with a fake output.
+   The single-file `playFile` and `FileDecoder` move to HALOutput first, so the dependency runs
+   HALOutput → Playback.
+4. **HALOutput:** `ExclusiveDevice` becomes `HALDevice`: hog mode follows the setting, and it
+   restores a snapshot taken by UID at the session's first open. `PCMDevice` and
+   `PCMDeviceProvider` are the seam between the output and a device. `HALDeviceProvider` finds
+   the device by UID and listens to `kAudioHardwarePropertyDevices` and
+   `kAudioDevicePropertyDeviceIsAlive`. A restore record in Application Support, deleted after a
+   clean close, lets the next run put the device and default outputs back after a crash.
+   `DeviceOutput` implements `Output` on one control thread: it decodes ahead into the ring
+   buffer, records each track's start as a byte position, gaplessly appends a next track of the
+   same rate and channels, and drains and reconfigures between tracks that differ.
+5. **Settings:** `output.digitalVolume`, off by default, saying it stops output being
+   bit-perfect.
+6. **Fixtures:** `NullDevice`, a `PCMDeviceProvider` that pulls `HALRenderIOProc` on its own
+   thread at real-time pace or as fast as it can, captures what it pulls, and can be unplugged.
+   Playback fixtures generated with afconvert into the cache: a ramp split into a two-track album
+   at 44.1/16 and at 96/24, and two minutes of 24/192 FLAC.
+7. **CLI:** `--play` takes files and folders as a queue (a folder by disc and track from tags,
+   then filename). Keys: space, n, p, ←/→, r (repeat), s (shuffle), -/+ (digital volume), q. It
+   prints track changes with the device format, rate switches with their time, device lost and
+   returned, and underruns. The terminal mode and the device are restored on q, Ctrl-C, SIGTERM
+   and the end of the queue.
+8. **Bench:** CPU playing 24/192 FLAC for 30 s through `NullDevice` at real-time pace, gap
+   samples across a same-format boundary, a rate-switching track change, and a soak (20 s by
+   default, `./scripts/bench --soak 3600` for the hour) counting underruns.
+9. Tests: RingBufferTests, HALRenderTests (discard while reading, draining, gain kinds),
+   PlaybackTests (queue rules, engine state machine), HALOutputTests (sample-exact gapless
+   continuity, rate-change sequencing, seek, pause, device loss and return, restore record).
+   ADR 0011 for the output protocol and the HAL output's design.
+
 ### 5. Main window
 
 - [ ] AppKit window: a sidebar (library, playlists, watched folders), Swinsian-style column
