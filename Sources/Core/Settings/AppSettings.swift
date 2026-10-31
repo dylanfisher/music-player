@@ -26,4 +26,40 @@ public struct AppSettings: SettingsSchema {
         "library.networkScanReaders", default: nil, range: networkScanReadersRange,
         "Files a scan of a network folder reads at once. Null tunes the number to the network"
             + " and NAS while each scan runs.")
+
+    // The main window's layout, saved as it changes. The app reads these once, at launch.
+    public let windowFrame = Setting<WindowFrame?>(
+        "window.frame", default: nil, "Where the main window was. Null centers it.")
+    public let sidebarWidth = Setting(
+        "window.sidebarWidth", default: 180, range: 100...600, "Width of the sidebar, in points.")
+    public let browserHeight = Setting(
+        "window.browserHeight", default: 160, range: 0...2000,
+        "Height of the genre, artist and album panes above the track table, in points. 0 hides"
+            + " them.")
+    public let queueVisible = Setting(
+        "window.queueVisible", default: false, "Show the queue beside the track table.")
+    public let queueWidth = Setting(
+        "window.queueWidth", default: 280, range: 150...1000, "Width of the queue, in points.")
+    public let trackTable = Setting(
+        "browser.trackTable",
+        default: TrackTableLayout(
+            columns: [
+                ColumnLayout(column: .title, width: 240), ColumnLayout(column: .artist, width: 170),
+                ColumnLayout(column: .album, width: 190),
+                ColumnLayout(column: .trackNumber, width: 44),
+                ColumnLayout(column: .duration, width: 56), ColumnLayout(column: .year, width: 50),
+                ColumnLayout(column: .genre, width: 110), ColumnLayout(column: .codec, width: 56),
+                ColumnLayout(column: .sampleRate, width: 70),
+                ColumnLayout(column: .bitDepth, width: 44),
+            ], sortColumn: .artist, sortAscending: true),
+        "The track table's columns, left to right, with their widths, and the column it sorts by.")
+    public let source = Setting<String?>(
+        "browser.source", default: nil,
+        "The watched folder the sidebar shows, by path. Null shows the whole library.")
+    public let selectedGenre = Setting<String?>(
+        "browser.genre", default: nil, "The genre selected in the browser. Null is All.")
+    public let selectedArtist = Setting<String?>(
+        "browser.artist", default: nil, "The artist selected in the browser. Null is All.")
+    public let selectedAlbum = Setting<String?>(
+        "browser.album", default: nil, "The album selected in the browser. Null is All.")
 }

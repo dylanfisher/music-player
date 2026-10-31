@@ -243,3 +243,64 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(setting.defaultValue == false)
     #expect(setting.summary.contains("no longer bit-perfect"))
 }
+
+@Test func windowLayoutSurvivesAReloadAndRejectsBadValues() throws {
+    let url = temporaryFile()
+    let settings = try SettingsStore(AppSettings(), fileURL: url)
+    let layout = TrackTableLayout(
+        columns: [
+            ColumnLayout(column: .path, width: 300), ColumnLayout(column: .title, width: 90),
+        ],
+        sortColumn: .dateAdded, sortAscending: false)
+    try settings.set(\.trackTable, to: layout)
+    try settings.set(\.windowFrame, to: WindowFrame(x: 10, y: 20, width: 800, height: 500))
+    let reloaded = try SettingsStore(AppSettings(), fileURL: url)
+    #expect(reloaded[\.trackTable] == layout)
+    #expect(reloaded[\.windowFrame] == WindowFrame(x: 10, y: 20, width: 800, height: 500))
+
+    let twice = TrackTableLayout(
+        columns: [
+            ColumnLayout(column: .title, width: 90), ColumnLayout(column: .title, width: 90),
+        ],
+        sortColumn: .title, sortAscending: true)
+    #expect(throws: SettingsError.self) { try settings.set(\.trackTable, to: twice) }
+    let empty = TrackTableLayout(columns: [], sortColumn: .title, sortAscending: true)
+    #expect(throws: SettingsError.self) { try settings.set(\.trackTable, to: empty) }
+    #expect(throws: SettingsError.self) {
+        try settings.set(\.windowFrame, to: WindowFrame(x: 0, y: 0, width: 0, height: 5))
+    }
+}
+
+@Test func windowLayoutRejectsUnknownKeysAtEveryLevel() throws {
+    func reason(_ json: String) throws -> String {
+        let url = temporaryFile()
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(json.utf8).write(to: url)
+        do {
+            _ = try SettingsStore(AppSettings(), fileURL: url)
+        } catch SettingsError.invalid(_, let problems) {
+            return problems.map { "\($0.key) \($0.reason)" }.joined()
+        }
+        Issue.record("accepted \(json)")
+        return ""
+    }
+    #expect(
+        try reason(
+            #"{"browser.trackTable": {"columns": [{"column": "title", "width": 90, "x": 1}],"#
+                + #" "sortColumn": "title", "sortAscending": true}}"#
+        ).contains("columns[0].x: unknown key"))
+    #expect(
+        try reason(
+            #"{"browser.trackTable": {"columns": [{"column": "title", "width": 90}],"#
+                + #" "sortColumn": "title", "sortAscending": true, "extra": 1}}"#
+        ).contains("extra: unknown key"))
+    #expect(
+        try reason(
+            #"{"browser.trackTable": {"columns": [{"column": "bogus", "width": 90}],"#
+                + #" "sortColumn": "title", "sortAscending": true}}"#
+        ).contains("browser.trackTable"))
+    #expect(
+        try reason(#"{"window.frame": {"x": 0, "y": 0, "width": 9, "height": 9, "z": 0}}"#)
+            .contains("z: unknown key"))
+}
