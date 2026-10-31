@@ -87,6 +87,12 @@ let package = Package(
             path: "Sources/Features/NowPlaying",
             swiftSettings: strictSwift
         ),
+        .target(
+            name: "QueueView",
+            dependencies: ["DisplayText", "Library", "Log", "Playback"],
+            path: "Sources/Features/QueueView",
+            swiftSettings: strictSwift
+        ),
         .executableTarget(
             name: "MusicPlayer",
             dependencies: [
@@ -179,6 +185,11 @@ let package = Package(
         .testTarget(
             name: "PlaybackTests",
             dependencies: ["Playback"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "QueueViewTests",
+            dependencies: ["Library", "Playback", "QueueView"],
             swiftSettings: strictSwift
         ),
         .testTarget(
