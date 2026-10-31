@@ -174,7 +174,7 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
 private let entryIdentifier = NSUserInterfaceItemIdentifier("entry")
 
 extension BrowserModel.Pane {
-    var title: String {
+    public var title: String {
         switch self {
         case .genre: "Genre"
         case .artist: "Artist"

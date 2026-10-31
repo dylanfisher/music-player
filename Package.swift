@@ -23,6 +23,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "FuzzyMatch",
+            path: "Sources/Primitives/FuzzyMatch",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "KeyChord",
             path: "Sources/Primitives/KeyChord",
             swiftSettings: strictSwift
@@ -93,6 +98,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Palette",
+            dependencies: ["FuzzyMatch", "KeyChord", "Settings"],
+            path: "Sources/Features/Palette",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SettingsWindow",
             dependencies: ["Commands", "KeyChord", "Log", "Settings"],
             path: "Sources/Features/SettingsWindow",
@@ -115,7 +126,7 @@ let package = Package(
             dependencies: [
                 "Artwork", "Commands", "DisplayText", "HALOutput", "KeyChord", "Library",
                 "LibraryBrowser", "Log", "Metadata", "NowPlaying", "Playback", "QueueView",
-                "SQLite", "Settings", "SettingsWindow",
+                "Palette", "SQLite", "Settings", "SettingsWindow",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
@@ -136,7 +147,7 @@ let package = Package(
             name: "Bench",
             dependencies: [
                 "Commands", "DisplayText", "Fixtures", "HALOutput", "Library", "LibraryBrowser",
-                "Metadata", "Playback", "SQLite", "Settings",
+                "Metadata", "Palette", "Playback", "SQLite", "Settings",
             ],
             path: "Sources/Tools/Bench",
             swiftSettings: strictSwift
@@ -177,6 +188,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .testTarget(
+            name: "FuzzyMatchTests",
+            dependencies: ["FuzzyMatch"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
             name: "KeyChordTests",
             dependencies: ["KeyChord"],
             swiftSettings: strictSwift
@@ -209,6 +225,11 @@ let package = Package(
         .testTarget(
             name: "NowPlayingTests",
             dependencies: ["Library", "Metadata", "NowPlaying", "Playback"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "PaletteTests",
+            dependencies: ["FuzzyMatch", "Palette", "Settings"],
             swiftSettings: strictSwift
         ),
         .testTarget(

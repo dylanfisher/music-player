@@ -124,6 +124,28 @@ public final class BrowserModel {
         return trackIDs.firstIndex(of: id)
     }
 
+    /// Shows the whole library narrowed to one genre, artist or album, as the palette chooses
+    /// one: the other panes are All and the search is cleared.
+    public func showOnly(_ pane: Pane, id: Int64) async {
+        history.visit(nil)
+        pending = TrackFilter()
+        switch pane {
+        case .genre: pending.genre = id
+        case .artist: pending.artist = id
+        case .album: pending.album = id
+        }
+        await reload(panesFrom: .genre, reason: .user)
+    }
+
+    /// Every genre, artist and album in the library, for the palette.
+    public func allEntries() async throws -> [(Pane, BrowserEntry)] {
+        let all = TrackFilter()
+        let genres = try await reader.genres(all).map { (Pane.genre, $0) }
+        let artists = try await reader.artists(all).map { (Pane.artist, $0) }
+        let albums = try await reader.albums(all).map { (Pane.album, $0) }
+        return genres + artists + albums
+    }
+
     /// The shown tracks' names in table order, read once per change of the list. Nil when the
     /// list changed while they were read.
     public func trackNames() async throws -> [TrackName]? {

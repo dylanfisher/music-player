@@ -57,4 +57,10 @@ public struct AppState: SettingsSchema {
     public let selectedAlbum = Setting<String?>(
         "browser.album", title: "Album", default: nil,
         "The album selected in the browser. Null is All.")
+    public let palettePlace = Setting<PalettePlace?>(
+        "palette.place", title: "Palette Place", default: nil,
+        "Where the palette was dragged. Null opens it centered near the top of the screen.")
+    public let paletteVisits = Setting(
+        "palette.visits", title: "Palette Visits", default: VisitLog(visits: []),
+        "How often and how recently each palette item was chosen or played.")
 }

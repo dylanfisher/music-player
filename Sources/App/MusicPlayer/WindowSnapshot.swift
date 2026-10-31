@@ -1,5 +1,10 @@
 import AppKit
 
+/// What `--snapshot-of` draws: the main window, or the main window's palette opened on ⌘K.
+enum SnapshotTarget: String, CaseIterable {
+    case main, palette
+}
+
 /// `--snapshot <file>`: draws the window's content into a PNG, for checking the layout on a Mac
 /// where screen recording isn't allowed. The app draws its own views, so it needs no permission.
 @MainActor

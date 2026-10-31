@@ -9,7 +9,7 @@ import Settings
 //   MusicPlayer --play <file or folder>... [--device <part of name>]
 //   MusicPlayer --scan <folder> [--db <file>] [--readers <n>] [--scan-io-hints none|rdahead|all]
 // and the window:
-//   MusicPlayer [--measure-window] [--snapshot <png file>]
+//   MusicPlayer [--measure-window] [--snapshot <png file> [--snapshot-of main|palette]]
 // and in every mode [--home <folder>] [--settings <file>]:
 // --home keeps the config file, library, state file and device record in one folder instead of
 // ~/.config/music-player and Application Support, for tests and runs on the build Mac.
@@ -87,6 +87,18 @@ if arguments.contains("--play") {
     }
 }
 
+let snapshotTarget =
+    value(after: "--snapshot-of").map { text in
+        guard let target = SnapshotTarget(rawValue: text) else {
+            FileHandle.standardError.write(
+                Data(
+                    "error: --snapshot-of needs one of \(SnapshotTarget.allCases.map(\.rawValue)), not \(text)\n"
+                        .utf8))
+            exit(1)
+        }
+        return target
+    } ?? .main
+
 let launchPaths: AppPaths
 do {
     launchPaths = try appPaths()
@@ -97,7 +109,8 @@ do {
 let app = NSApplication.shared
 let delegate = AppDelegate(
     paths: launchPaths, measuring: arguments.contains("--measure-window"),
-    snapshotURL: value(after: "--snapshot").map(URL.init(fileURLWithPath:)))
+    snapshotURL: value(after: "--snapshot").map(URL.init(fileURLWithPath:)),
+    snapshotOf: snapshotTarget)
 app.delegate = delegate
 app.setActivationPolicy(.regular)
 app.run()

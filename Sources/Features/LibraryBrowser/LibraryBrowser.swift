@@ -395,6 +395,24 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         focusTracks()
     }
 
+    /// Every genre, artist and album in the library.
+    public func allEntries() async throws -> [(BrowserModel.Pane, BrowserEntry)] {
+        try await model.allEntries()
+    }
+
+    /// Shows the library narrowed to one entry, as the palette chooses it.
+    public func showOnly(_ pane: BrowserModel.Pane, id: Int64) async {
+        searchField.stringValue = ""
+        await model.showOnly(pane, id: id)
+        showSource()
+        focusTracks()
+    }
+
+    /// The track ID shown at `row`, to check a palette row still points at it.
+    public func trackID(at row: Int) -> Int64? {
+        model.trackIDs.indices.contains(row) ? model.trackIDs[row] : nil
+    }
+
     /// The shown tracks' names in table order; nil when the list changed while they were read.
     public func trackNames() async throws -> [TrackName]? { try await model.trackNames() }
 

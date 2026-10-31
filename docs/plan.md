@@ -89,6 +89,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Library database for the fixture library | < 60 MB | < 60 MB |
 | Memory a scan of the fixture library adds, at its peak | < 50 MB | < 50 MB |
 | Browser pane query: genres, artists, albums (p95) | < 20 ms | < 60 ms |
+| Palette results per keystroke, Go to Item over every fixture track (p95) | < 30 ms | < 80 ms |
 | Resident memory with the library loaded, after scrolling every row with art | < 250 MB | < 250 MB |
 | CPU while playing 24/192 FLAC | < 3 percent of a core | < 5 percent of a core |
 | Underruns in a 1-hour playback soak (`--soak 3600`; 20 s by default) | 0 frames | 0 frames |

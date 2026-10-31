@@ -7,6 +7,7 @@ import Library
 import LibraryBrowser
 import Log
 import NowPlaying
+import Palette
 import Playback
 import QueueView
 import Settings
@@ -25,10 +26,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let paths: AppPaths
     private let measuring: Bool
     private let snapshotURL: URL?
+    private let snapshotOf: SnapshotTarget
     /// How long after the first rows the snapshot waits, for the scan and art to show.
     static let snapshotDelaySeconds = 4.0
     private(set) var settings: ConfigStore<AppSettings>?
     let banner = ConfigBanner()
+    private(set) var state: StateStore<AppState>?
+    var palette: PaletteController?
+    /// What each ⌘K entry item opens, by its key.
+    var paletteEntries: [String: (BrowserModel.Pane, Int64)] = [:]
+    /// Looks a track up by path, for counting plays toward frecency.
+    private(set) var trackLookup: ((String) throws -> TrackRow?)?
     private(set) var saver: LayoutSaver?
     private(set) var window: MainWindow?
     private(set) var browser: LibraryBrowser?
@@ -53,7 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
     /// `snapshotURL` gets a PNG of the window a few seconds after that.
-    init(paths: AppPaths, measuring: Bool, snapshotURL: URL?) {
+    init(paths: AppPaths, measuring: Bool, snapshotURL: URL?, snapshotOf: SnapshotTarget) {
+        self.snapshotOf = snapshotOf
         self.paths = paths
         self.measuring = measuring
         self.snapshotURL = snapshotURL
@@ -76,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.menu = menu
             try openWindow(settings)
             registerCommands(dispatcher)
+            if let state, let saver { makePalette(dispatcher, state: state, saver: saver) }
             registerSettingCommands(dispatcher)
             settings.changed = { [weak self] keys in self?.settingsChanged(keys) }
             settings.problemsChanged = { [weak self] in self?.showConfigProblems() }
@@ -94,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openWindow(_ settings: ConfigStore<AppSettings>) throws {
         let state = try StateStore(AppState(), fileURL: paths.stateFile)
+        self.state = state
         let saver = LayoutSaver(state)
         self.saver = saver
         let layout = WindowSettings(settings, state: state)
@@ -105,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             layout: layout.trackTable, browserHeight: layout.browserHeight,
             folders: layout.folders)
         let lookup = { (path: String) in try index.track(path: path) }
+        trackLookup = lookup
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
         let queue = QueuePanel(model: QueueModel(lookup: lookup))
         let window = MainWindow(
@@ -157,20 +169,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let settings else { return }
         startPlayback(settings)
         startWatching(settings[\.watchedFolders], settings)
-        if let snapshotURL, let window = window?.window {
+        if let snapshotURL {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.snapshotDelaySeconds) {
-                do {
-                    try writeSnapshot(of: window, to: snapshotURL)
-                } catch {
-                    logger.error("\(error)")
-                    FileHandle.standardError.write(Data("error: \(error)\n".utf8))
-                }
+                [weak self] in self?.snapshot(to: snapshotURL)
             }
         }
         if measuring, let browser {
             // After this turn of the run loop, so the first frame is counted as drawn.
             DispatchQueue.main.async { [artwork] in
                 WindowMeasurement.run(browser: browser, artwork: artwork)
+            }
+        }
+    }
+
+    /// Draws `snapshotOf` into a PNG; the palette gets a second to list its items first.
+    private func snapshot(to url: URL) {
+        let target: () -> NSWindow? =
+            switch snapshotOf {
+            case .main: { [weak self] in self?.window?.window }
+            case .palette: { [weak self] in self?.palette?.window }
+            }
+        let wait = snapshotOf == .main ? 0 : 1.0
+        if snapshotOf == .palette { dispatcher?.run(.showPalette) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+            do {
+                guard let window = target() else { throw SnapshotError(path: url.path) }
+                try writeSnapshot(of: window, to: url)
+            } catch {
+                logger.error("\(error)")
+                FileHandle.standardError.write(Data("error: \(error)\n".utf8))
             }
         }
     }
@@ -211,6 +238,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 for await update in await engine.updates() {
                     self?.playback = update.state
                     self?.playbackChanged(update.state)
+                    if case .trackStarted(let index) = update.event {
+                        self?.countPlay(update.state.queue[index].path)
+                    }
                 }
             }
         } catch {

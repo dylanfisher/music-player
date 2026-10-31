@@ -17,13 +17,14 @@ private let valueFlags = [
     ("--scan", "a folder"), ("--db", "a database file"),
     ("--readers", "a number of files to read at once"), ("--scan-io-hints", ioHintsChoices),
     ("--settings", "a config file"), ("--home", "a folder"), ("--snapshot", "a PNG file to write"),
+    ("--snapshot-of", SnapshotTarget.allCases.map(\.rawValue).joined(separator: ", ")),
 ]
 /// The command-line modes, which run and exit without the window.
 private let modeFlags = [
     "--list-devices", "--scan", "--play",
 ]
 /// Flags only the window uses.
-private let windowFlags = ["--measure-window", "--snapshot"]
+private let windowFlags = ["--measure-window", "--snapshot", "--snapshot-of"]
 private let scanOnlyFlags = ["--db", "--readers", "--scan-io-hints"]
 
 /// Why `arguments` (without the executable) can't run, or nil when they can. A mistake here would
