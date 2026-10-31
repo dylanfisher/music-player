@@ -185,20 +185,20 @@ untyped covers, and wide AAC layouts. Deferred: DSF to phase 12.
 
 ### 3. Library index and watched folders
 
-- [ ] **SQLite** primitive: a thin wrapper over system `libsqlite3` with prepared statements, a
+- [x] **SQLite** primitive: a thin wrapper over system `libsqlite3` with prepared statements, a
       transaction helper, and errors that throw with the SQL and message.
-- [ ] **Schema:** tracks, albums, artists, and an FTS5 table for search. Plays, ratings and
+- [x] **Schema:** tracks, albums, artists, and an FTS5 table for search. Plays, ratings and
       history go in their own tables, so a rescan never touches them. Because of the pre-release
       boundary there are no migrations: a schema mismatch means rebuilding the index, but keep the
       stats tables.
-- [ ] **Scanner:** a parallel file walk with incremental rescans keyed on path, size and mtime.
+- [x] **Scanner:** a parallel file walk with incremental rescans keyed on path, size and mtime.
       It's NAS-friendly: one stat per file, bounded concurrency, and it can be paused and
       cancelled. Progress is reported, never blocking the UI.
-- [ ] **Watched folders,** configurable in settings: a list of roots, each with an include/exclude
+- [x] **Watched folders,** configurable in settings: a list of roots, each with an include/exclude
       pattern list. FSEvents doesn't report changes on SMB volumes, so local roots use FSEvents and
       network roots use a polling rescan at a configurable interval (default 15 minutes, never
       while playback is starting). Optionally pause polling during playback.
-- [ ] Benchmarks: full scan, no-change rescan, and the query latencies the UI will need.
+- [x] Benchmarks: full scan, no-change rescan, and the query latencies the UI will need.
 - [ ] **Hardware checkpoint (owner):** scan the real NAS library on the DAC Mac. Report the time,
       the database size, and any files that failed to parse.
 
@@ -364,3 +364,13 @@ This replaces the read-only boundary in AGENTS.md. Do it first in the phase, wit
       decide how stored data will be migrated from then on.
 - [ ] **Hardware checkpoint (owner):** a clean install on the 2015 MacBook Pro and the DAC Mac
       from a notarized build.
+
+Result: shipped as planned, apart from the owner's checkpoint, which is pending. Bench on Apple Silicon: a full
+scan of 43k fixture files takes 2.96 s (budget 60 s), a no-change rescan 0.90 s (5 s), search
+keystroke p95 12.6 ms (30 ms), sort p95 43.7 ms (100 ms), pane query p95 0.56 ms (20 ms). The
+database is 30 MB (60 MB) and a scan adds 17 MB at its peak (50 MB). The memory row now measures
+what a scan adds; the whole-app budget is measured in phase 5. The review fixed an ejected root
+emptying the index, a trailing "/" making duplicate tracks, case-only renames, excluded subtrees,
+stale ID caches with two scanners, and roots spelled precomposed (ADR 0009). The App now hands
+Library its watched folders. Known limit: one subfolder that lists as empty without an error has
+its files dropped from the index until it lists again; stats survive.
