@@ -16,11 +16,8 @@ public actor LibraryReader {
         try index.trackIDs(filter, sortedBy: column, ascending: ascending)
     }
 
-    /// The three panes for `filter`, each narrowed by the panes to its left.
-    public func panes(_ filter: TrackFilter) throws -> BrowserPanes {
-        BrowserPanes(
-            genres: try index.genres(filter), artists: try index.artists(filter),
-            albums: try index.albums(filter))
+    public func genres(_ filter: TrackFilter) throws -> [BrowserEntry] {
+        try index.genres(filter)
     }
 
     public func artists(_ filter: TrackFilter) throws -> [BrowserEntry] {
@@ -31,24 +28,15 @@ public actor LibraryReader {
         try index.albums(filter)
     }
 
-    public func paths(ids: [Int64]) throws -> [String] {
+    public func paths(ids: [Int64]) throws -> [Int64: String] {
         try index.paths(ids: ids)
     }
 
     public func fileIssues() throws -> [FileIssue] {
         try index.fileIssues()
     }
-}
 
-/// The genre, artist and album panes' entries.
-public struct BrowserPanes: Equatable, Sendable {
-    public var genres: [BrowserEntry]
-    public var artists: [BrowserEntry]
-    public var albums: [BrowserEntry]
-
-    public init(genres: [BrowserEntry], artists: [BrowserEntry], albums: [BrowserEntry]) {
-        self.genres = genres
-        self.artists = artists
-        self.albums = albums
+    public func trackCount() throws -> Int {
+        try index.trackCount()
     }
 }

@@ -25,7 +25,7 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
         try index.albums(TrackFilter(genre: genre.id, artist: artist.id)).first)
 
     func paths(_ filter: TrackFilter) throws -> Set<String> {
-        Set(try index.paths(ids: try index.trackIDs(filter, sortedBy: .path)))
+        Set(try index.paths(ids: try index.trackIDs(filter, sortedBy: .path)).values)
     }
     #expect(
         try paths(TrackFilter(genre: genre.id))
@@ -66,7 +66,7 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
     let file = try #require(library.manifest.files.first { $0.malformation == nil })
     let folder = (library.path(file) as NSString).deletingLastPathComponent
     let filter = TrackFilter(folder: folder)
-    let paths = try index.paths(ids: try index.trackIDs(filter, sortedBy: .path))
+    let paths = Array(try index.paths(ids: try index.trackIDs(filter, sortedBy: .path)).values)
     #expect(!paths.isEmpty)
     #expect(paths.allSatisfy { $0.hasPrefix(folder + "/") })
     #expect(paths.count < library.readableCount)
@@ -100,7 +100,7 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
         row.addedSeconds >= before.rounded(.down)
             && row.addedSeconds <= Date().timeIntervalSince1970)
     #expect(try index.track(path: library.root + "/nothing.flac") == nil)
-    #expect(try index.paths(ids: [row.id, 999_999]) == [library.path(file)])
+    #expect(try index.paths(ids: [row.id, 999_999]) == [row.id: library.path(file)])
 }
 
 @Test func dateAddedSurvivesARescanOfAChangedFile() throws {

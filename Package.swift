@@ -75,6 +75,12 @@ let package = Package(
             path: "Sources/Core/Settings",
             swiftSettings: strictSwift
         ),
+        .target(
+            name: "LibraryBrowser",
+            dependencies: ["DisplayText", "Library", "Log", "Settings"],
+            path: "Sources/Features/LibraryBrowser",
+            swiftSettings: strictSwift
+        ),
         .executableTarget(
             name: "MusicPlayer",
             dependencies: [
@@ -137,6 +143,11 @@ let package = Package(
         .testTarget(
             name: "LibraryTests",
             dependencies: ["Fixtures", "Library", "Metadata", "Settings", "SQLite"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "LibraryBrowserTests",
+            dependencies: ["Fixtures", "Library", "LibraryBrowser", "Settings"],
             swiftSettings: strictSwift
         ),
         .testTarget(

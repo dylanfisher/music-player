@@ -1,0 +1,144 @@
+import AppKit
+import Library
+
+/// The genre, artist and album panes, side by side, each with an All row first.
+@MainActor
+final class PanesController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
+    private let model: BrowserModel
+    private var tables: [BrowserModel.Pane: NSTableView] = [:]
+    private let select: (BrowserModel.Pane, Int64?) -> Void
+    /// Set while selections are set from the model, so they don't count as clicks.
+    private var applying = false
+
+    init(model: BrowserModel, select: @escaping (BrowserModel.Pane, Int64?) -> Void) {
+        self.model = model
+        self.select = select
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
+
+    override func loadView() {
+        let split = NSSplitView()
+        split.isVertical = true
+        split.dividerStyle = .thin
+        for pane in BrowserModel.Pane.allCases {
+            let table = NSTableView()
+            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("entry"))
+            column.title = pane.title
+            column.resizingMask = .autoresizingMask
+            table.addTableColumn(column)
+            table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
+            if #available(macOS 11.0, *) { table.style = .fullWidth }
+            table.rowHeight = 18
+            table.dataSource = self
+            table.delegate = self
+            tables[pane] = table
+            let scroll = NSScrollView()
+            scroll.documentView = table
+            scroll.hasVerticalScroller = true
+            scroll.autohidesScrollers = true
+            split.addArrangedSubview(scroll)
+        }
+        view = split
+    }
+
+    func reload() {
+        applying = true
+        defer { applying = false }
+        for pane in BrowserModel.Pane.allCases {
+            guard let table = tables[pane] else { continue }
+            table.reloadData()
+            let entries = self.entries(pane)
+            let row =
+                selected(pane).flatMap { id in entries.firstIndex { $0.id == id } }
+                .map { $0 + 1 } ?? 0
+            table.selectRowIndexes([row], byExtendingSelection: false)
+            table.scrollRowToVisible(row)
+        }
+    }
+
+    private func pane(of table: NSTableView) -> BrowserModel.Pane? {
+        tables.first { $0.value === table }?.key
+    }
+
+    private func entries(_ pane: BrowserModel.Pane) -> [BrowserEntry] {
+        switch pane {
+        case .genre: model.genres
+        case .artist: model.artists
+        case .album: model.albums
+        }
+    }
+
+    private func selected(_ pane: BrowserModel.Pane) -> Int64? {
+        switch pane {
+        case .genre: model.filter.genre
+        case .artist: model.filter.artist
+        case .album: model.filter.album
+        }
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        pane(of: tableView).map { entries($0).count + 1 } ?? 0
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int)
+        -> NSView?
+    {
+        guard let pane = pane(of: tableView) else { return nil }
+        let identifier = NSUserInterfaceItemIdentifier("entry")
+        let cell =
+            tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
+            ?? {
+                let cell = NSTableCellView()
+                cell.identifier = identifier
+                let text = NSTextField(labelWithString: "")
+                text.lineBreakMode = .byTruncatingTail
+                text.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+                text.translatesAutoresizingMaskIntoConstraints = false
+                cell.addSubview(text)
+                cell.textField = text
+                NSLayoutConstraint.activate([
+                    text.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
+                    text.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
+                    text.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                ])
+                return cell
+            }()
+        let entries = self.entries(pane)
+        cell.textField?.stringValue =
+            row == 0 ? pane.allTitle(entries.count) : entries[row - 1].name
+        cell.textField?.font =
+            row == 0
+            ? .boldSystemFont(ofSize: NSFont.smallSystemFontSize)
+            : .systemFont(ofSize: NSFont.smallSystemFontSize)
+        return cell
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard !applying, let table = notification.object as? NSTableView,
+            let pane = pane(of: table)
+        else { return }
+        let row = table.selectedRow
+        let entries = self.entries(pane)
+        // No selection, or the All row, means All.
+        select(pane, row > 0 && row <= entries.count ? entries[row - 1].id : nil)
+    }
+}
+
+extension BrowserModel.Pane {
+    var title: String {
+        switch self {
+        case .genre: "Genre"
+        case .artist: "Artist"
+        case .album: "Album"
+        }
+    }
+
+    /// "All (12 Genres)".
+    func allTitle(_ count: Int) -> String {
+        let noun = count == 1 ? title : title + "s"
+        return "All (\(count) \(noun))"
+    }
+}
