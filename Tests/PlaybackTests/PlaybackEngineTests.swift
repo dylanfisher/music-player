@@ -327,3 +327,64 @@ private final class ClosingOutput: Output, @unchecked Sendable {
     func position() -> OutputPosition? { nil }
     func close() {}
 }
+
+@Test func playNextQueuesAfterTheCurrentTrackAndHandsItOver() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+    let extra = URL(fileURLWithPath: "/music/extra.flac")
+    await engine.playNext([extra])
+    #expect(output.takeCalls() == [.setNext(3, extra)])
+    let state = await engine.state
+    #expect(state.order.map { state.queue[$0] } == [urls[0], extra, urls[1], urls[2]])
+    #expect(state.currentIndex == 0)
+}
+
+@Test func movingTracksKeepsTheCurrentOnePlaying() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+    // The current track moves to the end; nothing follows it, so the output's next is cleared.
+    await engine.moveQueueItems([0], to: 3)
+    #expect(output.takeCalls() == [.setNext(nil, nil)])
+    var state = await engine.state
+    #expect(state.order.map { state.queue[$0] } == [urls[1], urls[2], urls[0]])
+    #expect(state.currentIndex == 2)
+    #expect(state.status == .playing)
+    // Moving another track in after it makes that the next one.
+    await engine.moveQueueItems([0], to: 3)
+    #expect(output.takeCalls() == [.setNext(3, urls[1])])
+    state = await engine.state
+    #expect(state.order.map { state.queue[$0] } == [urls[2], urls[0], urls[1]])
+}
+
+@Test func removingTheNextTrackReplacesItAndRemovingTheCurrentOneMovesOn() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+    await engine.removeQueueItems([1])
+    #expect(output.takeCalls() == [.setNext(3, urls[2])])
+    await engine.removeQueueItems([0])
+    #expect(output.takeCalls() == [.load(4, urls[2], startSeconds: 0, playing: true)])
+    var state = await engine.state
+    #expect(state.queue == [urls[2]])
+    #expect(state.currentIndex == 0)
+    await engine.removeQueueItems([0])
+    state = await engine.state
+    #expect(state.queue.isEmpty)
+    #expect(state.status == .stopped)
+    #expect(state.currentIndex == nil)
+}
+
+@Test func playAtJumpsToAPositionInPlayOrder() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.setQueue(urls)
+    await engine.play(at: 2)
+    #expect(output.takeCalls().first == .load(1, urls[2], startSeconds: 0, playing: true))
+    #expect(await engine.state.status == .playing)
+    #expect(await engine.state.currentIndex == 2)
+}

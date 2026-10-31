@@ -16,6 +16,8 @@ public struct PlaybackState: Sendable, Equatable {
 
     public var status = Status.stopped
     public var queue: [URL] = []
+    /// Indices into `queue` in the order they play: the queue as listed, or shuffled.
+    public var order: [Int] = []
     /// Into `queue`: the track playing or paused, or the one `play()` starts.
     public var currentIndex: Int?
     public var repeatMode = RepeatMode.off

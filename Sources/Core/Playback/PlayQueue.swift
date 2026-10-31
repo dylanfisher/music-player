@@ -62,4 +62,81 @@ struct PlayQueue {
         if position > 0 { return position - 1 }
         return repeatMode == .all && !order.isEmpty ? order.count - 1 : nil
     }
+
+    // MARK: Edits, in play order
+
+    /// Puts `urls` at `position` in play order, before what is there now. Off shuffle they join
+    /// the listed queue at the same place; on shuffle they're listed last. Returns where each old
+    /// position went.
+    mutating func insert(_ urls: [URL], at position: Int) -> [Int?] {
+        precondition((0...order.count).contains(position), "position \(position) is outside")
+        return rebuild(
+            (0..<position).map(Item.kept) + urls.map(Item.added)
+                + (position..<order.count).map(Item.kept))
+    }
+
+    /// Moves the tracks at `positions` to just before `destination`, a position counted before
+    /// the move, keeping their order. Returns where each old position went.
+    mutating func move(_ positions: IndexSet, to destination: Int) -> [Int?] {
+        precondition((0...order.count).contains(destination), "destination is outside")
+        let moving = positions.filter { order.indices.contains($0) }
+        let staying = order.indices.filter { !positions.contains($0) }
+        let split = destination - moving.filter { $0 < destination }.count
+        return rebuild(
+            (staying[..<split] + moving + staying[split...]).map(Item.kept))
+    }
+
+    /// Removes the tracks at `positions`. Returns where each old position went, nil for those
+    /// removed.
+    mutating func remove(_ positions: IndexSet) -> [Int?] {
+        rebuild(order.indices.filter { !positions.contains($0) }.map(Item.kept))
+    }
+
+    private enum Item {
+        /// The track at this position before the edit.
+        case kept(Int)
+        case added(URL)
+    }
+
+    /// Makes `items` the new play order. Off shuffle the listed queue is the play order, so it
+    /// stays that way and turning shuffle on later starts from the edited order.
+    private mutating func rebuild(_ items: [Item]) -> [Int?] {
+        var moved = [Int?](repeating: nil, count: order.count)
+        for (position, item) in items.enumerated() {
+            if case .kept(let old) = item { moved[old] = position }
+        }
+        if shuffle {
+            let kept = Set(
+                items.compactMap { item -> Int? in
+                    if case .kept(let old) = item { return order[old] }
+                    return nil
+                })
+            var listed: [URL] = []
+            var renumbered: [Int: Int] = [:]
+            for entry in entries.indices where kept.contains(entry) {
+                renumbered[entry] = listed.count
+                listed.append(entries[entry])
+            }
+            var played: [Int] = []
+            for item in items {
+                switch item {
+                case .kept(let old): played.append(renumbered[order[old]]!)
+                case .added(let url):
+                    played.append(listed.count)
+                    listed.append(url)
+                }
+            }
+            entries = listed
+            order = played
+        } else {
+            entries = items.map { item in
+                switch item {
+                case .kept(let old): entries[order[old]]
+                case .added(let url): url
+                }
+            }
+            order = Array(entries.indices)
+        }
+        return moved
+    }
 }

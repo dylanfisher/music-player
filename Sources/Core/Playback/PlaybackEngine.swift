@@ -71,6 +71,7 @@ public actor PlaybackEngine {
         failuresInARow = 0
         cursor = queue.replace(with: urls, first: first, shuffled: shuffled) ?? 0
         state.queue = urls
+        state.order = queue.order
         state.currentIndex = urls.isEmpty ? nil : queue.entry(at: cursor)
         state.status = .stopped
         publish(.queueChanged)
@@ -174,8 +175,75 @@ public actor PlaybackEngine {
             if let id = currentItem?.id { currentItem = (id, position) } else { cursor = position }
         }
         state.shuffle = on
+        state.order = queue.order
         sendNext()
         publish(.shuffleChanged)
+    }
+
+    // MARK: Queue edits. Positions count through `state.order`.
+
+    /// Plays the track at `position` in play order now.
+    public func play(at position: Int) {
+        guard queue.order.indices.contains(position) else { return }
+        move(to: position)
+        play()
+    }
+
+    /// Queues `urls` to play straight after the current track, or after the one `play()` would
+    /// start with.
+    public func playNext(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        let after = queue.order.isEmpty ? -1 : (currentItem?.position ?? cursor)
+        applyEdit(queue.insert(urls, at: after + 1))
+    }
+
+    /// Moves the tracks at `positions` to just before `destination`, counted before the move.
+    public func moveQueueItems(_ positions: IndexSet, to destination: Int) {
+        guard (0...queue.order.count).contains(destination) else { return }
+        applyEdit(queue.move(positions, to: destination))
+    }
+
+    /// Removes the tracks at `positions`. Removing the current track moves on to the one after it,
+    /// as `next()` would, or stops when none is left.
+    public func removeQueueItems(_ positions: IndexSet) {
+        applyEdit(queue.remove(positions))
+    }
+
+    /// Follows the current, next and starting tracks to their new positions after an edit.
+    private func applyEdit(_ moved: [Int?]) {
+        state.queue = queue.entries
+        state.order = queue.order
+        if let nextItem {
+            if let position = moved[nextItem.position] {
+                self.nextItem = (nextItem.id, position, queue.entry(at: position))
+            } else {
+                // Gone from the queue, but the output still has it: `sendNext` replaces it.
+                self.nextItem = (nextItem.id, -1, -1)
+            }
+        }
+        if let current = currentItem {
+            if let position = moved[current.position] {
+                currentItem = (current.id, position)
+                cursor = position
+                state.currentIndex = queue.entry(at: position)
+                sendNext()
+            } else if let following = moved[(current.position + 1)...].lazy.compactMap({ $0 })
+                .first
+            {
+                load(following, startSeconds: 0, playing: state.status == .playing)
+            } else {
+                cursor = 0
+                unload()
+                state.status = .stopped
+                state.currentIndex = queue.order.isEmpty ? nil : queue.entry(at: 0)
+            }
+        } else {
+            cursor =
+                moved.indices.contains(cursor)
+                ? moved[cursor] ?? moved[cursor...].lazy.compactMap({ $0 }).first ?? 0 : 0
+            state.currentIndex = queue.order.isEmpty ? nil : queue.entry(at: cursor)
+        }
+        publish(.queueChanged)
     }
 
     /// Linear amplitude from 0 to 1, for outputs that have a volume.

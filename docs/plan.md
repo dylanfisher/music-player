@@ -364,6 +364,14 @@ during playback, which waits for the phase 5 window.
       Intel) with the real library. Report launch time and how scrolling and searching feel, and
       run `./scripts/bench` there.
 
+**Searcher parity, waiting on the owner.** The window should look and behave like Searcher's
+([ADR 0012](decisions/0012-searcher-conventions.md), proposed). Two of its open questions touch
+this phase: Q1 (window layout is app state, not config) and Q9 (transport and now-playing in a
+unified toolbar, search field in the toolbar, a status bar). Build the plan below as written.
+Don't build those two answers until the owner decides. What 0012 already settles applies now:
+native AppKit chrome, system colours and materials, and hover, pressed, focused and disabled
+looks on every control.
+
 Implementation plan:
 
 1. **SQLite:** bind a parameter list as well as variadic values, for queries whose filters vary.
@@ -406,15 +414,36 @@ Implementation plan:
 
 ### 6. Commands, shortcuts, command palette, settings window
 
-- [ ] A **command registry**: every user action, including changing each setting, is one command
-      with an ID, a title, and an optional default shortcut. Menus, shortcuts, the palette and the
-      remote API all read from it. No action exists outside it.
-- [ ] **Configurable shortcuts** for every command, stored in settings JSON. Conflicts are
-      reported by name, not silently overridden.
-- [ ] **⌘K palette:** fuzzy search over commands, settings, tracks, albums, artists and playlists,
-      driven only by the keyboard. Results in < 30 ms per keystroke at 43k tracks.
+Ported from Searcher ([ADR 0012](decisions/0012-searcher-conventions.md)). **Don't start this
+phase until the owner has answered 0012's open questions and it is accepted.** The questions each
+bullet waits on are in brackets.
+
+- [ ] A **command registry**: every user action is one command with an ID, a title, and up to
+      two default chords, primary and alternate. A chord has one spelling (`cmd+shift+k`). Two
+      defaults on one chord throw at registration. Menus, key handling, the palette, the
+      Shortcuts pane, the config file and the remote API all read from it. No action exists
+      outside it. [Q4: which settings are commands]
+- [ ] **Menus from command IDs:** every command has a menu item, its primary as the key
+      equivalent and a hidden item for the alternate. Reserved chords (Quit, Hide, Minimize,
+      Settings…) can't be rebound; the Edit items' chords stay fixed. Unbound ⌘/⌃/⌥ chords beep.
+      Row movement and type-to-select as Searcher's 0029 and 0034.
+- [ ] **Configurable shortcuts** for every command, with a recorder per slot in a Shortcuts
+      pane. A clash names the other command, with Replace and Cancel. [Q3: conflicts]
+- [ ] **Default chords** as in 0012's tables. [Q7, Q8]
+- [ ] **Config file** in Searcher's model: JSON with comments, every preference listed with a
+      comment when the file is created, patches that keep the user's text, live reload, and an
+      error banner that applies nothing from a broken file. Open Config File and Copy Default
+      Config commands. [Q2a–e: location, export and import, key spelling, a bad file at launch,
+      live reload]
+- [ ] **App state** (window layout, the palette's place, frecency) moves out of the settings.
+      [Q1]
+- [ ] **⌘K palette** and **⌘P Go to Item:** one panel, Searcher's keys, fuzzy matching (0079)
+      and ranking with frecency (0085), driven only by the keyboard. Results in < 30 ms per
+      keystroke at 43k tracks. [Q6: what each one searches]
 - [ ] **Settings window** generated from the settings schema, so a new setting appears there
-      without any UI code.
+      without any UI code, plus the config file's location buttons. [Q5: AppKit or SwiftUI,
+      generated or written by hand]
+- [ ] **Appearance** setting: auto, light or dark.
 
 ### 7. Playlists, smart playlists, stats
 
