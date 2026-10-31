@@ -743,6 +743,40 @@ How the phase uses it:
 7. `./scripts/check` stays hermetic: the corpus run isn't part of it. The phase gate runs
    `scripts/tag-corpus --round-trip`, and the Result line reports files, edits and failures.
 
+Implementation plan:
+
+1. **Boundary.** ADR 0020 names the writer module, the reference folder and the clone folder;
+   AGENTS.md's read-only line becomes the new rule.
+2. **Metadata** shares its walkers with the writer through `package` access (`ByteReader`,
+   `Bytes`, `forEachAtom`, `forEachChunk`, the field-key tables), so the writer removes exactly the
+   keys the reader maps to a field.
+3. **TagWriter** (Core, new): `TagLayout` (every block, its range and role, padding, and the audio
+   payload range, for MP4, ID3v2 in MP3/AIFF/WAV and FLAC) comes first, then `TagCorpus` (Tools,
+   `scripts/tag-corpus [folder]`) surveys the corpus with it, and the surprises go into ADR 0020.
+   After that: `TagEdit` (fields to set or clear, art to replace or remove), the format writers
+   (ID3v2.3/2.4, MP4 `ilst` with `free` and `stco`/`co64`, FLAC/Vorbis, the AIFF and WAV chunk),
+   each returning the new file as segments of new bytes and ranges of the old file, and
+   `TagFileWriter`, which writes the temp file beside the original (an APFS clone patched in place
+   when nothing moves), checks the payload hash, the read-back tags and art and the chunk offsets,
+   copies mode, flags, xattrs and creation date, checks the original didn't change, and renames.
+   `TagUndoJournal` keeps the last 50 edits' old bytes in `<data directory>/tag-undo`; undo goes
+   through the same checked write and must match the original's hash.
+4. **TagCorpus `--round-trip`** runs every edit of step 4 above on clones, with the five checks,
+   attribute checks and the failure injections; `scripts/tag-corpus` makes the clones and the
+   full-disk image (HFS+, attached under the clone folder) and detaches it on exit. Every write
+   is refused outside the clone folder and the temp directory.
+5. **Library:** `LibraryWatcher.rescan(directories:)` queues edited folders, network ones too.
+6. **TagEditor** (Features, new): `TagEditorModel` (one or many tracks, mixed values, which
+   fields changed, art replace and remove, number checks) and `TagEditorSheet` (AppKit).
+   Commands Edit Tags… (⌘I), Undo Tag Edit, Replace Artwork… and Remove Artwork. The app reads
+   the selection's files off the main thread, writes after Save (and a confirmation for a
+   batch), then rescans. `--snapshot-of tags` draws the editor over the first rows.
+7. **Tests:** MetadataTests (shared walkers unchanged), TagWriterTests (every format's layout,
+   every edit kind on generated fixtures, untouched blocks byte-identical, padding then rewrite,
+   `stco` shift, attributes kept, each failure leaves the original untouched, journal and undo,
+   strict journal decoding), TagCorpusTests (the write guard), TagEditorTests (mixed values, edit
+   built from changes), LibraryTests (rescan of edited folders), MusicPlayerTests (flags).
+
 ### 12. DSD over DoP
 
 - [ ] DSF and DFF parsers, and DSD in the library (rate shown as DSD64, DSD128 or DSD256).
