@@ -2,7 +2,7 @@
 /// Every kind but `symbolicLink` and `networkFolderMarkedLocal` stops the scan removing
 /// anything at or under `path`, so a missing volume never reads as deleted files.
 public struct ScanIssue: Equatable, Sendable, CustomStringConvertible {
-    public enum Kind: String, CaseIterable, Sendable {
+    public enum Kind: String, Sendable {
         /// The folder doesn't exist or isn't a directory, as when a NAS isn't mounted.
         case rootUnavailable
         /// The folder lists nothing though the index holds files from it: most likely an empty

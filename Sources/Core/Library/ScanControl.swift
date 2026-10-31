@@ -29,8 +29,6 @@ public final class ScanControl: @unchecked Sendable {
         }
     }
 
-    public var isCancelled: Bool { condition.withLock { cancelled } }
-
     /// Blocks while paused. False once cancelled, when the caller should stop.
     func proceed() -> Bool {
         condition.withLock {
