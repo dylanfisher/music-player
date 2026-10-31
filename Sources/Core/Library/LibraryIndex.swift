@@ -168,14 +168,16 @@ public final class LibraryIndex {
         try statement(
             """
             INSERT INTO files (path, size_bytes, modified_seconds, failure_kind, failure_offset,
-                failure_detail)
-            VALUES (?, ?, ?, ?, ?, ?)
+                failure_detail, added_seconds)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (path) DO UPDATE SET size_bytes = excluded.size_bytes,
                 modified_seconds = excluded.modified_seconds,
                 failure_kind = excluded.failure_kind, failure_offset = excluded.failure_offset,
                 failure_detail = excluded.failure_detail
             """
-        ).run(file.path, values[0], values[1], values[2], values[3], values[4])
+        ).run(
+            file.path, values[0], values[1], values[2], values[3], values[4],
+            Date().timeIntervalSince1970)
         return try statement("SELECT id FROM files WHERE path = ?").map(file.path) {
             try $0.int64(0)
         }[0]
@@ -190,8 +192,7 @@ public final class LibraryIndex {
     private func insertTrack(_ id: Int64, path: String, _ metadata: TrackMetadata) throws {
         let tags = metadata.tags
         let audio = metadata.audio
-        let displayTitle =
-            tags.title ?? ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+        let displayTitle = tags.title ?? displayName(path)
         let artist = try artistID(tags.artist)
         let albumArtist = try artistID(tags.albumArtist)
         let album = try albumID(
@@ -375,6 +376,11 @@ func pathRange(under directory: String) -> Range<String> {
 
 func isPath(_ path: String, under directory: String) -> Bool {
     path.hasPrefix(stem(directory) + "/")
+}
+
+/// What a track without a title tag is called: its file name without the extension.
+func displayName(_ path: String) -> String {
+    ((path as NSString).lastPathComponent as NSString).deletingPathExtension
 }
 
 /// Case, diacritic and width folded, so "élan", "Elan" and "ELAN" sort together.

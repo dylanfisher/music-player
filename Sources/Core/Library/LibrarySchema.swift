@@ -35,7 +35,9 @@ private let indexSchema = """
         -- Set when the file couldn't be read; MetadataError.Kind's raw value.
         failure_kind TEXT,
         failure_offset INTEGER,
-        failure_detail TEXT
+        failure_detail TEXT,
+        -- When the file was first indexed, in seconds since 1970: the "date added" column.
+        added_seconds REAL NOT NULL
     );
     CREATE TABLE artists (
         id INTEGER PRIMARY KEY,

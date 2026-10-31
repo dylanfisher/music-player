@@ -56,3 +56,35 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
         .map { try $0.text(0) }
     #expect(doubled.isEmpty)
 }
+
+@Test func reportsEachScansOutcome() async throws {
+    let library = try TestLibrary()
+    let received = LockedEvents()
+    let watcher = LibraryWatcher(
+        databaseURL: library.databaseURL, networkReaders: nil, events: received.append)
+    watcher.start(
+        folders: [library.folder, WatchedFolder(path: library.root + "-gone", kind: .local)],
+        pausePollingDuringPlayback: true)
+    defer { watcher.stop() }
+
+    #expect(try await eventually(within: 20) { received.scanned.count == 2 })
+    let byFolder = Dictionary(uniqueKeysWithValues: received.scanned)
+    #expect(byFolder[library.root]?.read == library.manifest.files.count)
+    #expect(byFolder[library.root + "-gone"]?.issues.map(\.kind) == [.rootUnavailable])
+}
+
+private final class LockedEvents: @unchecked Sendable {
+    private let lock = NSLock()
+    private var events: [WatcherEvent] = []
+
+    func append(_ event: WatcherEvent) { lock.withLock { events.append(event) } }
+
+    var scanned: [(String, ScanSummary)] {
+        lock.withLock {
+            events.compactMap { event in
+                guard case .scanned(let folder, let summary) = event else { return nil }
+                return (folder, summary)
+            }
+        }
+    }
+}

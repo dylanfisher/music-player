@@ -14,4 +14,11 @@ public struct EmbeddedArt: Equatable, Sendable {
     public var mimeType: String
     /// The bytes carry ID3 unsynchronisation, which `readArt` removes.
     public var unsynchronised: Bool
+
+    public init(offset: Int, byteCount: Int, mimeType: String, unsynchronised: Bool) {
+        self.offset = offset
+        self.byteCount = byteCount
+        self.mimeType = mimeType
+        self.unsynchronised = unsynchronised
+    }
 }

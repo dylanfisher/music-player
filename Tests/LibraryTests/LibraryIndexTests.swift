@@ -1,4 +1,5 @@
 import Foundation
+import Settings
 import Testing
 
 @testable import Fixtures
@@ -51,7 +52,7 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     let index = try library.index()
     let all = Set(try index.trackIDs(sortedBy: .path))
     #expect(all.count == library.readableCount)
-    for column in TrackSortColumn.allCases {
+    for column in TrackColumn.allCases {
         for ascending in [true, false] {
             let ids = try index.trackIDs(sortedBy: column, ascending: ascending)
             #expect(ids.count == all.count && Set(ids) == all, "\(column)")
@@ -98,19 +99,20 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     let artist = try #require(tagged.first?.tags?.artist)
     let album = try #require(tagged.first?.tags?.album)
     let word = String(try #require(artist.split(separator: " ").first).prefix(3))
-    let byArtist = Set(try index.trackIDs(sortedBy: .title, matching: word.uppercased()))
+    let byArtist = Set(try index.trackIDs(TrackFilter(search: word.uppercased()), sortedBy: .title))
     let known = try index.knownFiles(under: library.root)
     for file in tagged where file.tags?.artist == artist {
         #expect(byArtist.contains(try #require(known[library.path(file)]).id), "\(file.path)")
     }
 
     let albumWord = String(try #require(album.split(separator: " ").last))
-    let both = try index.trackIDs(sortedBy: .title, matching: "\(word) \(albumWord)")
+    let both = try index.trackIDs(TrackFilter(search: "\(word) \(albumWord)"), sortedBy: .title)
     #expect(!both.isEmpty)
     #expect(Set(both).isSubset(of: byArtist))
-    #expect(try index.trackIDs(sortedBy: .title, matching: "zzqx").isEmpty)
+    #expect(try index.trackIDs(TrackFilter(search: "zzqx"), sortedBy: .title).isEmpty)
     #expect(
-        try index.trackIDs(sortedBy: .title, matching: "\" ' - ( *").count == library.readableCount)
+        try index.trackIDs(TrackFilter(search: "\" ' - ( *"), sortedBy: .title).count
+            == library.readableCount)
 }
 
 @Test func searchTextBecomesQuotedPrefixPhrases() {
@@ -131,17 +133,22 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     #expect(Set(try index.artists().map(\.name)) == Set(tagged.compactMap(\.artist)))
     for genre in try index.genres() {
         let expected = Set(tagged.filter { $0.genre == genre.name }.compactMap(\.artist))
-        #expect(Set(try index.artists(genre: genre.id).map(\.name)) == expected, "\(genre.name)")
+        #expect(
+            Set(try index.artists(TrackFilter(genre: genre.id)).map(\.name)) == expected,
+            "\(genre.name)")
     }
     for artist in try index.artists() {
         let expected = Set(tagged.filter { $0.artist == artist.name }.compactMap(\.album))
-        #expect(Set(try index.albums(artist: artist.id).map(\.name)) == expected, "\(artist.name)")
+        #expect(
+            Set(try index.albums(TrackFilter(artist: artist.id)).map(\.name)) == expected,
+            "\(artist.name)")
         if let genre = try index.genres().first {
             let narrowed = Set(
                 tagged.filter { $0.artist == artist.name && $0.genre == genre.name }
                     .compactMap(\.album))
             #expect(
-                Set(try index.albums(artist: artist.id, genre: genre.id).map(\.name)) == narrowed)
+                Set(try index.albums(TrackFilter(genre: genre.id, artist: artist.id)).map(\.name))
+                    == narrowed)
         }
     }
     #expect(Set(try index.albums().map(\.name)) == Set(tagged.compactMap(\.album)))

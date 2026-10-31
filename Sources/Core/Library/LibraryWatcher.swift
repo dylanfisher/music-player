@@ -14,8 +14,12 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// How long FSEvents collects changes before reporting them, so copying an album in causes
     /// one rescan of its folder rather than one per file.
     static let fsEventsLatencySeconds = 2.0
+    /// How often a running scan reports progress: often enough that rows appear while a long
+    /// first scan runs, rarely enough that the window's refreshes cost little.
+    public static let progressIntervalSeconds = 1.0
 
     private let scanner: LibraryScanner
+    private let events: @Sendable (WatcherEvent) -> Void
     /// Guards every field below it, and runs FSEvents and timer callbacks.
     private let queue = DispatchQueue(label: "\(bundleIdentifier).watcher")
     private let scanQueue = DispatchQueue(label: "\(bundleIdentifier).scan", qos: .utility)
@@ -28,8 +32,13 @@ public final class LibraryWatcher: @unchecked Sendable {
     private var resolvedFolders: [(resolved: String, configured: String)] = []
 
     /// `networkReaders` is the files a network scan reads at once, or nil to tune it per scan.
-    public init(databaseURL: URL, networkReaders: Int?) {
+    /// `events` is called on a background thread for every scan's progress and outcome.
+    public init(
+        databaseURL: URL, networkReaders: Int?,
+        events: @escaping @Sendable (WatcherEvent) -> Void = { _ in }
+    ) {
         scanner = LibraryScanner(databaseURL: databaseURL, networkReaders: networkReaders)
+        self.events = events
     }
 
     /// Removes files outside `folders` from the index, scans every folder, and starts watching
@@ -100,11 +109,26 @@ public final class LibraryWatcher: @unchecked Sendable {
         if let job = current.start(now: Date()) {
             let control = ScanControl()
             self.control = control
-            scanQueue.async { [self, scanner] in
-                let result = Result {
-                    try scanner.scan(job.folder, only: job.subtrees, control: control)
+            scanQueue.async { [self, scanner, events] in
+                let (stream, progress) = ScanProgress.makeStream()
+                let reported = Task.detached {
+                    var last = Date.distantPast
+                    for await update in stream
+                    where Date().timeIntervalSince(last) >= Self.progressIntervalSeconds {
+                        last = Date()
+                        events(.scanning(folder: job.folder.path, update))
+                    }
                 }
-                queue.async { [self] in finished(job, result) }
+                let result = Result {
+                    try scanner.scan(
+                        job.folder, only: job.subtrees, control: control, progress: progress)
+                }
+                progress.finish()
+                Task { [self] in
+                    // The last progress goes out before the outcome.
+                    await reported.value
+                    queue.async { [self] in finished(job, result) }
+                }
             }
         }
         schedulePoll(at: current.nextPoll(after: Date()))
@@ -117,8 +141,10 @@ public final class LibraryWatcher: @unchecked Sendable {
         switch result {
         case .success(let summary):
             for issue in summary.issues { logger.error("\(issue.description)") }
+            events(.scanned(folder: job.folder.path, summary))
         case .failure(let error):
             logger.error("scanning \(job.folder.path) failed: \(error)")
+            events(.scanFailed(folder: job.folder.path, reason: "\(error)"))
         }
         advance()
     }

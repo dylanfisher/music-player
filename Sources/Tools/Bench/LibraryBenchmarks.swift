@@ -172,7 +172,9 @@ let libraryBenchmarks = [
         let index = try scannedLibrary.get().index
         let typed = try typedQueries(index)
         let samples = try millisecondSamples(
-            typed.map { text in { _ = try index.trackIDs(sortedBy: .artist, matching: text) } })
+            typed.map { text in
+                { _ = try index.trackIDs(TrackFilter(search: text), sortedBy: .artist) }
+            })
         return Measured(
             value: p95(samples),
             notes: [
@@ -186,7 +188,7 @@ let libraryBenchmarks = [
         let index = try scannedLibrary.get().index
         var runs: [() throws -> Void] = []
         for _ in 0..<3 {
-            for column in TrackSortColumn.allCases {
+            for column in TrackColumn.allCases {
                 for ascending in [true, false] {
                     runs.append { _ = try index.trackIDs(sortedBy: column, ascending: ascending) }
                 }
@@ -205,9 +207,11 @@ let libraryBenchmarks = [
         var runs: [() throws -> Void] = [
             { _ = try index.genres() }, { _ = try index.artists() }, { _ = try index.albums() },
         ]
-        runs += genres.map { genre in { _ = try index.artists(genre: genre.id) } }
-        runs += artists.prefix(200).map { artist in { _ = try index.albums(artist: artist.id) } }
-        runs += genres.map { genre in { _ = try index.albums(genre: genre.id) } }
+        runs += genres.map { genre in { _ = try index.artists(TrackFilter(genre: genre.id)) } }
+        runs += artists.prefix(200).map { artist in
+            { _ = try index.albums(TrackFilter(artist: artist.id)) }
+        }
+        runs += genres.map { genre in { _ = try index.albums(TrackFilter(genre: genre.id)) } }
         let samples = try millisecondSamples(runs)
         return Measured(
             value: p95(samples),
