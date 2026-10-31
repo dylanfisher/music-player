@@ -183,7 +183,12 @@ private final class Player: @unchecked Sendable {
                     + " → \(state.outputFormat ?? "?")")
         case .formatChanged(let change):
             if let from = change.from, from != change.to {
-                let took = change.switchSeconds.map { " in \(Int(($0 * 1000).rounded())) ms" } ?? ""
+                func ms(_ seconds: Double) -> String { String(Int((seconds * 1000).rounded())) }
+                let steps = change.steps.map { steps in
+                    " (" + steps.map { "\($0.name) \(ms($0.seconds))" }.joined(separator: ", ")
+                        + ")"
+                }
+                let took = change.switchSeconds.map { " in \(ms($0)) ms\(steps ?? "")" } ?? ""
                 log("rate change: \(from) → \(change.to)\(took)")
             }
         case .trackFailed(let url, let reason): log("✗ couldn't play \(url.path): \(reason)")

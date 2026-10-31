@@ -431,6 +431,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
         guard now - since >= stream.format.latencySeconds else { return }
         drainedAt = nil
+        // The old track's last sample has now played: the switch is timed from here.
+        let playedOut = now
         let last = segments.first?.item
         if let last { emit(.trackEnded(last.id)) }
         guard let track = pendingSwitch else {
@@ -442,13 +444,15 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         pendingSwitch = nil
         segments = []
         let from = stream.format.summary
-        stopIO()
+        let clock = StepClock()
+        clock.time("stop") { stopIO() }
         self.stream = nil
         guard device != nil else { return }
         let next: RenderStream
         do {
             next = try configure(for: track)
-            try feed(track, into: next, atFrame: 0)
+            clock.add(next.format.steps)
+            try clock.time("open") { try feed(track, into: next, atFrame: 0) }
         } catch {
             emit(.trackFailed(track.item.id, error))
             unload()
@@ -456,12 +460,14 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             if let last { emit(.finished(last.id)) }
             return
         }
-        fill(next, upTo: next.prefillBytes)
-        startIfReady()
+        clock.time("prefill") { fill(next, upTo: next.prefillBytes) }
+        clock.time("start") { startIfReady() }
         emit(
             .formatChanged(
                 track.item.id,
-                FormatChange(from: from, to: next.format.summary, switchSeconds: uptime() - since)))
+                FormatChange(
+                    from: from, to: next.format.summary, switchSeconds: uptime() - playedOut,
+                    steps: clock.steps)))
         emit(.trackStarted(track.item.id, next.info(for: track)))
     }
 

@@ -1,4 +1,6 @@
 import CoreAudio
+import Foundation
+import Playback
 
 /// What a device was configured to.
 public struct DeviceFormat {
@@ -10,12 +12,34 @@ public struct DeviceFormat {
     /// From the IO proc taking a byte to the device playing it, which a drain waits out before
     /// stopping the device.
     public var latencySeconds: Double
+    /// How long each part of configuring took, such as waiting for the rate to settle.
+    public var steps: [SwitchStep]
 
-    public init(stream: AudioStreamBasicDescription, summary: String, latencySeconds: Double) {
+    public init(
+        stream: AudioStreamBasicDescription, summary: String, latencySeconds: Double,
+        steps: [SwitchStep] = []
+    ) {
         self.stream = stream
         self.summary = summary
         self.latencySeconds = latencySeconds
+        self.steps = steps
     }
+}
+
+/// Times the steps of a switch, in order.
+final class StepClock {
+    private(set) var steps: [SwitchStep] = []
+
+    func time<T>(_ name: String, _ body: () throws -> T) rethrows -> T {
+        let start = ProcessInfo.processInfo.systemUptime
+        defer {
+            steps.append(
+                SwitchStep(name: name, seconds: ProcessInfo.processInfo.systemUptime - start))
+        }
+        return try body()
+    }
+
+    func add(_ steps: [SwitchStep]) { self.steps += steps }
 }
 
 /// One open session on an output device, which `DeviceOutput` configures and pulls

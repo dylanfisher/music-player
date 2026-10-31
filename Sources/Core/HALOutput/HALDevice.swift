@@ -87,17 +87,22 @@ final class HALDevice: PCMDevice {
             throw HALDeviceError.noBitPerfectFormat(sampleRateHz: sampleRateHz, channels: channels)
         }
 
+        let clock = StepClock()
         // Rate first: on some devices setting the physical format alone leaves the clock where
         // it was.
-        try writeScalar(id, address(kAudioDevicePropertyNominalSampleRate), sampleRateHz)
-        try waitUntil("\(kilohertz(sampleRateHz)) kHz") {
-            try readScalar(id, address(kAudioDevicePropertyNominalSampleRate)) == sampleRateHz
+        try clock.time("rate") {
+            try writeScalar(id, address(kAudioDevicePropertyNominalSampleRate), sampleRateHz)
+            try waitUntil("\(kilohertz(sampleRateHz)) kHz") {
+                try readScalar(id, address(kAudioDevicePropertyNominalSampleRate)) == sampleRateHz
+            }
         }
-        try writeScalar(stream, address(kAudioStreamPropertyPhysicalFormat), format)
-        try waitUntil(PhysicalFormat(format).summary) {
-            let now: AudioStreamBasicDescription = try readScalar(
-                stream, address(kAudioStreamPropertyPhysicalFormat))
-            return PhysicalFormat(now) == PhysicalFormat(format)
+        try clock.time("format") {
+            try writeScalar(stream, address(kAudioStreamPropertyPhysicalFormat), format)
+            try waitUntil(PhysicalFormat(format).summary) {
+                let now: AudioStreamBasicDescription = try readScalar(
+                    stream, address(kAudioStreamPropertyPhysicalFormat))
+                return PhysicalFormat(now) == PhysicalFormat(format)
+            }
         }
         let current: AudioStreamBasicDescription = try readScalar(
             stream, address(kAudioStreamPropertyPhysicalFormat))
@@ -108,7 +113,7 @@ final class HALDevice: PCMDevice {
         return DeviceFormat(
             stream: try readScalar(stream, address(kAudioStreamPropertyVirtualFormat)),
             summary: "\(name): \(physical.summary)\(hogMode ? ", hog mode" : "")",
-            latencySeconds: try latencyFrames() / sampleRateHz)
+            latencySeconds: try latencyFrames() / sampleRateHz, steps: clock.steps)
     }
 
     /// The IO buffer plus everything the HAL and the device add after it.

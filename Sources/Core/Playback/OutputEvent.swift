@@ -43,10 +43,24 @@ public struct FormatChange: Sendable, Equatable {
     /// From the old track's last sample leaving the output to the new track's first one, or from
     /// the load for the first track. Nil for an output that can't measure it.
     public var switchSeconds: Double?
+    /// Where `switchSeconds` went, in order, for an output that can say.
+    public var steps: [SwitchStep]?
 
-    public init(from: String?, to: String, switchSeconds: Double?) {
+    public init(from: String?, to: String, switchSeconds: Double?, steps: [SwitchStep]? = nil) {
         self.from = from
         self.to = to
         self.switchSeconds = switchSeconds
+        self.steps = steps
+    }
+}
+
+/// One timed part of a format switch, such as setting the device's rate.
+public struct SwitchStep: Sendable, Equatable {
+    public var name: String
+    public var seconds: Double
+
+    public init(name: String, seconds: Double) {
+        self.name = name
+        self.seconds = seconds
     }
 }
