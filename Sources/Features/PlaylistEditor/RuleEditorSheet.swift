@@ -145,6 +145,8 @@ public final class RuleEditorSheet: NSObject, NSTextFieldDelegate {
             rowsStack.addArrangedSubview(
                 NSStackView(views: [field, comparison, value, unit, remove, add]))
         }
+        // The sheet grows and shrinks with its rules.
+        if let content = window.contentView { window.setContentSize(content.fittingSize) }
     }
 
     private func showLimit() {
