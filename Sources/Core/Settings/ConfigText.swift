@@ -256,7 +256,9 @@ struct ConfigText {
                     indent + "\(keyText): \(reindent(value, by: indent))"
                         + (last.comma == nil ? "" : ",")
                 ]
-            let after = endOfLine(from: last.comma.map { $0 + 1 } ?? last.valueEnd)
+            // After the last member's line, unless the object closes on it.
+            let end = last.comma.map { $0 + 1 } ?? last.valueEnd
+            let after = line(at: end) == line(at: object.close) ? end : endOfLine(from: end)
             bytes.insert(
                 contentsOf: Array((ending + lines.joined(separator: ending)).utf8), at: after)
             if last.comma == nil { bytes.insert(commaByte, at: last.valueEnd) }

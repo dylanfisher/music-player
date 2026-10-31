@@ -138,6 +138,13 @@ private func problems(_ text: String) -> [String] {
     #expect(
         try ConfigFile.patch(ConfigText("{}\n"), setting: flag, to: true).string
             == "{\n  // A bool.\n  // Takes true or false.\n  \"a.flag\": true\n}\n")
+    // The last member shares its line with the close.
+    let closing = try ConfigFile.patch(ConfigText("{\n  \"a.count\": 5 }"), setting: flag, to: true)
+    #expect(
+        closing.string
+            == "{\n  \"a.count\": 5,\n  // A bool.\n  // Takes true or false.\n  \"a.flag\": true }"
+    )
+    #expect(try parsed(closing.string).values["a.flag"] as? Bool == true)
     let crlf = "{\r\n  \"a.count\": 5,\r\n}\r\n"
     #expect(
         try ConfigFile.patch(ConfigText(crlf), setting: flag, to: true).string
