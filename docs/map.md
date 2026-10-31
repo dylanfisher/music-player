@@ -38,7 +38,7 @@ the dependency direction.
 | **core** | `Sources/Core` | The domain: library index and scanner, tag reading, decoders, DSD/DoP, outputs (CoreAudio HAL device, UPnP renderer), settings, logging. | primitives, other core modules |
 | **features** | `Sources/Features` | User-facing slices: library browser, now playing, settings window, and later remote control. | core, primitives |
 | **app** | `Sources/App` | The composition root: `main`, app delegate, menus. Wires features together; holds no logic of its own. | features, core, primitives |
-| **tools** | `Sources/Tools` | Development tooling that never ships in the app: the fixture generator and benchmarks. | tools, features, core, primitives |
+| **tools** | `Sources/Tools` | Development tooling that never ships in the app: the fixture generator, test stand-ins such as a null audio device, and benchmarks. | tools, features, core, primitives |
 
 Each SwiftPM target is one module at `Sources/<Tier>/<Name>`, and its tests are at
 `Tests/<Name>Tests`. `Support/` holds bundle resources such as `Info.plist`, which
