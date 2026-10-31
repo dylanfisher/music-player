@@ -13,7 +13,7 @@ write music files.
 
 ## Decision
 
-Add a fifth tier, `Sources/Tools`. Tools may import every tier except app, and other tools.
+Add a fifth tier, `Sources/Tools`. Tools may import every tier except app, including other tools.
 Nothing outside tools imports them. `scripts/arch.swift` enforces both, so an app or core target
 that depends on a tool fails `./scripts/check`. `Fixtures` (library), `GenerateFixtures` and
 `Bench` (executables) live there.
