@@ -39,11 +39,19 @@ uint64_t HALRenderUnderrunBytes(const HALRender *render);
 /// producer compares this with its own count of bytes written to tell which byte is playing.
 uint64_t HALRenderConsumedBytes(const HALRender *render);
 
+/// For `HALRenderDiscardBefore`: the new audio doesn't continue the old.
+#define HALRenderNoContinuation UINT64_MAX
+
 /// Producer side, safe while the IO proc runs. Makes the IO proc discard every byte before
 /// `producedBytes` (a count of bytes written since `source` was created) instead of playing it,
 /// at the start of its next cycle. The producer can write the audio that replaces them right away.
 /// Shortfalls until the IO proc next fills a whole buffer are not underruns.
-void HALRenderDiscardBefore(HALRender *render, uint64_t producedBytes);
+///
+/// When the new audio picks up where the old was when `HALRenderConsumedBytes` read
+/// `continuingFrom`, the IO proc also skips as much of the new audio as it played of the old since
+/// then, so nothing plays twice. Otherwise pass `HALRenderNoContinuation`. Only one producer may
+/// call this.
+void HALRenderDiscardBefore(HALRender *render, uint64_t producedBytes, uint64_t continuingFrom);
 
 /// Producer side. True while the producer has nothing more to write for now, at the end of the
 /// queue or before a format change, so the silence that follows is not counted as an underrun.
