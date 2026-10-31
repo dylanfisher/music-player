@@ -13,6 +13,7 @@ private struct ScannedLibrary: @unchecked Sendable {
     var scanSeconds: Double
     var summary: ScanSummary
     var footprintBeforeMB: Double
+    var footprintPeakMB: Double
     var footprintAfterMB: Double
     var databaseMB: Double
     var index: LibraryIndex
@@ -28,10 +29,12 @@ private let scannedLibrary = Result { () throws -> ScannedLibrary in
     let databaseURL = directory.appendingPathComponent("library.sqlite")
     let folder = WatchedFolder(path: root.path, kind: .local)
     let before = try footprintMB()
+    let peak = PeakFootprint()
     var scanned: ScanSummary?
     let elapsed = try seconds {
         scanned = try LibraryScanner(databaseURL: databaseURL).scan(folder)
     }
+    let peakMB = try peak.stop()
     guard let summary = scanned, summary.read == fullLibraryFileCount, summary.issues.isEmpty
     else {
         throw BenchError.expected(
@@ -40,7 +43,7 @@ private let scannedLibrary = Result { () throws -> ScannedLibrary in
     let index = try LibraryIndex(at: databaseURL)
     return ScannedLibrary(
         folder: folder, databaseURL: databaseURL, scanSeconds: elapsed, summary: summary,
-        footprintBeforeMB: before, footprintAfterMB: try footprintMB(),
+        footprintBeforeMB: before, footprintPeakMB: peakMB, footprintAfterMB: try footprintMB(),
         databaseMB: Double(try Database.sizeBytes(at: databaseURL)) / 1e6, index: index)
 }
 
@@ -81,14 +84,19 @@ let libraryBenchmarks = [
     ) {
         Measured(value: try scannedLibrary.get().databaseMB)
     },
+    // Measured as growth, since earlier benchmarks in the same process leave their own memory.
     Benchmark(
-        name: "library: resident memory after a scan",
-        budget: Budget(appleSilicon: 150, oldMac: 150, unit: .megabytes)
+        name: "library: memory a scan adds at its peak",
+        budget: Budget(appleSilicon: 50, oldMac: 50, unit: .megabytes)
     ) {
         let library = try scannedLibrary.get()
         return Measured(
-            value: library.footprintAfterMB,
-            notes: [String(format: "%.0f MB before the scan", library.footprintBeforeMB)])
+            value: library.footprintPeakMB - library.footprintBeforeMB,
+            notes: [
+                String(
+                    format: "footprint %.0f MB before, %.0f MB at the peak, %.0f MB after",
+                    library.footprintBeforeMB, library.footprintPeakMB, library.footprintAfterMB)
+            ])
     },
     Benchmark(
         name: "library: search keystroke, sorted by artist (p95)",
@@ -151,6 +159,43 @@ private func typedQueries(_ index: LibraryIndex) throws -> [String] {
 }
 
 private func format(_ milliseconds: Double) -> String { String(format: "%.2f", milliseconds) }
+
+/// Samples the footprint every 10 ms on its own thread until stopped.
+private final class PeakFootprint: @unchecked Sendable {
+    // Every field but `done` is guarded by `lock`.
+    private let lock = NSLock()
+    private var peakMB = 0.0
+    private var running = true
+    private var failure: (any Error)?
+    private let done = DispatchSemaphore(value: 0)
+
+    init() {
+        Thread.detachNewThread { [self] in
+            while lock.withLock({ running }) {
+                do {
+                    let current = try footprintMB()
+                    lock.withLock { peakMB = max(peakMB, current) }
+                } catch {
+                    lock.withLock {
+                        failure = error
+                        running = false
+                    }
+                }
+                usleep(10_000)
+            }
+            done.signal()
+        }
+    }
+
+    func stop() throws -> Double {
+        lock.withLock { running = false }
+        done.wait()
+        return try lock.withLock {
+            if let failure { throw failure }
+            return peakMB
+        }
+    }
+}
 
 /// This process's physical footprint, as Activity Monitor's Memory column shows it.
 private func footprintMB() throws -> Double {
