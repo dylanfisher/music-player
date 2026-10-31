@@ -400,6 +400,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// channel count differs can't be predicted, and one that fails here is decoded again at the
     /// switch, which reports the failure.
     private func predecoded(_ track: Track, after stream: RenderStream) -> Track {
+        // Audio from an earlier drain is stale once the decoder has moved, so it never survives.
+        var track = track
+        track.predecoded = nil
         guard track.channels == stream.format.stream.mChannelsPerFrame else { return track }
         var format = stream.decoderFormat
         format.mSampleRate = track.sampleRateHz
@@ -515,12 +518,15 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             clock.time("prefill") { fill(next, upTo: next.prefillBytes) }
         }
         clock.time("start") { startIfReady() }
+        let switchSeconds = uptime() - playedOut
+        // Whatever no step timed, such as allocating the ring buffer, so the steps add up.
+        let other = switchSeconds - clock.steps.reduce(0) { $0 + $1.seconds }
         emit(
             .formatChanged(
                 track.item.id,
                 FormatChange(
-                    from: from, to: next.format.summary, switchSeconds: uptime() - playedOut,
-                    steps: clock.steps)))
+                    from: from, to: next.format.summary, switchSeconds: switchSeconds,
+                    steps: clock.steps + [SwitchStep(name: "other", seconds: max(other, 0))])))
         emit(.trackStarted(track.item.id, next.info(for: track)))
     }
 

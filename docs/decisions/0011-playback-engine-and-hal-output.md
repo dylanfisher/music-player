@@ -51,7 +51,9 @@ decoded. Position comes from the same count.
   the old one drains, into the device's layout at the new rate, so after the drain only the
   device's own steps remain (stop, rate, format, start) and copying that audio in. Settling waits
   on property listeners for the rate and format rather than polling. The switch is timed from the
-  old track's last sample playing, and `FormatChange.steps` says where the time went.
+  old track's last sample playing, after the device latency; the first ADI-2 measurement
+  (about 840 ms) started before that wait, so the two aren't strictly comparable.
+  `FormatChange.steps` says where the time went, with an "other" step for what no step timed.
 - **Discard handshake:** `HALRenderDiscard(from, to)` tells the IO proc to skip the bytes from
   `from` up to `to`. The producer writes what follows straight after `to`, so neither side waits,
   and nothing resets the ring buffer under the reader. Only the IO proc moves the read index
