@@ -21,3 +21,9 @@ extension SQLiteError {
         self.sql = sql
     }
 }
+
+extension SQLiteError {
+    /// SQLITE_CONSTRAINT_FOREIGNKEY, which Swift doesn't import because it's an expression.
+    /// A row refers to one that doesn't exist, such as an artist another connection deleted.
+    public var isForeignKeyViolation: Bool { code == (SQLITE_CONSTRAINT | (3 << 8)) }
+}

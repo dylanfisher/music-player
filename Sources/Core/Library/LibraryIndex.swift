@@ -104,6 +104,19 @@ public final class LibraryIndex {
 
     /// Stores a batch of read results in one transaction.
     func store(_ files: [ScannedFile]) throws {
+        do {
+            try storeBatch(files)
+        } catch let error as SQLiteError where error.isForeignKeyViolation {
+            // Another scan (the command line beside the app) deleted orphans this connection
+            // still has cached IDs for. The batch rolled back; reload the IDs and run it again.
+            artistIDs = nil
+            genreIDs = nil
+            albumIDs = nil
+            try storeBatch(files)
+        }
+    }
+
+    private func storeBatch(_ files: [ScannedFile]) throws {
         try database.transaction {
             for file in files { try store(file) }
         }

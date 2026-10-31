@@ -291,3 +291,27 @@ import Testing
     #expect(summary.read == 0)
     #expect(try library.index().trackCount() == before)
 }
+
+@Test func cachedIDsDeletedByAnotherScanAreReloaded() throws {
+    let library = try TestLibrary()
+    let tagged = try library.manifest.files.filter { $0.malformation == nil }.compactMap {
+        file -> (String, ParsedFile)? in
+        let parsed = try readMetadata(at: URL(fileURLWithPath: library.path(file)))
+        return parsed.metadata.tags.artist == nil ? nil : (library.path(file), parsed)
+    }.first
+    let (path, parsed) = try #require(tagged)
+    func scanned(_ path: String) -> ScannedFile {
+        ScannedFile(
+            path: path, sizeBytes: 1, modifiedSeconds: 0, known: nil, outcome: .success(parsed))
+    }
+    let index = try library.index()
+    try index.store([scanned(path)])
+
+    // The other scan removes the file and the artist, album and genre only it used.
+    let other = try library.index()
+    try other.remove(Array(try other.knownFiles(under: library.root).values.map(\.id)))
+    try other.deleteOrphans()
+
+    try index.store([scanned(path + ".copy")])
+    #expect(try index.trackCount() == 1)
+}
