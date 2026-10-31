@@ -42,3 +42,18 @@ private func store() throws -> StateStore<AppState> {
     #expect(settings[\.sidebarWidth] == AppState().sidebarWidth.defaultValue)
     #expect(settings[\.queueWidth] == 300)
 }
+
+@MainActor @Test func aFailedSaveIsReportedUntilASaveWorks() throws {
+    let settings = try store()
+    let saver = LayoutSaver(settings)
+    var reported = 0
+    saver.failureChanged = { reported += 1 }
+    saver.set(\.sidebarWidth, 5000)
+    saver.flush()
+    #expect(saver.failure?.hasPrefix(AppState().sidebarWidth.key) == true)
+    #expect(reported == 1)
+    saver.set(\.sidebarWidth, 300)
+    saver.flush()
+    #expect(saver.failure == nil)
+    #expect(reported == 2)
+}

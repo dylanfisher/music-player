@@ -126,7 +126,7 @@ extension AppDelegate {
         guard let settings else { return }
         banner.show(
             problems: settings.problems, writeFailure: settings.writeFailure,
-            path: settings.fileURL.path)
+            path: settings.fileURL.path, stateFailure: saver?.failure)
     }
 }
 

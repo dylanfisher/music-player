@@ -1,9 +1,10 @@
 import AppKit
 import Settings
 
-/// A strip across the top of the main window while the config file has a problem: the first
-/// problem, how many more, all of them in the tooltip, and Open Config File. An alert would
-/// interrupt on every save of a half-edited line; the banner just stays until the file is good.
+/// A strip across the top of the main window while the config file has a problem or the app's
+/// files can't be saved: the first problem, how many more, all of them in the tooltip, and Open
+/// Config File. An alert would interrupt on every save of a half-edited line; the banner just
+/// stays until the file is good.
 @MainActor
 public final class ConfigBanner: NSViewController {
     public var openConfigFile: () -> Void = {}
@@ -37,17 +38,23 @@ public final class ConfigBanner: NSViewController {
         view.isHidden = true
     }
 
-    /// Shows what's wrong, or hides the banner when nothing is.
-    public func show(problems: [ConfigProblem], writeFailure: String?, path: String) {
+    /// Shows what's wrong, or hides the banner when nothing is. `stateFailure` is why the window
+    /// layout couldn't be saved to the state file.
+    public func show(
+        problems: [ConfigProblem], writeFailure: String?, path: String, stateFailure: String?
+    ) {
         _ = view
+        let name = (path as NSString).lastPathComponent
         let lines =
-            problems.map(\.description) + (writeFailure.map { ["couldn't save: \($0)"] } ?? [])
+            (problems.map(\.description) + (writeFailure.map { ["couldn't save: \($0)"] } ?? []))
+            .map { "\(name): \($0)" }
+            + (stateFailure.map { ["couldn't save the window layout: \($0)"] } ?? [])
         view.isHidden = lines.isEmpty
         guard let first = lines.first else { return }
         let more = lines.count > 1 ? " (\(lines.count - 1) more)" : ""
         let waiting =
             problems.isEmpty ? "" : " Nothing in it applies, and changes wait, until it's fixed."
-        label.stringValue = "\((path as NSString).lastPathComponent): \(first)\(more).\(waiting)"
+        label.stringValue = "\(first)\(more).\(waiting)"
         label.toolTip = lines.joined(separator: "\n")
     }
 

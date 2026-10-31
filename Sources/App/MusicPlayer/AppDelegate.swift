@@ -95,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             registerSettingCommands(dispatcher)
             settings.changed = { [weak self] keys in self?.settingsChanged(keys) }
             settings.problemsChanged = { [weak self] in self?.showConfigProblems() }
+            saver?.failureChanged = { [weak self] in self?.showConfigProblems() }
             banner.openConfigFile = { [weak dispatcher] in dispatcher?.run(.openConfigFile) }
             showConfigProblems()
             settings.startWatching()

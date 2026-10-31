@@ -15,6 +15,10 @@ final class LayoutSaver {
     /// The latest value of each changed setting, by key, as a write to run.
     private var pending: [String: () throws -> Void] = [:]
     private var scheduled = false
+    /// Why the last flush couldn't save, until one saves everything it had.
+    private(set) var failure: String?
+    /// Called when `failure` changes, for the banner.
+    var failureChanged: () -> Void = {}
 
     init(_ settings: StateStore<AppState>) {
         self.settings = settings
@@ -35,12 +39,19 @@ final class LayoutSaver {
         scheduled = false
         let writes = pending
         pending = [:]
+        guard !writes.isEmpty else { return }
+        var failures: [String] = []
         for (key, write) in writes.sorted(by: { $0.key < $1.key }) {
             do {
                 try write()
             } catch {
                 logger.error("couldn't save \(key): \(error)")
+                failures.append("\(key): \(error)")
             }
         }
+        let next = failures.isEmpty ? nil : failures.joined(separator: "; ")
+        guard next != failure else { return }
+        failure = next
+        failureChanged()
     }
 }
