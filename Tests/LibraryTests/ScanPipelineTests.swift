@@ -60,7 +60,8 @@ private func emptyFiles(_ count: Int) throws -> String {
 
 @Test func fixedNetworkReadersAreHonored() throws {
     let library = try TestLibrary()
-    let nas = SimulatedNAS(latencySeconds: 0.002, capacity: 64)
+    let nas = SimulatedNAS(
+        operationSeconds: 0.002, listingSeconds: 0.002, capacity: 64, fileDelay: nil)
     let summary = try LibraryScanner(
         databaseURL: library.databaseURL, networkReaders: 3, access: nas
     ).scan(WatchedFolder(path: library.root, kind: .network))
@@ -69,10 +70,27 @@ private func emptyFiles(_ count: Int) throws -> String {
     #expect(nas.mostFilesReadAtOnce == 3)
 }
 
+@Test func aSimulatedNASDelaysEachFileByItsDiskDelay() throws {
+    let root = try emptyFiles(20)
+    let path = root + "/Album 0/0.flac"
+    func seconds(_ fileDelay: SimulatedNAS.FileDelay?) -> Double {
+        let nas = SimulatedNAS(
+            operationSeconds: 0, listingSeconds: 0, capacity: 1, fileDelay: fileDelay)
+        let started = DispatchTime.now().uptimeNanoseconds
+        #expect(throws: MetadataError.self) { try nas.readMetadata(at: path) }
+        return Double(DispatchTime.now().uptimeNanoseconds - started) / 1e9
+    }
+    // With no spread, every file waits the median.
+    #expect(seconds(.init(medianSeconds: 0.05, sigma: 0)) >= 0.05)
+    #expect(seconds(nil) < 0.05)
+    #expect(SimulatedNAS.FileDelay(medianSeconds: 0.01, sigma: 1).meanSeconds > 0.016)
+}
+
 @Test func networkReadersClimbMidScanOnASlowNAS() throws {
     let root = try emptyFiles(1500)
     let databaseURL = URL(fileURLWithPath: root + ".sqlite")
-    let nas = SimulatedNAS(latencySeconds: 0.003, capacity: 16)
+    let nas = SimulatedNAS(
+        operationSeconds: 0.003, listingSeconds: 0.003, capacity: 16, fileDelay: nil)
     let summary = try LibraryScanner(databaseURL: databaseURL, access: nas)
         .scan(WatchedFolder(path: root, kind: .network))
     #expect(summary.read == 1500)

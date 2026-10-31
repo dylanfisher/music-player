@@ -2,22 +2,54 @@ import Foundation
 import Library
 import Metadata
 
-/// Files on this Mac, scanned as if they were on a NAS: a network volume where each operation
-/// (listing a directory, and opening, reading and closing a file) takes `latencySeconds`, and
-/// at most `capacity` are served at once while the rest wait. It tells the scanner the volume is
-/// a network one, so the scan tunes its readers as it would on the NAS.
+/// Files on this Mac, scanned as if they were on a NAS: a network volume where each file
+/// operation (opening, each read, closing) takes `operationSeconds` and listing a directory
+/// takes `listingSeconds`, and at most `capacity` operations are served at once while the rest
+/// wait. Its cost is per request, not per byte: a NAS's disks and network serve a few kilobytes
+/// of tags in about the same time as a megabyte, so what scales is how many requests are in
+/// flight. Each file can also wait a `FileDelay` on the NAS's disks, which is what makes one
+/// file's cost vary so much on spinning disks. It tells the scanner the volume is a network one, so the scan tunes its readers as it
+/// would on the NAS.
 public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
-    private let latencySeconds: Double
+    /// Extra seconds per file, log-normal around `medianSeconds`: most files cost little more,
+    /// and a few in a hundred cost ten times the median, as a seek behind other requests does.
+    public struct FileDelay: Sendable {
+        public var medianSeconds: Double
+        /// The spread of the delay's logarithm. Above 1, the slowest files dominate a short
+        /// measurement.
+        public var sigma: Double
+
+        public init(medianSeconds: Double, sigma: Double) {
+            precondition(medianSeconds > 0 && sigma >= 0, "a delay needs a median and a spread")
+            self.medianSeconds = medianSeconds
+            self.sigma = sigma
+        }
+
+        /// The mean delay, which is above the median by the tail.
+        public var meanSeconds: Double { medianSeconds * exp(sigma * sigma / 2) }
+    }
+
+    private let operationSeconds: Double
+    private let listingSeconds: Double
+    private let fileDelay: FileDelay?
     private let slots: DispatchSemaphore
     private let system = SystemFileAccess()
     // Guarded by `lock`.
     private let lock = NSLock()
     private var reading = 0
     private var mostReading = 0
+    // Seeded, so the same delays are drawn every run, though threads take them in any order.
+    private var random = SplitMix64(seed: 0x4E41_5344_454C_4159)
 
-    public init(latencySeconds: Double, capacity: Int) {
-        precondition(latencySeconds >= 0 && capacity > 0, "a NAS that can't serve anything")
-        self.latencySeconds = latencySeconds
+    public init(
+        operationSeconds: Double, listingSeconds: Double, capacity: Int, fileDelay: FileDelay?
+    ) {
+        precondition(
+            operationSeconds >= 0 && listingSeconds >= 0 && capacity > 0,
+            "a NAS that can't serve anything")
+        self.operationSeconds = operationSeconds
+        self.listingSeconds = listingSeconds
+        self.fileDelay = fileDelay
         slots = DispatchSemaphore(value: capacity)
     }
 
@@ -27,7 +59,7 @@ public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
     public func volumeIsLocal(_ path: String) throws -> Bool? { false }
 
     public func contentsOfDirectory(_ directory: String, keys: [URLResourceKey]) throws -> [URL] {
-        serve(1)
+        serve(1, seconds: listingSeconds)
         return try system.contentsOfDirectory(directory, keys: keys)
     }
 
@@ -38,7 +70,18 @@ public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
         }
         defer { lock.withLock { reading -= 1 } }
         // Opening, then each read the parser made (one, when it failed), then closing.
-        serve(1)
+        serve(1, seconds: operationSeconds)
+        if let fileDelay {
+            // Box-Muller, from two uniform draws in (0, 1].
+            let (u, v) = lock.withLock {
+                (
+                    1 - Double.random(in: 0..<1, using: &random),
+                    Double.random(in: 0..<1, using: &random)
+                )
+            }
+            let normal = (-2 * log(u)).squareRoot() * cos(2 * .pi * v)
+            serve(1, seconds: fileDelay.medianSeconds * exp(fileDelay.sigma * normal))
+        }
         let result = Result { () throws(MetadataError) -> ParsedFile in
             try system.readMetadata(at: path)
         }
@@ -47,14 +90,14 @@ public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
             case .success(let parsed): parsed.readCount
             case .failure: 1
             }
-        serve(reads + 1)
+        serve(reads + 1, seconds: operationSeconds)
         return try result.get()
     }
 
-    private func serve(_ operations: Int) {
+    private func serve(_ operations: Int, seconds: Double) {
         for _ in 0..<operations {
             slots.wait()
-            usleep(useconds_t(latencySeconds * 1e6))
+            usleep(useconds_t(seconds * 1e6))
             slots.signal()
         }
     }

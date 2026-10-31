@@ -79,11 +79,11 @@ let libraryBenchmarks = [
             notes: [String(format: "%.0f files/s", Double(summary.unchanged) / elapsed)])
     },
     Benchmark(
-        name: "library: scan \(simulatedScanFileCount) fixture files on a simulated NAS, tuned",
+        name: "library: scan \(fastNAS.fileCount) fixture files on a simulated NAS, tuned",
         budget: Budget(appleSilicon: 4, oldMac: 8, unit: .seconds)
     ) {
-        let fixed = try simulatedNetworkScan(readers: fixedNetworkReaders)
-        let tuned = try simulatedNetworkScan(readers: nil)
+        let fixed = try simulatedNetworkScan(fastNAS, readers: fixedNetworkReaders)
+        let tuned = try simulatedNetworkScan(fastNAS, readers: nil)
         let speedup = fixed.seconds / tuned.seconds
         // The point of tuning: a NAS that serves 16 at once is wasted on 4 readers.
         guard speedup >= 2 else {
@@ -95,17 +95,53 @@ let libraryBenchmarks = [
         guard case .tuned(let levels, _) = tuned.summary.readers else {
             throw BenchError.expected("tuned readers: \(String(describing: tuned.summary.readers))")
         }
-        let rate = { (scan: (seconds: Double, summary: ScanSummary)) in
-            Double(scan.summary.read) / scan.seconds
-        }
         return Measured(
             value: tuned.seconds,
             notes: [
                 String(
                     format: "%.0f ms per operation, %d at once; %.0f files/s tuned, %.0f files/s"
                         + " with %d readers (%.2f s), %.1fx faster",
-                    simulatedLatencySeconds * 1e3, simulatedCapacity, rate(tuned), rate(fixed),
+                    fastNAS.operationSeconds * 1e3, fastNAS.capacity, rate(tuned), rate(fixed),
                     fixedNetworkReaders, fixed.seconds, speedup),
+                "readers " + levels.map(String.init).joined(separator: "→"),
+            ])
+    },
+    Benchmark(
+        name:
+            "library: scan \(slowNAS.fileCount) fixture files on a slow simulated NAS that"
+            + " serves many at once, tuned",
+        budget: Budget(appleSilicon: 10, oldMac: 20, unit: .seconds)
+    ) {
+        let tuned = try simulatedNetworkScan(slowNAS, readers: nil)
+        let fixed = try slowNASFixedReaders.map { readers in
+            (readers, try simulatedNetworkScan(slowNAS, readers: readers))
+        }
+        let (bestReaders, best) = fixed.min { $0.1.seconds < $1.1.seconds }!
+        let share = best.seconds / tuned.seconds
+        // A NAS that serves dozens of slow requests at once is wasted on a level that stays low.
+        guard share >= tunedShareOfBestFixed else {
+            throw BenchError.expected(
+                String(
+                    format: "tuned readers to reach %.0f%% of a fixed %d's throughput, not %.0f%%",
+                    tunedShareOfBestFixed * 100, bestReaders, share * 100))
+        }
+        guard case .tuned(let levels, _) = tuned.summary.readers,
+            levels.last! >= slowNASFixedReaders[0]
+        else {
+            throw BenchError.expected(
+                "tuned readers to end at \(slowNASFixedReaders[0]) or more:"
+                    + " \(String(describing: tuned.summary.readers))")
+        }
+        return Measured(
+            value: tuned.seconds,
+            notes: [
+                String(
+                    format: "%.0f ms per operation, %.0f ms per listing, %d at once; %.0f files/s"
+                        + " tuned, %.0f%% of the best fixed level",
+                    slowNAS.operationSeconds * 1e3, slowNAS.listingSeconds * 1e3,
+                    slowNAS.capacity, rate(tuned), share * 100),
+                fixed.map { String(format: "%d readers: %.0f files/s", $0.0, rate($0.1)) }
+                    .joined(separator: ", "),
                 "readers " + levels.map(String.init).joined(separator: "→"),
             ])
     },
@@ -181,17 +217,41 @@ let libraryBenchmarks = [
     },
 ]
 
-/// The NAS the network scan benchmark simulates: every operation takes 2 ms, and it serves 16
-/// at once, so more readers than that only queue.
-private let simulatedLatencySeconds = 0.002
-private let simulatedCapacity = 16
-private let simulatedScanFileCount = 3000
+/// A NAS the network scan benchmarks simulate, and how many fixture files they scan on it.
+private struct SimulatedProfile {
+    var operationSeconds: Double
+    var listingSeconds: Double
+    var capacity: Int
+    var fileDelay: SimulatedNAS.FileDelay?
+    var fileCount: Int
+}
+
+/// Every operation takes 2 ms, and it serves 16 at once, so more readers than that only queue.
+private let fastNAS = SimulatedProfile(
+    operationSeconds: 0.002, listingSeconds: 0.002, capacity: 16, fileDelay: nil, fileCount: 3000)
+/// The owner's NAS as measured over SMB, cold: a file costs about 60 ms, half of it in three
+/// operations and half a disk delay with a long tail, and 16 in flight read about 16x as fast
+/// as one; listing a directory costs about 45 ms. Fixture albums hold about ten files each,
+/// under a folder per artist.
+private let slowNAS = SimulatedProfile(
+    operationSeconds: 0.010, listingSeconds: 0.045, capacity: 24,
+    fileDelay: SimulatedNAS.FileDelay(medianSeconds: 0.013, sigma: 1.3), fileCount: 2000)
+/// The fixed levels the slow NAS's tuned scan is held against, and the share of the best one's
+/// throughput it must reach.
+private let slowNASFixedReaders = [16, 32]
+private let tunedShareOfBestFixed = 0.8
 /// What the tuning is measured against: the fixed count network scans read before it.
 private let fixedNetworkReaders = 4
 
-/// Scans the first artists' folders of the fixture library, about `simulatedScanFileCount`
-/// files, through a simulated NAS into a new index, and returns the seconds and the summary.
-private func simulatedNetworkScan(readers: Int?) throws -> (seconds: Double, summary: ScanSummary) {
+private func rate(_ scan: (seconds: Double, summary: ScanSummary)) -> Double {
+    Double(scan.summary.read) / scan.seconds
+}
+
+/// Scans the first artists' folders of the fixture library, about `profile.fileCount` files,
+/// through a simulated NAS into a new index, and returns the seconds and the summary.
+private func simulatedNetworkScan(_ profile: SimulatedProfile, readers: Int?) throws -> (
+    seconds: Double, summary: ScanSummary
+) {
     let root = try defaultFixturesDirectory()
     _ = try generateFixtures(count: fullLibraryFileCount, in: root)
     let byArtist = Dictionary(grouping: try loadManifest(in: root).files) {
@@ -199,7 +259,7 @@ private func simulatedNetworkScan(readers: Int?) throws -> (seconds: Double, sum
     }
     var artists: [String] = []
     var files = 0
-    for artist in byArtist.keys.sorted() where files < simulatedScanFileCount {
+    for artist in byArtist.keys.sorted() where files < profile.fileCount {
         artists.append(root.path + "/" + artist)
         files += byArtist[artist]!.count
     }
@@ -208,7 +268,9 @@ private func simulatedNetworkScan(readers: Int?) throws -> (seconds: Double, sum
             databaseURL: directory.appendingPathComponent("library.sqlite"),
             networkReaders: readers,
             access: SimulatedNAS(
-                latencySeconds: simulatedLatencySeconds, capacity: simulatedCapacity))
+                operationSeconds: profile.operationSeconds,
+                listingSeconds: profile.listingSeconds, capacity: profile.capacity,
+                fileDelay: profile.fileDelay))
         var scanned: ScanSummary?
         let elapsed = try seconds {
             scanned = try scanner.scan(
