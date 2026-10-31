@@ -96,6 +96,34 @@ Everything later phases measure and configure against.
       benchmarks, prints a table, and exits non-zero on a budget miss. Each later phase adds its
       own benchmarks. Bench stays out of `./scripts/check`, because it takes too long.
 
+Implementation plan:
+
+1. **Tools tier** (`Sources/Tools`, ADR 0002): tooling that must never link into the app. It may
+   import every other tier and nothing imports it. `scripts/arch.swift` and `docs/map.md` learn it.
+2. **Log** (Core): `bundleIdentifier` is declared once in Swift and is the log subsystem.
+   `scripts/bundle` writes it into the `.app`'s Info.plist, the way it already writes the minimum
+   macOS. `moduleLogger()` takes its category from `#fileID`, so each module gets one. HALOutput,
+   Playback and Settings log state changes; the IO proc and the CLI's stdout stay as they are.
+3. **Settings** (Core): `Setting<Value>` declares key, default, summary and an optional range;
+   `AppSettings` holds the declarations as stored properties, enumerated in order (ADR 0003).
+   Values: Bool, Int, Double, String, string-backed enums, optionals, lists, and `WatchedFolder`.
+   `SettingsStore` loads, validates (unknown key, wrong type, out of range, each naming the key),
+   saves only changed values atomically, exports the effective settings and imports overrides.
+   The file URL is injected. Seeded with the output device UID, hog mode, watched folders and
+   pausing polls during playback.
+4. **CLI:** `--export-settings <path>` and `--import-settings <path>` next to `--play`.
+5. **Fixtures** (Tools library) and **GenerateFixtures** (Tools executable, `scripts/fixtures`):
+   seeds from afconvert (FLAC, ALAC, AAC, WAV, AIFF) plus hand-built silent MP3 frames, since
+   macOS has no MP3 encoder. A deterministic plan of artists, albums and discs; per-file tag
+   blocks (Vorbis comments + PICTURE, MP4 `ilst`, ID3v2.2/2.3/2.4, RIFF `LIST/INFO`); a set of
+   malformed files; `manifest.json` with expected tags and audio properties. Written in parallel,
+   skipped when the stored manifest already matches the plan (ADR 0004).
+6. **Bench** (Tools executable, `scripts/bench`): `Benchmark` with a `Budget` per machine class,
+   defined next to each benchmark. Phase 1 benchmarks: settings load and validate, fixture
+   generation for 43k files, and the up-to-date rerun. Budgets join the table above.
+7. Tests: LogTests, SettingsTests, FixturesTests (AudioToolbox decodes every valid fixture to the
+   seed's samples and reads its tags back), BenchTests (budget selection and miss reporting).
+
 ### 2. Tag and format reading
 
 - [ ] Our own parsers (no dependencies) for FLAC/Vorbis comments, MP4 atoms (ALAC, AAC), ID3v2.2,
