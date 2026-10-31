@@ -18,11 +18,6 @@ final class ScanPipeline: @unchecked Sendable {
     static let windowSeconds = 0.25
     static let windowFilesPerReader = 4
 
-    enum Readers {
-        case fixed(Int)
-        case tuned(ReadConcurrency)
-    }
-
     /// What the walk and the reads found.
     struct Outcome {
         /// Every audio file the walk found, changed or not.
@@ -94,10 +89,12 @@ final class ScanPipeline: @unchecked Sendable {
         }
     }
 
-    /// Scans `starts`, each `root` or a directory inside it that the filter includes.
+    /// Scans `starts`, each `root` or a directory inside it that the filter includes. It starts
+    /// with `readers`, and `controller`, if any, changes that as it measures.
     init(
         _ starts: [String], root: String, filter: FolderFilter, known: [String: KnownFile],
-        index: LibraryIndex, readers: Readers, access: any ScanFileAccess, control: ScanControl,
+        index: LibraryIndex, controller: ReadConcurrency?, readers: Int, access: any ScanFileAccess,
+        control: ScanControl,
         counter: ProgressCounter, rootIsThere: @escaping @Sendable () -> Bool
     ) {
         directories = starts.reversed()
@@ -109,14 +106,9 @@ final class ScanPipeline: @unchecked Sendable {
         self.control = control
         self.counter = counter
         self.rootIsThere = rootIsThere
-        switch readers {
-        case .fixed(let count):
-            precondition(count > 0, "a scan needs at least one reader")
-            limit = count
-        case .tuned(let tuning):
-            controller = tuning
-            limit = tuning.level
-        }
+        precondition(readers > 0, "a scan needs at least one reader")
+        self.controller = controller
+        limit = readers
         window = Window(
             start: DispatchTime.now().uptimeNanoseconds, pauseChanges: control.pauseState.changes)
     }

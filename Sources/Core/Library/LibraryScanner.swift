@@ -74,17 +74,20 @@ public struct LibraryScanner: Sendable {
         for start in starts { known.merge(try index.knownFiles(under: start)) { a, _ in a } }
 
         // Walk and read at once.
-        let readers: ScanPipeline.Readers =
-            if isLocal {
-                .fixed(Self.localReaders)
-            } else if let networkReaders {
-                .fixed(networkReaders)
-            } else {
-                .tuned(ReadConcurrency())
-            }
+        let controller: ReadConcurrency?
+        let readers: Int
+        if isLocal {
+            (controller, readers) = (nil, Self.localReaders)
+        } else if let networkReaders {
+            (controller, readers) = (nil, networkReaders)
+        } else {
+            let tuning = ReadConcurrency()
+            (controller, readers) = (tuning, tuning.level)
+        }
         let pipeline = ScanPipeline(
             starts.filter { startIsIncluded($0, root: root, filter: filter) }, root: root,
-            filter: filter, known: known, index: index, readers: readers,
+            filter: filter, known: known, index: index, controller: controller,
+            readers: readers,
             access: access, control: control, counter: ProgressCounter(progress),
             rootIsThere: { directoryDevice(root) == device })
         let outcome = try pipeline.run()

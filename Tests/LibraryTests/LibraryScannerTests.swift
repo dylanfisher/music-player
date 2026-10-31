@@ -182,7 +182,7 @@ private struct FailingReads: ScanFileAccess {
     let index = try library.index()
     let pipeline = ScanPipeline(
         [library.root], root: library.root, filter: FolderFilter(include: [], exclude: []),
-        known: [:], index: index, readers: .fixed(2), access: FailingReads(),
+        known: [:], index: index, controller: nil, readers: 2, access: FailingReads(),
         control: ScanControl(), counter: ProgressCounter(nil), rootIsThere: { false })
     let outcome = try pipeline.run()
     #expect(outcome.rootLost)
