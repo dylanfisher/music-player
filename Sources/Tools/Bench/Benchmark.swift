@@ -15,7 +15,8 @@ enum MachineClass: String, CaseIterable, Sendable {
     }
 }
 
-/// The most a benchmark may measure on each machine class. docs/plan.md has the human copy.
+/// The most a benchmark may measure on each machine class: strictly less, except that a limit of 0
+/// allows exactly 0. docs/plan.md has the human copy.
 struct Budget: Sendable {
     enum Unit: String, Sendable {
         case milliseconds = "ms"
@@ -24,11 +25,17 @@ struct Budget: Sendable {
         case percentOfCore = "percent of a core"
         /// Sample frames: one sample per channel.
         case samples
+        case frames
     }
 
     var appleSilicon: Double
     var oldMac: Double
     var unit: Unit
+
+    func allows(_ value: Double, on machine: MachineClass) -> Bool {
+        let limit = limit(on: machine)
+        return limit == 0 ? value == 0 : value < limit
+    }
 
     func limit(on machine: MachineClass) -> Double {
         switch machine {
@@ -95,7 +102,7 @@ func run(
             let measured = try benchmark.measure()
             notes = measured.notes
             outcome =
-                measured.value < limit
+                benchmark.budget.allows(measured.value, on: machine)
                 ? .withinBudget(measured.value) : .overBudget(measured.value)
         } catch {
             outcome = .failed(error)
@@ -129,7 +136,11 @@ func table(_ results: [BenchmarkResult], machine: MachineClass) -> String {
             }
         lines.append(
             pad(result.name, nameWidth) + "  " + pad(measured, 14) + "  "
-                + pad("< " + amount(result.limit, result.unit), 16) + "  " + verdict)
+                + pad(
+                    result.limit == 0
+                        ? "0 \(result.unit.rawValue)" : "< " + amount(result.limit, result.unit), 16
+                )
+                + "  " + verdict)
         lines += result.notes.map { "    " + $0 }
     }
     return lines.joined(separator: "\n")

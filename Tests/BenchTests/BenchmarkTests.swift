@@ -34,6 +34,17 @@ private let budget = Budget(appleSilicon: 10, oldMac: 40, unit: .milliseconds)
     #expect(report.contains("\n    3 of 10\n"))
 }
 
+@Test func aZeroBudgetAllowsOnlyZero() {
+    let zero = Budget(appleSilicon: 0, oldMac: 0, unit: .frames)
+    #expect(zero.allows(0, on: .appleSilicon))
+    #expect(!zero.allows(1, on: .appleSilicon))
+    #expect(
+        table(
+            run([Benchmark(name: "z", budget: zero) { Measured(value: 0) }], on: .oldMac),
+            machine: .oldMac
+        ).contains("0 frames"))
+}
+
 @Test func benchmarkNamesAreUnique() {
     let names = benchmarks.map(\.name)
     #expect(Set(names).count == names.count)
@@ -57,7 +68,9 @@ private func cells(_ row: Substring) -> [String] {
     let rows = lines[(header + 2)...].prefix { $0.hasPrefix("|") }.map(cells)
 
     func text(_ value: Double, _ unit: Budget.Unit) -> String {
-        "< " + (value == value.rounded() ? String(Int(value)) : "\(value)") + " " + unit.rawValue
+        if value == 0 { return "0 " + unit.rawValue }
+        return "< " + (value == value.rounded() ? String(Int(value)) : "\(value)") + " "
+            + unit.rawValue
     }
     for benchmark in benchmarks {
         let limits = try MachineClass.allCases.map { machine in

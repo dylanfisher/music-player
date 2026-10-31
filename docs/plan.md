@@ -74,9 +74,9 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Memory a scan of the fixture library adds, at its peak | < 50 MB | < 50 MB |
 | Browser pane query: genres, artists, albums (p95) | < 20 ms | < 60 ms |
 | Resident memory with the library loaded | < 250 MB | < 250 MB |
-| CPU while playing 24/192 FLAC | < 2 percent of a core | < 5 percent of a core |
-| Underruns in a 1-hour playback soak (`--soak 3600`; 20 s by default) | < 1 samples | < 1 samples |
-| Gap between same-format tracks | < 1 samples | < 1 samples |
+| CPU while playing 24/192 FLAC | < 3 percent of a core | < 5 percent of a core |
+| Underruns in a 1-hour playback soak (`--soak 3600`; 20 s by default) | 0 frames | 0 frames |
+| Gap between same-format tracks | 0 samples | 0 samples |
 | Track change that switches sample rate | < 500 ms | < 500 ms |
 | CPU when idle (not playing) | ~0%, no timers firing faster than settings allow | same |
 | Load and validate settings, every key changed | < 5 ms | < 20 ms |
@@ -299,9 +299,9 @@ Implementation plan:
 1. **RingBuffer:** `RingBufferSkip`, a consumer-side discard, so a seek never resets the buffer
    under the reader.
 2. **HALRender** (C): atomics the IO proc shares with the decode thread. A consumed-bytes
-   counter times track boundaries and position. `HALRenderDiscardBefore` is the seek handshake:
-   the producer names a byte position, and the IO proc skips everything before it on its next
-   cycle while the producer keeps writing after it. A draining flag and the refill after a
+   counter times track boundaries and position. `HALRenderDiscard` is the seek handshake: the
+   producer names a byte range, and the IO proc skips it when it gets there (at once for a seek)
+   while the producer keeps writing after it. A draining flag and the refill after a
    discard keep expected silence out of the underrun count. An atomic gain, ramped per buffer, for
    the optional digital volume; at unity the samples are copied untouched.
 3. **Playback** (no CoreAudio): the `Output` protocol at the track level (load, set next, play,

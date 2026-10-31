@@ -1,6 +1,6 @@
 # 0011. A track-level output protocol, and a HAL output that decodes ahead into one ring buffer
 
-- **Date:** 2026-10-31
+- **Date:** 2026-10-30
 - **Status:** accepted
 
 ## Context
@@ -19,7 +19,17 @@ next item, play, pause, stop, seek, position, volume and close. Results come bac
 (`trackStarted`, `trackEnded`, `formatChanged`, `trackFailed`, `finished`, `underrun`,
 `deviceLost`, `deviceReturned`, `failed`), each naming the item it concerns. The engine gives every
 load a fresh item ID, so it can ignore events about an item it has replaced. Playback has no
-CoreAudio in it; HALOutput depends on it, and phase 9's UPnP output will too.
+CoreAudio in it; HALOutput depends on it, and phase 9's UPnP output will too. What only a local
+device can know is optional: `TrackInfo.outputFormat` and `FormatChange.switchSeconds` are nil
+for an output that can't tell.
+
+**Phase 9 maps an item to the renderer** without changing the protocol. `OutputItem.url` stays the
+local file URL. The UPnP output asks the HTTP server for the URL it serves that file at (only files
+the library knows), and builds the DIDL-Lite metadata (title, artist, album, duration and the
+`protocolInfo` for the file's MIME type) from the library's row for that path. `load` becomes
+`SetAVTransportURI` and `Play`, `setNext` becomes `SetNextAVTransportURI`, and the renderer's
+`TransportState` and `CurrentTrackURI` events become `trackStarted`, `trackEnded` and
+`finished`.
 
 **`PlaybackEngine` is an actor.** It holds the queue (play order, shuffle, repeat off/one/all)
 and tells the output the next item whenever the current one starts or the order changes.
@@ -38,17 +48,18 @@ decoded. Position comes from the same count.
 - **Format change:** a next track that differs waits until the ring buffer is empty and the
   device's latency (buffer, safety offset, device and stream latency) has passed. Then the device
   is stopped, reconfigured and restarted with half a second queued.
-- **Seek handshake:** `HALRenderDiscardBefore(n, from)` tells the IO proc to skip every byte
-  before `n`, at the start of its next cycle. The producer writes the new audio after `n` straight
-  away, so neither side waits and nothing resets the ring buffer under the reader. Only the IO
-  proc moves the read index (`RingBufferSkip`). Silence until the next full buffer, or while the
-  producer says it is draining, isn't counted as an underrun. Skips and a changed next track use
-  the same path. A changed next track seeks the current one to the frame playing now and passes
-  the consumed count it read as `from`; the IO proc then also skips what it played since that
-  read, so the current track carries on with no gap and no repeat. The two values are published
-  under a sequence lock, so the IO proc never pairs one discard's target with another's `from`,
-  and a discard caught mid-write waits for the next cycle. The producer writes whole frames only,
-  so every count stays on a frame edge.
+- **Discard handshake:** `HALRenderDiscard(from, to)` tells the IO proc to skip the bytes from
+  `from` up to `to`. The producer writes what follows straight after `to`, so neither side waits,
+  and nothing resets the ring buffer under the reader. Only the IO proc moves the read index
+  (`RingBufferSkip`). The two positions are published under a sequence lock, so the IO proc never
+  pairs one discard's start with another's end; a discard caught mid-write waits a cycle.
+  - A seek, skip or load of the same format uses `from` = 0: everything queued is dropped at the
+    IO proc's next cycle. The silence until the new audio arrives isn't counted as an underrun.
+  - A changed next track that is already queued uses `from` = its first byte. The IO proc plays
+    the current track to its last byte and skips from there, mid-buffer if need be, and the
+    replacement follows with no gap. Boundaries already played are announced first, so the track
+    playing now is never the one dropped.
+  - The producer writes whole frames only, so every count stays on a frame edge.
 - **Ring buffer:** four seconds, refilled once half empty. That covers a NAS stall and the open of
   the next file, which happens on the same thread. The sizing is justified next to the constant in
   `DeviceOutput.swift`.
@@ -62,9 +73,12 @@ engine offers to resume. Hog mode follows `output.hogMode`; without it only mixa
 chosen, since a non-mixable one would lock other apps out.
 
 **Restoring the device:** the first open in a run snapshots the device's rate and format and
-the system's default outputs, by UID, and every later session restores that snapshot. The
-snapshot is written to `device-restore.json` beside the settings while a session holds the device,
-and deleted after a clean restore. `HALDeviceProvider.recoverAfterCrash` restores from a record
+the system's default outputs, by UID, and every later session restores that snapshot. Closing runs
+every restore step (stop, format, rate, hog mode, default outputs) even when one fails, then
+reports the first failure. `device-restore.json` beside the settings holds one snapshot per device
+UID: a session adds its device's entry once it holds the device, never replaces one already there
+(that one holds the older state, and the session restores to it), and removes it after a clean
+restore. `HALDeviceProvider.recoverAfterCrash` restores from a record
 left by a crash, a kill or an unplugged device the next time the CLI plays. coreaudiod releases
 hog mode itself when a process dies.
 
@@ -84,10 +98,10 @@ underruns through it.
 - **Stopping the IO proc to seek, or a flush flag that resets the ring buffer** — rejected: a
   reset from the producer races the reader. Stopping and restarting the device costs tens of
   milliseconds per seek and clicks on some DACs.
-- **Range discards** (drop the bytes between two positions, to replace an already queued next
-  track without touching the current one) — rejected: the IO proc would have to split a read at an
-  arbitrary byte. Re-decoding the current track from the frame playing now costs a little decoding
-  and needs only the continuation skip.
+- **Re-decoding the current track to replace a queued next one** (seek to the frame playing now,
+  dropping everything queued) — rejected: the ring buffer is usually full then, so the new audio
+  can't be written before the discard lands, and the IO proc plays silence. The range discard
+  keeps the current track's queued audio.
 - **A second ring buffer per track** — rejected: the IO proc would have to switch buffers at an
   exact byte, which one buffer and a byte count already give for free.
 - **Following macOS to the new default device when the DAC is unplugged** — rejected: it would play
@@ -102,8 +116,11 @@ underruns through it.
   but not audio, which has seconds queued.
 - A mono file on a stereo-only DAC fails with a clear error and is skipped. Upmixing would change
   the samples.
-- At real-time pace, 24/192 FLAC costs about 2.7% of a core on Apple Silicon. The same work run
-  flat out costs 0.9%: the CPU runs short bursts at a low clock. About a quarter of decode time is
-  AudioToolbox scanning FLAC packets byte by byte, which only a decoder of our own would avoid.
+- At real-time pace, 24/192 FLAC measured 2.73% of a core on Apple Silicon, against a 2% target.
+  The same work run flat out costs 0.9%: the CPU runs short bursts at a low clock. About a quarter
+  of decode time is AudioToolbox scanning FLAC packets byte by byte (`FLACAudioFile::
+  ScanForPackets`), which only a decoder of our own would avoid. The owner raised the Apple Silicon
+  budget to < 3%. A FLAC decoder of our own is revisited only if the 2015 MacBook Pro misses its
+  5% at the phase 5 checkpoint.
 - The rate-switch time the benchmark measures excludes the real device's own settling, which the
   hardware checkpoint measures.
