@@ -154,15 +154,26 @@ private func directoryDevice(_ path: String) -> dev_t? {
     return info.st_dev
 }
 
+/// Whether `path` is a directory whose last component is spelled as it is on disk. A volume that
+/// ignores case finds a folder renamed only in case under its old name too.
+private func isDirectory(spelledAsOnDisk path: String) -> Bool {
+    guard directoryDevice(path) != nil, let resolved = realpath(path, nil) else { return false }
+    defer { free(resolved) }
+    return (String(cString: resolved) as NSString).lastPathComponent
+        == (path as NSString).lastPathComponent
+}
+
 /// `subtrees` without those inside another, each moved up to its nearest existing directory so
-/// a deleted folder's files are found missing. Each must be inside `root`.
+/// a deleted folder's files are found missing. A folder renamed only in case counts as deleted
+/// under its old spelling, so its parent is scanned and finds the old-case paths gone. Each must
+/// be inside `root`.
 private func coalesced(_ subtrees: [String], in root: String) -> [String] {
     var starts: [String] = []
     for subtree in subtrees {
         precondition(
             subtree == root || isPath(subtree, under: root), "\(subtree) isn't inside \(root)")
         var start = subtree
-        while start != root, directoryDevice(start) == nil {
+        while start != root, !isDirectory(spelledAsOnDisk: start) {
             start = (start as NSString).deletingLastPathComponent
         }
         starts.append(start)

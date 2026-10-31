@@ -255,3 +255,23 @@ import Testing
     #expect(summary.issues.map(\.kind) == [.rootEmpty])
     #expect(try library.index().trackCount() == library.readableCount)
 }
+
+@Test func folderRenamedOnlyInCaseIsIndexedUnderItsNewSpellingOnly() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let file = library.manifest.files.first { $0.malformation == nil }!
+    let directory = (library.path(file) as NSString).deletingLastPathComponent
+    let renamed =
+        (directory as NSString).deletingLastPathComponent + "/"
+        + (directory as NSString).lastPathComponent.uppercased()
+    try #require(renamed != directory)
+    try FileManager.default.moveItem(atPath: directory, toPath: renamed)
+    // FSEvents reports both spellings, and a case-insensitive volume finds the folder by either.
+    _ = try library.scan(only: [directory, renamed])
+    let paths = try library.index().database.prepare("SELECT path FROM files").map {
+        try $0.text(0)
+    }
+    #expect(paths.count == library.manifest.files.count)
+    #expect(!paths.contains { isPath($0, under: directory) })
+    #expect(paths.contains { isPath($0, under: renamed) })
+}
