@@ -13,12 +13,13 @@ Idle CPU is budgeted at about zero.
 
 ## Decision
 
-**Walk, then read.** The walk lists each directory with `contentsOfDirectory` and prefetched
+**Walk and read.** The walk lists each directory with `contentsOfDirectory` and prefetched
 resource values, which come from `getattrlistbulk` with the listing: one stat per entry, in bulk.
 Hidden entries (`.DS_Store`, AppleDouble `._` files) and symbolic links are skipped, the latter
 reported. Only files with an audio extension count. A file whose path, size and mtime match the
-index is unchanged; everything else is read on a fixed number of threads (the core count
-locally, 4 on a network volume, found with `volumeIsLocal`) and stored 500 to a transaction.
+index is unchanged; everything else is read as the walk finds it, on the core count's threads
+locally and a tuned number on a network volume (found with `volumeIsLocal`; ADR 0010), and
+stored 500 to a transaction.
 
 **Nothing is removed under anything the scan couldn't see.** Files are removed only after a
 walk that finished, when the folder is still the same directory on the same device (`st_dev`)
@@ -54,9 +55,6 @@ paths. Names a network share lists precomposed are stored as listed.
   to tell which subtree went unseen, and it can't be paused between directories.
 - **`fts` or `readdir` plus `lstat`** — rejected: a stat per file is a round trip per file on
   SMB, where the bulk listing is one per batch.
-- **Overlapping the walk with reading** — deferred: simpler to reason about removal after a
-  complete walk, and the fixture library scans in 3 s. Revisit if the NAS checkpoint shows the
-  walk and the reads each take long enough to overlap.
 - **Refusing to remove more than some share of a folder in one scan** — rejected: it blocks real
   deletions and still misses a partial vanish; the device and listing checks are exact.
 - **A periodic timer that checks what's due** — rejected: it fires while nothing is due, against
