@@ -6,8 +6,9 @@ import Metadata
 /// so neighbouring files are read together; readers take them under a limit that
 /// `ReadConcurrency` can change mid-scan.
 ///
-/// The index isn't `Sendable`; `condition` is what makes sharing it between the threads safe,
-/// and every field below it is guarded by it.
+/// The index isn't `Sendable`; `storeLock` is what makes sharing it between the threads safe,
+/// since a store takes about 12 ms per batch and mustn't stall the readers and listers, which
+/// share `condition`. Every field below `condition` is guarded by it.
 final class ScanPipeline: @unchecked Sendable {
     /// Directories listed at once. A listing is a round trip or two that yields about ten files,
     /// each of which costs several to read, so a few listers stay ahead of many readers without
@@ -43,8 +44,9 @@ final class ScanPipeline: @unchecked Sendable {
     private let rootIsThere: @Sendable () -> Bool
     private let threads = DispatchGroup()
 
-    private let condition = NSCondition()
+    private let storeLock = NSLock()
     private let index: LibraryIndex
+    private let condition = NSCondition()
     private var outcome = Outcome()
     /// Directories still to list, popped from the end.
     private var directories: [String]
@@ -123,7 +125,8 @@ final class ScanPipeline: @unchecked Sendable {
         threads.wait()
         return try condition.withLock {
             if let storeError { throw storeError }
-            try flush()
+            // Every thread has finished, so no store is running.
+            if !batch.isEmpty { try index.store(batch) }
             outcome.readers =
                 controller.map { .tuned($0.trace, climbing: $0.isClimbing) } ?? .fixed(limit)
             return outcome
@@ -244,17 +247,15 @@ final class ScanPipeline: @unchecked Sendable {
     }
 
     private func finish(_ file: ScannedFile, seconds: Double) {
-        condition.withLock {
+        let full: [ScannedFile]? = condition.withLock {
             outcome.read += 1
             if case .failure = file.outcome { outcome.failed += 1 }
             batch.append(file)
+            var full: [ScannedFile]?
             if batch.count >= LibraryScanner.batchSize {
-                do {
-                    try flush()
-                } catch {
-                    storeError = error
-                    condition.broadcast()
-                }
+                full = batch
+                batch = []
+                batch.reserveCapacity(LibraryScanner.batchSize)
             }
             // Every file would wake a waiting progress reader 43k times a scan for no visible
             // difference.
@@ -265,6 +266,23 @@ final class ScanPipeline: @unchecked Sendable {
                 }
             }
             measure(seconds)
+            return full
+        }
+        if let full { store(full) }
+    }
+
+    /// Stores a full batch outside `condition`, one thread at a time. A failure stops the scan.
+    private func store(_ files: [ScannedFile]) {
+        storeLock.withLock {
+            guard condition.withLock({ storeError == nil }) else { return }
+            do {
+                try index.store(files)
+            } catch {
+                condition.withLock {
+                    storeError = error
+                    condition.broadcast()
+                }
+            }
         }
     }
 
@@ -327,12 +345,5 @@ final class ScanPipeline: @unchecked Sendable {
     private func cancel() {
         outcome.cancelled = true
         condition.broadcast()
-    }
-
-    /// Called with `condition` held.
-    private func flush() throws {
-        guard !batch.isEmpty else { return }
-        try index.store(batch)
-        batch.removeAll(keepingCapacity: true)
     }
 }

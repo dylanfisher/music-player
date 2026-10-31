@@ -23,9 +23,9 @@ quarter up (kept if 8% better) and a quarter down (kept unless 5% worse), so it 
 fewest readers that reach the best throughput, which leaves the NAS room for playback. A held
 level whose throughput falls below 60% of its estimate, or whose seconds per file double, means
 the NAS got slower, perhaps from another client; the level halves and climbs again. It is
-clamped to 2…64. A window in which a reader waited for the walk, or the scan was paused, is
+clamped to 2…64. A window in which a reader waited for the walk, or that spans or ends in a pause, is
 dropped, since it says nothing about the NAS. `library.networkScanReaders` (null by default)
-and `--scan … --readers <n>` fix the count instead. Local volumes stay at the core count:
+and `--scan … --readers <n>` fix the count instead, within 1…64. Local volumes stay at the core count:
 there, parsing is the cost, so more threads than cores can't help and fewer only waste them.
 
 **Read while walking.** `ScanPipeline` runs four lister threads, which walk depth-first and
@@ -38,6 +38,9 @@ with directory requests. Each folder's files stay together in the queue, so the 
 neighbouring files together. The safety rules from ADR 0009 are unchanged: nothing is removed
 unless the walk finished, the folder is still on its device and lists something, and nothing
 under an unreadable folder.
+
+Batches are stored outside the lock that readers and listers share, one at a time, so a
+12 ms store stalls only the reader that filled the batch.
 
 **No read-ahead, no caching.** Tag reads open files with `F_RDAHEAD` off and `F_NOCACHE` on.
 
