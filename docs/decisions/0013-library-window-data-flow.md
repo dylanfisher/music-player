@@ -39,8 +39,9 @@ change when the index is rebuilt; a saved name that's gone loads as All and is l
 
 **Refreshing.** The watcher reports progress at most once a second and each scan's outcome. The
 window refreshes at most every 2 s during a scan and at once when one ends with changes. The
-selection is kept by ID, read through the IDs the table showed before the change. On a refresh the first visible track keeps its place on screen; on a
-user's change the table scrolls to the selection, or the top.
+selection is kept by ID, read through the IDs the table showed before the change. On a refresh the
+first visible track keeps its place on screen; on a user's change the table scrolls to the
+selection, or the top.
 
 **Playing.** A double-click on one row queues the whole visible list, starting there, so
 previous and repeat-all work through it. With several rows selected it queues the selection in
