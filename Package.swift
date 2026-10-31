@@ -278,6 +278,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .testTarget(
+            name: "TagWriterTests",
+            dependencies: ["Fixtures", "Metadata", "TagWriter"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
             name: "SQLiteTests",
             dependencies: ["SQLite"],
             swiftSettings: strictSwift

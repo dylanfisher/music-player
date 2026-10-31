@@ -188,22 +188,19 @@ struct FLACFile {
         for block in self.blocks {
             let range = block.original!
             let name = BlockType(rawValue: block.type).map { "\($0)" } ?? "block\(block.type)"
+            // The header's last-block flag changes when blocks are added; the body is what must
+            // stay.
+            blocks.append(
+                TagBlock("\(name)/header", range.lowerBound..<range.lowerBound + 4, .header))
+            let body = range.lowerBound + 4..<range.upperBound
             switch BlockType(rawValue: block.type) {
-            case .padding: blocks.append(TagBlock(name, range, .padding))
-            case .picture: blocks.append(TagBlock(name, range, .art))
+            case .padding: blocks.append(TagBlock(name, body, .padding))
+            case .picture: blocks.append(TagBlock(name, body, .art))
             case .vorbisComment:
-                blocks.append(TagBlock(name, range.lowerBound..<range.lowerBound + 4, .header))
-                let (vendor, comments) = try vorbisComments(block.body, base: range.lowerBound + 4)
-                blocks.append(
-                    TagBlock(
-                        "\(name)/vendor",
-                        range.lowerBound + 4..<range.lowerBound + 8 + vendor.count,
-                        .other))
-                blocks.append(
-                    TagBlock(
-                        "\(name)/count",
-                        range.lowerBound + 8 + vendor.count..<range.lowerBound + 12 + vendor.count,
-                        .header))
+                let (vendor, comments) = try vorbisComments(block.body, base: body.lowerBound)
+                let count = body.lowerBound + 4 + vendor.count
+                blocks.append(TagBlock("\(name)/vendor", body.lowerBound..<count, .other))
+                blocks.append(TagBlock("\(name)/count", count..<count + 4, .header))
                 for comment in comments {
                     let key = vorbisKey(comment.raw)
                     let group = TagGroup.allCases.first { group in
@@ -215,11 +212,7 @@ struct FLACFile {
                             fields: Set(group?.fields ?? [])))
                 }
             case .streamInfo, nil:
-                // The header's last-block flag changes when blocks are added; the body is what
-                // must stay.
-                blocks.append(
-                    TagBlock("\(name)/header", range.lowerBound..<range.lowerBound + 4, .header))
-                blocks.append(TagBlock(name, range.lowerBound + 4..<range.upperBound, .other))
+                blocks.append(TagBlock(name, body, .other))
             }
         }
         blocks.append(TagBlock("frames", audioStart..<size, .audio))
