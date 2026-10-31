@@ -26,10 +26,23 @@ public final class Database {
         self.connection = connection
         sqlite3_extended_result_codes(connection, 1)
         sqlite3_busy_timeout(connection, Self.busyTimeoutMs)
+        // Switching a new file to WAL takes a lock SQLite doesn't wait for with the busy
+        // timeout, so connections opening the same new file at once retry it within that time.
+        let deadline = DispatchTime.now().uptimeNanoseconds + UInt64(Self.busyTimeoutMs) * 1_000_000
+        while true {
+            do {
+                try execute("PRAGMA journal_mode = WAL")
+                break
+            } catch let error
+                where error.code & 0xFF == SQLITE_BUSY
+                && DispatchTime.now().uptimeNanoseconds < deadline
+            {
+                usleep(1000)
+            }
+        }
         // synchronous=NORMAL is durable in WAL mode except across a power cut, which loses at
         // most the last transactions of a rescan.
-        try execute(
-            "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON")
+        try execute("PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON")
     }
 
     deinit {

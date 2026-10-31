@@ -131,3 +131,28 @@ private struct Boom: Error {}
     #expect(walBytes > 100_000)
     #expect(try Database.sizeBytes(at: url) > walBytes)
 }
+
+@Test func connectionsOpeningANewFileAtOnceAllSucceed() throws {
+    for _ in 0..<40 {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sqlite-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("race.sqlite")
+        let failures = LockedFailures()
+        DispatchQueue.concurrentPerform(iterations: 8) { _ in
+            do {
+                _ = try Database(at: url)
+            } catch {
+                failures.add("\(error)")
+            }
+        }
+        #expect(failures.all.isEmpty)
+    }
+}
+
+private final class LockedFailures: @unchecked Sendable {
+    private let lock = NSLock()
+    private var failures: [String] = []
+    func add(_ failure: String) { lock.withLock { failures.append(failure) } }
+    var all: [String] { lock.withLock { failures } }
+}
