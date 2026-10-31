@@ -1,7 +1,7 @@
 import Foundation
 
 /// The machines the budgets in docs/plan.md are set for.
-enum MachineClass: String, Sendable {
+enum MachineClass: String, CaseIterable, Sendable {
     case appleSilicon = "Apple Silicon"
     /// The 2015 MacBook Pro on macOS 12. Every Intel Mac is held to its budget.
     case oldMac = "old Mac"

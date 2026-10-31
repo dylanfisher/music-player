@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import Bench
@@ -33,4 +34,39 @@ private let budget = Budget(appleSilicon: 10, oldMac: 40, unit: .milliseconds)
 @Test func benchmarkNamesAreUnique() {
     let names = benchmarks.map(\.name)
     #expect(Set(names).count == names.count)
+}
+
+/// "| a | b |" -> ["a", "b"].
+private func cells(_ row: Substring) -> [String] {
+    row.split(separator: "|", omittingEmptySubsequences: false).dropFirst().dropLast()
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+}
+
+/// docs/plan.md holds the human copy of every budget; the code holds the one that is enforced.
+@Test func everyBudgetMatchesTheTableInThePlan() throws {
+    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+    let plan = try String(contentsOf: root.appendingPathComponent("docs/plan.md"), encoding: .utf8)
+    let lines = plan.split(separator: "\n", omittingEmptySubsequences: false)
+    let header = try #require(
+        lines.firstIndex { $0.hasPrefix("| What |") }, "no budget table in docs/plan.md")
+    let titles = cells(lines[header]).map { $0.lowercased() }
+    let rows = lines[(header + 2)...].prefix { $0.hasPrefix("|") }.map(cells)
+
+    func text(_ value: Double, _ unit: Budget.Unit) -> String {
+        "< " + (value == value.rounded() ? String(Int(value)) : "\(value)") + " " + unit.rawValue
+    }
+    for benchmark in benchmarks {
+        let limits = try MachineClass.allCases.map { machine in
+            (
+                column: try #require(
+                    titles.firstIndex(of: machine.rawValue.lowercased()),
+                    "no \(machine.rawValue) column in the budget table"),
+                text: text(benchmark.budget.limit(on: machine), benchmark.budget.unit)
+            )
+        }
+        #expect(
+            rows.contains { row in limits.allSatisfy { row[$0.column] == $0.text } },
+            "no row in the plan's budget table for \"\(benchmark.name)\": \(limits.map(\.text))")
+    }
 }
