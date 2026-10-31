@@ -18,6 +18,13 @@ let package = Package(
             cSettings: strictC
         ),
         .target(
+            name: "SQLite",
+            path: "Sources/Primitives/SQLite",
+            swiftSettings: strictSwift,
+            // The system library, through the SDK's SQLite3 module.
+            linkerSettings: [.linkedLibrary("sqlite3")]
+        ),
+        .target(
             name: "HALRender",
             dependencies: ["RingBuffer"],
             path: "Sources/Core/HALRender",
@@ -113,6 +120,11 @@ let package = Package(
         .testTarget(
             name: "SettingsTests",
             dependencies: ["Settings"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "SQLiteTests",
+            dependencies: ["SQLite"],
             swiftSettings: strictSwift
         ),
         .testTarget(
