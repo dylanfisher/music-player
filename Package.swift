@@ -63,6 +63,17 @@ let package = Package(
             path: "Sources/Tools/GenerateFixtures",
             swiftSettings: strictSwift
         ),
+        .executableTarget(
+            name: "Bench",
+            dependencies: ["Fixtures", "Settings"],
+            path: "Sources/Tools/Bench",
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "BenchTests",
+            dependencies: ["Bench"],
+            swiftSettings: strictSwift
+        ),
         .testTarget(
             name: "FixturesTests",
             dependencies: ["Fixtures"],

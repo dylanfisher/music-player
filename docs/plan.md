@@ -57,6 +57,9 @@ These are targets for a 43k-track library, measured by `./scripts/bench` on the 
 (phase 1). "Old Mac" means the 2015 MacBook Pro on macOS 12, measured at hardware checkpoints.
 Change a budget only with a reason in the Result line.
 
+This table is the human copy. Each budget is defined in code next to its benchmark in
+`Sources/Tools/Bench`, and the two change together.
+
 | What | Apple Silicon | Old Mac |
 |---|---|---|
 | Cold launch to an interactive library window | < 1.0 s | < 2.5 s |
@@ -70,6 +73,9 @@ Change a budget only with a reason in the Result line.
 | Gap between same-format tracks | 0 samples | 0 samples |
 | Track change that switches sample rate | < 500 ms | < 500 ms |
 | CPU when idle (not playing) | ~0%, no timers firing faster than settings allow | same |
+| Load and validate settings, every key changed | < 5 ms | < 20 ms |
+| Generate the fixture library | < 30 s | < 120 s |
+| Rerun the fixture generator with nothing to do | < 10 s | < 30 s |
 
 ## Phases
 

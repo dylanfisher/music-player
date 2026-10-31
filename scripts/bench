@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Build release and run the benchmarks against the budgets in docs/plan.md. Exits non-zero on a
+# budget miss. Not part of ./scripts/check, because the full run takes too long.
+#   ./scripts/bench [--list] [<part of a benchmark name>...]
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+swift build -c release --product Bench >&2
+exec "$(swift build -c release --show-bin-path)/Bench" "$@"

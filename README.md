@@ -18,6 +18,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 | Build the `.app` | `./scripts/bundle [debug\|release]` |
 | Update a second Mac's clone, then run the app | `./scripts/pull` |
 | Build the fixture library (43k tagged files) | `./scripts/fixtures [--count N]` |
+| Run the benchmarks against their budgets | `./scripts/bench [name]` |
 | Everything CI runs | `./scripts/check` |
 
 `./scripts/check` runs every step even after one fails, so one run lists every problem.
