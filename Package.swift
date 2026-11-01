@@ -298,7 +298,7 @@ let package = Package(
         ),
         .testTarget(
             name: "PlaybackTests",
-            dependencies: ["Playback"],
+            dependencies: ["Fixtures", "Playback"],
             swiftSettings: strictSwift
         ),
         .testTarget(
