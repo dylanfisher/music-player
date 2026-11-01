@@ -1,0 +1,8 @@
+# What scripts/dupes.swift accepts, one entry per line with its reason after ` | `.
+# ADR 0024 has the rules. An entry that matches nothing fails the check, so delete it with the
+# duplicate it excused.
+
+# Oracles: they write and check test files from the formats' specs, apart from the readers and
+# the writer, so a wrong ID in Metadata fails a test instead of agreeing with itself.
+oracle Sources/Tools/Fixtures | the fixture generator writes every tag format from its spec, independent of Metadata and TagWriter
+oracle Sources/Tools/TagCorpus | its independent readers and round-trip checks re-read tags apart from Metadata, as a test does
