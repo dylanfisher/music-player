@@ -25,13 +25,22 @@ import Testing
     status.fileIssueCount = 3
     #expect(status.text(trackCount: 2) == "2 tracks · 3 files and 1 folder with problems")
     #expect(status.hasProblems)
-    #expect(status.folderLines.count == 1)
+    #expect(status.problemLines.count == 1)
 
     status.apply(.scanned(folder: "/Volumes/music/library", ScanSummary()))
     status.fileIssueCount = 0
     #expect(!status.hasProblems)
     status.apply(.scanFailed(folder: "/Music", reason: "disk I/O error"))
-    #expect(status.folderLines == ["/Music: the scan failed: disk I/O error"])
+    #expect(status.problemLines == ["/Music: the scan failed: disk I/O error"])
+}
+
+@Test func theTimelineCountsPlaysAndADiscardShowsAsAProblem() {
+    var status = LibraryStatus()
+    #expect(status.text(trackCount: 0, playCount: 1_000_000) == "1,000,000 plays")
+    status.notices = ["the earlier stats were discarded"]
+    #expect(status.hasProblems)
+    #expect(status.text(trackCount: 2) == "2 tracks · earlier play counts and playlists discarded")
+    #expect(status.problemLines == ["the earlier stats were discarded"])
 }
 
 @Test func aWindowReportRoundTripsAndRejectsUnknownKeys() throws {

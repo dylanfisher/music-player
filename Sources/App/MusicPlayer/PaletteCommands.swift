@@ -142,10 +142,11 @@ extension AppDelegate {
             else { return }
             browser.show(.playlist(id))
         case .track:
-            // "track:<row>:<id>": the row, if it still shows that track.
+            // "track:<row>:<id>": the row, if it still shows that track, or on the timeline
+            // that play.
             let parts = item.key.split(separator: ":")
             guard parts.count == 3, let row = Int(parts[1]), let id = Int64(parts[2]),
-                browser.trackID(at: row) == id
+                browser.rowID(at: row) == id
             else { return }
             browser.showRow(row)
         case .setting:

@@ -46,6 +46,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private let reader: LibraryReader
     private let index: LibraryIndex
     private let table: TrackTableController
+    private let timelineModel: TimelineModel
+    /// Shown in place of the panes and the track table while the timeline is the source.
+    private let timeline: TimelineController
     private let panes: PanesController
     private let sidebarController: SidebarController
     private let split = NSSplitView()
@@ -88,6 +91,17 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             failed: { message in owner?.show(failure: message) },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         table = TrackTableController(model: model, cache: cache, layout: layout, actions: actions)
+        let timelineModel = TimelineModel(reader: reader)
+        self.timelineModel = timelineModel
+        timeline = TimelineController(
+            model: timelineModel,
+            play: { rows, clicked in
+                guard let request = timelineModel.playRequest(selected: rows, clicked: clicked)
+                else { return }
+                owner?.play(request)
+            },
+            playNext: { rows in owner?.playNext(timelineModel.urls(ofRows: rows)) },
+            keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         panes = PanesController(
             model: model, select: { pane, id in Task { await model.select(pane, id: id) } },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
@@ -119,6 +133,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         content.view = makeContent()
         content.addChild(table)
         content.addChild(panes)
+        content.addChild(timeline)
 
         searchField.placeholderString = "Search"
         searchField.sendsSearchStringImmediately = true
@@ -128,6 +143,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
         model.changed = { [weak self] change in self?.apply(change) }
         model.failed = { [weak self] message in self?.show(failure: message) }
+        timelineModel.changed = { [weak self] previous in
+            self?.timeline.reload(previousIDs: previous)
+            self?.showStatus()
+        }
+        timelineModel.failed = { [weak self] message in self?.show(failure: message) }
     }
 
     private func makeContent() -> NSView {
@@ -151,11 +171,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         for view in [statusLabel, problemsButton] { bar.addArrangedSubview(view) }
         bar.edgeInsets = NSEdgeInsets(top: 3, left: 8, bottom: 3, right: 8)
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let stack = NSStackView(views: [split, bar])
+        timeline.view.isHidden = true
+        let stack = NSStackView(views: [split, timeline.view, bar])
         stack.orientation = .vertical
         stack.spacing = 0
         stack.alignment = .leading
-        for view in [split, bar] {
+        stack.detachesHiddenViews = true
+        for view in [split, timeline.view, bar] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
@@ -171,6 +193,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Loads everything, selecting what `saved` names where it still exists.
     public func load(_ saved: BrowserState) async {
         await model.load(saved)
+        do {
+            status.notices = try await reader.takeDiscards()
+        } catch {
+            report("couldn't read what the last rebuild discarded: \(error)")
+        }
         showSource()
         if model.trackIDs.isEmpty, let firstRowsDrawn {
             self.firstRowsDrawn = nil
@@ -225,6 +252,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         lastRefresh = Date()
         Task {
             await model.refresh()
+            if showsTimeline { await timelineModel.refresh() }
             libraryRefreshed()
             await countIssues()
         }
@@ -242,14 +270,36 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private func apply(_ change: BrowserChange) {
         if change.panes { panes.reload() }
         table.reload(change)
+        showTimelineIfItIsTheSource()
         showStatus()
         stateChanged(model.state)
     }
 
+    /// Whether the sidebar shows the play timeline, which lists plays instead of tracks.
+    public var showsTimeline: Bool { model.filter.source == .timeline }
+
+    /// Swaps the timeline in for the panes and the track table, or back, as the source
+    /// changes. The timeline loads afresh each time it shows.
+    private func showTimelineIfItIsTheSource() {
+        let shows = showsTimeline
+        guard timeline.view.isHidden == shows else { return }
+        let hadKeys = focusedList != nil
+        split.isHidden = shows
+        timeline.view.isHidden = !shows
+        searchField.isEnabled = !shows
+        if shows {
+            Task { await timelineModel.load() }
+        } else {
+            timelineModel.clear()
+        }
+        if hadKeys { focusTracks() }
+    }
+
     private func showStatus() {
         statusLabel.stringValue = status.text(
-            trackCount: model.trackIDs.count, missingCount: model.missingTracks)
-        statusLabel.toolTip = status.folderLines.joined(separator: "\n")
+            trackCount: model.trackIDs.count, missingCount: model.missingTracks,
+            playCount: showsTimeline ? timelineModel.playCount : nil)
+        statusLabel.toolTip = status.problemLines.joined(separator: "\n")
         problemsButton.isHidden = !status.hasProblems
     }
 
@@ -301,7 +351,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             }
             let window = problems ?? ProblemsWindow()
             problems = window
-            window.show(status.folderLines + issues)
+            window.show(status.problemLines + issues)
         }
     }
 
@@ -311,18 +361,21 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private enum List: Equatable {
         case tracks
         case pane(BrowserModel.Pane)
+        case timeline
     }
 
     private var focusedList: List? {
         let responder = table.table.window?.firstResponder
         if responder === table.table { return .tracks }
+        if responder === timeline.table { return .timeline }
         return panes.tables.first { $0.value === responder }.map { .pane($0.key) }
     }
 
     /// The browser's lists in the order Tab moves through them: the sidebar, the panes, the
     /// track table.
     public var focusAreas: [NSView] {
-        [sidebarController.outline]
+        if showsTimeline { return [sidebarController.outline, timeline.table] }
+        return [sidebarController.outline]
             + BrowserModel.Pane.allCases.compactMap { panes.tables[$0] } + [table.table]
     }
 
@@ -331,6 +384,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         switch focusedList {
         case .tracks: table.move(move, extending: extending)
         case .pane(let pane): panes.move(move, in: pane)
+        case .timeline: timeline.move(move, extending: extending)
         case nil: return false
         }
         return true
@@ -338,16 +392,25 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Focuses the next pane to the right (or left), from the genre pane to the track table.
     public func focusPane(forward: Bool) {
+        // The timeline has no panes.
+        guard !showsTimeline else {
+            focusTracks()
+            return
+        }
         let order: [List] = BrowserModel.Pane.allCases.map { .pane($0) } + [.tracks]
         let index = focusedList.flatMap { order.firstIndex(of: $0) } ?? (order.count - 1)
         let next = order[(index + (forward ? 1 : order.count - 1)) % order.count]
         switch next {
-        case .tracks: focusTracks()
+        case .tracks, .timeline: focusTracks()
         case .pane(let pane): table.table.window?.makeFirstResponder(panes.tables[pane])
         }
     }
 
-    public func focusTracks() { table.table.window?.makeFirstResponder(table.table) }
+    /// Gives the keys to the track table, or to the timeline while it shows.
+    public func focusTracks() {
+        let list = showsTimeline ? timeline.table : table.table
+        list.window?.makeFirstResponder(list)
+    }
 
     public func focusSidebar() {
         sidebarController.outline.window?.makeFirstResponder(sidebarController.outline)
@@ -359,20 +422,37 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         searchField.selectText(nil)
     }
 
-    public var hasSelectedTracks: Bool { !table.table.selectedRowIndexes.isEmpty }
+    /// Whether the shown list's selection has a track to act on. On the timeline, plays of
+    /// files no longer in the library have none.
+    public var hasSelectedTracks: Bool { !selectedTrackIDs.isEmpty }
+
+    /// The selected tracks in row order: on the timeline, each track once (ADR 0022).
+    private var selectedTrackIDs: [Int64] {
+        showsTimeline
+            ? timelineModel.trackIDs(ofRows: timeline.table.selectedRowIndexes)
+            : model.ids(ofRows: table.table.selectedRowIndexes)
+    }
 
     /// Whether the track table has the keys.
     public var tracksHaveFocus: Bool { focusedList == .tracks }
 
-    public func selectAllTracks() { table.table.selectAll(nil) }
+    public func selectAllTracks() {
+        (showsTimeline ? timeline.table : table.table).selectAll(nil)
+    }
 
-    public func playSelection() { table.playSelected() }
+    public func playSelection() {
+        if showsTimeline { timeline.playSelected() } else { table.playSelected() }
+    }
 
-    public func playSelectionNext() { table.playSelectedNext() }
+    public func playSelectionNext() {
+        if showsTimeline { timeline.playSelectedNext() } else { table.playSelectedNext() }
+    }
 
     /// The paths of the selected tracks, in table order.
     public func selectedPaths() async throws -> [String] {
-        try await model.urls(ofRows: table.table.selectedRowIndexes).map(\.path)
+        let ids = selectedTrackIDs
+        let paths = try await reader.paths(ids: ids)
+        return ids.compactMap { paths[$0] }
     }
 
     public var sortColumn: TrackColumn { model.sortColumn }
@@ -414,7 +494,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Makes a playlist, smart when `rules` are given, holding the selected tracks when
     /// `withSelection` is set, and shows it.
     public func createPlaylist(named name: String, rules: SmartRules?, withSelection: Bool) {
-        let ids = withSelection ? model.ids(ofRows: table.table.selectedRowIndexes) : []
+        let ids = withSelection ? selectedTrackIDs : []
         edit("couldn't make the playlist \"\(name)\"") {
             try await self.model.createPlaylist(named: name, rules: rules, trackIDs: ids)
         }
@@ -436,7 +516,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Adds the selected tracks to a manual playlist.
     public func addSelection(to playlist: Int64) {
-        let ids = model.ids(ofRows: table.table.selectedRowIndexes)
+        let ids = selectedTrackIDs
         edit("couldn't add the tracks to the playlist") {
             _ = try await self.model.add(ids, to: playlist)
         }
@@ -456,7 +536,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Rates the selected tracks; 0 stars clears their rating.
     public func rateSelection(_ stars: Int) {
-        let ids = model.ids(ofRows: table.table.selectedRowIndexes)
+        let ids = selectedTrackIDs
         edit("couldn't rate the tracks") { try await self.model.rate(ids, stars: stars) }
     }
 
@@ -464,6 +544,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func recordPlay(_ path: String, at seconds: Double) {
         edit("couldn't count the play of \(path)") {
             try await self.model.recordPlay(path, at: seconds)
+            if self.showsTimeline { await self.timelineModel.addNewPlays() }
         }
     }
 
@@ -507,7 +588,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Selects `row` alone, centered, and gives the table the keys.
     public func showRow(_ row: Int) {
-        table.selectCentered(row)
+        if showsTimeline { timeline.selectCentered(row) } else { table.selectCentered(row) }
         focusTracks()
     }
 
@@ -524,13 +605,25 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         focusTracks()
     }
 
-    /// The track ID shown at `row`, to check a palette row still points at it.
-    public func trackID(at row: Int) -> Int64? {
-        model.trackIDs.indices.contains(row) ? model.trackIDs[row] : nil
+    /// What identifies `row`, to check a palette row still points at it: the track ID, or on
+    /// the timeline the play's history ID.
+    public func rowID(at row: Int) -> Int64? {
+        if showsTimeline {
+            return timelineModel.entries.indices.contains(row) ? timelineModel.entries[row].id : nil
+        }
+        return model.trackIDs.indices.contains(row) ? model.trackIDs[row] : nil
     }
 
-    /// The shown tracks' names in table order; nil when the list changed while they were read.
-    public func trackNames() async throws -> [TrackName] { try await model.trackNames() }
+    /// The shown rows' names in order, each with its `rowID`, for Go to Item. On the timeline,
+    /// the loaded plays.
+    public func trackNames() async throws -> [TrackName] {
+        guard showsTimeline else { return try await model.trackNames() }
+        return timelineModel.entries.map { entry in
+            TrackName(
+                id: entry.id, title: entry.title, artist: entry.track?.artist,
+                album: entry.track?.album, genre: entry.track?.genre)
+        }
+    }
 
     /// Esc clears the search and gives the keys back to the table; ↑ and ↓ move the table's
     /// selection while the field keeps the keys.

@@ -18,4 +18,7 @@ public struct PlayEntry: Equatable, Sendable {
         self.playedSeconds = playedSeconds
         self.track = track
     }
+
+    /// The track's title, or for a file no longer in the index, its file name.
+    public var title: String { track?.title ?? displayName(path) }
 }

@@ -77,13 +77,15 @@ extension AppDelegate {
             (.sortByTitle, .title), (.sortByArtist, .artist), (.sortByAlbum, .album),
             (.sortByDateAdded, .dateAdded),
         ]
+        // The timeline's order is the log's.
+        let canSort = { [weak self] in self?.browser?.showsTimeline == false }
         for (id, column) in sorts {
             dispatcher.handle(
-                id, enabled: hasWindow,
+                id, enabled: canSort,
                 isOn: { [weak self] in self?.browser?.sortColumn == column },
                 run: { [weak self] in self?.browser?.sort(by: column) })
         }
-        dispatcher.handle(.reverseSort, enabled: hasWindow) { [weak self] in
+        dispatcher.handle(.reverseSort, enabled: canSort) { [weak self] in
             self?.browser?.reverseSort()
         }
         dispatcher.handle(

@@ -66,7 +66,7 @@ play listed, not only one row per track, and expects the log to reach a million 
 
 - **Its own sidebar item, Timeline, under Music after History**, saved as the source
   `timeline`. A second mode of History would need a switch that History alone has; a sidebar
-  item is a row like the others, reachable from Back, Forward and ⌘K.
+  item is a row like the others, which Back and Forward step through.
 - **Every play, newest first**, 200 at a time by key (`WHERE id < :last ORDER BY id DESC LIMIT
   200`), never `OFFSET`, so a page costs the same at any depth and new plays don't shift the
   pages already loaded. The next page loads as the table draws its last rows. A new play is added

@@ -5,7 +5,7 @@ import KeyChord
 import Library
 import Settings
 
-/// The source list: the library and History, the playlists and the watched folders, with
+/// The source list: the library, History and the timeline, the playlists and the watched folders, with
 /// buttons to add and remove folders. Tracks dragged from the table onto a manual playlist are
 /// added to it.
 @MainActor
@@ -37,7 +37,10 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         self.removeFolder = removeFolder
         self.keyCommand = keyCommand
         let libraryGroup = SidebarNode(.group, title: "Library")
-        libraryGroup.children = [library, SidebarNode(.history, title: "History")]
+        libraryGroup.children = [
+            library, SidebarNode(.history, title: "History"),
+            SidebarNode(.timeline, title: "Timeline"),
+        ]
         groups = [libraryGroup, playlistGroup, folderGroup]
         super.init(nibName: nil, bundle: nil)
     }
@@ -267,7 +270,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         switch selectedNode?.kind {
         case .library: selectSource(nil)
         case .group, nil: break
-        case .folder, .history, .playlist: selectSource(selectedNode?.source)
+        case .folder, .history, .timeline, .playlist: selectSource(selectedNode?.source)
         }
     }
 }
@@ -275,7 +278,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 /// A row of the source list. A class, since NSOutlineView tells items apart by identity.
 private final class SidebarNode {
     enum Kind: Equatable {
-        case group, library, history
+        case group, library, history, timeline
         case folder(String)
         case playlist(Playlist)
     }
@@ -291,6 +294,7 @@ private final class SidebarNode {
         case .folder(let path): .folder(path)
         case .playlist(let playlist): .playlist(playlist.id)
         case .history: .history
+        case .timeline: .timeline
         case .group, .library: nil
         }
     }
@@ -301,6 +305,7 @@ private final class SidebarNode {
         case .group: nil
         case .library: "music.note"
         case .history: "clock"
+        case .timeline: "list.bullet"
         case .folder: "folder"
         case .playlist(let playlist):
             switch playlist.kind {

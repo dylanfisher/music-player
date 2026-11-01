@@ -44,7 +44,8 @@ extension TrackColumn {
     }
 }
 
-@MainActor private let dateFormat: DateFormatter = {
+/// Dates and times as the table shows them: short, in the user's locale.
+@MainActor let dateFormat: DateFormatter = {
     let format = DateFormatter()
     format.dateStyle = .short
     format.timeStyle = .short

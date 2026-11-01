@@ -12,6 +12,8 @@ public struct LibraryStatus: Equatable, Sendable {
     public private(set) var failures: [String: String] = [:]
     /// Files the index stores a warning or failure for.
     public var fileIssueCount = 0
+    /// What a rebuild of the stats discarded, shown for the session it was found in.
+    public var notices: [String] = []
 
     public init() {}
 
@@ -33,13 +35,15 @@ public struct LibraryStatus: Equatable, Sendable {
 
     /// Whether there's anything for the problems list to show.
     public var hasProblems: Bool {
-        fileIssueCount > 0 || !folderIssues.isEmpty || !failures.isEmpty
+        fileIssueCount > 0 || !folderIssues.isEmpty || !failures.isEmpty || !notices.isEmpty
     }
 
     /// "1,204 tracks · scanning Music: 300 of 1,200 read · 3 files and 1 folder with problems".
-    /// `missingCount` is how many of a playlist's tracks aren't in the library.
-    public func text(trackCount: Int, missingCount: Int = 0) -> String {
-        var parts = [count(trackCount, "track")]
+    /// `missingCount` is how many of a playlist's tracks aren't in the library. `playCount` is
+    /// set on the timeline, which counts plays instead of tracks.
+    public func text(trackCount: Int, missingCount: Int = 0, playCount: Int? = nil) -> String {
+        var parts = [playCount.map { count($0, "play") } ?? count(trackCount, "track")]
+        if !notices.isEmpty { parts.append("earlier play counts and playlists discarded") }
         if missingCount > 0 { parts.append(count(missingCount, "track") + " not in the library") }
         for (folder, progress) in scanning.sorted(by: { $0.key < $1.key }) {
             let name = (folder as NSString).lastPathComponent
@@ -59,9 +63,10 @@ public struct LibraryStatus: Equatable, Sendable {
         return parts.joined(separator: " · ")
     }
 
-    /// Every folder problem as a line, for the top of the problems list.
-    public var folderLines: [String] {
-        failures.sorted { $0.key < $1.key }.map { "\($0.key): the scan failed: \($0.value)" }
+    /// Every notice and folder problem as a line, for the top of the problems list.
+    public var problemLines: [String] {
+        notices
+            + failures.sorted { $0.key < $1.key }.map { "\($0.key): the scan failed: \($0.value)" }
             + folderIssues.sorted { $0.key < $1.key }.flatMap { $0.value.map(\.description) }
     }
 }
