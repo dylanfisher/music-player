@@ -753,16 +753,17 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             returnTo = previous
         }
         choice = next
-        let before = [previous.provider] + (previousReturn.map { [$0.provider] } ?? [])
-        let after = [next.provider] + (returnTo.map { [$0.provider] } ?? [])
-        for provider in before where !after.contains(where: { $0 === provider }) {
-            provider.stopWatching()
-        }
-        for provider in after where !before.contains(where: { $0 === provider }) {
-            do {
-                try watch(provider)
-            } catch {
-                emit(.failed(nil, error))
+        // Watching again reports each device's state now, which a device watched only for its
+        // return had its reports dropped.
+        if next.provider !== previous.provider || returnTo?.provider !== previousReturn?.provider {
+            previous.provider.stopWatching()
+            previousReturn?.provider.stopWatching()
+            for provider in [next.provider] + (returnTo.map { [$0.provider] } ?? []) {
+                do {
+                    try watch(provider)
+                } catch {
+                    emit(.failed(nil, error))
+                }
             }
         }
         condition.withLock { volumeOn = next.digitalVolume }
