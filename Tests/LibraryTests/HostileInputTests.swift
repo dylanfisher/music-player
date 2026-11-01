@@ -1,7 +1,9 @@
 import Foundation
+import Metadata
 import Settings
 import Testing
 
+@testable import Fixtures
 @testable import Library
 
 /// What SQL, LIKE and FTS5 give meaning to, and a value near the rule limit (ADR 0025).
@@ -17,27 +19,30 @@ private func value(_ word: String) -> String {
     word == plainWord ? "\(word) plain" : "\(word) a\(hostile.first { $0.word == word }!.text)b"
 }
 
-/// A FLAC file with STREAMINFO and a Vorbis comment, which is all the scan reads.
+/// A FLAC file with STREAMINFO and a Vorbis comment, which is all the scan reads. Built here
+/// because Fixtures' `flacFile` writes only `FixtureTags`, which has no composer, and
+/// MetadataTests' `flac(_:)` is in a test target this one can't import; Fixtures' byte helpers
+/// do the packing.
 private func flac(tags: [String: String]) -> Data {
-    var info = Data([0x10, 0x00, 0x10, 0x00]) + Data(count: 6)
-    let packed = UInt64(44_100) << 44 | UInt64(1) << 41 | UInt64(15) << 36 | UInt64(4410)
-    for shift in stride(from: 56, through: 0, by: -8) { info.append(UInt8(packed >> shift & 0xFF)) }
-    info += Data(count: 16)
-    func littleEndian(_ value: Int) -> Data {
-        Data((0..<4).map { UInt8(value >> ($0 * 8) & 0xFF) })
-    }
-    var comment = littleEndian(0) + littleEndian(tags.count)
+    var file = Data()
+    file.append(ascii: flacMarker)
+    file.append(0)
+    file.appendUInt24(34)
+    file.appendBigEndian(UInt16(4096))
+    file.appendBigEndian(UInt16(4096))
+    file.append(Data(count: 6))
+    file.appendBigEndian(UInt64(44_100) << 44 | UInt64(1) << 41 | UInt64(15) << 36 | 4410)
+    file.append(Data(count: 16))
+    var comment = Data()
+    comment.appendLittleEndian(UInt32(0))
+    comment.appendLittleEndian(UInt32(tags.count))
     for (key, value) in tags.sorted(by: { $0.key < $1.key }) {
-        let field = Data("\(key)=\(value)".utf8)
-        comment += littleEndian(field.count) + field
+        comment.appendLittleEndian(UInt32("\(key)=\(value)".utf8.count))
+        comment.append(ascii: "\(key)=\(value)")
     }
-    func block(_ type: UInt8, _ body: Data) -> Data {
-        Data([
-            type, UInt8(body.count >> 16), UInt8(body.count >> 8 & 0xFF), UInt8(body.count & 0xFF),
-        ])
-            + body
-    }
-    return Data("fLaC".utf8) + block(0, info) + block(0x84, comment) + Data([0xFF, 0xF8, 0, 0])
+    file.append(0x84)
+    file.appendUInt24(comment.count)
+    return file + comment + Data([0xFF, 0xF8, 0, 0])
 }
 
 /// A library of one file per hostile text and one plain file. The hostile text is in every text
