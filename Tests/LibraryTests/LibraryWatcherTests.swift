@@ -175,3 +175,30 @@ private final class LockedEvents: @unchecked Sendable {
     #expect(after.id == id)
     #expect(after.playCount == 1)
 }
+
+@Test func aListingThatFailsAtStartStillWatchesTheRestAndTriesAgain() async throws {
+    struct Refused: Error {}
+    let library = try TestLibrary()
+    let mountPoint = (library.root as NSString).deletingLastPathComponent + "/nas-music"
+    try FileManager.default.createDirectory(
+        atPath: mountPoint + "/library", withIntermediateDirectories: true)
+    let mounts = FakeMounts([MountedShare(url: "smb://nas/music", mountPoint: mountPoint)])
+    mounts.fail(with: Refused())
+    let received = LockedEvents()
+    let watcher = LibraryWatcher(
+        databaseURL: library.databaseURL, networkReaders: 4, mounts: mounts,
+        events: received.append)
+    let share = WatchedFolder(path: "library", share: "smb://nas/music", kind: .network)
+    watcher.start(folders: [library.folder, share], pausePollingDuringPlayback: false)
+    defer { watcher.stop() }
+    // The local folder is scanned; the share folder, never found, is offline.
+    #expect(try await eventually(within: 20) { received.scanned.count == 2 })
+    let byFolder = Dictionary(uniqueKeysWithValues: received.scanned)
+    #expect(byFolder[library.root]?.read == library.manifest.files.count)
+    #expect(byFolder["smb://nas/music/library"]?.issues.map(\.kind) == [.rootUnavailable])
+
+    mounts.fail(with: nil)
+    watcher.sharesMayHaveMoved()
+    let found = canonicalPath(mountPoint + "/library")
+    #expect(try await eventually(within: 20) { received.scanned.contains { $0.0 == found } })
+}

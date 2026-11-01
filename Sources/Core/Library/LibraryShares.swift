@@ -50,8 +50,7 @@ extension LibraryIndex {
         guard let share = folder.share else {
             preconditionFailure("\(folder.path) isn't on a share")
         }
-        return try storedRoot(share: share, path: folder.path)
-            ?? (folder.path.isEmpty ? share : share + "/" + folder.path)
+        return try storedRoot(share: share, path: folder.path) ?? unfoundRoot(of: folder)
     }
 
     private func storedRoot(share: String, path: String) throws -> String? {
@@ -179,4 +178,11 @@ extension LibraryIndex {
     {
         zip(folders, try lastKnownFolders(folders)).filter { $0.1.path != path }.map(\.0)
     }
+}
+
+/// What stands in for the root of a share folder never found: its URL, which no scan finds as a
+/// directory, so it shows offline.
+func unfoundRoot(of folder: WatchedFolder) -> String {
+    guard let share = folder.share else { preconditionFailure("\(folder.path) isn't on a share") }
+    return folder.path.isEmpty ? share : share + "/" + folder.path
 }

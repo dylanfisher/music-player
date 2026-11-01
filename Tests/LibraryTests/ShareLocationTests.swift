@@ -8,12 +8,21 @@ import Testing
 final class FakeMounts: ShareMounts, @unchecked Sendable {
     private let lock = NSLock()
     private var shares: [MountedShare]
+    private var failure: (any Error)?
 
     init(_ shares: [MountedShare] = []) { self.shares = shares }
 
     func set(_ shares: [MountedShare]) { lock.withLock { self.shares = shares } }
 
-    func mountedShares() throws -> [MountedShare] { lock.withLock { shares } }
+    /// Makes every listing throw `error`, until it's nil again.
+    func fail(with error: (any Error)?) { lock.withLock { failure = error } }
+
+    func mountedShares() throws -> [MountedShare] {
+        try lock.withLock {
+            if let failure { throw failure }
+            return shares
+        }
+    }
 }
 
 private let music = WatchedFolder(path: "library", share: "smb://nas.local/music", kind: .network)
