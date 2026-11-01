@@ -543,7 +543,7 @@ func canonicalPath(_ path: String) -> String {
 }
 
 /// `directory` as a prefix of the paths under it: "dir" becomes "dir", and "/" becomes "".
-private func stem(_ directory: String) -> String {
+func stem(_ directory: String) -> String {
     let base = canonicalPath(directory)
     return base == "/" ? "" : base
 }
@@ -552,6 +552,12 @@ private func stem(_ directory: String) -> String {
 /// "/" in byte order. The index on `files.path` serves the range.
 func pathRange(under directory: String) -> Range<String> {
     let base = stem(directory)
+    return (base + "/")..<(base + "0")
+}
+
+/// `pathRange` for `directory` byte for byte, without putting it in canonical form first.
+func exactPathRange(under directory: String) -> Range<String> {
+    let base = directory == "/" ? "" : directory
     return (base + "/")..<(base + "0")
 }
 

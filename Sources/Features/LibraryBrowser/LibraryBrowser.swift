@@ -63,6 +63,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var lastRefresh = Date.distantPast
     private var refreshPending = false
     private var problems: ProblemsWindow?
+    /// Counts folder tree reads, so only the newest is shown.
+    private var treeReads = 0
     /// Set from the read of another player's library until its preview sheet closes.
     private var isImporting = false
     private(set) var importSheet: PlayerImportSheet?
@@ -235,6 +237,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         } catch {
             report("couldn't read or forget what a stats rebuild discarded: \(error)")
         }
+        // Before the sidebar shows the source, which may be a subfolder.
+        await loadFolderTree()
         showSource()
         await countIssues()
     }
@@ -249,11 +253,27 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func setFolders(_ folders: [WatchedFolder]) async {
         self.folders = folders
         var source = model.filter.source
-        if case .folder(let path) = source, !folders.contains(where: { $0.path == path }) {
+        if case .folder(let path) = source,
+            !FolderTree.isFolder(path, under: folders.map(\.path))
+        {
             source = nil
         }
         sidebarController.show(folders: folders, playlists: model.playlists, source: source)
         if source != model.filter.source { await model.setSource(source) }
+        await loadFolderTree()
+    }
+
+    /// Reads the subfolders of the watched folders from the index and lists them.
+    private func loadFolderTree() async {
+        treeReads += 1
+        let mine = treeReads
+        do {
+            let tree = try await reader.folderTree(roots: folders.map(\.path))
+            guard mine == treeReads else { return }
+            sidebarController.show(tree: tree)
+        } catch {
+            report("couldn't read the folders from the library: \(error)")
+        }
     }
 
     /// What the watcher reported. Refreshes as rows arrive, at most every
@@ -286,6 +306,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         Task {
             await model.refresh()
             if showsTimeline { timelineModel.refresh() }
+            await loadFolderTree()
             libraryRefreshed()
             await countIssues()
         }
@@ -555,10 +576,18 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     public func forward() { Task { if await model.forward() { showSource() } } }
 
-    /// Selects the model's source in the sidebar, listing the playlists as they are now.
+    /// Selects the model's source in the sidebar, listing the playlists as they are now. A
+    /// folder the sidebar no longer lists, since its tracks left the index, gives way to the
+    /// library.
     private func showSource() {
         sidebarController.show(
             folders: folders, playlists: model.playlists, source: model.filter.source)
+        guard !sidebarController.lists(model.filter.source) else { return }
+        logger.notice("the folder shown has no tracks left; showing the library")
+        Task {
+            await model.setSource(nil)
+            showSource()
+        }
     }
 
     // MARK: Playlists and stats

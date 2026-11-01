@@ -7,9 +7,15 @@ import Settings
 /// waits for the one before it, so a query after an edit sees it.
 public actor LibraryReader {
     private let index: LibraryIndex
+    private let databaseURL: URL
 
     public init(databaseURL: URL) throws {
         index = try LibraryIndex(at: databaseURL)
+        self.databaseURL = databaseURL
+    }
+
+    public func folderTree(roots: [String]) throws -> FolderTree {
+        try index.folderTree(roots: roots)
     }
 
     public func trackIDs(_ filter: TrackFilter, sortedBy column: TrackColumn, ascending: Bool)

@@ -140,6 +140,14 @@ extension LibraryIndex {
         try statement(rowSelect + " WHERE f.path = ?").map(path, row: trackRow).first
     }
 
+    /// The tree of folders holding tracks under the watched folders `roots`.
+    public func folderTree(roots: [String]) throws -> FolderTree {
+        FolderTree(
+            paths: try statement(
+                "SELECT path FROM files WHERE id IN (SELECT file_id FROM tracks) ORDER BY path"
+            ).map { try $0.text(0) }, roots: roots)
+    }
+
     /// The path of each of `ids` that is still in the index.
     public func paths(ids: [Int64]) throws -> [Int64: String] {
         let select = try statement("SELECT path FROM files WHERE id = ?")
@@ -161,11 +169,7 @@ extension LibraryIndex {
             SELECT path, failure_kind, failure_offset, failure_detail FROM files
             WHERE failure_kind IS NOT NULL ORDER BY path
             """
-        ).map { row in
-            FileIssue(
-                path: try row.text(0), problem: .failure(try errorKind(try row.text(1))),
-                offset: row.optionalInt(2), detail: try row.text(3))
-        }
+        ).map(row: failureIssue)
         let warnings = try statement(
             """
             SELECT f.path, w.kind, w.offset, w.detail FROM warnings w
@@ -194,6 +198,13 @@ extension LibraryIndex {
             + " ORDER BY \(order), id"
         return try statement(sql).map(binding: values, row: read)
     }
+}
+
+/// A failure from a row of path, failure kind, offset and detail.
+func failureIssue(_ row: Row) throws -> FileIssue {
+    FileIssue(
+        path: try row.text(0), problem: .failure(try errorKind(try row.text(1))),
+        offset: row.optionalInt(2), detail: try row.text(3))
 }
 
 /// The parts of a `TrackFilter`, so each query names the ones it applies.
@@ -245,8 +256,21 @@ extension LibraryIndex {
     ) {
         switch source {
         case .folder(let folder):
-            let range = pathRange(under: folder)
-            return ("f.path >= ? AND f.path < ?", [range.lowerBound, range.upperBound])
+            // A watched folder is matched in the form the scan stores its paths in, and a
+            // subfolder from the folder tree as the index spells it, which on a share can mix
+            // forms (ADR 0034).
+            // Compared as bytes, since Swift's == calls two spellings of one name equal.
+            let canonical = pathRange(under: folder)
+            let exact = exactPathRange(under: folder)
+            let ranges =
+                Array(canonical.lowerBound.utf8) == Array(exact.lowerBound.utf8)
+                ? [canonical] : [canonical, exact]
+            return (
+                "("
+                    + Array(repeating: "(f.path >= ? AND f.path < ?)", count: ranges.count)
+                    .joined(separator: " OR ") + ")",
+                ranges.flatMap { [$0.lowerBound, $0.upperBound] }
+            )
         case .history:
             // On the joined plays the condition lets SQLite start from plays_last_played.
             if playsJoined { return ("p.last_played_seconds IS NOT NULL", []) }

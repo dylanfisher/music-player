@@ -6,7 +6,8 @@ import Library
 import Settings
 
 /// The source list: the library, History and the timeline, the playlists and the watched
-/// folders, with buttons to add and remove folders. Tracks dragged from the table onto a manual
+/// folders, each of which opens into the tree of its subfolders, with buttons to add and remove
+/// watched folders. Tracks dragged from the table onto a manual
 /// playlist are added to it; playlist files dropped anywhere on it are imported.
 @MainActor
 final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate {
@@ -28,6 +29,12 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     private var typeSelect: TypeSelect?
     private var folders: [WatchedFolder] = []
     private var playlists: [Playlist] = []
+    private var tree = FolderTree()
+    /// Counts trees shown, so a folder row reads its subfolders again from a newer one.
+    private var treeVersion = 0
+    /// Folder rows by path, each made when its parent first opens, and kept so a newer tree
+    /// finds the same rows and keeps them open.
+    private var folderNodes: [String: SidebarNode] = [:]
 
     init(
         selectSource: @escaping (BrowserSource?) -> Void, addFolder: @escaping () -> Void,
@@ -110,30 +117,96 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         self.playlists = playlists
         applying = true
         defer { applying = false }
+        let open = openFolders()
         playlistGroup.children = playlists.map { playlist in
             let node = SidebarNode(.playlist(playlist), title: playlist.name)
             if case .unreadable(let reason) = playlist.kind { node.toolTip = reason }
             return node
         }
         folderGroup.children = folders.map { folder in
-            let node = SidebarNode(.folder(folder.path), title: displayName(folder.path))
+            let node = folderNode(folder.path)
             node.toolTip =
                 folder.path + (folder.kind == .network ? " (network, polled)" : " (local)")
             return node
         }
         outline.reloadData()
         for group in groups { outline.expandItem(group) }
-        let selected =
-            source.flatMap { source in
-                groups.lazy.flatMap(\.children).first { $0.source == source }
-            } ?? library
-        outline.selectRowIndexes([outline.row(forItem: selected)], byExtendingSelection: false)
+        // In row order, so each folder opens after the one holding it.
+        for node in open.compactMap({ folderNodes[$0] }) { outline.expandItem(node) }
+        let found = source.flatMap(row(for:))
+        outline.selectRowIndexes(
+            [found ?? outline.row(forItem: library)], byExtendingSelection: false)
         updateRemoveButton()
+    }
+
+    /// Whether the sidebar has a row for `source`: false for a folder that is neither watched
+    /// nor in the tree, such as one whose tracks have all gone.
+    func lists(_ source: BrowserSource?) -> Bool {
+        guard case .folder(let path) = source else { return true }
+        return folders.contains { $0.path == path } || !tree.ancestors(of: path).isEmpty
     }
 
     /// Selects `source` without reporting it, for Back and Forward.
     func show(source: BrowserSource?) {
         show(folders: folders, playlists: playlists, source: source)
+    }
+
+    /// Lists the subfolders of `tree` under the watched folders, keeping open the rows that are
+    /// open and the selection.
+    func show(tree: FolderTree) {
+        guard tree != self.tree else { return }
+        let source = selectedSource
+        self.tree = tree
+        treeVersion += 1
+        show(folders: folders, playlists: playlists, source: source)
+    }
+
+    /// The row showing `source`, opening the folders above a subfolder; nil when there's none.
+    private func row(for source: BrowserSource) -> Int? {
+        if case .folder(let path) = source {
+            // Each opens before the next is asked for, which its opening makes.
+            for folder in tree.ancestors(of: path) {
+                if let node = folderNodes[folder] { outline.expandItem(node) }
+            }
+        }
+        let node =
+            groups.lazy.flatMap(\.children).first { $0.source == source }
+            ?? {
+                if case .folder(let path) = source { return folderNodes[path] }
+                return nil
+            }()
+        guard let node else { return nil }
+        let row = outline.row(forItem: node)
+        return row >= 0 ? row : nil
+    }
+
+    /// The paths of the open folder rows, in row order.
+    private func openFolders() -> [String] {
+        (0..<outline.numberOfRows).compactMap { row in
+            guard let node = outline.item(atRow: row) as? SidebarNode,
+                case .folder(let path) = node.kind, outline.isItemExpanded(node)
+            else { return nil }
+            return path
+        }
+    }
+
+    private func folderNode(_ path: String) -> SidebarNode {
+        if let node = folderNodes[path] { return node }
+        let node = SidebarNode(.folder(path), title: displayName(path))
+        node.toolTip = path
+        folderNodes[path] = node
+        return node
+    }
+
+    /// A row's children; a folder's are read from the tree when it first opens, and again
+    /// after a newer tree.
+    private func children(of node: SidebarNode) -> [SidebarNode] {
+        guard case .folder(let path) = node.kind else { return node.children }
+        if node.treeVersion != treeVersion {
+            node.children = tree.subfolders(of: path).map(folderNode)
+            node.treeVersion = treeVersion
+        }
+        return node.children
     }
 
     /// The outline moves through its own rows, skipping the group headings; every other key
@@ -152,33 +225,45 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.item(atRow: outline.selectedRow) as? SidebarNode
     }
 
+    /// What the selected row shows; nil for the library.
+    var selectedSource: BrowserSource? { selectedNode?.source }
+
+    /// The watched folder selected, which − stops watching; nil for a subfolder.
+    private var selectedWatchedFolder: String? {
+        guard case .folder(let path) = selectedNode?.kind,
+            folders.contains(where: { $0.path == path })
+        else { return nil }
+        return path
+    }
+
     private func updateRemoveButton() {
-        if case .folder = selectedNode?.kind {
-            removeButton.isEnabled = true
-        } else {
-            removeButton.isEnabled = false
-        }
+        removeButton.isEnabled = selectedWatchedFolder != nil
     }
 
     @objc private func addClicked() { addFolder() }
 
     @objc private func removeClicked() {
-        guard case .folder(let path) = selectedNode?.kind else { return }
+        guard let path = selectedWatchedFolder else { return }
         removeFolder(path)
     }
 
     // MARK: Data source and delegate
 
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
-        (item as? SidebarNode)?.children.count ?? groups.count
+        (item as? SidebarNode).map { children(of: $0).count } ?? groups.count
     }
 
     func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
-        (item as? SidebarNode)?.children[index] ?? groups[index]
+        (item as? SidebarNode).map { children(of: $0)[index] } ?? groups[index]
     }
 
     func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
-        (item as? SidebarNode)?.kind == .group
+        guard let node = item as? SidebarNode else { return false }
+        switch node.kind {
+        case .group: return true
+        case .folder(let path): return !tree.subfolders(of: path).isEmpty
+        case .library, .history, .timeline, .playlist: return false
+        }
     }
 
     func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool {
@@ -308,6 +393,8 @@ private final class SidebarNode {
     let title: String
     var toolTip: String?
     var children: [SidebarNode] = []
+    /// The folder tree `children` was read from, for a folder row.
+    var treeVersion = -1
 
     /// What selecting the row shows; nil for the library and the group headings.
     var source: BrowserSource? {

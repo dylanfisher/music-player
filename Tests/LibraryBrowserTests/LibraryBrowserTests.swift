@@ -75,3 +75,45 @@ import Testing
     #expect(beeps == 1)
     #expect(browser.statusText.hasSuffix("\(LibraryError.playsNotTracks)"))
 }
+
+@MainActor @Test func aSavedSubfolderOpensItsFoldersAndListsItsTracks() async throws {
+    let (root, databaseURL) = try browserLibrary.get()
+    let artist = root + "/Crimson Tides"
+    let album = artist + "/Glass Distance (1973)"
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, folders: [WatchedFolder(path: root, kind: .local)],
+        groupByAlbumArtist: false)
+    let sidebar = try #require(browser.sidebar as? SidebarController)
+    _ = sidebar.view
+    await browser.load(BrowserState(source: .folder(album), genre: nil, artist: nil, album: nil))
+    #expect(sidebar.selectedSource == .folder(album))
+    // The library's three groups, the watched folder, the artist, then the album.
+    #expect(sidebar.outline.level(forRow: sidebar.outline.selectedRow) == 3)
+    browser.selectAllTracks()
+    let paths = try await browser.selectedPaths()
+    #expect(!paths.isEmpty)
+    #expect(paths.allSatisfy { $0.hasPrefix(album + "/") })
+}
+
+@MainActor @Test func aSavedFolderWithNoTracksLeftShowsTheLibrary() async throws {
+    let (root, databaseURL) = try browserLibrary.get()
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, folders: [WatchedFolder(path: root, kind: .local)],
+        groupByAlbumArtist: false)
+    let sidebar = try #require(browser.sidebar as? SidebarController)
+    _ = sidebar.view
+    var shown: [BrowserSource?] = []
+    browser.stateChanged = { shown.append($0.source) }
+    await browser.load(
+        BrowserState(source: .folder(root + "/Gone"), genre: nil, artist: nil, album: nil))
+    let deadline = Date().addingTimeInterval(10)
+    while shown.last != .some(nil), Date() < deadline {
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    #expect(shown.last == .some(nil))
+    #expect(sidebar.selectedSource == nil)
+}
