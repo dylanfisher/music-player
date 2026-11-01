@@ -189,3 +189,30 @@ private func expected(
         Set(failures.map { ($0.path as NSString).lastPathComponent })
             == Set(hostileFiles.map(\.0)))
 }
+
+@Test func aWalkListsAtMostItsCapOfProblemsAndStillProtectsEveryUnreadableFolder() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("hostile-\(UUID().uuidString)")
+    let root = directory.appendingPathComponent("Music")
+    let locked = root.appendingPathComponent("zz locked")
+    try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+    try flac(tags: ["TITLE": "kept"]).write(to: locked.appendingPathComponent("kept.flac"))
+    let links = ScanPipeline.maximumIssues + 50
+    for number in 0..<links {
+        #expect(symlink("/nowhere", root.appendingPathComponent("link \(number)").path) == 0)
+    }
+    let databaseURL = directory.appendingPathComponent("library.sqlite")
+    let scanner = LibraryScanner(databaseURL: databaseURL)
+    let folder = WatchedFolder(path: root.path, kind: .local)
+    var summary = try scanner.scan(folder)
+    #expect(summary.read == 1)
+    #expect(summary.issues.count == ScanPipeline.maximumIssues + 1)
+    #expect(summary.issues.last?.detail.hasPrefix("50 more problems in this folder") == true)
+
+    chmod(locked.path, 0)
+    defer { chmod(locked.path, 0o755) }
+    summary = try scanner.scan(folder)
+    #expect(summary.issues.count == ScanPipeline.maximumIssues + 1)
+    #expect(summary.removed == 0)
+    #expect(try LibraryIndex(at: databaseURL).trackCount() == 1)
+}

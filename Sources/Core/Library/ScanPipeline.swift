@@ -20,13 +20,23 @@ final class ScanPipeline: @unchecked Sendable {
     /// doubling's gain in that noise.
     static let windowSeconds = 2.0
     static let windowFilesPerReader = 4
+    /// The most walk problems one scan lists. A folder of a million links or unreadable files
+    /// would otherwise make a summary of a million lines.
+    static let maximumIssues = 100
 
     /// What the walk and the reads found.
     struct Outcome {
         /// Every audio file the walk found, changed or not.
         var seen: Set<String> = []
         var otherFiles = 0
+        /// The walk's first `maximumIssues` problems.
         var issues: [ScanIssue] = []
+        /// How many more there were, and the first of them.
+        var moreIssues = 0
+        var firstMoreIssue: ScanIssue?
+        /// Every directory or entry the walk couldn't read, listed or not, which the scan
+        /// mustn't remove anything under.
+        var unreadablePaths: [String] = []
         /// Entries in `root`'s listing, when it was listed.
         var rootEntries: Int?
         var unchanged = 0
@@ -170,7 +180,15 @@ final class ScanPipeline: @unchecked Sendable {
             listing -= 1
             if directory == root { outcome.rootEntries = listed.entries }
             outcome.otherFiles += listed.otherFiles
-            outcome.issues += listed.issues
+            for issue in listed.issues {
+                if issue.kind == .unreadable { outcome.unreadablePaths.append(issue.path) }
+                if outcome.issues.count < Self.maximumIssues {
+                    outcome.issues.append(issue)
+                } else {
+                    if outcome.moreIssues == 0 { outcome.firstMoreIssue = issue }
+                    outcome.moreIssues += 1
+                }
+            }
             directories += listed.directories.reversed()
             found += listed.files.count
             for file in listed.files {

@@ -95,7 +95,18 @@ public struct LibraryScanner: Sendable {
         summary.failed = outcome.failed
         summary.unchanged = outcome.unchanged
         summary.otherFiles = outcome.otherFiles
+        // Only the walk's own unreadable paths and the folder's protect it from removals, so the
+        // count line below can't, whatever kind it names.
+        let protected =
+            summary.issues.filter { $0.kind == .unreadable }.map(\.path) + outcome.unreadablePaths
         summary.issues += outcome.issues
+        if let first = outcome.firstMoreIssue {
+            summary.issues.append(
+                ScanIssue(
+                    kind: first.kind, path: root,
+                    detail: "\(outcome.moreIssues) more problems in this folder, not listed;"
+                        + " the first: \(first.path): \(first.detail)"))
+        }
         summary.readers = outcome.readers
         summary.readCost = outcome.readCost
         summary.idleReaderSeconds = outcome.idleReaderSeconds
@@ -121,7 +132,6 @@ public struct LibraryScanner: Sendable {
         }
 
         // The walk finished, so remove what's gone, except under anything it couldn't see.
-        let protected = summary.issues.filter { $0.kind == .unreadable }.map(\.path)
         let gone = known.filter { path, _ in
             !outcome.seen.contains(path)
                 && !protected.contains { $0 == path || isPath(path, under: $0) }
