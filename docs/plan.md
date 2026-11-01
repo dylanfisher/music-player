@@ -1101,13 +1101,15 @@ Implementation plan (ADR 0024, written with the script):
    - SQLite, Library and Bench: the WAL and shared-memory suffixes in `Database`, the library
      file name, the history insert and the checkpoint, which Bench takes from Library.
    - Settings and Commands: setting keys in the menus from `AppSettings`, the view toggles'
-     titles from `AppState`, a public `AppCommands.title(of:)`, one spelling of a key problem.
-   - Features: field titles from `TagField` in Metadata (the tag editor, smart rules, the browser
-     panes and the track columns), command titles for buttons that run a command, the settings
-     symbol and the bit-depth text in DisplayText, the Go to Item key in Palette.
+     titles from `AppState`, a public `AppCommands.title(of:)`.
+   - Features: the smart field titles move from the rule editor to Library, beside the column
+     titles, and the tag editor and the browser panes read them; buttons that run a command take
+     its title; the bit-depth text joins `kilohertz` in DisplayText.
    - App: the command-line flags named once, one error printer.
-   - What stays is allowlisted with its reason: the same word for different things, standard
-     AppKit button titles, separate executables' own messages, and the strict-decoding shape.
+   - What stays is allowlisted with its reason: the same word for different things (the SF
+     Symbols among them), standard AppKit button titles, flags and keys Tools use from outside
+     the app, separate executables' own messages, second copies of behavior, and the
+     strict-decoding shape.
 4. **Tests.** `scripts/dupes-test` builds fixture trees under `.build/dupes-test` and runs the
    script on each: a clean tree passes; a planted literal, a third copy of a block, a stale
    entry and an entry with no reason each fail with the expected line. Tests that assert a
