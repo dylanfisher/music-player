@@ -37,7 +37,7 @@ Set by the owner on 2026-10-30 and 2026-10-31:
 2. Phases 6, 7, 8, 11 and then 15, each through its gate.
 3. Write the [hardening sub-plan](#14-hardening), committed as `docs: plan phase 14`, then run
    14a onward, each through its gate.
-4. Phases 16 to 22 in order, each through its gate. Added by the owner on 2026-11-01.
+4. Phases 16 to 23 in order, each through its gate. Added by the owner on 2026-11-01.
 5. Phase 9 last, if time is left, against a simulated renderer only. Nothing contacts the Denon
    or any real device: no SSDP on the LAN, no HTTP or receiver control to real addresses. Its Denon checkpoint stays
    pending.
@@ -1541,6 +1541,61 @@ keyed by the device's UID (a renderer's UDN once phase 9 lands) and kept in the 
 - [ ] **Hardware checkpoint (owner):** on the DAC Mac, set different volumes on the ADI-2 and the
       built-in output, switch between them, then power the ADI-2 off and on, and report what the
       app does.
+
+### 23. Sync across machines
+
+Two or three Macs play the same NAS library, and each keeps its own index. Plays, skips, ratings,
+loved, playlists and Date Added are shared through a sync folder on the NAS. Each machine appends
+its own changes to its own log there and reads the others' logs. No file has two writers, so SMB
+locking never matters. The library index, the layout state and the config file are never synced.
+Write the ADR first; it amends ADR 0022.
+
+- [ ] **Boundary first.** AGENTS.md gains one exception: the app may write its own log, and
+      nothing else, in the sync folder the user chose, which must be outside every watched folder.
+      Music files stay as they are. Tests use a temporary folder, never the NAS.
+- [ ] **Track identity.** A track's identity is the SHA-256 of its audio payload, the same hash
+      the tag writer checks (ADR 0020), plus its length in frames. It doesn't change when tags
+      are edited or the file is renamed or moved. Paths are only a locator:
+      - Each log event carries the identity and the path relative to the library root,
+        normalized to NFC, as a hint for duplicates and for files not hashed yet.
+      - A machine applies an event to the local file with that identity. When two local files
+        share it (the same rip in two folders, or two silent tracks of one length), it uses the one
+        whose relative path matches, then the first by path. An event it can't match is kept and
+        retried after each scan, and listed in the health report (phase 19).
+      - Hashing reads every file once. A machine publishes what it hashed as (relative path, size,
+        modification time, identity), and a machine that sees the same three values takes the
+        identity without reading the file, so the library is read once per change, not once per
+        machine. Hashing runs in the background, never while playing from the same share, and
+        resumes where it stopped.
+      - A tag edit made by this app publishes the new size and modification time with the same
+        identity, from the hashes the tag writer already computed.
+      - Locally, `paths` gains the identity, so a file that moved or was renamed keeps its stats
+        on this machine too, which fixes phase 15's known limit.
+- [ ] **Library root.** `sync.folder` and `sync.libraryRoot` in the config file, per machine. The
+      root is where relative paths start, so `/Volumes/music/library` and `/Volumes/music-1/library`
+      are the same library.
+- [ ] **Logs.** One append-only file per machine (`<machine id>.log`, the ID minted on first run
+      and kept in the state file), one event a line: play, skip, rating, loved, Date Added, and
+      playlist create, rename, delete and entry changes. Events carry a hybrid logical clock, not
+      just wall time, so a machine with a wrong clock can't win every conflict. Each machine
+      records how far it has read each other log.
+- [ ] **Merging.** Plays and skips are a union, so none is lost or counted twice. Ratings, loved,
+      playlist names and playlist contents take the latest change by clock, then by machine ID.
+      Date Added takes the earliest. Phase 18's import runs on one machine and reaches the others
+      as events.
+- [ ] **Offline.** With the NAS away, the app works as now and appends to a local copy of its log,
+      which goes to the NAS when it's back. A log that ends mid-line (a machine died while
+      writing) is read up to its last complete line.
+- [ ] Logs from other machines are hostile input: line and file size caps, strict decoding, rows
+      in [ADR 0025](decisions/0025-threat-model.md).
+- [ ] Tests: two and three simulated machines in temporary folders, with interleaved and
+      conflicting edits, skewed clocks, a renamed and a moved file, a tag edit, duplicate audio,
+      a truncated log, the NAS going away and coming back, and identities borrowed from another
+      machine's hashes.
+- [ ] Bench: merging 1M play events, and the cost of hashing the fixture library.
+- [ ] **Hardware checkpoint (owner):** with two Macs on the NAS, play and rate on each, rename a
+      folder of a test album, and report whether both machines show the same plays, ratings and
+      playlists.
 
 ## Later
 
