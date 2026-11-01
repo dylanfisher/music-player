@@ -183,6 +183,7 @@ extension LibraryIndex {
         merge.pathIDs[to] = nil
         let oldNFC = fromPath.precomposedStringWithCanonicalMapping
         let newNFC = toPath.precomposedStringWithCanonicalMapping
+        guard oldNFC != newNFC else { return "it moves \(from) onto itself" }
         guard let old = try existingPathID(oldNFC) else { return nil }
         guard let new = try existingPathID(newNFC) else {
             try statement("UPDATE paths SET path = ? WHERE id = ?").run(newNFC, old)

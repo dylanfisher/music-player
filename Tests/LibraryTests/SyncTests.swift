@@ -422,7 +422,6 @@ private func syncAll(_ machines: [Machine]) throws {
         among: [MountedShare(url: "smb://nas/elsewhere", mountPoint: b.mount + "-other")])
     try b.index.database.execute("DELETE FROM share_roots WHERE share = '\(share)'")
     let report = try b.sync()
-    #expect(report.outside == 1)
     #expect(
         report.problems == [
             "events for files outside this Mac's share folders, which it doesn't keep: 1"

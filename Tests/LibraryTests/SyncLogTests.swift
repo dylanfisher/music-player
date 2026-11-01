@@ -226,3 +226,16 @@ private func folder(with lines: [String], name: String = String(repeating: "c", 
     #expect(report.problems.count == 2)
     #expect(report.problems.allSatisfy { !$0.contains("\n") }, "\(report.problems)")
 }
+
+@Test func aMoveOntoItselfKeepsTheStats() throws {
+    let play = SyncRecord(
+        seq: 1, clock: clock, event: .play(path: "music/library/a.flac", at: 1_700_000_000)
+    ).line
+    let move = SyncRecord(
+        seq: 2, clock: clock, event: .move(from: "music/library/a.flac", to: "music/library/a.flac")
+    ).line
+    let (sync, index) = try folder(with: [play, move])
+    let report = try index.sync(folder: "sync", at: sync.path)
+    #expect(report.problems.count == 1)
+    #expect(try index.database.prepare("SELECT play_count FROM plays").map { try $0.int(0) } == [1])
+}

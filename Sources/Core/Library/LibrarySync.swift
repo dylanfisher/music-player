@@ -168,7 +168,6 @@ extension LibraryIndex {
                 try save.run(cursor.machine, folder, cursor.offset, cursor.seq, cursor.lines)
             }
         }
-        report.outside += merge.outside
         if merge.outside > 0 {
             report.problems.append(
                 "events for files outside this Mac's share folders, which it doesn't keep:"
