@@ -1915,15 +1915,15 @@ registry. ADR 0025 rows 47 to 50.
 Each output device remembers its own settings, with nothing for the user to set up. A profile is
 keyed by the device's UID (a renderer's UDN once phase 9 lands) and kept in the state file.
 
-- [ ] The volume level, and whether digital volume and hog mode are on, are remembered per device.
+- [x] The volume level, and whether digital volume and hog mode are on, are remembered per device.
       A device seen for the first time starts from the `output.*` settings in the config file;
       after that, changing one while that device is in use changes it for that device only.
       The ADR says how an edit to those settings in the config file meets the profiles.
-- [ ] Each profile records the rates and formats the device reported, so a track the device can't
+- [x] Each profile records the rates and formats the device reported, so a track the device can't
       take is refused before playback starts, and the signal path panel can show them.
-- [ ] When the device last chosen reconnects (the DAC switched back on), output returns to it, as
+- [x] When the device last chosen reconnects (the DAC switched back on), output returns to it, as
       long as nothing is playing elsewhere.
-- [ ] Tests: two fake devices with different settings, a first-seen device, switching between
+- [x] Tests: two fake devices with different settings, a first-seen device, switching between
       them mid-queue, and a reconnect.
 - [ ] **Hardware checkpoint (owner):** on the DAC Mac, set different volumes on the ADI-2 and the
       built-in output, switch between them, then power the ADI-2 off and on, and report what the
@@ -1949,6 +1949,17 @@ Implementation plan:
   decoding), DeviceSwitchTests (HALOutput, two null devices: first seen, switch mid-queue,
   reconnect paused and while playing elsewhere, unsupported format refused), SignalPathLines.
 - ADR 0037.
+
+Result: shipped up to the owner's checkpoint. Volume, digital volume and hog mode are kept per
+device UID in `output.profiles` in the state file, at most 32, least recently used evicted, each
+written before the change it protects. A first-seen device starts from `output.*`, which always
+shows the device in use; the app writes it back on a switch, and an edit made with the app closed
+counts as an edit for the device in use at launch (ADR 0037). Output settings now switch mid-track.
+Each profile records the rates and formats the device reports; a track none takes fails with
+`deviceCannotTake` before the device is configured, and the signal path panel has a "Takes" row.
+A device that comes back gets output back unless a track plays on the device chosen since, and
+the check runs again on pause, stop, queue end and a failed track; no polling. The profile save
+on an automatic return lands after the switch, an accepted exception. CPU while playing 2.21%.
 
 ### 23. Sync across machines
 
