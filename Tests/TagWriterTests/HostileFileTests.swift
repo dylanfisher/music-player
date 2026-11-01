@@ -142,3 +142,47 @@ func anOriginalSwappedBeforeTheTempFileIsRefused(_ swap: String) throws {
     #expect(try Data(contentsOf: other) == otherBytes, "\(swap)")
     #expect(try leftoverTemps(for: url.path).isEmpty, "\(swap)")
 }
+
+/// The bytes of the MP4 file's `ilst` item `type`.
+private func ilstItem(_ url: URL, _ type: String) throws -> [UInt8]? {
+    let moov = try MP4File(ByteReader(FileSource(path: url.path))).moov
+    guard let path = moov.indexPath(MP4File.ilstPath) else { return nil }
+    return moov[path].children?.first { $0.type == type }?.serialized()
+}
+
+/// `url` with the first `marker` in it turned into a NUL, as a tagger that wrote one would.
+private func plantNUL(in url: URL, at marker: String) throws {
+    var bytes = try Data(contentsOf: url)
+    let range = try #require(bytes.range(of: Data(marker.utf8)))
+    bytes[range.lowerBound] = 0
+    try bytes.write(to: url)
+}
+
+/// A field the reader cut at a NUL, edited or left alone beside an edit: the edited field
+/// takes its new value, and the field the edit doesn't name keeps every byte, NUL and all.
+@Test(arguments: [TagEditField.title, .artist])
+func aFieldCutAtANULEditsAndKeepsItsNeighbour(_ edited: TagEditField) throws {
+    let mp4 = try Sample.mp4.copy()
+    let writer = scratchWriter()
+    expectChanged(
+        writer.write(TagEdit(values: [.title: "cut~after", .artist: "Neighbour"]), to: [mp4.path]),
+        [mp4])
+    try plantNUL(in: mp4, at: "~after")
+    let flacURL = try flac(comments: ["TITLE=cut\u{0}after", "ARTIST=Neighbour"], padding: 512)
+    for url in [mp4, flacURL] {
+        #expect(try tags(url).title == "cut", "\(url.lastPathComponent)")
+        let kept = edited == .title ? "Neighbour" : "cut\u{0}after"
+        let keptItem =
+            url == mp4 ? try ilstItem(url, edited == .title ? "\u{A9}ART" : "\u{A9}nam") : nil
+        expectChanged(writer.write(TagEdit(values: [edited: "New"]), to: [url.path]), [url])
+        let now = try tags(url)
+        #expect((edited == .title ? now.title : now.artist) == "New", "\(url.lastPathComponent)")
+        #expect(
+            (edited == .title ? now.artist : now.title) == kept.components(separatedBy: "\u{0}")[0])
+        #expect(
+            try Data(contentsOf: url).range(of: Data(kept.utf8)) != nil, "\(url.lastPathComponent)")
+        if let keptItem {
+            #expect(try ilstItem(url, edited == .title ? "\u{A9}ART" : "\u{A9}nam") == keptItem)
+        }
+    }
+}
