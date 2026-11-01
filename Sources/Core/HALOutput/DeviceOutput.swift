@@ -689,9 +689,11 @@ private struct Track {
     func clamped(_ frame: Int64) -> Int64 { min(max(0, frame), decoder.lengthFrames) }
 
     /// Why decoding stopped short, once it has: nil unless it's more than
-    /// `endedEarlySeconds` before the stated length, which leaves room for a length that's
-    /// only an estimate, as some encoders write.
+    /// `endedEarlySeconds` before the stated length, which leaves room for encoders' rounding.
+    /// An MP3's length is an estimate from its bitrate unless a Xing or LAME header gives it,
+    /// so MP3s aren't checked.
     var endedEarly: DeviceOutputError? {
+        guard decoder.fileFormat.mFormatID != kAudioFormatMPEGLayer3 else { return nil }
         let missing = Double(decoder.lengthFrames - decoder.nextFrame) / sampleRateHz
         guard missing > Self.endedEarlySeconds else { return nil }
         return .endedEarly(
