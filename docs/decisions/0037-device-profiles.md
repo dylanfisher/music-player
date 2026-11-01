@@ -52,7 +52,9 @@ playback stopped. Stored data has one shape before release, and the IO proc can'
   on the device the user chose since.** Paused, stopped or with that device lost too, output goes
   back. Choosing the remembered device by hand, or a return, forgets it. A device that went away
   while nothing else was chosen needs no return: output never left it, and the existing lost and
-  returned events cover it. Nothing polls; the check runs when a device-list listener fires.
+  returned events cover it. Nothing polls; the check runs when a device-list listener fires and
+  when playback pauses, stops or ends, or a track can't play, so a device that came back while
+  the other played gets output once that stops.
 - **The signal path panel** shows the reported rates and formats in a "Takes" row, from the same
   `SignalPath` snapshot, which now carries `DeviceFormats` and the device's UID. The listeners
   that keep it current gain the device's available nominal rates and the stream's available

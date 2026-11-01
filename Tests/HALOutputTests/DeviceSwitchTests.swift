@@ -122,23 +122,12 @@ private final class TwoDevices: @unchecked Sendable {
 }
 
 @Test func theLostDeviceComingBackLeavesOutputWhereItPlays() async throws {
-    let album = try album(44_100, 16)
-    let rig = try await TwoDevices()
-    rig.dac.unplug()
-    rig.output.use(rig.speakersChoice)
-    try await rig.waitForSink("Speakers")
-    await rig.engine.setQueue(album.tracks)
-    await rig.engine.play()
-    try await rig.wait(for: .trackStarted(index: 0))
-
-    rig.dac.plugIn()
+    let rig = try await dacBackWhileSpeakersPlay()
     // A change of device list is handled within a control pass; give it many.
     try await Task.sleep(nanoseconds: 300_000_000)
     #expect(rig.returns.returned.isEmpty)
-    try await rig.wait(for: .finished)
-    #expect(rig.dac.captured.isEmpty)
-    #expect(rig.speakers.captured.map(\.sampleRateHz) == [44_100])
-    #expect(rig.returns.returned.isEmpty)
+    #expect(rig.dac.openSessionCount == 0)
+    #expect(rig.speakers.openSessionCount == 1)
 }
 
 @Test func aTrackNoReportedFormatTakesIsRefusedBeforeItPlays() async throws {
@@ -173,4 +162,45 @@ private final class TwoDevices: @unchecked Sendable {
     #expect(rig.events.contains(.trackStarted(index: 3)))
     #expect(rig.speakers.captured.map(\.sampleRateHz) == [44_100])
     #expect(rig.dac.captured.isEmpty)
+}
+
+/// The DAC lost while playing, the speakers chosen and playing on, and the DAC back while they
+/// play.
+private func dacBackWhileSpeakersPlay() async throws -> TwoDevices {
+    let album = try album(44_100, 16)
+    let rig = try await TwoDevices()
+    await rig.engine.setQueue(album.tracks)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    rig.dac.unplug()
+    try await rig.wait(for: .deviceLost)
+    rig.output.use(rig.speakersChoice)
+    try await rig.waitForSink("Speakers")
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    rig.dac.plugIn()
+    return rig
+}
+
+@Test func pausingOnTheOtherDeviceReturnsToTheOneThatCameBack() async throws {
+    let rig = try await dacBackWhileSpeakersPlay()
+    await rig.engine.pause()
+    #expect(try await rig.returns.next() == "DAC")
+    try await rig.waitForSink("DAC")
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    #expect(rig.dac.captured.count == 2)
+}
+
+@Test func theQueueEndingOnTheOtherDeviceReturnsToTheOneThatCameBack() async throws {
+    let rig = try await dacBackWhileSpeakersPlay()
+    try await rig.wait(for: .finished)
+    #expect(try await rig.returns.next() == "DAC")
+    try await rig.waitForSink("DAC")
+}
+
+@Test func stoppingOnTheOtherDeviceReturnsToTheOneThatCameBack() async throws {
+    let rig = try await dacBackWhileSpeakersPlay()
+    await rig.engine.stop()
+    #expect(try await rig.returns.next() == "DAC")
 }

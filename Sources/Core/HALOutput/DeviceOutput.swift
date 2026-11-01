@@ -66,6 +66,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private var provider: any PCMDeviceProvider { choice.provider }
     /// The device that went away while in use before another was chosen, to go back to.
     private var returnTo: DeviceChoice?
+    /// Set when the device list changed or playback stopped, so the pass ends by checking whether
+    /// to go back to `returnTo`.
+    private var returnDue = false
     /// What the device last reported, which a track has to fit before it plays.
     private var knownFormats: DeviceFormats?
     private var device: (any PCMDevice)?
@@ -196,6 +199,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                 perform(command)
             }
             service()
+            if returnDue {
+                returnDue = false
+                checkReturn()
+            }
             publishSignal()
         }
     }
@@ -216,9 +223,11 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         case .pause:
             playing = false
             stopIO()
+            returnDue = true
         case .stop:
             unload()
             closeDevice()
+            returnDue = true
         case .seek(let seconds): seekTrack(toSeconds: seconds)
         case .volume(let gain):
             self.gain = gain
@@ -226,7 +235,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             if let stream { HALRenderSetGain(stream.render, Float(gain)) }
         case .devicesChanged:
             checkDevice()
-            checkReturn()
+            returnDue = true
         case .deviceState(let state, let from):
             // One queued by a device that was in use before a switch.
             guard from == ObjectIdentifier(provider) else { return }
@@ -312,6 +321,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         unload()
         closeDevice()
         emit(.finished(item.id))
+        returnDue = true
     }
 
     /// Opens the device unless a session already holds it. False when it isn't connected or
@@ -565,6 +575,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             unload()
             closeDevice()
             if let last { emit(.finished(last.id)) }
+            returnDue = true
             return
         }
         pendingSwitch = nil
@@ -600,6 +611,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             unload()
             closeDevice()
             if let last { emit(.finished(last.id)) }
+            returnDue = true
             return
         }
         if let ahead {
