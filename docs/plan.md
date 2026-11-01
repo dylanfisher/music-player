@@ -1585,19 +1585,19 @@ every budget holds.
 
 ### 17. Playlist files
 
-- [ ] **Export** a manual playlist, or a smart playlist's current tracks, as M3U8 (UTF-8, `#EXTM3U`
+- [x] **Export** a manual playlist, or a smart playlist's current tracks, as M3U8 (UTF-8, `#EXTM3U`
       with `#EXTINF` length and "artist - title"), paths absolute or relative to the file's folder,
       chosen in the save panel.
-- [ ] **Import** M3U and M3U8 (and PLS if it's cheap) as a new manual playlist. Paths may be
+- [x] **Import** M3U and M3U8 (and PLS if it's cheap) as a new manual playlist. Paths may be
       absolute, relative to the playlist file, or `file://` URLs. Entries the index doesn't hold
       are counted and listed in a report after the import, never added silently or dropped
       silently.
-- [ ] Playlist files are hostile input: a size cap, a line-length cap, no URL schemes but
+- [x] Playlist files are hostile input: a size cap, a line-length cap, no URL schemes but
       `file`, and no reads of the paths they name beyond an index lookup. Add the rows to
       [ADR 0025](decisions/0025-threat-model.md).
-- [ ] Commands in the registry (Import Playlist…, Export Playlist…) and dragging an `.m3u8` onto
+- [x] Commands in the registry (Import Playlist…, Export Playlist…) and dragging an `.m3u8` onto
       the sidebar.
-- [ ] Tests: round trip, relative and absolute paths, non-ASCII names, CRLF, a BOM, missing
+- [x] Tests: round trip, relative and absolute paths, non-ASCII names, CRLF, a BOM, missing
       entries, and hostile files.
 
 Implementation plan:
@@ -1623,6 +1623,15 @@ Implementation plan:
    both forms, CRLF, BOM, Windows-1252, missing, duplicates, hostile files, caps),
    LibraryBrowserTests (import report, export file, the drop's pasteboard); the menu and
    registry tests already cover every new command.
+
+Result: shipped. M3U, M3U8 and PLS import as a new manual playlist, and M3U8 export of the shown
+playlist in its current order (a manual playlist opens in its own order, so a round trip keeps
+it), with absolute paths by default and relative ones by choice (ADR 0032). Import caps a file
+at 16 MiB, 4 KiB a line, 200,000 lines and 100,000 entries, takes only `file` URLs, and looks
+paths up in the index as written, then as NFC, never on disk. A `.m3u` or `.pls` that isn't UTF-8
+is read as Windows-1252. Missing, repeated and skipped entries are counted on the status line and
+listed in the Problems window, escaped. The `playlist-file` fuzz target found that Foundation
+drops a leading U+FEFF from a line; lines are now decoded by hand. ADR 0025 rows 36 to 40.
 
 ### 18. Import from other players
 
