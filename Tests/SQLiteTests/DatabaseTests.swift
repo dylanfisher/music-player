@@ -189,3 +189,20 @@ private final class LockedFailures: @unchecked Sendable {
     #expect(!database.isInTransaction)
     #expect(try database.prepare("SELECT count(*) FROM t").map { try $0.int(0) } == [0])
 }
+
+@Test func textWithNULRoundTripsWhole() throws {
+    let database = try temporaryDatabase()
+    try database.execute("CREATE TABLE t (s TEXT)")
+    let insert = try database.prepare("INSERT INTO t VALUES (?)")
+    for text in ["a\u{0}b", "\u{0}", "a\u{0}b%", "plain"] { try insert.run(text) }
+    #expect(
+        try database.prepare("SELECT s FROM t ORDER BY rowid").map { try $0.text(0) }
+            == ["a\u{0}b", "\u{0}", "a\u{0}b%", "plain"])
+    #expect(
+        try database.prepare("SELECT length(CAST(s AS BLOB)) FROM t").map { try $0.int(0) } == [
+            3, 1, 4, 5,
+        ])
+    #expect(
+        try database.prepare("SELECT ?").map(binding: ["x\u{0}y"]) { $0.optionalText(0) }
+            == ["x\u{0}y"])
+}

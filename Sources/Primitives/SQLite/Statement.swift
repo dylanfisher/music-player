@@ -33,8 +33,9 @@ extension Bool: SQLiteValue {
 }
 
 extension String: SQLiteValue {
+    /// Bound by its byte count, so text holding a NUL, which a tag can, is bound whole.
     public func bind(to statement: OpaquePointer, at index: Int32) -> Int32 {
-        sqlite3_bind_text(statement, index, self, -1, transient)
+        sqlite3_bind_text(statement, index, self, Int32(utf8.count), transient)
     }
 }
 
@@ -153,11 +154,15 @@ public struct Row {
 
     public func text(_ column: Int32) throws(SQLiteError) -> String {
         try notNull(column)
-        return String(cString: sqlite3_column_text(statement, column))
+        return optionalText(column)!
     }
 
+    /// Read by its byte count, so text holding a NUL comes back whole.
     public func optionalText(_ column: Int32) -> String? {
-        sqlite3_column_text(statement, column).map { String(cString: $0) }
+        // SQLite's docs ask for the text first, then its length.
+        guard let text = sqlite3_column_text(statement, column) else { return nil }
+        let count = Int(sqlite3_column_bytes(statement, column))
+        return String(decoding: UnsafeBufferPointer(start: text, count: count), as: UTF8.self)
     }
 
     /// A NULL where the caller expects a value means the schema and the query disagree.
