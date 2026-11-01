@@ -21,14 +21,13 @@ public func stars(_ count: Int) -> String {
     String(repeating: "★", count: max(0, count))
 }
 
-/// `text` for a terminal. A file name or a tag can hold control characters, which would move the
-/// cursor, retitle the window or write the clipboard, so each one but a newline or a tab prints
-/// as `\u{1B}` and so on.
+/// `text` as one line for a terminal. A file name or a tag can hold control characters, which
+/// would move the cursor, retitle the window or write the clipboard, or a line break, which
+/// would print a line that looks like the app's own; each prints as `\u{1B}`, `\u{A}` and so on.
 public func terminalSafe(_ text: String) -> String {
     var safe = ""
     for scalar in text.unicodeScalars {
-        let isControl = scalar.value < 0x20 || (0x7F...0x9F).contains(scalar.value)
-        if isControl, scalar != "\n", scalar != "\t" {
+        if scalar.value < 0x20 || (0x7F...0x9F).contains(scalar.value) {
             safe += "\\u{" + String(scalar.value, radix: 16, uppercase: true) + "}"
         } else {
             safe.unicodeScalars.append(scalar)

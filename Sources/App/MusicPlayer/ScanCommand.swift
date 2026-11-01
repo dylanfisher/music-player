@@ -32,7 +32,8 @@ func scanCommand(folder: String, databasePath: String?, readers: Int?, hints: Re
         databaseURL = libraryFileURL(in: paths.dataDirectory)
     }
     if readers != nil, isLocal == nil {
-        FileHandle.standardError.write(Data(terminalSafe("error: \(path) doesn't exist\n").utf8))
+        FileHandle.standardError.write(
+            Data((terminalSafe("error: \(path) doesn't exist") + "\n").utf8))
         exit(1)
     }
     if readers != nil, isLocal != false {
@@ -102,7 +103,7 @@ func scanCommand(folder: String, databasePath: String?, readers: Int?, hints: Re
             format: "  database: %.1f MB", Double(try Database.sizeBytes(at: databaseURL)) / 1e6),
         "  every warned or failed file: \(reportURL.path)",
     ]
-    print(terminalSafe(lines.joined(separator: "\n")))
+    print(lines.map(terminalSafe).joined(separator: "\n"))
 }
 
 private func printProgress(_ progress: ScanProgress, since started: Date) {
@@ -168,8 +169,8 @@ private func counts<Kind: RawRepresentable<String>>(
 
 private func report(_ summary: ScanSummary, _ issues: [FileIssue], folder: String) -> String {
     var lines = ["Warnings and failures in the library, after scanning \(folder)", ""]
-    lines += summary.issues.map { "folder: \($0)" }
-    lines += issues.map(\.description)
+    lines += summary.issues.map { terminalSafe("folder: \($0)") }
+    lines += issues.map { terminalSafe($0.description) }
     if summary.issues.isEmpty && issues.isEmpty { lines.append("none") }
     return lines.joined(separator: "\n") + "\n"
 }

@@ -42,7 +42,7 @@ func playCommand(paths: [String], deviceName: String?) throws -> Never {
     let settings = try readConfig(appFiles)
     let recordURL = restoreRecordURL(in: appFiles.dataDirectory)
     if let recovered = try HALDeviceProvider.recoverAfterCrash(restoreRecordURL: recordURL) {
-        print(terminalSafe(recovered))
+        for line in recovered.split(separator: "\n") { print(terminalSafe(String(line))) }
     }
 
     // Printed first, because reading a network folder can block on a privacy prompt.

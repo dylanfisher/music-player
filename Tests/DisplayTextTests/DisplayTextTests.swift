@@ -22,12 +22,14 @@ func formatsKilohertz(hertz: Double, expected: String) {
 }
 
 @Test func controlCharactersAreEscapedForTheTerminal() {
-    for value in Array(0x00..<0x20) + Array(0x7F...0x9F) where value != 0x0A && value != 0x09 {
+    for value in Array(0x00..<0x20) + Array(0x7F...0x9F) {
         let scalar = Unicode.Scalar(value)!
         let escaped = terminalSafe("a" + String(Character(scalar)) + "b")
         #expect(escaped == "a\\u{\(String(value, radix: 16, uppercase: true))}b", "\(value)")
     }
     #expect(terminalSafe("\u{1B}]52;c;aGk=\u{07}") == "\\u{1B}]52;c;aGk=\\u{7}")
-    let plain = "Björk – Jóga\tlive\nside A ★ \u{202E}"
+    #expect(
+        terminalSafe("a.flac\nscanned 0 files\r\t") == "a.flac\\u{A}scanned 0 files\\u{D}\\u{9}")
+    let plain = "Björk – Jóga, live side A ★ \u{202E}"
     #expect(terminalSafe(plain) == plain)
 }
