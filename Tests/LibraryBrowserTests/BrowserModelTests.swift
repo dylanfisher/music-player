@@ -71,9 +71,12 @@ private func loadedModel(
     let (model, index) = try await loadedModel()
     var changes = 0
     model.changed = { _ in changes += 1 }
-    async let first: Void = model.setSearch("a")
-    async let second: Void = model.setSearch("zzqx")
-    _ = await (first, second)
+    // The first search starts and waits on its query before the second is typed; async let
+    // didn't promise that order, so the first could start last under load.
+    let first = Task { await model.setSearch("a") }
+    await Task.yield()
+    await model.setSearch("zzqx")
+    await first.value
     #expect(model.filter.search == "zzqx")
     #expect(model.trackIDs.isEmpty)
     #expect(changes == 1)
