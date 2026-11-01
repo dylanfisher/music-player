@@ -14,18 +14,30 @@ nonisolated(unsafe) var soakSeconds = 20.0
 /// How often the soak scans the fixture library, from its start.
 private let soakScanIntervalSeconds = 300.0
 
-/// When the soak's memory counts from: minute 5, or a quarter of a shorter soak, once the first
-/// scan's database and caches have settled.
-private var soakSettledSeconds: Double { min(300, soakSeconds / 4) }
+/// When the soak's memory counts from: one scan interval in, or a quarter of a shorter soak,
+/// once the first scan's database and caches have settled.
+private var soakSettledSeconds: Double { min(soakScanIntervalSeconds, soakSeconds / 4) }
+
+/// How long after each scan ends its memory is sampled: the trough of the cycle, the same
+/// point in each, so growth compares like with like rather than a scan's peak with an idle end.
+private let soakTroughDelaySeconds = soakScanIntervalSeconds / 10
 
 /// What a soak under load measured.
 private struct LoadedSoak {
     var underrunFrames: Int
     var scans: Int
     var searches: Int
+    /// The footprint `soakTroughDelaySeconds` after each scan that ended once settled.
+    var troughsMB: [Double]
     var settledMB: Double
     var endMB: Double
     var peakMB: Double
+
+    /// The last trough less the first, or, in a soak too short for two, the end less the settle
+    /// point.
+    var growthMB: Double {
+        troughsMB.count >= 2 ? troughsMB.last! - troughsMB.first! : endMB - settledMB
+    }
 }
 
 /// Plays on repeat for `soakSeconds` while a full scan into a new index runs every 5 minutes and
@@ -48,10 +60,19 @@ private let loadedSoak = Result { () throws -> LoadedSoak in
             func elapsed() -> Double { Double(DispatchTime.now().uptimeNanoseconds - start) / 1e9 }
             var settledMB: Double?
             var peakMB = 0.0
+            var troughsMB: [Double] = []
+            var sampledScans = 0
             while elapsed() < soakSeconds {
                 let current = try footprintMB()
                 peakMB = max(peakMB, current)
                 if settledMB == nil, elapsed() >= soakSettledSeconds { settledMB = current }
+                let ends = load.scanEnds
+                while sampledScans < ends.count,
+                    elapsed() >= ends[sampledScans] + soakTroughDelaySeconds
+                {
+                    if ends[sampledScans] >= soakSettledSeconds { troughsMB.append(current) }
+                    sampledScans += 1
+                }
                 if let failure = load.failure { throw failure }
                 Thread.sleep(forTimeInterval: 1)
             }
@@ -59,7 +80,8 @@ private let loadedSoak = Result { () throws -> LoadedSoak in
             let endMB = try footprintMB()
             return LoadedSoak(
                 underrunFrames: session.underrunFrames(), scans: scans, searches: searches,
-                settledMB: try settledMB ?? footprintMB(), endMB: endMB, peakMB: max(peakMB, endMB))
+                troughsMB: troughsMB, settledMB: try settledMB ?? footprintMB(), endMB: endMB,
+                peakMB: max(peakMB, endMB))
         }
     }
 }
@@ -70,6 +92,8 @@ private final class SoakLoad: @unchecked Sendable {
     private let lock = NSLock()
     private var running = true
     private var scans = 0
+    /// Seconds from the start at which each scan ended.
+    private var ends: [Double] = []
     private var searches = 0
     private var firstFailure: (any Error)?
     private let done = DispatchGroup()
@@ -88,7 +112,11 @@ private final class SoakLoad: @unchecked Sendable {
             guard summary.read == fullLibraryFileCount, summary.issues.isEmpty else {
                 throw BenchError.expected("each soak scan to read every file: \(summary)")
             }
-            lock.withLock { scans += 1 }
+            let end = elapsed()
+            lock.withLock {
+                scans += 1
+                ends.append(end)
+            }
         }
         var index: LibraryIndex?
         loop(every: 1) { [self] in
@@ -101,6 +129,7 @@ private final class SoakLoad: @unchecked Sendable {
     }
 
     var failure: (any Error)? { lock.withLock { firstFailure } }
+    var scanEnds: [Double] { lock.withLock { ends } }
 
     private func elapsed() -> Double {
         Double(DispatchTime.now().uptimeNanoseconds - start) / 1e9
@@ -226,16 +255,22 @@ let playbackBenchmarks = [
             ])
     },
     Benchmark(
-        name: "playback: memory growth in a soak under load, from minute 5 to the end",
+        name: "playback: memory growth in a soak under load, between scan troughs",
         budget: Budget(appleSilicon: 10, oldMac: 10, unit: .megabytes)
     ) {
         let soak = try loadedSoak.get()
+        let troughs = soak.troughsMB.map { String(format: "%.1f", $0) }.joined(separator: ", ")
         return Measured(
-            value: soak.endMB - soak.settledMB,
+            value: soak.growthMB,
             notes: [
-                String(
-                    format: "footprint %.1f MB at %.0f s, %.1f MB at the end, %.1f MB at the peak",
-                    soak.settledMB, soakSettledSeconds, soak.endMB, soak.peakMB)
+                soak.troughsMB.count >= 2
+                    ? String(
+                        format: "footprint %.0f s after each scan that ended past %.0f s: %@ MB",
+                        soakTroughDelaySeconds, soakSettledSeconds, troughs)
+                    : String(
+                        format: "too short for two scan troughs: %.1f MB at %.0f s, %.1f MB at"
+                            + " the end", soak.settledMB, soakSettledSeconds, soak.endMB),
+                String(format: "peak %.1f MB", soak.peakMB),
             ])
     },
 ]

@@ -94,7 +94,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Resident memory with the library loaded, after scrolling every row with art | < 250 MB | < 250 MB |
 | CPU while playing 24/192 FLAC | < 3 percent of a core | < 5 percent of a core |
 | Underruns in a 1-hour playback soak (`--soak 3600`; 20 s by default), with a full fixture scan every 5 minutes and a search every second | 0 frames | 0 frames |
-| Memory growth in that soak, from minute 5 (or a quarter of a shorter soak) to the end | < 10 MB | < 10 MB |
+| Memory growth in that soak, from the first scan trough after minute 5 to the last (30 s after each scan ends) | < 10 MB | < 10 MB |
 | Gap between same-format tracks | 0 samples | 0 samples |
 | Track change that switches sample rate | < 500 ms | < 500 ms |
 | CPU when idle (not playing) | ~0%, no timers firing faster than settings allow | same |
@@ -1048,7 +1048,7 @@ Implementation plan (ADR 0023, written first):
    is in `./scripts/check`, which gets the deterministic tests above.
 9. **Loaded soak** (Bench). The soak plays while a full scan of the fixture library into a new
    index runs every 5 minutes and a search every second, and a second benchmark reports memory
-   growth from minute 5 (or a quarter of a shorter soak) to the end, budget < 10 MB.
+   growth between the footprints 30 s after each scan ends, from minute 5 on, budget < 10 MB.
 
 #### 14b. Single source of truth and DRY
 
