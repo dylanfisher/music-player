@@ -102,6 +102,10 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Rerun the fixture generator with nothing to do | < 10 s | < 30 s |
 | Parse every fixture file's tags, first read in a fresh process | < 5 s | < 20 s |
 | Tag journal: write a 1000-file batch with 1 MB art each, flushed per file | < 20 s | < 60 s |
+| Play timeline: one page of 200 plays, 1M synthetic plays over the fixture library (p95) | < 5 ms | < 15 ms |
+| History, one row per track played, 1M synthetic plays (p95) | < 30 ms | < 80 ms |
+| Record a play, 1M synthetic plays (p95) | < 2 ms | < 6 ms |
+| History table plus its index, 1M synthetic plays | < 40 MB | < 40 MB |
 
 ## Phases
 
@@ -1006,3 +1010,29 @@ path" and amends ADR 0018. Write the ADR first, at the next free number.
       per-track History view p95 < 30 ms, recording a play < 2 ms, and the history table plus
       its index < 40 MB. Measured on a scratch database before the phase (100k plays, Apple
       Silicon): a page 0.5 ms, the current History view 25 ms, about 27 bytes a play.
+
+Implementation plan (ADR [0022](decisions/0022-stable-track-identity-and-play-timeline.md)):
+
+1. **Library schema.** `paths` joins the stats SQL; `files.id` refers to it and loses
+   `added_seconds`; `plays`, `ratings`, `playlist_entries` and `history` key on `path_id`. A
+   stats rebuild counts the old rows first and records them in `schema_discards`, which
+   `takeDiscards()` hands to the window once. The scanner's upsert looks the path up or inserts
+   it, in one helper `recordPlay` shares.
+2. **Queries.** `trackJoins`, `rowSelect`, Date Added, playlist order, the History, playlist and
+   smart rule sources, the missing-entry count, and the rating and playlist APIs move to IDs.
+   New: `timeline(before:limit:)` and `timeline(after:limit:)` returning `PlayEntry`, and
+   `playCount()`. `LibraryReader` passes them through.
+3. **BrowserSource.timeline** (Settings), saved as `timeline`. `BrowserModel` runs no track
+   queries for it and passes track IDs, not paths, to the library.
+4. **LibraryBrowser:** `TimelineModel` (pages by key, new plays on top, re-resolves loaded rows,
+   selection by history ID, a session token for stale results) and `TimelineController` (the
+   AppKit table). The browser swaps it in for the panes and track table, routes play, drag,
+   Go to Item and the selection commands to it, and turns ⌘⌫, search and sorts off there.
+5. **App:** the sidebar row, the Go to Item rows, the commands' enabled states, and the
+   discard notice. `--snapshot-of timeline`.
+6. **Bench:** 1M synthetic plays under `.build/bench-plays`, four benchmarks with the budgets
+   above, and the smart playlist, sort, search and launch numbers before and after.
+7. **Tests:** LibraryTests (IDs and Date Added across a rebuild and a file leaving and coming
+   back, stats, ratings and entries following the ID, the discard record, timeline paging while
+   plays arrive, missing files), SettingsTests (`timeline` source), LibraryBrowserTests
+   (`TimelineModel`), MusicPlayerTests (Go to Item, ⌘⌫ off).

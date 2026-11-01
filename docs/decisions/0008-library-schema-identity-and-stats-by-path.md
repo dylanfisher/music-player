@@ -1,7 +1,8 @@
 # 0008. Rebuild the index on a schema change, and key stats by path
 
 - **Date:** 2026-10-30
-- **Status:** accepted
+- **Status:** accepted; keying the stats by path is superseded by
+  [0022](0022-stable-track-identity-and-play-timeline.md)
 
 ## Context
 
