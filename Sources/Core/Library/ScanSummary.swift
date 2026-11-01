@@ -16,6 +16,8 @@ public struct ScanSummary: Equatable, Sendable {
     public var unchanged = 0
     /// Files no longer on disk, or no longer included, removed from the index.
     public var removed = 0
+    /// Files that left one path and arrived at another, whose stats followed them (ADR 0026).
+    public var moved = 0
     /// Files without an audio extension, which are skipped.
     public var otherFiles = 0
     public var issues: [ScanIssue] = []

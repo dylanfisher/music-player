@@ -160,10 +160,22 @@ private let statsSchema = """
     -- and comes back keeps its ID, its Date Added and its stats (ADR 0022).
     CREATE TABLE paths (
         id INTEGER PRIMARY KEY,
+        -- In NFC, so a name listed decomposed once and precomposed later is one path (ADR
+        -- 0026). files.path keeps the spelling the volume listed, which opens the file.
         path TEXT NOT NULL UNIQUE,
         -- When the path was first seen, in seconds since 1970: the "date added" column.
-        added_seconds REAL NOT NULL
+        added_seconds REAL NOT NULL,
+        -- What the last read of the file found, to match it with a new path once it's gone
+        -- and can't be read (ADR 0026). NULL until a read succeeds; the title is in NFC.
+        codec TEXT,
+        sample_rate_hz INTEGER,
+        length_frames INTEGER,
+        title TEXT,
+        -- 1 once the user dismissed the path from Lost Stats; a read of its file clears it.
+        lost_dismissed INTEGER NOT NULL DEFAULT 0
     );
+    -- Move matching and Lost Stats look paths up by length.
+    CREATE INDEX paths_length ON paths (length_frames);
     CREATE TABLE plays (
         path_id INTEGER PRIMARY KEY REFERENCES paths (id),
         play_count INTEGER NOT NULL,
@@ -200,6 +212,8 @@ private let statsSchema = """
         PRIMARY KEY (playlist_id, path_id)
     );
     CREATE INDEX playlist_entries_order ON playlist_entries (playlist_id, position);
+    -- Move matching asks whether a path is in any playlist.
+    CREATE INDEX playlist_entries_path ON playlist_entries (path_id);
     """
 
 private let lovedSchema = """

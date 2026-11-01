@@ -58,6 +58,7 @@ extension HealthCheck {
         case .noArt: "No Art"
         case .noAlbum: "No Album"
         case .noAlbumArtist: "No Album Artist"
+        case .lostStats: "Lost Stats"
         }
     }
 
@@ -75,6 +76,8 @@ extension HealthCheck {
         case .noArt: "Tracks with no embedded art"
         case .noAlbum: "Tracks with no album"
         case .noAlbumArtist: "Tracks with no album artist"
+        case .lostStats:
+            "Plays, ratings and playlist entries of files that left, and the tracks they may have moved to"
         }
     }
 }
@@ -191,6 +194,8 @@ extension LibraryIndex {
         case .noAlbumArtist:
             return HealthFindings(
                 trackIDs: try ids("SELECT file_id FROM tracks WHERE album_artist_id IS NULL"))
+        case .lostStats:
+            return try lostStatsFindings()
         }
     }
 

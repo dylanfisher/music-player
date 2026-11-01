@@ -275,6 +275,7 @@ public final class LibraryIndex {
             let id = try upsertFile(file, failure: nil)
             try clearTrack(id)
             try insertTrack(id, path: file.path, parsed.metadata)
+            try recordFacts(id, parsed.metadata)
             for warning in parsed.warnings {
                 try statement(
                     "INSERT INTO warnings (file_id, kind, offset, detail) VALUES (?, ?, ?, ?)"
@@ -331,20 +332,36 @@ public final class LibraryIndex {
         return id
     }
 
-    /// The permanent ID of `path`, adding it to `paths` as first seen at `seconds` when it's
-    /// new. Call inside a transaction, so no other connection adds it between the two steps.
+    /// The permanent ID of `path`, in any Unicode spelling, adding it to `paths` as first seen
+    /// at `seconds` when it's new. Call inside a transaction, so no other connection adds it
+    /// between the two steps.
     func pathID(_ path: String, seenAt seconds: Double) throws -> Int64 {
         precondition(database.isInTransaction, "pathID outside a transaction, for \(path)")
+        let nfc = path.precomposedStringWithCanonicalMapping
         if let id = try statement("SELECT id FROM paths WHERE path = ?").map(
-            path,
+            nfc,
             row: {
                 try $0.int64(0)
             }
         ).first {
             return id
         }
-        try statement("INSERT INTO paths (path, added_seconds) VALUES (?, ?)").run(path, seconds)
+        try statement("INSERT INTO paths (path, added_seconds) VALUES (?, ?)").run(nfc, seconds)
         return database.lastInsertRowID
+    }
+
+    /// Keeps what move matching compares on the path `id`, since a gone file can't be read.
+    private func recordFacts(_ id: Int64, _ metadata: TrackMetadata) throws {
+        let audio = metadata.audio
+        try statement(
+            """
+            UPDATE paths SET codec = ?, sample_rate_hz = ?, length_frames = ?, title = ?,
+                lost_dismissed = 0
+            WHERE id = ?
+            """
+        ).run(
+            audio.codec.rawValue, audio.sampleRateHz, audio.lengthFrames,
+            metadata.tags.title?.precomposedStringWithCanonicalMapping, id)
     }
 
     private func clearTrack(_ id: Int64) throws {
