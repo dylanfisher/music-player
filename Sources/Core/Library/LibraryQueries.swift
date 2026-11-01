@@ -37,7 +37,7 @@ extension LibraryIndex {
         _ read: (Row) throws -> T
     ) throws -> [T] {
         let (conditions, values) = try trackConditions(
-            filter, panes: [.source, .genre, .artist, .album, .search])
+            filter, panes: [.source, .genre, .artist, .album, .search], playsJoined: true)
         // Playlist order is the shown playlist's; anywhere else it's null, which leaves the
         // album order below.
         var entries = ""
@@ -51,13 +51,24 @@ extension LibraryIndex {
                 entryValues = [nil]
             }
         }
+        let direction = ascending ? "ASC" : "DESC"
+        let tieBreak: String
+        if column == .lastPlayed {
+            // A time is almost unique, so the ID breaks ties without the artist and album
+            // lookups the other columns need. In History every row has plays, so p.path_id is
+            // t.file_id, and naming it lets plays_last_played supply the whole order.
+            tieBreak = "\(filter.source == .history ? "p.path_id" : "t.file_id") \(direction)"
+        } else {
+            tieBreak =
+                "ar.sort_name, al.sort_title, t.disc_number, t.track_number, t.sort_title,"
+                + " t.file_id"
+        }
         let sql = """
             SELECT \(columns) FROM tracks t
             \(trackJoins)
             \(entries)
             \(whereClause(conditions))
-            ORDER BY \(column.expression) \(ascending ? "ASC" : "DESC"), ar.sort_name,
-                al.sort_title, t.disc_number, t.track_number, t.sort_title, t.file_id
+            ORDER BY \(column.expression) \(direction), \(tieBreak)
             """
         return try statement(sql).map(binding: entryValues + values, row: read)
     }
@@ -160,16 +171,18 @@ private enum FilterPart {
 extension LibraryIndex {
     /// SQL conditions on tracks `t` and files `f` for the `panes` of `filter` that are set, and
     /// the values they bind, in order.
-    fileprivate func trackConditions(_ filter: TrackFilter, panes: [FilterPart]) throws -> (
-        [String], [(any SQLiteValue)?]
-    ) {
+    /// `playsJoined` says the query joins plays as `p`, as `trackJoins` does.
+    fileprivate func trackConditions(
+        _ filter: TrackFilter, panes: [FilterPart], playsJoined: Bool = false
+    ) throws -> ([String], [(any SQLiteValue)?]) {
         var conditions: [String] = []
         var values: [(any SQLiteValue)?] = []
         for part in panes {
             switch part {
             case .source:
                 guard let source = filter.source else { continue }
-                let (condition, sourceValues) = try sourceCondition(source)
+                let (condition, sourceValues) = try sourceCondition(
+                    source, playsJoined: playsJoined)
                 conditions.append(condition)
                 values += sourceValues
             case .genre:
@@ -194,7 +207,7 @@ extension LibraryIndex {
         return (conditions, values)
     }
 
-    private func sourceCondition(_ source: BrowserSource) throws -> (
+    private func sourceCondition(_ source: BrowserSource, playsJoined: Bool) throws -> (
         String, [(any SQLiteValue)?]
     ) {
         switch source {
@@ -202,6 +215,8 @@ extension LibraryIndex {
             let range = pathRange(under: folder)
             return ("f.path >= ? AND f.path < ?", [range.lowerBound, range.upperBound])
         case .history:
+            // On the joined plays the condition lets SQLite start from plays_last_played.
+            if playsJoined { return ("p.last_played_seconds IS NOT NULL", []) }
             return (
                 "t.file_id IN (SELECT path_id FROM plays WHERE last_played_seconds IS NOT NULL)",
                 []

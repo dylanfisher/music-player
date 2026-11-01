@@ -124,6 +124,8 @@ private let statsSchema = """
         skip_count INTEGER NOT NULL,
         last_played_seconds REAL
     );
+    -- History lists played tracks in this order, so it reads them without sorting.
+    CREATE INDEX plays_last_played ON plays (last_played_seconds);
     CREATE TABLE ratings (
         path_id INTEGER PRIMARY KEY REFERENCES paths (id),
         rating INTEGER NOT NULL

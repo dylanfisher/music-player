@@ -252,9 +252,10 @@ public enum SmartOrder: String, Codable, CaseIterable, Sendable {
 }
 
 /// Every join a rule or a sort can need, from tracks `t`. Each joins on a unique key, so SQLite
-/// leaves out the ones a statement doesn't use.
+/// leaves out the ones a statement doesn't use. Every track has a file, so files is a left join
+/// only so that it can be left out too.
 let trackJoins = """
-    JOIN files f ON f.id = t.file_id
+    LEFT JOIN files f ON f.id = t.file_id
     LEFT JOIN artists ar ON ar.id = t.artist_id
     LEFT JOIN artists aa ON aa.id = t.album_artist_id
     LEFT JOIN albums al ON al.id = t.album_id

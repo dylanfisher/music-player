@@ -73,3 +73,25 @@ import Testing
         try index.trackIDs(TrackFilter(source: .timeline), sortedBy: .title)
     }
 }
+
+@Test func lastPlayedTiesBreakOnTheIDAlone() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let ids = try index.trackIDs(sortedBy: .path)
+    // Picked so their artist and album order isn't their ID order.
+    let picked = try index.rows(ids: try index.trackIDs(sortedBy: .artist, ascending: false))
+        .prefix(5)
+    for row in picked { try index.recordPlay(row.path, at: 100) }
+    let history = TrackFilter(source: .history)
+    #expect(
+        try index.trackIDs(history, sortedBy: .lastPlayed, ascending: false)
+            == picked.map(\.id).sorted(by: >))
+    #expect(
+        try index.trackIDs(history, sortedBy: .lastPlayed) == picked.map(\.id).sorted())
+    // Outside History, the tracks never played tie too, and come in ID order.
+    let unplayed = Set(ids).subtracting(picked.map(\.id))
+    #expect(
+        Array(try index.trackIDs(sortedBy: .lastPlayed).prefix(unplayed.count))
+            == unplayed.sorted())
+}
