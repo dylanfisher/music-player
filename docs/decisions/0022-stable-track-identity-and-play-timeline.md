@@ -3,7 +3,9 @@
 - **Date:** 2026-10-31
 - **Status:** accepted
 - **Amended by:** [0023](0023-failure-table.md): the failure table, and the failures phase 14a
-  changed how this reports.
+  changed how this reports. [0026](0026-sync-identity-is-the-relative-path.md): paths are
+  stored in NFC, and a matched move deletes the stat-less row a scan added.
+  [0028](0028-network-folders-by-share.md): a share's new mount point rewrites the paths.
 - **Supersedes:** "key stats by path" in [0008](0008-library-schema-identity-and-stats-by-path.md)
 - **Amends:** [0018](0018-playlists-and-stats.md)
 
