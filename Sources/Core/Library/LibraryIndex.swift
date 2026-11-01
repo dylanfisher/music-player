@@ -239,6 +239,7 @@ public final class LibraryIndex {
     /// The permanent ID of `path`, adding it to `paths` as first seen at `seconds` when it's
     /// new. Call inside a transaction, so no other connection adds it between the two steps.
     func pathID(_ path: String, seenAt seconds: Double) throws -> Int64 {
+        precondition(database.isInTransaction, "pathID outside a transaction, for \(path)")
         if let id = try statement("SELECT id FROM paths WHERE path = ?").map(
             path,
             row: {

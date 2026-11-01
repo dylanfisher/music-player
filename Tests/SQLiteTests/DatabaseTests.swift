@@ -165,3 +165,10 @@ private final class LockedFailures: @unchecked Sendable {
     try database.execute("UPDATE t SET r = 0 WHERE r IS NOT NULL")
     #expect(database.changes == 2)
 }
+
+@Test func knowsWhetherATransactionIsOpen() throws {
+    let database = try temporaryDatabase()
+    #expect(!database.isInTransaction)
+    try database.transaction { #expect(database.isInTransaction) }
+    #expect(!database.isInTransaction)
+}

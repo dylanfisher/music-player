@@ -32,7 +32,8 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     let library = try TestLibrary()
     let index = try library.index()
     try index.recordPlay("/x.flac", at: 100)
-    try index.setRating(1, trackIDs: [try index.pathID("/x.flac", seenAt: 0)])
+    let id = try index.database.transaction { try index.pathID("/x.flac", seenAt: 0) }
+    try index.setRating(1, trackIDs: [id])
     try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'stats'")
 
     let rebuilt = try library.index()
@@ -86,7 +87,7 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     #expect(try library.scan().removed == 1)
     #expect(try index.track(path: path) == nil)
     // A different path is a different ID, as before.
-    #expect(try index.pathID(aside, seenAt: 0) != row.id)
+    #expect(try index.database.transaction { try index.pathID(aside, seenAt: 0) } != row.id)
 
     try FileManager.default.moveItem(atPath: aside, toPath: path)
     _ = try library.scan()
@@ -248,4 +249,11 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     #expect(canonicalPath("/") == "/")
     #expect(isPath("/a/b/c", under: "/a/b/"))
     #expect(pathRange(under: "/a/b//") == "/a/b/"..<"/a/b0")
+}
+
+@Test func aPathIDOutsideATransactionTraps() async {
+    await #expect(processExitsWith: .failure) {
+        let index = try TestLibrary().index()
+        _ = try index.pathID("/a.flac", seenAt: 0)
+    }
 }

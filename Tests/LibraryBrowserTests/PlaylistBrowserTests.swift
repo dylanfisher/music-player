@@ -181,7 +181,8 @@ private func writableModel(
         named: "Mix", rules: nil, trackIDs: model.ids(ofRows: [0]))
     let mix = try #require(model.shownPlaylist?.id)
     try index.recordSkip("/gone/a.flac")
-    _ = try index.addToPlaylist(mix, trackIDs: [try index.pathID("/gone/a.flac", seenAt: 0)])
+    let gone = try index.database.transaction { try index.pathID("/gone/a.flac", seenAt: 0) }
+    _ = try index.addToPlaylist(mix, trackIDs: [gone])
     await model.refresh()
     #expect(model.missingTracks == 1)
     await model.setSource(nil)

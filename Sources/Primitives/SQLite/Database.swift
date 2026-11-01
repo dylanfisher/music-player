@@ -86,6 +86,9 @@ public final class Database {
     /// How many rows the last INSERT, UPDATE or DELETE on this connection changed.
     public var changes: Int { Int(sqlite3_changes(connection)) }
 
+    /// Whether a transaction is open on this connection.
+    public var isInTransaction: Bool { sqlite3_get_autocommit(connection) == 0 }
+
     /// The rowid of the last row inserted on this connection.
     public var lastInsertRowID: Int64 { sqlite3_last_insert_rowid(connection) }
 }
