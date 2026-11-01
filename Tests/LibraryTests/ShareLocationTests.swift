@@ -1,0 +1,178 @@
+import Foundation
+import Testing
+
+@testable import Library
+@testable import Settings
+
+/// Stands in for the system's list of mounted shares, which no test may change.
+final class FakeMounts: ShareMounts, @unchecked Sendable {
+    private let lock = NSLock()
+    private var shares: [MountedShare]
+
+    init(_ shares: [MountedShare] = []) { self.shares = shares }
+
+    func set(_ shares: [MountedShare]) { lock.withLock { self.shares = shares } }
+
+    func mountedShares() throws -> [MountedShare] { lock.withLock { shares } }
+}
+
+private let music = WatchedFolder(path: "library", share: "smb://nas.local/music", kind: .network)
+
+private func share(_ url: String, at mountPoint: String) -> MountedShare {
+    MountedShare(url: url, mountPoint: mountPoint)
+}
+
+@Test func aShareIsFoundByHostThenByNameAlone() throws {
+    let stored = try #require(ShareURL("smb://NAS.local./music"))
+    #expect(stored.host == "nas.local")
+    let byName = share("smb://dylan@nas.local/Music", at: "/Volumes/music")
+    let byIP = share("smb://192.168.1.5/music", at: "/Volumes/music-1")
+    let other = share("smb://nas.local/video", at: "/Volumes/video")
+    #expect(ShareLookup(stored, among: [other, byName]) == .mounted(at: "/Volumes/music"))
+    // The same share reached by IP address: no host matches, and one share has the name.
+    #expect(ShareLookup(stored, among: [other, byIP]) == .mounted(at: "/Volumes/music-1"))
+    // By host name and by IP at once: the host decides.
+    #expect(ShareLookup(stored, among: [byIP, byName]) == .mounted(at: "/Volumes/music"))
+    let otherNAS = share("smb://10.0.0.9/music", at: "/Volumes/music-2")
+    #expect(
+        ShareLookup(stored, among: [byIP, otherNAS])
+            == .ambiguous(["/Volumes/music-1", "/Volumes/music-2"]))
+    #expect(ShareLookup(stored, among: [other]) == .unmounted)
+    #expect(ShareLookup(stored, among: [share("afp://nas.local/music", at: "/V/m")]) == .unmounted)
+}
+
+@Test func aShareURLNeedsAHostAndAShare() {
+    #expect(ShareURL("smb://nas") == nil)
+    #expect(ShareURL("smb:///music") == nil)
+    #expect(ShareURL("/Volumes/music") == nil)
+    #expect(ShareURL("nfs://nas/export/music")?.name == "export/music")
+    #expect(ShareURL("smb://nas/My%20Music")?.name == "My Music")
+}
+
+/// An index whose files are under `root`, as a scan there would leave it, with a play on the
+/// first.
+private func index(under root: String, names: [String] = ["a.flac", "Caf\u{e9}/b.flac"]) throws
+    -> LibraryIndex
+{
+    let index = try craftedIndex(names.map { Crafted(path: root + "/" + $0).scanned })
+    try index.recordPlay(root + "/" + names[0], at: 100)
+    return index
+}
+
+@Test func aShareRemountedAtDashOneKeepsItsTracks() throws {
+    let old = canonicalPath("/V/music/library")
+    let index = try index(under: old)
+    let before = try #require(try index.track(path: old + "/a.flac"))
+    #expect(
+        try index.locate([music], among: [share("smb://nas.local/music", at: "/V/music")])
+            == [WatchedFolder(path: old, kind: .network)])
+
+    let located = try index.locate(
+        [music], among: [share("smb://nas.local/music", at: "/V/music-1")])
+    let new = canonicalPath("/V/music-1/library")
+    #expect(located == [WatchedFolder(path: new, kind: .network)])
+    #expect(try index.track(path: old + "/a.flac") == nil)
+    let after = try #require(try index.track(path: new + "/a.flac"))
+    #expect(after.id == before.id)
+    #expect(after.playCount == 1)
+    #expect(after.addedSeconds == before.addedSeconds)
+    #expect(after.fileName == "a.flac")
+    // The name keeps the spelling it was listed in; only the root changed.
+    let accented = try #require(try index.track(path: new + "/Caf\u{e9}/b.flac"))
+    #expect(accented.fileName == "b.flac")
+    let stored = try index.database.prepare("SELECT path FROM paths ORDER BY id").map {
+        try $0.text(0)
+    }
+    #expect(
+        stored
+            == [new + "/a.flac", new + "/Caf\u{e9}/b.flac"].map(
+                \.precomposedStringWithCanonicalMapping))
+    // A scan's view of the folder: every file known at its new path.
+    #expect(try index.knownFiles(under: new).count == 2)
+    #expect(try index.knownFiles(under: old).isEmpty)
+}
+
+@Test func anUnmountedShareKeepsItsLastRoot() throws {
+    let index = try craftedIndex([])
+    // Never found: its URL stands in, which no scan finds.
+    #expect(
+        try index.locate([music], among: [])
+            == [WatchedFolder(path: "smb://nas.local/music/library", kind: .network)])
+    _ = try index.locate([music], among: [share("smb://nas.local/music", at: "/V/music")])
+    let offline = [WatchedFolder(path: "/V/music/library", kind: .network)]
+    #expect(try index.locate([music], among: []) == offline)
+    #expect(try index.lastKnownFolders([music]) == offline)
+    // Mounted twice by name, on neither host: offline too.
+    let twice = [
+        share("smb://10.0.0.1/music", at: "/V/a"), share("smb://10.0.0.2/music", at: "/V/b"),
+    ]
+    #expect(try index.locate([music], among: twice) == offline)
+}
+
+@Test func aFolderStoredByPathIsAsConfigured() throws {
+    let folder = WatchedFolder(path: "/Users/me/Music", kind: .local)
+    #expect(try craftedIndex([]).locate([folder], among: []) == [folder])
+}
+
+@Test func theRewriteMakesWayForWhatTheNewRootHeld() throws {
+    let index = try index(under: "/V/old", names: ["a.flac", "b.flac", "c.flac", "d.flac"])
+    try index.recordPlay("/V/old/c.flac", at: 100)
+    try index.store(["b", "c", "d"].map { Crafted(path: "/V/new/\($0).flac").scanned })
+    try index.recordPlay("/V/new/c.flac", at: 200)
+    try index.recordPlay("/V/new/d.flac", at: 200)
+    let ids = try ["a", "b", "c", "d"].map {
+        try #require(try index.track(path: "/V/old/\($0).flac")).id
+    }
+    let newD = try #require(try index.track(path: "/V/new/d.flac")).id
+    try index.database.transaction { try index.rewritePaths(under: "/V/old", to: "/V/new") }
+    // a moved; b's stat-less twin gave way. The new root's files are dropped for the next
+    // scan to read again, so only a and b are in the index there now.
+    #expect(try index.track(path: "/V/new/a.flac")?.id == ids[0])
+    #expect(try index.track(path: "/V/new/b.flac")?.id == ids[1])
+    #expect(Set(try index.knownFiles(under: "/V/new").map(\.value.id)) == [ids[0], ids[1]])
+    #expect(try index.knownFiles(under: "/V/old").isEmpty)
+    // Both c's have stats, so the old one stays behind, lost; the old d had none and gave way.
+    // The new c and d are lost too until the next scan reads their files again.
+    #expect(
+        try index.lostFiles().map(\.path) == ["/V/new/c.flac", "/V/new/d.flac", "/V/old/c.flac"])
+    let paths = try index.database.prepare("SELECT id FROM paths WHERE path = ?").map(
+        "/V/new/d.flac"
+    ) { try $0.int64(0) }
+    #expect(paths == [newD])
+    #expect(
+        !(try index.database.prepare("SELECT id FROM paths").map { try $0.int64(0) }).contains(
+            ids[3]))
+    #expect(throws: LibraryError.nestedRoots("/V/new", "/V/new/inner")) {
+        try index.database.transaction {
+            try index.rewritePaths(under: "/V/new", to: "/V/new/inner")
+        }
+    }
+}
+
+@Test func aPickedFolderOnAShareIsStoredByShare() {
+    let shares = [
+        share("smb://nas/music", at: "/Volumes/music"), share("smb://nas/x", at: "/Volumes/m"),
+    ]
+    #expect(
+        folderToWatch(
+            "/Volumes/music/Caf\u{e9}".decomposedStringWithCanonicalMapping, isLocal: false,
+            among: shares)
+            == WatchedFolder(path: "Caf\u{e9}", share: "smb://nas/music", kind: .network))
+    #expect(
+        folderToWatch("/Volumes/music", isLocal: false, among: shares)
+            == WatchedFolder(path: "", share: "smb://nas/music", kind: .network))
+    #expect(
+        folderToWatch("/Volumes/musical", isLocal: false, among: shares)
+            == WatchedFolder(path: "/Volumes/musical", kind: .network))
+    #expect(
+        folderToWatch("/Users/me/Music", isLocal: true, among: shares)
+            == WatchedFolder(path: "/Users/me/Music", kind: .local))
+}
+
+@Test func removingAShareFolderMatchesItWhereItIs() throws {
+    let index = try craftedIndex([])
+    _ = try index.locate([music], among: [share("smb://nas.local/music", at: "/V/music")])
+    let local = WatchedFolder(path: "/M", kind: .local)
+    #expect(try index.folders([local, music], without: "/V/music/library") == [local])
+    #expect(try index.folders([local, music], without: "/M") == [music])
+}

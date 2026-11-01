@@ -22,7 +22,7 @@ struct WatchState {
     static let failedScanRetrySeconds = 60.0
     static let longestRetrySeconds = 15.0 * 60
 
-    let folders: [WatchedFolder]
+    private(set) var folders: [WatchedFolder]
     private(set) var running: WatchJob?
     private var activity = PlaybackActivity.stopped
     private var pausePollingDuringPlayback: Bool
@@ -43,6 +43,23 @@ struct WatchState {
         self.pausePollingDuringPlayback = pausePollingDuringPlayback
         wholeScans = folders.filter { $0.kind == .local }.map(\.path)
         for folder in folders where folder.kind == .network { pollDue[folder.path] = now }
+    }
+
+    /// The folders at new paths, in the same order, after a share moved (ADR 0028). What was
+    /// pending for each moves with it, but its changed directories are dropped: a moved network
+    /// folder is polled now, which scans it whole at its new path.
+    mutating func relocated(_ moved: [WatchedFolder], now: Date) {
+        precondition(moved.count == folders.count, "relocated a different set of folders")
+        precondition(running == nil, "relocated during a scan")
+        for (old, new) in zip(folders, moved) where old.path != new.path {
+            changed[old.path] = nil
+            wholeScans = wholeScans.map { $0 == old.path ? new.path : $0 }
+            retryDue[new.path] = retryDue.removeValue(forKey: old.path)
+            failuresInARow[new.path] = failuresInARow.removeValue(forKey: old.path)
+            pollDue[old.path] = nil
+            if new.kind == .network { pollDue[new.path] = now }
+        }
+        folders = moved
     }
 
     /// Directories FSEvents reports changed. Paths outside every local folder are ignored.

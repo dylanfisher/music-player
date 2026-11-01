@@ -19,6 +19,7 @@ public final class LibraryWatcher: @unchecked Sendable {
     static let progressIntervalSeconds = 1.0
 
     private let scanner: LibraryScanner
+    private let mounts: any ShareMounts
     private let events: @Sendable (WatcherEvent) -> Void
     /// Guards every field below it, and runs FSEvents and timer callbacks.
     private let queue = DispatchQueue(label: "\(bundleIdentifier).watcher")
@@ -30,27 +31,42 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// Each local folder's path with symbolic links resolved, as FSEvents reports it, and the
     /// path as configured.
     private var resolvedFolders: [(resolved: String, configured: String)] = []
+    /// The folders as Settings has them, and where each one's share was found when they were
+    /// last located; nil for a folder stored by path.
+    private var configured: [WatchedFolder] = []
+    private var lookups: [ShareLookup?] = []
 
     /// `networkReaders` is the files a network scan reads at once, or nil to tune it per scan.
-    /// `events` is called on a background thread for every scan's progress and outcome.
+    /// `mounts` finds the shares that folders on one are under. `events` is called on a
+    /// background thread for every scan's progress and outcome.
     public init(
-        databaseURL: URL, networkReaders: Int?,
+        databaseURL: URL, networkReaders: Int?, mounts: any ShareMounts = SystemShareMounts(),
         events: @escaping @Sendable (WatcherEvent) -> Void = { _ in }
     ) {
         scanner = LibraryScanner(databaseURL: databaseURL, networkReaders: networkReaders)
+        self.mounts = mounts
         self.events = events
     }
 
-    /// Removes files outside `folders` from the index, scans every folder, and starts watching
-    /// them. The caller reads them from Settings.
+    /// Finds each of `folders` (ADR 0028), removes files outside them from the index, scans
+    /// every folder, and starts watching them. The caller reads them from Settings.
     public func start(folders: [WatchedFolder], pausePollingDuringPlayback: Bool) {
         queue.async { [self] in
             precondition(state == nil, "the watcher is already running")
-            let folders = folders.map { folder in
-                var folder = folder
-                folder.path = canonicalPath(folder.path)
-                return folder
+            configured = folders
+            let located: [WatchedFolder]
+            do {
+                located = try locate()
+            } catch {
+                // Without them the files of every share folder would read as outside them.
+                logger.error("couldn't find the watched folders on their shares: \(error)")
+                events(
+                    .scanFailed(
+                        folder: folders.compactMap(\.share).joined(separator: ", "),
+                        reason: "couldn't find the watched folders: \(error)"))
+                return
             }
+            let folders = located.map { $0.located(at: canonicalPath($0.path)) }
             state = WatchState(
                 folders: folders,
                 pausePollingDuringPlayback: pausePollingDuringPlayback, now: Date())
@@ -108,11 +124,49 @@ public final class LibraryWatcher: @unchecked Sendable {
         }
     }
 
+    /// A share may have been mounted somewhere new: on wake, a network change or a mount. The
+    /// folders are found again once no scan is running.
+    public func sharesMayHaveMoved() {
+        queue.async { [self] in advance() }
+    }
+
+    /// The configured folders where they are now, rewriting the paths of any whose share
+    /// moved, and notes where each share was found. Runs on `queue`.
+    private func locate() throws -> [WatchedFolder] {
+        let shares = configured.contains { $0.share != nil } ? try mounts.mountedShares() : []
+        let index = try LibraryIndex(at: scanner.databaseURL)
+        let before = try index.lastKnownFolders(configured)
+        let located = try index.locate(configured, among: shares)
+        lookups = configured.map { folder in
+            folder.share.flatMap(ShareURL.init).map { ShareLookup($0, among: shares) }
+        }
+        if located != before { events(.folders(located)) }
+        return located
+    }
+
+    /// Before a scan starts: finds the share folders again if a share is mounted somewhere
+    /// other than when they were last located. Runs on `queue`, with no scan running.
+    private func relocateIfMoved(_ current: inout WatchState) {
+        guard lookups.contains(where: { $0 != nil }) else { return }
+        do {
+            let shares = try mounts.mountedShares()
+            let now = configured.map { folder in
+                folder.share.flatMap(ShareURL.init).map { ShareLookup($0, among: shares) }
+            }
+            guard now != lookups else { return }
+            current.relocated(
+                try locate().map { $0.located(at: canonicalPath($0.path)) }, now: Date())
+        } catch {
+            logger.error("couldn't find the watched folders on their shares again: \(error)")
+        }
+    }
+
     /// Starts the next scan if one may run, pauses or resumes the running one for playback,
     /// and sets the timer for the next poll. Runs on `queue`.
     private func advance() {
         guard var current = state else { return }
         defer { state = current }
+        if control == nil { relocateIfMoved(&current) }
         if let control {
             if current.holdsRunningScan { control.pause() } else { control.resume() }
         }

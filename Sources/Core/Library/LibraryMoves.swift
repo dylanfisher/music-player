@@ -83,6 +83,11 @@ extension LibraryIndex {
         }
     }
 
+    /// Deletes the path `id`, which nothing refers to. Call inside a transaction.
+    func deletePath(_ id: Int64) throws {
+        try statement("DELETE FROM paths WHERE id = ?").run(id)
+    }
+
     /// Gives the path `old` the file of the path `new`, which has no stats, and deletes `new`:
     /// the file keeps `old`'s ID, Date Added and stats. Call inside a transaction.
     private func move(_ old: Int64, to new: Int64) throws {
@@ -97,7 +102,7 @@ extension LibraryIndex {
                 row.optionalText(4),
             ] as [(any SQLiteValue)?]
         }[0]
-        try statement("DELETE FROM paths WHERE id = ?").run(new)
+        try deletePath(new)
         try statement(
             """
             UPDATE paths SET path = ?, codec = ?, sample_rate_hz = ?, length_frames = ?,
@@ -123,7 +128,7 @@ private let lostCondition = """
     """
 
 /// Whether the path `id` has what a move keeps: plays, a rating, a love or a playlist entry.
-private func hasStats(_ id: String) -> String {
+func hasStats(_ id: String) -> String {
     """
     (EXISTS (SELECT 1 FROM plays WHERE path_id = \(id))
         OR EXISTS (SELECT 1 FROM ratings WHERE path_id = \(id))

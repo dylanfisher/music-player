@@ -1,3 +1,5 @@
+import Settings
+
 /// What the watcher's scans are doing, so the window can refresh as rows arrive and show what
 /// went wrong.
 public enum WatcherEvent: Sendable {
@@ -10,4 +12,7 @@ public enum WatcherEvent: Sendable {
     /// At start, this many files outside every watched folder left the index, such as those of a
     /// folder no longer watched.
     case removed(count: Int)
+    /// The watched folders are at these paths now, in the order Settings lists them, since a
+    /// share they're on was mounted somewhere else (ADR 0028).
+    case folders([WatchedFolder])
 }

@@ -96,6 +96,15 @@ private final class LockedEvents: @unchecked Sendable {
         }
     }
 
+    var folders: [[WatchedFolder]] {
+        lock.withLock {
+            events.compactMap { event in
+                guard case .folders(let folders) = event else { return nil }
+                return folders
+            }
+        }
+    }
+
     var scanned: [(String, ScanSummary)] {
         lock.withLock {
             events.compactMap { event in
@@ -124,4 +133,45 @@ private final class LockedEvents: @unchecked Sendable {
     watcher.rescan(directories: [folder])
     #expect(
         try await eventually(within: 20) { try index.trackCount() == library.readableCount + 1 })
+}
+
+@Test func aShareMountedSomewhereNewIsRewrittenThenScanned() async throws {
+    let library = try TestLibrary()
+    // A folder stands in for the share's mount point, with the library inside it.
+    let mountPoint = (library.root as NSString).deletingLastPathComponent + "/nas-music"
+    try FileManager.default.createDirectory(atPath: mountPoint, withIntermediateDirectories: true)
+    try FileManager.default.moveItem(atPath: library.root, toPath: mountPoint + "/library")
+    let mounts = FakeMounts([MountedShare(url: "smb://nas/music", mountPoint: mountPoint)])
+    let received = LockedEvents()
+    let watcher = LibraryWatcher(
+        databaseURL: library.databaseURL, networkReaders: 4, mounts: mounts,
+        events: received.append)
+    watcher.start(
+        folders: [WatchedFolder(path: "library", share: "smb://nas/music", kind: .network)],
+        pausePollingDuringPlayback: false)
+    defer { watcher.stop() }
+    #expect(try await eventually(within: 20) { received.scanned.count == 1 })
+    let first = canonicalPath(mountPoint + "/library")
+    #expect(received.folders.last == [WatchedFolder(path: first, kind: .network)])
+    let file = try #require(library.manifest.files.first { $0.malformation == nil })
+    let index = try library.index()
+    try index.recordPlay(first + "/" + file.path, at: 100)
+    let id = try #require(try index.track(path: first + "/" + file.path)).id
+
+    // Ejected and mounted again at "-1", with the old mount point left behind empty.
+    try FileManager.default.moveItem(atPath: mountPoint, toPath: mountPoint + "-1")
+    try FileManager.default.createDirectory(atPath: mountPoint, withIntermediateDirectories: true)
+    mounts.set([MountedShare(url: "smb://nas/music", mountPoint: mountPoint + "-1")])
+    watcher.sharesMayHaveMoved()
+    #expect(try await eventually(within: 20) { received.scanned.count == 2 })
+    let moved = canonicalPath(mountPoint + "-1/library")
+    #expect(received.folders.last == [WatchedFolder(path: moved, kind: .network)])
+    let rescan = try #require(received.scanned.last)
+    #expect(rescan.0 == moved)
+    #expect(rescan.1.read == 0, "the rewrite left nothing to read again")
+    #expect(rescan.1.removed == 0)
+    #expect(rescan.1.unchanged == library.manifest.files.count)
+    let after = try #require(try index.track(path: moved + "/" + file.path))
+    #expect(after.id == id)
+    #expect(after.playCount == 1)
 }

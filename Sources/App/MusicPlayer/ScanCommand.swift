@@ -28,8 +28,12 @@ func scanCommand(folder: String, databasePath: String?, readers: Int?, hints: Re
         // index of anything else would be undone.
         let paths = try appPaths()
         let settings = try readConfig(paths)
-        try requireWatched(path, in: settings[\.watchedFolders])
         databaseURL = libraryFileURL(in: paths.dataDirectory)
+        // Where the share folders are now, as the app would find them before a scan.
+        try requireWatched(
+            path,
+            in: try LibraryIndex(at: databaseURL).locate(
+                settings[\.watchedFolders], among: SystemShareMounts().mountedShares()))
     }
     if readers != nil, isLocal == nil {
         FileHandle.standardError.write(

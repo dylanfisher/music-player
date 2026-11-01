@@ -419,11 +419,14 @@ public final class LibraryIndex {
     func remove(_ ids: [Int64]) throws {
         guard !ids.isEmpty else { return }
         try database.transaction {
-            for id in ids {
-                try statement("DELETE FROM track_search WHERE rowid = ?").run(id)
-                try statement("DELETE FROM files WHERE id = ?").run(id)
-            }
+            for id in ids { try deleteFile(id) }
         }
+    }
+
+    /// Deletes the file `id` and everything stored for it. Call inside a transaction.
+    func deleteFile(_ id: Int64) throws {
+        try statement("DELETE FROM track_search WHERE rowid = ?").run(id)
+        try statement("DELETE FROM files WHERE id = ?").run(id)
     }
 
     /// Deletes every file outside `roots`, such as those of a folder no longer watched, and

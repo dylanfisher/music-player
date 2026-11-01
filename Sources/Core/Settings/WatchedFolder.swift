@@ -19,8 +19,12 @@ public struct WatchedFolder: SettingValue {
     public static let defaultPollIntervalMinutes = 15
     static let pollIntervalRangeMinutes = 1...1440
 
-    /// The root, as an absolute path.
+    /// The root, as an absolute path; for a folder on a share, its path inside the share, with
+    /// no leading slash, and empty for the share itself.
     public var path: String
+    /// For a folder on a network share, the share's URL (`smb://nas/music`), so the folder is
+    /// found wherever the share is mounted (ADR 0028). Nil for a folder stored by its path.
+    public var share: String?
     public var kind: Kind
     /// Glob patterns relative to the root. An empty list includes everything.
     public var include: [String]
@@ -30,10 +34,11 @@ public struct WatchedFolder: SettingValue {
     public var pollIntervalMinutes: Int
 
     public init(
-        path: String, kind: Kind, include: [String] = [], exclude: [String] = [],
-        pollIntervalMinutes: Int = defaultPollIntervalMinutes
+        path: String, share: String? = nil, kind: Kind, include: [String] = [],
+        exclude: [String] = [], pollIntervalMinutes: Int = defaultPollIntervalMinutes
     ) {
         self.path = path
+        self.share = share
         self.kind = kind
         self.include = include
         self.exclude = exclude
@@ -41,13 +46,14 @@ public struct WatchedFolder: SettingValue {
     }
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
-        case path, kind, include, exclude, pollIntervalMinutes
+        case path, share, kind, include, exclude, pollIntervalMinutes
     }
 
     public init(from decoder: any Decoder) throws {
         try rejectUnknownKeys(decoder, CodingKeys.self)
         let container = try decoder.container(keyedBy: CodingKeys.self)
         path = try container.decode(String.self, forKey: .path)
+        share = try container.decodeIfPresent(String.self, forKey: .share)
         kind = try container.decode(Kind.self, forKey: .kind)
         include = try container.decode([String].self, forKey: .include)
         exclude = try container.decode([String].self, forKey: .exclude)
@@ -55,15 +61,29 @@ public struct WatchedFolder: SettingValue {
     }
 
     public static var typeName: String {
-        "a watched folder (path, kind, include, exclude, pollIntervalMinutes)"
+        "a watched folder (path, optional share, kind, include, exclude, pollIntervalMinutes)"
     }
     public static var kind: SettingKind { .watchedFolder }
 
     public func problem() -> String? {
         let range = Self.pollIntervalRangeMinutes
-        if !path.hasPrefix("/") { return "path \"\(path)\" isn't absolute" }
+        if let share {
+            if ShareURL(share) == nil {
+                return "share \"\(share)\" isn't a URL with a host and a share, such as"
+                    + " smb://nas/music"
+            }
+            if kind != .network { return "a folder on share \"\(share)\" needs kind network" }
+            if path.hasPrefix("/") {
+                return "path \"\(path)\" is inside share \"\(share)\", so it can't start with /"
+            }
+            if path.split(separator: "/").contains("..") {
+                return "path \"\(path)\" leaves share \"\(share)\""
+            }
+        } else if !path.hasPrefix("/") {
+            return "path \"\(path)\" isn't absolute"
+        }
         let standard = (path as NSString).standardizingPath
-        if Self.refusedRoots.contains(standard) || standard == NSHomeDirectory() {
+        if share == nil, Self.refusedRoots.contains(standard) || standard == NSHomeDirectory() {
             return "path \"\(path)\" is a system folder or the home folder, not a music folder;"
                 + " watching it would scan, and tag-edit, everything under it"
         }

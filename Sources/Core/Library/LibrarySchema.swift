@@ -46,10 +46,11 @@ let schemaDiscardsTable = "schema_discards"
 
 /// The tables `statsSchema` creates, which an index rebuild keeps.
 let statsTables: Set<String> = [
-    "paths", "plays", "ratings", "history", "playlists", "playlist_entries",
+    "paths", "plays", "ratings", "history", "playlists", "playlist_entries", shareRootsTable,
 ]
 
 let lovedTable = "loved"
+let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 
 private let indexSchema = """
@@ -176,6 +177,16 @@ private let statsSchema = """
     );
     -- Move matching and Lost Stats look paths up by length.
     CREATE INDEX paths_length ON paths (length_frames);
+    -- Where the paths of each watched folder on a share were last (ADR 0028), so a new mount
+    -- point rewrites them.
+    CREATE TABLE \(shareRootsTable) (
+        share TEXT NOT NULL,
+        -- The folder's path inside the share, as configured.
+        inner_path TEXT NOT NULL,
+        -- In canonicalPath's form, as files.path starts.
+        root TEXT NOT NULL,
+        PRIMARY KEY (share, inner_path)
+    );
     CREATE TABLE plays (
         path_id INTEGER PRIMARY KEY REFERENCES paths (id),
         play_count INTEGER NOT NULL,

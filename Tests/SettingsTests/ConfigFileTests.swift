@@ -270,3 +270,26 @@ func fuzzedFilesAreProblemsNotCrashes(_ name: String) throws {
         #expect(throws: Never.self, "\(path)") { try parsed(folder(path)) }
     }
 }
+
+@Test func aFolderOnAShareIsItsShareAndThePathInsideIt() throws {
+    func folder(_ fields: String) -> String {
+        #"{"folders": [{\#(fields), "include": [], "exclude": [], "pollIntervalMinutes": 15}]}"#
+    }
+    let stored = folder(#""path": "library", "share": "smb://nas/music", "kind": "network""#)
+    #expect(
+        try parsed(stored).values["folders"] as? [WatchedFolder] == [
+            WatchedFolder(path: "library", share: "smb://nas/music", kind: .network)
+        ])
+    let refused = [
+        (#""path": "library", "share": "smb://nas", "kind": "network""#, "isn't a URL"),
+        (#""path": "library", "share": "/Volumes/music", "kind": "network""#, "isn't a URL"),
+        (#""path": "library", "share": "smb://nas/music", "kind": "local""#, "needs kind network"),
+        (#""path": "/library", "share": "smb://nas/music", "kind": "network""#, "can't start"),
+        (#""path": "a/../..", "share": "smb://nas/music", "kind": "network""#, "leaves share"),
+        (#""path": "library", "kind": "network""#, "isn't absolute"),
+    ]
+    for (fields, problem) in refused {
+        let found = problems(folder(fields))
+        #expect(found.count == 1 && found[0].contains(problem), "\(fields): \(found)")
+    }
+}

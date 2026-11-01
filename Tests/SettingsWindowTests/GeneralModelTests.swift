@@ -95,9 +95,17 @@ private var appearanceChoices: [SettingKind.Choice] {
     #expect(model.folders("a.folders").isEmpty)
     let listed = GeneralModel(
         settings: Schema().settings,
-        value: { $0 == "a.folders" ? [["path": "/Music", "kind": "local"]] : nil },
+        value: {
+            $0 == "a.folders"
+                ? [
+                    ["path": "/Music", "kind": "local"],
+                    ["path": "library", "share": "smb://nas/music", "kind": "network"],
+                    ["path": "", "share": "smb://nas/other", "kind": "network"],
+                ] : nil
+        },
         set: { _, _ in })
-    #expect(listed.folders("a.folders") == ["/Music"])
+    #expect(
+        listed.folders("a.folders") == ["/Music", "library on smb://nas/music", "smb://nas/other"])
 }
 
 @MainActor @Test func aRefusedValueIsPutBackInItsField() throws {

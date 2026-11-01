@@ -303,6 +303,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         case .removed:
             refreshNow()
             runHealth()
+        case .folders(let folders):
+            // The rewrite gave the tracks under them new paths.
+            refreshNow()
+            Task { await setFolders(folders) }
         }
     }
 

@@ -33,7 +33,7 @@ struct LibraryStatus: Equatable, Sendable {
         case .scanFailed(let folder, let reason):
             scanning[folder] = nil
             failures[folder] = reason
-        case .removed:
+        case .removed, .folders:
             break
         }
     }

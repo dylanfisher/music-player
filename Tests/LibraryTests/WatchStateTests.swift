@@ -158,3 +158,19 @@ private struct FakeEngine {
     #expect(!second)
     #expect(state.nextPoll(after: minutes(15)) == minutes(30))
 }
+
+@Test func aRelocatedFolderKeepsItsPlaceAndIsPolledAtItsNewPath() {
+    var state = WatchState(folders: [nas, local], pausePollingDuringPlayback: false, now: start)
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
+    state.finished(now: start)
+    #expect(state.start(now: start) == WatchJob(folder: nas, subtrees: []))
+    state.finished(now: minutes(1))
+    state.directoriesEdited([nas.path + "/Album"])
+    let moved = WatchedFolder(path: "/Volumes/Music-1", kind: .network, pollIntervalMinutes: 15)
+    state.relocated([moved, local], now: minutes(2))
+    #expect(state.folders == [moved, local])
+    // The edit under the old path is dropped; the whole folder is polled at once instead.
+    #expect(state.start(now: minutes(2)) == WatchJob(folder: moved, subtrees: []))
+    state.finished(now: minutes(3))
+    #expect(state.nextPoll(after: minutes(3)) == minutes(18))
+}

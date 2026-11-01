@@ -28,10 +28,14 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   date added, ratings, loved tracks and playlists across, matched by path, after a preview of
   what each would change. Running one again adds only the plays since.
 - **Watched folders** open in the sidebar into their subfolders, from the paths the library
-  holds. **Library Health** lists files that couldn't be read, playlist entries whose file left,
-  likely duplicates, albums with gaps, several album artists or mixed sample rates, and tracks
-  missing art, an album or an album artist; it runs after a scan and on Check Library Health.
-  ⇧⌘R reveals the selected tracks in Finder.
+  holds. A folder on a network share is stored by the share, so the library follows it when
+  macOS mounts it somewhere else, such as `/Volumes/music-1`. A renamed or moved file keeps its
+  plays, rating and playlist entries. **Library Health** lists files that couldn't be read,
+  playlist entries whose file left, likely duplicates, albums with gaps, several album artists
+  or mixed sample rates, tracks missing art, an album or an album artist, and Lost Stats: files
+  with stats that left without a match, which **Resolve Lost Stats…** gives to a track or
+  dismisses. It runs after a scan and on Check Library Health. ⇧⌘R reveals the selected tracks
+  in Finder.
 - **`music-player`**, in `MusicPlayer.app/Contents/MacOS`, runs any command in the app and
   starts it if it isn't running: `music-player next`, `music-player play "album:Kind of Blue"`,
   `music-player status --json`. `music-player help` lists the commands. Links run playback and

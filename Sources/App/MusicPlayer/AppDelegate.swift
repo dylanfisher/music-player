@@ -55,6 +55,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dockMenu: DockMenu?
     private(set) var queue: QueuePanel?
     private var watcher: LibraryWatcher?
+    /// The window's own connection, which says where the watched folders' paths are.
+    private var windowIndex: LibraryIndex?
+    private var shareChanges: ShareChangeObserver?
     private(set) var output: DeviceOutput?
     private(set) var engine: PlaybackEngine?
     private var activity = PlaybackActivity.stopped
@@ -149,7 +152,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let browser = LibraryBrowser(
             reader: try LibraryReader(databaseURL: databaseURL), index: index,
             layout: layout.trackTable, browserHeight: layout.browserHeight,
-            folders: layout.folders, groupByAlbumArtist: layout.groupByAlbumArtist)
+            folders: try index.lastKnownFolders(layout.folders),
+            groupByAlbumArtist: layout.groupByAlbumArtist)
+        windowIndex = index
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
@@ -225,6 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startPlayback(settings)
         startScripting()
         startWatching(settings[\.watchedFolders], settings)
+        shareChanges = ShareChangeObserver { [weak self] in self?.watcher?.sharesMayHaveMoved() }
         if let snapshotURL {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.snapshotDelaySeconds) {
                 [weak self] in self?.snapshot(to: snapshotURL)
@@ -539,11 +545,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func watch(_ url: URL, _ settings: ConfigStore<AppSettings>) {
         let path = url.standardizedFileURL.path
         var folders = settings[\.watchedFolders]
-        guard !folders.contains(where: { $0.path == path }) else { return }
         do {
             // FSEvents reports nothing on network volumes, so those are polled.
             let local = try url.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal
-            folders.append(WatchedFolder(path: path, kind: local == true ? .local : .network))
+            let folder = folderToWatch(
+                path, isLocal: local == true,
+                among: local == true ? [] : try SystemShareMounts().mountedShares())
+            guard !folders.contains(where: { $0.path == folder.path && $0.share == folder.share })
+            else { return }
+            folders.append(folder)
             try settings.set(\.watchedFolders, to: folders)
         } catch {
             fail("Couldn't add \(path)", error)
@@ -561,9 +571,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
-            let folders = settings[\.watchedFolders].filter { $0.path != path }
             do {
-                try settings.set(\.watchedFolders, to: folders)
+                guard let index = self?.windowIndex else { return }
+                try settings.set(
+                    \.watchedFolders,
+                    to: try index.folders(settings[\.watchedFolders], without: path))
             } catch {
                 self?.fail("Couldn't remove \(path)", error)
             }
@@ -572,7 +584,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func changedFolders(_ folders: [WatchedFolder], _ settings: ConfigStore<AppSettings>) {
         startWatching(folders, settings)
-        if let browser { Task { await browser.setFolders(folders) } }
+        guard let browser, let windowIndex else { return }
+        do {
+            let shown = try windowIndex.lastKnownFolders(folders)
+            Task { await browser.setFolders(shown) }
+        } catch {
+            fail("Couldn't read where the watched folders are", error)
+        }
     }
 
     // MARK: Errors

@@ -74,9 +74,14 @@ public final class GeneralModel {
         }
     }
 
-    /// The watched folders' paths.
+    /// The watched folders' paths, and for a folder on a share, the share it's in; the
+    /// sidebar's tooltip shows where the share is mounted now (ADR 0028).
     public func folders(_ key: String) -> [String] {
-        (value(key) as? [[String: Any]] ?? []).compactMap { $0["path"] as? String }
+        (value(key) as? [[String: Any]] ?? []).compactMap { folder in
+            guard let path = folder["path"] as? String else { return nil }
+            guard let share = folder["share"] as? String else { return path }
+            return path.isEmpty ? share : "\(path) on \(share)"
+        }
     }
 
     func setOn(_ key: String, _ on: Bool) throws { try set(key, on) }
