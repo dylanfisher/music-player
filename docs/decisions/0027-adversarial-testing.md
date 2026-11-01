@@ -104,6 +104,37 @@ each with its own scratch path, applying one mutant, building only its entry's t
 running it, then checking the file out again; the main checkout isn't written. A mutant that
 doesn't compile isn't counted. The files and line ranges are in `scripts/mutate-files.txt`.
 
+### What the runs found, and the mutants that survive
+
+The fuzzer found two config file bugs: a doubled comma that crashed the scan (Foundation now
+takes a trailing comma itself, so the blanker's half-blanked pair parsed), and problem
+reporting that was quadratic in the file's size. The tag edit property found that a file's
+second edit could never be undone after its first undo. The first mutation run scored 50% to
+72% on most files; the tests added since bring it to 351 killed of 385 (91.2%): PlayQueue and
+the tag writer's checks 100%, the engine 91.8%, PlayCounter 93.8%, the scanner 89.2%,
+PlayTracker 85.7% (6 of 7) and ConfigStore 83.8%. Logging lines aren't mutated: no test reads
+the log. Each of the 34 survivors is one no test can tell from the original:
+
+- **Tuning constants:** the scanner's 500-file batch, the engine's 256-update buffer and
+  ConfigStore's 30 s longest retry (reached only after five failures, over a minute).
+- **Values every path sets before reading:** the engine's initial `failuresInARow` and
+  `cursor`, `failuresInARow` reset in `setQueue` (every way to play resets it again),
+  `cursor` on an empty `setQueue`, in `load`, after an edit and on a lost device (`cursor` is
+  read only while nothing is loaded, and each way to unload sets it), the removed next item's
+  `-1` placeholders (any value that isn't an entry), the `+ 1` after a removed current track
+  (that position is nil), and `nextItem = nil` in two `finished` branches that already leave
+  it nil.
+- **Clean-up nothing can observe:** dropping finished subscribers, `wake = nil` after
+  `cancel()`, the FSEvents stop, invalidate and release calls (and the two after a start that
+  never fails here), and FSEvents' context `version`, which it ignores.
+- **Equal results by another way:** a re-read of bytes the store already has (`||` to `&&`
+  on its shortcut, and not recording its own write's bytes) parses to the same values; the
+  shortcut sort with `<=` on unique keys; the scanner's subtree coalescing with `==`, which only
+  scans a nested folder twice; an exact path match among protected paths, which are folders the
+  walk couldn't list and never a file's path; the root check with `&&`, which differs only if a
+  lost root comes back on the same device before the scan ends; and the play count's
+  `>= needed - 0.001` as `>`, where no `Date` lands on the boundary.
+
 ## Alternatives considered
 
 - **A seeded mutation fuzzer without coverage**, the plan's fallback — not needed: the hooks
