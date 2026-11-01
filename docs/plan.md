@@ -1413,9 +1413,10 @@ Album pane (the known limit in phase 5's Result).
         never guessed.
       - Loved: a yes/no stat kept in the database beside ratings (Swinsian's heart), with a
         command to toggle it, so phase 18 can import it.
-- [ ] The owner's minimum, shown by default in this order: #, Album Art, Title, Artist, Album,
-      Track of Total, Time, Year, Genre, Grouping, Catalog Number, Bit Rate, Sample Rate, Size,
-      Play Count, Date Added. The rest are off until chosen.
+- [ ] The default columns stay as they are; every new column is off until chosen from the
+      header's menu. The owner will turn on #, Album Art, Title, Artist, Album, Track of Total,
+      Time, Year, Genre, Grouping, Catalog Number, Bit Rate, Sample Rate, Size, Play Count and
+      Date Added, so those must work first and be tested.
 - [ ] The tag editor (phase 11) stays as it is; editing the new fields is a later change.
 - [ ] Tests: the pane with the setting on and off, compilations, same-title albums, the sort
       order, each new tag read from every format, and each new column's sort.
