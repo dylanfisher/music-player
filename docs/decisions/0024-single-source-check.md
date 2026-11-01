@@ -19,7 +19,10 @@ one block with three copies.
 `scripts/dupes.swift`, Foundation only and run by `./scripts/check` as
 `swift scripts/dupes.swift`, as `scripts/arch.swift` is. It lexes each `.swift`, `.c` and `.h`
 file under `Sources`, so comments, raw and multi-line strings, and literals inside
-interpolations are read as the compiler reads them. It takes under a second on the whole tree.
+interpolations are read as the compiler reads them. A multi-line string loses its closing
+delimiter's indentation, as Swift reads it, so the same SQL at two indents matches, and a
+backslash at a line's end, in a string or a C preprocessor line, still counts the line. It takes
+under a second on the whole tree.
 
 **A literal worth flagging** is any string literal with 4 or more characters of its own in more
 than one file under `Sources`: user-facing text, identifiers (setting keys, command IDs, table
@@ -34,13 +37,18 @@ Not compared:
 - **Tests.** They may repeat literals freely, since a test that types the value it expects
   catches a wrong constant that a test importing it would not. A test that asserts a string the
   code exposes by name, such as a command's title or a setting's type name, reads that name.
-- **Messages to `fatalError`, `precondition`, `preconditionFailure`, `assert` and
-  `assertionFailure`.** Each describes a programmer error at its own site, is never shown in a
-  window and is never compared, as the `required init?(coder:)` message in eleven views is.
-- **Oracles.** A Tools module listed as `oracle <dir>` in the allowlist re-types format facts on
-  purpose: the fixture generator writes each tag format from its spec, and the tag corpus's
-  independent readers re-read it, so a wrong ID in Metadata fails a test instead of agreeing
-  with itself.
+- **Programmer-error messages:** the message of `fatalError`, `preconditionFailure` and
+  `assertionFailure`, and the argument after the condition of `precondition` and `assert`. Each
+  describes a programmer error at its own site, is never shown in a window and is never
+  compared, as the `required init?(coder:)` message in eleven views is. A literal in the
+  condition, or in a `file:` argument, still counts.
+- **What an oracle shares with the modules it checks.** A Tools module listed as
+  `oracle <dir> | checks <dir>…` re-types those modules' format facts on purpose: the fixture
+  generator writes each tag format from its spec, so a wrong ID in Metadata fails a test instead
+  of agreeing with itself. Its literal is hidden only where a checked module (Metadata or
+  TagWriter) spells it too; anything else it shares, such as a file extension with the scanner,
+  is compared like any other. The tag corpus was an oracle in the first draft, but hides nothing
+  under this rule, so it's compared in full.
 - Log categories, which come from `#fileID`, so they're never literals.
 
 Within one file a repeat is left to review: it's in front of the reader, and the plan's
@@ -52,12 +60,23 @@ renamed variables still matches. A window with fewer than 6 distinct lines is sk
 `case .x: "y"` lines or stored properties is the code's shape, not a copy. A block fails at its
 third copy. A second copy of 20 lines or more prints as advisory and doesn't fail.
 
-**The allowlist,** `scripts/dupes-allow.txt`, holds one entry per line with its reason after
-` | `: `literal "<as written>"`, `block <every file with a copy>` or `oracle <dir>`. An entry
-with no reason fails, and so does an entry that no longer matches anything, so the list can't
-outlive what it excused. `scripts/dupes-test`, also in `./scripts/check`, runs the script on a
-fixture tree it must pass and one with a planted literal, a third block, a long second block, a
-stale literal, a stale oracle and an entry with no reason, and checks each `file:line`.
+**The allowlist,** `scripts/dupes-allow.txt`, holds one entry per line,
+`<key> | <scope> | <reason>`, and the script prints each finding's key and scope:
+
+- `literal "<as written>" | files <file>…`: that literal in exactly those files. A new file
+  that reuses the spelling changes the file list, so it fails.
+- `block <fingerprint> x<copies> | files <file>…`: that block, by an FNV-1a hash of its first
+  window, that many times, in exactly those files. A fourth copy, or a different block in the
+  same files, fails.
+- `oracle <dir> | checks <dir>…`, as above.
+
+An entry with no reason or no scope fails, as do a repeated entry, an unknown kind and an entry
+that no longer matches anything: an oracle fails when nothing it hides would otherwise be
+reported. So the list can't outlive what it excused. `scripts/dupes-test`, also in
+`./scripts/check`, runs the script on a tree it must pass and a tree that plants each kind of
+duplicate (in an interpolation, in a condition, at two indents of a multi-line string, with
+`\"` escapes, in a `##` raw string, in C, beside an oracle in a directory named like it) and
+each kind of bad entry, and checks each `file:line`.
 
 **Where a shared fact lives:** in the lowest module every user imports, as docs/map.md says.
 
@@ -77,10 +96,15 @@ stale literal, a stale oracle and an entry with no reason, and checks each `file
 | App flags and keys Bench and FailureDrill use from outside | 4 | | 4 |
 | Separate executables' own messages | 5 | | 5 |
 | Second copies of behavior | 2 | | 2 |
-| Format IDs re-typed only by an oracle | 36 | | 2 oracle entries |
+| Format IDs re-typed only by an oracle | 36 | | 1 oracle entry |
 | Blocks with three copies: the strict-decoding shape | 1 | | 1 |
 
-After the sweep the script reports nothing outside 37 allowlist entries. The fixes:
+After the sweep the script reported nothing outside 37 allowlist entries. Review then
+scoped the oracles, which brought back 10 literals the tag corpus and the fixture generator
+share with the app or other tools (their own messages, file extensions, a fixture word that is
+also an appearance's title); all 10 are allowlisted with reasons, and the fixture generator's
+oracle entry now hides 64 format IDs it shares with Metadata. The check runs clean with 46
+entries. The fixes:
 
 - Metadata names each ID once as a `package` constant beside `MP4Type` (`ID3FrameID`,
   `VorbisKey`, `MP4ItemType`, the audio chunk IDs, `FileFailure`), and TagWriter uses them.
@@ -106,8 +130,8 @@ After the sweep the script reports nothing outside 37 allowlist entries. The fix
   were renamed, which is the usual copy. Normalizing them finds the strict-decoding shape, which
   is allowlisted.
 - **Excluding all of `Sources/Tools`** — rejected: Bench and FailureDrill read the library's
-  file name and the SQLite suffixes, and those must follow the app. Only the two oracles are
-  excluded, by name.
+  file name and the SQLite suffixes, and those must follow the app. Only the fixture generator is
+  an oracle, and only for what it shares with Metadata and TagWriter.
 - **Excluding log messages** — rejected: the owner reads them in Console, so they're user-facing
   text. The one repeated log line is allowlisted as a second copy of behavior.
 - **Moving the strict-key check to a primitive** so HALOutput and Settings share it — deferred:
@@ -116,8 +140,22 @@ After the sweep the script reports nothing outside 37 allowlist entries. The fix
 ## Consequences
 
 A fact a second module needs makes the check fail until it's imported or allowlisted with a
-reason, and the allowlist shrinks as duplicates are fixed, since a stale entry fails too. An
-allowlisted literal covers every file it's in, so a third use of an allowlisted spelling passes
-without review; the reasons say which uses each entry means. Within-file repeats and numeric
-constants aren't checked: budgets have BenchTests, and a number such as `1024` or `1000` repeats
-across unrelated code too often to flag.
+reason, and the allowlist shrinks as duplicates are fixed, since a stale entry fails too.
+Because each entry names its files, a file that edits its way into or out of an allowlisted
+duplicate makes its entry fail, and the entry is rewritten from the key the script prints.
+
+What it doesn't check:
+
+- **Repeats within one file**, of literals or of blocks: they're in front of the reader.
+- **Numeric constants:** budgets have BenchTests, and a number such as `1024` or `1000` repeats
+  across unrelated code too often to flag.
+
+The block comparison's limits:
+
+- **Structure over-matches.** With identifiers normalized, unrelated code of the same shape
+  matches, as the strict-decoding types do; those go in the allowlist.
+- **One inserted line breaks a window.** A copy with a line added every 7 lines has no 8-line
+  window in common with the original, so heavily edited copies go unseen.
+- **Keywords are kept, so a variable named like one differs.** A word in the keyword list
+  (`get`, `set`, `open`, `some`…) stays as itself, so a copy that renames `set` to `put` doesn't
+  match, and a C file's types are read as identifiers unless listed.

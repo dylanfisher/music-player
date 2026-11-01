@@ -1085,13 +1085,15 @@ Implementation plan (ADR 0024, written with the script):
    like `scripts/arch.swift`, lexes every `.swift`, `.c` and `.h` file under `Sources`: comments,
    raw and multi-line strings and interpolations, whose own literals count too. It reports each
    string literal of 4 or more characters of its own (interpolations, format specifiers and
-   escapes taken out) found in more than one file, with every `file:line`. Messages to
-   `fatalError`, `precondition` and `assert` are skipped. Blocks: windows of 8 lines that aren't
-   only punctuation, compared with identifiers and literals normalized, fail at a third copy;
-   a second copy of 20 lines or more prints as advisory. `scripts/dupes-allow.txt` holds
-   `literal "…" | reason`, `block <files> | reason` and `oracle <dir> | reason` (a Tools module
-   that re-types format facts on purpose, like a test, so its literals aren't compared); an
-   entry without a reason, or one that matches nothing, fails.
+   escapes taken out) found in more than one file, with every `file:line`. Programmer-error
+   messages (`fatalError`, and the message after `precondition`'s or `assert`'s condition) are
+   skipped. Blocks: windows of 8 lines that aren't only punctuation, compared with identifiers
+   and literals normalized, fail at a third copy; a second copy of 20 lines or more prints as
+   advisory. `scripts/dupes-allow.txt` holds `literal "…" | files … | reason`,
+   `block <fingerprint> x<copies> | files … | reason` and `oracle <dir> | checks <dir>… | reason`
+   (a Tools module that re-types the checked modules' format facts on purpose, like a test, so
+   what it shares with them is hidden); an entry without a reason, or one that matches nothing,
+   fails.
 2. **Survey and ADR 0024.** What counts as a literal worth flagging and what's excluded, the
    oracle rule, the block rule, and every category the first run found with its count.
 3. **Fixes, one commit per module group,** each fact moved to the lowest module its users share:
