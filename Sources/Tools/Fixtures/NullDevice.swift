@@ -19,7 +19,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     private var runs: [CapturedRun] = []
     private var restoredDefaults = 0
     private var openSessions = 0
-    private var goesAwayDuring: SessionStep?
+    private var goesAwayDuring: (step: SessionStep, afterSeconds: Double)?
 
     /// A call on a session the device can go away during.
     public enum SessionStep: String, CaseIterable, Sendable {
@@ -58,17 +58,24 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     public func plugInUnannounced() { lock.withLock { connected = true } }
 
     /// Makes the device go away during the next `step` of a session, as a DAC unplugged
-    /// mid-switch does: the call fails, the device reads as gone and the watcher is told.
-    public func goAway(during step: SessionStep) { lock.withLock { goesAwayDuring = step } }
+    /// mid-switch does: the call fails, and the device reads as gone and the watcher is told,
+    /// at once or `afterSeconds` after the call fails, as the HAL may report it later.
+    public func goAway(during step: SessionStep, afterSeconds: Double = 0) {
+        lock.withLock { goesAwayDuring = (step, afterSeconds) }
+    }
 
     fileprivate func perform(_ step: SessionStep) throws {
-        let goes = lock.withLock {
-            guard goesAwayDuring == step else { return false }
+        let delay = lock.withLock { () -> Double? in
+            guard let goes = goesAwayDuring, goes.step == step else { return nil }
             goesAwayDuring = nil
-            return true
+            return goes.afterSeconds
         }
-        guard goes else { return }
-        unplug()
+        guard let delay else { return }
+        if delay == 0 {
+            unplug()
+        } else {
+            DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [self] in unplug() }
+        }
         throw WentAway(step: step)
     }
 

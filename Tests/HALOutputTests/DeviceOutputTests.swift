@@ -179,9 +179,12 @@ private func contiguousFrames(of album: RampAlbum, from first: Int = 0, in sampl
     #expect(rig.device.captured.isEmpty)
 }
 
-@Test(arguments: NullDevice.SessionStep.allCases)
+/// Gone before the step's error, and a moment after it, within the settle time.
+private let goneBeforeAndAfterTheError = [0, DeviceOutput.deviceSettleSeconds / 5]
+
+@Test(arguments: NullDevice.SessionStep.allCases, goneBeforeAndAfterTheError)
 func theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost(
-    _ step: NullDevice.SessionStep
+    _ step: NullDevice.SessionStep, _ goneAfterSeconds: Double
 ) async throws {
     let low = try album(44_100, 16)
     let high = try album(96_000, 24)
@@ -191,7 +194,7 @@ func theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost(
     try await rig.wait(for: .trackStarted(index: 0))
     // The first track has about a second left, and the next call of `step` is the switch's:
     // nothing pauses or reconfigures before it.
-    rig.device.goAway(during: step)
+    rig.device.goAway(during: step, afterSeconds: goneAfterSeconds)
     let lost = try await rig.wait { $0.event == .deviceLost }
     #expect(lost.state.status == .paused)
     #expect(lost.state.currentIndex == 1)
@@ -208,6 +211,26 @@ func theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost(
     #expect(resumed.sampleRateHz == 96_000)
     let frame = high.trackFrames[0]
     #expect(contiguousFrames(of: high, from: frame, in: resumed.samples)?.start == 0)
+}
+
+@Test func aDeviceThatReadsAsGoneOnlyAfterTheSettleIsStillOfferedForResume() async throws {
+    let low = try album(44_100, 16)
+    let high = try album(96_000, 24)
+    let rig = try await Rig(speed: 1)
+    await rig.engine.setQueue([low.tracks[0], high.tracks[1]])
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    rig.device.goAway(during: .start, afterSeconds: DeviceOutput.deviceSettleSeconds * 3)
+
+    // The device still reads as there when the step fails, so the output failed; once it
+    // reads as gone, that's a loss, and its return is offered.
+    let failed = try await rig.wait { if case .failed = $0.event { true } else { false } }
+    #expect(failed.state.status == .stopped)
+    let lost = try await rig.wait { $0.event == .deviceLost }
+    #expect(lost.state.device == .lost)
+    rig.device.plugIn()
+    let returned = try await rig.wait { $0.event == .deviceReturned }
+    #expect(returned.state.device == .returned)
 }
 
 @Test func aFileCutShortWhilePlayingIsReportedAndSkipped() async throws {

@@ -63,6 +63,12 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private var drainedAt: Double?
     /// The device went away while in use, so its return is worth reporting.
     private var deviceMissing = false
+    /// Where playback would resume after a device step failed while the device still read as
+    /// connected. If the device then turns out to be gone, that's reported as a loss.
+    private var failedResume: (item: OutputItem.ID?, seconds: Double)?
+    /// How long a failed step waits for the device to read as gone before calling the failure
+    /// the device's own: the HAL can report the removal a moment after the call fails.
+    static let deviceSettleSeconds = 0.25
     private var gain = 1.0
     /// Streams whose IO proc may still be called because stopping it failed. They are never freed.
     private var retired: [RenderStream] = []
@@ -251,6 +257,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             }
             device = opened
             deviceMissing = false
+            failedResume = nil
             return true
         } catch {
             emit(.failed(item.id, error))
@@ -573,13 +580,20 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
     }
 
-    /// A device unplugged mid-switch fails the step it's in, before or after its listener fires,
-    /// so a failed step while the device is gone is a lost device, not a failed track or output.
-    /// True when it was, after reporting it.
+    /// A device unplugged mid-switch fails the step it's in, before or after the HAL says it's
+    /// gone, so a failed step while the device is gone, or goes within `deviceSettleSeconds`,
+    /// is a lost device, not a failed track or output. True when it was, after reporting it.
     private func deviceIsGone(
         after error: any Error, resuming item: OutputItem.ID?, at seconds: Double
     ) -> Bool {
-        guard !provider.isConnected() else { return false }
+        let deadline = uptime() + Self.deviceSettleSeconds
+        while provider.isConnected() {
+            guard uptime() < deadline else {
+                failedResume = (item, seconds)
+                return false
+            }
+            usleep(10_000)
+        }
         logger.error("\(self.provider.deviceName) went away: \(error)")
         lose(item, at: seconds)
         return true
@@ -622,6 +636,12 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             guard !provider.isConnected() else { return }
             logger.error("\(self.provider.deviceName) went away")
             lose(segments.first?.item.id, at: position())
+        } else if let resume = failedResume, !provider.isConnected() {
+            // A step failed while the device still read as connected, and now it's gone.
+            failedResume = nil
+            deviceMissing = true
+            logger.error("\(self.provider.deviceName) went away after a failed step")
+            emit(.deviceLost(resume.item, positionSeconds: resume.seconds))
         } else if deviceMissing, provider.isConnected() {
             deviceMissing = false
             provider.deviceReturned()
