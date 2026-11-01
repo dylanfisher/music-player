@@ -21,7 +21,7 @@ machine points at the same files.
 
 ## Decision
 
-A synced track is its path relative to the machine's `sync.libraryRoot`, normalized to NFC. Each
+A synced track is its path relative to the library root, normalized to NFC. Each
 machine maps that to its own `paths` row by adding its root, so 0022's local IDs stay as they
 are. A scan that finds files gone and files new matches them as moves, locally and for every
 machine.
@@ -44,7 +44,7 @@ machine.
   on both paths (it played the new path before the event arrived) merges them by phase 23's
   rules.
 - Users who point machines at separate copies of their music don't share stats, unless the
-  relative paths happen to match. Settings say so beside `sync.libraryRoot`.
+  relative paths happen to match. Settings say so beside the sync folder.
 
 ## Alternatives considered
 

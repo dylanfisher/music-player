@@ -1623,10 +1623,8 @@ Write the ADR first; it amends ADR 0022.
       watched folder on a network volume is stored as its share's URL and the path inside it. The
       app finds the share's current mount point at launch, before each scan, on wake and on a
       network change, and rewrites the `paths` prefixes in one transaction when the mount point
-      moved (`/Volumes/music` to `/Volumes/music-1`). When the share isn't mounted, NetFS mounts it
-      in the background with a 15-second timeout, no UI and the Keychain's password; a Connect
-      button on the offline message is the only mount that may show a login dialog. This helps a
-      single machine too, so it can land before the rest of the phase.
+      moved (`/Volumes/music` to `/Volumes/music-1`). An unmounted share leaves the folder offline,
+      as now. This helps a single machine too, so it can land before the rest of the phase.
 - [ ] **Library root.** `sync.folder` in the config file. The library root is the watched folder,
       stored by share, so it's the same on every machine; relative paths start there.
 - [ ] **Logs.** One append-only file per machine (`<machine id>.log`, the ID minted on first run
@@ -1653,8 +1651,9 @@ Write the ADR first; it amends ADR 0022.
       move matching after every fixture file is renamed.
 - [ ] **Hardware checkpoint (owner):** with two Macs on the NAS, play and rate on each, rename a
       folder of a test album, and report whether both machines show the same plays, ratings and
-      playlists. Then eject the share on one Mac and relaunch the app, and report whether it
-      mounted the share and kept the stats.
+      playlists. Then eject the share on one Mac, remount it at `/Volumes/music-1` (leave an
+      empty `/Volumes/music` folder behind), and report whether the library and its stats came
+      back.
 
 ## Later
 
