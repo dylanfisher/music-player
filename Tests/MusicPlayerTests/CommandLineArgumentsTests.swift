@@ -3,8 +3,8 @@ import Testing
 @testable import MusicPlayer
 
 @Test func aFlagFollowedByAnotherHasNoValue() {
-    #expect(value(after: "--db", in: ["--scan", "/m", "--db", "--readers", "4"]) == nil)
-    #expect(value(after: "--db", in: ["--scan", "/m", "--db", "/x.sqlite"]) == "/x.sqlite")
+    #expect(value(after: .db, in: ["--scan", "/m", "--db", "--readers", "4"]) == nil)
+    #expect(value(after: .db, in: ["--scan", "/m", "--db", "/x.sqlite"]) == "/x.sqlite")
     #expect(
         argumentProblem(["--scan", "/m", "--db", "--readers", "4"]) == "--db needs a database file")
 }

@@ -250,7 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try writeSnapshot(of: window, to: url)
             } catch {
                 logger.error("\(error)")
-                FileHandle.standardError.write(Data("error: \(error)\n".utf8))
+                printError(error)
             }
         }
     }

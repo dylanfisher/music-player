@@ -48,7 +48,7 @@ extension AppDelegate {
 
     private func newPlaylist(withSelection: Bool) {
         askForName(
-            "New Playlist", button: "Create", initial: untitledPlaylist
+            AppCommands.title(of: .newPlaylist), button: "Create", initial: untitledPlaylist
         ) { [weak self] name in
             self?.browser?.createPlaylist(named: name, rules: nil, withSelection: withSelection)
         }

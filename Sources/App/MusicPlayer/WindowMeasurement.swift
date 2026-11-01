@@ -34,7 +34,7 @@ enum WindowMeasurement {
         do {
             FileHandle.standardOutput.write(try JSONEncoder().encode(report) + Data("\n".utf8))
         } catch {
-            FileHandle.standardError.write(Data("error: \(error)\n".utf8))
+            printError(error)
         }
         NSApp.terminate(nil)
     }

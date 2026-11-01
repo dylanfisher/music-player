@@ -20,11 +20,13 @@ import Settings
 // window's General or Shortcuts pane, instead.
 let arguments = CommandLine.arguments
 
-func value(after flag: String) -> String? { value(after: flag, in: arguments) }
+func value(after flag: Flag) -> String? { value(after: flag, in: arguments) }
+
+func given(_ flag: Flag) -> Bool { arguments.contains(flag.rawValue) }
 
 /// Everything after `flag` up to the next flag.
-func values(after flag: String) -> [String] {
-    guard let index = arguments.firstIndex(of: flag) else { return [] }
+func values(after flag: Flag) -> [String] {
+    guard let index = arguments.firstIndex(of: flag.rawValue) else { return [] }
     return Array(arguments[(index + 1)...].prefix { !$0.hasPrefix("--") })
 }
 
@@ -33,32 +35,30 @@ func runAndExit(_ command: () throws -> Void) -> Never {
         try command()
         exit(0)
     } catch {
-        FileHandle.standardError.write(Data("error: \(error)\n".utf8))
+        printError(error)
         exit(1)
     }
 }
 
 if let problem = argumentProblem(Array(arguments.dropFirst())) {
-    FileHandle.standardError.write(Data("error: \(problem)\n".utf8))
+    printError(problem)
     exit(1)
 }
 
-let readers = value(after: "--readers").map { text in
+let readers = value(after: .readers).map { text in
     let range = AppSettings.networkScanReadersRange
     guard let count = Int(text), range.contains(count) else {
-        FileHandle.standardError.write(
-            Data(
-                "error: --readers needs a whole number from \(range.lowerBound) to \(range.upperBound), not \(text)\n"
-                    .utf8))
+        printError(
+            "\(Flag.readers.rawValue) needs a whole number from \(range.lowerBound) to"
+                + " \(range.upperBound), not \(text)")
         exit(1)
     }
     return count
 }
 
-let ioHints = value(after: "--scan-io-hints").map { text in
+let ioHints = value(after: .scanIOHints).map { text in
     guard let hints = ReadHints(rawValue: text) else {
-        FileHandle.standardError.write(
-            Data("error: --scan-io-hints needs one of \(ioHintsChoices), not \(text)\n".utf8))
+        printError(choiceProblem(.scanIOHints, ioHintsChoices, text))
         exit(1)
     }
     return hints
@@ -67,30 +67,30 @@ let ioHints = value(after: "--scan-io-hints").map { text in
 /// The app's files: in `--home`'s folder or the standard places, with `--settings`'s config file.
 func appPaths() throws -> AppPaths {
     var paths =
-        try value(after: "--home").map { AppPaths(home: URL(fileURLWithPath: $0)) }
+        try value(after: .home).map { AppPaths(home: URL(fileURLWithPath: $0)) }
         ?? AppPaths.standard()
-    if let file = value(after: "--settings") { paths.configFile = URL(fileURLWithPath: file) }
+    if let file = value(after: .settings) { paths.configFile = URL(fileURLWithPath: file) }
     return paths
 }
 
-if arguments.contains("--list-devices") {
+if given(.listDevices) {
     runAndExit { print(deviceReport(try AudioDevice.outputDevices())) }
 }
-if let folder = value(after: "--scan") {
+if let folder = value(after: .scan) {
     runAndExit {
         try scanCommand(
-            folder: folder, databasePath: value(after: "--db"), readers: readers,
+            folder: folder, databasePath: value(after: .db), readers: readers,
             hints: ioHints ?? SystemFileAccess().hints)
     }
 }
-if arguments.contains("--play") {
+if given(.play) {
     runAndExit {
-        try playCommand(paths: values(after: "--play"), deviceName: value(after: "--device"))
+        try playCommand(paths: values(after: .play), deviceName: value(after: .device))
     }
 }
 
 let snapshotTarget =
-    value(after: "--snapshot-of").map { text in
+    value(after: .snapshotOf).map { text in
         guard let target = SnapshotTarget(rawValue: text) else {
             preconditionFailure("argumentProblem lets only a snapshot target through, not \(text)")
         }
@@ -101,13 +101,13 @@ let launchPaths: AppPaths
 do {
     launchPaths = try appPaths()
 } catch {
-    FileHandle.standardError.write(Data("error: \(error)\n".utf8))
+    printError(error)
     exit(1)
 }
 let app = NSApplication.shared
 let delegate = AppDelegate(
-    paths: launchPaths, measuring: arguments.contains("--measure-window"),
-    snapshotURL: value(after: "--snapshot").map(URL.init(fileURLWithPath:)),
+    paths: launchPaths, measuring: given(.measureWindow),
+    snapshotURL: value(after: .snapshot).map(URL.init(fileURLWithPath:)),
     snapshotOf: snapshotTarget)
 app.delegate = delegate
 app.setActivationPolicy(.regular)
