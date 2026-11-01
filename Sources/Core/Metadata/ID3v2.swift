@@ -155,6 +155,7 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
     let headerSize = version == 2 ? 6 : 10
     let idLength = version == 2 ? 3 : 4
     while area.range.upperBound - cursor >= headerSize {
+        try reader.step(at: area.fileOffset(cursor))
         let frameHeader = try area.bytes(cursor..<cursor + headerSize)
         if try frameHeader.uint8(0) == 0 { break }  // padding
         let id = latin1(try frameHeader.slice(0..<idLength).array)

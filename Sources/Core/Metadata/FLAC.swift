@@ -10,6 +10,7 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     var pictures: [(type: UInt32, art: EmbeddedArt)] = []
     var isLast = false
     while !isLast {
+        try reader.step(at: offset)
         let header = try reader.bytes(offset..<offset + 4)
         let type = try header.uint8(0) & 0x7F
         isLast = try header.uint8(0) & 0x80 != 0

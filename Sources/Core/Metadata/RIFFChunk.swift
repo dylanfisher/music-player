@@ -38,6 +38,7 @@ package func forEachChunk(
 ) throws(ParseFailure) {
     var offset = range.lowerBound
     while offset < range.upperBound {
+        try reader.step(at: offset)
         guard range.upperBound - offset >= 8 else {
             throw .malformed(
                 at: offset,

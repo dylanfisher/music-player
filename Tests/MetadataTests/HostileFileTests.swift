@@ -300,3 +300,29 @@ private final class ThrownError: @unchecked Sendable {
     var error: MetadataError? { lock.withLock { stored } }
     func set(_ error: MetadataError) { lock.withLock { stored = error } }
 }
+
+/// Comments and frames of a few bytes each, millions of them in a large enough block, would
+/// cost a loop turn and often a warning apiece.
+@Test func aFileOfTinyStructuresStopsAtTheBudget() throws {
+    let tooMany = ByteReader.maximumSteps + 10
+    var comments = littleEndian32(0) + littleEndian32(tooMany)
+    for _ in 0..<tooMany { comments += littleEndian32(0) }
+    let vorbis = flac([(0, streamInfo()), (4, comments)])
+    var frames = Data()
+    for _ in 0..<tooMany { frames += ascii("XXXX") + Data(count: 6) }
+    let id3 = id3Tag([frames]) + mpegFrames(2)
+    for (name, file) in [("Vorbis comments", vorbis), ("ID3 frames", id3)] {
+        let thrown = failure(file)
+        #expect(thrown?.kind == .malformed, "\(name)")
+        #expect(thrown?.detail.contains("more than \(ByteReader.maximumSteps)") == true, "\(name)")
+    }
+}
+
+@Test func warningsPastTheCapAreCountedInOne() throws {
+    let extra = 250
+    let fields = Array(repeating: "no equals sign", count: ByteReader.maximumWarnings + extra)
+    let parsed = try parse(flac([(0, streamInfo()), (4, vorbisComment(fields))]))
+    #expect(parsed.warnings.count == ByteReader.maximumWarnings + 1)
+    #expect(parsed.warnings.last?.detail.hasPrefix("\(extra) more warnings, not kept") == true)
+    #expect(parsed.warnings.last?.kind == .unreadableField)
+}

@@ -45,6 +45,7 @@ func parseVorbisComment(_ block: Bytes, _ reader: ByteReader) throws(ParseFailur
             "Vorbis comment count \(count) doesn't fit in its \(block.count)-byte block")
     }
     for _ in 0..<count {
+        try reader.step(at: block.fileOffset(cursor))
         let length = Int(try block.uint32LE(cursor))
         guard length <= block.count - cursor - 4 else {
             throw .malformed(

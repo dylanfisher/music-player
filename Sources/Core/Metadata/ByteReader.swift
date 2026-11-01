@@ -10,7 +10,14 @@ package final class ByteReader {
     /// it; art and audio are never read.
     static let maximumRangeBytes = 16 * 1024 * 1024
 
+    /// The most atoms, chunks, blocks, frames and comments one file's walks visit. Each takes a
+    /// few bytes, so a hostile file could hold millions; real files hold at most a few thousand.
+    static let maximumSteps = 100_000
+    /// The most warnings kept for one file; past it, one more says how many were left out.
+    static let maximumWarnings = 100
+
     package let size: Int
+    private var steps = 0
     private(set) var bytesRead = 0
     private(set) var readCount = 0
     /// Spent waiting in the source's reads.
@@ -32,6 +39,29 @@ package final class ByteReader {
         } catch {
             warn(.unreadableField, at: error.offset ?? offset, error.detail)
         }
+    }
+
+    /// Counts one atom, chunk, block, frame or comment at `offset`, and fails past the budget.
+    package func step(at offset: Int) throws(ParseFailure) {
+        steps += 1
+        guard steps <= Self.maximumSteps else {
+            throw .malformed(
+                at: offset,
+                "more than \(Self.maximumSteps) atoms, chunks, frames or comments in one file")
+        }
+    }
+
+    /// `warnings`, at most `maximumWarnings` of them, then one naming how many more there were
+    /// and the first of those.
+    var keptWarnings: [MetadataWarning] {
+        guard warnings.count > Self.maximumWarnings else { return warnings }
+        let first = warnings[Self.maximumWarnings]
+        return Array(warnings.prefix(Self.maximumWarnings)) + [
+            MetadataWarning(
+                kind: first.kind, offset: first.offset,
+                detail: "\(warnings.count - Self.maximumWarnings) more warnings, not kept; the"
+                    + " first: \(first.detail)")
+        ]
     }
 
     package init(_ source: any ByteSource) {

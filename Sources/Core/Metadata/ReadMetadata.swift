@@ -55,7 +55,7 @@ func parse(_ reader: ByteReader) throws(ParseFailure) -> ParsedFile {
     case .mp3: metadata = try parseMP3(reader)
     }
     return ParsedFile(
-        metadata: metadata, warnings: reader.warnings, bytesRead: reader.bytesRead,
+        metadata: metadata, warnings: reader.keptWarnings, bytesRead: reader.bytesRead,
         readCount: reader.readCount, readSeconds: reader.readSeconds)
 }
 

@@ -66,6 +66,7 @@ package func forEachAtom(
     let parentName = parent.map { "'\($0.type)'" } ?? wholeFileName
     var offset = range.lowerBound
     while offset < range.upperBound {
+        try reader.step(at: offset)
         guard range.upperBound - offset >= 8 else {
             if parent != nil { return }
             throw .malformed(
