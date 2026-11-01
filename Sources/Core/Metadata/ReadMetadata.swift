@@ -36,8 +36,9 @@ public func readArt(_ art: EmbeddedArt, at url: URL) throws(MetadataError) -> Da
                 "art of \(art.byteCount) bytes runs past the end of the file (\(source.size)"
                     + " bytes); the file changed since it was read")
         }
-        let bytes = try source.read(art.offset..<art.offset + art.byteCount)
-        return Data(art.unsynchronised ? UnsyncEscapes.decode(bytes).0 : bytes)
+        let range = art.offset..<art.offset + art.byteCount
+        guard art.unsynchronised else { return try source.readData(range) }
+        return Data(UnsyncEscapes.decode(try source.read(range)).0)
     } catch {
         throw error.error(path: url.path)
     }

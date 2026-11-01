@@ -1,4 +1,5 @@
 import Darwin
+import Foundation
 
 /// The caching hints a tag read gives the volume. Each is a hint the volume may ignore, and on
 /// SMB only the NAS can show what they save, so the scan can be run with each (ADR 0010).
@@ -62,29 +63,38 @@ package final class FileSource: ByteSource {
 
     package func read(_ range: Range<Int>) throws(ParseFailure) -> [UInt8] {
         var buffer = [UInt8](repeating: 0, count: range.count)
-        var done = 0
-        var failure: ParseFailure?
-        buffer.withUnsafeMutableBytes { raw in
-            while done < range.count {
-                let count = pread(
-                    descriptor, raw.baseAddress! + done, range.count - done,
-                    off_t(range.lowerBound + done))
-                if count < 0 {
-                    if errno == EINTR { continue }
-                    failure = unreadable(range.lowerBound + done, FileFailure.read)
-                    return
-                }
-                if count == 0 {
-                    failure = ParseFailure(
-                        kind: .unreadable, offset: range.lowerBound + done,
-                        detail: "the file ended early; it was \(size) bytes when opened")
-                    return
-                }
-                done += count
-            }
-        }
-        if let failure { throw failure }
+        if let failure = buffer.withUnsafeMutableBytes({ fill($0, from: range) }) { throw failure }
         return buffer
+    }
+
+    /// `read` into `Data`, for bytes that leave as `Data`, so they aren't held twice.
+    func readData(_ range: Range<Int>) throws(ParseFailure) -> Data {
+        var data = Data(count: range.count)
+        if let failure = data.withUnsafeMutableBytes({ fill($0, from: range) }) { throw failure }
+        return data
+    }
+
+    /// Reads `range` into `raw`, returning what went wrong, if anything.
+    private func fill(_ raw: UnsafeMutableRawBufferPointer, from range: Range<Int>)
+        -> ParseFailure?
+    {
+        var done = 0
+        while done < range.count {
+            let count = pread(
+                descriptor, raw.baseAddress! + done, range.count - done,
+                off_t(range.lowerBound + done))
+            if count < 0 {
+                if errno == EINTR { continue }
+                return unreadable(range.lowerBound + done, FileFailure.read)
+            }
+            if count == 0 {
+                return ParseFailure(
+                    kind: .unreadable, offset: range.lowerBound + done,
+                    detail: "the file ended early; it was \(size) bytes when opened")
+            }
+            done += count
+        }
+        return nil
     }
 }
 
