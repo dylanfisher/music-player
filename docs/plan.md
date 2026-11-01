@@ -1870,6 +1870,35 @@ fixes: 1.27 to 1.51% of 3%.
 - [ ] Tests: argument parsing, each command routed to the registry, refused commands, and status
       output.
 
+Implementation plan (ADR 0036):
+
+1. **Registry** (Commands): each `Command` gets `runsFromLinks`, true for the playback commands
+   and Back, Forward and Show Current Track, and `argument`, the help for what it takes (Play's
+   search). They are the only list: the URL check, the help and the tests read them.
+2. **Socket** (new primitive `LocalSocket`): a Unix-domain socket server in a 0700 folder the
+   user owns, the socket 0600, `getpeereid` checked on every connection against an injected
+   uid, frames a 4-byte length then the bytes, capped, read under a deadline. A client that
+   checks the server's uid too. One thread blocked in `poll`, so idle costs no wakeups.
+3. **Scripting** (new Core module): the request and reply JSON (strict keys), the status shape,
+   command names derived from the registry (the ID, or its last part when no other command has
+   it), the command-line parser and help, the URL parser (length cap, one percent-decode,
+   unknown hosts, paths and keys refused, only `runsFromLinks` commands), and a router that
+   runs a request through the `CommandDispatcher`. The socket lives at
+   `<data folder>/scripting/socket`, so `--home` moves it.
+4. **Play a search** (LibraryBrowser): `play "<text>"` shows the whole library with that
+   search and plays it; `album:`, `artist:` or `genre:` and a name shows that entry, as the
+   palette does, and plays it.
+5. **App:** start the server once playback is ready, route requests and `music-player://`
+   links (queued until then) to the router; refused links are reported in the status bar.
+6. **Tool** (new App-tier executable `ScriptTool`): bundled as `Contents/MacOS/music-player`,
+   signed with the hardened runtime before the app. It starts the app with `NSWorkspace` when
+   the socket doesn't answer and waits up to 20 s. `scripts/bundle` adds `CFBundleURLTypes`
+   with the scheme read from Swift; `scripts/check-signature` checks every executable.
+7. **Tests:** LocalSocketTests (permissions, a refused uid, oversized and slow frames, a stale
+   socket, the next client served), ScriptingTests (parsing, help, URL refusals, every command
+   routed, status JSON), CommandsTests (the link list), LibraryBrowserTests (play a search or
+   an entry). ADR 0025 gets rows for the socket and the URL scheme.
+
 ### 22. Per-device profiles
 
 Each output device remembers its own settings, with nothing for the user to set up. A profile is
