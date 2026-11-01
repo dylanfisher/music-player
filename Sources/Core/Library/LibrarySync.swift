@@ -1,3 +1,4 @@
+import DisplayText
 import Foundation
 import Log
 import SQLite
@@ -277,10 +278,11 @@ private struct SyncCursor {
         }
     }
 
-    /// The problems, each on a line naming the log, and a count of those not listed.
+    /// The problems, each on a line naming the log, and a count of those not listed. A log's
+    /// text in them is escaped, so a line break can't fake a row of the report.
     func reportLines(in folder: String) -> [String] {
         let name = folder + "/" + file.name
-        return problems.map { "\(name): \($0)" }
+        return problems.map { terminalSafe("\(name): \($0)") }
             + (unlisted > 0 ? ["\(name): \(unlisted) more problems"] : [])
     }
 }

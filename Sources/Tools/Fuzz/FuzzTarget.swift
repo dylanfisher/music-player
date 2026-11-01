@@ -33,8 +33,8 @@ struct FuzzTarget: Sendable {
         parser(.mp3, "ID3v1 and ID3v2 tags and MPEG audio frames"),
         parser(.wav, "RIFF chunks, INFO lists and ID3 chunks"),
         parser(.aiff, "AIFF and AIFF-C chunks and ID3 chunks"),
-        vorbis, config, state, journal, rules, playlistFile, swinsian, swinsianPredicate, iTunesXML,
-        tagWriter,
+        vorbis, config, state, journal, rules, playlistFile, syncLog, swinsian, swinsianPredicate,
+        iTunesXML, tagWriter,
     ]
 
     static func named(_ name: String) -> FuzzTarget? { all.first { $0.name == name } }
@@ -360,6 +360,69 @@ private let playlistFile = FuzzTarget(
                     "entries don't survive being written: \(expected) became \(again.paths)")
             }
             return file.problems.isEmpty && !file.paths.isEmpty
+        }
+    })
+
+/// The keys of a sync log line that hold one path, and the one that holds a list of them.
+private let syncPathKeys = ["path", "from", "to"]
+private let syncPathListKey = "paths"
+
+private let syncLog = FuzzTarget(
+    name: "sync-log",
+    summary:
+        "another machine's sync log, read line by line; each event written back and read again",
+    seedFormats: [],
+    tokens: [
+        #""seq":"#, #""event":"#, #""playlistEntries""#, #""paths":["#, "\\ud83c\\udfb5", "e301",
+        "..",
+    ],
+    madeSeeds: { _, _ in
+        let id = String(repeating: "0f", count: 16)
+        let lines = [
+            #"{"seq":1,"ms":1800000000000,"n":0,"event":"play","path":"music/a.flac","at":1700000000.5}"#,
+            #"{"seq":2,"ms":1800000000001,"n":3,"event":"move","from":"music/a.flac","to":"music/Cafe\u0301.flac"}"#,
+            #"{"seq":3,"ms":1800000000002,"n":0,"event":"playlistCreate","playlist":"\#(id)","name":"Mix","rules":null}"#,
+            #"{"seq":4,"ms":1800000000003,"n":0,"event":"playlistEntries","playlist":"\#(id)","paths":["music/a.flac","music/b"]}"#,
+            #"{"seq":5,"ms":1800000000004,"n":0,"event":"counts","path":"music/a.flac","plays":2,"skips":0,"lastPlayed":null}"#,
+        ]
+        return [Array((lines.joined(separator: "\n") + "\n").utf8), Array(lines[0].utf8)]
+    },
+    prepare: { _ in
+        { input in
+            var reader = SyncLogLines(from: 0, end: input.count, maximumLine: 1 << 16) {
+                Array(input[$0])
+            }
+            var accepted = 0
+            while let line = try! reader.next() {
+                guard case .line(let bytes) = line,
+                    let record = try? SyncRecord(line: bytes[...])
+                else { continue }
+                let written = record.line
+                precondition(!written.utf8.contains(0x0A), "a written line holds a line break")
+                guard let again = try? SyncRecord(line: Array(written.utf8)[...]), again == record
+                else { preconditionFailure("an event doesn't survive being written: \(written)") }
+                // Foundation, apart from the log's own parser, must read the same paths.
+                guard
+                    let object = try? JSONSerialization.jsonObject(with: Data(written.utf8))
+                        as? [String: Any]
+                else { preconditionFailure("Foundation can't read \(written)") }
+                let paths =
+                    syncPathKeys.compactMap { object[$0] as? String }
+                    + (object[syncPathListKey] as? [String] ?? [])
+                for path in paths {
+                    precondition(
+                        !path.isEmpty && !path.hasPrefix("/") && !path.unicodeScalars.contains("\0")
+                            && path == path.precomposedStringWithCanonicalMapping
+                            && !path.split(separator: "/", omittingEmptySubsequences: false)
+                                .contains { $0.isEmpty || $0 == "." || $0 == ".." },
+                        "a path isn't relative, folded and in NFC: \(path.debugDescription)")
+                }
+                accepted += 1
+            }
+            precondition(
+                reader.offset == 0 || input[reader.offset - 1] == 0x0A,
+                "reading stopped mid-line, at \(reader.offset)")
+            return accepted > 0
         }
     })
 

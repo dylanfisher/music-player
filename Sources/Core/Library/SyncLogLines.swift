@@ -1,5 +1,5 @@
 /// One line of a log, or one too long to read.
-enum SyncLogLine: Equatable {
+package enum SyncLogLine: Equatable {
     /// Without its line break.
     case line([UInt8])
     /// Over `SyncRecord.maximumLineBytes`; skipped to its line break, never held whole.
@@ -8,11 +8,11 @@ enum SyncLogLine: Equatable {
 
 /// Reads a log's complete lines from an offset, a chunk at a time: a line without its line
 /// break, which a machine that died while writing leaves, is left for the next read.
-struct SyncLogLines {
+package struct SyncLogLines {
     static let chunkBytes = 1 << 20
 
     /// Where the next unread line starts.
-    private(set) var offset: Int
+    package private(set) var offset: Int
     private let end: Int
     private let maximumLine: Int
     private let read: (Range<Int>) throws -> [UInt8]
@@ -21,7 +21,7 @@ struct SyncLogLines {
     private var bufferStart: Int
 
     /// Reads `end` bytes at most, from `offset`, through `read`.
-    init(
+    package init(
         from offset: Int, end: Int, maximumLine: Int = SyncRecord.maximumLineBytes,
         read: @escaping (Range<Int>) throws -> [UInt8]
     ) {
@@ -33,7 +33,7 @@ struct SyncLogLines {
     }
 
     /// The next complete line, or nil when none is left.
-    mutating func next() throws -> SyncLogLine? {
+    package mutating func next() throws -> SyncLogLine? {
         var searched = offset
         var skipped = false
         while true {

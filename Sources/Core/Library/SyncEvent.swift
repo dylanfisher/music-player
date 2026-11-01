@@ -23,13 +23,13 @@ enum SyncEvent: Equatable, Sendable {
 }
 
 /// An event as one line of a log: its sequence number in the log, its clock and the event.
-struct SyncRecord: Equatable, Sendable {
+package struct SyncRecord: Equatable, Sendable {
     var seq: Int64
     var clock: SyncClock
     var event: SyncEvent
 
     /// What a log may hold, for its writer and every reader.
-    static let maximumLineBytes = 4 << 20
+    package static let maximumLineBytes = 4 << 20
     static let maximumLogBytes = 1 << 30
     static let maximumEvents = 4_000_000
     /// The largest sequence number, and count, JSON carries exactly.
@@ -41,7 +41,7 @@ struct SyncRecord: Equatable, Sendable {
     static let maximumPathBytes = 4096
 
     /// The line, without its line break: a JSON object with its keys in a fixed order.
-    var line: String {
+    package var line: String {
         var fields: [(SyncKey, SyncJSON)] = [
             (.seq, .integer(seq)), (.ms, .integer(clock.ms)), (.n, .integer(clock.counter)),
             (.event, .string(event.name.rawValue)),
@@ -54,7 +54,7 @@ struct SyncRecord: Equatable, Sendable {
 
     /// Decodes a line without its line break. Every key is required, nothing else is allowed,
     /// and every value is checked (ADR 0025).
-    init(line bytes: ArraySlice<UInt8>) throws(SyncLineProblem) {
+    package init(line bytes: ArraySlice<UInt8>) throws(SyncLineProblem) {
         var parser = SyncJSONParser(bytes)
         var fields = SyncFields(object: try parser.object())
         seq = try fields.take(.seq).integer(.seq, in: Self.seqRange)
@@ -192,7 +192,7 @@ extension SyncEvent {
                 playlist: try fields.playlist(), rules: try fields.take(.rules).rules())
         case .playlistEntries:
             guard case .strings(let paths) = try fields.take(.paths) else {
-                throw .badValue(.paths, "isn't a list of strings")
+                throw .bad(.paths, "isn't a list of strings")
             }
             var checked: [String] = []
             for path in paths { checked.append(try SyncJSON.string(path).path(.paths)) }
@@ -203,20 +203,24 @@ extension SyncEvent {
 }
 
 /// Why a log's line was refused.
-enum SyncLineProblem: Error, Equatable, CustomStringConvertible {
+package enum SyncLineProblem: Error, Equatable, CustomStringConvertible {
     case notJSON(String)
     case missing(String)
     case unknownKey(String)
     case unknownEvent(String)
-    case badValue(SyncKey, String)
+    case badValue(String, String)
 
-    var description: String {
+    static func bad(_ key: SyncKey, _ reason: String) -> SyncLineProblem {
+        .badValue(key.rawValue, reason)
+    }
+
+    package var description: String {
         switch self {
         case .notJSON(let detail): "isn't a JSON object of the log's form: \(detail)"
         case .missing(let key): "has no \"\(key)\""
         case .unknownKey(let key): "has the unknown key \"\(key)\""
         case .unknownEvent(let name): "has the unknown event \"\(name)\""
-        case .badValue(let key, let reason): "\"\(key.rawValue)\" \(reason)"
+        case .badValue(let key, let reason): "\"\(key)\" \(reason)"
         }
     }
 }
@@ -256,9 +260,9 @@ enum SyncJSON: Equatable {
     fileprivate func integer(_ key: SyncKey, in range: ClosedRange<Int64>) throws(SyncLineProblem)
         -> Int64
     {
-        guard case .integer(let value) = self else { throw .badValue(key, "isn't an integer") }
+        guard case .integer(let value) = self else { throw .bad(key, "isn't an integer") }
         guard range.contains(value) else {
-            throw .badValue(key, "\(value) isn't in \(range.lowerBound)...\(range.upperBound)")
+            throw .bad(key, "\(value) isn't in \(range.lowerBound)...\(range.upperBound)")
         }
         return value
     }
@@ -268,22 +272,22 @@ enum SyncJSON: Equatable {
         switch self {
         case .integer(let whole): value = Double(whole)
         case .number(let number): value = number
-        default: throw .badValue(key, "isn't a number")
+        default: throw .bad(key, "isn't a number")
         }
         let range = SyncRecord.secondsRange
         guard range.contains(value) else {
-            throw .badValue(key, "\(value) isn't in \(range.lowerBound)...\(range.upperBound)")
+            throw .bad(key, "\(value) isn't in \(range.lowerBound)...\(range.upperBound)")
         }
         return value
     }
 
     fileprivate func string(_ key: SyncKey) throws(SyncLineProblem) -> String {
-        guard case .string(let value) = self else { throw .badValue(key, "isn't a string") }
+        guard case .string(let value) = self else { throw .bad(key, "isn't a string") }
         return value
     }
 
     fileprivate func bool(_ key: SyncKey) throws(SyncLineProblem) -> Bool {
-        guard case .bool(let value) = self else { throw .badValue(key, "isn't true or false") }
+        guard case .bool(let value) = self else { throw .bad(key, "isn't true or false") }
         return value
     }
 
@@ -291,19 +295,19 @@ enum SyncJSON: Equatable {
     fileprivate func path(_ key: SyncKey) throws(SyncLineProblem) -> String {
         let path = try string(key)
         guard !path.isEmpty, path.utf8.count <= SyncRecord.maximumPathBytes else {
-            throw .badValue(key, "is empty or over \(SyncRecord.maximumPathBytes) bytes")
+            throw .bad(key, "is empty or over \(SyncRecord.maximumPathBytes) bytes")
         }
         guard !path.utf8.contains(0),
             !path.split(separator: "/", omittingEmptySubsequences: false).contains(where: {
                 $0.isEmpty || $0 == "." || $0 == ".."
             })
-        else { throw .badValue(key, "isn't a relative path without empty, . or .. parts") }
+        else { throw .bad(key, "isn't a relative path without empty, . or .. parts") }
         return path.precomposedStringWithCanonicalMapping
     }
 
     fileprivate func playlistID() throws(SyncLineProblem) -> String {
         let id = try string(.playlist)
-        guard isSyncID(id) else { throw .badValue(.playlist, "isn't 32 lowercase hex digits") }
+        guard isSyncID(id) else { throw .bad(.playlist, "isn't 32 lowercase hex digits") }
         return id
     }
 
@@ -315,7 +319,7 @@ enum SyncJSON: Equatable {
                 $0.properties.generalCategory == .control || $0 == "\u{2028}" || $0 == "\u{2029}"
             })
         else {
-            throw .badValue(
+            throw .bad(
                 .name, "is over \(SyncRecord.maximumNameBytes) bytes or holds a control character")
         }
         return name
@@ -327,12 +331,12 @@ enum SyncJSON: Equatable {
         do {
             let rules = try SmartRules(json: json)
             if let problem = rules.rules.lazy.compactMap(\.problem).first ?? rules.limit?.problem {
-                throw SyncLineProblem.badValue(.rules, "\(problem)")
+                throw SyncLineProblem.bad(.rules, "\(problem)")
             }
         } catch let problem as SyncLineProblem {
             throw problem
         } catch {
-            throw .badValue(.rules, "aren't a smart playlist's rules: \(error)")
+            throw .bad(.rules, "aren't a smart playlist's rules: \(error)")
         }
         return json
     }

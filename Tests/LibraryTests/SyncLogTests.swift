@@ -216,3 +216,13 @@ private func folder(with lines: [String], name: String = String(repeating: "c", 
         try index.database.prepare("SELECT count(*) FROM sync_outbox").map { try $0.int(0) } == [0])
     #expect(try index.discards().count == 1)
 }
+
+@Test func aLogsTextIsEscapedInItsProblems() throws {
+    let (sync, index) = try folder(with: [
+        #"{"seq":1,"ms":1,"n":0,"event":"fake\nrow","path":"a"}"#,
+        #"{"seq":2,"ms":1,"n":0,"event":"skip","path":"a","x\u000ay":1}"#,
+    ])
+    let report = try index.sync(folder: "sync", at: sync.path)
+    #expect(report.problems.count == 2)
+    #expect(report.problems.allSatisfy { !$0.contains("\n") }, "\(report.problems)")
+}

@@ -35,7 +35,9 @@ work folder: `config-file` (read, change a setting, read again; a good file must
 `TagUndoJournal.latest`, never undone, since a record names a path), `smart-rules` (decode,
 re-encode, store in a library and list; valid rules must list) and `playlist-file` (M3U, M3U8
 or PLS by the first byte; entries must be folded absolute paths, and written as M3U8,
-absolute and relative, they must read back the same), `swinsian` (a database through
+absolute and relative, they must read back the same), `sync-log` (another machine's sync
+log, line by line: each event must read back as written, and Foundation must read its paths
+as relative, folded and in NFC), `swinsian` (a database through
 `PlayerLibrary.read`, copied aside first) and `itunes-xml` (a `Library.xml`); for both, tracks
 must have absolute NUL-free paths, one per path in NFC, with ratings in stars, and playlists
 must name only tracks read. `swinsian-predicate` reads a smart playlist's archived rules
