@@ -13,25 +13,26 @@ final class PlayerImportSheet: NSObject {
     let alert = NSAlert()
     private let session: PlayerImportSession
     private let countsLabel = NSTextField(wrappingLabelWithString: "")
-    private let fromField = NSTextField()
-    private let toField = NSTextField()
+    let fromField = NSTextField()
+    let toField = NSTextField()
     private let updateButton = NSButton(title: "Update Preview", target: nil, action: nil)
     private let details = NSTextView()
+    private let stack = NSStackView()
 
     /// Wide enough for a NAS path in the details without wrapping most of them.
     static let width = 640.0
     static let detailsHeight = 240.0
 
-    init(session: PlayerImportSession) {
+    init(session: PlayerImportSession, player: PlayerLibrary.Player) {
         self.session = session
         super.init()
-        alert.messageText = "Import from \(session.shown.library.player.title)"
+        alert.messageText = "Import from \(player.title)"
         alert.informativeText =
             "Nothing changes until you click Import. Music files aren't touched."
         alert.addButton(withTitle: "Import")
         alert.addButton(withTitle: "Cancel")
-        alert.accessoryView = makeAccessory()
-        if let prefix = session.shown.prefix {
+        makeAccessory()
+        if let prefix = session.shown?.prefix {
             fromField.stringValue = prefix.from
             toField.stringValue = prefix.to
         }
@@ -41,48 +42,59 @@ final class PlayerImportSheet: NSObject {
     func begin(over window: NSWindow) {
         alert.beginSheetModal(for: window) { [weak self] response in
             guard let self else { return }
-            if response == .alertFirstButtonReturn { confirmed(session.shown) }
+            if response == .alertFirstButtonReturn, let plan = session.shown { confirmed(plan) }
             closed()
         }
     }
 
-    private func makeAccessory() -> NSView {
+    private func makeAccessory() {
         countsLabel.preferredMaxLayoutWidth = Self.width
         fromField.placeholderString = "/Volumes/old"
         toField.placeholderString = "/Volumes/music"
         updateButton.target = self
         updateButton.action = #selector(updatePreview)
-        let prefixRow = NSStackView(views: [
-            NSTextField(labelWithString: "Replace the path prefix"), fromField,
-            NSTextField(labelWithString: "with"), toField, updateButton,
+        let fields = NSStackView(views: [
+            fromField, NSTextField(labelWithString: "with"), toField, updateButton,
         ])
         details.isEditable = false
         details.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
         details.isVerticallyResizable = true
         details.autoresizingMask = [.width]
+        details.frame = NSRect(x: 0, y: 0, width: Self.width, height: Self.detailsHeight)
         let scroll = NSScrollView()
         scroll.documentView = details
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
-        let stack = NSStackView(views: [countsLabel, prefixRow, scroll])
+        for view in [
+            countsLabel, NSTextField(labelWithString: "Replace the path prefix:"), fields, scroll,
+        ] {
+            stack.addArrangedSubview(view)
+        }
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.frame = NSRect(x: 0, y: 0, width: Self.width, height: Self.detailsHeight + 200)
         NSLayoutConstraint.activate([
-            scroll.widthAnchor.constraint(equalToConstant: Self.width),
+            stack.widthAnchor.constraint(equalToConstant: Self.width),
+            fields.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            scroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
             scroll.heightAnchor.constraint(equalToConstant: Self.detailsHeight),
-            fromField.widthAnchor.constraint(equalToConstant: 160),
-            toField.widthAnchor.constraint(equalToConstant: 160),
+            // The fields share what the label and button leave.
+            fromField.widthAnchor.constraint(equalTo: toField.widthAnchor),
         ])
-        details.frame = NSRect(x: 0, y: 0, width: Self.width, height: Self.detailsHeight)
-        return stack
+        alert.accessoryView = stack
     }
 
-    private func show(_ plan: ImportPlan) {
-        countsLabel.stringValue = plan.previewLines.joined(separator: "\n")
-        let lines = plan.detailLines
-        details.string = lines.isEmpty ? "Every track matched." : lines.joined(separator: "\n")
-        alert.buttons.first?.isEnabled = plan.changesSomething
+    /// Shows `plan`'s counts and details, or none, and sizes the sheet to them, so the wrapped
+    /// counts can't be cut off.
+    private func show(_ plan: ImportPlan?) {
+        if let plan {
+            countsLabel.stringValue = plan.previewLines.joined(separator: "\n")
+            let lines = plan.detailLines
+            details.string = lines.isEmpty ? "Every track matched." : lines.joined(separator: "\n")
+        }
+        alert.buttons.first?.isEnabled = plan?.changesSomething ?? false
+        stack.layoutSubtreeIfNeeded()
+        stack.setFrameSize(stack.fittingSize)
+        alert.layout()
     }
 
     @objc private func updatePreview() {
@@ -90,13 +102,12 @@ final class PlayerImportSheet: NSObject {
         alert.buttons.first?.isEnabled = false
         Task {
             do {
-                if let plan = try await session.preview(prefix) { show(plan) }
+                guard let plan = try await session.preview(prefix) else { return }
+                show(plan)
             } catch {
                 countsLabel.stringValue = "Couldn't preview that prefix: \(error)"
-                return
-            }
-            if !session.isPreviewing {
-                alert.buttons.first?.isEnabled = session.shown.changesSomething
+                details.string = ""
+                show(nil)
             }
         }
     }

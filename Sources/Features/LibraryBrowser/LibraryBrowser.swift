@@ -65,7 +65,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var problems: ProblemsWindow?
     /// Set from the read of another player's library until its preview sheet closes.
     private var isImporting = false
-    private var importSheet: PlayerImportSheet?
+    private(set) var importSheet: PlayerImportSheet?
 
     /// `index` is a connection for the main thread, which fetches the table's rows a page at a
     /// time: a page is one primary-key lookup per row and takes well under a millisecond.
@@ -640,7 +640,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 let session = PlayerImportSession(
                     shown: try await model.importPlan(library, prefix: nil)
                 ) { [model] prefix in try await model.importPlan(library, prefix: prefix) }
-                let sheet = PlayerImportSheet(session: session)
+                let sheet = PlayerImportSheet(session: session, player: player)
                 sheet.confirmed = { [weak self] plan in self?.apply(plan) }
                 sheet.closed = { [weak self] in
                     self?.importSheet = nil

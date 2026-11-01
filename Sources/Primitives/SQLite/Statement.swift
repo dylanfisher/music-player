@@ -151,6 +151,12 @@ public struct Row {
         }
     }
 
+    /// The bytes of a text or blob value, without converting or copying it, so a caller can
+    /// refuse one too long before reading it.
+    public func byteCount(_ column: Int32) -> Int {
+        Int(sqlite3_column_bytes(statement, column))
+    }
+
     public func int(_ column: Int32) throws(SQLiteError) -> Int {
         try notNull(column)
         return Int(sqlite3_column_int64(statement, column))

@@ -61,7 +61,7 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
     }
 
     override public func loadView() {
-        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("track"))
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("queueEntry"))
         column.resizingMask = .autoresizingMask
         table.addTableColumn(column)
         table.headerView = nil

@@ -23,6 +23,7 @@ struct SwinsianRule: Equatable, Sendable {
         guard let comparison = Self.comparisons[operatorName.lowercased()] else {
             return .failure(.operator(operatorName))
         }
+        if case .longText = value { return .failure(.invalid(SmartRule.textTooLong)) }
         let smartValue: SmartValue
         switch (smartField.kind, value) {
         case (.text, .text(let text)): smartValue = .text(text)

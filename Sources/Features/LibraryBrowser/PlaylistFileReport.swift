@@ -5,7 +5,7 @@ import Library
 extension PlaylistImport {
     /// "Imported “Mix”: 40 tracks · 3 not in the library · 1 listed twice · 2 lines skipped".
     var summary: String {
-        var parts = ["Imported “\(terminalSafe(name))”: \(count(added, "track"))"]
+        var parts = ["Imported “\(terminalSafe(name))”: \(tracks(added))"]
         if !missing.isEmpty { parts.append("\(number(missing.count)) not in the library") }
         if repeated > 0 { parts.append("\(number(repeated)) listed twice") }
         let skipped = file.problems.count + file.unlistedProblemCount
@@ -38,7 +38,7 @@ func exportReport(
     file: String, written: Int, missing: Int, unwritable: [String]
 ) -> (summary: String, lines: [String]) {
     let file = terminalSafe(file)
-    var parts = ["Exported \(count(written, "track")) to \((file as NSString).lastPathComponent)"]
+    var parts = ["Exported \(tracks(written)) to \((file as NSString).lastPathComponent)"]
     if missing > 0 { parts.append("\(number(missing)) not in the library") }
     if !unwritable.isEmpty {
         parts.append("\(number(unwritable.count)) not written")

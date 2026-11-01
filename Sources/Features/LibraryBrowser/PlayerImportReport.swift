@@ -8,28 +8,28 @@ extension ImportPlan {
     /// One line per field, for the preview sheet.
     var previewLines: [String] {
         var lines = [
-            "\(count(library.tracks.count, "track")) read: \(number(matched)) in this library,"
+            "\(tracks(library.tracks.count)) read: \(number(matched)) in this library,"
                 + " \(number(unmatched.count)) not",
-            "Play counts: +\(number(playsAdded)) on \(count(tracksGainingPlays, "track"))",
+            "Play counts: +\(number(playsAdded)) on \(tracks(tracksGainingPlays))",
         ]
         if library.player == .iTunes {
             lines.append(
-                "Skip counts: +\(number(skipsAdded)) on \(count(tracksGainingSkips, "track"))")
+                "Skip counts: +\(number(skipsAdded)) on \(tracks(tracksGainingSkips))")
         }
         lines += [
-            "Last played: later on \(count(lastPlayed, "track"))",
-            "Date added: earlier on \(count(dateAdded, "track"))",
-            "Ratings: \(count(ratings, "track")) rated"
+            "Last played: later on \(tracks(lastPlayed))",
+            "Date added: earlier on \(tracks(dateAdded))",
+            "Ratings: \(tracks(ratings)) rated"
                 + (ratingsKept > 0
                     ? ", \(number(ratingsKept)) keep the rating they have here" : ""),
-            "Loved: \(count(loved, "track"))",
+            "Loved: \(tracks(loved))",
             "Playlists: \(number(playlists.count)) new" + playlistNotes,
         ]
         if mergedRows > 0 {
             lines.append("\(count(mergedRows, "row")) for a track already read, merged into it")
         }
         if library.tracksWithoutFiles > 0 {
-            lines.append("\(count(library.tracksWithoutFiles, "track")) with no file, left out")
+            lines.append("\(tracks(library.tracksWithoutFiles)) with no file, left out")
         }
         let problems = library.problems.count + library.unlistedProblemCount
         if problems > 0 { lines.append("\(count(problems, "problem")) reading the library") }
@@ -65,7 +65,7 @@ extension ImportPlan {
     var summary: String {
         var parts = [
             "Imported from \(library.player.title): +\(number(playsAdded)) plays on"
-                + " \(count(tracksGainingPlays, "track"))"
+                + " \(tracks(tracksGainingPlays))"
         ]
         if ratings > 0 { parts.append(count(ratings, "rating")) }
         if loved > 0 { parts.append("\(number(loved)) loved") }

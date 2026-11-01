@@ -45,9 +45,9 @@ struct LibraryStatus: Equatable, Sendable {
     /// `missingCount` is how many of a playlist's tracks aren't in the library. `playCount` is
     /// set on the timeline, which counts plays instead of tracks.
     func text(trackCount: Int, missingCount: Int = 0, playCount: Int? = nil) -> String {
-        var parts = [playCount.map { count($0, "play") } ?? count(trackCount, "track")]
+        var parts = [playCount.map { count($0, "play") } ?? tracks(trackCount)]
         if !notices.isEmpty { parts.append("earlier play counts and playlists discarded") }
-        if missingCount > 0 { parts.append(count(missingCount, "track") + " not in the library") }
+        if missingCount > 0 { parts.append(tracks(missingCount) + " not in the library") }
         for (folder, progress) in scanning.sorted(by: { $0.key < $1.key }) {
             let name = (folder as NSString).lastPathComponent
             parts.append(
@@ -77,6 +77,9 @@ struct LibraryStatus: Equatable, Sendable {
 func number(_ value: Int) -> String {
     NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
 }
+
+/// "1 track", "1,204 tracks": the one spelling of the noun every count of tracks uses.
+func tracks(_ value: Int) -> String { count(value, "track") }
 
 func count(_ value: Int, _ noun: String) -> String {
     "\(number(value)) \(noun)\(value == 1 ? "" : "s")"

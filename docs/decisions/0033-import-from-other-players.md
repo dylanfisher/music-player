@@ -110,9 +110,13 @@ are built in or hold other playlists, so they're skipped and counted.
   imported play and skip counts per path ID (`imported_plays`). An import adds the difference
   from those, never less than 0, and records the new ones; every other rule is a maximum, a
   minimum, a union or "only where none", and a playlist of the same name is skipped, so running
-  the same import again changes nothing, and running a newer Swinsian library adds only the plays
-  since. Keyed by player, not by file, so a fresh copy of the same library counts as the same.
+  the same import again changes nothing, and running a newer Swinsian library adds only the
+  plays since. The baseline is per player, not per source file: a fresh copy of the same library
+  counts as the same, and so do two different Swinsian databases or two different XML exports,
+  which share one baseline, so the second adds only plays past the first's count for each track.
   A separate part keeps a change to it from discarding the stats (0031).
+- **The preview sheet** shows only the current plan: a preview that fails clears the counts and
+  keeps Import off until one succeeds.
 - **Preview, then one transaction.** The preview reads the library and computes the plan without
   writing. Confirming recomputes it inside one transaction from the same code and writes it all,
   so a scan or a play in between is counted, not overwritten. The report shows what was written.

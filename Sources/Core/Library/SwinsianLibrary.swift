@@ -62,11 +62,19 @@ extension PlayerLibrary {
                 return
             }
             let item = PlayerLibraryProblem.track(id)
-            guard case .text(let written) = Cell(row, 1) else {
-                let kind: PlayerLibraryProblem.Kind =
-                    Cell(row, 1) == .null
-                    ? .noPath : .wrongType(columns[1], expected: String.typeName)
-                note(PlayerLibraryProblem(item, kind))
+            let written: String
+            switch Cell(row, 1) {
+            case .text(let text): written = text
+            case .null:
+                note(PlayerLibraryProblem(item, .noPath))
+                return
+            case .longText:
+                note(PlayerLibraryProblem(item, .tooLong(Self.maximumPathBytes)))
+                return
+            default:
+                note(
+                    PlayerLibraryProblem(
+                        item, .wrongType(columns[1], expected: String.typeName)))
                 return
             }
             guard let path = checkedText(written, item, maximumBytes: Self.maximumPathBytes)
@@ -105,7 +113,10 @@ extension PlayerLibrary {
         try database.prepare(ruleTable.select(orderedBy: [0, 1])).query { row in
             guard case .integer(let playlist) = Cell(row, 0) else { return }
             rules[playlist, default: []].append(
-                SwinsianRule(field: Cell(row, 2), operator: Cell(row, 3), value: Cell(row, 4)))
+                SwinsianRule(
+                    field: Cell(row, 2, maximumTextBytes: SmartRule.maximumTextBytes),
+                    operator: Cell(row, 3, maximumTextBytes: SmartRule.maximumTextBytes),
+                    value: Cell(row, 4, maximumTextBytes: SmartRule.maximumTextBytes)))
         }
         let columns = playlistTable.columns
         var playlistCount = 0
@@ -124,7 +135,13 @@ extension PlayerLibrary {
                 return
             }
             let numbered = PlayerLibraryProblem.playlist(id)
-            guard case .text(let written) = Cell(row, 1) else {
+            let written: String
+            switch Cell(row, 1, maximumTextBytes: Self.maximumNameBytes) {
+            case .text(let text): written = text
+            case .longText:
+                note(PlayerLibraryProblem(numbered, .tooLong(Self.maximumNameBytes)))
+                return
+            default:
                 note(
                     PlayerLibraryProblem(
                         numbered, .wrongType(columns[1], expected: String.typeName)))
@@ -280,12 +297,17 @@ enum Cell: Equatable, Sendable {
     case integer(Int64)
     case real(Double)
     case text(String)
+    /// Text over the cap it was read with, by its byte count; it was never read.
+    case longText(Int)
     case blob
 
-    init(_ row: Row, _ column: Int32) {
+    /// Text past `maximumTextBytes` is refused by its length before a string is made of it.
+    init(_ row: Row, _ column: Int32, maximumTextBytes: Int = PlayerLibrary.maximumPathBytes) {
         switch row.storageClass(column) {
         case .integer: self = .integer(row.optionalInt(column).map(Int64.init) ?? 0)
         case .real: self = .real(row.optionalDouble(column) ?? 0)
+        case .text where row.byteCount(column) > maximumTextBytes:
+            self = .longText(row.byteCount(column))
         case .text: self = .text(row.optionalText(column) ?? "")
         case .null: self = .null
         case .blob: self = .blob
@@ -293,9 +315,12 @@ enum Cell: Equatable, Sendable {
     }
 }
 
-/// Copies the file at `path` and its write-ahead log, if it has one, to `copy` through
-/// `FileSource`, and throws if either changed while it was read.
-private func copyAside(_ path: String, to copy: String) throws {
+/// Copies the file at `path` and its write-ahead log, if it has one, to `copy` with `copying`,
+/// and throws if either changed while it was read.
+func copyAside(
+    _ path: String, to copy: String,
+    copying: (_ from: String, _ to: String, _ budget: Int) throws -> Int = copyFile
+) throws {
     let log = path + Database.walSuffix
     let before = (identity(path), identity(log))
     guard before.0 != nil else {
@@ -304,7 +329,7 @@ private func copyAside(_ path: String, to copy: String) throws {
     var total = 0
     for (from, to) in [(path, copy), (log, copy + Database.walSuffix)] {
         if from == log && before.1 == nil { continue }
-        total += try copyFile(from, to: to, budget: PlayerLibrary.maximumDatabaseBytes - total)
+        total += try copying(from, to, PlayerLibrary.maximumDatabaseBytes - total)
     }
     guard identity(path) == before.0 else { throw PlayerImportError.changedWhileCopying(path) }
     guard identity(log) == before.1 else { throw PlayerImportError.changedWhileCopying(log) }
@@ -321,7 +346,7 @@ private func identity(_ path: String) -> [Int]? {
 
 /// Copies `from` to a new file at `to` a megabyte at a time and returns its size, refusing a
 /// file over `budget` before reading it.
-private func copyFile(_ from: String, to: String, budget: Int) throws -> Int {
+func copyFile(_ from: String, _ to: String, _ budget: Int) throws -> Int {
     let source: FileSource
     do throws(ParseFailure) {
         source = try FileSource(path: from, hints: .all)

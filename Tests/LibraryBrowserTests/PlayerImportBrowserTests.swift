@@ -1,5 +1,7 @@
+import AppKit
 import Foundation
 import SQLite
+import Settings
 import Testing
 
 @testable import Library
@@ -22,16 +24,16 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     let later = try await session.preview(fast)
     #expect(later?.prefix == fast)
     #expect(try await earlier.value == nil)
-    #expect(session.shown.prefix == fast && !session.isPreviewing)
+    #expect(session.shown?.prefix == fast && !session.isPreviewing)
 }
 
-@MainActor @Test func aFailedPreviewKeepsThePlanShown() async throws {
+@MainActor @Test func aFailedPreviewClearsThePlanShown() async throws {
     struct Failure: Error {}
     let session = PlayerImportSession(shown: emptyPlan()) { _ in throw Failure() }
     await #expect(throws: Failure.self) {
         try await session.preview(PathPrefix(from: "/x", to: "/y"))
     }
-    #expect(session.shown.prefix == nil && !session.isPreviewing)
+    #expect(session.shown == nil && !session.isPreviewing)
 }
 
 @Test func theImportReportEscapesNamesAndCapsEachList() throws {
@@ -89,4 +91,71 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     let made = try #require(model.playlists.first { $0.name == "From Swinsian" })
     #expect(try index.playlistTrackIDs(made.id) == [ids[1], ids[0]])
     #expect(try index.rows(ids: [ids[0]])[0].playCount == 7)
+}
+
+@MainActor @Test func importLibraryReadsPreviewsAndWritesOnImport() async throws {
+    let databaseURL = try writableBrowserDatabase()
+    let index = try LibraryIndex(at: databaseURL)
+    let id = try #require(try index.trackIDs(sortedBy: .path).first)
+    let path = try #require(try index.paths(ids: [id])[id])
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL), index: index,
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, folders: [],
+        groupByAlbumArtist: false)
+    let folder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("player-import-sheet-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let url = folder.appendingPathComponent("Library.sqlite")
+    try Database(at: url).execute(
+        swinsianSchema.map { "CREATE TABLE \($0.name) (\($0.columns.joined(separator: ", ")));" }
+            .joined()
+            + "INSERT INTO track VALUES (1, '\(path.replacingOccurrences(of: "'", with: "''"))',"
+            + " 4, NULL, NULL, 0, 0);")
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    browser.importLibrary(.swinsian, from: url, over: window)
+    let deadline = Date().addingTimeInterval(10)
+    while browser.importSheet == nil, Date() < deadline {
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    let sheet = try #require(browser.importSheet, "no sheet; status: \(browser.statusText)")
+    #expect(try index.rows(ids: [id])[0].playCount == 0)
+    window.endSheet(sheet.alert.window, returnCode: .alertFirstButtonReturn)
+    while !browser.statusText.hasPrefix("Imported from"), Date() < deadline {
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    #expect(browser.statusText == "Imported from Swinsian: +4 plays on 1 track · 0 playlists")
+    #expect(try index.rows(ids: [id])[0].playCount == 4)
+    #expect(browser.importSheet == nil)
+}
+
+@MainActor @Test func theSheetFitsA1440x900ScreenWithEverythingFilled() throws {
+    var plan = emptyPlan()
+    plan.unmatched = (1...300).map {
+        "/Volumes/music/library/Some Very Long Artist Name/An Album Title (Deluxe Edition)/\($0) A Track.flac"
+    }
+    plan.existingPlaylists = ["Mix"]
+    plan.library.tracksWithoutFiles = 3
+    plan.mergedRows = 32
+    let sheet = PlayerImportSheet(
+        session: PlayerImportSession(shown: plan) { _ in plan }, player: .iTunes)
+    sheet.fromField.stringValue = "/Volumes/Old Music Drive/iTunes/iTunes Media/Music"
+    sheet.toField.stringValue = "/Volumes/music/library"
+    sheet.alert.layout()
+    let frame = sheet.alert.window.frame
+    #expect(frame.width <= 1440 && frame.height <= 900 - 25, "\(frame)")
+    let accessory = try #require(sheet.alert.accessoryView)
+    #expect(accessory.fittingSize.width <= PlayerImportSheet.width + 1, "\(accessory.fittingSize)")
+    #expect(sheet.toField.frame.width > 100, "\(sheet.toField.frame)")
+    // A picture of the sheet for review, under .build.
+    let view = try #require(sheet.alert.window.contentView)
+    let image = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+    view.cacheDisplay(in: view.bounds, to: image)
+    let out = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent(".build/snapshots/player-import-sheet.png")
+    try FileManager.default.createDirectory(
+        at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try #require(image.representation(using: .png, properties: [:])).write(to: out)
 }

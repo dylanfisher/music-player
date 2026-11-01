@@ -296,3 +296,44 @@ private func readITunes(_ data: Data) throws -> PlayerLibrary {
     #expect(prefix.apply("/Volumes/music") == "/Volumes/Music")
     #expect(PathPrefix(from: "", to: "/x") == nil)
 }
+
+@Test func anOversizedCellIsRefusedByItsLength() throws {
+    let long = String(repeating: "a", count: SmartRule.maximumTextBytes + 1)
+    let url = try swinsianDatabase(
+        """
+        INSERT INTO track VALUES (1, '/\(String(repeating: "p", count: PlayerLibrary.maximumPathBytes))', 1, NULL, NULL, 0, 0);
+        INSERT INTO playlist VALUES (1, '\(String(repeating: "n", count: PlayerLibrary.maximumNameBytes + 1))', 0, NULL);
+        INSERT INTO playlist VALUES (2, 'Big', 1, 1);
+        INSERT INTO smartrule VALUES (2, 1, 'title', 'contains', '\(long)');
+        """)
+    let library = try PlayerLibrary(swinsianAt: url, now: now)
+    #expect(library.tracks.isEmpty)
+    #expect(
+        library.problems.map(\.description) == [
+            "track 1: over \(PlayerLibrary.maximumPathBytes) bytes",
+            "playlist 1: over \(PlayerLibrary.maximumNameBytes) bytes",
+        ])
+    #expect(library.playlists.map(\.kind) == [.unmapped([SmartRule.textTooLong])])
+}
+
+@Test func aDatabaseOrLogChangedDuringTheCopyIsRefused() throws {
+    for changed in ["", Database.walSuffix] {
+        let folder = try temporaryFolder()
+        let url = folder.appendingPathComponent("Library.sqlite")
+        let writer = try Database(at: url)
+        try writer.execute(swinsianSchemaSQL())
+        let copy = folder.appendingPathComponent("copy.sqlite").path
+        let error = #expect(throws: PlayerImportError.self) {
+            try copyAside(url.path, to: copy) { from, to, budget in
+                let size = try copyFile(from, to, budget)
+                // Swinsian writing between the copy and the check after it.
+                let handle = try #require(FileHandle(forWritingAtPath: url.path + changed))
+                try handle.seekToEnd()
+                try handle.write(contentsOf: Data([0]))
+                try handle.close()
+                return size
+            }
+        }
+        #expect(error == .changedWhileCopying(url.path + changed))
+    }
+}
