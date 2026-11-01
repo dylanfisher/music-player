@@ -12,8 +12,10 @@ extension LibraryIndex {
             let gone = try statement(movableSelect + " WHERE \(lostCondition)").map(row: movable)
             guard !gone.isEmpty else { return [] }
             let free = try statement(freeTracksSelect).map(row: movable)
+            let roots = try syncRoots()
             return try movePairs(gone: gone, free: free).map { old, new in
                 try move(old.id, to: new.id)
+                try logMove(from: old.path, to: new.path, roots)
                 return TrackMove(from: old.path, to: new.path)
             }
         }
@@ -60,7 +62,11 @@ extension LibraryIndex {
                     "SELECT 1 FROM tracks WHERE file_id = ? AND NOT \(hasStats("file_id"))"
                 ).map(track) { _ in true }.first ?? false
             guard isLost, isFree else { return false }
+            let paths = try [lost, track].map {
+                try statement(pathSQL).map($0) { try $0.text(0) }[0]
+            }
             try move(lost, to: track)
+            try logMove(from: paths[0], to: paths[1], try syncRoots())
             return true
         }
     }
@@ -77,31 +83,46 @@ extension LibraryIndex {
     /// count of no plays leaves. Call inside a transaction.
     func deletePath(_ id: Int64) throws {
         try statement("DELETE FROM \(importedPlaysTable) WHERE path_id = ?").run(id)
+        // The ID can be handed out again, which mustn't inherit a cleared rating's clock.
+        for field in [SyncField.rating, .loved] { try deleteStamp(field, id) }
         try statement("DELETE FROM paths WHERE id = ?").run(id)
     }
 
+    /// Logs the move of `from` to `to`, both `paths` rows, when both are in share folders.
+    private func logMove(from: String, to: String, _ roots: SyncRoots) throws {
+        guard let old = roots.syncPath(from), let new = roots.syncPath(to) else { return }
+        try logSync(.move(from: old, to: new))
+    }
+
     /// Gives the path `old` the file of the path `new`, which has no stats, and deletes `new`:
-    /// the file keeps `old`'s ID, Date Added and stats. Call inside a transaction.
-    private func move(_ old: Int64, to new: Int64) throws {
+    /// the file keeps `old`'s ID, Date Added and stats. `old` keeps its own facts when `new`
+    /// has none, as a path another machine's event added doesn't. Call inside a transaction.
+    func move(_ old: Int64, to new: Int64) throws {
         // The file's row and its children change ID one at a time, so the checks wait for the
         // commit.
         try database.execute("PRAGMA defer_foreign_keys = ON")
-        let row = try statement(
+        let (path, facts) = try statement(
             "SELECT path, codec, sample_rate_hz, length_frames, title FROM paths WHERE id = ?"
         ).map(new) { row in
-            [
-                try row.text(0), try row.text(1), try row.int(2), try row.int(3),
-                row.optionalText(4),
-            ] as [(any SQLiteValue)?]
+            (
+                try row.text(0),
+                row.optionalText(1) == nil
+                    ? nil
+                    : [
+                        try row.text(1), try row.int(2), try row.int(3), row.optionalText(4),
+                    ] as [(any SQLiteValue)?]
+            )
         }[0]
         try deletePath(new)
-        try statement(
-            """
-            UPDATE paths SET path = ?, codec = ?, sample_rate_hz = ?, length_frames = ?,
-                title = ?, lost_dismissed = 0
-            WHERE id = ?
-            """
-        ).run(binding: row + [old])
+        try statement("UPDATE paths SET path = ?, lost_dismissed = 0 WHERE id = ?").run(path, old)
+        if let facts {
+            try statement(
+                """
+                UPDATE paths SET codec = ?, sample_rate_hz = ?, length_frames = ?, title = ?
+                WHERE id = ?
+                """
+            ).run(binding: facts + [old])
+        }
         for sql in [
             "UPDATE files SET id = ? WHERE id = ?",
             "UPDATE tracks SET file_id = ? WHERE file_id = ?",

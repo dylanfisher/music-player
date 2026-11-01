@@ -26,6 +26,9 @@ public final class LibraryIndex {
     public private(set) var movedAside: URL?
     /// Unreadable files kept beside the library; older ones are deleted when another is moved.
     static let keptUnreadableFiles = 3
+    /// The wall clock sync events are stamped by, in milliseconds since 1970; tests set their
+    /// own to skew one machine's.
+    var wallClockMs: () -> Int64 = { Int64((Date().timeIntervalSince1970 * 1000).rounded(.down)) }
 
     /// Opens or creates the database at `url`. A part whose stored SQL differs from this build's
     /// is rebuilt: the index tables are emptied (the next scan refills them), and the stats are
@@ -132,13 +135,19 @@ public final class LibraryIndex {
             let stale = SchemaPart.allCases.filter { stored[$0.rawValue] != $0.sql }
             guard !stale.isEmpty else { return }
             // Stats tables that don't match are discarded with everything else, since every
-            // other part refers to their paths; any other part is rebuilt around the rest.
-            let rebuilt = stale.contains(.stats) ? SchemaPart.allCases : stale
+            // other part refers to their paths, and so are they when an earlier sync part is
+            // (SchemaPart.sync); any other part is rebuilt around the rest.
+            let rebuilt =
+                stale.contains(.stats)
+                    || (stale.contains(.sync) && stored[SchemaPart.sync.rawValue] != nil)
+                ? SchemaPart.allCases : stale
             for part in rebuilt where stored[part.rawValue] != nil {
                 logger.notice("the \(part.rawValue) tables don't match this build; rebuilding them")
             }
-            let discarded = rebuilt.filter { stored[$0.rawValue] != nil }.compactMap(\.tables)
-                .reduce(into: Set<String>()) { $0.formUnion($1) }
+            // The sync part's rows are where reading the logs got to, which the next sync
+            // reads again, not the owner's stats.
+            let discarded = rebuilt.filter { stored[$0.rawValue] != nil && $0 != .sync }
+                .compactMap(\.tables).reduce(into: Set<String>()) { $0.formUnion($1) }
             if !discarded.isEmpty { try recordDiscardedStats(discarded) }
             let kept = SchemaPart.allCases.filter { !rebuilt.contains($0) }.compactMap(\.tables)
                 .reduce(into: Set<String>()) { $0.formUnion($1) }
@@ -179,7 +188,7 @@ public final class LibraryIndex {
     }
 
     /// Keeps `detail` for the window to show once.
-    private func recordDiscard(_ detail: String) throws {
+    func recordDiscard(_ detail: String) throws {
         try database.prepare(
             "INSERT INTO \(schemaDiscardsTable) (discarded_seconds, detail) VALUES (?, ?)"
         ).run(Date().timeIntervalSince1970, detail)
@@ -265,14 +274,15 @@ public final class LibraryIndex {
 
     private func storeBatch(_ files: [ScannedFile]) throws {
         try database.transaction {
-            for file in files { try store(file) }
+            let roots = try syncRoots()
+            for file in files { try store(file, roots) }
         }
     }
 
-    private func store(_ file: ScannedFile) throws {
+    private func store(_ file: ScannedFile, _ roots: SyncRoots) throws {
         switch file.outcome {
         case .success(let parsed):
-            let id = try upsertFile(file, failure: nil)
+            let id = try upsertFile(file, failure: nil, roots)
             try clearTrack(id)
             try insertTrack(id, path: file.path, parsed.metadata)
             try recordFacts(id, parsed.metadata)
@@ -291,12 +301,15 @@ public final class LibraryIndex {
                 ).run(error.kind.rawValue, error.offset, error.detail, known.id)
                 return
             }
-            let id = try upsertFile(file, failure: error)
+            let id = try upsertFile(file, failure: error, roots)
             try clearTrack(id)
         }
     }
 
-    private func upsertFile(_ file: ScannedFile, failure: MetadataError?) throws -> Int64 {
+    /// A new path's Date Added goes in the sync log.
+    private func upsertFile(_ file: ScannedFile, failure: MetadataError?, _ roots: SyncRoots)
+        throws -> Int64
+    {
         let values: [(any SQLiteValue)?] = [
             file.sizeBytes, file.modifiedSeconds, file.createdSeconds, failure?.kind.rawValue,
             failure?.offset, failure?.detail,
@@ -314,7 +327,15 @@ public final class LibraryIndex {
         // An upsert, since another scan (the command line beside the app) may have added the
         // path since this one listed what the index knew. The ID is the path's for good, so a
         // conflict on it is the same file.
-        let id = try pathID(file.path, seenAt: Date().timeIntervalSince1970)
+        let seen = Date().timeIntervalSince1970
+        let nfc = file.path.precomposedStringWithCanonicalMapping
+        let id: Int64
+        if let known = try existingPathID(nfc) {
+            id = known
+        } else {
+            id = try insertPath(nfc, seenAt: seen)
+            if let path = roots.syncPath(nfc) { try logSync(.added(path: path, at: seen)) }
+        }
         try statement(
             """
             INSERT INTO files (id, path, name_offset, size_bytes, modified_seconds,
@@ -338,14 +359,15 @@ public final class LibraryIndex {
     func pathID(_ path: String, seenAt seconds: Double) throws -> Int64 {
         precondition(database.isInTransaction, "pathID outside a transaction, for \(path)")
         let nfc = path.precomposedStringWithCanonicalMapping
-        if let id = try statement("SELECT id FROM paths WHERE path = ?").map(
-            nfc,
-            row: {
-                try $0.int64(0)
-            }
-        ).first {
-            return id
-        }
+        return try existingPathID(nfc) ?? insertPath(nfc, seenAt: seconds)
+    }
+
+    /// The ID of `nfc`, a path in NFC, when `paths` has it.
+    func existingPathID(_ nfc: String) throws -> Int64? {
+        try statement("SELECT id FROM paths WHERE path = ?").map(nfc) { try $0.int64(0) }.first
+    }
+
+    private func insertPath(_ nfc: String, seenAt seconds: Double) throws -> Int64 {
         try statement("INSERT INTO paths (path, added_seconds) VALUES (?, ?)").run(nfc, seconds)
         return database.lastInsertRowID
     }

@@ -1,0 +1,263 @@
+import Foundation
+import SQLite
+
+/// What a sync pass carries from one event to the next.
+struct SyncMerge {
+    let roots: SyncRoots
+    /// Sync paths already mapped to `paths` rows this pass.
+    var pathIDs: [String: Int64] = [:]
+    /// Events for paths outside this machine's share folders, which it doesn't keep.
+    var outside = 0
+    /// Whether any event changed the library, so the window reads it again.
+    var changed = false
+
+    init(roots: SyncRoots) { self.roots = roots }
+}
+
+/// Applying other machines' events (ADR 0038). Nothing here logs an event of its own.
+extension LibraryIndex {
+    /// Applies `record` from the log of `machine`, inside the caller's transaction. Returns
+    /// why it was skipped when that's a problem with the event; one outside this machine's
+    /// folders is only counted.
+    func apply(_ record: SyncRecord, from machine: String, _ merge: inout SyncMerge) throws
+        -> String?
+    {
+        let stamp = SyncStamp(clock: record.clock, machine: machine)
+        let seconds = Double(record.clock.ms) / 1000
+        switch record.event {
+        case .play(let path, let at):
+            guard let id = try mergedPathID(path, seenAt: at, &merge) else { return nil }
+            try addCounts(id, plays: 1, skips: 0, lastPlayed: at)
+            try statement(insertHistorySQL).run(id, Int(at.rounded(.down)))
+        case .skip(let path):
+            guard let id = try mergedPathID(path, seenAt: seconds, &merge) else { return nil }
+            try addCounts(id, plays: 0, skips: 1, lastPlayed: nil)
+        case .counts(let path, let plays, let skips, let lastPlayed):
+            guard let id = try mergedPathID(path, seenAt: seconds, &merge) else { return nil }
+            try addCounts(id, plays: plays, skips: skips, lastPlayed: lastPlayed)
+        case .rating(let path, let stars):
+            guard let id = try mergedPathID(path, seenAt: seconds, &merge),
+                try wins(stamp, .rating, id)
+            else { return nil }
+            try setRating(stars, of: id)
+        case .loved(let path, let loved):
+            guard let id = try mergedPathID(path, seenAt: seconds, &merge),
+                try wins(stamp, .loved, id)
+            else { return nil }
+            try setLoved(loved, id)
+        case .added(let path, let at):
+            guard let id = try mergedPathID(path, seenAt: at, &merge) else { return nil }
+            try statement(earliestAddedSQL).run(at, id)
+        case .move(let from, let to):
+            return try mergeMove(from: from, to: to, &merge)
+        case .playlistCreate(let syncID, let name, let rules):
+            guard case .unknown = try mergedPlaylist(syncID) else { return nil }
+            let id = try insertPlaylist(named: name, rules: rules)
+            try statement(insertSyncPlaylistSQL).run(syncID, id)
+            try setStamp(.playlistName, id, stamp)
+            try setStamp(.playlistRules, id, stamp)
+        case .playlistRename(let syncID, let name):
+            guard case .local(let id) = try mergedPlaylist(syncID) else {
+                return try unknownPlaylist(syncID)
+            }
+            guard try wins(stamp, .playlistName, id) else { return nil }
+            try statement(renamePlaylistSQL).run(name, id)
+        case .playlistRules(let syncID, let rules):
+            guard case .local(let id) = try mergedPlaylist(syncID) else {
+                return try unknownPlaylist(syncID)
+            }
+            guard try isManual(id) == false else {
+                return "it gives rules to a manual playlist"
+            }
+            guard try wins(stamp, .playlistRules, id) else { return nil }
+            try statement(setRulesSQL).run(rules, id)
+        case .playlistEntries(let syncID, let paths):
+            guard case .local(let id) = try mergedPlaylist(syncID) else {
+                return try unknownPlaylist(syncID)
+            }
+            guard try isManual(id) else { return "it gives entries to a smart playlist" }
+            guard try wins(stamp, .playlistEntries, id) else { return nil }
+            try statement("DELETE FROM playlist_entries WHERE playlist_id = ?").run(id)
+            let insert = try statement(insertEntrySQL)
+            var position = 0
+            for path in paths {
+                guard let track = try mergedPathID(path, seenAt: seconds, &merge) else { continue }
+                try insert.run(id, track, position)
+                position += database.changes
+            }
+        case .playlistDelete(let syncID):
+            switch try mergedPlaylist(syncID) {
+            case .deleted: return nil
+            case .unknown:
+                // Kept, so a create read later doesn't bring it back.
+                try statement(
+                    "INSERT INTO \(syncPlaylistsTable) (id, playlist_id) VALUES (?, NULL)"
+                )
+                .run(syncID)
+            case .local(let id):
+                try statement(deletePlaylistSQL).run(id)
+                try deleteStamps(ofPlaylist: id)
+            }
+        }
+        merge.changed = true
+        return nil
+    }
+
+    /// The `paths` row of `syncPath`, added as first seen at `seconds` when this machine has
+    /// none; nil, counted, for a path outside its share folders.
+    private func mergedPathID(_ syncPath: String, seenAt seconds: Double, _ merge: inout SyncMerge)
+        throws -> Int64?
+    {
+        if let id = merge.pathIDs[syncPath] { return id }
+        guard let path = merge.roots.localPath(syncPath) else {
+            merge.outside += 1
+            return nil
+        }
+        let id = try pathID(path, seenAt: seconds)
+        merge.pathIDs[syncPath] = id
+        return id
+    }
+
+    private func addCounts(_ id: Int64, plays: Int, skips: Int, lastPlayed: Double?) throws {
+        try statement(addPlaysSQL).run(id, plays, skips, lastPlayed)
+    }
+
+    private func setRating(_ stars: Int?, of id: Int64) throws {
+        if let stars, stars > 0 {
+            try statement(setRatingSQL).run(id, stars)
+        } else {
+            try statement(deleteRatingSQL).run(id)
+        }
+    }
+
+    private func setLoved(_ loved: Bool, _ id: Int64) throws {
+        try statement(loved ? insertLovedSQL : deleteLovedSQL).run(id)
+    }
+
+    /// Whether `stamp` is later than the change `field` of `key` holds, recording it if so.
+    private func wins(_ stamp: SyncStamp, _ field: SyncField, _ key: Int64) throws -> Bool {
+        if let held = try self.stamp(field, key), held >= stamp { return false }
+        try setStamp(field, key, stamp)
+        return true
+    }
+
+    private enum MergedPlaylist {
+        case unknown, deleted
+        case local(Int64)
+    }
+
+    private func mergedPlaylist(_ syncID: String) throws -> MergedPlaylist {
+        guard
+            let row = try statement(
+                "SELECT playlist_id FROM \(syncPlaylistsTable) WHERE id = ?"
+            ).map(syncID, row: { $0.optionalInt(0).map(Int64.init) }).first
+        else { return .unknown }
+        return row.map { .local($0) } ?? .deleted
+    }
+
+    /// Why an event for the playlist `syncID` was skipped: nothing when it was deleted here.
+    private func unknownPlaylist(_ syncID: String) throws -> String? {
+        if case .deleted = try mergedPlaylist(syncID) { return nil }
+        return "it changes the playlist \(syncID), which no log read so far created"
+    }
+
+    private func isManual(_ id: Int64) throws -> Bool {
+        try statement("SELECT rules IS NULL FROM playlists WHERE id = ?").map(id) {
+            try $0.int(0) == 1
+        }[0]
+    }
+
+    // MARK: Moves
+
+    /// Another machine's scan matched `from` to `to` (ADR 0026). Without a row for `from`,
+    /// this machine made the move itself or never had the path. With one and none for `to`,
+    /// the row takes the new path. With both, the stats of `to` join `from`'s row, which then
+    /// takes the new path, unless both have a file here.
+    private func mergeMove(from: String, to: String, _ merge: inout SyncMerge) throws -> String? {
+        guard let fromPath = merge.roots.localPath(from), let toPath = merge.roots.localPath(to)
+        else {
+            merge.outside += 1
+            return nil
+        }
+        merge.pathIDs[from] = nil
+        merge.pathIDs[to] = nil
+        let oldNFC = fromPath.precomposedStringWithCanonicalMapping
+        let newNFC = toPath.precomposedStringWithCanonicalMapping
+        guard let old = try existingPathID(oldNFC) else { return nil }
+        guard let new = try existingPathID(newNFC) else {
+            try statement("UPDATE paths SET path = ? WHERE id = ?").run(newNFC, old)
+            merge.changed = true
+            return nil
+        }
+        let hasFile = try statement("SELECT 1 FROM files WHERE id = ?")
+        if try !hasFile.map(old, row: { _ in () }).isEmpty,
+            try !hasFile.map(new, row: { _ in () }).isEmpty
+        {
+            return "this Mac has files at both \(from) and \(to), so neither took the other's stats"
+        }
+        try absorb(new, into: old)
+        try move(old, to: new)
+        merge.changed = true
+        return nil
+    }
+
+    /// Moves the stats of the path `gone` onto `kept`, by the merge rules: counts added, the
+    /// history moved, the later rating and love, the earliest Date Added. Leaves `gone` with no
+    /// stats. Call inside a transaction.
+    private func absorb(_ gone: Int64, into kept: Int64) throws {
+        if let counts = try statement(
+            "SELECT play_count, skip_count, last_played_seconds FROM plays WHERE path_id = ?"
+        ).map(gone, row: { (try $0.int(0), try $0.int(1), $0.optionalDouble(2)) }).first {
+            try addCounts(kept, plays: counts.0, skips: counts.1, lastPlayed: counts.2)
+            try statement("DELETE FROM plays WHERE path_id = ?").run(gone)
+        }
+        try statement("UPDATE history SET path_id = ? WHERE path_id = ?").run(kept, gone)
+        let rating = try statement("SELECT rating FROM ratings WHERE path_id = ?")
+        let ratings: [Int?] = try [gone, kept].map { id in
+            try rating.map(id, row: { try $0.int(0) }).first
+        }
+        if try takesGone(
+            .rating, gone, kept, goneHas: ratings[0] != nil, keptHas: ratings[1] != nil)
+        {
+            try setRating(ratings[0], of: kept)
+        }
+        try statement(deleteRatingSQL).run(gone)
+        let love = try statement(isLovedSQL)
+        let loves = try [gone, kept].map { id in try !love.map(id, row: { _ in () }).isEmpty }
+        if try takesGone(.loved, gone, kept, goneHas: loves[0], keptHas: loves[1]) {
+            try setLoved(loves[0], kept)
+        }
+        try statement(deleteLovedSQL).run(gone)
+        try statement("UPDATE OR IGNORE playlist_entries SET path_id = ? WHERE path_id = ?").run(
+            kept, gone)
+        try statement("DELETE FROM playlist_entries WHERE path_id = ?").run(gone)
+        try statement(
+            """
+            UPDATE paths SET added_seconds = min(added_seconds,
+                (SELECT added_seconds FROM paths WHERE id = ?))
+            WHERE id = ?
+            """
+        ).run(gone, kept)
+        try statement("UPDATE OR IGNORE \(importedPlaysTable) SET path_id = ? WHERE path_id = ?")
+            .run(kept, gone)
+    }
+
+    /// Whether `kept` takes `gone`'s value of `field`: the later change, or with no clock on
+    /// either, `gone`'s when only it has a value. The winner's clock goes to `kept`.
+    private func takesGone(
+        _ field: SyncField, _ gone: Int64, _ kept: Int64, goneHas: Bool, keptHas: Bool
+    ) throws -> Bool {
+        let goneStamp = try stamp(field, gone)
+        let keptStamp = try stamp(field, kept)
+        let takes: Bool
+        switch (goneStamp, keptStamp) {
+        case (let goneStamp?, let keptStamp?): takes = goneStamp > keptStamp
+        case (.some, nil): takes = true
+        case (nil, .some): takes = false
+        case (nil, nil): takes = goneHas && !keptHas
+        }
+        if takes, let goneStamp { try setStamp(field, kept, goneStamp) }
+        try deleteStamp(field, gone)
+        return takes
+    }
+}

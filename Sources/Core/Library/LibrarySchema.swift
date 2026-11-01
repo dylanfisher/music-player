@@ -16,6 +16,10 @@ enum SchemaPart: String, CaseIterable {
     /// What each import from another player counted, so a second import adds only what grew
     /// (ADR 0033). A part of its own for the same reason as `loved`.
     case imports
+    /// This machine's log and what it read of the others' (ADR 0038). Rebuilding it from an
+    /// earlier shape rebuilds the stats too: the new machine ID reads every log from the
+    /// start, its own old one included, which the old stats already hold.
+    case sync
 
     var sql: String {
         switch self {
@@ -23,6 +27,7 @@ enum SchemaPart: String, CaseIterable {
         case .stats: statsSchema
         case .loved: lovedSchema
         case .imports: importsSchema
+        case .sync: syncSchema
         }
     }
 
@@ -33,6 +38,7 @@ enum SchemaPart: String, CaseIterable {
         case .stats: statsTables
         case .loved: [lovedTable]
         case .imports: [importedPlaysTable]
+        case .sync: syncTables
         }
     }
 }
@@ -52,6 +58,14 @@ let statsTables: Set<String> = [
 let lovedTable = "loved"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
+let syncStateTable = "sync_state"
+let syncOutboxTable = "sync_outbox"
+let syncLogsTable = "sync_logs"
+let syncItemsTable = "sync_items"
+let syncPlaylistsTable = "sync_playlists"
+let syncTables: Set<String> = [
+    syncStateTable, syncOutboxTable, syncLogsTable, syncItemsTable, syncPlaylistsTable,
+]
 
 private let indexSchema = """
     CREATE TABLE files (
@@ -243,5 +257,54 @@ private let importsSchema = """
         play_count INTEGER NOT NULL,
         skip_count INTEGER NOT NULL,
         PRIMARY KEY (player, path_id)
+    );
+    """
+
+private let syncSchema = """
+    -- This machine: its ID, minted here so it lives as long as its log's sequence numbers; its
+    -- clock; its log's size; and how much of the log reached the sync folder, which is named
+    -- so another folder gets the log from the start.
+    CREATE TABLE \(syncStateTable) (
+        one INTEGER PRIMARY KEY CHECK (one = 1),
+        machine TEXT NOT NULL,
+        clock_ms INTEGER NOT NULL,
+        clock_n INTEGER NOT NULL,
+        log_bytes INTEGER NOT NULL,
+        -- 1 once the log reached a cap, after which nothing more is logged.
+        full INTEGER NOT NULL,
+        pushed_folder TEXT,
+        pushed_seq INTEGER NOT NULL,
+        pushed_bytes INTEGER NOT NULL
+    );
+    INSERT INTO \(syncStateTable) VALUES (1, lower(hex(randomblob(16))), 0, 0, 0, 0, NULL, 0, 0);
+    -- This machine's log, one line a row, each written in the transaction of its change.
+    CREATE TABLE \(syncOutboxTable) (
+        seq INTEGER PRIMARY KEY,
+        line TEXT NOT NULL
+    );
+    -- How far each other machine's log was read and applied: the byte offset in the file as
+    -- it was in the folder named, the last sequence number applied and the lines read.
+    CREATE TABLE \(syncLogsTable) (
+        machine TEXT PRIMARY KEY,
+        folder TEXT NOT NULL,
+        offset INTEGER NOT NULL,
+        seq INTEGER NOT NULL,
+        lines INTEGER NOT NULL
+    );
+    -- The change each synced field holds: a rating or love by path ID, a playlist's name,
+    -- rules or entries by playlist ID. Last writer wins against it.
+    CREATE TABLE \(syncItemsTable) (
+        item TEXT NOT NULL,
+        key INTEGER NOT NULL,
+        ms INTEGER NOT NULL,
+        n INTEGER NOT NULL,
+        machine TEXT NOT NULL,
+        PRIMARY KEY (item, key)
+    );
+    -- Each synced playlist's ID in the logs; a deleted one keeps its row with no playlist, so
+    -- a late create doesn't bring it back.
+    CREATE TABLE \(syncPlaylistsTable) (
+        id TEXT PRIMARY KEY,
+        playlist_id INTEGER UNIQUE REFERENCES playlists (id) ON DELETE SET NULL
     );
     """

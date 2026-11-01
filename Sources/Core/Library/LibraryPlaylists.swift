@@ -4,6 +4,18 @@ import SQLite
 /// Loves one path; loving a loved one changes nothing.
 let insertLovedSQL = "INSERT OR IGNORE INTO \(lovedTable) (path_id) VALUES (?)"
 
+let deleteLovedSQL = "DELETE FROM \(lovedTable) WHERE path_id = ?"
+let isLovedSQL = "SELECT 1 FROM \(lovedTable) WHERE path_id = ?"
+let setRatingSQL = "INSERT OR REPLACE INTO ratings (path_id, rating) VALUES (?, ?)"
+let deleteRatingSQL = "DELETE FROM ratings WHERE path_id = ?"
+/// Adds a track to a playlist, unless it's there already.
+let insertEntrySQL =
+    "INSERT OR IGNORE INTO playlist_entries (playlist_id, path_id, position) VALUES (?, ?, ?)"
+let renamePlaylistSQL = "UPDATE playlists SET name = ? WHERE id = ?"
+/// Only a smart playlist has rules to replace.
+let setRulesSQL = "UPDATE playlists SET rules = ? WHERE id = ? AND rules IS NOT NULL"
+let deletePlaylistSQL = "DELETE FROM playlists WHERE id = ?"
+
 /// One play in the history; the benches write a million straight to the table with it.
 package let insertHistorySQL = "INSERT INTO history (path_id, played_at) VALUES (?, ?)"
 
@@ -29,28 +41,55 @@ extension LibraryIndex {
 
     /// Adds an empty manual playlist, or a smart one for `rules`, and returns its ID.
     public func createPlaylist(named name: String, rules: SmartRules? = nil) throws -> Int64 {
-        try statement("INSERT INTO playlists (name, rules) VALUES (?, ?)").run(
-            name, try rules.map(checkedJSON))
+        try inTransaction {
+            let json = try rules.map(checkedJSON)
+            let id = try insertPlaylist(named: name, rules: json)
+            _ = try logCreate(id, name: name, rules: json)
+            return id
+        }
+    }
+
+    /// Adds a playlist without logging it, for one another machine made. Call inside a
+    /// transaction.
+    func insertPlaylist(named name: String, rules json: String?) throws -> Int64 {
+        try statement("INSERT INTO playlists (name, rules) VALUES (?, ?)").run(name, json)
         return database.lastInsertRowID
     }
 
     public func renamePlaylist(_ id: Int64, to name: String) throws {
-        try statement("UPDATE playlists SET name = ? WHERE id = ?").run(name, id)
-        guard database.changes == 1 else { throw LibraryError.unknownPlaylist(id) }
+        try database.transaction {
+            try statement(renamePlaylistSQL).run(name, id)
+            guard database.changes == 1 else { throw LibraryError.unknownPlaylist(id) }
+            try logSync(
+                .playlistRename(playlist: try syncPlaylistID(id).id, name: name),
+                field: (.playlistName, id))
+        }
     }
 
     /// Replaces a smart playlist's rules, readable or not. Throws for a manual playlist, which
     /// has no rules to replace.
     public func setRules(_ rules: SmartRules, of id: Int64) throws {
-        try statement("UPDATE playlists SET rules = ? WHERE id = ? AND rules IS NOT NULL").run(
-            try checkedJSON(rules), id)
-        guard database.changes == 1 else { throw LibraryError.unknownPlaylist(id) }
+        try database.transaction {
+            let json = try checkedJSON(rules)
+            try statement(setRulesSQL).run(json, id)
+            guard database.changes == 1 else { throw LibraryError.unknownPlaylist(id) }
+            try logSync(
+                .playlistRules(playlist: try syncPlaylistID(id).id, rules: json),
+                field: (.playlistRules, id))
+        }
     }
 
     /// Deletes a playlist and its entries. The tracks stay in the library.
     public func deletePlaylist(_ id: Int64) throws {
-        try statement("DELETE FROM playlists WHERE id = ?").run(id)
-        guard database.changes == 1 else { throw LibraryError.unknownPlaylist(id) }
+        try database.transaction {
+            let syncID = try statement(
+                syncPlaylistIDSQL
+            ).map(id) { try $0.text(0) }.first
+            try statement(deletePlaylistSQL).run(id)
+            guard database.changes == 1 else { throw LibraryError.unknownPlaylist(id) }
+            try deleteStamps(ofPlaylist: id)
+            if let syncID { try logSync(.playlistDelete(playlist: syncID)) }
+        }
     }
 
     /// A manual playlist's track IDs in order, including any whose file has left the index.
@@ -76,15 +115,14 @@ extension LibraryIndex {
             try statement(
                 "SELECT ifnull(max(position), -1) FROM playlist_entries WHERE playlist_id = ?"
             ).map(id) { try $0.int(0) }[0]
-        let insert = try statement(
-            "INSERT OR IGNORE INTO playlist_entries (playlist_id, path_id, position)"
-                + " VALUES (?, ?, ?)")
+        let insert = try statement(insertEntrySQL)
         var added = 0
         for track in ids {
             position += 1
             try insert.run(id, track, position)
             added += database.changes
         }
+        if added > 0 { try logEntries(id) }
         return added
     }
 
@@ -110,6 +148,7 @@ extension LibraryIndex {
             let update = try statement(
                 "UPDATE playlist_entries SET position = ? WHERE playlist_id = ? AND path_id = ?")
             for (position, track) in kept.enumerated() { try update.run(position, id, track) }
+            try logEntries(id)
         }
     }
 
@@ -131,6 +170,7 @@ extension LibraryIndex {
             let delete = try statement(
                 "DELETE FROM playlist_entries WHERE playlist_id = ? AND path_id = ?")
             for track in ids { try delete.run(id, track) }
+            try logEntries(id)
         }
     }
 
@@ -164,6 +204,7 @@ extension LibraryIndex {
             ).run(id, seconds)
             try statement(insertHistorySQL).run(
                 id, Int(seconds.rounded(.down)))
+            try logSync(pathID: id, try syncRoots()) { .play(path: $0, at: seconds) }
         }
     }
 
@@ -176,6 +217,7 @@ extension LibraryIndex {
                 ON CONFLICT (path_id) DO UPDATE SET skip_count = skip_count + 1
                 """
             ).run(id)
+            try logSync(pathID: id, try syncRoots()) { .skip(path: $0) }
         }
     }
 
@@ -186,10 +228,11 @@ extension LibraryIndex {
         try database.transaction {
             let write =
                 stars == 0
-                ? try statement("DELETE FROM ratings WHERE path_id = ?")
-                : try statement("INSERT OR REPLACE INTO ratings (path_id, rating) VALUES (?, ?)")
+                ? try statement(deleteRatingSQL) : try statement(setRatingSQL)
+            let roots = try syncRoots()
             for id in ids {
                 if stars == 0 { try write.run(id) } else { try write.run(id, stars) }
+                try logSync(pathID: id, roots, field: .rating) { .rating(path: $0, stars: stars) }
             }
         }
     }
@@ -197,13 +240,17 @@ extension LibraryIndex {
     /// Loves the tracks `ids`, or unloves them when every one of them is loved already.
     public func toggleLoved(trackIDs ids: [Int64]) throws {
         try database.transaction {
-            let isLoved = try statement("SELECT 1 FROM \(lovedTable) WHERE path_id = ?")
+            let isLoved = try statement(isLovedSQL)
             let allLoved = try ids.allSatisfy { !(try isLoved.map($0, row: { _ in () })).isEmpty }
             let write =
                 allLoved
-                ? try statement("DELETE FROM \(lovedTable) WHERE path_id = ?")
+                ? try statement(deleteLovedSQL)
                 : try statement(insertLovedSQL)
-            for id in ids { try write.run(id) }
+            let roots = try syncRoots()
+            for id in ids {
+                try write.run(id)
+                try logSync(pathID: id, roots, field: .loved) { .loved(path: $0, loved: !allLoved) }
+            }
         }
     }
 

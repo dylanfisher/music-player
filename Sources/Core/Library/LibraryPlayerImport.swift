@@ -110,37 +110,43 @@ extension LibraryIndex {
     func applyImport(_ library: PlayerLibrary, prefix: PathPrefix?) throws -> ImportPlan {
         try database.transaction {
             let plan = try importPlan(library, prefix: prefix)
-            let plays = try statement(
-                """
-                INSERT INTO plays (path_id, play_count, skip_count, last_played_seconds)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT (path_id) DO UPDATE SET
-                    play_count = play_count + excluded.play_count,
-                    skip_count = skip_count + excluded.skip_count,
-                    last_played_seconds = max(
-                        ifnull(last_played_seconds, excluded.last_played_seconds),
-                        ifnull(excluded.last_played_seconds, last_played_seconds))
-                """)
+            let plays = try statement(addPlaysSQL)
             let recordCounts = try statement(
                 "INSERT OR REPLACE INTO \(importedPlaysTable) (player, path_id, play_count,"
                     + " skip_count) VALUES (?, ?, ?, ?)")
-            let added = try statement(
-                "UPDATE paths SET added_seconds = min(added_seconds, ?) WHERE id = ?")
+            let added = try statement(earliestAddedSQL)
             let rate = try statement(
                 "INSERT OR IGNORE INTO ratings (path_id, rating) VALUES (?, ?)")
             let love = try statement(insertLovedSQL)
+            let roots = try syncRoots()
+            // What the import changed reaches the other machines as events (ADR 0038).
             for update in plan.updates {
+                let id = update.pathID
                 if update.plays > 0 || update.skips > 0 || update.lastPlayedSeconds != nil {
-                    try plays.run(
-                        update.pathID, update.plays, update.skips, update.lastPlayedSeconds)
+                    try plays.run(id, update.plays, update.skips, update.lastPlayedSeconds)
+                    try logSync(pathID: id, roots) {
+                        .counts(
+                            path: $0, plays: update.plays, skips: update.skips,
+                            lastPlayed: update.lastPlayedSeconds)
+                    }
                 }
                 if let counts = update.imported {
-                    try recordCounts.run(
-                        library.player.rawValue, update.pathID, counts.plays, counts.skips)
+                    try recordCounts.run(library.player.rawValue, id, counts.plays, counts.skips)
                 }
-                if let seconds = update.addedSeconds { try added.run(seconds, update.pathID) }
-                if let stars = update.rating { try rate.run(update.pathID, stars) }
-                if update.loves { try love.run(update.pathID) }
+                if let seconds = update.addedSeconds {
+                    try added.run(seconds, id)
+                    try logSync(pathID: id, roots) { .added(path: $0, at: seconds) }
+                }
+                if let stars = update.rating {
+                    try rate.run(id, stars)
+                    try logSync(pathID: id, roots, field: .rating) {
+                        .rating(path: $0, stars: stars)
+                    }
+                }
+                if update.loves {
+                    try love.run(id)
+                    try logSync(pathID: id, roots, field: .loved) { .loved(path: $0, loved: true) }
+                }
             }
             for playlist in plan.playlists {
                 switch playlist.kind {
@@ -154,6 +160,21 @@ extension LibraryIndex {
         }
     }
 }
+
+/// Adds plays and skips to a path's counts, keeping the latest Last Played.
+let addPlaysSQL = """
+    INSERT INTO plays (path_id, play_count, skip_count, last_played_seconds)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT (path_id) DO UPDATE SET
+        play_count = play_count + excluded.play_count,
+        skip_count = skip_count + excluded.skip_count,
+        last_played_seconds = max(
+            ifnull(last_played_seconds, excluded.last_played_seconds),
+            ifnull(excluded.last_played_seconds, last_played_seconds))
+    """
+
+/// Keeps the earlier of a path's Date Added and the one given.
+let earliestAddedSQL = "UPDATE paths SET added_seconds = min(added_seconds, ?) WHERE id = ?"
 
 /// A playlist's name as imports compare it: in NFC, ignoring case.
 private func playlistKey(_ name: String) -> String {
