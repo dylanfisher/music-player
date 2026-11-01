@@ -1,0 +1,14 @@
+# Public members scripts/surface.swift can't see a caller for. Format and rules: ADR 0030.
+# AppKit calls these: each fulfills an optional requirement of an AppKit delegate protocol on a
+# public type, which the compiler requires to be public.
+LibraryBrowser.control | NSControlTextEditingDelegate
+PaletteController.windowDidResignKey | NSWindowDelegate
+PaletteController.controlTextDidChange | NSControlTextEditingDelegate
+PaletteController.control | NSControlTextEditingDelegate
+PaletteController.numberOfRows | NSTableViewDataSource
+QueuePanel.numberOfRows | NSTableViewDataSource
+RuleEditorSheet.controlTextDidChange | NSControlTextEditingDelegate
+SettingsWindowController.toolbarAllowedItemIdentifiers | NSToolbarDelegate
+SettingsWindowController.toolbarDefaultItemIdentifiers | NSToolbarDelegate
+SettingsWindowController.toolbarSelectableItemIdentifiers | NSToolbarDelegate
+TagEditorSheet.controlTextDidChange | NSControlTextEditingDelegate

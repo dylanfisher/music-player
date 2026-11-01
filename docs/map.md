@@ -64,6 +64,10 @@ When one module has to walk another's internals, as the tag writer walks the tag
 and frames, mark those internals `package` rather than `public`, so the public API stays what
 features and the app call, and the shared code stays one copy.
 
+A declaration is `public` or `package` only when another module under `Sources` calls it; tests
+reach the rest through `@testable import`. `scripts/surface.swift`, in `./scripts/check`, fails
+on any other ([ADR 0030](decisions/0030-public-surface-check.md)).
+
 `scripts/arch.swift` enforces this from `Package.swift`, and `./scripts/check` runs it. The
 compiler already rejects any import a target hasn't declared, so checking the declared
 dependencies covers every import. Its tier map has to match the table above.

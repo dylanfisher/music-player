@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+# Runs scripts/surface.swift on two fixture trees under .build/surface-test and checks what it
+# reports: one tree it must pass, and one with each kind of finding and each kind of bad
+# allowlist entry planted, which it must fail at the exact file:line of each.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+base=.build/surface-test
+rm -rf "$base"
+problems=0
+output=""
+
+# write <path> — the file's text comes from standard input.
+write() {
+  mkdir -p "$(dirname "$1")"
+  cat > "$1"
+}
+
+# expect <tree> <exit status> <line>... — runs the script on <tree>, then checks the status and
+# that each <line> is a whole line of its output.
+expect() {
+  local tree="$1" status="$2"; shift 2
+  local actual
+  output=$(swift scripts/surface.swift --root "$tree" 2>&1)
+  actual=$?
+  if [ "$actual" != "$status" ]; then
+    printf 'surface-test: %s exited %s, expected %s:\n%s\n' "$tree" "$actual" "$status" "$output" >&2
+    problems=$((problems + 1))
+  fi
+  for line in "$@"; do
+    if ! printf '%s\n' "$output" | grep -qxF -- "$line"; then
+      printf 'surface-test: %s is missing the line\n  %s\nin:\n%s\n' "$tree" "$line" "$output" >&2
+      problems=$((problems + 1))
+    fi
+  done
+}
+
+# base_module <tree> — the modules the others use, the same in both trees.
+base_module() {
+  write "$1/Sources/Core/Base/Shape.swift" <<'SWIFT'
+/// Mentions `Comment` and "Quoted" in text only.
+public struct Shape: CustomStringConvertible {
+    public var sides: Int
+    public var description: String { "\(sides)" }
+    public static func == (a: Shape, b: Shape) -> Bool { a.sides == b.sides }
+    public init(sides: Int) { self.sides = sides }
+    public func area(unit: Unit = Unit()) -> Double { 0 }
+    public func scaled(by factor: Double) -> Shape { self }
+}
+
+public struct Unit {
+    public init() {}
+}
+
+public enum Mode {
+    case plain(Detail)
+}
+
+public struct Detail {}
+
+public protocol Drawing {
+    func draw(_ shape: Shape)
+}
+
+public final class Tracker {
+    public init(record: @escaping () -> Void) {}
+}
+
+open class Canvas {
+    open func paint() {}
+}
+SWIFT
+  write "$1/Sources/Core/Middle/Middle.swift" <<'SWIFT'
+import Base
+
+public func makeShape() -> Shape { Shape(sides: 3) }
+SWIFT
+}
+
+# Passes: each declaration is used outside its module, directly, through a module that imports
+# it, in another public signature, or in an interpolation; or it's a witness, an operator, an
+# override, a protocol requirement, or allowlisted.
+clean="$base/clean"
+base_module "$clean"
+write "$clean/Sources/Features/Top/Top.swift" <<'SWIFT'
+import AppKit
+import Base
+import Middle
+
+public final class Top: NSObject, NSTableViewDataSource {
+    public func numberOfRows(in tableView: NSTableView) -> Int { 0 }
+    let mode: Mode? = nil
+    let tracker = Tracker { }
+    func show() -> String { "\(makeShape().scaled(by: 2))" }
+}
+
+final class Painter: Canvas, Drawing {
+    func draw(_ shape: Shape) {}
+    override func paint() {}
+}
+SWIFT
+write "$clean/Sources/App/Main/Main.swift" <<'SWIFT'
+import Top
+import Middle
+
+// Base reaches here only through Middle.
+let sides = makeShape().sides
+let area = makeShape().area()
+let top = Top()
+SWIFT
+write "$clean/scripts/surface-allow.txt" <<'TEXT'
+# A comment line.
+Top.numberOfRows | NSTableViewDataSource
+TEXT
+expect "$clean" 0 \
+  "17 public and package declarations, each used outside its module or allowed (1 entries)"
+
+# Fails: each kind of finding, and each kind of bad allowlist entry.
+planted="$base/planted"
+base_module "$planted"
+write "$planted/Sources/Core/Base/Extra.swift" <<'SWIFT'
+public func lonely() {}
+package let packaged = 1
+public struct Built {
+    public init(size: Int) {}
+}
+struct Hidden {
+    public var shown: Int
+}
+public extension Shape {
+    func extra() {}
+}
+public let Comment = 1
+public let Quoted = 2
+public let onlyTested = 3
+SWIFT
+write "$planted/Sources/Features/Top/Top.swift" <<'SWIFT'
+import Base
+import Middle
+
+let mode: Mode? = nil
+let tracker = Tracker { }
+let built: Built? = nil
+let label = "Quoted"
+final class Painter: Canvas, Drawing {
+    func draw(_ shape: Shape) {}
+    override func paint() {}
+}
+let shape = makeShape().scaled(by: 2).area()
+let sides = shape.sides
+SWIFT
+write "$planted/Tests/BaseTests/BaseTests.swift" <<'SWIFT'
+@testable import Base
+let value = onlyTested
+SWIFT
+write "$planted/scripts/surface-allow.txt" <<'TEXT'
+Shape.gone | was deleted
+Shape.sides |
+Shape.sides is fine | not a key
+Shape.sides | used
+Shape.sides | used again
+TEXT
+expect "$planted" 1 \
+  "Sources/Core/Base/Extra.swift:1: public func lonely has no caller outside Base" \
+  "Sources/Core/Base/Extra.swift:2: package let packaged has no caller outside Base" \
+  "Sources/Core/Base/Extra.swift:4: public init Built.init has no caller outside Base" \
+  "Sources/Core/Base/Extra.swift:7: public var Hidden.shown is in an internal type; drop its access level" \
+  "Sources/Core/Base/Extra.swift:9: write the access level on each member, not on the extension" \
+  "Sources/Core/Base/Extra.swift:12: public let Comment has no caller outside Base" \
+  "Sources/Core/Base/Extra.swift:13: public let Quoted has no caller outside Base" \
+  "Sources/Core/Base/Extra.swift:14: public let onlyTested has no caller outside Base" \
+  "scripts/surface-allow.txt:1: matches nothing, delete it: Shape.gone" \
+  'scripts/surface-allow.txt:2: expected `<Type>.<member> | <reason>`' \
+  'scripts/surface-allow.txt:3: expected `<Type>.<member>`, not Shape.sides is fine' \
+  "scripts/surface-allow.txt:4: matches nothing, delete it: Shape.sides" \
+  "scripts/surface-allow.txt:5: repeats line 4"
+
+# A flag without its value, or an unknown one, fails loudly instead of checking the current
+# folder.
+for args in "--root" "--root --other" "--verbose"; do
+  read -ra words <<< "$args"
+  output=$(swift scripts/surface.swift "${words[@]}" 2>&1)
+  actual=$?
+  if [ "$actual" != 2 ] || [[ "$output" != surface:* ]]; then
+    printf 'surface-test: `%s` exited %s:\n%s\n' "$args" "$actual" "$output" >&2
+    problems=$((problems + 1))
+  fi
+done
+
+if [ "$problems" -gt 0 ]; then
+  echo "surface-test: $problems problems" >&2
+  exit 1
+fi
+echo "surface passes the clean tree and fails each planted finding and bad entry"

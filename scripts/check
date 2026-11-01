@@ -98,13 +98,17 @@ run residue bash -c '
 '
 
 # swift-format checks layout and its lint rules (.swift-format) in one pass.
-run format    swift format lint --strict --recursive --parallel Package.swift Sources Tests scripts/arch.swift scripts/dupes.swift
+run format    swift format lint --strict --recursive --parallel Package.swift Sources Tests scripts/arch.swift scripts/dupes.swift scripts/surface.swift
 # Strict concurrency and warnings-as-errors are set in Package.swift, so a clean build is the typecheck.
 run typecheck swift build --build-tests
 run arch      swift scripts/arch.swift
 # Each fact once and no third copy of a block (ADR 0024); the test plants one of each.
 run dupes     swift scripts/dupes.swift
 run dupes-test ./scripts/dupes-test
+# Each public and package declaration has a caller outside its module (ADR 0030); the test
+# plants each finding.
+run surface   swift scripts/surface.swift
+run surface-test ./scripts/surface-test
 # The release signature check refuses what it should (ADR 0025), on stand-in bundles.
 run signature-test ./scripts/check-signature-test
 run test      ./scripts/test
