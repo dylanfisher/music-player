@@ -1119,6 +1119,19 @@ Implementation plan (ADR 0024, written with the script):
 5. **Wire it in.** `./scripts/check` runs `dupes` and `dupes-test` and lints the script; time
    `dupes` on the whole tree (budget 5 s), then `./scripts/bench` and `./scripts/bundle release`.
 
+Result: shipped; the exit passes. `scripts/dupes` (Foundation only, ADR 0024) runs in
+`./scripts/check` in 0.94 s over 262 files and reports nothing outside its 46-entry allowlist; each
+literal and block entry names its files (and a block its copy count), so a new reuse fails, and a
+stale entry fails. `scripts/dupes-test` covers every failure mode, each confirmed by breaking the
+rule. The first run found 160 literals in two or more files and one block with three copies. Fixed
+in Sources: 44 tag format IDs and 9 error messages shared by the tag reader and writer, 9 CLI flags,
+5 database names and SQL statements in Bench, 4 setting keys, 17 titles and 2 format strings, with
+no behaviour change (the tag IDs were checked byte for byte). The fixture generator stays an oracle
+that spells 64 format IDs from the spec. The review fixed multi-line strings compared with their
+indentation, assert and precondition conditions skipped along with their messages, line numbers
+drifting after a line continuation, and allowlist entries that covered every file. Known limit:
+repeats within one file aren't checked.
+
 #### 14c. Security
 
 - **Goal:** a written threat model, and a test or check for every threat in it.
