@@ -33,7 +33,9 @@ package func vorbisKeys(for field: TagField) -> Set<String> {
 
 /// Little-endian lengths, unlike the rest of FLAC: the vendor string, the comment count, then each
 /// comment as `KEY=value` in UTF-8. Unknown keys are skipped; they're the user's own fields.
-func parseVorbisComment(_ block: Bytes, _ reader: ByteReader) throws(ParseFailure) -> TrackTags {
+package func parseVorbisComment(_ block: Bytes, _ reader: ByteReader) throws(ParseFailure)
+    -> TrackTags
+{
     var tags = TrackTags()
     var cursor = 4 + Int(try block.uint32LE(0))
     let count = Int(try block.uint32LE(cursor))

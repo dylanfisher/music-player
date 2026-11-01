@@ -45,7 +45,7 @@ public func readArt(_ art: EmbeddedArt, at url: URL) throws(MetadataError) -> Da
 }
 
 /// Picks the parser from the file's first bytes.
-func parse(_ reader: ByteReader) throws(ParseFailure) -> ParsedFile {
+package func parse(_ reader: ByteReader) throws(ParseFailure) -> ParsedFile {
     let metadata: TrackMetadata
     switch try FileFormat(reader) {
     case .flac: metadata = try parseFLAC(reader)

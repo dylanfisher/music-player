@@ -15,8 +15,8 @@ public struct TagUndoJournal: Sendable {
     static let folderName = "tag-undo"
     /// Entry folders and record files are numbers, zero-padded so they sort by name.
     fileprivate static let sequenceDigits = 8
-    private static let recordSuffix = ".json"
-    private static let bytesSuffix = ".bytes"
+    package static let recordSuffix = ".json"
+    package static let bytesSuffix = ".bytes"
 
     package let directory: URL
     let capacityBytes: Int
@@ -134,7 +134,7 @@ public struct TagUndoJournal: Sendable {
     /// The newest edit's files, in the order they were written, with nil for an empty journal.
     /// A record that doesn't decode exactly, or whose bytes file doesn't match it, is deleted
     /// and reported, since stored data has one shape (AGENTS.md).
-    func latest() throws(TagWriteError)
+    package func latest() throws(TagWriteError)
         -> (entry: Entry?, files: [(Handle, FileRecord)], discarded: [TagWriteError])
     {
         var discarded: [TagWriteError] = []

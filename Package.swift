@@ -176,6 +176,20 @@ let package = Package(
             path: "Sources/Tools/FailureDrill",
             swiftSettings: strictSwift
         ),
+        .target(
+            name: "FuzzCoverage",
+            path: "Sources/Tools/FuzzCoverage",
+            cSettings: strictC
+        ),
+        .executableTarget(
+            name: "Fuzz",
+            dependencies: [
+                "Fixtures", "FuzzCoverage", "Library", "Log", "Metadata", "SQLite", "Settings",
+                "TagWriter",
+            ],
+            path: "Sources/Tools/Fuzz",
+            swiftSettings: strictSwift
+        ),
         .executableTarget(
             name: "Bench",
             dependencies: [
@@ -213,6 +227,11 @@ let package = Package(
         .testTarget(
             name: "FixturesTests",
             dependencies: ["Fixtures"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "FuzzTests",
+            dependencies: ["Fixtures", "Fuzz", "FuzzCoverage"],
             swiftSettings: strictSwift
         ),
         .testTarget(

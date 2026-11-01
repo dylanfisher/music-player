@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Coverage-guided fuzzing of the parsers and the tag writer (ADR 0027). Not part of
+# ./scripts/check.
+#   ./scripts/fuzz <target> <seconds> [--seed <n>]   one target; `Fuzz --list` names them
+#   ./scripts/fuzz all <seconds> [--seed <n>]        every target at once, one log each
+# Builds the Fuzz tool with AddressSanitizer and the SanitizerCoverage hooks in its own scratch
+# path. Seeds come from a generated library and from APFS clones of the tag reference corpus,
+# made again here; the reference itself is only cloned, never read by the tool. Each target's
+# corpus, crashes and log are in .build/fuzz/<target>. Exits 1 if any target found a crash.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+[ $# -ge 2 ] || { echo "usage: scripts/fuzz <target>|all <seconds> [--seed <n>]" >&2; exit 1; }
+target=$1
+seconds=$2
+shift 2
+case "$seconds" in
+  ''|*[!0-9]*) echo "error: <seconds> must be a whole number, not $seconds" >&2; exit 1 ;;
+esac
+seed=1
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --seed)
+      if [ $# -lt 2 ]; then echo "error: --seed needs a number" >&2; exit 1; fi
+      case "$2" in
+        ''|*[!0-9]*) echo "error: --seed needs a number, not $2" >&2; exit 1 ;;
+      esac
+      seed=$2
+      shift 2 ;;
+    *) echo "error: $1 isn't an option" >&2; exit 1 ;;
+  esac
+done
+
+scratch=.build/fuzz-build
+flags=(--scratch-path "$scratch" --sanitize=address -Xswiftc -sanitize-coverage=edge,trace-pc-guard)
+swift build "${flags[@]}" --product Fuzz >&2
+swift build "${flags[@]}" --product TagCorpus >&2
+bin="$(swift build "${flags[@]}" --show-bin-path)"
+
+if [ "$target" = all ]; then
+  targets=$("$bin/Fuzz" --list | cut -f1)
+else
+  "$bin/Fuzz" --list | cut -f1 | grep -qx "$target" || {
+    echo "error: no target $target; one of: $("$bin/Fuzz" --list | cut -f1 | tr '\n' ' ')" >&2
+    exit 1
+  }
+  targets=$target
+fi
+
+paths=$("$bin/TagCorpus" --paths)
+reference=$(printf '%s\n' "$paths" | sed -n 1p)
+clones=$(printf '%s\n' "$paths" | sed -n 2p)
+case "$clones" in
+  "$HOME"/Library/Caches/*/tag-corpus) ;;
+  *) echo "error: the clone folder $clones isn't under ~/Library/Caches" >&2; exit 1 ;;
+esac
+clone_flag=()
+if [ -d "$reference" ]; then
+  rm -rf "$clones"
+  mkdir -p "$(dirname "$clones")"
+  cp -c -Rp "$reference" "$clones"
+  clone_flag=(--clones "$clones")
+else
+  echo "no reference corpus at $reference; seeding from generated files only" >&2
+fi
+
+# Workers still going when the script stops, as on ^C, are stopped with it.
+pids=()
+stop_runs() {
+  for pid in "${pids[@]+"${pids[@]}"}"; do kill "$pid" 2> /dev/null || true; done
+}
+trap stop_runs EXIT
+trap 'exit 130' INT TERM
+
+for name in $targets; do
+  mkdir -p ".build/fuzz/$name"
+  "$bin/Fuzz" run "$name" "$seconds" --output ".build/fuzz/$name" --seed "$seed" \
+    "${clone_flag[@]+"${clone_flag[@]}"}" > ".build/fuzz/$name/log" 2>&1 &
+  pids+=($!)
+done
+failed=0
+set -- $targets
+for pid in "${pids[@]}"; do
+  if ! wait "$pid"; then failed=1; fi
+  echo "$1: $(grep -v '^ *$' ".build/fuzz/$1/log" | grep -E "^$1: " | tail -2 | tr '\n' ' ')"
+  shift
+done
+pids=()
+exit $failed
