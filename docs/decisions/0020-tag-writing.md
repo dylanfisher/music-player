@@ -54,8 +54,9 @@ every key the reader maps onto it (`TDRC` and `TYER`; `©gen` and `gnre`; `COMME
 - **Padding first.** MP4 grows into `free` beside `ilst`, `meta` or `udta`, then a `free` right
   after `moov`; ID3 and FLAC into their padding. Past that the tags are rewritten with 2 KB of new
   padding, and when audio follows `moov`, every `stco`/`co64` entry moves with it (an `stco`
-  entry past 4 GB is refused). ID3v2.3 keeps 2.3 (`TYER` for a bare year, else `TDRC`, which the
-  reader takes in either version); a file without a tag gets 2.4.
+  entry past 4 GB is refused). ID3v2.3 keeps 2.3: a date is split into `TYER`, `TDAT` (DDMM)
+  and `TIME` (HHMM), which the reader joins back, and a date 2.3 can't hold (a month without a
+  day, free text) is refused. A file without a tag gets 2.4.
 - **Temp file and rename.** The temp file is `.<name>.tagwrite` in the same folder: hidden, so
   the scanner skips one a crash leaves, and the same name each time, so the next write replaces
   it. When nothing moves it starts as an APFS clone and only the new bytes are written; where
@@ -68,23 +69,33 @@ every key the reader maps onto it (`TDRC` and `TYER`; `©gen` and `gnre`; `COMME
   point at the same byte of the same `mdat`. The original's identity (device, inode, size,
   mtime) must still match what was read. Any failure removes the temp file and leaves the
   original as it was.
-- **Refused:** a file that or whose folder can't be written, a locked file, ID3v2.2, an ID3 tag
+- **Refused:** a file that or whose folder can't be written, a locked file, a file with more
+  than one hard link (the rename would leave the other names on the old bytes), a frame or tag
+  past ID3's 256 MB, ID3v2.2, an ID3 tag
   that's unsynchronised or has an extended header or footer, a fragmented MP4, a WAV or AIFF
   whose form is cut off. A WAV whose `LIST/INFO` holds a field the edit clears fails the
   read-back check, since the reader falls back to INFO; INFO isn't edited.
-- **Undo journal.** Each edit (one file or a batch) is a JSON file in `tag-undo` under the
-  data directory (Application Support, or `--home`'s folder), saved before the rename. It holds
-  the bytes the edit replaced and where the rest went, the original's SHA-256, and the edited
-  file's size and mtime. Undo refuses a file that has changed since, rebuilds the original
-  through the same temp-file write and must match the hash byte for byte. The last 50 edits are
-  kept. A journal file with any key or value its type doesn't have is deleted and reported.
+- **Undo journal.** Each edit (one file or a batch) is a folder in `tag-undo` under the data
+  directory (Application Support, or `--home`'s folder). Each file adds a small JSON record
+  (where the kept ranges went, the original's SHA-256, the edited file's size, mtime and inode)
+  and a raw file of the bytes the edit replaced, so a batch appends rather than rewriting, and
+  art never goes through JSON. The bytes, the record and the folder are flushed (one
+  `F_FULLFSYNC` per record) before the music file is renamed; after the rename the record takes
+  the size, mtime and inode the volume reports, in case it rounded or renumbered them. Undo
+  refuses a file whose size, mtime or inode no longer match, rebuilds the original through the
+  same temp-file write and must match the hash byte for byte. The last 50 edits are kept, and
+  fewer when they pass 512 MB, though never fewer than the newest. A record with any key or
+  value its type doesn't have, or whose bytes file doesn't match it, is deleted and reported.
+  A full disk, or a journal that can't be written, stops a batch after that file and reports
+  the files not written; a 1000-file batch with 1 MB art each journals in 14 s on Apple Silicon.
 
 **SMB.** Rename over an open file, `F_FULLFSYNC`, `clonefile` and creation dates behave
 differently on SMB, and the build Mac never touches the NAS. `clonefile` fails there with
 `ENOTSUP`, so writes go whole; `F_FULLFSYNC` falls back to `fsync`. The owner's checkpoint
 verifies the rest on copies of NAS files first: the edit reads back in Swinsian and Finder, the
-file's Finder tags and permissions survive, `ls -l@` shows no `.tagwrite` file left, and an
-edit while Swinsian has the file open either succeeds or fails cleanly with the file intact.
+file's Finder tags and permissions survive, `ls -l@` shows no `.tagwrite` file left, an edit
+while Swinsian has the file open either succeeds or fails cleanly with the file intact, and undo
+still recognises the file, since SMB may round the mtime or report a new file ID on rename.
 
 ## Alternatives considered
 
@@ -111,5 +122,6 @@ edit while Swinsian has the file open either succeeds or fails cleanly with the 
 AGENTS.md's read-only boundary is replaced by this one. A second writer anywhere else is a review
 finding. Every edit reads the whole file twice (the original's hash, then the temp file's
 payload), which on the NAS costs a few seconds for a large file; the safety is worth it. Undo
-restores bytes, not the mtime, so a restored file rescans once. A shared ID3v2.4 text frame with
-several values is written back with the one value the editor shows.
+restores bytes, not the mtime, so a restored file rescans once. A field whose frame or item holds
+several values (an ID3v2.4 text frame, an MP4 item with several `data` atoms, a repeated Vorbis
+key) is written back with the one value the editor shows; the editor says so before saving.

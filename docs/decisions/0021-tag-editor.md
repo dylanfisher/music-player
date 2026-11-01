@@ -23,6 +23,9 @@ removes art. Every action is a registry command (phase 6), and the App tier only
 - **Mixed fields** show "Mixed" as a placeholder and stay untouched unless typed in; typing
   then clearing one clears it in every file. The compilation box starts in the mixed state and
   a click sets it for all.
+- **Several values.** When the user edits a field whose frame or item holds several values in
+  any of the files, the sheet says so in orange before Save ("Artist holds several values in 3
+  files. Saving keeps only the value shown."), and saving logs it.
 - **Commands:** Edit Tags… (⌘I, Searcher's Get Info), Undo Tag Edit, Replace Artwork… and Remove
   Artwork, in the File menu. The sheet's art buttons run the last two through the dispatcher.
   Save writes one file directly; more than one asks first ("Change the tags of 12 files?").

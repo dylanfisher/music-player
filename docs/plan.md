@@ -689,33 +689,44 @@ This replaces the read-only boundary in AGENTS.md. Do it first in the phase, wit
 - [ ] **Corpus round trips:** every file in the test corpus below survives every edit and its undo.
 - [ ] **Hardware checkpoint (owner):** open the edited corpus clones in Swinsian and Finder, then
       edit tags on copies of a few NAS files, then on real ones. Confirm both apps read the
-      results. Push first; each snippet is for Terminal (zsh) and runs under bash.
+      results. Do this once the owner has pushed the phase. Each snippet is for Terminal (zsh)
+      and runs under bash.
       1. **Corpus clones, on the build Mac.** This makes fresh clones of the corpus (the
-         reference is only read) and opens the app watching them:
+         reference is only read; the tool names both folders), makes a JPEG to use as art, and
+         opens the app watching the clones:
          ```
          bash <<'EOF'
          set -euo pipefail
-         clones=~/Library/Caches/MusicPlayer/tag-corpus
+         cd ~/projects/music-player
+         paths=$(./scripts/tag-corpus --paths)
+         reference=$(printf '%s\n' "$paths" | sed -n 1p)
+         clones=$(printf '%s\n' "$paths" | sed -n 2p)
          home=~/Library/Caches/MusicPlayer/tag-editor-check
          rm -rf "$clones" "$home"
          mkdir -p "$home"
-         cp -c -Rp /Users/dylanfisher/Music/music-player/test "$clones"
-         printf '{\n  "library.watchedFolders": [{"path": "%s", "kind": "local"}]\n}\n' "$clones" > "$home/config.json"
-         cd ~/projects/music-player
+         cp -c -Rp "$reference" "$clones"
+         icons=/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources
+         sips -s format jpeg -Z 600 --out "$home/cover.jpg" "$icons/GenericFolderIcon.icns" \
+           > /dev/null
+         printf '{"library.watchedFolders": [{"path": "%s", "kind": "local"}]}\n' "$clones" \
+           > "$home/config.json"
          ./scripts/dev --home "$home"
          EOF
          ```
          In the app, with Swinsian quit: select the three tracks of Latoma EP, press ⌘I, set
-         Album to "Latoma EP Perälä", Save and confirm. Do the same for Compilation Tracks
-         (AIFF), Alithia A' and Anima (both M4A). On one track of Anima also choose Replace
-         Artwork… with any JPEG, and on one of Latoma EP choose Remove Artwork. Then in Finder,
-         open `~/Library/Caches/MusicPlayer/tag-corpus` (⇧⌘G) and check each edited file's
-         preview pane shows the new album and art. In Swinsian, add those four folders, check
-         the same, then remove them from Swinsian's library. Back in the app, press Undo Tag
-         Edit (File menu) five times and paste any alert it shows.
+         Album to "Latoma EP Perälä", Save, then Change Tags. Do the same for Compilation
+         Tracks (AIFF), Alithia A' and Anima (both M4A). On one track of Anima also choose
+         Replace Artwork… and pick `cover.jpg` in the app home above
+         (`~/Library/Caches/MusicPlayer/tag-editor-check`, ⇧⌘G in the panel), and on one track
+         of Latoma EP choose Remove Artwork. Then in Finder, open
+         `~/Library/Caches/MusicPlayer/tag-corpus` (⇧⌘G) and check each edited file's preview
+         pane shows the new album and art. In Swinsian, add those four folders, check the
+         same, then remove them from Swinsian's library. Back in the app, choose File ▸ Undo
+         Tag Edit six times, once per edit. No alert should appear; if "Couldn't undo the tag edit for …"
+         appears, paste its text.
       2. **Copies of NAS files, on the DAC Mac.** This copies one random album folder from the
-         library to `/Volumes/music/tag-editor-check` on the NAS, outside the library, and
-         makes an app home that watches the copy:
+         library to `/Volumes/music/tag-editor-check` on the NAS, outside the library, makes a
+         JPEG to use as art, and makes an app home that watches the copy:
          ```
          bash <<'EOF'
          set -euo pipefail
@@ -725,30 +736,44 @@ This replaces the read-only boundary in AGENTS.md. Do it first in the phase, wit
          # A random album folder with at least two audio files.
          album=$(find "$library" -mindepth 2 -maxdepth 2 -type d -print0 \
            | while IFS= read -r -d '' dir; do
-               count=$(find "$dir" -maxdepth 1 -type f \( -iname '*.flac' -o -iname '*.m4a' -o -iname '*.mp3' -o -iname '*.aif' -o -iname '*.aiff' -o -iname '*.wav' \) | wc -l)
+               count=$(find "$dir" -maxdepth 1 -type f \( -iname '*.flac' -o -iname '*.m4a' \
+                 -o -iname '*.mp3' -o -iname '*.aif*' -o -iname '*.wav' \) | wc -l)
                if [ "$count" -ge 2 ]; then printf '%s\n' "$dir"; fi
-             done | awk 'BEGIN { srand() } { line[NR] = $0 } END { print line[int(rand() * NR) + 1] }')
+             done \
+           | awk 'BEGIN { srand() } { a[NR] = $0 } END { print a[int(rand() * NR) + 1] }')
          [ -n "$album" ] || { echo "no album folder found under $library" >&2; exit 1; }
          rm -rf "$check" "$home"
          mkdir -p "$check" "$home"
          cp -Rp "$album" "$check/"
-         printf '{\n  "library.watchedFolders": [{"path": "%s", "kind": "network"}]\n}\n' "$check" > "$home/config.json"
+         icons=/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources
+         sips -s format jpeg -Z 600 --out "$home/cover.jpg" "$icons/GenericFolderIcon.icns" \
+           > /dev/null
+         printf '{"library.watchedFolders": [{"path": "%s", "kind": "network"}]}\n' "$check" \
+           > "$home/config.json"
          echo "copied: $album"
          echo "to:     $check"
          ls -l@ "$check"/*
          EOF
          ```
-         In Finder, give the first file of the copy a Red tag. Run
-         `cd ~/projects/music-player && ./scripts/pull --home ~/Library/Caches/MusicPlayer/tag-editor-check`,
-         select every track, press ⌘I, set Comment to "tag editor check" and Replace Artwork…
-         with any JPEG, Save and confirm. Then edit one track's title alone while Swinsian plays that track
-         from the copy. Report: whether Swinsian and Finder show the new comment, title and
-         art; whether the Red tag is still there; any alert; and the output of
-         `bash -c 'ls -la@ /Volumes/music/tag-editor-check/*'` (no `.tagwrite` files should
-         be left).
+         In Finder, give the first file of the copy a Red tag. Then run:
+         ```
+         cd ~/projects/music-player
+         ./scripts/pull --home ~/Library/Caches/MusicPlayer/tag-editor-check
+         ```
+         Select every track, press ⌘I, set Comment to "tag editor check", choose Replace
+         Artwork… with `cover.jpg` from that app home, Save, then Change Tags. Then edit one
+         track's title alone while Swinsian plays that track from the copy. Report
+         whether Swinsian and Finder show the new comment, title and art, whether the Red tag
+         is still there, the text of any alert, and the output of
+         `bash -c 'ls -la@ /Volumes/music/tag-editor-check/*'`, where no `.tagwrite` file
+         should be left. Then choose File ▸ Undo Tag Edit twice. SMB may round a file's mtime
+         or give it a new file ID on rename; the writer records both as the NAS reports them
+         after the rename, so undo should work without "the file changed after the tag
+         edit". Report whether it does.
       3. **Real files, on the DAC Mac.** Run `cd ~/projects/music-player && ./scripts/pull`,
-         pick one album, press ⌘I, set Comment to "tag editor check", Save and confirm. Check Swinsian shows it, then press
-         Undo Tag Edit and check Swinsian shows the old comment again. Afterwards
+         pick one album, press ⌘I, set Comment to "tag editor check", Save, then Change Tags.
+         Check Swinsian shows it, then choose File ▸ Undo Tag Edit and check Swinsian shows
+         the old comment again. Afterwards,
          `rm -rf /Volumes/music/tag-editor-check ~/Library/Caches/MusicPlayer/tag-editor-check`
          removes the copies.
 
@@ -808,36 +833,41 @@ How the phase uses it:
 Implementation plan:
 
 1. **Boundary.** ADR 0020 names the writer module, the reference folder and the clone folder;
-   AGENTS.md's read-only line becomes the new rule.
+   AGENTS.md's read-only line is replaced by the new rule.
 2. **Metadata** shares its walkers with the writer through `package` access (`ByteReader`,
-   `Bytes`, `forEachAtom`, `forEachChunk`, the field-key tables), so the writer removes exactly the
-   keys the reader maps to a field.
-3. **TagWriter** (Core, new): `TagLayout` (every block, its range and role, padding, and the audio
-   payload range, for MP4, ID3v2 in MP3/AIFF/WAV and FLAC) comes first, then `TagCorpus` (Tools,
-   `scripts/tag-corpus [folder]`) surveys the corpus with it, and the surprises go into ADR 0020.
-   After that: `TagEdit` (fields to set or clear, art to replace or remove), the format writers
-   (ID3v2.3/2.4, MP4 `ilst` with `free` and `stco`/`co64`, FLAC/Vorbis, the AIFF and WAV chunk),
-   each returning the new file as segments of new bytes and ranges of the old file, and
-   `TagFileWriter`, which writes the temp file beside the original (an APFS clone patched in place
-   when nothing moves), checks the payload hash, the read-back tags and art and the chunk offsets,
-   copies mode, flags, xattrs and creation date, checks the original didn't change, and renames.
-   `TagUndoJournal` keeps the last 50 edits' old bytes in `<data directory>/tag-undo`; undo goes
-   through the same checked write and must match the original's hash.
+   `Bytes`, `forEachAtom`, `forEachChunk`, `FileFormat`, `MP4Type`, the field-key tables), so the
+   writer removes exactly the keys the reader maps to a field. It reads a 2.3 date from `TYER`,
+   `TDAT` and `TIME`.
+3. **TagWriter** (Core): `TagLayout` lists every block of a file (MP4, ID3v2 in MP3/AIFF/WAV,
+   FLAC) with its range, its kind and the fields that replace it, plus padding and the audio
+   payload; `TagCorpus` surveyed the corpus with it before anything was written. `TagEdit`
+   holds the fields to set or clear and the art to replace or remove. `MP4File`, `ID3File`
+   (with `ID3Tag`) and `FLACFile` plan each edit as segments of new bytes and old ranges.
+   `TagWriter` runs one edit over one file or a batch: `FileReplace` writes the temp file
+   beside the original (an APFS clone patched in place when nothing moves), copies the
+   attributes and flushes it; `FileHash` hashes the payload and the whole file; the temp file is
+   read back and checked, journaled, then renamed over the original once the original's identity
+   still matches. `TagUndoJournal` keeps, per edit, a folder of per-file JSON records and raw
+   old bytes, flushed before each rename and capped at 50 edits and 512 MB; undo goes through
+   the same checked write and must match the original's hash. `multiValuedFields` finds fields
+   whose frame or item holds several values.
 4. **TagCorpus `--round-trip`** runs every edit of step 4 above on clones, with the five checks,
-   attribute checks and the failure injections; `scripts/tag-corpus` makes the clones and the
-   full-disk image (HFS+, attached under the clone folder) and detaches it on exit. Every write
-   is refused outside the clone folder and the temp directory.
+   the attribute checks and the failure injections; `scripts/tag-corpus` makes the clones and
+   the full-disk image (HFS+, attached inside the clone folder) and detaches it on exit.
+   `--paths` prints the reference and clone folders. Every write is refused outside the clone
+   folder and the temp directory, and through a dangling link.
 5. **Library:** `LibraryWatcher.rescan(directories:)` queues edited folders, network ones too.
-6. **TagEditor** (Features, new): `TagEditorModel` (one or many tracks, mixed values, which
-   fields changed, art replace and remove, number checks) and `TagEditorSheet` (AppKit).
-   Commands Edit Tags… (⌘I), Undo Tag Edit, Replace Artwork… and Remove Artwork. The app reads
-   the selection's files off the main thread, writes after Save (and a confirmation for a
-   batch), then rescans. `--snapshot-of tags` draws the editor over the first rows.
-7. **Tests:** MetadataTests (shared walkers unchanged), TagWriterTests (every format's layout,
-   every edit kind on generated fixtures, untouched blocks byte-identical, padding then rewrite,
-   `stco` shift, attributes kept, each failure leaves the original untouched, journal and undo,
-   strict journal decoding), TagCorpusTests (the write guard), TagEditorTests (mixed values, edit
-   built from changes), LibraryTests (rescan of edited folders), MusicPlayerTests (flags).
+6. **TagEditor** (Features): `TagEditorModel` (one or many tracks, mixed values, which fields
+   changed, art, number checks, the note when a field's other values will go), `TagEditorSheet`
+   (AppKit) and `TagEditing` (reads off the main thread, one write at a time, a confirmation for
+   a batch). Commands: Edit Tags… (⌘I), Undo Tag Edit, Replace Artwork… and Remove Artwork.
+   `--snapshot-of tags` draws the editor over every track.
+7. **Bench:** the journal's cost for a 1000-file batch with 1 MB art each.
+8. **Tests:** MetadataTests, TagWriterTests (every format and edit on generated fixtures and
+   hand-built files: co64, FLAC without padding, ID3 chunks before the audio, 2.3 dates; the
+   refusals; untouched blocks; attributes; every failure injection; the journal and undo),
+   TagCorpusTests (the write guard), TagEditorTests (the model and `TagEditing`'s sessions,
+   busy state and confirmation), LibraryTests (edited-folder rescans), MusicPlayerTests (flags).
 
 ### 12. DSD over DoP
 
