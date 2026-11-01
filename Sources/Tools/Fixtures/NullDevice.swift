@@ -19,6 +19,18 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     private var runs: [CapturedRun] = []
     private var restoredDefaults = 0
     private var openSessions = 0
+    private var goesAwayDuring: SessionStep?
+
+    /// A call on a session the device can go away during.
+    public enum SessionStep: String, CaseIterable, Sendable {
+        case stop, configure, start
+    }
+
+    /// What a session call throws when the device goes away during it.
+    public struct WentAway: Error, CustomStringConvertible {
+        public var step: SessionStep
+        public var description: String { "the null device went away during \(step.rawValue)" }
+    }
 
     /// What the IO proc wrote while the device ran at one rate.
     public struct CapturedRun: Sendable {
@@ -44,6 +56,21 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     public func plugIn() { setConnected(true) }
     /// Connects the device without telling the watcher, as when a change notification is missed.
     public func plugInUnannounced() { lock.withLock { connected = true } }
+
+    /// Makes the device go away during the next `step` of a session, as a DAC unplugged
+    /// mid-switch does: the call fails, the device reads as gone and the watcher is told.
+    public func goAway(during step: SessionStep) { lock.withLock { goesAwayDuring = step } }
+
+    fileprivate func perform(_ step: SessionStep) throws {
+        let goes = lock.withLock {
+            guard goesAwayDuring == step else { return false }
+            goesAwayDuring = nil
+            return true
+        }
+        guard goes else { return }
+        unplug()
+        throw WentAway(step: step)
+    }
 
     private func setConnected(_ connected: Bool) {
         let watcher = lock.withLock {
@@ -92,6 +119,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
 
         func configure(sampleRateHz: Double, channels: UInt32) throws -> DeviceFormat {
             precondition(channels == 2, "the null device is stereo")
+            try device.perform(.configure)
             self.sampleRateHz = sampleRateHz
             device.began(sampleRateHz: sampleRateHz)
             let format = AudioStreamBasicDescription(
@@ -108,6 +136,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
 
         func start(_ render: OpaquePointer) throws {
             precondition(stopRequested == nil, "the null device is already running")
+            try device.perform(.start)
             let stop = StopFlag()
             let finished = DispatchSemaphore(value: 0)
             stopRequested = stop
@@ -144,10 +173,14 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
 
         func stop() throws {
             guard let stopRequested, let finished else { return }
-            stopRequested.set()
-            finished.wait()
-            self.stopRequested = nil
-            self.finished = nil
+            // A real device that's gone stops calling the IO proc, whatever the call returns.
+            defer {
+                stopRequested.set()
+                finished.wait()
+                self.stopRequested = nil
+                self.finished = nil
+            }
+            try device.perform(.stop)
         }
 
         func close() throws {

@@ -179,6 +179,37 @@ private func contiguousFrames(of album: RampAlbum, from first: Int = 0, in sampl
     #expect(rig.device.captured.isEmpty)
 }
 
+@Test(arguments: NullDevice.SessionStep.allCases)
+func theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost(
+    _ step: NullDevice.SessionStep
+) async throws {
+    let low = try album(44_100, 16)
+    let high = try album(96_000, 24)
+    let rig = try await Rig(speed: 1)
+    await rig.engine.setQueue([low.tracks[0], high.tracks[1]])
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    // The first track has about a second left, and the next call of `step` is the switch's:
+    // nothing pauses or reconfigures before it.
+    rig.device.goAway(during: step)
+    let lost = try await rig.wait { $0.event == .deviceLost }
+    #expect(lost.state.status == .paused)
+    #expect(lost.state.currentIndex == 1)
+    #expect(rig.device.openSessionCount == 0)
+    #expect(!rig.events.contains { if case .trackFailed = $0 { true } else { false } })
+    #expect(!rig.events.contains { if case .failed = $0 { true } else { false } })
+    #expect(await rig.engine.position() == 0)
+
+    rig.device.plugIn()
+    try await rig.wait(for: .deviceReturned)
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    let resumed = try #require(rig.device.captured.last)
+    #expect(resumed.sampleRateHz == 96_000)
+    let frame = high.trackFrames[0]
+    #expect(contiguousFrames(of: high, from: frame, in: resumed.samples)?.start == 0)
+}
+
 @Test func aFileThatWontOpenIsSkipped() async throws {
     let album = try album(44_100, 16)
     let broken = FileManager.default.temporaryDirectory

@@ -199,7 +199,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             if playing { startIfReady() } else { stopIO() }
         } else {
             let from = stream?.format.summary
-            stopIO()
+            stopIO(resuming: (item.id, startSeconds))
             stream = nil
             // Stopping can fail the device, which has been reported.
             guard device != nil else { return }
@@ -208,11 +208,14 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                 stream = try configure(for: track)
                 try feed(track, into: stream, atFrame: frame)
             } catch {
+                if deviceIsGone(after: error, resuming: item.id, at: startSeconds) { return }
                 cannotPlay(item, error)
                 return
             }
             fill(stream, upTo: stream.prefillBytes)
             startIfReady()
+            // Starting can lose the device, which has been reported.
+            guard device != nil else { return }
             emit(
                 .formatChanged(
                     item.id,
@@ -482,7 +485,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         segments = []
         let from = stream.format.summary
         let clock = StepClock()
-        clock.time("stop") { stopIO() }
+        clock.time("stop") { stopIO(resuming: (track.item.id, 0)) }
         self.stream = nil
         guard device != nil else { return }
         let next: RenderStream
@@ -506,6 +509,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                 try clock.time("open") { try feed(track, into: next, atFrame: 0) }
             }
         } catch {
+            if deviceIsGone(after: error, resuming: track.item.id, at: 0) { return }
             emit(.trackFailed(track.item.id, error))
             unload()
             closeDevice()
@@ -518,6 +522,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             clock.time("prefill") { fill(next, upTo: next.prefillBytes) }
         }
         clock.time("start") { startIfReady() }
+        guard device != nil else { return }
         let switchSeconds = uptime() - playedOut
         // Whatever no step timed, such as allocating the ring buffer, so the steps add up.
         let other = switchSeconds - clock.steps.reduce(0) { $0 + $1.seconds }
@@ -538,19 +543,38 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             try device.start(stream.render)
             running = true
         } catch {
+            if deviceIsGone(after: error, resuming: segments.first?.item.id, at: position()) {
+                return
+            }
             fail(error)
         }
     }
 
-    private func stopIO() {
+    /// Stops the IO proc. If the device is gone, playback resumes at `resume`, by default the
+    /// track playing and where it is.
+    private func stopIO(resuming resume: (item: OutputItem.ID?, seconds: Double)? = nil) {
         guard running, let device, let stream else { return }
+        let resume = resume ?? (segments.first?.item.id, position())
         running = false
         do {
             try device.stop()
         } catch {
             retired.append(stream)
+            if deviceIsGone(after: error, resuming: resume.item, at: resume.seconds) { return }
             fail(error)
         }
+    }
+
+    /// A device unplugged mid-switch fails the step it's in, before or after its listener fires,
+    /// so a failed step while the device is gone is a lost device, not a failed track or output.
+    /// True when it was, after reporting it.
+    private func deviceIsGone(
+        after error: any Error, resuming item: OutputItem.ID?, at seconds: Double
+    ) -> Bool {
+        guard !provider.isConnected() else { return false }
+        logger.error("\(self.provider.deviceName) went away: \(error)")
+        lose(item, at: seconds)
+        return true
     }
 
     /// The device itself failed: drop everything and report it.
@@ -586,18 +610,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 
     private func checkDevice() {
-        if let device {
+        if device != nil {
             guard !provider.isConnected() else { return }
-            let item = segments.first?.item.id
-            let seconds = positionSeconds() ?? 0
-            if !device.abandon(), let stream { retired.append(stream) }
-            self.device = nil
-            running = false
-            stream = nil
-            unload()
-            deviceMissing = true
             logger.error("\(self.provider.deviceName) went away")
-            emit(.deviceLost(item, positionSeconds: seconds))
+            lose(segments.first?.item.id, at: position())
         } else if deviceMissing, provider.isConnected() {
             deviceMissing = false
             provider.deviceReturned()
@@ -605,7 +621,23 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
     }
 
+    /// The device is gone: drop everything without restoring it, and report where to resume.
+    private func lose(_ item: OutputItem.ID?, at seconds: Double) {
+        if let device, !device.abandon(), let stream, !retired.contains(where: { $0 === stream }) {
+            retired.append(stream)
+        }
+        device = nil
+        running = false
+        stream = nil
+        unload()
+        deviceMissing = true
+        emit(.deviceLost(item, positionSeconds: seconds))
+    }
+
     // MARK: Position and events
+
+    /// Where the track playing is, or 0 before anything plays.
+    private func position() -> Double { positionSeconds() ?? 0 }
 
     private func positionSeconds() -> Double? {
         guard let stream, let segment = segments.first else { return nil }
