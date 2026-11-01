@@ -5,7 +5,7 @@ import Palette
 let paletteBenchmarks = [
     Benchmark(
         name: "palette: Go to Item keystroke over every fixture track (p95)",
-        budget: Budget(appleSilicon: 30, oldMac: 80, unit: .milliseconds)
+        budget: Budget(appleSilicon: 15, oldMac: 80, unit: .milliseconds)
     ) {
         let index = try scannedLibrary.get().index
         let names = try index.trackNames(sortedBy: .artist)

@@ -80,19 +80,19 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | What | Apple Silicon | Old Mac |
 |---|---|---|
 | Cold launch to an interactive library window | < 1 s | < 2.5 s |
-| Search-as-you-type, per keystroke (p95) | < 30 ms | < 80 ms |
+| Search-as-you-type, per keystroke (p95) | < 20 ms | < 80 ms |
 | Re-sort the track table by any column | < 100 ms | < 250 ms |
-| Full scan of the fixture library, local SSD | < 60 s | < 180 s |
+| Full scan of the fixture library, local SSD | < 5 s | < 180 s |
 | Rescan with no changes, on the NAS | < 30 s | < 60 s |
 | Scan 3,000 fixture files on a simulated NAS (2 ms per operation, 16 at once), tuned readers | < 4 s | < 8 s |
 | Scan 2,000 fixture files on a slow simulated NAS (about 60 ms per file with a long tail, 45 ms per listing, 24 at once), tuned readers, ending at 16 or more and within 80% of the best fixed level | < 10 s | < 20 s |
-| Rescan with no changes, fixture library, local SSD | < 5 s | < 15 s |
+| Rescan with no changes, fixture library, local SSD | < 1.5 s | < 15 s |
 | Library database for the fixture library | < 60 MB | < 60 MB |
 | Memory a scan of the fixture library adds, at its peak | < 50 MB | < 50 MB |
-| Browser pane query: genres, artists, albums (p95) | < 20 ms | < 60 ms |
-| Palette results per keystroke, Go to Item over every fixture track (p95) | < 30 ms | < 80 ms |
+| Browser pane query: genres, artists, albums (p95) | < 2 ms | < 60 ms |
+| Palette results per keystroke, Go to Item over every fixture track (p95) | < 15 ms | < 80 ms |
 | List a smart playlist of six rules over every fixture track (p95); the old Mac figure is an estimate until its checkpoint | < 50 ms | < 150 ms |
-| Resident memory with the library loaded, after scrolling every row with art | < 250 MB | < 250 MB |
+| Resident memory with the library loaded, after scrolling every row with art | < 120 MB | < 250 MB |
 | CPU while playing 24/192 FLAC | < 3 percent of a core | < 5 percent of a core |
 | Underruns in a 1-hour playback soak (`--soak 3600`; 20 s by default), with a full fixture scan every 5 minutes and a search every second | 0 frames | 0 frames |
 | Memory growth in that soak, from the first scan trough after minute 5 to the last (30 s after each scan ends) | < 10 MB | < 10 MB |
@@ -100,14 +100,14 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Track change that switches sample rate | < 500 ms | < 500 ms |
 | CPU when idle, the library window open and nothing playing, over a minute after a 20 s settle; the old Mac figure is an estimate until its checkpoint | < 0.1 percent of a core | < 0.1 percent of a core |
 | Idle wakeups in the same minute, as `top` counts them | < 1 wakeups a second | < 1 wakeups a second |
-| Load and validate settings, every key changed | < 5 ms | < 20 ms |
-| Generate the fixture library | < 30 s | < 120 s |
-| Rerun the fixture generator with nothing to do | < 10 s | < 30 s |
+| Load and validate settings, every key changed | < 2 ms | < 20 ms |
+| Generate the fixture library | < 6 s | < 120 s |
+| Rerun the fixture generator with nothing to do | < 3 s | < 30 s |
 | Parse every fixture file's tags, first read in a fresh process | < 5 s | < 20 s |
 | Tag journal: write a 1000-file batch with 1 MB art each, flushed per file | < 20 s | < 60 s |
 | Play timeline: one page of 200 plays, 1M synthetic plays over the fixture library (p95) | < 5 ms | < 15 ms |
 | History, one row per track played, 1M synthetic plays (p95) | < 30 ms | < 80 ms |
-| Record a play, 1M synthetic plays (p95) | < 2 ms | < 6 ms |
+| Record a play, 1M synthetic plays (p95) | < 1 ms | < 6 ms |
 | History table plus its index, 1M synthetic plays | < 40 MB | < 40 MB |
 
 ## Phases

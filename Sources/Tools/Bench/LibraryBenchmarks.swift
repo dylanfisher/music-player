@@ -50,7 +50,7 @@ let scannedLibrary = Result { () throws -> ScannedLibrary in
 let libraryBenchmarks = [
     Benchmark(
         name: "library: scan \(fullLibraryFileCount) fixture files into a new index",
-        budget: Budget(appleSilicon: 60, oldMac: 180, unit: .seconds)
+        budget: Budget(appleSilicon: 5, oldMac: 180, unit: .seconds)
     ) {
         let library = try scannedLibrary.get()
         return Measured(
@@ -63,7 +63,7 @@ let libraryBenchmarks = [
     },
     Benchmark(
         name: "library: rescan the fixture library with no changes",
-        budget: Budget(appleSilicon: 5, oldMac: 15, unit: .seconds)
+        budget: Budget(appleSilicon: 1.5, oldMac: 15, unit: .seconds)
     ) {
         let library = try scannedLibrary.get()
         var rescanned: ScanSummary?
@@ -167,7 +167,7 @@ let libraryBenchmarks = [
     },
     Benchmark(
         name: "library: search keystroke, sorted by artist (p95)",
-        budget: Budget(appleSilicon: 30, oldMac: 80, unit: .milliseconds)
+        budget: Budget(appleSilicon: 20, oldMac: 80, unit: .milliseconds)
     ) {
         let index = try scannedLibrary.get().index
         let typed = try typedQueries(index)
@@ -199,7 +199,7 @@ let libraryBenchmarks = [
     },
     Benchmark(
         name: "library: browser pane query (p95)",
-        budget: Budget(appleSilicon: 20, oldMac: 60, unit: .milliseconds)
+        budget: Budget(appleSilicon: 2, oldMac: 60, unit: .milliseconds)
     ) {
         let index = try scannedLibrary.get().index
         let genres = try index.genres()

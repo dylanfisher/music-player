@@ -4,7 +4,7 @@ import Foundation
 let fixtureBenchmarks = [
     Benchmark(
         name: "fixtures: generate \(fullLibraryFileCount) files",
-        budget: Budget(appleSilicon: 30, oldMac: 120, unit: .seconds)
+        budget: Budget(appleSilicon: 6, oldMac: 120, unit: .seconds)
     ) {
         try withScratchDirectory("fixtures") { root in
             Measured(
@@ -15,7 +15,7 @@ let fixtureBenchmarks = [
     },
     Benchmark(
         name: "fixtures: rerun with nothing to do",
-        budget: Budget(appleSilicon: 10, oldMac: 30, unit: .seconds)
+        budget: Budget(appleSilicon: 3, oldMac: 30, unit: .seconds)
     ) {
         try withScratchDirectory("fixtures") { root in
             _ = try generateFixtures(count: fullLibraryFileCount, in: root)

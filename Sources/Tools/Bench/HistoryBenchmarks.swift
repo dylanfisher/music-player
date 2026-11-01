@@ -52,7 +52,7 @@ let historyBenchmarks = [
     },
     Benchmark(
         name: "history: record a play, 1M synthetic plays (p95)",
-        budget: Budget(appleSilicon: 2, oldMac: 6, unit: .milliseconds)
+        budget: Budget(appleSilicon: 1, oldMac: 6, unit: .milliseconds)
     ) {
         let library = try playedLibrary.get()
         let now = Date().timeIntervalSince1970

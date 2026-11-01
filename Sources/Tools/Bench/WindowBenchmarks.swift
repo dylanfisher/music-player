@@ -19,7 +19,7 @@ let windowBenchmarks = [
     },
     Benchmark(
         name: "window: memory after scrolling every row, with each album's art",
-        budget: Budget(appleSilicon: 250, oldMac: 250, unit: .megabytes)
+        budget: Budget(appleSilicon: 120, oldMac: 250, unit: .megabytes)
     ) {
         let runs = try windowRuns.get()
         let worst = runs.max { $0.scrolledMB < $1.scrolledMB }!
@@ -52,7 +52,7 @@ let windowBenchmarks = [
     },
     Benchmark(
         name: "window: search keystroke through the browser model (p95)",
-        budget: Budget(appleSilicon: 30, oldMac: 80, unit: .milliseconds)
+        budget: Budget(appleSilicon: 20, oldMac: 80, unit: .milliseconds)
     ) {
         let library = try scannedLibrary.get()
         let typed = try typedQueries(library.index)

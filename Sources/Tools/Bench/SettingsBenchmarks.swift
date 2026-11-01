@@ -5,7 +5,7 @@ import Settings
 let settingsBenchmarks = [
     Benchmark(
         name: "settings: load and validate, every key changed",
-        budget: Budget(appleSilicon: 5, oldMac: 20, unit: .milliseconds)
+        budget: Budget(appleSilicon: 2, oldMac: 20, unit: .milliseconds)
     ) {
         try withScratchDirectory("settings") { directory in
             let url = directory.appendingPathComponent(configFileName)
