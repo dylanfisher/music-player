@@ -1,3 +1,5 @@
+import Foundation
+
 /// A folder the library scans, and how it learns about changes in it.
 public struct WatchedFolder: SettingValue {
     public enum Kind: String, Codable, Sendable {
@@ -7,6 +9,12 @@ public struct WatchedFolder: SettingValue {
         /// volumes.
         case network
     }
+
+    /// Folders that hold the system or every user's files, never only music.
+    static let refusedRoots: Set<String> = [
+        "/", "/Applications", "/Library", "/Network", "/System", "/Users", "/Volumes", "/bin",
+        "/cores", "/dev", "/etc", "/opt", "/private", "/sbin", "/tmp", "/usr", "/var",
+    ]
 
     public static let defaultPollIntervalMinutes = 15
     public static let pollIntervalRangeMinutes = 1...1440
@@ -54,6 +62,11 @@ public struct WatchedFolder: SettingValue {
     public func problem() -> String? {
         let range = Self.pollIntervalRangeMinutes
         if !path.hasPrefix("/") { return "path \"\(path)\" isn't absolute" }
+        let standard = (path as NSString).standardizingPath
+        if Self.refusedRoots.contains(standard) || standard == NSHomeDirectory() {
+            return "path \"\(path)\" is a system folder or the home folder, not a music folder;"
+                + " watching it would scan, and tag-edit, everything under it"
+        }
         if !range.contains(pollIntervalMinutes) {
             return "pollIntervalMinutes \(pollIntervalMinutes) is outside"
                 + " \(range.lowerBound)...\(range.upperBound)"

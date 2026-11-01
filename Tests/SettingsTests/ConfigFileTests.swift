@@ -222,3 +222,17 @@ private func problems(_ text: String) -> [String] {
         #expect(!text.string.contains(ending == "\n" ? "\r" : "\n\n"), "\(text.string)")
     }
 }
+
+@Test func aSystemFolderOrTheHomeFolderIsRefusedAsAWatchedFolder() {
+    func folder(_ path: String) -> String {
+        #"{"folders": [{"path": "\#(path)", "kind": "local", "include": [], "exclude": [], "pollIntervalMinutes": 15}]}"#
+    }
+    for path in ["/", "/System", "/Users/", "/Volumes", "/usr/../usr", NSHomeDirectory()] {
+        let found = problems(folder(path))
+        #expect(found.count == 1, "\(path)")
+        #expect(found.first?.contains("not a music folder") == true, "\(path): \(found)")
+    }
+    for path in ["/Volumes/music/library", NSHomeDirectory() + "/Music", "/Users/Shared/Music"] {
+        #expect(throws: Never.self, "\(path)") { try parsed(folder(path)) }
+    }
+}

@@ -9,6 +9,7 @@
 oracle Sources/Tools/Fixtures | checks Sources/Core/Metadata Sources/Core/TagWriter | the fixture generator writes every tag format from its spec, independent of Metadata and TagWriter
 
 block b013e447 x3 | files Sources/Core/Library/SmartRules.swift Sources/Core/Settings/TrackTableLayout.swift Sources/Core/Settings/VisitLog.swift | each strict Codable type's memberwise init, CodingKeys and rejectUnknownKeys decoder; the fields differ, so only the shape repeats
+literal "/Volumes" | files Sources/Core/Settings/WatchedFolder.swift Sources/Tools/TagCorpus/CorpusPaths.swift | the mount folder itself, refused as a watched folder, and the place the tag corpus tool never writes under
 literal "--home" | files Sources/App/MusicPlayer/CommandLineArguments.swift Sources/Tools/Bench/WindowBenchmarks.swift Sources/Tools/FailureDrill/DrillCommand.swift | the app's flag, which Bench passes to the app it launches; FailureDrill's own --home flag is spelled the same on purpose
 literal "--measure-window" | files Sources/App/MusicPlayer/CommandLineArguments.swift Sources/Tools/Bench/WindowBenchmarks.swift | the app's flag, which Bench passes to the app it launches
 literal "--scan" | files Sources/App/MusicPlayer/CommandLineArguments.swift Sources/Tools/FailureDrill/DrillCommand.swift | the app's flag and FailureDrill's own --scan flag, two programs' command lines
