@@ -37,7 +37,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var removeFolder: (String) -> Void = { _ in }
     /// Runs the command a key press in one of the browser's lists is bound to.
     public var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
-    /// Called once, when the table first draws rows, or once loading finds none to draw.
+    /// Called once, when the table or the timeline first draws rows, or once loading finds none
+    /// to draw.
     public var firstRowsDrawn: (() -> Void)? {
         get { table.firstRowsDrawn }
         set { table.firstRowsDrawn = newValue }
@@ -207,6 +208,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Loads everything, selecting what `saved` names where it still exists.
     public func load(_ saved: BrowserState) async {
         await model.load(saved)
+        // Handed over before anything else waits, so no row can draw first.
+        if let firstRowsDrawn {
+            if showsTimeline {
+                self.firstRowsDrawn = nil
+                timeline.firstRowsDrawn = firstRowsDrawn
+            } else if model.trackIDs.isEmpty {
+                self.firstRowsDrawn = nil
+                firstRowsDrawn()
+            }
+        }
         do {
             // Forgotten only once shown, so a crash before then shows them next time.
             let discards = try await reader.discards()
@@ -217,10 +228,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             report("couldn't read or forget what a stats rebuild discarded: \(error)")
         }
         showSource()
-        if model.trackIDs.isEmpty, let firstRowsDrawn {
-            self.firstRowsDrawn = nil
-            firstRowsDrawn()
-        }
         await countIssues()
     }
 

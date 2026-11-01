@@ -74,6 +74,8 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
         table.reloadData()
         select(model.rows(holding: selection))
         if let top { restore(top, row: model.rows(holding: [top.id]).first) }
+        // With no plays there are no rows to draw; the loaded, empty list is the first frame.
+        if model.isLoaded, model.entries.isEmpty { rowsDrawn() }
     }
 
     // MARK: Data source and delegate
@@ -89,6 +91,7 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
         }
         let entry = model.entries[row]
         let played = playedTrack(row)
+        rowsDrawn()
         let column = TrackColumn(rawValue: tableColumn.identifier.rawValue)
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)

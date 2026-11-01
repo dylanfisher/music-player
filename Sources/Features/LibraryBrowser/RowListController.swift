@@ -11,6 +11,8 @@ class RowListController: NSViewController {
     /// Double-click or Return: the selected rows and the one clicked.
     let play: (IndexSet, Int) -> Void
     let playNext: (IndexSet) -> Void
+    /// Called once, when the list first draws rows, for the launch measurement.
+    var firstRowsDrawn: (() -> Void)?
     /// The row the keys move from, and the one an extending move keeps.
     private var cursor: Int?
     private var anchor: Int?
@@ -50,6 +52,14 @@ class RowListController: NSViewController {
         menu.addItem(withTitle: "Play Next", action: #selector(playMenuRowsNext), keyEquivalent: "")
         for item in menu.items { item.target = self }
         table.menu = menu
+    }
+
+    /// Reports the first rows drawn, after this pass draws, so the measurement includes the
+    /// first frame.
+    func rowsDrawn() {
+        guard let firstRowsDrawn else { return }
+        self.firstRowsDrawn = nil
+        DispatchQueue.main.async { firstRowsDrawn() }
     }
 
     // MARK: Keeping the place

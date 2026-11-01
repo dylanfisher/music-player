@@ -25,6 +25,8 @@ public final class TimelineModel {
     public private(set) var reachedEnd = false
     /// How many plays the history holds, loaded or not.
     public private(set) var playCount = 0
+    /// Whether the newest page has been read since the timeline last showed.
+    public private(set) var isLoaded = false
     /// Called after the rows or what they show change, with the history IDs shown before, so
     /// the view can find its selection again.
     public var changed: (_ previousIDs: [Int64]) -> Void = { _ in }
@@ -61,6 +63,7 @@ public final class TimelineModel {
             guard mine == session else { return }
             reachedEnd = page.count < Self.pageSize
             playCount = count
+            isLoaded = true
             apply(page, forced: true)
         } catch {
             fail(mine, "couldn't read the play timeline: \(error)")
@@ -71,6 +74,7 @@ public final class TimelineModel {
     public func clear() {
         session += 1
         loadingMore = nil
+        isLoaded = false
         apply([])
     }
 

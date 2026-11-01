@@ -196,3 +196,49 @@ private func play(_ count: Int, of rows: [TrackRow], from start: Int, _ index: L
     // The log is append-only, so ⌘⌫ has nothing to remove there.
     #expect(!browser.canRemoveFromPlaylist)
 }
+
+/// A browser over a copy of the shared browser library, and the index to write plays with.
+@MainActor
+private func timelineBrowser() throws -> (LibraryBrowser, LibraryIndex, [TrackRow]) {
+    let source = try browserLibrary.get().databaseURL
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("timeline-browser-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let databaseURL = directory.appendingPathComponent("library.sqlite")
+    for suffix in ["", "-wal"] where FileManager.default.fileExists(atPath: source.path + suffix) {
+        try FileManager.default.copyItem(
+            atPath: source.path + suffix, toPath: databaseURL.path + suffix)
+    }
+    let index = try LibraryIndex(at: databaseURL)
+    let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL), index: index,
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, folders: [])
+    return (browser, index, rows)
+}
+
+private let showingTimeline = BrowserState(source: .timeline, genre: nil, artist: nil, album: nil)
+
+/// Waits up to 10 seconds for `condition`.
+@MainActor
+private func waitUntil(_ condition: () -> Bool) async throws {
+    let deadline = Date().addingTimeInterval(10)
+    while !condition(), Date() < deadline { try await Task.sleep(nanoseconds: 10_000_000) }
+}
+
+@MainActor @Test func theTimelineSaysItsFirstRowsDrewOnlyOnceItHasThem() async throws {
+    let (browser, index, rows) = try timelineBrowser()
+    try index.recordPlay(rows[0].path, at: 1)
+    var drawn = 0
+    browser.firstRowsDrawn = { drawn += 1 }
+    await browser.load(showingTimeline)
+    // The track table is empty on the timeline, but that isn't the first frame.
+    #expect(drawn == 0)
+
+    let (empty, _, _) = try timelineBrowser()
+    var emptyDrawn = 0
+    empty.firstRowsDrawn = { emptyDrawn += 1 }
+    await empty.load(showingTimeline)
+    try await waitUntil { emptyDrawn > 0 }
+    #expect(emptyDrawn == 1)
+}

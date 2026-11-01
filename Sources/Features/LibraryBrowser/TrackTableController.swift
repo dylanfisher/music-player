@@ -20,8 +20,6 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     private var applyingSort = false
     /// A row fetch failed; reported once until the next reload.
     private var reportedFetchFailure = false
-    /// The first time rows are drawn, for the launch measurement.
-    var firstRowsDrawn: (() -> Void)?
     private var typeSelect: TypeSelect? = TypeSelect()
 
     init(model: BrowserModel, cache: RowCache, layout: TrackTableLayout, actions: BrowserActions) {
@@ -130,11 +128,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
             as? NSTableCellView ?? makeTextCell(tableColumn.identifier, numeric: column.isNumeric)
         cell.textField?.stringValue = trackRow(row).map { column.text($0, position: row) } ?? ""
-        if let firstRowsDrawn {
-            self.firstRowsDrawn = nil
-            // After this pass draws, so the measurement includes the first frame.
-            DispatchQueue.main.async { firstRowsDrawn() }
-        }
+        rowsDrawn()
         return cell
     }
 
