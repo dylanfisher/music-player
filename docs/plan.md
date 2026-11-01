@@ -1669,10 +1669,8 @@ comes from Swinsian; most other Mac users come from iTunes or Music.
       library.
 - [ ] **Hardware checkpoint (owner):** on the DAC Mac, import the Swinsian library and report
       the preview's counts, the unmatched list, and whether ratings and playlists look right.
-      The reader's Swinsian schema is assumed (ADR 0033), so first paste back the output of
-      this, which copies each database in Swinsian's folder to a temporary folder and prints
-      only its file names, its schema and each table's row count, no rows:
-      `d=$(mktemp -d) && src="$HOME/Library/Application Support/Swinsian" && ls -l "$src" && for f in "$src"/*; do case "$f" in *-wal|*-shm) continue;; esac; [ -f "$f" ] || continue; head -c 16 "$f" | grep -q 'SQLite format 3' || continue; n=$(basename "$f"); cp "$f" "$d/$n"; if [ -f "$f-wal" ]; then cp "$f-wal" "$d/$n-wal"; fi; echo "== $n"; sqlite3 "$d/$n" .schema; sqlite3 "$d/$n" "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" | while IFS= read -r t; do q=$(printf '%s' "$t" | sed 's/"/""/g'); printf '%s\t' "$t"; sqlite3 "$d/$n" "SELECT count(*) FROM \"$q\""; done; done; rm -rf "$d"`
+      The schema dump is done: the reader uses the schema read from the owner's library
+      (ADR 0033). What remains is running the import and checking the preview's counts.
       Its tracks are at `/Volumes/music/library`, so if the preview shows them unmatched, put
       the prefix Swinsian's paths start with in "Replace the path prefix" and
       `/Volumes/music/library` in "with".

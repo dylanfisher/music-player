@@ -12,8 +12,9 @@ owner used before: Swinsian, whose library is a SQLite database in
 `~/Library/Application Support/Swinsian/`, or iTunes and Music, which export `Library.xml`.
 Both files come from other programs and are hostile input (0025). Neither player's track IDs
 mean anything here, and Swinsian's bookmarks resolve only on the Mac that made them, so tracks
-match by path. The owner's Swinsian library holds one path in more than one row. No Swinsian
-database exists on the Mac this was built on, so its schema below is assumed, not read.
+match by path. The owner's Swinsian library holds one path in more than one row (32 extra rows
+in 43,400). Its schema below was read from the owner's library on 2026-11-01: the tables, their
+columns, row counts and value ranges, no rows.
 
 ## Decision
 
@@ -40,40 +41,66 @@ database exists on the Mac this was built on, so its schema below is assumed, no
   17's code (0032): only `file` with no host or `localhost`, `%` escapes as UTF-8.
 - **Caps.** 1,000,000 tracks, 10,000 playlists, 2,000,000 playlist entries in all, 100 rules a
   playlist, 4 KiB a path, 1 KiB a playlist name. Past a cap the rest isn't read and the problem
-  says so. Problems list 100, then a count.
+  says so. Problems list 100, then a count. A Swinsian rule archive is 64 KiB, 2,048 objects
+  and 64 references deep at most, and a playlist lists 10 reasons, then a count.
 
-### The Swinsian schema assumed (unverified)
+### The Swinsian schema read
 
 | Table | Column | Read as |
 |---|---|---|
 | `track` | `track_id` | integer, the row's ID |
-| | `path` | text, a POSIX path |
+| | `path` | text, an absolute POSIX path, such as `/Volumes/music/library/…` |
 | | `playcount` | integer, 0 or more |
-| | `lastplayed` | number, seconds since 2001-01-01 UTC, or NULL |
+| | `lastplayed` | number, seconds since 2001-01-01 UTC; 0 or NULL is never |
 | | `dateadded` | number, seconds since 2001-01-01 UTC, or NULL |
-| | `rating` | integer, 0 to 5 stars |
-| | `loved` | integer, 0 or 1 |
-| `playlist` | `playlist_id` | integer |
-| | `name` | text |
+| | `rating` | stars, 0 to 5 in half steps, stored as REAL in an INTEGER column, or NULL |
+| | `favourite` | integer, 1 for loved, 0 or NULL for not |
+| `playlist` | `playlist_id`, `name` | integer, text |
 | | `smart` | integer, 1 for a smart playlist |
-| | `matchall` | integer, 1 when every rule must hold, 0 for any |
+| | `smartpredicate` | blob, the rules: an `NSPredicate` archived by `NSKeyedArchiver` |
+| | `folder` | integer, 1 for a folder, which is skipped and counted as built in |
+| | `limited` | integer, 1 for a playlist limited to some of its tracks |
 | `playlisttrack` | `playlist_id`, `track_id` | integers |
-| | `position` | integer, the order |
-| `smartrule` | `playlist_id`, `position` | integers |
-| | `field`, `operator` | text, below |
-| | `value` | text, or a number |
+| | `tindex` | integer, the order |
 
-A rule's `field` and `operator` are assumed to be this app's own field and comparison names
-(`SmartField`, `SmartComparison`) ignoring case, such as `playcount` and `greaterthan`, with
-dates compared in days and ratings in stars; any other name, a value of the wrong kind, or a
-rule our editor would refuse leaves the playlist unmapped. Swinsian limits, if it has them,
-aren't read. Every value is read by its SQLite storage class, not its declared type.
+`playlistfolderplaylist` says which folder holds a playlist. Folders flatten here, so it isn't
+read. Every value is read by its SQLite storage class, not its declared type: a whole rating of
+REAL affinity in an INTEGER column reads as an integer, and a half one as a real.
 
-A date before 1970 or more than a day in the future is a problem for that field and is left out,
-so a wrong epoch shows in the preview as a problem on every dated track instead of moving every
-date. A rating over 5 is a problem the same way, so a 0–100 scale shows instead of reading as
-5 stars. The checkpoint's command prints the real schema and each table's row count, without any
-rows, so the next session can correct this table.
+**Ratings.** Ours are whole stars. A half star rounds up, 0.5 to 1 and 4.5 to 5, as iTunes's
+0–100 ratings already do (a star each 20, rounded). The preview counts the ratings that came
+from a half star. Rows for one path keep the highest rating, which counts as rounded only when
+every row with that rating was.
+
+**Smart playlists.** `smartpredicate` is decoded by `NSKeyedUnarchiver` with
+`requiresSecureCoding` and only these classes allowed: `NSPredicate`, `NSCompoundPredicate`,
+`NSComparisonPredicate`, `NSExpression`, `NSArray`, `NSString`, `NSNumber` and `NSDate` (the
+unarchiver takes their private subclasses the archive names, such as `NSFunctionExpression`).
+Before it's decoded, the archive is read as a property list to check its keys, its object count
+and how deep its references go, since the unarchiver recurses and about 300 nested NOTs
+overflow the 512 KiB stack the import reads on. The predicate is never evaluated: its structure
+is walked, not its `predicateFormat` text parsed.
+
+| Swinsian | Here |
+|---|---|
+| `genre`, `fileType` with `BEGINSWITH[c]`, `CONTAINS[c]`, `==[c]` | starts with, contains, is |
+| `NOT` of `CONTAINS[c]`, `==[c]` | doesn't contain, is not |
+| `sampleRate`, `bitRate` with `>`, `==` (and `NOT ==`) | greater than, is (is not); hertz and kilobits a second, as ours |
+| `groupingLength > 0` (and its `NOT`) | grouping is not "" (is "") |
+| `dateAdded`, `lastPlayed` `> CAST(CAST(now(), "NSNumber") - N, "NSDate")` | in the last N / 86,400 days (not in the last, for its `NOT`) |
+| `AND`, `OR` | all, any |
+| `NOT` of `AND` or `OR` | pushed to the comparisons by De Morgan: `NOT (a OR b)` is `NOT a AND NOT b` |
+
+Anything else leaves the playlist unmapped and listed with why: a comparison without `[c]`
+(ours ignore case), any other key or operator, a `NOT` of `BEGINSWITH` or `>`, a fixed date, a
+time that isn't whole days, all and any mixed in one playlist, `ANY` or `ALL`, and a rule our
+editor would refuse. A limited playlist is listed too, since its limit isn't read and it would
+otherwise come across with more tracks than it holds. The owner's 18 smart playlists all map.
+Swinsian's `bitRate > 1000` compares the `bitrate` column, in kilobits a second as ours, which
+is the average over the file.
+
+A date before 1970 or more than a day in the future is a problem for that field and is left out.
+A rating past 5 or between half steps is a problem the same way.
 
 ### iTunes keys read
 
@@ -134,6 +161,11 @@ are built in or hold other playlists, so they're skipped and counted.
 - **Opening the live database read-only or with `immutable=1`.** Rejected: read-only still maps
   Swinsian's shared memory and takes its locks, and `immutable` skips the WAL, so recent plays
   would be missing.
+- **Parsing the rules' `predicateFormat` text, or evaluating the predicate** against a track.
+  Rejected: the text has no grammar of its own to rely on, and evaluating would run whatever
+  the archive asks for; the decoded structure says exactly what each part is.
+- **Half stars rounded down, or kept as halves.** Rejected: rounding down makes 0.5 unrated,
+  and halves would change the rating column, the editor and smart rules for one import.
 - **Guessing Swinsian's column names from what's there.** Rejected: a near match is a wrong
   number in the owner's stats with nothing to show for it. The check names what's missing.
 - **Adding the imported plays to the timeline** at the last played time. Rejected: one play would
@@ -143,6 +175,5 @@ are built in or hold other playlists, so they're skipped and counted.
 
 ## Consequences
 
-Until the checkpoint's schema comes back, a Swinsian import may stop on a missing column and say
-which. A track moved since the other player last saw it is listed as unmatched. Removing an
+A Swinsian that changes its schema makes the import stop on the missing column and say which. A track moved since the other player last saw it is listed as unmatched. Removing an
 import's plays means editing the database; there is no undo beyond not confirming.

@@ -38,7 +38,9 @@ or PLS by the first byte; entries must be folded absolute paths, and written as 
 absolute and relative, they must read back the same), `swinsian` (a database through
 `PlayerLibrary.read`, copied aside first) and `itunes-xml` (a `Library.xml`); for both, tracks
 must have absolute NUL-free paths, one per path in NFC, with ratings in stars, and playlists
-must name only tracks read. `tag-writer` writes each input
+must name only tracks read. `swinsian-predicate` decodes a smart playlist's archived rules
+on their own; rules that map must be valid, and ones that don't must say why, 11 reasons at
+most. `tag-writer` writes each input
 to a file, applies an edit and undoes it, and the bytes must match. A broken invariant is a
 `preconditionFailure`, which the fuzzer catches like any crash.
 
