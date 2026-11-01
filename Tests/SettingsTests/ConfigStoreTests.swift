@@ -390,3 +390,35 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
     await wait(seconds: 1) { false }
     #expect(calls == before)
 }
+
+@MainActor @Test func anEmptyReadWaitingForConfirmationIsntAProblemYet() throws {
+    let url = configURL()
+    try write(#"{"a.count": 3}"#, to: url)
+    let settings = store(url)
+    try write("", to: url)
+    settings.read(confirmed: false)
+    try settings.set(\.flag, to: true)
+    #expect(settings.problems.isEmpty)
+}
+
+@MainActor @Test func retriesWaitLongerEachTimeAndStartOverAfterASuccess() async throws {
+    let url = configURL()
+    let folder = url.deletingLastPathComponent()
+    try write(#"{"a.count": 3}"#, to: url)
+    let settings = store(url)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
+    defer {
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: folder.path)
+    }
+    try settings.set(\.flag, to: true)
+    #expect(settings.retrySeconds == 1)
+    await wait(seconds: 3) { settings.retrySeconds == 2 }
+    #expect(settings.retrySeconds == 2)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+    await wait(seconds: 4) { settings.writeFailure == nil }
+    #expect(settings.retrySeconds == nil)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
+    try settings.set(\.count, to: 4)
+    #expect(settings.retrySeconds == 1)
+}

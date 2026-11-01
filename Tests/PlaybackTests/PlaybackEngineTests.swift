@@ -709,3 +709,124 @@ private func published(
     await engine.handle(.trackFailed(2, Broken()))
     #expect(output.takeCalls() == [.setNext(nil, nil)])
 }
+
+@Test func failuresInARowStartAgainWithANewQueueAPlayOrAStartedTrack() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.setRepeat(.all)
+    await engine.setQueue(Array(urls.prefix(2)))
+    await engine.play()
+    // The next track fails once: the engine hands over the first again, as repeat all wraps.
+    await engine.handle(.trackFailed(2, Broken()))
+    #expect(output.takeCalls().last == .setNext(3, urls[0]))
+    await engine.setQueue(Array(urls.prefix(2)))
+    await engine.play()
+    _ = output.takeCalls()
+    await engine.handle(.trackFailed(5, Broken()))
+    #expect(output.takeCalls() == [.setNext(6, urls[0])])
+    await engine.stop()
+    await engine.play()
+    _ = output.takeCalls()
+    await engine.handle(.trackFailed(8, Broken()))
+    #expect(output.takeCalls() == [.setNext(9, urls[0])])
+
+    // Three tracks: failures between two that start don't add up.
+    let three = PlaybackEngine(output: output)
+    await three.setRepeat(.all)
+    await three.setQueue(urls)
+    await three.play()
+    await three.handle(.trackStarted(1, info))
+    await three.handle(.trackFailed(2, Broken()))
+    await three.handle(.trackStarted(3, info))
+    await three.handle(.trackFailed(4, Broken()))
+    _ = output.takeCalls()
+    await three.handle(.trackFailed(5, Broken()))
+    #expect(output.takeCalls() == [.setNext(6, urls[2])])
+}
+
+@Test func removingTheTrackPlayWouldStartFromTheEndGoesBackToTheStart() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.setQueue(urls, first: 2)
+    await engine.removeQueueItems([2])
+    #expect(await engine.state.currentIndex == 0)
+}
+
+@Test func aTrackChosenAfterOneFailedFinishesNormally() async {
+    let output = FakeOutput()
+    let engine = await playing(Array(urls.prefix(2)), output)
+    await engine.handle(.trackStarted(1, info))
+    await engine.handle(.trackFailed(1, Broken()))
+    await engine.next()
+    await engine.handle(.trackStarted(3, info))
+    _ = output.takeCalls()
+    await engine.handle(.finished(3))
+    #expect(output.takeCalls().isEmpty)
+    #expect(await engine.state.status == .stopped)
+}
+
+@Test func aNextTrackStartedAfterAFailedOneFinishesNormally() async {
+    let output = FakeOutput()
+    let engine = await playing(Array(urls.prefix(2)), output)
+    await engine.handle(.trackStarted(1, info))
+    await engine.handle(.trackFailed(1, Broken()))
+    await engine.handle(.trackStarted(2, info))
+    _ = output.takeCalls()
+    await engine.handle(.finished(2))
+    #expect(output.takeCalls().isEmpty)
+}
+
+@Test func aNewQueueForgetsWhereALostDeviceWasAndTheOldNextTrack() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    await engine.setQueue(urls)
+    output.setPosition(OutputPosition(item: 2, seconds: 4))
+    #expect(await engine.position() == nil)
+    await engine.play()
+    await engine.handle(.trackStarted(3, info))
+    await engine.handle(.deviceLost(3, positionSeconds: 30))
+    await engine.setQueue(urls)
+    _ = output.takeCalls()
+    await engine.play()
+    #expect(output.takeCalls().first == .load(5, urls[0], startSeconds: 0, playing: true))
+}
+
+@Test func afterTheLastTrackFinishesPlayStartsAtTheFirst() async {
+    let output = FakeOutput()
+    let engine = await playing(Array(urls.prefix(2)), output)
+    await engine.handle(.trackStarted(1, info))
+    await engine.handle(.trackStarted(2, info))
+    output.setPosition(OutputPosition(item: 2, seconds: 199))
+    await engine.handle(.finished(2))
+    #expect(await engine.position() == nil)
+    _ = output.takeCalls()
+    await engine.play()
+    #expect(output.takeCalls().first == .load(3, urls[0], startSeconds: 0, playing: true))
+}
+
+@Test func anOutputFailureForgetsTheTracksAndWhereTheDeviceWasLost() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    output.setPosition(OutputPosition(item: 2, seconds: 3))
+    await engine.handle(.failed(nil, Broken()))
+    #expect(await engine.position() == nil)
+    output.setPosition(OutputPosition(item: 1, seconds: 3))
+    #expect(await engine.position() == nil)
+    await engine.play()
+    await engine.handle(.deviceLost(3, positionSeconds: 30))
+    await engine.handle(.failed(nil, Broken()))
+    _ = output.takeCalls()
+    await engine.play()
+    #expect(output.takeCalls().first == .load(5, urls[0], startSeconds: 0, playing: true))
+}
+
+@Test func aNextTrackGivenUpOnIsntReportedAsPlaying() async {
+    let output = FakeOutput()
+    let engine = await playing(Array(urls.prefix(2)), output)
+    await engine.handle(.trackFailed(1, Broken()))
+    await engine.handle(.trackFailed(2, Broken()))
+    output.setPosition(OutputPosition(item: 2, seconds: 1))
+    #expect(await engine.position() == nil)
+}

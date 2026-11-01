@@ -52,7 +52,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
     private var lastBytes: [UInt8]?
     private var confirming = false
     /// The wait before the last retry of a failed write, and whether one is scheduled.
-    private var retrySeconds: Double?
+    private(set) var retrySeconds: Double?
     private var retryScheduled = false
     private var watch: DirectoryWatch?
 

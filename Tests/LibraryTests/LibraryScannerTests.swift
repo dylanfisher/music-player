@@ -497,3 +497,23 @@ private struct FailingReads: ScanFileAccess {
     _ = try library.scan()
     #expect(try !index.albums().contains { $0.id == album.id })
 }
+
+@Test func aRescanDeletesOrphanedAlbumsAndEmptiesTheLog() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let album = try #require(index.albums().first)
+    let ids = try index.trackIDs(TrackFilter(album: album.id), sortedBy: .title)
+    for path in try index.paths(ids: ids).values {
+        try FileManager.default.removeItem(atPath: path)
+    }
+    _ = try library.scan()
+    let database = try SQLite.Database(at: library.databaseURL)
+    let rows = try database.prepare("SELECT count(*) FROM albums WHERE id = ?").map(album.id) {
+        try $0.int(0)
+    }
+    #expect(rows == [0])
+    let wal = library.databaseURL.path + "-wal"
+    let walBytes = (try? FileManager.default.attributesOfItem(atPath: wal)[.size] as? Int) ?? 0
+    #expect(walBytes == 0)
+}

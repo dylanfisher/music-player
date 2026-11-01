@@ -109,3 +109,37 @@ private final class Harness {
     harness.send(.trackStarted(index: 1), status: .playing)
     #expect(harness.recorded == [.skipped(urls[0])])
 }
+
+@MainActor @Test func aWakeOvertakenByAPauseAndResumeDoesNothing() async throws {
+    let harness = Harness()
+    harness.send(.trackStarted(index: 0), status: .playing)
+    try await harness.waitForSleeps(1)
+    harness.clock = start.addingTimeInterval(10)
+    harness.send(.paused, status: .paused)
+    harness.send(.resumed, status: .playing)
+    try await harness.waitForSleeps(2)
+    // The first wake was cancelled, so its return schedules nothing more.
+    await harness.sleeps.finishOldest()
+    await harness.settle()
+    #expect(await harness.sleeps.asked.count == 2)
+}
+
+/// The tracker's own sleeper: a deadline already past wakes at once.
+@MainActor @Test func aDeadlineAlreadyPastIsCountedAtOnce() async throws {
+    var calls = 0
+    var recorded: [PlayCounter.Event] = []
+    let tracker = PlayTracker(
+        now: {
+            // The second reading, which sets the wait, is past the deadline.
+            calls += 1
+            return start.addingTimeInterval(calls == 1 ? 0 : 60)
+        }, record: { recorded += $0 })
+    var state = PlaybackState()
+    state.queue = urls
+    state.status = .playing
+    state.durationSeconds = 100
+    tracker.handle(PlaybackUpdate(state: state, event: .trackStarted(index: 0)))
+    let deadline = Date().addingTimeInterval(0.5)
+    while recorded.isEmpty, Date() < deadline { try await Task.sleep(nanoseconds: 10_000_000) }
+    #expect(recorded == [.played(urls[0])])
+}
