@@ -16,9 +16,18 @@ public func readMetadata(at url: URL, hints: ReadHints = .all) throws(MetadataEr
     }
 }
 
+/// The most art `readArt` reads. A length from the file is otherwise bounded only by the file's
+/// size; real art is under 2 MB.
+let maximumArtBytes = 64 * 1024 * 1024
+
 /// The image bytes of `art`, as recorded by `readMetadata` for the same file.
 public func readArt(_ art: EmbeddedArt, at url: URL) throws(MetadataError) -> Data {
     do throws(ParseFailure) {
+        guard art.byteCount <= maximumArtBytes else {
+            throw .unsupported(
+                at: art.offset,
+                "art of \(art.byteCount) bytes, more than the \(maximumArtBytes) this reads")
+        }
         let source = try FileSource(path: url.path)
         guard art.offset >= 0, art.byteCount >= 0, art.byteCount <= source.size - art.offset
         else {

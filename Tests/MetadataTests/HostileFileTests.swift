@@ -229,3 +229,30 @@ private let hostileFiles: [(String, Data, Outcome)] = [
     #expect(tags.title == "a\u{0}b")
     #expect(tags.artist == bidi)
 }
+
+@Test func artLongerThanTheMaximumIsRefusedBeforeReading() throws {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("hostile-art-\(UUID().uuidString).mp3")
+    defer { try? FileManager.default.removeItem(at: url) }
+    // An ID3v2.4 tag whose APIC claims more than the maximum, written sparse so the test doesn't
+    // write the bytes.
+    let imageBytes = maximumArtBytes + 1
+    let apic = Data([0]) + ascii("image/png\u{0}") + Data([3, 0])
+    var frame = ascii("APIC")
+    frame.appendSyncsafe(apic.count + imageBytes)
+    frame.append(Data(count: 2))
+    var header = ascii("ID3") + Data([4, 0, 0])
+    header.appendSyncsafe(frame.count + apic.count + imageBytes)
+    try (header + frame + apic).write(to: url)
+    let handle = try FileHandle(forWritingTo: url)
+    try handle.truncate(atOffset: UInt64(header.count + frame.count + apic.count + imageBytes))
+    try handle.seekToEnd()
+    try handle.write(contentsOf: mpegFrames(2))
+    try handle.close()
+
+    let art = try #require(try readMetadata(at: url).metadata.art)
+    #expect(art.byteCount == imageBytes)
+    let error = #expect(throws: MetadataError.self) { try readArt(art, at: url) }
+    #expect(error?.kind == .unsupported)
+    #expect(error?.offset == art.offset)
+}
