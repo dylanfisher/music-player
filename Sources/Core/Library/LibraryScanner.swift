@@ -34,11 +34,11 @@ public struct LibraryScanner: Sendable {
             batchSize: Self.defaultBatchSize)
     }
 
-    /// For tests, which store a small library in several batches.
+    /// For tests, which store a small library in several batches. A batch size under 1 stores
+    /// each file on its own.
     init(
         databaseURL: URL, networkReaders: Int? = nil, access: any ScanFileAccess, batchSize: Int
     ) {
-        precondition(batchSize > 0, "a batch needs at least one file")
         self.databaseURL = databaseURL
         self.networkReaders = networkReaders
         self.access = access
