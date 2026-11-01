@@ -38,15 +38,18 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
 
     let rebuilt = try library.index()
     #expect(try ratingPaths(rebuilt).isEmpty)
-    let discards = try rebuilt.takeDiscards()
+    let discards = try rebuilt.discards()
     #expect(discards.count == 1)
     #expect(
-        discards.first?.hasSuffix(
+        discards.first?.text.hasSuffix(
             "(rows: history 1, paths 1, plays 1, ratings 1)") == true, "\(discards)")
-    #expect(try rebuilt.takeDiscards().isEmpty)
+    // Until it's been shown, it stays.
+    #expect(try rebuilt.discards() == discards)
+    try rebuilt.forgetDiscards(discards.map(\.id))
+    #expect(try rebuilt.discards().isEmpty)
     // Empty stats lose nothing, so nothing is recorded.
     try rebuilt.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'stats'")
-    #expect(try library.index().takeDiscards().isEmpty)
+    #expect(try library.index().discards().isEmpty)
 }
 
 @Test func aRecordedDiscardSurvivesAnotherRebuild() throws {
@@ -56,7 +59,7 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'stats'")
     let rebuilt = try library.index()
     try rebuilt.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'index'")
-    #expect(try library.index().takeDiscards().count == 1)
+    #expect(try library.index().discards().count == 1)
 }
 
 @Test func idsAndDateAddedSurviveAnIndexRebuild() throws {

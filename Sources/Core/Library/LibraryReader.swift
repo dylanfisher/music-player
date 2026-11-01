@@ -102,5 +102,7 @@ public actor LibraryReader {
 
     public func loggedPlayCount() throws -> Int { try index.loggedPlayCount() }
 
-    public func takeDiscards() throws -> [String] { try index.takeDiscards() }
+    public func discards() throws -> [DiscardNotice] { try index.discards() }
+
+    public func forgetDiscards(_ ids: [Int64]) throws { try index.forgetDiscards(ids) }
 }

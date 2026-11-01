@@ -98,18 +98,24 @@ public final class LibraryIndex {
         ).run(Date().timeIntervalSince1970, detail)
     }
 
-    /// What stats rebuilds have discarded since the last call, oldest first, each as a line for
-    /// the owner. Taking them deletes them, so each shows once.
-    public func takeDiscards() throws -> [String] {
+    /// What stats rebuilds have discarded and the owner hasn't been shown, oldest first.
+    public func discards() throws -> [DiscardNotice] {
+        try database.prepare(
+            "SELECT rowid, discarded_seconds, detail FROM \(schemaDiscardsTable) ORDER BY rowid"
+        ).map { row in
+            let date = Date(timeIntervalSince1970: try row.double(1))
+            return DiscardNotice(
+                id: try row.int64(0),
+                text: "\(ISO8601DateFormatter().string(from: date)): \(try row.text(2))")
+        }
+    }
+
+    /// Forgets the discards `ids` once they've been shown, so each shows once, and one the app
+    /// crashed before showing shows next time.
+    public func forgetDiscards(_ ids: [Int64]) throws {
         try database.transaction {
-            let lines = try database.prepare(
-                "SELECT discarded_seconds, detail FROM \(schemaDiscardsTable) ORDER BY rowid"
-            ).map { row in
-                let date = Date(timeIntervalSince1970: try row.double(0))
-                return "\(ISO8601DateFormatter().string(from: date)): \(try row.text(1))"
-            }
-            try database.execute("DELETE FROM \(schemaDiscardsTable)")
-            return lines
+            let delete = try database.prepare("DELETE FROM \(schemaDiscardsTable) WHERE rowid = ?")
+            for id in ids { try delete.run(id) }
         }
     }
 

@@ -194,9 +194,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func load(_ saved: BrowserState) async {
         await model.load(saved)
         do {
-            status.notices = try await reader.takeDiscards()
+            // Forgotten only once shown, so a crash before then shows them next time.
+            let discards = try await reader.discards()
+            status.notices += discards.map(\.text)
+            showStatus()
+            try await reader.forgetDiscards(discards.map(\.id))
         } catch {
-            report("couldn't read what the last rebuild discarded: \(error)")
+            report("couldn't read or forget what a stats rebuild discarded: \(error)")
         }
         showSource()
         if model.trackIDs.isEmpty, let firstRowsDrawn {

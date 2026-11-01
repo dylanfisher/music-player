@@ -27,3 +27,31 @@ import Testing
     }
     #expect(Array(browser.status.scanning.keys) == ["/Music/last"])
 }
+
+@MainActor @Test func aDiscardShowsOnceThenIsForgottenAndLaterOnesAddToIt() async throws {
+    let source = try browserLibrary.get().databaseURL
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("discards-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let databaseURL = directory.appendingPathComponent("library.sqlite")
+    for suffix in ["", "-wal"] where FileManager.default.fileExists(atPath: source.path + suffix) {
+        try FileManager.default.copyItem(
+            atPath: source.path + suffix, toPath: databaseURL.path + suffix)
+    }
+    let index = try LibraryIndex(at: databaseURL)
+    let record = try index.database.prepare(
+        "INSERT INTO schema_discards (discarded_seconds, detail) VALUES (0, ?)")
+    try record.run("first")
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL), index: index,
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, folders: [])
+    let state = BrowserState(source: nil, genre: nil, artist: nil, album: nil)
+    await browser.load(state)
+    #expect(browser.status.notices.map { $0.hasSuffix("first") } == [true])
+    #expect(try index.discards().isEmpty)
+
+    try record.run("second")
+    await browser.load(state)
+    #expect(browser.status.notices.map { $0.split(separator: " ").last } == ["first", "second"])
+    #expect(try index.discards().isEmpty)
+}
