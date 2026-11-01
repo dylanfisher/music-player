@@ -2,6 +2,8 @@
 
 - **Date:** 2026-10-30
 - **Status:** accepted
+- **Amended by:** [0015](0015-config-file.md): what this left open in phase 6, including which
+  Edit items have commands.
 - **Amends:** [0003](0003-settings-schema.md) (where the file lives, what it holds, export and
   import)
 
@@ -62,8 +64,9 @@ before macOS 26.
   equivalents, so text fields keep them; they reach their command from the focused view's
   `keyDown`. The row-movement submenu shows no chords. Changes show in the menus at once.
 - Reserved chords (Quit, Hide, Hide Others, Minimize, Settings… on ⌘,) can't be bound to a
-  command. The six Edit items keep their chords (⌘Z, ⇧⌘Z, ⌘X, ⌘C, ⌘V, ⌘A) as their commands'
-  fixed primaries, so text fields always have them; a command's alternate stays editable.
+  command. The six Edit items keep their chords (⌘Z, ⇧⌘Z, ⌘X, ⌘C, ⌘V, ⌘A), so text fields
+  always have them: Select All's ⌘A is its command's fixed primary, and the other five, which
+  have no commands, are reserved (0015). A command's alternate stays editable.
 - An unbound chord with ⌘, ⌃ or ⌥ beeps instead of reaching `NSTableView`'s own key bindings.
   Unbound plain and Shift-only printable keys go to type-to-select.
 - Type-to-select (0034), in the track table and each browser pane: plain letters select the
@@ -102,7 +105,7 @@ Kept from Searcher, the same job on the same key:
 | Sort by Title, Artist, Album, Date Added / reverse | ⌃⌥1–4 / ⇧⌥⌘P |
 | Toggle sidebar / focus sidebar | ⌃⌘S / ⌘0 |
 | Toggle status bar | ⌘/ |
-| Get Info / Reveal in Finder / Copy Path | ⌘I / ⌥⌘R / ⌥⌘C |
+| Edit Tags… (Searcher's Get Info) / Reveal in Finder / Copy Path | ⌘I / ⌥⌘R / ⌥⌘C |
 | Back / forward through sidebar sources | ⌘[ / ⌘] |
 | Settings | ⌘, (reserved) |
 | Open Config File, Copy Default Config | no chord; app menu and palette |

@@ -2,6 +2,8 @@
 
 - **Date:** 2026-10-30
 - **Status:** accepted
+- **Amended by:** [0023](0023-failure-table.md): the failure table, and the failures phase 14a
+  changed how this reports.
 
 ## Context
 
@@ -82,7 +84,7 @@ chosen, since a non-mixable one would lock other apps out.
 **Restoring the device:** the first open in a run snapshots the device's rate and format and
 the system's default outputs, by UID, and every later session restores that snapshot. Closing runs
 every restore step (stop, format, rate, hog mode, default outputs) even when one fails, then
-reports the first failure. `device-restore.json` beside the settings holds one snapshot per device
+reports the first failure. `device-restore.json` in the data folder holds one snapshot per device
 UID: a session adds its device's entry once it holds the device, never replaces one already there
 (that one holds the older state, and the session restores to it), and removes it after a clean
 restore. `HALDeviceProvider.recoverAfterCrash` restores from a record

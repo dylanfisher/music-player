@@ -1149,7 +1149,7 @@ Implementation plan (ADR 0024, written with the script):
 5. **Wire it in.** `./scripts/check` runs `dupes` and `dupes-test` and lints the script; time
    `dupes` on the whole tree (budget 5 s), then `./scripts/bench` and `./scripts/bundle release`.
 
-Result: shipped; the exit passes. `scripts/dupes` (Foundation only, ADR 0024) runs in
+Result: shipped; the exit passes. `scripts/dupes.swift` (Foundation only, ADR 0024) runs in
 `./scripts/check` in 0.94 s over 262 files and reports nothing outside its 46-entry allowlist; each
 literal and block entry names its files (and a block its copy count), so a new reuse fails, and a
 stale entry fails. `scripts/dupes-test` covers every failure mode, each confirmed by breaking the
