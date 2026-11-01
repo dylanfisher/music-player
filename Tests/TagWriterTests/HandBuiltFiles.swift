@@ -47,3 +47,45 @@ func flac(comments: [String], padding: Int?) throws -> URL {
     try (Data(bytes) + audio).write(to: url)
     return url
 }
+
+/// The MP4 sample with every `stco` turned into a `co64`, its entries moved by the growth.
+func mp4WithCo64() throws -> URL {
+    let url = try Sample.mp4.copy()
+    let file = try MP4File(ByteReader(FileSource(path: url.path)))
+    var moov = file.moov
+    let tables = moov.chunkOffsetTables()
+    let growth = try tables.reduce(0) { $0 + 4 * (try moov[$1].chunkOffsets().count) }
+    for path in tables {
+        let offsets = try moov[path].chunkOffsets()
+        var body = Array(moov[path].body.prefix(8))
+        for offset in offsets { body += bigEndianBytes(offset + growth, 8) }
+        moov[path] = MP4Box(type: MP4Type.co64, body: body)
+    }
+    let bytes = try Data(contentsOf: url)
+    var moved = bytes[..<file.moovAtom.start]
+    moved += moov.serialized()
+    moved += bytes[file.moovAtom.body.upperBound...]
+    try moved.write(to: url)
+    return url
+}
+
+/// `sample` with its ID3 chunk moved in front of the audio chunk.
+func formWithID3BeforeAudio(_ sample: Sample) throws -> URL {
+    let url = try sample.copy()
+    let file = try ID3File(
+        ByteReader(FileSource(path: url.path)), container: sample == .wavID3 ? .wav : .aiff)
+    guard case .form(_, let tagChunk?, let chunks, _) = file.host else {
+        throw SampleMissing(sample: sample)
+    }
+    let bytes = try Data(contentsOf: url)
+    func whole(_ chunk: RIFFChunk) -> Data {
+        bytes[chunk.start..<chunk.body.upperBound + chunk.body.count % 2]
+    }
+    var body = Data()
+    for chunk in chunks where chunk.start != tagChunk.start {
+        if chunk.body == file.payload { body += whole(tagChunk) }
+        body += whole(chunk)
+    }
+    try (bytes[..<12] + body).write(to: url)
+    return url
+}

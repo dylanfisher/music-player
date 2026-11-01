@@ -19,13 +19,32 @@ public final class TagEditing {
     public var replaceArtwork: () -> Void = {}
     public var removeArtwork: () -> Void = {}
 
-    private let writer: TagWriter
+    /// What the editor does to the files and the screen, so tests can stand in for each.
+    struct Effects {
+        /// Reads the files for the editor; runs off the main thread.
+        var read: @Sendable ([String]) -> (tracks: [EditableTrack], problems: [String])
+        var write: @Sendable (TagEdit, [String]) -> TagWriteReport
+        var undo: @Sendable () -> TagWriteReport
+        var present: @MainActor (TagEditorSheet, NSWindow) -> Void
+        /// Asks before a batch write, then calls back with the answer.
+        var confirm: @MainActor (String, NSWindow, @escaping @MainActor (Bool) -> Void) -> Void
+        var alert: @MainActor (String, [String], NSWindow) -> Void
+    }
+
+    private let effects: Effects
     /// Bumped by each open, so a slow read for an earlier one is dropped.
     private var session = 0
     public private(set) var isBusy = false
 
     public init(writer: TagWriter) {
-        self.writer = writer
+        effects = Effects(
+            read: { readEditableTracks($0) }, write: { writer.write($0, to: $1) },
+            undo: { writer.undoLast() }, present: { $0.begin(over: $1) },
+            confirm: askBeforeWriting, alert: showProblems)
+    }
+
+    init(effects: Effects) {
+        self.effects = effects
     }
 
     public var isOpen: Bool { sheet != nil }
@@ -37,12 +56,13 @@ public final class TagEditing {
         session += 1
         let token = session
         Task { [weak self] in
-            let (tracks, problems) = await Task.detached { readEditableTracks(paths) }.value
+            let read = self?.effects.read
+            guard let read else { return }
+            let (tracks, problems) = await Task.detached { read(paths) }.value
             guard let self, token == self.session, self.sheet == nil, !self.isBusy else { return }
             if !problems.isEmpty {
-                self.show(
-                    "\(problems.count) of \(paths.count) files can't be edited", problems,
-                    over: window)
+                self.effects.alert(
+                    "\(problems.count) of \(paths.count) files can't be edited", problems, window)
             }
             guard !tracks.isEmpty else { return }
             let sheet = TagEditorSheet(model: TagEditorModel(tracks: tracks))
@@ -54,7 +74,7 @@ public final class TagEditing {
                 self?.confirm(edit, tracks.map(\.path), over: window)
             }
             self.sheet = sheet
-            sheet.begin(over: window)
+            self.effects.present(sheet, window)
         }
     }
 
@@ -71,7 +91,7 @@ public final class TagEditing {
                 let type = UTType(filenameExtension: url.pathExtension)
                 sheet.replaceArt(image, mimeType: type == .png ? pngMIMEType : jpegMIMEType)
             } catch {
-                self?.show("The image couldn't be read", ["\(error)"], over: sheet.window)
+                self?.effects.alert("The image couldn't be read", ["\(error)"], sheet.window)
             }
         }
     }
@@ -81,36 +101,31 @@ public final class TagEditing {
     /// Undo Tag Edit: puts back the files of the newest edit.
     public func undo(over window: NSWindow) {
         guard !isBusy, sheet == nil else { return }
-        run(over: window, "undo the tag edit") { $0.undoLast() }
+        let undo = effects.undo
+        run(over: window, "undo the tag edit") { undo() }
     }
 
     private func confirm(_ edit: TagEdit, _ paths: [String], over window: NSWindow) {
         guard !edit.isEmpty else { return }
         let action = "write the tags"
+        let write = effects.write
         guard paths.count > 1 else {
-            run(over: window, action) { $0.write(edit, to: paths) }
+            run(over: window, action) { write(edit, paths) }
             return
         }
-        let alert = NSAlert()
-        alert.messageText = "Change the tags of \(paths.count) files?"
-        alert.informativeText =
-            "Each file is rewritten with the new tags. Undo Tag Edit puts them all back."
-        alert.addButton(withTitle: "Change Tags")
-        alert.addButton(withTitle: "Cancel")
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn else { return }
-            self?.run(over: window, action) { $0.write(edit, to: paths) }
+        effects.confirm("Change the tags of \(paths.count) files?", window) { [weak self] yes in
+            guard yes else { return }
+            self?.run(over: window, action) { write(edit, paths) }
         }
     }
 
     private func run(
         over window: NSWindow, _ action: String,
-        _ work: @escaping @Sendable (TagWriter) -> TagWriteReport
+        _ work: @escaping @Sendable () -> TagWriteReport
     ) {
         isBusy = true
-        let writer = writer
         Task {
-            let report = await Task.detached { work(writer) }.value
+            let report = await Task.detached { work() }.value
             self.isBusy = false
             if !report.changed.isEmpty { self.written(report.changed) }
             if report.nothingToUndo, report.failures.isEmpty {
@@ -118,22 +133,40 @@ public final class TagEditing {
                 logger.notice("no tag edit to undo")
             }
             if !report.failures.isEmpty {
-                self.show(
+                let skipped =
+                    report.notWritten.isEmpty
+                    ? [] : ["The rest stopped: \(report.notWritten.count) files weren't written."]
+                self.effects.alert(
                     "Couldn't \(action) for \(report.failures.count) file"
                         + (report.failures.count == 1 ? "" : "s"),
-                    report.failures.map(\.description), over: window)
+                    report.failures.map(\.description) + skipped, window)
             }
         }
     }
 
-    /// The problems in an alert, the first few in full.
-    private func show(_ message: String, _ problems: [String], over window: NSWindow) {
-        let shown = 8
-        let alert = NSAlert()
-        alert.messageText = message
-        alert.informativeText =
-            problems.prefix(shown).joined(separator: "\n")
-            + (problems.count > shown ? "\n…and \(problems.count - shown) more" : "")
-        alert.beginSheetModal(for: window)
-    }
+}
+
+/// The problems in an alert, the first few in full.
+@MainActor
+private func showProblems(_ message: String, _ problems: [String], over window: NSWindow) {
+    let shown = 8
+    let alert = NSAlert()
+    alert.messageText = message
+    alert.informativeText =
+        problems.prefix(shown).joined(separator: "\n")
+        + (problems.count > shown ? "\n…and \(problems.count - shown) more" : "")
+    alert.beginSheetModal(for: window)
+}
+
+@MainActor
+private func askBeforeWriting(
+    _ message: String, over window: NSWindow, _ answer: @escaping @MainActor (Bool) -> Void
+) {
+    let alert = NSAlert()
+    alert.messageText = message
+    alert.informativeText =
+        "Each file is rewritten with the new tags. Undo Tag Edit puts them all back."
+    alert.addButton(withTitle: "Change Tags")
+    alert.addButton(withTitle: "Cancel")
+    alert.beginSheetModal(for: window) { answer($0 == .alertFirstButtonReturn) }
 }
