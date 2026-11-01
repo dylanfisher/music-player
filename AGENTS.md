@@ -35,7 +35,7 @@ Non-negotiable, regardless of stack. Rationale: [docs/principles.md](docs/princi
 
 ## Boundaries
 
-- **Music files are written only by `Sources/Core/TagWriter`, for a tag edit the user confirmed in the UI.** Nothing else writes, renames, moves or deletes them, and no test or tool touches a real library or the NAS: tag tests write to generated fixtures or to clones of the reference corpus ([ADR 0020](docs/decisions/0020-tag-writing.md)). App state lives in the SQLite index.
+- **Music files are written only by `Sources/Core/TagWriter`, for a tag edit the user confirmed in the UI.** Nothing else writes, renames, moves or deletes them, and no test or tool touches a real library or the NAS: tag tests write to generated fixtures or to clones of the reference corpus ([ADR 0020](docs/decisions/0020-tag-writing.md)). App state lives in the SQLite index. The one exception: the app appends its own `<machine id>.log`, and writes nothing else, in the sync folder the user chose, which must be outside every watched folder; tests use a temporary folder ([ADR 0038](docs/decisions/0038-sync-logs.md)).
 - **The real-time audio thread is C-only.** Nothing reachable from the CoreAudio IO proc allocates, locks, logs, or calls Swift/ObjC; it goes through `Sources/Primitives/RingBuffer`.
 - **Commit locally; never push.** No `git push`, no `gh`. The owner pushes.
 - **Pre-release:** breaking changes are fine. Stored data has one shape — no version fields, migrations, or compatibility shims; data that doesn't match is discarded. Delete this line at the first production release.
