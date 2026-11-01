@@ -140,6 +140,17 @@ public struct Row {
         sqlite3_column_type(statement, column) == SQLITE_NULL
     }
 
+    /// How SQLite stored the value, which a column of any declared type can vary row by row.
+    public func storageClass(_ column: Int32) -> StorageClass {
+        switch sqlite3_column_type(statement, column) {
+        case SQLITE_INTEGER: .integer
+        case SQLITE_FLOAT: .real
+        case SQLITE_TEXT: .text
+        case SQLITE_BLOB: .blob
+        default: .null
+        }
+    }
+
     public func int(_ column: Int32) throws(SQLiteError) -> Int {
         try notNull(column)
         return Int(sqlite3_column_int64(statement, column))
@@ -187,4 +198,9 @@ public struct Row {
                 code: SQLITE_MISMATCH, message: "column \(column) is NULL", sql: sql)
         }
     }
+}
+
+/// SQLite's storage classes.
+public enum StorageClass: Sendable {
+    case integer, real, text, blob, null
 }

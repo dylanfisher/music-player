@@ -15,17 +15,8 @@ public final class Database {
 
     /// Opens or creates the file at `url` in WAL mode, with foreign keys enforced.
     public init(at url: URL) throws(SQLiteError) {
-        var connection: OpaquePointer?
-        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX
-        guard sqlite3_open_v2(url.path, &connection, flags, nil) == SQLITE_OK, let connection
-        else {
-            let error = SQLiteError(connection, sql: nil)
-            sqlite3_close_v2(connection)
-            throw SQLiteError(code: error.code, message: "\(url.path): \(error.message)", sql: nil)
-        }
-        self.connection = connection
-        sqlite3_extended_result_codes(connection, 1)
-        sqlite3_busy_timeout(connection, Self.busyTimeoutMs)
+        connection = try Self.open(
+            url, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX)
         // Switching a new file to WAL takes a lock SQLite doesn't wait for with the busy
         // timeout, so connections opening the same new file at once retry it within that time.
         let deadline = DispatchTime.now().uptimeNanoseconds + UInt64(Self.busyTimeoutMs) * 1_000_000
@@ -43,6 +34,27 @@ public final class Database {
         // synchronous=NORMAL is durable in WAL mode except across a power cut, which loses at
         // most the last transactions of a rescan.
         try execute("PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON")
+    }
+
+    /// Opens the file at `url` read-only, for another program's database copied aside. Its
+    /// schema can't call functions as it's read, since a hostile file can declare views and
+    /// defaults that would (`trusted_schema`), and no statement on the connection can write.
+    public init(readOnlyAt url: URL) throws(SQLiteError) {
+        connection = try Self.open(url, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX)
+        try execute("PRAGMA trusted_schema = OFF; PRAGMA query_only = ON")
+    }
+
+    private static func open(_ url: URL, _ flags: Int32) throws(SQLiteError) -> OpaquePointer {
+        var connection: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &connection, flags, nil) == SQLITE_OK, let connection
+        else {
+            let error = SQLiteError(connection, sql: nil)
+            sqlite3_close_v2(connection)
+            throw SQLiteError(code: error.code, message: "\(url.path): \(error.message)", sql: nil)
+        }
+        sqlite3_extended_result_codes(connection, 1)
+        sqlite3_busy_timeout(connection, busyTimeoutMs)
+        return connection
     }
 
     deinit {

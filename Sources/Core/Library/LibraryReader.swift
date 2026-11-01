@@ -99,6 +99,16 @@ public actor LibraryReader {
         return (tracks.count - unwritable.count, unwritable)
     }
 
+    /// What importing another player's library would change, without writing.
+    public func importPlan(_ library: PlayerLibrary, prefix: PathPrefix?) throws -> ImportPlan {
+        try index.importPlan(library, prefix: prefix)
+    }
+
+    /// Writes an import in one transaction, and returns what it wrote.
+    public func applyImport(_ library: PlayerLibrary, prefix: PathPrefix?) throws -> ImportPlan {
+        try index.applyImport(library, prefix: prefix)
+    }
+
     public func recordPlay(_ path: String, at seconds: Double) throws {
         try index.recordPlay(path, at: seconds)
     }

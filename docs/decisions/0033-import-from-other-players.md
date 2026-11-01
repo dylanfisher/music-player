@@ -19,12 +19,12 @@ database exists on the Mac this was built on, so its schema below is assumed, no
 
 ### Reading
 
-- **Swinsian.** The database file the owner picks, and its `-wal` when there is one, are copied
+- **Swinsian.** Import from Swinsian… opens a panel in Swinsian's folder. The database file the owner picks, and its `-wal` when there is one, are copied
   into a new folder in the user's temporary folder through `FileSource` (`O_NOFOLLOW`, a regular
   file only), 4 GiB at most together. Each is `lstat`ed before and after; a change in size,
   modification time or inode means Swinsian wrote during the copy, and the import stops and asks
   for Swinsian to be quit. The copy is opened with `SQLITE_OPEN_READONLY`, `query_only` and
-  `trusted_schema = OFF`, so its WAL is read and nothing in it runs; the live file, its WAL and
+  `trusted_schema = OFF`, so its WAL is read and its schema can't call functions as it's read; the live file, its WAL and
   its shared memory are never opened by SQLite. The copy is deleted when the read ends.
 - **The schema is checked before it's read.** Every table and column below is looked up in
   `sqlite_master` and `PRAGMA table_info`. Any missing fails the whole import with one error
@@ -62,11 +62,11 @@ database exists on the Mac this was built on, so its schema below is assumed, no
 | | `field`, `operator` | text, below |
 | | `value` | text, or a number |
 
-Rule fields read: `title`, `artist`, `album`, `albumartist`, `genre`, `composer`, `comment`,
-`grouping`, `path`, `year`, `tracknumber`, `discnumber`, `length` (seconds), `bpm`,
-`samplerate`, `bitrate`, `playcount`, `rating`, `loved`, `dateadded`, `lastplayed`. Operators:
-`contains`, `notcontains`, `is`, `isnot`, `startswith`, `endswith`, `greaterthan`, `lessthan`,
-`inthelast` and `notinthelast` (days). Swinsian limits, if it has them, aren't read.
+A rule's `field` and `operator` are assumed to be this app's own field and comparison names
+(`SmartField`, `SmartComparison`) ignoring case, such as `playcount` and `greaterthan`, with
+dates compared in days and ratings in stars; any other name, a value of the wrong kind, or a
+rule our editor would refuse leaves the playlist unmapped. Swinsian limits, if it has them,
+aren't read. Every value is read by its SQLite storage class, not its declared type.
 
 A date before 1970 or more than a day in the future is a problem for that field and is left out,
 so a wrong epoch shows in the preview as a problem on every dated track instead of moving every

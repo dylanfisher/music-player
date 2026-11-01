@@ -36,6 +36,12 @@ extension AppDelegate {
         dispatcher.handle(.importPlaylist, enabled: hasWindow) { [weak self] in
             self?.chooseFilesToImport()
         }
+        dispatcher.handle(.importSwinsian, enabled: hasWindow) { [weak self] in
+            self?.chooseLibraryToImport(.swinsian)
+        }
+        dispatcher.handle(.importITunes, enabled: hasWindow) { [weak self] in
+            self?.chooseLibraryToImport(.iTunes)
+        }
         let exportable = { [weak self] in
             guard let playlist = self?.browser?.shownPlaylist else { return false }
             if case .unreadable = playlist.kind { return false }
@@ -120,6 +126,29 @@ extension AppDelegate {
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK else { return }
             self?.browser?.importPlaylists(from: panel.urls)
+        }
+    }
+
+    /// Import from Swinsian… and Import iTunes Library…: an open panel for the library file,
+    /// starting in Swinsian's folder or taking only XML, then the browser's preview sheet.
+    private func chooseLibraryToImport(_ player: PlayerLibrary.Player) {
+        guard let window = window?.window else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        switch player {
+        case .swinsian:
+            panel.message = "Choose the library database in Swinsian’s folder."
+            // Swinsian keeps its library in a folder of its own name.
+            panel.directoryURL = FileManager.default.urls(
+                for: .applicationSupportDirectory, in: .userDomainMask
+            ).first?.appendingPathComponent(player.title)
+        case .iTunes:
+            panel.message = "Choose the Library.xml exported with File ▸ Library ▸ Export Library."
+            panel.allowedContentTypes = [.xml]
+        }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.browser?.importLibrary(player, from: url, over: window)
         }
     }
 

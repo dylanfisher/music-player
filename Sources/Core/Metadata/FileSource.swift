@@ -68,7 +68,7 @@ package final class FileSource: ByteSource {
     }
 
     /// `read` into `Data`, for bytes that leave as `Data`, so they aren't held twice.
-    func readData(_ range: Range<Int>) throws(ParseFailure) -> Data {
+    package func readData(_ range: Range<Int>) throws(ParseFailure) -> Data {
         var data = Data(count: range.count)
         if let failure = data.withUnsafeMutableBytes({ fill($0, from: range) }) { throw failure }
         return data

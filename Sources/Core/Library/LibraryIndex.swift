@@ -159,7 +159,7 @@ public final class LibraryIndex {
     /// window to show once, when there were any (ADR 0022).
     private func recordDiscardedStats(_ tables: Set<String>) throws {
         let existing = Set(
-            try database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").map {
+            try database.prepare(tableNamesSQL).map {
                 try $0.text(0)
             })
         var counts: [String] = []
@@ -219,7 +219,7 @@ public final class LibraryIndex {
             try database.execute("DROP TABLE \(quotedIdentifier(table.name))")
         }
         let remaining = Set(
-            try database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").map {
+            try database.prepare(tableNamesSQL).map {
                 try $0.text(0)
             })
         for table in doomed where !table.isVirtual && remaining.contains(table.name) {
@@ -504,6 +504,9 @@ public final class LibraryIndex {
         return statement
     }
 }
+
+/// Every table's name in a database.
+let tableNamesSQL = "SELECT name FROM sqlite_master WHERE type = 'table'"
 
 /// What the index holds about a file, enough to tell whether it changed.
 struct KnownFile: Sendable {

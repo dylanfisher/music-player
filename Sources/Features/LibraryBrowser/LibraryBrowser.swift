@@ -63,6 +63,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var lastRefresh = Date.distantPast
     private var refreshPending = false
     private var problems: ProblemsWindow?
+    /// Set from the read of another player's library until its preview sheet closes.
+    private var isImporting = false
+    private var importSheet: PlayerImportSheet?
 
     /// `index` is a connection for the main thread, which fetches the table's rows a page at a
     /// time: a page is one primary-key lookup per row and takes well under a millisecond.
@@ -614,6 +617,56 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 finishPlaylistFile(summary, lines)
             } catch {
                 report(terminalSafe("couldn't export the playlist to \(url.path): \(error)"))
+            }
+        }
+    }
+
+    /// Reads `player`'s library at `url` and shows what importing it would change in a sheet
+    /// over `window`. One import is open at a time.
+    public func importLibrary(_ player: PlayerLibrary.Player, from url: URL, over window: NSWindow)
+    {
+        guard !isImporting else {
+            NSSound.beep()
+            show(failure: "An import is already open")
+            return
+        }
+        isImporting = true
+        show(failure: "Reading the \(player.title) library…")
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let library = try await Task.detached { try PlayerLibrary.read(player, at: url) }
+                    .value
+                let session = PlayerImportSession(
+                    shown: try await model.importPlan(library, prefix: nil)
+                ) { [model] prefix in try await model.importPlan(library, prefix: prefix) }
+                let sheet = PlayerImportSheet(session: session)
+                sheet.confirmed = { [weak self] plan in self?.apply(plan) }
+                sheet.closed = { [weak self] in
+                    self?.importSheet = nil
+                    self?.isImporting = false
+                }
+                importSheet = sheet
+                showStatus()
+                sheet.begin(over: window)
+            } catch {
+                isImporting = false
+                report(terminalSafe("couldn't read \(url.path): \(error)"))
+            }
+        }
+    }
+
+    private func apply(_ plan: ImportPlan) {
+        Task {
+            do {
+                let written = try await model.applyImport(plan.library, prefix: plan.prefix)
+                showSource()
+                finishPlaylistFile(written.summary, written.detailLines)
+            } catch {
+                report(
+                    terminalSafe(
+                        "couldn't import from \(plan.library.player.title); nothing changed: \(error)"
+                    ))
             }
         }
     }

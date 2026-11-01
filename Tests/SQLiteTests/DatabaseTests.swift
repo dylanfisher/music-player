@@ -229,3 +229,34 @@ private final class LockedFailures: @unchecked Sendable {
     #expect(error?.code == SQLITE_TOOBIG)
     #expect(error?.message == "value 1 is too big to bind")
 }
+
+@Test func aReadOnlyCopyReadsItsLogAndRefusesWrites() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("sqlite-\(UUID().uuidString)")
+    let copy = directory.appendingPathComponent("copy")
+    try FileManager.default.createDirectory(at: copy, withIntermediateDirectories: true)
+    let url = directory.appendingPathComponent("live.sqlite")
+    let live = try Database(at: url)
+    try live.execute("CREATE TABLE t (i INTEGER); INSERT INTO t VALUES (1), (2)")
+    // The rows are still only in the log while the writer stays open; the copy has no -shm.
+    for suffix in ["", Database.walSuffix] {
+        try FileManager.default.copyItem(
+            atPath: url.path + suffix, toPath: copy.path + "/live.sqlite" + suffix)
+    }
+    let database = try Database(readOnlyAt: copy.appendingPathComponent("live.sqlite"))
+    #expect(try database.prepare("SELECT i FROM t ORDER BY i").map { try $0.int(0) } == [1, 2])
+    let error = #expect(throws: SQLiteError.self) {
+        try database.execute("INSERT INTO t VALUES (3)")
+    }
+    #expect(error.map { $0.code & 0xFF } == SQLITE_READONLY)
+    #expect(try database.prepare("PRAGMA trusted_schema").map { try $0.int(0) } == [0])
+}
+
+@Test func eachValueReportsHowItWasStored() throws {
+    let database = try temporaryDatabase()
+    try database.execute(
+        "CREATE TABLE t (v); INSERT INTO t VALUES (1), (1.5), ('a'), (x'00'), (NULL)")
+    #expect(
+        try database.prepare("SELECT v FROM t ORDER BY rowid").map { $0.storageClass(0) }
+            == [.integer, .real, .text, .blob, .null])
+}

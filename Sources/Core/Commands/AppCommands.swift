@@ -57,6 +57,8 @@ extension CommandID {
     public static let deletePlaylist = CommandID("playlist.delete")
     public static let importPlaylist = CommandID("playlist.import")
     public static let exportPlaylist = CommandID("playlist.export")
+    public static let importSwinsian = CommandID("library.importSwinsian")
+    public static let importITunes = CommandID("library.importITunes")
 
     public static let playPause = CommandID("playback.playPause")
     public static let play = CommandID("playback.play")
@@ -149,6 +151,8 @@ public enum AppCommands {
             Command(.deletePlaylist, "Delete Playlist…"),
             Command(.importPlaylist, "Import Playlist…"),
             Command(.exportPlaylist, "Export Playlist…"),
+            Command(.importSwinsian, "Import from Swinsian…"),
+            Command(.importITunes, "Import iTunes Library…"),
 
             Command(.playPause, "Play/Pause", [.init(.space)]),
             Command(.play, "Play"),

@@ -13,12 +13,16 @@ enum SchemaPart: String, CaseIterable {
     /// Loved tracks, also keyed by path ID. A part of its own, so its shape can change without
     /// discarding the other stats (ADR 0031).
     case loved
+    /// What each import from another player counted, so a second import adds only what grew
+    /// (ADR 0033). A part of its own for the same reason as `loved`.
+    case imports
 
     var sql: String {
         switch self {
         case .index: indexSchema
         case .stats: statsSchema
         case .loved: lovedSchema
+        case .imports: importsSchema
         }
     }
 
@@ -28,6 +32,7 @@ enum SchemaPart: String, CaseIterable {
         case .index: nil
         case .stats: statsTables
         case .loved: [lovedTable]
+        case .imports: [importedPlaysTable]
         }
     }
 }
@@ -45,6 +50,7 @@ let statsTables: Set<String> = [
 ]
 
 let lovedTable = "loved"
+let importedPlaysTable = "imported_plays"
 
 private let indexSchema = """
     CREATE TABLE files (
@@ -200,5 +206,17 @@ private let lovedSchema = """
     -- A row for each loved path; none means not loved.
     CREATE TABLE \(lovedTable) (
         path_id INTEGER PRIMARY KEY REFERENCES paths (id)
+    );
+    """
+
+private let importsSchema = """
+    -- The play and skip counts each player's last import brought, by path; an import adds the
+    -- difference.
+    CREATE TABLE \(importedPlaysTable) (
+        player TEXT NOT NULL,
+        path_id INTEGER NOT NULL REFERENCES paths (id),
+        play_count INTEGER NOT NULL,
+        skip_count INTEGER NOT NULL,
+        PRIMARY KEY (player, path_id)
     );
     """

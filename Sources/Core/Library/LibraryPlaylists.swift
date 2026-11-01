@@ -1,6 +1,9 @@
 import Foundation
 import SQLite
 
+/// Loves one path; loving a loved one changes nothing.
+let insertLovedSQL = "INSERT OR IGNORE INTO \(lovedTable) (path_id) VALUES (?)"
+
 /// One play in the history; the benches write a million straight to the table with it.
 package let insertHistorySQL = "INSERT INTO history (path_id, played_at) VALUES (?, ?)"
 
@@ -199,7 +202,7 @@ extension LibraryIndex {
             let write =
                 allLoved
                 ? try statement("DELETE FROM \(lovedTable) WHERE path_id = ?")
-                : try statement("INSERT OR IGNORE INTO \(lovedTable) (path_id) VALUES (?)")
+                : try statement(insertLovedSQL)
             for id in ids { try write.run(id) }
         }
     }
