@@ -85,12 +85,9 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
 
 @Test func aMoveWithARetagMatchesOnItsAudio() throws {
     let index = try craftedIndex([])
-    let watermark = try index.lastPathID()
     let old = try gone(Crafted(path: "/M/a.flac", title: "Old Title", seconds: 123), in: index)
-    let start = try index.lastPathID()
     try index.store([Crafted(path: "/M/b.flac", title: "New Title", seconds: 123).scanned])
-    #expect(watermark < start)
-    let moves = try index.matchMoves(addedAfter: start)
+    let moves = try index.matchMoves()
     #expect(moves == [TrackMove(from: "/M/a.flac", to: "/M/b.flac")])
     let after = try #require(try index.track(path: "/M/b.flac"))
     #expect(after.id == old)
@@ -98,25 +95,42 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
     #expect(after.playCount == 1)
 }
 
-@Test func onlyPathsTheScanAddedAreMatched() throws {
+@Test func anOlderTrackAloneInItsLengthTakesTheStats() throws {
     let index = try craftedIndex([Crafted(path: "/M/old.flac", seconds: 50).scanned])
-    _ = try gone(Crafted(path: "/M/a.flac", seconds: 50), in: index)
-    #expect(try index.matchMoves(addedAfter: try index.lastPathID()).isEmpty)
-    // Lost Stats still offers the older track.
-    let lost = try index.lostFiles()
-    #expect(lost.map(\.candidates) == [try ids(index, ["/M/old.flac"])])
+    let id = try gone(Crafted(path: "/M/a.flac", seconds: 50), in: index)
+    #expect(try index.matchMoves().count == 1)
+    #expect(try index.track(path: "/M/old.flac")?.id == id)
+}
+
+@Test func aTrackSharingItsLengthWithAnotherIsntGuessed() throws {
+    let index = try craftedIndex([
+        Crafted(path: "/M/x.flac", title: "X", seconds: 50).scanned,
+        Crafted(path: "/M/y.flac", title: "Y", seconds: 50).scanned,
+    ])
+    _ = try gone(Crafted(path: "/M/a.flac", title: "A", seconds: 50), in: index)
+    #expect(try index.matchMoves().isEmpty)
+    #expect(
+        try index.lostFiles().map(\.candidates) == [try ids(index, ["/M/x.flac", "/M/y.flac"])])
+}
+
+@Test func aFileThatArrivesBeforeItsOldPathLeavesStillMatches() throws {
+    let library = try TestLibrary()
+    let file = try playedThenMoved(library, to: "Elsewhere/moved.flac")
+    // The new folder's scan finds it first; the old folder's, later, finds it gone.
+    #expect(try library.scan(only: [library.root + "/Elsewhere"]).moved == 0)
+    #expect(try library.scan(only: [(file.from as NSString).deletingLastPathComponent]).moved == 1)
+    #expect(try library.index().track(path: file.to)?.id == file.id)
 }
 
 @Test func aTitleBreaksATieBetweenFilesOfOneLength() throws {
     let index = try craftedIndex([])
     let one = try gone(Crafted(path: "/M/1.flac", title: "One", seconds: 60), in: index)
     let two = try gone(Crafted(path: "/M/2.flac", title: "Two", seconds: 60), in: index)
-    let start = try index.lastPathID()
     try index.store([
         Crafted(path: "/N/two.flac", title: "Two", seconds: 60).scanned,
         Crafted(path: "/N/one.flac", title: "One", seconds: 60).scanned,
     ])
-    #expect(try index.matchMoves(addedAfter: start).count == 2)
+    #expect(try index.matchMoves().count == 2)
     #expect(try index.track(path: "/N/one.flac")?.id == one)
     #expect(try index.track(path: "/N/two.flac")?.id == two)
 }
@@ -125,9 +139,8 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
     let index = try craftedIndex([])
     let one = try gone(Crafted(path: "/M/1.flac", title: "Song", seconds: 60), in: index)
     let two = try gone(Crafted(path: "/M/2.flac", title: "Song", seconds: 60), in: index)
-    let start = try index.lastPathID()
     try index.store([Crafted(path: "/N/new.flac", title: "Retitled", seconds: 60).scanned])
-    #expect(try index.matchMoves(addedAfter: start).isEmpty)
+    #expect(try index.matchMoves().isEmpty)
 
     let new = try #require(try index.track(path: "/N/new.flac")).id
     #expect(
@@ -200,7 +213,7 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
     }
     let pairs = movePairs(
         gone: [path(1, 10, "A"), path(2, 20, "B"), path(3, 20, "B"), path(4, 30, nil)],
-        added: [path(5, 10, "Z"), path(6, 20, "B"), path(7, 30, nil), path(8, 40, "A")])
+        free: [path(5, 10, "Z"), path(6, 20, "B"), path(7, 30, nil), path(8, 40, "A")])
     // 1 and 5 are alone at 10 frames; 2 and 3 tie on title too; 4 and 7 are alone at 30.
     #expect(pairs.map { [$0.0.id, $0.1.id] } == [[1, 5], [4, 7]])
 }

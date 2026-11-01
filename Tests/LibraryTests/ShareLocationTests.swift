@@ -269,6 +269,6 @@ private func index(under root: String, names: [String] = ["a.flac", "Caf\u{e9}/b
     try index.database.execute(
         "INSERT INTO \(importedPlaysTable) (player, path_id, play_count, skip_count) VALUES ('itunes', \(new), 0, 0)"
     )
-    #expect(try index.matchMoves(addedAfter: 0).count == 1)
+    #expect(try index.matchMoves().count == 1)
     #expect(try index.track(path: "/M/b.flac")?.id == id)
 }

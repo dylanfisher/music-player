@@ -2,23 +2,17 @@ import DisplayText
 import SQLite
 
 extension LibraryIndex {
-    /// The highest path ID, which a scan notes first to tell the paths it adds.
-    func lastPathID() throws -> Int64 {
-        try statement("SELECT ifnull(max(id), 0) FROM paths").map { try $0.int64(0) }[0]
-    }
-
-    /// Gives each gone path with stats to the path added after `id` that it matches, in one
-    /// transaction, and returns the moves. A pair matches on codec, sample rate and length in
-    /// frames, and where several share those, on title; any still ambiguous waits in Lost Stats.
-    func matchMoves(addedAfter id: Int64) throws -> [TrackMove] {
+    /// Gives each gone path with stats to the stat-less track it matches, in one transaction,
+    /// and returns the moves. Every such track is a candidate, not only those this scan added,
+    /// since one folder's scan can find a file arrive before another's finds it leave. A pair
+    /// matches when it's alone in sharing its codec, sample rate and length in frames, or,
+    /// where several share those, alone in sharing its title too; the rest wait in Lost Stats.
+    func matchMoves() throws -> [TrackMove] {
         try database.transaction {
-            let added = try statement(
-                movableSelect + " JOIN tracks t ON t.file_id = p.id"
-                    + " WHERE p.id > ? AND p.codec IS NOT NULL AND NOT \(hasStats("p.id"))"
-            ).map(id, row: movable)
-            guard !added.isEmpty else { return [] }
             let gone = try statement(movableSelect + " WHERE \(lostCondition)").map(row: movable)
-            return try movePairs(gone: gone, added: added).map { old, new in
+            guard !gone.isEmpty else { return [] }
+            let free = try statement(freeTracksSelect).map(row: movable)
+            return try movePairs(gone: gone, free: free).map { old, new in
                 try move(old.id, to: new.id)
                 return TrackMove(from: old.path, to: new.path)
             }
@@ -33,10 +27,7 @@ extension LibraryIndex {
             .map(row: movable)
         guard !lost.isEmpty else { return [] }
         let free = Dictionary(
-            grouping: try statement(
-                movableSelect + " JOIN tracks t ON t.file_id = p.id"
-                    + " WHERE p.codec IS NOT NULL AND NOT \(hasStats("p.id")) ORDER BY p.id"
-            ).map(row: movable), by: \.audio)
+            grouping: try statement(freeTracksSelect).map(row: movable), by: \.audio)
         return lost.map { path in
             let matching = free[path.audio] ?? []
             return LostFile(
@@ -144,6 +135,11 @@ func hasStats(_ id: String) -> String {
 private let movableSelect =
     "SELECT p.id, p.path, p.codec, p.sample_rate_hz, p.length_frames, p.title FROM paths p"
 
+/// Tracks with no stats, which a lost path's stats can move to, in ID order.
+private let freeTracksSelect =
+    movableSelect + " JOIN tracks t ON t.file_id = p.id"
+    + " WHERE p.codec IS NOT NULL AND NOT \(hasStats("p.id")) ORDER BY p.id"
+
 private func movable(_ row: Row) throws -> MovablePath {
     MovablePath(
         id: try row.int64(0), path: try row.text(1),
@@ -159,7 +155,7 @@ struct AudioFacts: Hashable {
     var frames: Int
 }
 
-/// A gone or added path as move matching sees it.
+/// A gone path or a stat-less track as move matching sees it.
 struct MovablePath {
     var id: Int64
     var path: String
@@ -167,12 +163,12 @@ struct MovablePath {
     var title: String?
 }
 
-/// The gone and added paths that match one to one: alone in sharing their audio facts, or,
+/// The gone and free paths that match one to one: alone in sharing their audio facts, or,
 /// where several share them, alone in sharing their title too. In the gone paths' ID order.
-func movePairs(gone: [MovablePath], added: [MovablePath]) -> [(MovablePath, MovablePath)] {
+func movePairs(gone: [MovablePath], free: [MovablePath]) -> [(MovablePath, MovablePath)] {
     let goneByAudio = Dictionary(grouping: gone, by: \.audio)
     var pairs: [(MovablePath, MovablePath)] = []
-    for (audio, news) in Dictionary(grouping: added, by: \.audio) {
+    for (audio, news) in Dictionary(grouping: free, by: \.audio) {
         guard let olds = goneByAudio[audio] else { continue }
         if olds.count == 1, news.count == 1 {
             pairs.append((olds[0], news[0]))

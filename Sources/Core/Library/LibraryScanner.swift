@@ -84,7 +84,6 @@ public struct LibraryScanner: Sendable {
         let starts = subtrees.isEmpty ? [root] : coalesced(subtrees, in: root)
         var known: [String: KnownFile] = [:]
         for start in starts { known.merge(try index.knownFiles(under: start)) { a, _ in a } }
-        let lastPathID = try index.lastPathID()
 
         // Walk and read at once.
         let controller: ReadConcurrency?
@@ -152,7 +151,8 @@ public struct LibraryScanner: Sendable {
         }
         try index.remove(gone.map(\.value.id))
         summary.removed = gone.count
-        let moves = try index.matchMoves(addedAfter: lastPathID)
+        // A scan that changed nothing can't have made a move.
+        let moves = summary.read > 0 || summary.removed > 0 ? try index.matchMoves() : []
         for move in moves { logger.notice("moved the stats of \(move.from) to \(move.to)") }
         summary.moved = moves.count
         try index.deleteOrphans()
