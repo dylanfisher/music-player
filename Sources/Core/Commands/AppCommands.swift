@@ -83,6 +83,8 @@ public enum AppCommands {
     private static let shift: KeyChord.Modifiers = .shift
     private static let opt: KeyChord.Modifiers = .option
     private static let ctrl: KeyChord.Modifiers = .control
+    /// The view toggles show and hide what these state entries save, under the same titles.
+    private static let state = AppState()
 
     /// The commands written here, without the ones generated from settings.
     static let fixedSet: [Command] =
@@ -112,10 +114,10 @@ public enum AppCommands {
             Command(.sortByDateAdded, "Sort by Date Added", [.init("4", [ctrl, opt])]),
             Command(.reverseSort, "Reverse Sort Order", [.init("p", [opt, cmd, shift])]),
 
-            Command(.toggleSidebar, "Show Sidebar", [.init("s", [ctrl, cmd])]),
+            Command(.toggleSidebar, state.sidebarVisible.title, [.init("s", [ctrl, cmd])]),
             Command(.focusSidebar, "Focus Sidebar", [.init("0", cmd)]),
-            Command(.toggleStatusBar, "Show Status Bar", [.init("/", cmd)]),
-            Command(.toggleQueue, "Show Queue", [.init("u", [opt, cmd])]),
+            Command(.toggleStatusBar, state.statusBarVisible.title, [.init("/", cmd)]),
+            Command(.toggleQueue, state.queueVisible.title, [.init("u", [opt, cmd])]),
             Command(.showCurrentTrack, "Show Current Track", [.init("l", cmd)]),
             Command(.back, "Back", [.init("[", cmd)]),
             Command(.forward, "Forward", [.init("]", cmd)]),
@@ -169,5 +171,13 @@ public enum AppCommands {
     /// Every command: those above, then those generated from `settings`.
     public static func all(_ settings: AppSettings = AppSettings()) -> [Command] {
         fixedSet + SettingCommand.all(settings).map(\.command)
+    }
+
+    /// The title of `id`, one of the commands written here, for a button or item that runs it.
+    public static func title(of id: CommandID) -> String {
+        guard let command = fixedSet.first(where: { $0.id == id }) else {
+            preconditionFailure("\(id) isn't one of the fixed commands")
+        }
+        return command.title
     }
 }

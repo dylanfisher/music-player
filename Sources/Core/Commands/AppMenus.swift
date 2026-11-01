@@ -49,6 +49,7 @@ public enum AppMenus {
 
     public static func sections(appName: String) -> [MenuSection] {
         let cmd: KeyChord.Modifiers = .command
+        let settings = AppSettings()
         return [
             MenuSection(
                 title: appName, role: .app,
@@ -70,7 +71,7 @@ public enum AppMenus {
                     .command(.newPlaylist), .command(.newPlaylistFromSelection),
                     .command(.newSmartPlaylist), .command(.editSmartPlaylist),
                     .command(.renamePlaylist), .command(.deletePlaylist), .separator,
-                    .command(.addFolder), .setting("library.pausePollingDuringPlayback"),
+                    .command(.addFolder), .setting(settings.pausePollingDuringPlayback.key),
                     .separator, .command(.revealInFinder), .command(.copyPath),
                     .command(.addToPlaylist), .separator, .command(.editTags),
                     .command(.undoTagEdit), .command(.replaceArtwork), .command(.removeArtwork),
@@ -89,7 +90,8 @@ public enum AppMenus {
                     .standard(StandardItem("Paste", "paste:", KeyChord("v", cmd))),
                     .standard(
                         StandardItem(
-                            "Select All", "selectAll:", KeyChord("a", cmd), runs: .selectAll)
+                            AppCommands.title(of: .selectAll), "selectAll:", KeyChord("a", cmd),
+                            runs: .selectAll)
                     ),
                     .submenu(
                         "Selection",
@@ -116,7 +118,7 @@ public enum AppMenus {
                             .command(.reverseSort),
                         ], showsChords: true),
                     .separator, .command(.back), .command(.forward), .command(.showCurrentTrack),
-                    .separator, .setting("appearance"),
+                    .separator, .setting(settings.appearance.key),
                 ]),
             MenuSection(
                 title: "Controls", role: .plain,
@@ -130,7 +132,7 @@ public enum AppMenus {
                         [.command(.repeatOff), .command(.repeatAll), .command(.repeatOne)],
                         showsChords: true),
                     .separator, .command(.volumeUp), .command(.volumeDown), .separator,
-                    .setting("output.hogMode"), .setting("output.digitalVolume"),
+                    .setting(settings.hogMode.key), .setting(settings.digitalVolume.key),
                 ]),
             MenuSection(
                 title: "Window", role: .window,
