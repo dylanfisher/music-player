@@ -324,9 +324,9 @@ private func update(
     let (controls, _, _, dispatcher) = try controls(world)
     let dock = DockMenu(model: controls.model, dispatcher: dispatcher)
     let transport: [DockMenu.Entry] = [
-        .command(.playPause, title: "Play/Pause", enabled: true),
-        .command(.nextTrack, title: "Next Track", enabled: true),
-        .command(.previousTrack, title: "Previous Track", enabled: true),
+        .command(.playPause, title: AppCommands.title(of: .playPause), enabled: true),
+        .command(.nextTrack, title: AppCommands.title(of: .nextTrack), enabled: true),
+        .command(.previousTrack, title: AppCommands.title(of: .previousTrack), enabled: true),
     ]
     #expect(dock.entries() == transport)
     controls.apply(update(.trackStarted(index: 0), position: 0))
@@ -337,12 +337,14 @@ private func update(
     world.hasEngine = false
     #expect(
         dock.entries().suffix(3) == [
-            .command(.playPause, title: "Play/Pause", enabled: false),
-            .command(.nextTrack, title: "Next Track", enabled: false),
-            .command(.previousTrack, title: "Previous Track", enabled: false),
+            .command(.playPause, title: AppCommands.title(of: .playPause), enabled: false),
+            .command(.nextTrack, title: AppCommands.title(of: .nextTrack), enabled: false),
+            .command(.previousTrack, title: AppCommands.title(of: .previousTrack), enabled: false),
         ])
     let menu = dock.menu()
-    #expect(menu.items.map(\.title).suffix(3) == ["Play/Pause", "Next Track", "Previous Track"])
+    #expect(
+        menu.items.map(\.title).suffix(3)
+            == [.playPause, .nextTrack, .previousTrack].map(AppCommands.title(of:)))
     #expect(menu.items.allSatisfy { !$0.isEnabled || $0.isSeparatorItem })
 }
 

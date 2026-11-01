@@ -112,9 +112,9 @@ private func problems(_ json: String) -> [SettingProblem] {
 @Test func rejectsWrongTypes() {
     #expect(
         problems(#"{"flag": 1, "count": 2.5, "name": null, "theme": "blue"}"#) == [
-            SettingProblem(key: "count", reason: .wrongType(expected: "an integer", detail: nil)),
-            SettingProblem(key: "flag", reason: .wrongType(expected: "true or false", detail: nil)),
-            SettingProblem(key: "name", reason: .wrongType(expected: "a string", detail: nil)),
+            SettingProblem(key: "count", reason: .wrongType(expected: Int.typeName, detail: nil)),
+            SettingProblem(key: "flag", reason: .wrongType(expected: Bool.typeName, detail: nil)),
+            SettingProblem(key: "name", reason: .wrongType(expected: String.typeName, detail: nil)),
             SettingProblem(
                 key: "theme",
                 reason: .wrongType(expected: #"one of "light", "dark""#, detail: nil)),
