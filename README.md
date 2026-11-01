@@ -32,6 +32,11 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   likely duplicates, albums with gaps, several album artists or mixed sample rates, and tracks
   missing art, an album or an album artist; it runs after a scan and on Check Library Health.
   ⇧⌘R reveals the selected tracks in Finder.
+- **`music-player`**, in `MusicPlayer.app/Contents/MacOS`, runs any command in the app and
+  starts it if it isn't running: `music-player next`, `music-player play "album:Kind of Blue"`,
+  `music-player status --json`. `music-player help` lists the commands. Links run playback and
+  moving around the window only: `music-player://next`, `music-player://play?q=miles`
+  ([ADR 0036](docs/decisions/0036-scripting.md)).
 
 ## Develop
 
