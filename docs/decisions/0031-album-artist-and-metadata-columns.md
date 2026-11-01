@@ -56,7 +56,7 @@ playlists shouldn't be lost to add a stat.
   it when all of it is loved.
 - **Default widths** per column, used when one is first shown, add up for the owner's sixteen
   (#, Album Art, Title, Artist, Album, Track of Total, Time, Year, Genre, Grouping, Catalog
-  Number, Bit Rate, Sample Rate, Size, Plays, Date Added) to 1,025 points with spacing, which
+  Number, Bit Rate, Sample Rate, Size, Plays, Date Added) to 1,027 points with spacing, which
   fits a 1440-point window with the sidebar and queue open. The default 1280-point window
   scrolls them sideways. The track number's header is now "Track", since "#" is the row number.
 

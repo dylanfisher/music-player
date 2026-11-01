@@ -68,3 +68,9 @@ private func request(_ offset: Int) -> ArtRequest {
     #expect(requests.waiting.count == ArtRequests.capacity)
     #expect(requests.waiting.first?.key.offset == 10)
 }
+
+@Test func everyDefaultWidthIsOneASavedLayoutAccepts() {
+    for column in TrackColumn.allCases {
+        #expect(TrackTableLayout.widthRange.contains(column.defaultWidth), "\(column)")
+    }
+}

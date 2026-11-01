@@ -18,9 +18,9 @@ extension TrackColumn {
     /// The width a column gets when it's first shown from the header's menu, in points: enough
     /// for a typical value, so the owner's sixteen columns fit beside the sidebar and the queue
     /// on a 1440-point screen.
-    var defaultWidth: Double {
+    public var defaultWidth: Double {
         switch self {
-        case .art: 18
+        case .art: 20
         case .rowNumber: 30
         case .trackNumber, .discNumber, .year, .channels, .bpm, .playCount, .skipCount, .loved,
             .compilation:
