@@ -1150,6 +1150,54 @@ repeats within one file aren't checked.
   produces a hardened-runtime app whose entitlement check passes; phase 9's section lists its
   security requirements.
 
+Implementation plan (ADR 0025, written first):
+
+1. **Survey and threat model.** ADR 0025 has one row per threat: asset, attacker, entry point,
+   mitigation, and the test or check. It covers each parser's sizes, offsets, nesting and text,
+   the tag writer's links, races and temp files, SQL from rules, search and the database's own
+   schema, paths from settings, files, the state file, the journal and the device record, each
+   file read at launch, the bundle's signature, and phase 9's LAN surface as requirements. It
+   records the SQL audit and what the owner must do for distribution.
+2. **Art reads bounded** (Metadata). An art length comes from the file and is checked only
+   against the file's size, so `readArt` refuses one past a fixed maximum as unsupported, before
+   allocating it. Test: a sparse file whose art claims more than the maximum.
+3. **Writer nesting bounded** (TagWriter). `MP4Box` opens its containers recursively at whatever
+   depth the file nests them, so a file of nested `udta`s overflows the stack. It refuses
+   nesting past a fixed depth as malformed. Test: hand-built hostile MP4s for the writer.
+4. **Temp file not followed** (TagWriter). Opening the cloned temp file follows a symbolic link
+   planted at its name after the clone; it's opened with `O_NOFOLLOW`. Tests: the open refuses a
+   link, and a link planted at the temp name before a write is removed with its target unchanged.
+5. **Text with NUL** (SQLite). Text is bound with `-1` and read with `String(cString:)`, so a NUL
+   in a tag, a rule or the search cuts it short: a rule matches too much and a search fails.
+   Bind and read by byte count. Test: a NUL round trip and a NUL in a LIKE pattern.
+6. **Quoted identifiers** (SQLite, Library). Table names read back from `sqlite_master` are put
+   in `DROP TABLE "..."` without doubling quotes, and `execute` runs every statement it's given.
+   A `quotedIdentifier` function doubles them. Test: a library file with a table named to break
+   out is rebuilt with nothing else dropped.
+7. **Rule text bounded** (Library). SQLite refuses a LIKE pattern over 50,000 bytes, so a long
+   rule fails when listed, not when saved. `SmartRule.problem` refuses text over 10,000 UTF-8
+   bytes. Injection test: a hand-built library whose tags and file names hold `'`, `"`, `;`,
+   `--`, `%`, `_`, `\`, NUL and a 10,000-character string, each text rule field with each
+   comparison, and the search box, each checked against the expected tracks.
+8. **Terminal output** (DisplayText, App). The command line prints paths and tag warnings,
+   which a file can fill with escape sequences. Control characters print as `\u{..}`. Test:
+   each C0 and C1 control and DEL is escaped, and other text is unchanged.
+9. **Hostile files per parser** (Metadata, Library). A test per parser (MP4, ID3v2, FLAC and
+   Vorbis comments, WAV, AIFF, MPEG audio and the AAC config) with declared sizes that
+   overflow or run past the end, sizes that would drive a huge allocation, deep nesting, and
+   Unicode in text frames (invalid UTF-8 and UTF-16, unpaired surrogates, NUL, bidi controls),
+   each a typed error or warning. A scan of them beside a good file reports each per file and
+   indexes the good one.
+10. **Hardened runtime.** `scripts/bundle` signs ad hoc with `--options runtime`, and
+    `scripts/check-signature` (run by `scripts/bundle`) reads `codesign -dv` and
+    `codesign -d --entitlements -` and fails without the runtime flag or with any entitlement.
+    `scripts/check-signature --launch` also runs the bundled app with `--snapshot` and `--home`
+    in a temp folder and fails unless it draws the PNG.
+11. **Phase 9 requirements.** Phase 9's section gets the LAN requirements from ADR 0025: bind
+    addresses, serving only indexed files by ID, request limits, and SSDP and receiver input
+    treated as hostile.
+12. `./scripts/check`, `./scripts/bench` and `./scripts/bundle release`.
+
 #### 14d. Adversarial testing
 
 - **Goal:** find the inputs and interleavings the hand-written tests missed.
