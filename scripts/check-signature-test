@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Checks that scripts/check-signature fails when it should (ADR 0025), on stand-in bundles under
+# .build/sigtest: /bin/echo copied in as the executable, signed each way the check must refuse.
+# ./scripts/check runs it.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+root=.build/sigtest
+rm -rf "$root"
+mkdir -p "$root"
+trap 'rm -rf "$root"' EXIT
+
+# A bundle named $1, signed with codesign's remaining arguments.
+bundle() {
+  local app="$root/$1.app"; shift
+  mkdir -p "$app/Contents/MacOS"
+  cp /bin/echo "$app/Contents/MacOS/MusicPlayer"
+  /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string MusicPlayer" \
+    -c "Add :CFBundleIdentifier string sigtest.$(basename "$app" .app)" \
+    "$app/Contents/Info.plist" >/dev/null
+  codesign --force --sign - "$@" "$app" 2>/dev/null
+  echo "$app"
+}
+
+entitlements="$root/get-task-allow.plist"
+/usr/libexec/PlistBuddy -c "Add :com.apple.security.get-task-allow bool true" \
+  "$entitlements" >/dev/null
+hardened=$(bundle hardened --options runtime)
+debuggable=$(bundle debuggable --options runtime --entitlements "$entitlements")
+plain=$(bundle plain)
+
+failed=0
+# expect <pass|fail> <what> <arguments...>
+expect() {
+  local want="$1" what="$2"; shift 2
+  local got=pass
+  scripts/check-signature "$@" >/dev/null 2>"$root/stderr" || got=fail
+  if [ "$got" = "$want" ]; then
+    echo "ok: $what"
+  else
+    echo "FAILED: $what should $want but did $got:" >&2
+    cat "$root/stderr" >&2
+    failed=1
+  fi
+}
+
+expect pass "a hardened bundle without entitlements" "$hardened"
+expect fail "signed with get-task-allow" "$debuggable"
+expect fail "signed without the hardened runtime" "$plain"
+expect fail "an unknown flag" "$hardened" --verbose
+expect fail "no app" 
+expect fail "two apps" "$hardened" "$plain"
+expect fail "a path that isn't a bundle" "$root/get-task-allow.plist"
+exit $failed

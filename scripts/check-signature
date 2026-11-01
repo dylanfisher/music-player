@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Checks a bundled app's signature (ADR 0025): it verifies, the hardened runtime is on, and it
-# claims no entitlement but those listed below. scripts/bundle runs it on every bundle.
+# Checks a release app's signature (ADR 0025): it verifies, the hardened runtime is on, and it
+# claims no entitlement but those listed below, so never get-task-allow, which debug bundles
+# carry so lldb can attach. scripts/bundle runs it on every release bundle, and
+# scripts/check-signature-test checks that it fails when it should.
 #   scripts/check-signature <MusicPlayer.app> [--launch]
 # --launch also runs the app with --home in a temp folder and --snapshot, and fails unless the
 # hardened app opens its window and draws it within a minute. Not part of ./scripts/check, which
@@ -34,11 +36,14 @@ case "$flags" in
   *) echo "error: $app isn't signed with the hardened runtime (flags: ${flags:-none})" >&2; exit 1 ;;
 esac
 
-entitlements=$(codesign -d --entitlements - --xml "$app" 2>/dev/null)
-claimed=$(printf '%s' "$entitlements" | python3 -I -c '
-import plistlib, sys
-data = sys.stdin.buffer.read()
-print("\n".join(sorted(plistlib.loads(data))) if data.strip() else "")')
+# The top-level keys of the entitlements plist, if it has any.
+plist=$(mktemp "${TMPDIR:-/tmp}/entitlements.XXXXXX")
+codesign -d --entitlements :- "$app" >"$plist" 2>/dev/null
+claimed=""
+if [ -s "$plist" ]; then
+  claimed=$(plutil -p "$plist" | sed -n 's/^  "\([^"]*\)" =>.*/\1/p')
+fi
+rm -f "$plist"
 unexpected=""
 for key in $claimed; do
   ok=false

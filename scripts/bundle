@@ -45,9 +45,17 @@ if [ -z "$bundle_id" ]; then
 fi
 /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $bundle_id" "$app/Contents/Info.plist"
 
-# Ad-hoc signature with the hardened runtime, checked for unexpected entitlements. Distribution
-# needs a Developer ID and notarization, which only the owner can set up (ADR 0025).
-codesign --force --options runtime --sign - "$app" >&2
-scripts/check-signature "$app" >&2
+# Ad-hoc signature with the hardened runtime (ADR 0025, which also has the distribution steps).
+# A debug bundle also gets get-task-allow so lldb can attach; a release one is checked for it.
+if [ "$config" = release ]; then
+  codesign --force --options runtime --sign - "$app" >&2
+  scripts/check-signature "$app" >&2
+else
+  entitlements="$bin/debug.entitlements"
+  rm -f "$entitlements"
+  /usr/libexec/PlistBuddy -c "Add :com.apple.security.get-task-allow bool true" \
+    "$entitlements" >/dev/null
+  codesign --force --options runtime --entitlements "$entitlements" --sign - "$app" >&2
+fi
 if [ "$config" = release ]; then echo "universal Bench: $bin/Bench" >&2; fi
 echo "$app"

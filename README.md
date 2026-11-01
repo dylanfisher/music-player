@@ -32,8 +32,8 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 | Run the app | `./scripts/dev` (`--home <folder>` keeps the config file, library and state in one folder; `--settings <file>` names another config file) |
 | Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|tags\|settings\|shortcuts]` |
 | Run tests | `./scripts/test` |
-| Build the `.app`, signed ad hoc with the hardened runtime | `./scripts/bundle [debug\|release]` |
-| Check a bundle's signature and entitlements, and that it launches hardened (not in `check`) | `./scripts/check-signature <MusicPlayer.app> [--launch]` |
+| Build the `.app`, signed ad hoc with the hardened runtime (debug also lets lldb attach) | `./scripts/bundle [debug\|release]` |
+| Check a release bundle's signature and entitlements, and that it launches hardened (not in `check`) | `./scripts/check-signature <MusicPlayer.app> [--launch]` |
 | Update a second Mac's clone, then run the app | `./scripts/pull` |
 | Build the fixture library (43k tagged files) | `./scripts/fixtures [--count N]` |
 | Survey the tag corpus, or edit and undo every file on clones of it (not in `check`) | `./scripts/tag-corpus [<folder> \| --round-trip]` |

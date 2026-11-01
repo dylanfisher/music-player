@@ -105,6 +105,8 @@ run arch      swift scripts/arch.swift
 # Each fact once and no third copy of a block (ADR 0024); the test plants one of each.
 run dupes     swift scripts/dupes.swift
 run dupes-test ./scripts/dupes-test
+# The release signature check refuses what it should (ADR 0025), on stand-in bundles.
+run signature-test ./scripts/check-signature-test
 run test      ./scripts/test
 
 if [ ${#failures[@]} -gt 0 ]; then
