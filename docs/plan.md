@@ -1227,6 +1227,20 @@ Implementation plan (ADR 0025, written first):
     treated as hostile.
 12. `./scripts/check`, `./scripts/bench` and `./scripts/bundle release`.
 
+Result: shipped; all three exits pass. ADR 0025's threat model has 35 rows, each naming a passing
+test or check; row 35 (line breaks in `os.Logger` entries) is accepted, as the log keeps them
+private. Review gaps fixed: the tag writer's temp file is made from the open original with
+`fclonefileat`, or with `O_EXCL` under a random name, and checked for type, owner, link count
+and inode before the rename, with tests for a swapped file, a hard link and a swapped original;
+`FileSource` refuses FIFOs and links; a file's walks stop at 100,000 steps and keep 100
+warnings, a scan keeps 100 walk problems; `/`, the home folder and system roots are refused as
+watched folders; the terminal escapes line breaks too. Release bundles are hardened with no
+entitlements and pass `check-signature --launch`; debug bundles keep `get-task-allow` for
+lldb. Corpus round trip on fresh clones: 159 files, 1,557 edits, 0 failures, reference hashes
+unchanged. Bench: metadata parse 4.79 s of 5 s (96%, a 14e target), playback CPU 2.33%, launch
+0.61 s, tag journal 12.1 s of 20 s. Distribution (Developer ID, notarization) is phase 13's,
+with the exact commands in the ADR.
+
 #### 14d. Adversarial testing
 
 - **Goal:** find the inputs and interleavings the hand-written tests missed.
