@@ -1006,6 +1006,47 @@ Known items carried in from earlier phases:
   kills across the operations with 0 integrity failures; the 1-hour loaded soak has 0 underruns and
   memory growth under 10 MB from minute 5 to the end.
 
+Implementation plan (ADR 0023, written first):
+
+1. **Survey and failure table.** ADR 0023 lists each failure, where it's detected, what the user
+   sees, how they recover, and the test that injects it. It matches ADRs 0009 (missing and
+   vanished volumes), 0011 (device loss), 0015 (the config banner, the state file discarded
+   whole), 0020 (the tag journal) and 0022 (the discard notice), and records what this phase
+   changes.
+2. **DAC at each step of a rate switch** (HALOutput, Fixtures). `NullDevice` can go away during
+   its next stop, configure or start, as a real device does: the call fails and the device
+   reads as gone. `DeviceOutput` reports a device error while the device is gone as
+   `deviceLost`, with where to resume, instead of a track failure or an output failure, so the
+   engine pauses and offers to resume once it's back.
+3. **NAS dropping** (Fixtures, Library, HALOutput). `SimulatedNAS` can drop after a number of
+   operations, failing every listing and read after it as a dead SMB mount does. A rescan through
+   it keeps every track and reports the issues; the next scan restores the rest. Mid-playback,
+   a file cut short while it plays reports a track failure and moves on.
+4. **Full disk and a locked database** (Library). A failed scan of a local folder is retried as
+   a whole scan a minute later, instead of losing its changes until the next launch. Tests fill
+   the database with `PRAGMA max_page_count` (scan, playlist edit, play count, all rolled back
+   and reported) and hold its lock from a second connection.
+5. **Corrupt database and state file** (Library, Settings, App). A library file SQLite can't read
+   at all is moved aside, a new one is made, and a discard notice says where the old one went.
+   `StateStore` keeps why it discarded a file, and the window shows it in the config banner.
+6. **Timeline rows whose files are all missing** (LibraryBrowser). Play, Play Next, rating,
+   playlists and the tag editor beep and say so in the status bar, instead of doing nothing.
+7. **`FailureDrill` tool** (Tools). Drives the Core APIs with `--home`: `run <operation>` loops a
+   scan, a tag write and undo, a playlist edit or a state save until killed; `verify` reopens
+   everything as the app does (`PRAGMA integrity_check`, the config and state files, the tag
+   journal, undoing every journaled edit) and prints any integrity failure; `full-disk <mount>`
+   fills a disk image under each of the database, the state file, the config file and the tag
+   journal, and checks each failure is reported and nothing else changed.
+8. **Scripts.** `scripts/kill-test [--kills N] [--seed S]` generates fixtures under
+   `~/Library/Caches/MusicPlayer/kill-test`, clones the tag-write files there with `cp -c`,
+   hashes every music file, and sends seeded `SIGKILL`s across the four operations, checking
+   after each. `scripts/full-disk` attaches a small image with `hdiutil attach -nobrowse
+   -mountpoint` under `~/Library/Caches/MusicPlayer`, detached by a trap on every exit. Neither
+   is in `./scripts/check`, which gets the deterministic tests above.
+9. **Loaded soak** (Bench). The soak plays while a full scan of the fixture library into a new
+   index runs every 5 minutes and a search every second, and a second benchmark reports memory
+   growth from minute 5 (or a quarter of a shorter soak) to the end, budget < 10 MB.
+
 #### 14b. Single source of truth and DRY
 
 - **Goal:** each fact is defined once, and a check keeps it that way.
