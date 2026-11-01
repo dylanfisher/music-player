@@ -26,6 +26,11 @@ against a codebase you haven't searched.
 If a search turns up something close but not identical, that's the second occurrence. Use it or
 duplicate it — do not abstract yet (principle 3).
 
+`scripts/dupes.swift`, in `./scripts/check`, catches what a search missed: a string literal in
+two files under `Sources`, or a third copy of a block. A fact two modules need lives in the
+lowest module both import. A repeat that isn't one fact goes in `scripts/dupes-allow.txt` with
+its reason ([ADR 0024](decisions/0024-single-source-check.md)).
+
 ## Tiers
 
 The default vocabulary below is a recommendation, not a mandate. **Rename these to whatever fits
