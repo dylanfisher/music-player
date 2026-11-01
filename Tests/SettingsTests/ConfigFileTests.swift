@@ -82,6 +82,23 @@ func fuzzedFilesAreProblemsNotCrashes(_ name: String) throws {
     #expect(problems("[1,,]").count == 1)
 }
 
+/// The fuzzer's file of mangled keys took over 10 s to report, counting each problem's line from
+/// the start of the file. Each problem keeps its line.
+@Test func aFileWithThousandsOfProblemsReportsThemQuickly() throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("Crashes/many-problems.json")
+    let fuzzed = String(decoding: try Data(contentsOf: url), as: UTF8.self)
+    let keys = (1...20_000).map { "  \"unknown\($0)\": 1," }
+    let text = "{\n" + keys.joined(separator: "\n") + "\n}\n"
+    let started = Date()
+    #expect(!problems(fuzzed).isEmpty)
+    let found = problems(text)
+    #expect(Date().timeIntervalSince(started) < 5)
+    #expect(found.count == 20_000)
+    #expect(found.first == #"line 2: unknown setting "unknown1""#)
+    #expect(found.last == #"line 20001: unknown setting "unknown20000""#)
+}
+
 @Test func duplicatesAreFoundInsideNestedObjects() {
     let text = """
         {

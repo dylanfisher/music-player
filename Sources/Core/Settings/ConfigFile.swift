@@ -94,8 +94,11 @@ public enum ConfigFile {
         let byKey = Dictionary(uniqueKeysWithValues: settings.map { ($0.key, $0) })
         var values: [String: any SettingValue] = [:]
         var shortcuts: ShortcutOverrides = [:]
+        // By key, as `member(_:)` finds them, so a file with thousands of keys isn't searched
+        // once per key.
+        let members = Dictionary(top.members.map { ($0.key, $0) }) { first, _ in first }
         for (key, json) in entries {
-            let member = top.member(key)
+            let member = members[key]
             if key == shortcutsKey {
                 shortcuts = parseShortcuts(json, member, text, check, &problems)
                 continue

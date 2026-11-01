@@ -4,21 +4,34 @@ import Foundation
 /// list's last item, and a UTF-8 byte order mark allowed. Every operation keeps each byte's
 /// offset, so lines in errors are the file's own, and a patch changes only the text it has to.
 struct ConfigText {
-    private(set) var bytes: [UInt8]
+    private(set) var bytes: [UInt8] {
+        didSet { newlines = newlineOffsets(bytes) }
+    }
+    /// Where each line break is, so finding a line costs a search, not a count from the start:
+    /// a file with thousands of problems would otherwise take seconds to report them.
+    private var newlines: [Int]
 
     init(_ text: String) {
-        bytes = Array(text.utf8)
+        self.init(bytes: Array(text.utf8))
     }
 
     init(bytes: [UInt8]) {
         self.bytes = bytes
+        newlines = newlineOffsets(bytes)
     }
 
     var string: String { String(decoding: bytes, as: UTF8.self) }
 
     /// The line `offset` is on, counting from 1.
     func line(at offset: Int) -> Int {
-        bytes[..<min(offset, bytes.count)].reduce(1) { $0 + ($1 == newline ? 1 : 0) }
+        // The line breaks before `offset`, plus one.
+        var low = 0
+        var high = newlines.count
+        while low < high {
+            let middle = (low + high) / 2
+            if newlines[middle] < offset { low = middle + 1 } else { high = middle }
+        }
+        return low + 1
     }
 
     /// The file's own line ending, from its first line.
@@ -330,6 +343,10 @@ struct ConfigText {
             .map { $0.offset == 0 ? String($0.element) : indent + $0.element }
             .joined(separator: lineEnding)
     }
+}
+
+private func newlineOffsets(_ bytes: [UInt8]) -> [Int] {
+    bytes.indices.filter { bytes[$0] == newline }
 }
 
 func jsonString(_ text: String) -> String {
