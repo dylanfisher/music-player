@@ -116,3 +116,44 @@ import Testing
     try index.showHealth(try index.healthReport())
     #expect(try index.trackIDs(filter, sortedBy: .title).isEmpty)
 }
+
+@Test func releasesInOtherFoldersAndDiscsAreKeptApart() throws {
+    func track(
+        _ path: String, _ album: String, disc: Int? = nil, _ number: Int, rateHz: Int = 44100
+    )
+        -> ScannedFile
+    {
+        Crafted(
+            path: path, title: path, album: album, albumArtist: "B", disc: disc, number: number,
+            rateHz: rateHz
+        ).scanned
+    }
+    let index = try craftedIndex([
+        // One title and album artist, two releases in two folders.
+        track("/M/Iron 1990/01.flac", "Iron", 1), track("/M/Iron 1990/02.flac", "Iron", 2),
+        track("/M/Iron 2008/01.flac", "Iron", 1, rateHz: 96000),
+        track("/M/Iron 2008/02.flac", "Iron", 2, rateHz: 96000),
+        // A box set with a folder per disc, each disc numbered from 1.
+        track("/M/Box/CD1/01.flac", "Box", disc: 1, 1),
+        track("/M/Box/CD1/02.flac", "Box", disc: 1, 2),
+        track("/M/Box/CD2/01.flac", "Box", disc: 2, 1),
+        track("/M/Box/CD2/02.flac", "Box", disc: 2, 2),
+        // Discs in one folder, the second going on from the first's numbers.
+        track("/M/Run/01.flac", "Run", disc: 1, 1), track("/M/Run/02.flac", "Run", disc: 1, 2),
+        track("/M/Run/03.flac", "Run", disc: 2, 3), track("/M/Run/04.flac", "Run", disc: 2, 4),
+        // The same, but with 4 missing from the second disc.
+        track("/M/Holes/01.flac", "Holes", disc: 1, 1),
+        track("/M/Holes/02.flac", "Holes", disc: 1, 2),
+        track("/M/Holes/03.flac", "Holes", disc: 2, 3),
+        track("/M/Holes/05.flac", "Holes", disc: 2, 5),
+        // Two tracks whose length isn't known.
+        Crafted(path: "/M/x/1.flac", title: "Same", seconds: 0).scanned,
+        Crafted(path: "/M/y/1.flac", title: "Same", seconds: 0).scanned,
+    ])
+    let report = try index.healthReport()
+    #expect(report[.sameNumber].trackIDs.isEmpty)
+    #expect(report[.mixedSampleRates].trackIDs.isEmpty)
+    #expect(
+        report[.trackGaps].trackIDs == (try ids(index, ["/M/Holes/03.flac", "/M/Holes/05.flac"])))
+    #expect(report[.sameTitle].trackIDs.isEmpty)
+}

@@ -49,15 +49,15 @@ extension HealthCheck {
         switch self {
         case .unreadable: "Unreadable"
         case .warnings: "Warnings"
-        case .missingEntries: "Missing Entries"
+        case .missingEntries: "Lost Entries"
         case .sameNumber: "Same Number"
         case .sameTitle: "Same Title"
         case .trackGaps: "Track Gaps"
         case .severalAlbumArtists: "Album Artists"
-        case .mixedSampleRates: "Sample Rates"
+        case .mixedSampleRates: "Mixed Rates"
         case .noArt: "No Art"
         case .noAlbum: "No Album"
-        case .noAlbumArtist: "No Album Artist"
+        case .noAlbumArtist: "No AA"
         }
     }
 
@@ -125,12 +125,11 @@ extension LibraryIndex {
             return HealthFindings(
                 trackIDs: try ids(
                     """
-                    SELECT t.file_id FROM tracks t JOIN (
-                        SELECT album_id, ifnull(disc_number, 0) AS disc, track_number FROM tracks
-                        WHERE album_id IS NOT NULL AND track_number IS NOT NULL
-                        GROUP BY 1, 2, 3 HAVING count(*) > 1
-                    ) d ON d.album_id = t.album_id AND d.disc = ifnull(t.disc_number, 0)
-                        AND d.track_number = t.track_number
+                    WITH a AS (\(albumTracks))
+                    SELECT a.file_id FROM a JOIN (
+                        SELECT album_id, folder, disc, track_number FROM a
+                        WHERE track_number IS NOT NULL GROUP BY 1, 2, 3, 4 HAVING count(*) > 1
+                    ) d USING (album_id, folder, disc, track_number)
                     """))
         case .sameTitle:
             let rows = try statement(
@@ -138,6 +137,7 @@ extension LibraryIndex {
                 SELECT file_id, title, artist_id, CAST(length_frames AS REAL) / sample_rate_hz
                 FROM tracks
                 WHERE title IS NOT NULL AND artist_id IS NOT NULL AND sample_rate_hz > 0
+                    AND length_frames > 0
                 ORDER BY title, artist_id, 4
                 """
             ).map { row in
@@ -147,26 +147,28 @@ extension LibraryIndex {
             }
             return HealthFindings(trackIDs: sameTitleAndLength(rows))
         case .trackGaps:
+            // A later disc may go on from the last one's numbers, so it counts from its lowest.
             return HealthFindings(
                 trackIDs: try ids(
                     """
-                    SELECT t.file_id FROM tracks t JOIN (
-                        SELECT album_id, ifnull(disc_number, 0) AS disc FROM tracks
-                        WHERE album_id IS NOT NULL AND track_number > 0
-                        GROUP BY 1, 2 HAVING count(DISTINCT track_number) < max(track_number)
-                    ) g ON g.album_id = t.album_id AND g.disc = ifnull(t.disc_number, 0)
+                    WITH a AS (\(albumTracks))
+                    SELECT a.file_id FROM a JOIN (
+                        SELECT album_id, folder, disc FROM a WHERE track_number > 0
+                        GROUP BY 1, 2, 3
+                        HAVING count(DISTINCT track_number) < max(track_number)
+                            - CASE WHEN disc > 1 THEN min(track_number) - 1 ELSE 0 END
+                    ) g USING (album_id, folder, disc)
                     """))
         case .severalAlbumArtists:
             // The index splits an album by album artist, so one album is its title in a folder.
-            // A track without one is No Album Artist's, and joins its track artist's album.
-            let folder = "substr(f.path, 1, f.name_offset - 1)"
+            // A track without one is No AA's, and joins its track artist's album.
             return HealthFindings(
                 trackIDs: try ids(
                     """
                     SELECT t.file_id FROM tracks t JOIN albums al ON al.id = t.album_id
                     JOIN files f ON f.id = t.file_id
-                    WHERE (al.title, \(folder)) IN (
-                        SELECT al.title, \(folder) FROM tracks t
+                    WHERE (al.title, \(folderSQL)) IN (
+                        SELECT al.title, \(folderSQL) FROM tracks t
                         JOIN albums al ON al.id = t.album_id JOIN files f ON f.id = t.file_id
                         GROUP BY 1, 2 HAVING count(DISTINCT t.album_artist_id) > 1)
                     """))
@@ -174,9 +176,11 @@ extension LibraryIndex {
             return HealthFindings(
                 trackIDs: try ids(
                     """
-                    SELECT file_id FROM tracks WHERE album_id IN (
-                        SELECT album_id FROM tracks WHERE album_id IS NOT NULL
-                        GROUP BY album_id HAVING count(DISTINCT sample_rate_hz) > 1)
+                    WITH a AS (\(albumTracks))
+                    SELECT a.file_id FROM a JOIN (
+                        SELECT album_id, folder FROM a
+                        GROUP BY 1, 2 HAVING count(DISTINCT sample_rate_hz) > 1
+                    ) m USING (album_id, folder)
                     """))
         case .noArt:
             return HealthFindings(
@@ -208,6 +212,17 @@ extension LibraryIndex {
         }
     }
 }
+
+/// The folder of file `f`'s path, with its trailing slash.
+private let folderSQL = "substr(f.path, 1, f.name_offset - 1)"
+
+/// Each track on an album, with the album's folder and disc (none is 0): two releases with one
+/// title and album artist are one album row in the index, but rarely share a folder.
+private let albumTracks = """
+    SELECT t.file_id, t.album_id, \(folderSQL) AS folder, ifnull(t.disc_number, 0) AS disc,
+        t.track_number, t.sample_rate_hz
+    FROM tracks t JOIN files f ON f.id = t.file_id WHERE t.album_id IS NOT NULL
+    """
 
 /// A connection's own table of the health report it shows, so a `.health` source is a
 /// condition like any other. Temporary: it belongs to the window's reader, not the library.

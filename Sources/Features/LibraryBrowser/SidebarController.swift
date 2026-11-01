@@ -328,6 +328,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         cell.imageView?.image = node.symbol.flatMap {
             NSImage(systemSymbolName: $0, accessibilityDescription: nil)
         }
+        // A row without a symbol gives its width to the name.
+        (cell as? CountCell)?.imageWidth?.constant = node.symbol == nil ? 0 : 16
         cell.toolTip = node.toolTip
         (cell as? CountCell)?.count.stringValue = node.count ?? ""
         return cell
@@ -351,8 +353,10 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             NSLayoutConstraint.activate([
                 image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
                 image.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                image.widthAnchor.constraint(equalToConstant: 16),
             ])
+            let width = image.widthAnchor.constraint(equalToConstant: 16)
+            width.isActive = true
+            (cell as? CountCell)?.imageWidth = width
             leading = image.trailingAnchor
         }
         var trailing = cell.trailingAnchor
@@ -360,6 +364,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             // The count keeps its width; the name is cut short first.
             let count = cell.count
             count.textColor = .secondaryLabelColor
+            count.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
             count.alignment = .right
             count.translatesAutoresizingMaskIntoConstraints = false
             count.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -473,7 +478,8 @@ private final class SidebarNode {
         case .history: "clock"
         case .timeline: "list.bullet"
         case .health: "stethoscope"
-        case .check: "exclamationmark.circle"
+        // The checks' names need the room for their counts.
+        case .check: nil
         case .folder: "folder"
         case .playlist(let playlist):
             switch playlist.kind {
@@ -493,6 +499,7 @@ private final class SidebarNode {
 /// A row with a count at its end, empty for rows that have none.
 private final class CountCell: NSTableCellView {
     let count = NSTextField(labelWithString: "")
+    var imageWidth: NSLayoutConstraint?
 }
 
 /// A folder's name as the sidebar shows it: its last component, or the path for "/".

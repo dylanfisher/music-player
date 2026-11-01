@@ -2,7 +2,8 @@ import Library
 
 /// Runs the library health report on request and when a scan ends, never on a timer, and keeps
 /// the newest. Each run takes a session number; a run that a newer one started after finishes
-/// late is dropped, so an old report never replaces a newer one.
+/// building late is dropped, so an old report never replaces a newer one. `report` is always
+/// the one the table lists.
 @MainActor
 final class HealthModel {
     private(set) var report: HealthReport?
@@ -34,9 +35,10 @@ final class HealthModel {
             let report = try await build()
             guard mine == session else { return }
             try await show(report)
-            guard mine == session else { return }
-            isRunning = false
+            // The table lists it now, so `report` follows even when a newer run has started:
+            // that run replaces both, or, if it fails, leaves the two agreeing.
             self.report = report
+            if mine == session { isRunning = false }
             changed()
         } catch {
             guard mine == session else { return }

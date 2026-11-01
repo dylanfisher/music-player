@@ -34,22 +34,25 @@ add a group for sync events that don't match.
   a case in `HealthCheck` and in the switch that runs it; nothing else changes.
   - *Unreadable*: `files.failure_kind` is set. *Warnings*: the file has a row
     in `warnings`.
-  - *Missing Entries*: an entry with no track, as `missingEntryCount` counts it.
+  - *Lost Entries*: an entry with no track, as `missingEntryCount` counts it.
   - *Same Number*: the same album row (title and album artist, else track artist,
-    as the index keys albums), disc (none counts as one value) and track number.
-  - *Same Title*: the same title and artist, within a second of the same length.
+    as the index keys albums), folder, disc (none counts as one value) and track number. The
+    folder keeps apart two releases with one title, which share an album row.
+  - *Same Title*: the same title and artist, within a second of the same length; a track of
+    unknown length never matches.
     SQLite sorts by title, artist and length, and one pass links each track to the next when
     they match and are a second or less apart, so it's O(n log n), not pairwise. Titles match
     exactly; case and spelling variants aren't duplicates here.
-  - *Track Gaps*: on one album and disc, fewer distinct numbers than the highest,
-    so a lone "track 5" counts too.
+  - *Track Gaps*: on one album, folder and disc, fewer distinct numbers than the highest,
+    so a lone "track 5" counts too. A disc after the first counts from its lowest number,
+    since some sets number on across discs.
   - *Album Artists*: the index splits an album by album artist, so this groups by
     album title and folder and counts the album artists set. A track without one isn't another
-    value: it joins its track artist's album, which is usually the same, and No Album Artist
-    lists it.
-  - *Sample Rates*: one album row with more than one rate.
-  - *No Art*: no embedded picture (the app shows no folder art). *No Album*, *No Album Artist*:
-    the tag is missing.
+    value: it joins its track artist's album, which is usually the same, and No AA lists it.
+  - *Mixed Rates*: one album row and folder with more than one rate.
+  - *No Art*: no embedded picture (the app shows no folder art). *No Album*, *No AA* (no
+    album artist): the tag is missing. Names are short so a five-digit count fits the default
+    sidebar; each row's tooltip says what it finds.
 - **Where it runs.** The report is built on a connection of its own, in a detached task, so the
   window's queries never wait for it. It runs on Check Library Health, at the end of a scan that
   stored or removed files (and the first scan's end if no report exists), and when a check is

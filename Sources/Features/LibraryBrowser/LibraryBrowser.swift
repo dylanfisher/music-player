@@ -143,7 +143,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         sidebar = sidebarController
         sidebarController.dropTracks = { playlist, ids in
-            owner?.edit("couldn't add the tracks to the playlist") {
+            owner?.edit("couldn't add the tracks to the playlist", entriesChange: true) {
                 _ = try await model.add(ids, to: playlist)
             }
         }
@@ -660,7 +660,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func createPlaylist(named name: String, rules: SmartRules?, withSelection: Bool) {
         let failure = "couldn't make the playlist \"\(name)\""
         guard let ids = withSelection ? selectedTrackIDs(else: failure) : [] else { return }
-        edit("couldn't make the playlist \"\(name)\"") {
+        edit("couldn't make the playlist \"\(name)\"", entriesChange: true) {
             try await self.model.createPlaylist(named: name, rules: rules, trackIDs: ids)
         }
     }
@@ -670,7 +670,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     public func deletePlaylist(_ id: Int64) {
-        edit("couldn't delete the playlist") { try await self.model.deletePlaylist(id) }
+        edit("couldn't delete the playlist", entriesChange: true) {
+            try await self.model.deletePlaylist(id)
+        }
     }
 
     public func setRules(_ rules: SmartRules, of id: Int64) {
@@ -699,6 +701,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             }
             showSource()
             finishPlaylistFile(summaries.joined(separator: " · "), lines)
+            playlistEntriesChanged()
         }
     }
 
@@ -764,6 +767,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 let written = try await model.applyImport(plan.library, prefix: plan.prefix)
                 showSource()
                 finishPlaylistFile(written.summary, written.detailLines)
+                playlistEntriesChanged()
             } catch {
                 report(
                     terminalSafe(
@@ -786,7 +790,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func addSelection(to playlist: Int64) {
         let failure = "couldn't add the tracks to the playlist"
         guard let ids = selectedTrackIDs(else: failure) else { return }
-        edit(failure) {
+        edit(failure, entriesChange: true) {
             _ = try await self.model.add(ids, to: playlist)
         }
     }
@@ -798,7 +802,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     public func removeSelectionFromPlaylist() {
         let rows = table.table.selectedRowIndexes
-        edit("couldn't remove the tracks from the playlist") {
+        edit("couldn't remove the tracks from the playlist", entriesChange: true) {
             try await self.model.removeFromShownPlaylist(rows: rows)
         }
     }
@@ -831,16 +835,28 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Runs an edit, then lists the playlists and selects the source as they now are. A failure
-    /// is logged and shown in the status bar.
-    private func edit(_ failure: String, _ body: @escaping @MainActor () async throws -> Void) {
+    /// is logged and shown in the status bar. `entriesChange` says the edit can add or drop
+    /// playlist entries, which the health report counts.
+    private func edit(
+        _ failure: String, entriesChange: Bool = false,
+        _ body: @escaping @MainActor () async throws -> Void
+    ) {
         Task {
             do {
                 try await body()
+                if entriesChange { playlistEntriesChanged() }
             } catch {
                 report("\(failure): \(error)")
             }
             showSource()
         }
+    }
+
+    /// Playlist entries were added or dropped: a report already made runs again, so Lost
+    /// Entries isn't left counting the old ones.
+    private func playlistEntriesChanged() {
+        guard health.report != nil || health.isRunning else { return }
+        runHealth()
     }
 
     public var isStatusBarVisible: Bool { !statusBar.isHidden }
