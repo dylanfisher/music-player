@@ -2032,9 +2032,8 @@ the logs, merging, the clock and `move` events.
    `paths` gains `codec`, `sample_rate_hz`, `length_frames` and `title`, which each stored read
    sets, and `lost_dismissed`. A stats table `share_roots` keeps where each share folder's paths
    were last rooted. The stats SQL changes, so the old stats are discarded once with a notice.
-2. **Move matching** (Library): the scanner notes the highest path ID before it starts; after a
-   finished walk's removals, `matchMoves(addedAfter:)` pairs gone stats rows with the stat-less
-   paths this scan added, on codec, rate and frames, then title. A match moves the files row
+2. **Move matching** (Library): after a finished walk's removals, `matchMoves()` pairs gone
+   stats rows with every stat-less track, one to one on codec, rate and frames, then title. A match moves the files row
    to the old ID and deletes the new paths row, in one transaction; `ScanSummary.moved` counts
    them and each is logged with both paths.
 3. **Lost Stats** (Library, Settings, LibraryBrowser, App): a `HealthCheck.lostStats` lists each

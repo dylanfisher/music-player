@@ -21,17 +21,27 @@ volume is stored that way when a mounted share holds it; one on a volume without
 and every local folder, is stored by path, as now. Mounting stays the user's job.
 
 - **Finding it:** the app looks for a mounted volume whose remount URL has the same scheme,
-  host and share. When none does and exactly one mounted share has the same scheme and share
-  name, that one is used, so `nas.local` and the NAS's IP address reach the same library.
-  Hosts are compared lowercased without a trailing dot, share names ignoring case (SMB names
-  do), and the user name in a remount URL is dropped. No DNS lookup decides it: resolving a
-  name is a network call that can hang, and the share name already tells two NASes apart in
-  this library. Two candidates, and the folder is offline, with both mount points in the log.
+  host and share. Hosts are the same when they differ only in case, a trailing dot, `.local`
+  or a Bonjour service label (`nas._smb._tcp.local`); share names ignore case, as SMB's do,
+  and the user name in the URL is dropped. Without such a match, a share with the same name is
+  used only when one of the two hosts is an IP address and no other mounted share has that
+  name, so the NAS reached by its address is found. A second server with a share of the same
+  name is never used: with the NAS off and `smb://backup/music` mounted, retargeting would
+  have the next scan remove the library and scramble its stats. That case, and two candidates,
+  leave the folder offline with the mount points in the log. No DNS lookup decides it: it's a
+  network call that can hang.
+- **Listing the shares** reads the kernel's mount table with `getmntinfo(MNT_NOWAIT)`: the
+  mount point and the source (`//user@nas/music` on `smbfs`, `nas:/export` on `nfs`), which
+  give the share's URL without asking any volume. `volumeURLForRemountingKey` asks each one,
+  and a hung SMB mount would block it, and with it the watcher's queue that quit waits on.
 - **When:** the watcher finds the folders when it starts (at launch and after a settings
-  change), and before each scan: whenever it's idle and about to start one, it lists the
-  mounted shares, which costs no NAS round trip, and finds the folders again only when a
-  share's lookup changed. The app also wakes it on wake, on a volume mount and on a network
-  change (`NWPathMonitor`). The window shows where the folders' paths were last until then.
+  change); after a trigger, which the app sends on wake, on a volume mount and on a network
+  change (`NWPathMonitor`); and when a scan is about to start, comparing each share's lookup
+  with the last and rewriting only when one changed. Not on every FSEvents batch, playback
+  change or timer. If finding them fails at start (the listing or the index), the local
+  folders are watched anyway, share folders stay where their paths were, files outside the
+  folders aren't removed that launch, and the next trigger or scan tries again. The window
+  shows where the folders' paths were last until the watcher reports.
 - **Where the paths were** is kept per folder (share and path inside it) in a stats table,
   `share_roots`, which index rebuilds keep.
 - **A new mount point** (`/Volumes/music` became `/Volumes/music-1`): one transaction rewrites

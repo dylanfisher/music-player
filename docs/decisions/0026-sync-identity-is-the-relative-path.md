@@ -32,15 +32,15 @@ machine.
 - **Locally**, `paths.path` is the absolute path in NFC, which every lookup normalizes to, so
   a name listed decomposed once and precomposed later is one path. `files.path` keeps the
   spelling the volume listed, which is what opens the file.
-- **Move candidates** are `paths` rows with stats (plays, a rating, a love or a playlist
-  entry) whose file has left the index, from this scan or an earlier one, so a move that one
-  folder's scan sees leave and a later scan sees arrive still matches; and the paths this scan
-  added, those above the highest path ID when it started, which have a track and no stats.
-  `paths` gains the codec, sample rate, length in frames and title (in NFC), set by each read
-  that succeeds, because a gone file can't be read again. A path a play created without a read
-  has none of them and is never a candidate. Only a scan whose walk finished matches.
-- **Matching:** a gone and a new path match when codec, sample rate and length in frames are
-  equal and no other gone or new path shares them. Where several do, a gone and a new path
+- **Move candidates** are `paths` rows with stats (plays, logged plays, a rating, a love or a
+  playlist entry) whose file has left the index, from this scan or an earlier one, and every
+  path with a track and no stats, whenever it arrived: one folder's scan can find a file
+  arrive before another folder's scan finds it leave. `paths` gains the codec, sample rate,
+  length in frames and title (in NFC), set by each read that succeeds, because a gone file
+  can't be read again. A path a play created without a read has none of them and is never a
+  candidate. Only a scan whose walk finished, and that read or removed something, matches.
+- **Matching:** a gone path and a stat-less track match when codec, sample rate and length in
+  frames are equal and no other gone path or stat-less track shares them. Where several do, a gone and a new path
   that are alone in also sharing a title match (no title on both counts as the same). Anything
   else isn't guessed.
 - **Lost Stats**, a library health check (phase 19), lists every gone path with stats that no
@@ -48,11 +48,13 @@ machine.
   match one, whenever it arrived. **Resolve Lost Stats…** shows one lost path at a time with
   the first 50 of those tracks, grouped in Swift rather than joined in SQL, since files that
   share a length would otherwise join every lost path with thousands of tracks: Give Stats
-  moves the stats to the one picked, Dismiss hides the path until a
+  moves the stats to the one picked (a pick a scan made stale moves nothing, and the next
+  file shows), Dismiss hides the path until a
   read of its file clears that.
 - **A match** gives the old `paths` row the new path and its facts, so the file keeps its ID,
   Date Added and stats. The row the scan added for the new path has no stats yet and is
-  removed, with the file's index rows moved to the old ID in the same transaction; this is
+  removed, with the file's index rows moved to the old ID and an import's empty counts for it
+  deleted in the same transaction; this is
   the one exception to 0022's "rows are never deleted". Its ID can be handed out again, which
   is safe because no stat or history row refers to it; 23b emits the `move` event from the
   same matches, which the scan logs today.
