@@ -21,7 +21,7 @@ public final class QueueModel {
         self.lookup = lookup
     }
 
-    public func apply(_ state: PlaybackState) {
+    func apply(_ state: PlaybackState) {
         self.state = state
     }
 
@@ -33,7 +33,7 @@ public final class QueueModel {
     public var count: Int { state.order.count }
 
     /// Where the current track is in play order.
-    public var currentPosition: Int? {
+    var currentPosition: Int? {
         state.currentIndex.flatMap { state.order.firstIndex(of: $0) }
     }
 

@@ -7,13 +7,13 @@ public struct CommandRegistry: Sendable {
     private var byID: [CommandID: Int] = [:]
     private var byChord: [KeyChord: CommandID] = [:]
 
-    public init() {}
+    init() {}
 
-    public init(_ commands: [Command]) throws {
+    init(_ commands: [Command]) throws {
         for command in commands { try register(command) }
     }
 
-    public mutating func register(_ command: Command) throws {
+    mutating func register(_ command: Command) throws {
         if byID[command.id] != nil { throw CommandConflict(id: command.id, other: command.id) }
         for chord in command.chords {
             if let other = byChord[chord] {
@@ -32,12 +32,12 @@ public struct CommandRegistry: Sendable {
 }
 
 /// Two commands registered on one ID, or on one chord.
-public struct CommandConflict: Error, Equatable, CustomStringConvertible {
-    public var id: CommandID
-    public var other: CommandID
-    public var chord: KeyChord?
+struct CommandConflict: Error, Equatable, CustomStringConvertible {
+    var id: CommandID
+    var other: CommandID
+    var chord: KeyChord?
 
-    public var description: String {
+    var description: String {
         if let chord { return "\(id) and \(other) both have \(chord.stored)" }
         return "\(id) is registered twice"
     }

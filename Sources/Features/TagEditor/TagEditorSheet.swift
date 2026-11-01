@@ -29,7 +29,7 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
     static let artPoints = 120.0
     private static let numberWidth = 52.0
 
-    public init(model: TagEditorModel) {
+    init(model: TagEditorModel) {
         self.model = model
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 420),
@@ -45,7 +45,7 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
         window.makeFirstResponder(fields[.title])
     }
 
-    public func replaceArt(_ image: Data, mimeType: String) {
+    func replaceArt(_ image: Data, mimeType: String) {
         model.replaceArt(image, mimeType: mimeType)
         showArt()
     }

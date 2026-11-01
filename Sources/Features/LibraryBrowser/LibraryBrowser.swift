@@ -13,7 +13,7 @@ private let logger = moduleLogger()
 @MainActor
 public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldDelegate {
     /// The longest the window waits between refreshes while a scan stores rows.
-    public static let refreshIntervalSeconds = 2.0
+    static let refreshIntervalSeconds = 2.0
 
     private let model: BrowserModel
     public let sidebar: NSViewController
@@ -301,7 +301,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Whether the sidebar shows the play timeline, which lists plays instead of tracks.
-    public var showsTimeline: Bool { model.filter.source == .timeline }
+    var showsTimeline: Bool { model.filter.source == .timeline }
 
     /// Whether the sort commands apply: not on the timeline, whose order is the log's.
     public var canSort: Bool { !showsTimeline }

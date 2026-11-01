@@ -1,7 +1,7 @@
-import Fixtures
 import Foundation
 import Testing
 
+@testable import Fixtures
 @testable import Metadata
 @testable import TagWriter
 

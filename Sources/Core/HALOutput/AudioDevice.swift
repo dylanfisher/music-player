@@ -2,31 +2,25 @@ import CoreAudio
 
 /// A snapshot of an output device's properties, read once from the HAL.
 public struct AudioDevice: Sendable {
-    public struct Stream: Sendable {
-        public var id: AudioStreamID
-        public var current: PhysicalFormat
-        public var available: [PhysicalFormat]
-
-        public init(id: AudioStreamID, current: PhysicalFormat, available: [PhysicalFormat]) {
-            self.id = id
-            self.current = current
-            self.available = available
-        }
+    struct Stream: Sendable {
+        var id: AudioStreamID
+        var current: PhysicalFormat
+        var available: [PhysicalFormat]
     }
 
     public var id: AudioObjectID
     public var name: String
-    public var manufacturer: String
+    var manufacturer: String
     public var uid: String
     /// Four-character code: `'usb '`, `'bltn'` (built-in), `'hdmi'`, and so on.
-    public var transport: String
-    public var nominalSampleRateHz: Double
-    public var availableSampleRatesHz: [ClosedRange<Double>]
-    public var outputStreams: [Stream]
+    var transport: String
+    var nominalSampleRateHz: Double
+    var availableSampleRatesHz: [ClosedRange<Double>]
+    var outputStreams: [Stream]
     /// The process holding exclusive access, or nil when no one is.
-    public var hogModeOwner: pid_t?
+    var hogModeOwner: pid_t?
 
-    public init(
+    init(
         id: AudioObjectID, name: String, manufacturer: String, uid: String, transport: String,
         nominalSampleRateHz: Double, availableSampleRatesHz: [ClosedRange<Double>],
         outputStreams: [Stream], hogModeOwner: pid_t?
@@ -54,7 +48,7 @@ public struct AudioDevice: Sendable {
     }
 
     /// The device macOS sends sound to by default (System Settings → Sound → Output).
-    public static func defaultOutputID() throws -> AudioObjectID {
+    static func defaultOutputID() throws -> AudioObjectID {
         try readScalar(
             AudioObjectID(kAudioObjectSystemObject),
             address(kAudioHardwarePropertyDefaultOutputDevice))

@@ -11,8 +11,7 @@ public struct StandardItem: Sendable {
     public var chord: KeyChord?
     public var runs: CommandID?
 
-    public init(_ title: String, _ action: String, _ chord: KeyChord? = nil, runs: CommandID? = nil)
-    {
+    init(_ title: String, _ action: String, _ chord: KeyChord? = nil, runs: CommandID? = nil) {
         self.title = title
         self.action = action
         self.chord = chord
@@ -45,7 +44,7 @@ public struct MenuSection: Sendable {
 /// its order, and the chord rules come from its standard items.
 public enum AppMenus {
     /// The action the Settings… item sends, which the app's delegate answers.
-    public static let showSettingsAction = "showSettings:"
+    static let showSettingsAction = "showSettings:"
 
     public static func sections(appName: String) -> [MenuSection] {
         let cmd: KeyChord.Modifiers = .command

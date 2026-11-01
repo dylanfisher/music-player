@@ -11,7 +11,7 @@ public struct TagUndoJournal: Sendable {
     package static let capacity = 50
     /// The bytes the kept edits may take by default; older ones are dropped past it. The newest
     /// edit is kept whatever its size, so it can always be undone.
-    package static let defaultCapacityBytes = 512 * 1024 * 1024
+    static let defaultCapacityBytes = 512 * 1024 * 1024
     static let folderName = "tag-undo"
     /// Entry folders and record files are numbers, zero-padded so they sort by name.
     fileprivate static let sequenceDigits = 8

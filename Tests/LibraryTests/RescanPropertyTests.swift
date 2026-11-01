@@ -1,7 +1,7 @@
-import Fixtures
 import Foundation
 import Testing
 
+@testable import Fixtures
 @testable import Library
 @testable import Settings
 

@@ -6,7 +6,7 @@ public struct BrowserEntry: Equatable, Sendable {
     /// a compilation without one.
     public var artist: String?
 
-    public init(id: Int64, name: String, artist: String? = nil) {
+    init(id: Int64, name: String, artist: String? = nil) {
         self.id = id
         self.name = name
         self.artist = artist

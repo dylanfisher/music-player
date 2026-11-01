@@ -3,7 +3,7 @@ import Foundation
 /// What the generator wrote, so tests can assert parsers against it. Stored as `manifest.json` at
 /// the fixture root.
 public struct FixtureManifest: Codable, Equatable, Sendable {
-    public static let fileName = "manifest.json"
+    static let fileName = "manifest.json"
 
     public var fileCount: Int
     /// Sorted by path.
@@ -12,7 +12,7 @@ public struct FixtureManifest: Codable, Equatable, Sendable {
 
 public struct FixtureFile: Codable, Equatable, Sendable {
     public enum Container: String, Codable, Sendable { case flac, mp4, mp3, wav, aiff }
-    public enum Codec: String, Codable, Sendable { case flac, alac, aac, mp3, pcm }
+    enum Codec: String, Codable, Sendable { case flac, alac, aac, mp3, pcm }
     public enum TagFormat: String, Codable, Sendable {
         case vorbisComment, mp4, id3v22, id3v23, id3v24, riffInfo
     }
@@ -22,7 +22,7 @@ public struct FixtureFile: Codable, Equatable, Sendable {
     public var byteCount: Int
     public var container: Container
     /// Nil for files broken in their structure.
-    public var audio: AudioProperties?
+    var audio: AudioProperties?
     /// The tag blocks in the file, in file order. Each holds the same values.
     public var tagFormats: [TagFormat]
     /// What a parser should read. Nil when the file is untagged or broken in its structure; for a
@@ -36,15 +36,15 @@ public struct FixtureFile: Codable, Equatable, Sendable {
     public var malformation: Malformation?
 }
 
-public struct AudioProperties: Codable, Equatable, Sendable {
-    public var codec: FixtureFile.Codec
-    public var sampleRateHz: Int
+struct AudioProperties: Codable, Equatable, Sendable {
+    var codec: FixtureFile.Codec
+    var sampleRateHz: Int
     /// Nil for lossy codecs.
-    public var bitsPerSample: Int?
-    public var channels: Int
+    var bitsPerSample: Int?
+    var channels: Int
     /// For AAC, without the encoder's priming and remainder frames. For MP3, which carries no
     /// length, every frame's samples.
-    public var lengthFrames: Int
+    var lengthFrames: Int
 }
 
 public struct FixtureTags: Codable, Equatable, Sendable {
@@ -56,9 +56,9 @@ public struct FixtureTags: Codable, Equatable, Sendable {
     /// "1997" or "1997-05-12".
     public var date: String?
     public var trackNumber: Int?
-    public var trackTotal: Int?
-    public var discNumber: Int?
-    public var discTotal: Int?
+    var trackTotal: Int?
+    var discNumber: Int?
+    var discTotal: Int?
     public var compilation: Bool
     public var comment: String?
 }

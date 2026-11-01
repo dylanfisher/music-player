@@ -4,10 +4,10 @@ import Log
 
 private let logger = moduleLogger()
 
-public enum HALDeviceProviderError: Error, CustomStringConvertible {
+enum HALDeviceProviderError: Error, CustomStringConvertible {
     case noDefaultOutput
 
-    public var description: String {
+    var description: String {
         switch self {
         case .noDefaultOutput: "macOS has no default output device"
         }

@@ -90,12 +90,12 @@ public struct ArtworkKey: Hashable, Sendable {
     }
 }
 
-public enum ArtworkError: Error, Equatable, CustomStringConvertible {
+enum ArtworkError: Error, Equatable, CustomStringConvertible {
     case unreadable(path: String, reason: String)
     /// The bytes aren't an image ImageIO can decode.
     case undecodable(path: String, mimeType: String)
 
-    public var description: String {
+    var description: String {
         switch self {
         case .unreadable(let path, let reason): "can't read the art in \(path): \(reason)"
         case .undecodable(let path, let mimeType):

@@ -1,10 +1,10 @@
-import Library
-import LibraryBrowser
-import Palette
-import Settings
 import Testing
 
+@testable import Library
+@testable import LibraryBrowser
 @testable import MusicPlayer
+@testable import Palette
+@testable import Settings
 
 @Test func sameTitledAlbumsAreEachListedWithTheirArtist() {
     let (items, shown) = libraryItems([

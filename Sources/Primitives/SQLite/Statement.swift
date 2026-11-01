@@ -131,7 +131,7 @@ public struct Row {
     let statement: OpaquePointer
     let sql: String
 
-    public func isNull(_ column: Int32) -> Bool {
+    func isNull(_ column: Int32) -> Bool {
         sqlite3_column_type(statement, column) == SQLITE_NULL
     }
 

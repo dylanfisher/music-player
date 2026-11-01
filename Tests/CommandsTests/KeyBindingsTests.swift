@@ -55,8 +55,6 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
             KeyBindings.Dropped(
                 command: open, position: .primary, chord: KeyChord("o", cmd), loss: .takenBy(close))
         ])
-    // The alternate is now the menus' chord.
-    #expect(bindings.menuChord(of: open) == KeyChord(.down, cmd))
 }
 
 @Test func storedDataNeverTakesReservedOrFixedChords() throws {

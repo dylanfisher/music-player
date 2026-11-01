@@ -1,15 +1,15 @@
-import Artwork
-import Commands
 import CoreGraphics
 import Foundation
 import ImageIO
-import Metadata
-import Settings
 import Testing
 
+@testable import Artwork
+@testable import Commands
 @testable import Library
+@testable import Metadata
 @testable import NowPlaying
 @testable import Playback
+@testable import Settings
 
 private let urls = ["/m/a.flac", "/m/b.flac"].map(URL.init(fileURLWithPath:))
 

@@ -17,7 +17,7 @@ public struct WatchedFolder: SettingValue {
     ]
 
     public static let defaultPollIntervalMinutes = 15
-    public static let pollIntervalRangeMinutes = 1...1440
+    static let pollIntervalRangeMinutes = 1...1440
 
     /// The root, as an absolute path.
     public var path: String

@@ -15,22 +15,22 @@ private let logger = moduleLogger()
 /// on the rows as they are when their results arrive, so overlapping ones neither duplicate nor
 /// drop a row.
 @MainActor
-public final class TimelineModel {
-    public static let pageSize = 200
+final class TimelineModel {
+    static let pageSize = 200
     /// Pages of resolved rows kept: a few screens either side of the visible ones.
     static let cachePages = 20
 
-    public private(set) var entries: [PlayEntry] = []
+    private(set) var entries: [PlayEntry] = []
     /// Whether the oldest play is loaded.
-    public private(set) var reachedEnd = false
+    private(set) var reachedEnd = false
     /// How many plays the history holds, loaded or not.
-    public private(set) var playCount = 0
+    private(set) var playCount = 0
     /// Whether the newest page has been read since the timeline last showed.
-    public private(set) var isLoaded = false
+    private(set) var isLoaded = false
     /// Called after the rows or what they show change, with the history IDs shown before, so
     /// the view can find its selection again.
-    public var changed: (_ previousIDs: [Int64]) -> Void = { _ in }
-    public var failed: (String) -> Void = { _ in }
+    var changed: (_ previousIDs: [Int64]) -> Void = { _ in }
+    var failed: (String) -> Void = { _ in }
 
     private let reader: LibraryReader
     /// Reads the files and tracks of path IDs, on the main thread's own connection, for the
@@ -43,7 +43,7 @@ public final class TimelineModel {
     private var pages: [Int: [Int64: PlayedTrack]] = [:]
     private var recency: [Int] = []
 
-    public init(
+    init(
         reader: LibraryReader, resolve: @escaping ([Int64]) throws -> [Int64: PlayedTrack]
     ) {
         self.reader = reader
@@ -54,7 +54,7 @@ public final class TimelineModel {
     var cachedPageCount: Int { pages.count }
 
     /// Reads the newest page, replacing what was loaded.
-    public func load() async {
+    func load() async {
         session += 1
         let mine = session
         do {
@@ -71,7 +71,7 @@ public final class TimelineModel {
     }
 
     /// Forgets the rows, as the timeline stops showing, so a later load starts fresh.
-    public func clear() {
+    func clear() {
         session += 1
         loadingMore = nil
         isLoaded = false
@@ -79,7 +79,7 @@ public final class TimelineModel {
     }
 
     /// Reads the page after the oldest loaded row, unless one is already being read.
-    public func loadMore() async {
+    func loadMore() async {
         guard !reachedEnd, loadingMore != session, let last = entries.last else { return }
         let mine = session
         loadingMore = mine
@@ -98,7 +98,7 @@ public final class TimelineModel {
 
     /// Adds plays logged since the newest loaded row above the rows. More than a page of them
     /// reloads, so no play is skipped between the two.
-    public func addNewPlays() async {
+    func addNewPlays() async {
         guard let newest = entries.first else {
             await load()
             return
@@ -122,14 +122,14 @@ public final class TimelineModel {
 
     /// Reads what the rows show again after the library changed: a file that left the index
     /// shows as missing, and one that came back shows again. Only rows drawn again are read.
-    public func refresh() {
+    func refresh() {
         pages = [:]
         recency = []
         changed(entries.map(\.id))
     }
 
     /// The file and track of the play at `row`, read with its page if that isn't cached.
-    public func played(at row: Int) throws -> PlayedTrack? {
+    func played(at row: Int) throws -> PlayedTrack? {
         precondition(entries.indices.contains(row), "row \(row) is outside the timeline")
         let page = row / Self.pageSize
         if let rows = pages[page] {
@@ -148,27 +148,27 @@ public final class TimelineModel {
     }
 
     /// The rows now holding the plays `ids`, for keeping a selection across a change.
-    public func rows(holding ids: Set<Int64>) -> IndexSet {
+    func rows(holding ids: Set<Int64>) -> IndexSet {
         IndexSet(entries.indices.filter { ids.contains(entries[$0].id) })
     }
 
     /// The tracks of the plays at `rows`, each once, in row order, leaving out missing files:
     /// what rating, playlists and the tag editor act on. Throws `OnlyMissingFiles` when rows
     /// are given and none of them has a track, as do the other two.
-    public func trackIDs(ofRows rows: IndexSet) throws -> [Int64] {
+    func trackIDs(ofRows rows: IndexSet) throws -> [Int64] {
         var seen = Set<Int64>()
         return try present(rows).map(\.entry.trackID).filter { seen.insert($0).inserted }
     }
 
     /// The files of the plays at `rows`, in row order, a track as often as its rows, leaving
     /// out missing files: what Play Next queues.
-    public func urls(ofRows rows: IndexSet) throws -> [URL] {
+    func urls(ofRows rows: IndexSet) throws -> [URL] {
         try present(rows).map { URL(fileURLWithPath: $0.played.path) }
     }
 
     /// The queue a double-click on `clicked` plays, by the track table's rule, leaving out
     /// missing files. A missing clicked row starts at the next row that plays.
-    public func playRequest(selected: IndexSet, clicked: Int) throws -> PlayRequest? {
+    func playRequest(selected: IndexSet, clicked: Int) throws -> PlayRequest? {
         let (rows, first) = playOrder(
             rowCount: entries.count, selected: selected, clicked: clicked)
         let played = try resolve(rows.map { entries[$0].trackID })
@@ -187,7 +187,7 @@ public final class TimelineModel {
     }
 
     /// Every loaded play's names in row order, each with its history ID, for Go to Item.
-    public func names() throws -> [TrackName] {
+    func names() throws -> [TrackName] {
         let played = try resolve(entries.map(\.trackID))
         return entries.map { entry in
             let file = played[entry.trackID]

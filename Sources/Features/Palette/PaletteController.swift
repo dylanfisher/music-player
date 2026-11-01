@@ -18,7 +18,7 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
     NSTableViewDelegate, NSWindowDelegate
 {
     public static let width = 640.0
-    public static let rowsHeight = 360.0
+    static let rowsHeight = 360.0
 
     public private(set) var model: PaletteModel
     public private(set) var mode: PaletteMode?
@@ -52,7 +52,7 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         model.resultsChanged = { [weak self] in self?.showResults(sameQuery: $0) }
     }
 
-    public var isShowing: Bool { panel.isVisible }
+    var isShowing: Bool { panel.isVisible }
 
     /// The panel, for drawing it into a snapshot.
     public var window: NSWindow { panel }

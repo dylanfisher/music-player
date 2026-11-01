@@ -36,14 +36,14 @@ struct FileIdentity: Equatable {
 package struct WriteFaults: Sendable {
     /// Runs once the file is read and planned, before the temp file is made from it. A throw
     /// stops the write the way a failure there would.
-    package var beforeWritingTemp: (@Sendable (_ original: String) throws -> Void)?
+    var beforeWritingTemp: (@Sendable (_ original: String) throws -> Void)?
     /// Runs once the temp file is written and checked, before the original is checked for
     /// changes and replaced. A throw stops the write the way a failure there would.
     package var beforeReplacing: (@Sendable (_ original: String, _ temp: String) throws -> Void)?
     /// Stops right before the rename and leaves the temp file, as a crash there would.
     package var crashBeforeRename = false
 
-    package init() {}
+    init() {}
 }
 
 /// The temp files a write of `path` may have left beside it, by path:

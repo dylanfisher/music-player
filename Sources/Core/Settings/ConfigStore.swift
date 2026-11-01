@@ -8,7 +8,7 @@ private let logger = moduleLogger()
 public let configFileName = "config.json"
 
 /// `~/.config/music-player/config.json`.
-public func defaultConfigFileURL() -> URL {
+func defaultConfigFileURL() -> URL {
     FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".config/music-player").appendingPathComponent(configFileName)
 }

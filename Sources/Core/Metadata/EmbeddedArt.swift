@@ -1,6 +1,6 @@
 public let jpegMIMEType = "image/jpeg"
 public let pngMIMEType = "image/png"
-public let gifMIMEType = "image/gif"
+let gifMIMEType = "image/gif"
 
 /// Where a picture sits in its file, so the scanner can record it without reading it and the UI
 /// can load it later with `readArt(_:at:)`.

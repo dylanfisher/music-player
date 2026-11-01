@@ -5,7 +5,7 @@ package struct RIFFChunk {
     package var start: Int
     package var body: Range<Int>
     /// The size the header states, which exceeds `body.count` for a clamped audio chunk.
-    package var declaredSize: Int
+    var declaredSize: Int
 }
 
 /// A streamed writer that couldn't know the size leaves all ones.

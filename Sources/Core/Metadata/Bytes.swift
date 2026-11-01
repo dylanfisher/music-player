@@ -26,7 +26,7 @@ package struct Bytes {
     }
 
     /// Where byte `index` came from in the file.
-    package func fileOffset(_ index: Int) -> Int {
+    func fileOffset(_ index: Int) -> Int {
         base + (escapes?.rawIndex(start + index) ?? start + index)
     }
 
@@ -50,7 +50,7 @@ package struct Bytes {
         return storage[start + offset]
     }
 
-    package func uint16BE(_ offset: Int) throws(ParseFailure) -> UInt16 {
+    func uint16BE(_ offset: Int) throws(ParseFailure) -> UInt16 {
         UInt16(try bigEndian(offset, 2))
     }
     package func uint24BE(_ offset: Int) throws(ParseFailure) -> UInt32 {
@@ -60,7 +60,7 @@ package struct Bytes {
         UInt32(try bigEndian(offset, 4))
     }
     package func uint64BE(_ offset: Int) throws(ParseFailure) -> UInt64 { try bigEndian(offset, 8) }
-    package func uint16LE(_ offset: Int) throws(ParseFailure) -> UInt16 {
+    func uint16LE(_ offset: Int) throws(ParseFailure) -> UInt16 {
         UInt16(try littleEndian(offset, 2))
     }
     package func uint32LE(_ offset: Int) throws(ParseFailure) -> UInt32 {
@@ -79,7 +79,7 @@ package struct Bytes {
     }
 
     /// Four bytes as Latin-1, the way MP4 atom types and RIFF chunk IDs are written.
-    package func fourCC(_ offset: Int) throws(ParseFailure) -> String {
+    func fourCC(_ offset: Int) throws(ParseFailure) -> String {
         try check(offset, 4)
         return latin1(storage[start + offset..<start + offset + 4])
     }

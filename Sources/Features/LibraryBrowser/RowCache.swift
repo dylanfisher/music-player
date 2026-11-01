@@ -3,7 +3,7 @@ import Library
 /// The track table's rows, fetched a page at a time as the table asks for them and kept for at
 /// most `capacityPages` pages, so the table holds a few thousand rows however long the library.
 /// The least recently used page goes first.
-public final class RowCache {
+final class RowCache {
     private let pageSize: Int
     private let capacityPages: Int
     private let fetch: ([Int64]) throws -> [TrackRow]
@@ -14,7 +14,7 @@ public final class RowCache {
     private var recency: [Int] = []
 
     /// `fetch` returns the rows for some IDs, leaving out those that are gone.
-    public init(
+    init(
         pageSize: Int = 100, capacityPages: Int = 30,
         fetch: @escaping ([Int64]) throws -> [TrackRow]
     ) {
@@ -25,7 +25,7 @@ public final class RowCache {
     }
 
     /// The table's rows are now these IDs. Cached pages no longer line up, so they go.
-    public func setIDs(_ ids: [Int64]) {
+    func setIDs(_ ids: [Int64]) {
         self.ids = ids
         pages = [:]
         recency = []
@@ -33,7 +33,7 @@ public final class RowCache {
 
     /// The row at `index`, fetching its page if it isn't cached. Nil when its track has gone
     /// from the index since the IDs were loaded.
-    public func row(at index: Int) throws -> TrackRow? {
+    func row(at index: Int) throws -> TrackRow? {
         precondition(ids.indices.contains(index), "row \(index) is outside the table")
         let page = index / pageSize
         if let rows = pages[page] {

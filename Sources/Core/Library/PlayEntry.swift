@@ -7,12 +7,6 @@ public struct PlayEntry: Equatable, Sendable {
     public var trackID: Int64
     /// Whole seconds since 1970.
     public var playedSeconds: Int
-
-    public init(id: Int64, trackID: Int64, playedSeconds: Int) {
-        self.id = id
-        self.trackID = trackID
-        self.playedSeconds = playedSeconds
-    }
 }
 
 /// A played file, and its track while the index has it.

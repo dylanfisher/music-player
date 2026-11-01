@@ -22,14 +22,14 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     private var goesAwayDuring: (step: SessionStep, callsLeft: Int, afterSeconds: Double)?
 
     /// A call on a session the device can go away during.
-    public enum SessionStep: String, CaseIterable, Sendable {
+    enum SessionStep: String, CaseIterable, Sendable {
         case stop, configure, start
     }
 
     /// What a session call throws when the device goes away during it.
-    public struct WentAway: Error, CustomStringConvertible {
-        public var step: SessionStep
-        public var description: String { "the null device went away during \(step.rawValue)" }
+    struct WentAway: Error, CustomStringConvertible {
+        var step: SessionStep
+        var description: String { "the null device went away during \(step.rawValue)" }
     }
 
     /// What the IO proc wrote while the device ran at one rate.
@@ -49,20 +49,20 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     /// One run per `configure`, in order.
     public var captured: [CapturedRun] { lock.withLock { runs } }
     /// How many sessions are open; zero once every one has been closed or abandoned.
-    public var openSessionCount: Int { lock.withLock { openSessions } }
-    public var defaultsRestoredCount: Int { lock.withLock { restoredDefaults } }
+    var openSessionCount: Int { lock.withLock { openSessions } }
+    var defaultsRestoredCount: Int { lock.withLock { restoredDefaults } }
 
-    public func unplug() { setConnected(false) }
-    public func plugIn() { setConnected(true) }
+    func unplug() { setConnected(false) }
+    func plugIn() { setConnected(true) }
     /// Connects the device without telling the watcher, as when a change notification is missed.
-    public func plugInUnannounced() { lock.withLock { connected = true } }
+    func plugInUnannounced() { lock.withLock { connected = true } }
 
     /// Makes the device go away during the `call`th call of `step` from now, counting every
     /// session's, as a DAC unplugged mid-switch does: the call fails, and the device reads as
     /// gone and the watcher is told, at once or `afterSeconds` after the call fails, as the HAL
     /// may report it later. Counting calls lets a test arm it before playing, so it never
     /// depends on when an event reaches the test.
-    public func goAway(during step: SessionStep, call: Int = 1, afterSeconds: Double = 0) {
+    func goAway(during step: SessionStep, call: Int = 1, afterSeconds: Double = 0) {
         precondition(call >= 1, "calls count from 1")
         lock.withLock { goesAwayDuring = (step, call, afterSeconds) }
     }

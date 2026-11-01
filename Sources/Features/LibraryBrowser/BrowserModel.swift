@@ -54,7 +54,7 @@ public final class BrowserModel {
     /// The sort the table had before a source with its own sort replaced it, to go back to.
     private var sortBeforeDefault: (column: TrackColumn, ascending: Bool)?
     /// Entries of the shown manual playlist with no track in the library, which it can't list.
-    public private(set) var missingTracks = 0
+    private(set) var missingTracks = 0
 
     public init(reader: LibraryReader, sortColumn: TrackColumn, ascending: Bool) {
         self.reader = reader
@@ -92,7 +92,7 @@ public final class BrowserModel {
 
     /// Selects an entry of `pane` by ID, or All for nil. The panes to its right are narrowed, and
     /// lose a selection they no longer list.
-    public func select(_ pane: Pane, id: Int64?) async {
+    func select(_ pane: Pane, id: Int64?) async {
         switch pane {
         case .genre: pending.genre = id
         case .artist: pending.artist = id
@@ -103,7 +103,7 @@ public final class BrowserModel {
 
     /// Shows a watched folder, a playlist or History, or the whole library for nil, as a step
     /// Back can undo.
-    public func setSource(_ source: BrowserSource?) async {
+    func setSource(_ source: BrowserSource?) async {
         pendingVisit = .some(source)
         await showSource(source)
     }
@@ -127,14 +127,14 @@ public final class BrowserModel {
     }
 
     /// Whether dragging rows moves them: only in a manual playlist shown in its own order.
-    public var canReorder: Bool {
+    var canReorder: Bool {
         shownPlaylist?.isManual == true && sortColumn == .playlistOrder && ascending
     }
 
     // MARK: Playlist and stats edits. Each refreshes what it changed.
 
     /// Reads the playlists again. If the one shown has gone, the library is shown.
-    public func reloadPlaylists() async throws {
+    func reloadPlaylists() async throws {
         playlists = try await reader.playlists()
         let ids = Set(playlists.map(\.id))
         history.remove { source in
@@ -186,7 +186,7 @@ public final class BrowserModel {
     }
 
     /// Takes the tracks at `rows` out of the manual playlist shown.
-    public func removeFromShownPlaylist(rows: IndexSet) async throws {
+    func removeFromShownPlaylist(rows: IndexSet) async throws {
         guard let playlist = shownPlaylist else { return }
         try await reader.removeFromPlaylist(playlist.id, trackIDs: ids(ofRows: rows))
         await refresh()
@@ -298,8 +298,8 @@ public final class BrowserModel {
     }
 
     /// The track list changed during every read of its names.
-    public struct NamesKeptChanging: Error, CustomStringConvertible {
-        public var description: String { "the track list kept changing while it was read" }
+    struct NamesKeptChanging: Error, CustomStringConvertible {
+        var description: String { "the track list kept changing while it was read" }
     }
 
     /// How many times `trackNames` reads before it gives up on a list that keeps changing.
@@ -332,13 +332,13 @@ public final class BrowserModel {
 
     /// Runs every query again after the library changed, keeping each selection that's still
     /// there.
-    public func refresh() async {
+    func refresh() async {
         await reload(panesFrom: .genre, reason: .libraryChanged)
     }
 
     /// The queue a double-click plays, as file URLs, and where in it to start. Rows whose track
     /// has gone from the index are left out.
-    public func playRequest(selected: IndexSet, clicked: Int) async throws -> PlayRequest? {
+    func playRequest(selected: IndexSet, clicked: Int) async throws -> PlayRequest? {
         let (rows, first) = playOrder(
             rowCount: trackIDs.count, selected: selected, clicked: clicked)
         let ids = rows.map { trackIDs[$0] }
@@ -467,7 +467,7 @@ public struct SourceHistory: Equatable, Sendable {
     private(set) var visited: [BrowserSource?]
     private(set) var position = 0
 
-    public init(start: BrowserSource? = nil) {
+    init(start: BrowserSource? = nil) {
         visited = [start]
     }
 
@@ -521,9 +521,9 @@ public struct BrowserChange: Equatable, Sendable {
 
     public var reason: Reason
     /// Whether the panes' entries were reloaded, not just the tracks.
-    public var panes: Bool
+    var panes: Bool
     /// The track IDs the views showed before, for finding the selected tracks again.
-    public var previousIDs: [Int64]
+    var previousIDs: [Int64]
 }
 
 /// The selections the window saves: the sidebar's source, and each pane's entry by name, since

@@ -6,7 +6,7 @@ import Library
 public struct RuleDraft: Equatable, Sendable {
     public struct Row: Equatable, Sendable {
         public var field: SmartField
-        public var comparison: SmartComparison
+        var comparison: SmartComparison
         public var value: String
     }
 
@@ -18,12 +18,12 @@ public struct RuleDraft: Equatable, Sendable {
     public var name: String
     public var match: SmartRules.Match
     public private(set) var rows: [Row]
-    public var isLimited: Bool
-    public var limitCount: String
-    public var limitOrder: SmartOrder
+    var isLimited: Bool
+    var limitCount: String
+    var limitOrder: SmartOrder
 
     /// The count a limit starts at when it's turned on.
-    public static let defaultLimit = 25
+    static let defaultLimit = 25
 
     /// Starts from `rules`, or from one empty rule for a new playlist.
     public init(name: String, rules: SmartRules?) {
@@ -46,20 +46,20 @@ public struct RuleDraft: Equatable, Sendable {
     private static let newRow = Row(field: .title, comparison: .contains, value: "")
 
     /// Adds an empty rule after row `index`.
-    public mutating func addRow(after index: Int) {
+    mutating func addRow(after index: Int) {
         rows.insert(Self.newRow, at: min(index + 1, rows.count))
     }
 
     /// Removes row `index`. The last row stays, since a rule editor with none has nothing to
     /// add to; an empty title rule matches every track.
-    public mutating func removeRow(at index: Int) {
+    mutating func removeRow(at index: Int) {
         guard rows.count > 1, rows.indices.contains(index) else { return }
         rows.remove(at: index)
     }
 
     /// Sets a row's field. A comparison the new field can't take becomes its first one, and a
     /// value of the other kind is cleared.
-    public mutating func setField(_ field: SmartField, at index: Int) {
+    mutating func setField(_ field: SmartField, at index: Int) {
         let comparisons = SmartComparison.comparisons(for: field.kind)
         if !comparisons.contains(rows[index].comparison) {
             rows[index].comparison = comparisons[0]
@@ -68,19 +68,19 @@ public struct RuleDraft: Equatable, Sendable {
         rows[index].field = field
     }
 
-    public mutating func setComparison(_ comparison: SmartComparison, at index: Int) {
+    mutating func setComparison(_ comparison: SmartComparison, at index: Int) {
         precondition(
             SmartComparison.comparisons(for: rows[index].field.kind).contains(comparison),
             "\(comparison) for \(rows[index].field)")
         rows[index].comparison = comparison
     }
 
-    public mutating func setValue(_ value: String, at index: Int) {
+    mutating func setValue(_ value: String, at index: Int) {
         rows[index].value = value
     }
 
     /// The trimmed name, or a problem when it's empty.
-    public func checkedName() throws(Problem) -> String {
+    func checkedName() throws(Problem) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw Problem(description: "Give the playlist a name.") }
         return trimmed

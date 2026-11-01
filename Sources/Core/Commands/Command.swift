@@ -10,7 +10,7 @@ public struct Command: Sendable, Equatable {
     /// primary.
     public let chords: [KeyChord]
 
-    public init(_ id: CommandID, _ title: String, _ chords: [KeyChord] = []) {
+    init(_ id: CommandID, _ title: String, _ chords: [KeyChord] = []) {
         precondition(chords.count <= 2, "\(id) has more than a primary and an alternate")
         precondition(Set(chords).count == chords.count, "\(id) lists one chord twice")
         self.id = id

@@ -11,7 +11,7 @@ public struct Setting<Value: SettingValue>: Sendable {
     public let kind: SettingKind
     private let check: @Sendable (Value) -> SettingProblem.Reason?
 
-    public init(_ key: String, title: String, default defaultValue: Value, _ summary: String) {
+    init(_ key: String, title: String, default defaultValue: Value, _ summary: String) {
         self.init(key, title, defaultValue, summary, Value.kind) { _ in nil }
     }
 
@@ -52,7 +52,7 @@ public struct Setting<Value: SettingValue>: Sendable {
 }
 
 extension Setting where Value == Int {
-    public init(
+    init(
         _ key: String, title: String, default defaultValue: Int, range: ClosedRange<Int>,
         _ summary: String
     ) {
@@ -62,7 +62,7 @@ extension Setting where Value == Int {
 
 extension Setting where Value == Int? {
     /// An integer in `range`, or null.
-    public init(
+    init(
         _ key: String, title: String, default defaultValue: Int?, range: ClosedRange<Int>,
         _ summary: String
     ) {
@@ -73,7 +73,7 @@ extension Setting where Value == Int? {
 }
 
 extension Setting where Value == Double {
-    public init(
+    init(
         _ key: String, title: String, default defaultValue: Double, range: ClosedRange<Double>,
         _ summary: String
     ) {

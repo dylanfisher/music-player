@@ -21,7 +21,7 @@ public final class ShortcutsModel {
 
     public private(set) var bindings: KeyBindings
     public let sections: [Section]
-    public private(set) var notices: [CommandID: Notice] = [:]
+    private(set) var notices: [CommandID: Notice] = [:]
     /// Writes changed overrides, by command; an empty override removes the command's entry.
     private let save: ([CommandID: ShortcutOverride]) -> Void
 
@@ -51,7 +51,7 @@ public final class ShortcutsModel {
 
     /// The sections with only the commands whose title contains `text`, or whose chords' symbols
     /// do ("⇧⌘P"); empty sections go.
-    public func filtered(_ text: String) -> [Section] {
+    func filtered(_ text: String) -> [Section] {
         let query = text.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return sections }
         return sections.compactMap { section in
@@ -66,7 +66,7 @@ public final class ShortcutsModel {
     }
 
     /// What the user lost, and why, from clashes in stored data.
-    public func losses(_ id: CommandID) -> [String] {
+    func losses(_ id: CommandID) -> [String] {
         bindings.dropped.filter { $0.command == id }.map { dropped in
             let what = dropped.chord.map { "\($0.symbols) " } ?? ""
             return switch dropped.loss {
@@ -78,34 +78,34 @@ public final class ShortcutsModel {
         }
     }
 
-    public func hasOverride(_ id: CommandID) -> Bool {
+    func hasOverride(_ id: CommandID) -> Bool {
         !(bindings.overrides[id.rawValue]?.isEmpty ?? true)
     }
 
-    public var hasOverrides: Bool { bindings.overrides.values.contains { !$0.isEmpty } }
+    var hasOverrides: Bool { bindings.overrides.values.contains { !$0.isEmpty } }
 
     public func record(_ chord: KeyChord, for id: CommandID, at position: ShortcutPosition) {
         apply(bindings.assign(chord, to: id, at: position, replacing: false), id, chord, position)
     }
 
     /// Takes the chord the notice names from the command that has it.
-    public func replace(for id: CommandID) {
+    func replace(for id: CommandID) {
         guard case .taken(let chord, let position, _) = notices[id] else { return }
         apply(bindings.assign(chord, to: id, at: position, replacing: true), id, chord, position)
     }
 
     public func cancel(for id: CommandID) { notices[id] = nil }
 
-    public func remove(from id: CommandID, at position: ShortcutPosition) {
+    func remove(from id: CommandID, at position: ShortcutPosition) {
         apply(bindings.remove(from: id, at: position), id, nil, position)
     }
 
-    public func reset(_ id: CommandID) {
+    func reset(_ id: CommandID) {
         notices[id] = nil
         save([id: ShortcutOverride()])
     }
 
-    public func resetAll() {
+    func resetAll() {
         notices = [:]
         save(
             Dictionary(

@@ -1,8 +1,8 @@
 import AppKit
 import Foundation
-import Settings
 import Testing
 
+@testable import Settings
 @testable import SettingsWindow
 
 /// A schema with one setting of each kind the General pane draws, none of which has UI code.

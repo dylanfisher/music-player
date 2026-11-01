@@ -26,7 +26,7 @@ public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
         }
 
         /// The mean delay, which is above the median by the tail.
-        public var meanSeconds: Double { medianSeconds * exp(sigma * sigma / 2) }
+        var meanSeconds: Double { medianSeconds * exp(sigma * sigma / 2) }
     }
 
     private let operationSeconds: Double
@@ -57,15 +57,15 @@ public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
 
     /// Drops the NAS after `operations` more operations: every listing and file operation after
     /// that fails, as on an SMB mount whose server went away while the mount stayed.
-    public func drop(afterOperations operations: Int) {
+    func drop(afterOperations operations: Int) {
         lock.withLock { operationsBeforeDrop = operations }
     }
 
     /// Brings a dropped NAS back.
-    public func reconnect() { lock.withLock { operationsBeforeDrop = nil } }
+    func reconnect() { lock.withLock { operationsBeforeDrop = nil } }
 
     /// The most files that were being read at once.
-    public var mostFilesReadAtOnce: Int { lock.withLock { mostReading } }
+    var mostFilesReadAtOnce: Int { lock.withLock { mostReading } }
 
     public func volumeIsLocal(_ path: String) throws -> Bool? { false }
 

@@ -32,7 +32,7 @@ public struct KeyChord: Hashable, Sendable, CustomStringConvertible {
         public static let shift = Modifiers(rawValue: 1 << 3)
     }
 
-    public static let functionKeys = 1...35
+    static let functionKeys = 1...35
 
     public let key: Key
     public let modifiers: Modifiers
@@ -53,7 +53,7 @@ public struct KeyChord: Hashable, Sendable, CustomStringConvertible {
     }
 
     /// Whether `init` takes `character` as a `.character` key.
-    public static func accepts(_ character: Character) -> Bool {
+    static func accepts(_ character: Character) -> Bool {
         !character.isUppercase && !character.isWhitespace
             && !character.unicodeScalars.contains { $0.properties.generalCategory == .control }
     }
@@ -70,7 +70,7 @@ public struct KeyChord: Hashable, Sendable, CustomStringConvertible {
     /// or ⌥ with ←, → or Delete, with or without ⇧. A field being edited takes these before the
     /// menu bar. ⌘↑ and ⌘↓ aren't among them: a one-line field has no lines to move by, and ⌘↓
     /// plays the selection.
-    public var isTextEditing: Bool {
+    var isTextEditing: Bool {
         [.left, .right, .delete].contains(key)
             && [.command, [.command, .shift], .option, [.option, .shift]].contains(modifiers)
     }

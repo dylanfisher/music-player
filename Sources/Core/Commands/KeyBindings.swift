@@ -8,7 +8,7 @@ public struct ChordRules: Sendable {
     public var reserved: [KeyChord: String]
     public var fixed: [CommandID: KeyChord]
 
-    public init(reserved: [KeyChord: String] = [:], fixed: [CommandID: KeyChord] = [:]) {
+    init(reserved: [KeyChord: String] = [:], fixed: [CommandID: KeyChord] = [:]) {
         self.reserved = reserved
         self.fixed = fixed
     }
@@ -140,12 +140,6 @@ public struct KeyBindings: Sendable {
         slots[id]?[position]
     }
 
-    /// The first chord a menu item can show as its key equivalent: the primary, else the
-    /// alternate.
-    public func menuChord(of id: CommandID) -> KeyChord? {
-        registry.command(id)?.chords.first(where: \.canBeKeyEquivalent)
-    }
-
     /// The rule for recording `chord` at `position` of `id`. With `replacing`, a command that
     /// has the chord loses it. A chord the command has in its other slot moves.
     public func assign(
@@ -223,10 +217,10 @@ extension ShortcutSlot {
 }
 
 /// A default chord a standard menu item has, which the item would always take first.
-public struct ReservedDefault: Error, CustomStringConvertible {
-    public var command: CommandID
-    public var chord: KeyChord
-    public var item: String
+struct ReservedDefault: Error, CustomStringConvertible {
+    var command: CommandID
+    var chord: KeyChord
+    var item: String
 
-    public var description: String { "\(command)'s default \(chord.stored) is the \(item) item's" }
+    var description: String { "\(command)'s default \(chord.stored) is the \(item) item's" }
 }

@@ -7,7 +7,7 @@ import Settings
 @MainActor
 public final class GeneralModel {
     /// The control a row shows for its setting's kind.
-    public enum Control: Equatable {
+    enum Control: Equatable {
         case checkbox
         case popUp([SettingKind.Choice])
         /// A number field; `whole` takes integers only, `optional` means empty is null.
@@ -23,7 +23,7 @@ public final class GeneralModel {
         public var key: String
         public var title: String
         public var summary: String
-        public var control: Control
+        var control: Control
     }
 
     public let rows: [Row]
@@ -79,13 +79,13 @@ public final class GeneralModel {
         (value(key) as? [[String: Any]] ?? []).compactMap { $0["path"] as? String }
     }
 
-    public func setOn(_ key: String, _ on: Bool) throws { try set(key, on) }
+    func setOn(_ key: String, _ on: Bool) throws { try set(key, on) }
 
-    public func setChoice(_ key: String, _ raw: String) throws { try set(key, raw) }
+    func setChoice(_ key: String, _ raw: String) throws { try set(key, raw) }
 
     /// Sets a number or text row from what was typed. Empty is null where the setting allows
     /// it; text that isn't a number of the right sort throws, naming the setting.
-    public func setText(_ key: String, _ text: String) throws {
+    func setText(_ key: String, _ text: String) throws {
         guard let row = rows.first(where: { $0.key == key }) else {
             preconditionFailure("\(key) has no row")
         }

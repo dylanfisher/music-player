@@ -6,13 +6,13 @@ import Log
 
 private let logger = moduleLogger()
 
-public enum HALDeviceError: Error, CustomStringConvertible {
+enum HALDeviceError: Error, CustomStringConvertible {
     case hogModeHeld(by: pid_t)
     case noOutputStream
     case noBitPerfectFormat(sampleRateHz: Double, channels: UInt32)
     case didNotSettle(String)
 
-    public var description: String {
+    var description: String {
         switch self {
         case .hogModeHeld(let pid):
             "another process (pid \(pid)) has exclusive access to the device"

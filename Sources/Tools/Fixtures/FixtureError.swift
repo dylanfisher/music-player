@@ -1,10 +1,10 @@
-public enum FixtureError: Error, CustomStringConvertible {
+enum FixtureError: Error, CustomStringConvertible {
     case afconvertFailed(arguments: [String], status: Int32, output: String)
     case unexpectedSeed(String)
     case refusingToClear(path: String)
     case artwork(String)
 
-    public var description: String {
+    var description: String {
         switch self {
         case .afconvertFailed(let arguments, let status, let output):
             "afconvert \(arguments.joined(separator: " ")) exited with \(status): \(output)"

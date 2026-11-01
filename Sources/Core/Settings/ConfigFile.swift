@@ -15,11 +15,11 @@ public struct ConfigProblem: Error, Equatable, CustomStringConvertible {
 }
 
 /// Everything wrong with a config file, which is applied only when nothing is.
-public struct ConfigError: Error, Equatable, CustomStringConvertible {
-    public var path: String
-    public var problems: [ConfigProblem]
+struct ConfigError: Error, Equatable, CustomStringConvertible {
+    var path: String
+    var problems: [ConfigProblem]
 
-    public var description: String {
+    var description: String {
         problems.map { "\(path): \($0)" }.joined(separator: "\n")
     }
 }
@@ -32,9 +32,9 @@ public typealias ShortcutCheck =
     ) -> String?
 
 /// What a good config file sets: the settings it names, and the shortcut overrides.
-public struct ConfigContents: Sendable {
-    public var values: [String: any SettingValue]
-    public var shortcuts: ShortcutOverrides
+struct ConfigContents: Sendable {
+    var values: [String: any SettingValue]
+    var shortcuts: ShortcutOverrides
 }
 
 /// The config file's format: what it holds, the text of a new one, and the text patches the app

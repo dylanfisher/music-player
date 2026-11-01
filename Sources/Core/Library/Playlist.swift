@@ -14,7 +14,7 @@ public struct Playlist: Equatable, Sendable {
     public var name: String
     public var kind: Kind
 
-    public init(id: Int64, name: String, kind: Kind) {
+    init(id: Int64, name: String, kind: Kind) {
         self.id = id
         self.name = name
         self.kind = kind

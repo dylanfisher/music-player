@@ -3,21 +3,21 @@ import Library
 
 /// The line under the track table: how many tracks it shows, what the watcher is scanning, and
 /// how many files and folders have problems, which the owner can open as a list.
-public struct LibraryStatus: Equatable, Sendable {
+struct LibraryStatus: Equatable, Sendable {
     /// Scans running now, by folder path.
-    public private(set) var scanning: [String: ScanProgress] = [:]
+    private(set) var scanning: [String: ScanProgress] = [:]
     /// Problems the last scan of each folder had with the folder itself, by folder path.
-    public private(set) var folderIssues: [String: [ScanIssue]] = [:]
+    private(set) var folderIssues: [String: [ScanIssue]] = [:]
     /// Scans that failed outright, by folder path.
-    public private(set) var failures: [String: String] = [:]
+    private(set) var failures: [String: String] = [:]
     /// Files the index stores a warning or failure for.
-    public var fileIssueCount = 0
+    var fileIssueCount = 0
     /// What a rebuild of the stats discarded, shown for the session it was found in.
-    public var notices: [String] = []
+    var notices: [String] = []
 
-    public init() {}
+    init() {}
 
-    public mutating func apply(_ event: WatcherEvent) {
+    mutating func apply(_ event: WatcherEvent) {
         switch event {
         case .scanning(let folder, let progress):
             scanning[folder] = progress
@@ -34,14 +34,14 @@ public struct LibraryStatus: Equatable, Sendable {
     }
 
     /// Whether there's anything for the problems list to show.
-    public var hasProblems: Bool {
+    var hasProblems: Bool {
         fileIssueCount > 0 || !folderIssues.isEmpty || !failures.isEmpty || !notices.isEmpty
     }
 
     /// "1,204 tracks · scanning Music: 300 of 1,200 read · 3 files and 1 folder with problems".
     /// `missingCount` is how many of a playlist's tracks aren't in the library. `playCount` is
     /// set on the timeline, which counts plays instead of tracks.
-    public func text(trackCount: Int, missingCount: Int = 0, playCount: Int? = nil) -> String {
+    func text(trackCount: Int, missingCount: Int = 0, playCount: Int? = nil) -> String {
         var parts = [playCount.map { count($0, "play") } ?? count(trackCount, "track")]
         if !notices.isEmpty { parts.append("earlier play counts and playlists discarded") }
         if missingCount > 0 { parts.append(count(missingCount, "track") + " not in the library") }
@@ -64,7 +64,7 @@ public struct LibraryStatus: Equatable, Sendable {
     }
 
     /// Every notice and folder problem as a line, for the top of the problems list.
-    public var problemLines: [String] {
+    var problemLines: [String] {
         notices
             + failures.sorted { $0.key < $1.key }.map { "\($0.key): the scan failed: \($0.value)" }
             + folderIssues.sorted { $0.key < $1.key }.flatMap { $0.value.map(\.description) }

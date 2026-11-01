@@ -4,14 +4,14 @@ import TagWriter
 
 /// A track as the editor opens it: its tags and art read from the file, not from the index, so
 /// the editor starts from what's really there.
-public struct EditableTrack: Equatable, Sendable {
-    public var path: String
-    public var tags: TrackTags
-    public var art: Data?
+struct EditableTrack: Equatable, Sendable {
+    var path: String
+    var tags: TrackTags
+    var art: Data?
     /// Fields whose frame or item holds several values, of which the editor shows the first.
-    public var multiValued: Set<TagEditField>
+    var multiValued: Set<TagEditField>
 
-    public init(path: String, tags: TrackTags, art: Data?, multiValued: Set<TagEditField> = []) {
+    init(path: String, tags: TrackTags, art: Data?, multiValued: Set<TagEditField> = []) {
         self.path = path
         self.tags = tags
         self.art = art
@@ -29,12 +29,12 @@ public struct TagEditorModel: Equatable, Sendable {
         case removed
     }
 
-    public let tracks: [EditableTrack]
+    let tracks: [EditableTrack]
     /// What the user typed, by field, including fields typed back to their old value.
-    public private(set) var typed: [TagEditField: String] = [:]
+    private(set) var typed: [TagEditField: String] = [:]
     public private(set) var art = Art.unchanged
 
-    public init(tracks: [EditableTrack]) {
+    init(tracks: [EditableTrack]) {
         precondition(!tracks.isEmpty, "the editor opens on at least one track")
         self.tracks = tracks
     }
@@ -45,7 +45,7 @@ public struct TagEditorModel: Equatable, Sendable {
         return tracks.dropFirst().allSatisfy { text(field, in: $0.tags) == first } ? first : nil
     }
 
-    public func isMixed(_ field: TagEditField) -> Bool {
+    func isMixed(_ field: TagEditField) -> Bool {
         typed[field] == nil && shared(field) == nil
     }
 
@@ -56,7 +56,7 @@ public struct TagEditorModel: Equatable, Sendable {
 
     /// Fields the edit changes that hold several values in some track, which saving collapses
     /// to the one shown.
-    public var collapsedFields: [TagEditField] {
+    var collapsedFields: [TagEditField] {
         let typedChanges = Set(typed.filter { shared($0.key) != $0.value }.keys)
         return TagEditField.allCases.filter { field in
             typedChanges.contains(field) && tracks.contains { $0.multiValued.contains(field) }
@@ -64,7 +64,7 @@ public struct TagEditorModel: Equatable, Sendable {
     }
 
     /// What the sheet says about `collapsedFields` before the user saves; nil when none.
-    public var collapseNote: String? {
+    var collapseNote: String? {
         let fields = collapsedFields
         guard !fields.isEmpty else { return nil }
         let files = tracks.filter { !$0.multiValued.isDisjoint(with: fields) }.count
@@ -74,7 +74,7 @@ public struct TagEditorModel: Equatable, Sendable {
     }
 
     /// The art to show: the new art, none once removed, or the tracks' art when they share it.
-    public var shownArt: Data? {
+    var shownArt: Data? {
         switch art {
         case .replaced(let image, _): image
         case .removed: nil
@@ -82,7 +82,7 @@ public struct TagEditorModel: Equatable, Sendable {
         }
     }
 
-    public var isArtMixed: Bool {
+    var isArtMixed: Bool {
         art == .unchanged && tracks.dropFirst().contains { $0.art != tracks[0].art }
     }
 
@@ -95,7 +95,7 @@ public struct TagEditorModel: Equatable, Sendable {
         }
     }
 
-    public mutating func replaceArt(_ image: Data, mimeType: String) {
+    mutating func replaceArt(_ image: Data, mimeType: String) {
         art = .replaced(image, mimeType: mimeType)
     }
 
@@ -103,7 +103,7 @@ public struct TagEditorModel: Equatable, Sendable {
 
     /// The edit to write: every field typed differently from what it showed, and the art. Throws
     /// for a value some track can't take, before anything is written.
-    public func edit() throws(TagValueError) -> TagEdit {
+    func edit() throws(TagValueError) -> TagEdit {
         var values: [TagEditField: String] = [:]
         for (field, text) in typed where shared(field) != text { values[field] = text }
         let artChange: ArtChange? =
@@ -140,7 +140,7 @@ public struct TagEditorModel: Equatable, Sendable {
 
 /// Reads each file's tags and art for the editor. A file that can't be read is reported and
 /// left out, so the rest can still be edited.
-public func readEditableTracks(_ paths: [String]) -> (tracks: [EditableTrack], problems: [String]) {
+func readEditableTracks(_ paths: [String]) -> (tracks: [EditableTrack], problems: [String]) {
     var tracks: [EditableTrack] = []
     var problems: [String] = []
     for path in paths {

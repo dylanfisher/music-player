@@ -23,13 +23,13 @@ public final class NowPlayingModel {
         self.lookup = lookup
     }
 
-    public var currentURL: URL? {
+    var currentURL: URL? {
         state.currentIndex.flatMap { state.queue.indices.contains($0) ? state.queue[$0] : nil }
     }
 
-    public var isPlaying: Bool { state.status == .playing }
+    var isPlaying: Bool { state.status == .playing }
 
-    public func apply(_ update: PlaybackUpdate) {
+    func apply(_ update: PlaybackUpdate) {
         let before = currentURL
         state = update.state
         switch update.event {
@@ -67,13 +67,13 @@ public final class NowPlayingModel {
     }
 
     /// "Artist — Album", with whichever the tags have.
-    public var subtitle: String {
+    var subtitle: String {
         [track?.artist, track?.album].compactMap { $0 }.joined(separator: " — ")
     }
 
     /// "96 kHz 24-bit FLAC → ADI-2 DAC: 'lpcm' 2 ch 32-bit int @ 96 kHz, non-mixable, hog mode":
     /// the file's format, then what the output is running, once it says.
-    public var formatLine: String {
+    var formatLine: String {
         let source = track.map { track in
             let bits = track.bitsPerSample.map { " " + bitDepth($0) } ?? ""
             return "\(kilohertz(Double(track.sampleRateHz))) kHz\(bits) \(track.codec.uppercased())"
@@ -82,7 +82,7 @@ public final class NowPlayingModel {
     }
 
     /// Elapsed and remaining time for the bar, as "1:02" and "-3:40".
-    public func times(positionSeconds: Double?) -> (elapsed: String, remaining: String) {
+    func times(positionSeconds: Double?) -> (elapsed: String, remaining: String) {
         guard let duration = state.durationSeconds, let position = positionSeconds else {
             return ("", "")
         }

@@ -380,7 +380,7 @@ public struct TagWriteReport: Equatable, Sendable {
     /// The files a batch didn't reach because it stopped (a full disk, a broken journal).
     public var notWritten: [String] = []
 
-    public init() {}
+    init() {}
 }
 
 private let crashDetail = "stopped before the rename, as a crash would"

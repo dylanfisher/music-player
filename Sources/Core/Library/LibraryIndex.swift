@@ -390,7 +390,7 @@ public final class LibraryIndex {
 
     /// Deletes every file outside `roots`, such as those of a folder no longer watched, and
     /// returns how many.
-    public func removeFiles(outside roots: [String]) throws -> Int {
+    func removeFiles(outside roots: [String]) throws -> Int {
         let outside = try database.prepare("SELECT id, path FROM files").map { row in
             (id: try row.int64(0), path: try row.text(1))
         }.filter { file in !roots.contains { isPath(file.path, under: $0) } }

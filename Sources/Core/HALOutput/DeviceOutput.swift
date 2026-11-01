@@ -8,14 +8,14 @@ import RingBuffer
 
 private let logger = moduleLogger()
 
-public enum DeviceOutputError: Error, CustomStringConvertible {
+enum DeviceOutputError: Error, CustomStringConvertible {
     case outOfMemory
     case noVolumeForFormat(String)
     /// The file's audio stopped well before the length its header gives, as a partial file's
     /// or one cut short while it played does.
     case endedEarly(atSeconds: Double, ofSeconds: Double)
 
-    public var description: String {
+    var description: String {
         switch self {
         case .outOfMemory: "couldn't allocate the playback buffer"
         case .endedEarly(let at, let length):

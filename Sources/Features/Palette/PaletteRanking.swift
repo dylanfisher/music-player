@@ -5,7 +5,7 @@ import FuzzyMatch
 public struct RankedItem: Sendable {
     public let index: Int
     public let item: PaletteItem
-    public let highlights: [NSRange]
+    let highlights: [NSRange]
 }
 
 /// Ranks items for a query as Searcher's 0085 does: the match score plus a frecency bonus, ties

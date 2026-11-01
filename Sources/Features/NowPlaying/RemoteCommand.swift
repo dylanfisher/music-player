@@ -44,7 +44,7 @@ public struct RemoteAction: Equatable, Sendable {
     let seconds: Double?
 
     /// Nil for the scrubber without a time. `seconds` is dropped for the other commands.
-    public init?(_ command: RemoteCommand, seconds: Double?) {
+    init?(_ command: RemoteCommand, seconds: Double?) {
         if command == .changePlaybackPosition, seconds == nil { return nil }
         self.command = command
         self.seconds = command == .changePlaybackPosition ? seconds : nil

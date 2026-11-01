@@ -1,9 +1,9 @@
-import Fixtures
 import Foundation
-import Playback
 import Testing
 
+@testable import Fixtures
 @testable import HALOutput
+@testable import Playback
 
 private struct TimedOut: Error, CustomStringConvertible {
     var seen: String

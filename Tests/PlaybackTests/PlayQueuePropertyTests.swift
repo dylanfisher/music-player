@@ -1,7 +1,7 @@
-import Fixtures
 import Foundation
 import Testing
 
+@testable import Fixtures
 @testable import Playback
 
 /// The queue as a test would write it: the listed tracks and the play order, as URLs. Every URL

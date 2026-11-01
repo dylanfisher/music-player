@@ -27,7 +27,7 @@ public struct TagWriteError: Error, Equatable, CustomStringConvertible {
     public var kind: Kind
     public var detail: String
 
-    package init(path: String, kind: Kind, detail: String) {
+    init(path: String, kind: Kind, detail: String) {
         self.path = path
         self.kind = kind
         self.detail = detail

@@ -15,9 +15,9 @@ public struct PlayCounter: Sendable {
     }
 
     /// The most a track needs to play to count, however long it is.
-    public static let playSeconds = 240.0
+    static let playSeconds = 240.0
     /// The share of a track that counts, for tracks shorter than twice `playSeconds`.
-    public static let playFraction = 0.5
+    static let playFraction = 0.5
 
     /// The track that started last and hasn't been counted or left.
     private struct Listen {
@@ -37,7 +37,7 @@ public struct PlayCounter: Sendable {
 
     private var listen: Listen?
 
-    public init() {}
+    init() {}
 
     /// When the current track counts as played if it keeps playing; nil when nothing is
     /// playing or it has already counted.
@@ -80,7 +80,7 @@ public struct PlayCounter: Sendable {
     }
 
     /// Counts the current track if it has now played long enough.
-    public mutating func tick(at now: Date) -> [Event] {
+    mutating func tick(at now: Date) -> [Event] {
         guard var current = listen else { return [] }
         let events = count(&current, at: now)
         listen = current

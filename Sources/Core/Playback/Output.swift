@@ -37,11 +37,6 @@ public struct OutputItem: Sendable, Equatable {
 
     public var id: ID
     public var url: URL
-
-    public init(id: ID, url: URL) {
-        self.id = id
-        self.url = url
-    }
 }
 
 public struct OutputPosition: Sendable, Equatable {

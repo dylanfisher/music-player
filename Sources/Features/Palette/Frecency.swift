@@ -29,7 +29,7 @@ public struct Frecency: Sendable, Equatable {
     }
 
     /// Every key's frecency at `now`.
-    public func scores(now: Double) -> [String: Double] {
+    func scores(now: Double) -> [String: Double] {
         Dictionary(uniqueKeysWithValues: log.visits.map { ($0.key, Self.score($0, now)) })
     }
 
@@ -42,7 +42,7 @@ public struct Frecency: Sendable, Equatable {
 
     /// The bonus a frecency adds to a match: the whole part of its log2, from 0 below 2 up to 4
     /// at 16 and over. Smaller than one letter's run bonus, so it reorders near-ties only.
-    public static func bonus(_ frecency: Double) -> Int {
+    static func bonus(_ frecency: Double) -> Int {
         frecency < 2 ? 0 : min(4, Int(log2(frecency)))
     }
 }

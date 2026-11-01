@@ -1,10 +1,10 @@
 import AppKit
-import Commands
-import KeyChord
-import Settings
 import Testing
 
+@testable import Commands
+@testable import KeyChord
 @testable import MusicPlayer
+@testable import Settings
 
 @MainActor
 private func menu(_ overrides: ShortcutOverrides = [:]) throws -> (MainMenu, CommandDispatcher) {
@@ -34,7 +34,9 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
         guard let id = item.representedObject as? CommandID, !item.isHidden,
             item.action == #selector(MainMenu.runCommand(_:))
         else { continue }
-        let expected = title == "Selection" ? nil : dispatcher.bindings.menuChord(of: id)
+        let first = dispatcher.bindings.registry.command(id)?.chords.first(
+            where: \.canBeKeyEquivalent)
+        let expected = title == "Selection" ? nil : first
         #expect(item.keyEquivalent == (expected?.keyEquivalent ?? ""), "\(id)")
         #expect(
             item.keyEquivalentModifierMask == (expected?.keyEquivalentModifierMask ?? []), "\(id)")

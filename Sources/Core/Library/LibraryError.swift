@@ -1,4 +1,4 @@
-public enum LibraryError: Error, Equatable, CustomStringConvertible {
+enum LibraryError: Error, Equatable, CustomStringConvertible {
     /// A stored warning or failure kind this build doesn't know, from a database another build
     /// wrote.
     case unknownKind(String)
@@ -16,7 +16,7 @@ public enum LibraryError: Error, Equatable, CustomStringConvertible {
     /// A track query asked of the timeline, which lists plays.
     case playsNotTracks
 
-    public var description: String {
+    var description: String {
         switch self {
         case .unknownKind(let name): "the library database holds an unknown kind \"\(name)\""
         case .notWatched(let path):

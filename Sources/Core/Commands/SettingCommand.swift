@@ -39,9 +39,9 @@ public struct SettingCommand: Sendable {
         }
     }
 
-    public static func toggleID(_ key: String) -> CommandID { CommandID("setting.\(key)") }
+    static func toggleID(_ key: String) -> CommandID { CommandID("setting.\(key)") }
 
-    public static func chooseID(_ key: String, _ value: String) -> CommandID {
+    static func chooseID(_ key: String, _ value: String) -> CommandID {
         CommandID("setting.\(key).\(value)")
     }
 

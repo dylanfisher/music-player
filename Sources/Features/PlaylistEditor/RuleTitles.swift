@@ -2,7 +2,7 @@ import Library
 
 extension SmartField {
     /// What the number after the value means, where it isn't plain.
-    public var unit: String? {
+    var unit: String? {
         switch self {
         case .duration: "seconds"
         case .sampleRate: "Hz"

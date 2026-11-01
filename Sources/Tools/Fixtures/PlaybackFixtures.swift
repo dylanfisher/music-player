@@ -13,7 +13,7 @@ public func defaultPlaybackFixturesDirectory() throws -> URL {
 /// shows as a sample that isn't the next step of the ramp.
 public struct RampAlbum: Sendable {
     public let tracks: [URL]
-    public let trackFrames: [Int]
+    let trackFrames: [Int]
     public let sampleRateHz: Int
     public let bitsPerSample: Int
 

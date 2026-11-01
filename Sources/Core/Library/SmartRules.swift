@@ -63,7 +63,7 @@ public struct SmartRule: Codable, Equatable, Sendable {
 
     /// The most text a rule compares with, in UTF-8 bytes: escaped and folded, it stays under
     /// SQLite's limit on a LIKE pattern.
-    public static let maximumTextBytes = 10_000
+    static let maximumTextBytes = 10_000
 
     /// Why the rule can't be compiled, or nil when it can: the comparison must suit the field,
     /// and the value must be text for a text field and a whole number otherwise.
@@ -147,7 +147,7 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
     }
 
     /// Ratings are whole stars, 1 to this; 0 is unrated.
-    public static let maxRating = 5
+    static let maxRating = 5
 
     public var kind: Kind {
         switch self {

@@ -26,7 +26,7 @@ public final class CommandDispatcher {
     /// Called after the bindings change, so the menus show the new chords.
     public var bindingsChanged: () -> Void = {}
     /// Called before any command runs, so a type-to-select query ends.
-    public var willRun: (CommandID) -> Void = { _ in }
+    var willRun: (CommandID) -> Void = { _ in }
     private var handlers: [CommandID: Handler] = [:]
 
     public init(bindings: KeyBindings) {
