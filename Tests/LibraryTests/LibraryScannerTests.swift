@@ -185,7 +185,8 @@ private struct FailingReads: ScanFileAccess {
     let pipeline = ScanPipeline(
         [library.root], root: library.root, filter: FolderFilter(include: [], exclude: []),
         known: [:], index: index, controller: nil, readers: 2, access: FailingReads(),
-        control: ScanControl(), counter: ProgressCounter(nil), rootIsThere: { false })
+        control: ScanControl(), counter: ProgressCounter(nil),
+        batchSize: LibraryScanner.defaultBatchSize, rootIsThere: { false })
     let outcome = try pipeline.run()
     #expect(outcome.rootLost)
     #expect(outcome.read == 0)
@@ -421,7 +422,8 @@ private struct FailingReads: ScanFileAccess {
         [library.root], root: library.root, filter: FolderFilter(include: [], exclude: []),
         known: try index.knownFiles(under: library.root), index: index, controller: nil,
         readers: 2, access: SystemFileAccess(), control: ScanControl(),
-        counter: ProgressCounter(nil), rootIsThere: { true })
+        counter: ProgressCounter(nil), batchSize: LibraryScanner.defaultBatchSize,
+        rootIsThere: { true })
     #expect {
         try pipeline.run()
     } throws: { error in
@@ -516,4 +518,46 @@ private struct FailingReads: ScanFileAccess {
     let wal = library.databaseURL.path + "-wal"
     let walBytes = (try? FileManager.default.attributesOfItem(atPath: wal)[.size] as? Int) ?? 0
     #expect(walBytes == 0)
+}
+
+/// One reader on what it calls a network volume, counting the tracks other connections can
+/// already see before each file it reads.
+private final class CountingReads: ScanFileAccess, @unchecked Sendable {
+    let databaseURL: URL
+    private let lock = NSLock()
+    private var counts: [Int] = []
+
+    init(databaseURL: URL) { self.databaseURL = databaseURL }
+
+    var visibleBeforeEachRead: [Int] { lock.withLock { counts } }
+
+    func volumeIsLocal(_ path: String) throws -> Bool? { false }
+
+    func contentsOfDirectory(_ directory: String, keys: [URLResourceKey]) throws -> [URL] {
+        try SystemFileAccess().contentsOfDirectory(directory, keys: keys)
+    }
+
+    func readMetadata(at path: String) throws(MetadataError) -> ParsedFile {
+        do {
+            let count = try SQLite.Database(at: databaseURL)
+                .prepare("SELECT count(*) FROM files").map { try $0.int(0) }[0]
+            lock.withLock { counts.append(count) }
+        } catch {
+            preconditionFailure("can't count the stored files: \(error)")
+        }
+        return try SystemFileAccess().readMetadata(at: path)
+    }
+}
+
+@Test func filesAreStoredABatchAtATimeAsTheScanGoes() throws {
+    let library = try TestLibrary()
+    _ = try LibraryIndex(at: library.databaseURL)
+    let access = CountingReads(databaseURL: library.databaseURL)
+    let scanner = LibraryScanner(
+        databaseURL: library.databaseURL, networkReaders: 1, access: access, batchSize: 3)
+    _ = try scanner.scan(WatchedFolder(path: library.root, kind: .network))
+    let counts = access.visibleBeforeEachRead
+    #expect(counts.count == library.manifest.files.count)
+    #expect(counts == counts.indices.map { $0 / 3 * 3 })
+    #expect(try library.index().knownFiles(under: library.root).count == counts.count)
 }

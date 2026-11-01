@@ -79,6 +79,7 @@ final class ScanPipeline: @unchecked Sendable {
     private var window: Window
     private var batch: [ScannedFile] = []
     private var storeError: (any Error)?
+    private let batchSize: Int
 
     /// Files finished since `start`, and whether readers waited for the walk or the scan paused
     /// during it, either of which makes its throughput say nothing about the NAS.
@@ -114,8 +115,9 @@ final class ScanPipeline: @unchecked Sendable {
         _ starts: [String], root: String, filter: FolderFilter, known: [String: KnownFile],
         index: LibraryIndex, controller: ReadConcurrency?, readers: Int, access: any ScanFileAccess,
         control: ScanControl,
-        counter: ProgressCounter, rootIsThere: @escaping @Sendable () -> Bool
+        counter: ProgressCounter, batchSize: Int, rootIsThere: @escaping @Sendable () -> Bool
     ) {
+        self.batchSize = batchSize
         directories = starts.reversed()
         self.root = root
         self.filter = filter
@@ -299,10 +301,10 @@ final class ScanPipeline: @unchecked Sendable {
             }
             batch.append(file)
             var full: [ScannedFile]?
-            if batch.count >= LibraryScanner.batchSize {
+            if batch.count >= batchSize {
                 full = batch
                 batch = []
-                batch.reserveCapacity(LibraryScanner.batchSize)
+                batch.reserveCapacity(batchSize)
             }
             // Every file would wake a waiting progress reader 43k times a scan for no visible
             // difference.

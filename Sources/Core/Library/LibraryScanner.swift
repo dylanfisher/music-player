@@ -17,20 +17,32 @@ public struct LibraryScanner: Sendable {
     static let localReaders = ProcessInfo.processInfo.activeProcessorCount
     /// Files stored per transaction: big enough that commits cost little, small enough that
     /// readers see progress and a cancelled scan keeps most of its work.
-    static let batchSize = 500
+    static let defaultBatchSize = 500
 
     public let databaseURL: URL
     /// Files read at once on a network volume, or nil to tune it to the volume as the scan runs.
     public let networkReaders: Int?
     let access: any ScanFileAccess
+    let batchSize: Int
 
     public init(
         databaseURL: URL, networkReaders: Int? = nil,
         access: any ScanFileAccess = SystemFileAccess()
     ) {
+        self.init(
+            databaseURL: databaseURL, networkReaders: networkReaders, access: access,
+            batchSize: Self.defaultBatchSize)
+    }
+
+    /// For tests, which store a small library in several batches.
+    init(
+        databaseURL: URL, networkReaders: Int? = nil, access: any ScanFileAccess, batchSize: Int
+    ) {
+        precondition(batchSize > 0, "a batch needs at least one file")
         self.databaseURL = databaseURL
         self.networkReaders = networkReaders
         self.access = access
+        self.batchSize = batchSize
     }
 
     /// Scans `folder`, or only the directories in `subtrees`, each of which must be inside it.
@@ -89,6 +101,7 @@ public struct LibraryScanner: Sendable {
             filter: filter, known: known, index: index, controller: controller,
             readers: readers,
             access: access, control: control, counter: ProgressCounter(progress),
+            batchSize: batchSize,
             rootIsThere: { directoryDevice(root) == device })
         let outcome = try pipeline.run()
         summary.read = outcome.read
