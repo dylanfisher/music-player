@@ -61,6 +61,10 @@ public struct SmartRule: Codable, Equatable, Sendable {
         self.value = value
     }
 
+    /// The most text a rule compares with, in UTF-8 bytes: escaped and folded, it stays under
+    /// SQLite's limit on a LIKE pattern.
+    public static let maximumTextBytes = 10_000
+
     /// Why the rule can't be compiled, or nil when it can: the comparison must suit the field,
     /// and the value must be text for a text field and a whole number otherwise.
     public var problem: String? {
@@ -68,7 +72,13 @@ public struct SmartRule: Codable, Equatable, Sendable {
             return "\(field.rawValue) can't be compared with \(comparison.rawValue)"
         }
         switch (field.kind, value) {
-        case (.text, .text): return nil
+        case (.text, .text(let text)):
+            // SQLite's LIKE refuses a pattern over 50,000 bytes, and stops at a NUL.
+            if text.utf8.count > SmartRule.maximumTextBytes {
+                return "a rule's text is at most \(SmartRule.maximumTextBytes) bytes"
+            }
+            if text.contains("\u{0}") { return "a rule's text can't hold a NUL" }
+            return nil
         case (.number, .number(let number)), (.date, .number(let number)):
             guard number >= 0 else { return "\(field.rawValue) can't be negative" }
             if field == .rating, number > SmartField.maxRating {

@@ -309,10 +309,11 @@ private func albumEntry(_ row: Row) throws -> BrowserEntry {
 }
 
 /// Each typed word as an FTS5 prefix phrase, so "beat abb" finds "The Beatles, Abbey Road".
-/// Quotes are doubled, which is how FTS5 escapes them inside a phrase. Nil when nothing typed
-/// has a letter or digit, which means no filter.
+/// Quotes are doubled, which is how FTS5 escapes them inside a phrase. A NUL separates words,
+/// since FTS5 would end the query there. Nil when nothing typed has a letter or digit, which
+/// means no filter.
 func ftsQuery(_ text: String) -> String? {
-    let words = text.split(whereSeparator: \.isWhitespace)
+    let words = text.split { $0.isWhitespace || $0 == "\u{0}" }
         .filter { $0.contains { $0.isLetter || $0.isNumber } }
         .map { "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"*" }
     return words.isEmpty ? nil : words.joined(separator: " ")
