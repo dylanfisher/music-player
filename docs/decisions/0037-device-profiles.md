@@ -60,6 +60,13 @@ playback stopped. Stored data has one shape before release, and the IO proc can'
   that keep it current gain the device's available nominal rates and the stream's available
   physical formats.
 
+- **One exception to save-before-change: an automatic return.** The output decides to go back
+  on its own control thread, and the app saves the returned device's profile (moved first, and
+  the config written to show it) when it hears of it on `returns`, just after. Nothing is lost
+  if the app dies in between: that profile was saved while the device was in use, and since then
+  only its place in the list would change. In that moment a volume key still saves to the
+  profile of the device output left, which then plays at that volume next time it is chosen.
+
 ## Alternatives considered
 
 - **Profiles in the config file** — rejected by the plan, and the config is what the user edits,
