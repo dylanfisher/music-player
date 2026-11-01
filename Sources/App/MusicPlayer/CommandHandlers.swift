@@ -205,8 +205,7 @@ extension AppDelegate {
             do {
                 use(try await browser.selectedPaths())
             } catch {
-                logger.error("couldn't read the selected tracks: \(error)")
-                NSSound.beep()
+                browser.reportCommand("couldn't read the selected tracks", error)
             }
         }
     }

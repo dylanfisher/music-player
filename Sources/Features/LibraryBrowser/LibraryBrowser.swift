@@ -105,14 +105,14 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                     else { return }
                     owner?.play(request)
                 } catch {
-                    owner?.report("couldn't read the plays to play: \(error)")
+                    owner?.reportCommand("couldn't play the selection", error)
                 }
             },
             playNext: { rows in
                 do {
                     owner?.playNext(try timelineModel.urls(ofRows: rows))
                 } catch {
-                    owner?.report("couldn't read the plays to queue: \(error)")
+                    owner?.reportCommand("couldn't queue the selection", error)
                 }
             },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound },
@@ -337,6 +337,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         show(failure: message)
     }
 
+    /// Reports a command that failed. One with no track to act on also beeps, as a menu item
+    /// that doesn't apply would.
+    public func reportCommand(_ failure: String, _ error: any Error) {
+        if error is OnlyMissingFiles { NSSound.beep() }
+        report("\(failure): \(error)")
+    }
+
     private func show(failure message: String) {
         statusLabel.stringValue = message
         statusLabel.toolTip = message
@@ -450,11 +457,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         searchField.selectText(nil)
     }
 
-    /// Whether the shown list's selection has a track to act on. On the timeline, plays of
-    /// files no longer in the library have none.
+    /// Whether the shown list has a selection to act on.
     public var hasSelectedTracks: Bool {
-        // A timeline selection of only missing files enables commands that then do nothing,
-        // rather than reading every selected play's track each time a menu is checked.
+        // A timeline selection of only missing files enables commands that then beep and say
+        // so, rather than reading every selected play's track each time a menu is checked.
         showsTimeline
             ? !timeline.table.selectedRowIndexes.isEmpty
             : !table.table.selectedRowIndexes.isEmpty
@@ -472,7 +478,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         do {
             return try selectedTrackIDs()
         } catch {
-            report("\(failure): \(error)")
+            reportCommand(failure, error)
             return nil
         }
     }

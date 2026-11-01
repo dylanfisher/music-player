@@ -86,7 +86,6 @@ private func play(_ count: Int, of rows: [TrackRow], from start: Int, _ index: L
     #expect(try model.played(at: 2)?.title == "x")
 
     #expect(try model.trackIDs(ofRows: [0, 1, 2, 3]) == [rows[1].id, rows[0].id])
-    #expect(try model.trackIDs(ofRows: [2]).isEmpty)
     let a = URL(fileURLWithPath: rows[0].path)
     let b = URL(fileURLWithPath: rows[1].path)
     #expect(try model.urls(ofRows: [0, 1, 2, 3]) == [b, a, a])
@@ -302,4 +301,22 @@ private func waitUntil(_ condition: () -> Bool) async throws {
     browser.addSelection(to: mix)
     try await waitUntil { (try? index.playlistTrackIDs(mix).count) == 2 }
     #expect(try index.playlistTrackIDs(mix) == [rows[1].id, rows[0].id])
+}
+
+@MainActor @Test func aSelectionOfOnlyMissingFilesFailsLoudly() async throws {
+    let (model, index, rows) = try timeline()
+    try index.recordPlay("/gone/x.flac", at: 1)
+    try index.recordPlay("/gone/y.flac", at: 2)
+    await model.load()
+    #expect(throws: OnlyMissingFiles()) { try model.trackIDs(ofRows: [0, 1]) }
+    #expect(throws: OnlyMissingFiles()) { try model.urls(ofRows: [0]) }
+    #expect(throws: OnlyMissingFiles()) { try model.playRequest(selected: [0, 1], clicked: 0) }
+    #expect(throws: OnlyMissingFiles()) { try model.playRequest(selected: [], clicked: 1) }
+
+    // Nothing selected is no command, and one file that's there is enough.
+    try index.recordPlay(rows[0].path, at: 3)
+    await model.load()
+    #expect(try model.trackIDs(ofRows: []).isEmpty)
+    #expect(throws: OnlyMissingFiles()) { try model.trackIDs(ofRows: [1, 2]) }
+    #expect(try model.trackIDs(ofRows: [0, 1]) == [rows[0].id])
 }

@@ -153,7 +153,8 @@ public final class TimelineModel {
     }
 
     /// The tracks of the plays at `rows`, each once, in row order, leaving out missing files:
-    /// what rating, playlists and the tag editor act on.
+    /// what rating, playlists and the tag editor act on. Throws `OnlyMissingFiles` when rows
+    /// are given and none of them has a track, as do the other two.
     public func trackIDs(ofRows rows: IndexSet) throws -> [Int64] {
         var seen = Set<Int64>()
         return try present(rows).map(\.entry.trackID).filter { seen.insert($0).inserted }
@@ -178,7 +179,11 @@ public final class TimelineModel {
             if start == nil, position >= first { start = urls.count }
             urls.append(URL(fileURLWithPath: file.path))
         }
-        return urls.isEmpty ? nil : PlayRequest(urls: urls, first: start ?? 0)
+        guard !urls.isEmpty else {
+            if rows.isEmpty { return nil }
+            throw OnlyMissingFiles()
+        }
+        return PlayRequest(urls: urls, first: start ?? 0)
     }
 
     /// Every loaded play's names in row order, each with its history ID, for Go to Item.
@@ -195,9 +200,11 @@ public final class TimelineModel {
     private func present(_ rows: IndexSet) throws -> [(entry: PlayEntry, played: PlayedTrack)] {
         let picked = rows.filter { entries.indices.contains($0) }.map { entries[$0] }
         let played = try resolve(picked.map(\.trackID))
-        return picked.compactMap { entry in
+        let present = picked.compactMap { entry in
             played[entry.trackID].flatMap { $0.track == nil ? nil : (entry, $0) }
         }
+        if present.isEmpty, !picked.isEmpty { throw OnlyMissingFiles() }
+        return present
     }
 
     /// Takes `next` as the rows and reports it, unless nothing changed. Rows shifted by plays
