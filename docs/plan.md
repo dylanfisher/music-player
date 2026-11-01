@@ -1708,6 +1708,19 @@ Implementation plan:
    temp folders only; schema problems, corrupt and oversized files, duplicates, the prefix,
    NFC, every merge rule, a second import, rules that map and don't.
 
+Schema fix, once the owner's schema was read:
+
+1. **Real tables:** `track` (`favourite` for loved, `rating` 0 to 5 in half steps rounded half
+   up and counted in the preview, `lastplayed` 0 as never), `playlist` (`smartpredicate`,
+   `folder`, `limited`) and `playlisttrack` by `tindex`; `smartrule` and `matchall` go.
+2. **`SwinsianPredicate`** in Core/Library: the archived `NSPredicate` under a byte, object and
+   depth cap, decoded by `NSKeyedUnarchiver` with secure coding and an allowed-class list, never
+   evaluated; its structure (AND, OR, NOT by De Morgan, the seven keys and four operators the
+   owner's rules use) maps onto `SmartRules`.
+3. **Fixtures:** the real schema and the 18 rule shapes with generic genres, shared by the tests
+   and the fuzzer; a `swinsian-predicate` fuzz target and an ADR 0025 row.
+4. **ADR 0033** records the verified schema; the checkpoint keeps only the import itself.
+
 Result: shipped up to the owner's checkpoint, which is pending. Swinsian's database is copied
 with its WAL, checked unchanged by size, mtime and inode, and opened read-only from the copy; the
 schema is assumed, unverified (ADR 0033), and a missing table or column fails with each one named.
