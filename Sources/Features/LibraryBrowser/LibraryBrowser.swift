@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import DisplayText
 import KeyChord
 import Library
 import Log
@@ -585,7 +586,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                     summaries.append(result.summary)
                     lines += result.reportLines
                 } catch {
-                    let failure = "couldn't import \(url.path): \(error)"
+                    let failure = terminalSafe("couldn't import \(url.path): \(error)")
                     logger.error("\(failure)")
                     summaries.append(failure)
                     lines.append(failure)
@@ -612,7 +613,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                     file: url.path, written: written, missing: missing, unwritable: unwritable)
                 finishPlaylistFile(summary, lines)
             } catch {
-                report("couldn't export the playlist to \(url.path): \(error)")
+                report(terminalSafe("couldn't export the playlist to \(url.path): \(error)"))
             }
         }
     }

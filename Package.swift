@@ -71,7 +71,7 @@ let package = Package(
         ),
         .target(
             name: "Library",
-            dependencies: ["Log", "Metadata", "Settings", "SQLite"],
+            dependencies: ["DisplayText", "Log", "Metadata", "Settings", "SQLite"],
             path: "Sources/Core/Library",
             swiftSettings: strictSwift
         ),

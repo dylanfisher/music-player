@@ -120,6 +120,17 @@ private func temporaryFolder() throws -> URL {
         many.problems == [
             PlaylistFileProblem(line: PlaylistFile.maximumEntries + 1, .tooManyEntries)
         ])
+    // A comment or blank line after the last entry allowed isn't an entry past it.
+    let full = try read(
+        String(repeating: "/a.flac\n", count: PlaylistFile.maximumEntries) + "#end\n\n")
+    #expect(full.paths.count == PlaylistFile.maximumEntries && full.problems.isEmpty)
+    // Line breaks alone stop at the line cap.
+    let breaks = try PlaylistFile(
+        [UInt8](repeating: 0x0A, count: PlaylistFile.maximumBytes), format: .m3u, folder: folder)
+    #expect(breaks.paths.isEmpty)
+    #expect(
+        breaks.problems == [PlaylistFileProblem(line: PlaylistFile.maximumLines + 1, .tooManyLines)]
+    )
     let noisy = try read(String(repeating: "http://x.invalid/\n", count: 250))
     #expect(noisy.problems.count == PlaylistFile.maximumProblems)
     #expect(noisy.unlistedProblemCount == 250 - PlaylistFile.maximumProblems)

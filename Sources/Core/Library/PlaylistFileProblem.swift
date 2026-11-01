@@ -15,6 +15,9 @@ public struct PlaylistFileProblem: Equatable, Sendable, CustomStringConvertible 
         case unknownLine
         /// Past `PlaylistFile.maximumEntries`; this line and the rest weren't read.
         case tooManyEntries
+        /// Past `PlaylistFile.maximumLines`, counting comments and blank lines; this line and
+        /// the rest weren't read.
+        case tooManyLines
     }
 
     /// From 1.
@@ -37,6 +40,8 @@ public struct PlaylistFileProblem: Equatable, Sendable, CustomStringConvertible 
             case .unknownLine: "not a PLS line this app reads"
             case .tooManyEntries:
                 "past \(PlaylistFile.maximumEntries) entries; the rest weren't read"
+            case .tooManyLines:
+                "past \(PlaylistFile.maximumLines) lines; the rest weren't read"
             }
         return "line \(line): \(what)"
     }

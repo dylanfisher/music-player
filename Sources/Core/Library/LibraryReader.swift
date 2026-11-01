@@ -1,3 +1,4 @@
+import DisplayText
 import Foundation
 import Settings
 
@@ -79,8 +80,9 @@ public actor LibraryReader {
 
     /// Reads the playlist file at `url` and makes a manual playlist named after it.
     public func importPlaylist(from url: URL) throws -> PlaylistImport {
-        let name = url.deletingPathExtension().lastPathComponent
-            .precomposedStringWithCanonicalMapping
+        // A file name can hold a line break, which the sidebar and the report would show as two.
+        let name = terminalSafe(
+            url.deletingPathExtension().lastPathComponent.precomposedStringWithCanonicalMapping)
         return try index.importPlaylist(
             named: name, try PlaylistFile(contentsOf: url), from: url.path)
     }

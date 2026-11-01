@@ -16,6 +16,8 @@ public struct PlaylistFile: Equatable, Sendable {
     /// Four times macOS's `PATH_MAX`, room for a percent-escaped `file:` URL.
     static let maximumLineBytes = 4096
     static let maximumEntries = 100_000
+    /// Entries, comments and blank lines together.
+    static let maximumLines = 2 * maximumEntries
     /// Problems kept in `problems`; the rest are counted.
     public static let maximumProblems = 100
 
@@ -38,10 +40,14 @@ public struct PlaylistFile: Equatable, Sendable {
         }
         let utf8 = hasBOM || format == .m3u8 || utf8Text(body) != nil
         var numbered: [(number: Int, path: String)] = []
-        for (number, line) in lines(body).enumerated() {
-            let lineNumber = number + 1
-            guard numbered.count < Self.maximumEntries else {
-                note(PlaylistFileProblem(line: lineNumber, .tooManyEntries))
+        var lines = Lines(body)
+        var lineNumber = 0
+        reading: while let line = lines.next() {
+            lineNumber += 1
+            // Blank lines and comments cost a turn each too, so lines are capped apart from
+            // entries.
+            guard lineNumber <= Self.maximumLines else {
+                note(PlaylistFileProblem(line: lineNumber, .tooManyLines))
                 break
             }
             if line.first == UInt8(ascii: "#") { continue }
@@ -71,11 +77,19 @@ public struct PlaylistFile: Equatable, Sendable {
             } else {
                 entry = text[...]
             }
+            let path: String
             switch PlaylistEntry(entry) {
-            case .absolute(let path): numbered.append((order, folded(path)))
-            case .relative(let path): numbered.append((order, folded(folder + "/" + path)))
-            case .problem(let kind): note(PlaylistFileProblem(line: lineNumber, kind))
+            case .absolute(let absolute): path = folded(absolute)
+            case .relative(let relative): path = folded(folder + "/" + relative)
+            case .problem(let kind):
+                note(PlaylistFileProblem(line: lineNumber, kind))
+                continue
             }
+            guard numbered.count < Self.maximumEntries else {
+                note(PlaylistFileProblem(line: lineNumber, .tooManyEntries))
+                break reading
+            }
+            numbered.append((order, path))
         }
         // PLS numbers its entries; a stable sort keeps the file's order among equal numbers.
         paths = numbered.enumerated()
@@ -219,26 +233,35 @@ func folded(_ path: String) -> String {
     return "/" + components.joined(separator: "/")
 }
 
-/// The lines of `bytes`, ended by LF, CRLF or a lone CR, as classic Mac OS wrote them.
-private func lines(_ bytes: ArraySlice<UInt8>) -> [ArraySlice<UInt8>] {
-    var result: [ArraySlice<UInt8>] = []
-    var start = bytes.startIndex
-    var index = start
-    while index < bytes.endIndex {
-        let byte = bytes[index]
-        if byte == UInt8(ascii: "\n") || byte == UInt8(ascii: "\r") {
-            result.append(bytes[start..<index])
-            if byte == UInt8(ascii: "\r"), index + 1 < bytes.endIndex,
-                bytes[index + 1] == UInt8(ascii: "\n")
-            {
-                index += 1
-            }
-            start = index + 1
-        }
-        index += 1
+/// The lines of `bytes`, one at a time, ended by LF, CRLF or a lone CR, as classic Mac OS wrote
+/// them. Lazy, so a file of line breaks costs no more memory than its bytes.
+private struct Lines: IteratorProtocol {
+    private let bytes: ArraySlice<UInt8>
+    private var start: Int
+
+    init(_ bytes: ArraySlice<UInt8>) {
+        self.bytes = bytes
+        start = bytes.startIndex
     }
-    if start < bytes.endIndex { result.append(bytes[start...]) }
-    return result
+
+    mutating func next() -> ArraySlice<UInt8>? {
+        guard start < bytes.endIndex else { return nil }
+        var index = start
+        while index < bytes.endIndex {
+            let byte = bytes[index]
+            if byte == UInt8(ascii: "\n") || byte == UInt8(ascii: "\r") {
+                let line = bytes[start..<index]
+                let crlf =
+                    byte == UInt8(ascii: "\r") && index + 1 < bytes.endIndex
+                    && bytes[index + 1] == UInt8(ascii: "\n")
+                start = index + (crlf ? 2 : 1)
+                return line
+            }
+            index += 1
+        }
+        defer { start = bytes.endIndex }
+        return bytes[start...]
+    }
 }
 
 /// What a PLS line says.

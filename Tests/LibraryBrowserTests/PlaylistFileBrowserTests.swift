@@ -101,7 +101,7 @@ private func temporaryFolder() throws -> URL {
     #expect(
         export.lines == [
             "/out/Mix.m3u8: " + export.summary,
-            #"/out/Mix.m3u8: not written, since a line can't hold its path: "/a\nb""#,
+            #"/out/Mix.m3u8: not written, since a line can't hold its path: /a\u{A}b"#,
         ])
     #expect(exportReport(file: "/o.m3u8", written: 1, missing: 0, unwritable: []).lines.isEmpty)
 }
@@ -119,4 +119,19 @@ private func temporaryFolder() throws -> URL {
     pasteboard.clearContents()
     pasteboard.writeObjects([urls[1]])
     #expect(playlistFileURLs(pasteboard).isEmpty)
+}
+
+@MainActor @Test func lineBreaksFromAPlaylistFileCantFakeAReportRow() async throws {
+    let (model, _) = try await writableModel()
+    let dir = try temporaryFolder()
+    let list = dir.appendingPathComponent("Two\nRows.m3u8")
+    try Data("file:///gone%0A/x: not in the library: /fake.flac\n".utf8).write(to: list)
+    let imported = try await model.importPlaylist(from: list)
+    #expect(imported.name == "Two\\u{A}Rows")
+    let lines = imported.reportLines
+    #expect(lines.count == 2 && lines.allSatisfy { !$0.contains("\n") }, "\(lines)")
+    #expect(lines[1].hasSuffix("not in the library: /gone\\u{A}/x: not in the library: /fake.flac"))
+    let export = exportReport(
+        file: dir.path + "/a\nb.m3u8", written: 0, missing: 0, unwritable: ["/c\nd"])
+    #expect(export.lines.allSatisfy { !$0.contains("\n") } && !export.summary.contains("\n"))
 }

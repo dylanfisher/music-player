@@ -48,7 +48,10 @@ walk listed it: decomposed under an APFS root, precomposed names under a share's
   line or a URL starts with `./`. A path holding CR, LF or NUL, or longer than a line the reader
   takes, isn't written and is reported, as is a manual playlist's count of entries not in the
   library. The file is written only to the save panel's URL, atomically.
-- **Caps.** 16 MiB a file, 4 KiB a line, 100,000 entries, 100 problems listed.
+- **Caps.** 16 MiB a file, 4 KiB a line, 200,000 lines of any kind (read one at a time),
+  100,000 entries (comments after the last don't count), 100 problems listed.
+- **Display.** The playlist's name, taken from the file name, and every report row and status
+  line are escaped with `terminalSafe`, so a line break shows as `\u{A}` and can't fake a row.
 
 ## Alternatives considered
 

@@ -1,10 +1,11 @@
+import DisplayText
 import Foundation
 import Library
 
 extension PlaylistImport {
     /// "Imported “Mix”: 40 tracks · 3 not in the library · 1 listed twice · 2 lines skipped".
     var summary: String {
-        var parts = ["Imported “\(name)”: \(count(added, "track"))"]
+        var parts = ["Imported “\(terminalSafe(name))”: \(count(added, "track"))"]
         if !missing.isEmpty { parts.append("\(number(missing.count)) not in the library") }
         if repeated > 0 { parts.append("\(number(repeated)) listed twice") }
         let skipped = file.problems.count + file.unlistedProblemCount
@@ -17,12 +18,13 @@ extension PlaylistImport {
     var reportLines: [String] {
         guard !missing.isEmpty || repeated > 0 || !file.problems.isEmpty else { return [] }
         let shown = PlaylistFile.maximumProblems
+        let source = terminalSafe(source)
         var lines = ["\(source): \(summary)"]
-        lines += missing.prefix(shown).map { "\(source): not in the library: \($0)" }
+        lines += missing.prefix(shown).map { "\(source): not in the library: \(terminalSafe($0))" }
         if missing.count > shown {
             lines.append("\(source): \(number(missing.count - shown)) more not in the library")
         }
-        lines += file.problems.map { "\(source): \($0)" }
+        lines += file.problems.map { "\(source): \(terminalSafe($0.description))" }
         if file.unlistedProblemCount > 0 {
             lines.append("\(source): \(count(file.unlistedProblemCount, "more line")) skipped")
         }
@@ -35,6 +37,7 @@ extension PlaylistImport {
 func exportReport(
     file: String, written: Int, missing: Int, unwritable: [String]
 ) -> (summary: String, lines: [String]) {
+    let file = terminalSafe(file)
     var parts = ["Exported \(count(written, "track")) to \((file as NSString).lastPathComponent)"]
     if missing > 0 { parts.append("\(number(missing)) not in the library") }
     if !unwritable.isEmpty {
@@ -45,7 +48,7 @@ func exportReport(
     let shown = PlaylistFile.maximumProblems
     var lines = ["\(file): \(summary)"]
     lines += unwritable.prefix(shown).map {
-        "\(file): not written, since a line can't hold its path: \($0.debugDescription)"
+        "\(file): not written, since a line can't hold its path: \(terminalSafe($0))"
     }
     if unwritable.count > shown {
         lines.append("\(file): \(number(unwritable.count - shown)) more not written")
