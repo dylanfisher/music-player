@@ -38,7 +38,7 @@ Set by the owner on 2026-10-30 and 2026-10-31:
 3. Write the [hardening sub-plan](#14-hardening), committed as `docs: plan phase 14`, then run
    14a onward, each through its gate.
 4. Phase 9 last, if time is left, against a simulated renderer only. Nothing contacts the Denon
-   or any real device: no SSDP on the LAN, no HTTP to real addresses. Its Denon checkpoint stays
+   or any real device: no SSDP on the LAN, no HTTP or receiver control to real addresses. Its Denon checkpoint stays
    pending.
 5. Skip 10, 12 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
@@ -656,8 +656,21 @@ checkpoint: the MediaPlayer adapters' off-main path.
       sends original file bytes. Formats the renderer can't take are reported, not transcoded.
 - [ ] Renderers appear next to HAL devices in the output picker.
 - [ ] Info.plist gets `NSLocalNetworkUsageDescription` and Bonjour entries.
+- [ ] **Receiver control** over Denon's AVR control protocol: plain-text commands ending in a
+      carriage return, on TCP port 23. It works on any input, not only while the Denon plays the
+      UPnP stream. The receiver's address comes from SSDP discovery.
+      - Commands in the registry: receiver volume up, down and set (`MV`), mute (`MU`), sound mode
+        with Pure Direct, Direct and Stereo (`MS`), input (`SI`), power (`PW`).
+      - The receiver pushes a status line whenever its state changes, including from its own
+        remote or front panel. The model follows those lines, not what the app last sent.
+      - At least 50 ms between commands, as Denon's spec asks, so held volume keys are throttled.
+      - Many Denon models accept one control client at a time. When the connection is refused or
+        dropped, the UI says the receiver is unreachable; it doesn't retry silently.
+      - Tests run against a simulated receiver on loopback.
 - [ ] **Hardware checkpoint (owner):** play 16/44.1, 24/96 and 24/192 FLAC to the Denon. Report
-      what its display shows, gapless behavior, seek, and volume.
+      what its display shows, gapless behavior, seek, and volume. With the receiver's Network
+      Control set to Always On, switch Pure Direct on and off, change volume and input from the
+      app, then from the Denon's remote, and report whether the app follows.
 
 ### 10. Web remote
 
