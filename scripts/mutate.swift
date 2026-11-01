@@ -84,14 +84,14 @@ func isIdentifier(_ byte: UInt8) -> Bool {
         || (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte) || byte == UInt8(ascii: "_")
 }
 
-/// Words that start a line which isn't a statement to drop: declarations, control flow, and
-/// what a dropped line would leave uncompilable or meaningless.
+/// Words that start a line which isn't a statement to drop: declarations, control flow, what a
+/// dropped line would leave uncompilable or meaningless, and logging, which no test reads.
 let keptStarts: Set<String> = [
     "let", "var", "func", "return", "throw", "guard", "if", "else", "for", "while", "switch",
     "case", "default", "defer", "do", "catch", "break", "continue", "struct", "class", "enum",
     "extension", "init", "private", "public", "package", "fileprivate", "static", "import",
     "protocol", "typealias", "precondition", "preconditionFailure", "fatalError", "assert",
-    "repeat", "override", "final", "nonisolated", "mutating", "weak", "lazy",
+    "repeat", "override", "final", "nonisolated", "mutating", "weak", "lazy", "logger",
 ]
 
 func mutants(_ bytes: [UInt8]) -> [Mutant] {

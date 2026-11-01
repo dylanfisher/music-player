@@ -85,6 +85,8 @@ run_job() {
     else
       outcome=killed
     fi
+    # The time limit ends swift test, not the test helper it started for a mutant that hangs.
+    pkill -f "swiftpm-testing-helper.*--scratch-path $build " || true
     git -C "$tree" checkout -q -- "$file"
     printf '%s\t%s\t%s\t%s\t%s\n' "$file" "$id" "$line" "$summary" "$outcome" >> "$results"
   done
