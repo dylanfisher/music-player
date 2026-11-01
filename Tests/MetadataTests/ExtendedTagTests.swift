@@ -161,14 +161,29 @@ private func id3Frames(version: UInt8) -> [Data] {
     #expect(parsed.warnings.isEmpty)
 }
 
-@Test func mp4SkipsAnIntegerItemOfTheWrongTypeWithAWarning() throws {
-    let file = mp4File(
-        moov(
-            entry: alacEntry(rate: 44_100, channels: 2, bits: 16), timescale: 44_100,
-            duration: 4410, items: ilstItem("tmpo", code: 1, ascii("128"))))
-    let parsed = try parse(file)
-    #expect(parsed.metadata.tags.bpm == nil)
-    #expect(parsed.warnings.map(\.kind) == [.unreadableField])
+@Test func aMalformedIntegerItemIsAWarningAndTheOtherTagsAreKept() throws {
+    var movement = Data()
+    movement.appendBigEndian(UInt16(2))
+    let cases: [(String, Data)] = [
+        ("text type", ilstItem("tmpo", code: 1, ascii("128"))),
+        ("nine bytes", ilstItem("tmpo", code: 21, Data(count: 9))),
+        ("empty", ilstItem("\u{A9}mvi", code: 21, Data())),
+    ]
+    for (name, bad) in cases {
+        let items =
+            ilstItem("\u{A9}nam", code: 1, ascii("Kept")) + bad
+            + ilstItem("\u{A9}mvi", code: 21, movement) + ilstItem("\u{A9}grp", code: 1, ascii("G"))
+        let file = mp4File(
+            moov(
+                entry: alacEntry(rate: 44_100, channels: 2, bits: 16), timescale: 44_100,
+                duration: 4410, items: items))
+        let parsed = try parse(file)
+        #expect(parsed.metadata.tags.title == "Kept", "\(name)")
+        #expect(parsed.metadata.tags.grouping == "G", "\(name)")
+        #expect(parsed.metadata.tags.bpm == nil, "\(name)")
+        #expect(parsed.metadata.tags.movementNumber == 2, "\(name)")
+        #expect(parsed.warnings.map(\.kind) == [.unreadableField], "\(name)")
+    }
 }
 
 @Test func wavReadsCopyrightFromInfoAndTheRestFromID3() throws {

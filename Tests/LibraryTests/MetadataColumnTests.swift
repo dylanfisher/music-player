@@ -238,10 +238,28 @@ private let grouped = TrackFilter(groupByAlbumArtist: true)
         Set(albumTitles(try index.albums()))
             == ["Hits", "Live \u{2014} Band", "Live \u{2014} Solo"])
     let repeated = [
-        BrowserEntry(id: 1, name: "Hits", artist: nil),
+        BrowserEntry(id: 1, name: "Hits", artist: nil, isCompilation: true),
         BrowserEntry(id: 2, name: "Hits", artist: "Band"),
+        BrowserEntry(id: 3, name: "Hits", artist: nil),
     ]
-    #expect(albumTitles(repeated) == ["Hits \u{2014} \(variousArtists)", "Hits \u{2014} Band"])
+    #expect(
+        albumTitles(repeated) == ["Hits \u{2014} \(variousArtists)", "Hits \u{2014} Band", "Hits"])
+}
+
+@Test func onlyACompilationWithoutAnArtistIsVariousArtistsInTheAlbumPane() throws {
+    let (index, _, _) = try taggedLibrary([
+        "comp": ["ALBUM": "Hits", "ARTIST": "A", "COMPILATION": "1"],
+        "nobody": ["ALBUM": "Mix"],
+        "band": ["ALBUM": "Hits", "ARTIST": "Band"],
+        "other": ["ALBUM": "Mix", "ARTIST": "Band"],
+    ])
+    let albums = try index.albums()
+    #expect(albums.filter(\.isCompilation).map(\.name) == ["Hits"])
+    #expect(
+        Set(albumTitles(albums))
+            == [
+                "Hits \u{2014} \(variousArtists)", "Hits \u{2014} Band", "Mix", "Mix \u{2014} Band",
+            ])
 }
 
 @Test func groupedSortsKeepEachAlbumTogetherInTrackOrder() throws {

@@ -29,8 +29,9 @@ playlists shouldn't be lost to add a stat.
   direction, so an album's tracks stay together. Other columns break ties by album artist
   instead of track artist. The plan asked Album to order by album artist first too; that made
   it the same order as Artist, so it orders by title first.
-- **The Album pane** adds " — " and the album artist (Various Artists for a compilation without
-  one) to a title only where another listed album has the same title.
+- **The Album pane** adds " — " and the album artist to a title only where another listed album
+  has the same title: Various Artists for an album of compilation tracks without one, and
+  nothing for any other album without an artist.
 - **Columns.** Every tag field is stored on `tracks` and is a column, sortable, and a rule field
   where it holds text, a number or a date. Text the tags hold as written sorts with
   `COLLATE NOCASE`; the names that already had folded sort keys keep them. Derived columns are
@@ -55,8 +56,8 @@ playlists shouldn't be lost to add a stat.
   so the plays, ratings and playlists stayed. "Love or Unlove" loves the selection, or unloves
   it when all of it is loved.
 - **Default widths** per column, used when one is first shown, add up for the owner's sixteen
-  (#, Album Art, Title, Artist, Album, Track of Total, Time, Year, Genre, Grouping, Catalog
-  Number, Bit Rate, Sample Rate, Size, Plays, Date Added) to 1,027 points with spacing, which
+  (#, Art, Title, Artist, Album, Track of Total, Time, Year, Genre, Grouping, Catalog
+  #, Bit Rate, Sample Rate, Size, Plays, Date Added) to 1,029 points with spacing, which
   fits a 1440-point window with the sidebar and queue open. The default 1280-point window
   scrolls them sideways. The track number's header is now "Track", since "#" is the row number.
 
@@ -76,6 +77,7 @@ playlists shouldn't be lost to add a stat.
 
 ## Consequences
 
-The index shape changed, so the first launch rebuilds it and rescans. The tag editor still edits
-only the fields it did; editing a comment no longer touches a Vorbis `DESCRIPTION`. A thumbnail
-column on a slow NAS shows art a row at a time as each loads.
+The index shape changed, so the first launch rebuilds it and rescans. Date Created is stored
+only when a file is read, so a file the rescan skips as unchanged keeps the date it had.
+The tag editor still edits only the fields it did; editing a comment no longer touches a Vorbis
+`DESCRIPTION`. A thumbnail column on a slow NAS shows art a row at a time as each loads.

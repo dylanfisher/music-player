@@ -5,7 +5,7 @@ extension TrackColumn {
     public var title: String {
         switch self {
         case .rowNumber: "#"
-        case .art: "Album Art"
+        case .art: "Art"
         case .title: "Title"
         case .artist: "Artist"
         case .album: "Album"
@@ -49,7 +49,7 @@ extension TrackColumn {
         case .rating: "Rating"
         case .loved: "Loved"
         case .publisher: "Publisher"
-        case .catalogNumber: "Catalog Number"
+        case .catalogNumber: "Catalog #"
         case .barcode: "Barcode"
         case .copyright: "Copyright"
         case .encoder: "Encoder"

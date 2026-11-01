@@ -98,7 +98,12 @@ extension LibraryIndex {
     /// The albums of the tracks in `filter`'s source, genre and artist.
     public func albums(_ filter: TrackFilter = TrackFilter()) throws -> [BrowserEntry] {
         try pane(
-            "SELECT id, title, (SELECT name FROM artists WHERE id = albums.artist_id) FROM albums",
+            """
+            SELECT id, title, (SELECT name FROM artists WHERE id = albums.artist_id),
+                albums.artist_id IS NULL AND EXISTS (SELECT 1 FROM tracks
+                    WHERE album_id = albums.id AND compilation = 1)
+            FROM albums
+            """,
             "album_id", "sort_title", filter, [.source, .genre, .artist], row: albumEntry)
     }
 
@@ -356,7 +361,9 @@ private func entry(_ row: Row) throws -> BrowserEntry {
 }
 
 private func albumEntry(_ row: Row) throws -> BrowserEntry {
-    BrowserEntry(id: try row.int64(0), name: try row.text(1), artist: row.optionalText(2))
+    BrowserEntry(
+        id: try row.int64(0), name: try row.text(1), artist: row.optionalText(2),
+        isCompilation: try row.int(3) == 1)
 }
 
 /// Each typed word as an FTS5 prefix phrase, so "beat abb" finds "The Beatles, Abbey Road".

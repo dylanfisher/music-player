@@ -20,20 +20,20 @@ extension TrackColumn {
     /// on a 1440-point screen.
     public var defaultWidth: Double {
         switch self {
-        case .art: 20
         case .rowNumber: 30
         case .trackNumber, .discNumber, .year, .channels, .bpm, .playCount, .skipCount, .loved,
-            .compilation:
+            .compilation, .art:
             34
         case .duration, .trackTotal, .discTotal, .movementNumber, .bitDepth, .playlistOrder: 40
-        case .trackOfTotal, .discOfTotal: 46
         case .size, .codec, .fileType: 48
-        case .sampleRate, .rating: 50
+        case .rating: 50
         case .bitRate: 55
+        case .sampleRate: 76
+        case .trackOfTotal, .discOfTotal: 84
         case .dateAdded, .dateCreated, .dateModified, .lastPlayed: 86
-        case .artist, .album, .albumArtist, .composer, .conductor, .lyricist, .publisher: 90
-        case .title, .fileName, .path, .comment, .description, .work, .movementName: 116
-        default: 64
+        case .artist, .album, .albumArtist, .composer, .conductor, .lyricist, .publisher: 72
+        case .title, .fileName, .path, .comment, .description, .work, .movementName: 88
+        default: 60
         }
     }
 
