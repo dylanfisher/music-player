@@ -66,6 +66,44 @@ a replay takes the same dictionary orders. A run keeps at most 10 crashes.
 Each crash found becomes a minimised file under `Tests/<Module>Tests/Crashes/` with a test, and
 a fix, in its own commit.
 
+### Sanitizers
+
+`scripts/sanitize` runs `swift test --sanitize=address`, `thread` and `undefined`, each in its
+own scratch path (`.build/<sanitizer>`) so the three builds and the normal one don't evict each
+other. Swift has no UBSan of its own (its integer and bounds checks trap in every build), so
+`undefined` checks the C targets; swiftc doesn't link the UBSan runtime they then call, and the
+script links `libclang_rt.ubsan_osx_dynamic.dylib` by hand. `--thread-runs <n>` repeats the TSan
+run to find tests that depend on start order; the first run of each sanitizer has 1,000
+property cases, the repeats the default 50, so 20 TSan runs take about an hour, not a day.
+
+### Properties
+
+`Fixtures.forEachPropertyCase` runs `PROPERTY_CASES` cases (50 in `./scripts/check`), each with
+a `SplitMix64` seeded from `PROPERTY_SEED` (default 0x14D) plus the case number, and wraps the
+first failure in an error naming the seed that repeats it. No property library: the generator
+is a few lines the fixtures already had. The properties:
+
+- **Queue:** random replaces, shuffles, inserts, moves and removes, against a model of the
+  listed and play orders by URL: what plays at each position, where each old position went,
+  and the next and previous positions under each repeat mode.
+- **Rescans:** a random tree of generated files, changed at random (files added, deleted,
+  moved, rewritten or touched; folders added, deleted or renamed), rescanned whole or by the
+  changed folders as the watcher reports them, must index what a full scan into a new index
+  does. A root left empty removes nothing, by ADR 0009's rule, and is checked for that instead.
+- **Writer round trips:** random edits to a random generated file, each read back, then undone
+  one at a time, each undo giving back the bytes from before its edit.
+
+### Mutation
+
+`scripts/mutate.swift` makes mutants only in code, not comments or strings: a comparison moved
+across its boundary (`<` and `<=`, `>` and `>=`) or negated (`==` and `!=`), `&&` and `||`
+swapped, a statement alone on its line dropped, and an integer literal plus or minus one. It
+finds binary operators by the spaces the formatter puts around them, which generics, ranges and
+shifts don't have. `scripts/mutate` runs them in 4 git worktrees of HEAD under `.build/mutate`,
+each with its own scratch path, applying one mutant, building only its entry's test target and
+running it, then checking the file out again; the main checkout isn't written. A mutant that
+doesn't compile isn't counted. The files and line ranges are in `scripts/mutate-files.txt`.
+
 ## Alternatives considered
 
 - **A seeded mutation fuzzer without coverage**, the plan's fallback — not needed: the hooks
@@ -81,6 +119,8 @@ a fix, in its own commit.
   on records the journal wrote.
 
 ## Consequences
+
+`scripts/sanitize` and `scripts/mutate` stay out of `./scripts/check` too.
 
 `scripts/fuzz <target> <seconds>` and `scripts/fuzz all <seconds>` (every target at once, a log
 each in `.build/fuzz/<target>/log`) stay out of `./scripts/check`. The corpus in `.build/fuzz`

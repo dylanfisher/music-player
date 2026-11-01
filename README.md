@@ -39,6 +39,9 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 | Survey the tag corpus, or edit and undo every file on clones of it (not in `check`) | `./scripts/tag-corpus [<folder> \| --round-trip]` |
 | Run the benchmarks against their budgets | `./scripts/bench [--soak <seconds>] [name]` |
 | Kill the app's writes at random points, or fill the disk under them, and check what's left (not in `check`) | `./scripts/kill-test [--kills N] [--seed N]`, `./scripts/full-disk` |
+| Fuzz a parser or the tag writer, or every target at once, with coverage (not in `check`) | `./scripts/fuzz <target>\|all <seconds> [--seed N]` |
+| Run the tests under ASan, TSan and UBSan with 1,000 property cases (not in `check`) | `./scripts/sanitize [--thread-runs N] [address] [thread] [undefined]` |
+| Mutate the core state machines and list the mutants the tests miss (not in `check`) | `./scripts/mutate [--jobs N] [<part of a path>]` |
 | Everything CI runs | `./scripts/check` |
 
 `./scripts/check` runs every step even after one fails, so one run lists every problem.
