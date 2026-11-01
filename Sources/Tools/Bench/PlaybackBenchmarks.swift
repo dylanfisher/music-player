@@ -5,6 +5,7 @@ import Foundation
 import HALOutput
 import Library
 import Playback
+import SQLite
 import Settings
 
 /// How long the soak plays. `scripts/bench --soak <seconds>` sets it; the hour the budget is for
@@ -102,7 +103,7 @@ private final class SoakLoad: @unchecked Sendable {
     init(folder: WatchedFolder, scratch: URL, searchDatabase: URL, queries: [String]) {
         loop(every: soakScanIntervalSeconds) { [self] in
             let databaseURL = scratch.appendingPathComponent("scan.sqlite")
-            for suffix in ["", "-wal", "-shm"] {
+            for suffix in ["", Database.walSuffix, Database.shmSuffix] {
                 let url = URL(fileURLWithPath: databaseURL.path + suffix)
                 if FileManager.default.fileExists(atPath: url.path) {
                     try FileManager.default.removeItem(at: url)

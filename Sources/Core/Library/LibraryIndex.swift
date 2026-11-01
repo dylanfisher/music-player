@@ -88,7 +88,7 @@ public final class LibraryIndex {
         let prefix = url.lastPathComponent + ".unreadable-"
         let aside = url.deletingLastPathComponent().appendingPathComponent(
             prefix + stamp + "-" + UUID().uuidString.prefix(8))
-        let suffixes = ["", "-wal", "-shm"]
+        let suffixes = ["", Database.walSuffix, Database.shmSuffix]
         for suffix in suffixes where FileManager.default.fileExists(atPath: url.path + suffix) {
             try FileManager.default.moveItem(atPath: url.path + suffix, toPath: aside.path + suffix)
         }

@@ -1,6 +1,9 @@
 import Foundation
 import SQLite
 
+/// One play in the history; the benches write a million straight to the table with it.
+package let insertHistorySQL = "INSERT INTO history (path_id, played_at) VALUES (?, ?)"
+
 /// Playlists and the stats: the user's data, which no scan recreates. Every row names its track
 /// by its path's permanent ID (ADR 0022), which an index rebuild keeps.
 extension LibraryIndex {
@@ -151,7 +154,7 @@ extension LibraryIndex {
                     last_played_seconds = excluded.last_played_seconds
                 """
             ).run(id, seconds)
-            try statement("INSERT INTO history (path_id, played_at) VALUES (?, ?)").run(
+            try statement(insertHistorySQL).run(
                 id, Int(seconds.rounded(.down)))
         }
     }

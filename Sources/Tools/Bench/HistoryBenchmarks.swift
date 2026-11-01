@@ -99,8 +99,9 @@ private let playedLibrary = Result { () throws -> PlayedLibrary in
         try FileManager.default.removeItem(at: directory)
     }
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    let databaseURL = directory.appendingPathComponent("library.sqlite")
-    for suffix in ["", "-wal"] where FileManager.default.fileExists(atPath: source.path + suffix) {
+    let databaseURL = libraryFileURL(in: directory)
+    for suffix in ["", Database.walSuffix]
+    where FileManager.default.fileExists(atPath: source.path + suffix) {
         try FileManager.default.copyItem(
             atPath: source.path + suffix, toPath: databaseURL.path + suffix)
     }
@@ -110,7 +111,7 @@ private let playedLibrary = Result { () throws -> PlayedLibrary in
     // Written straight to the tables: a million transactions through recordPlay would take
     // minutes. A few tracks are played far more often than most, as in a real library.
     try database.transaction {
-        let insert = try database.prepare("INSERT INTO history (path_id, played_at) VALUES (?, ?)")
+        let insert = try database.prepare(insertHistorySQL)
         var state: UInt64 = 0x9E37_79B9_7F4A_7C15
         let start = Int(Date().timeIntervalSince1970) - syntheticPlayCount * 600
         for play in 0..<syntheticPlayCount {
@@ -125,7 +126,7 @@ private let playedLibrary = Result { () throws -> PlayedLibrary in
             SELECT path_id, count(*), 0, max(played_at) FROM history GROUP BY path_id
             """)
     }
-    try database.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    try index.checkpoint()
     return PlayedLibrary(index: index, database: database, paths: rows.map(\.path))
 }
 

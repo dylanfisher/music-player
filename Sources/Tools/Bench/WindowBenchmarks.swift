@@ -67,7 +67,7 @@ let windowBenchmarks = [
             return samples
         }
         return Measured(
-            value: p95(samples), notes: ["slowest \(String(format: "%.2f", samples.max()!)) ms"])
+            value: p95(samples), notes: [slowestNote(samples)])
     },
 ]
 

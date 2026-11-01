@@ -13,8 +13,8 @@ let playlistBenchmarks = [
             // A copy, so the plays and ratings written here don't reach the other benchmarks.
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true)
-            let databaseURL = directory.appendingPathComponent("library.sqlite")
-            for suffix in ["", "-wal"]
+            let databaseURL = libraryFileURL(in: directory)
+            for suffix in ["", Database.walSuffix]
             where FileManager.default.fileExists(atPath: source.path + suffix) {
                 try FileManager.default.copyItem(
                     atPath: source.path + suffix, toPath: databaseURL.path + suffix)

@@ -180,6 +180,11 @@ func p95(_ samples: [Double]) -> Double {
     return sorted[min(sorted.count - 1, Int((Double(sorted.count) * 0.95).rounded(.up)) - 1)]
 }
 
+/// The note a p95 benchmark adds: its slowest sample, in milliseconds.
+func slowestNote(_ samples: [Double]) -> String {
+    "slowest \(String(format: "%.2f", samples.max()!)) ms"
+}
+
 /// Seconds for a single run of `body`, for benchmarks too slow to repeat.
 func seconds(_ body: () throws -> Void) rethrows -> Double {
     let start = DispatchTime.now().uptimeNanoseconds

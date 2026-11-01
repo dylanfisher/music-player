@@ -26,7 +26,7 @@ let scannedLibrary = Result { () throws -> ScannedLibrary in
     if FileManager.default.fileExists(atPath: directory.path) {
         try FileManager.default.removeItem(at: directory)
     }
-    let databaseURL = directory.appendingPathComponent("library.sqlite")
+    let databaseURL = libraryFileURL(in: directory)
     let folder = WatchedFolder(path: root.path, kind: .local)
     let before = try footprintMB()
     let peak = PeakFootprint()
@@ -195,7 +195,7 @@ let libraryBenchmarks = [
             }
         }
         let samples = try millisecondSamples(runs)
-        return Measured(value: p95(samples), notes: ["slowest \(format(samples.max()!)) ms"])
+        return Measured(value: p95(samples), notes: [slowestNote(samples)])
     },
     Benchmark(
         name: "library: browser pane query (p95)",
@@ -269,7 +269,7 @@ private func simulatedNetworkScan(_ profile: SimulatedProfile, readers: Int?) th
     }
     return try withScratchDirectory("simulated-nas") { directory in
         let scanner = LibraryScanner(
-            databaseURL: directory.appendingPathComponent("library.sqlite"),
+            databaseURL: libraryFileURL(in: directory),
             networkReaders: readers,
             access: SimulatedNAS(
                 operationSeconds: profile.operationSeconds,
