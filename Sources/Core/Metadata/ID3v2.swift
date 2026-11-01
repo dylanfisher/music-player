@@ -16,6 +16,8 @@ private enum FrameKind {
     /// `COMM`; only the one with an empty description is the user's comment.
     case comment
     case picture
+    /// 2.3's `TDAT` (DDMM) and `TIME` (HHMM), which refine `TYER` into a full date.
+    case day, time
 }
 
 /// ID3v2.2 has three-character IDs, 2.3 and 2.4 four. `TDRC` is 2.4's date and `TYER` 2.3's year;
@@ -29,7 +31,13 @@ private let frameKinds: [String: FrameKind] = [
     "TPE2": .text(.albumArtist), "TCON": .genre, "TDRC": .text(.date), "TYER": .text(.date),
     "TRCK": .text(.track), "TPOS": .text(.disc), "TCMP": .text(.compilation),
     "TCOM": .text(.composer), "COMM": .comment, "APIC": .picture,
+    id3v23DayFrameID: .day, id3v23TimeFrameID: .time,
 ]
+
+/// ID3v2.3 holds a date as `TYER`, `TDAT` and `TIME`.
+package let id3v23YearFrameID = "TYER"
+package let id3v23DayFrameID = "TDAT"
+package let id3v23TimeFrameID = "TIME"
 
 /// The frame IDs the reader maps onto `field`, so a writer replaces exactly those.
 package func id3FrameIDs(for field: TagField) -> Set<String> {
@@ -39,6 +47,7 @@ package func id3FrameIDs(for field: TagField) -> Set<String> {
             case .text(let each): each == field ? id : nil
             case .genre: field == .genre ? id : nil
             case .comment: field == .comment ? id : nil
+            case .day, .time: field == .date ? id : nil
             case .picture: nil
             }
         })
@@ -119,6 +128,8 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
 
     var tags = TrackTags()
     var pictures: [(type: UInt32, art: EmbeddedArt)] = []
+    var day: (text: String, offset: Int)?
+    var time: (text: String, offset: Int)?
     let headerSize = version == 2 ? 6 : 10
     let idLength = version == 2 ? 3 : 4
     while area.range.upperBound - cursor >= headerSize {
@@ -204,10 +215,19 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
             case .comment:
                 field = .comment
                 text = try commentFrame(bytes, &reader.warnings)
+            case .day:
+                if day == nil { day = (try textFrame(bytes, &reader.warnings), offset) }
+                return
+            case .time:
+                if time == nil { time = (try textFrame(bytes, &reader.warnings), offset) }
+                return
             case .picture: return
             }
             if let text { tags.set(field, text, at: offset, warnings: &reader.warnings) }
         }
+    }
+    if let day, let year = tags.date {
+        tags.date = fullDate(year: year, day: day, time: time, &reader.warnings)
     }
     return ID3v2Tag(tags: tags, art: preferredPicture(pictures), byteCount: byteCount)
 }
@@ -423,4 +443,40 @@ private func pictureHeader(_ bytes: Bytes, version: UInt8, _ warnings: inout [Me
             bytes, from: cursor + 1, encoding, &warnings, requireTerminator: true)
     else { return nil }
     return (mime, type, description.next)
+}
+
+/// A 2.3 year with its `TDAT` and `TIME`, as "1997-05-12T14:30". A day or time that isn't four
+/// digits is dropped with a warning; a year that isn't four digits keeps its text.
+private func fullDate(
+    year: String, day: (text: String, offset: Int), time: (text: String, offset: Int)?,
+    _ warnings: inout [MetadataWarning]
+) -> String {
+    func digits(_ text: String, _ ranges: (ClosedRange<Int>, ClosedRange<Int>)) -> (Int, Int)? {
+        guard text.count == 4, text.allSatisfy({ $0.isASCII && $0.isNumber }),
+            let first = Int(text.prefix(2)), let second = Int(text.suffix(2)),
+            ranges.0.contains(first), ranges.1.contains(second)
+        else { return nil }
+        return (first, second)
+    }
+    guard year.count == 4, year.allSatisfy({ $0.isASCII && $0.isNumber }) else { return year }
+    guard let (dayOfMonth, month) = digits(day.text, (1...31, 1...12)) else {
+        warnings.append(
+            MetadataWarning(
+                kind: .badValue, offset: day.offset,
+                detail: "TDAT \"\(day.text)\" isn't DDMM; the date is the year alone"))
+        return year
+    }
+    func two(_ value: Int) -> String { value < 10 ? "0\(value)" : "\(value)" }
+    var date = "\(year)-\(two(month))-\(two(dayOfMonth))"
+    if let time {
+        if let (hour, minute) = digits(time.text, (0...23, 0...59)) {
+            date += "T\(two(hour)):\(two(minute))"
+        } else {
+            warnings.append(
+                MetadataWarning(
+                    kind: .badValue, offset: time.offset,
+                    detail: "TIME \"\(time.text)\" isn't HHMM; ignored"))
+        }
+    }
+    return date
 }

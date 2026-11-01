@@ -43,7 +43,8 @@ enum TagFile {
     {
         switch self {
         case .mp4(let file): try file.rewrite(groups, from: tags, art: art)
-        case .id3(let file): file.rewrite(groups, from: tags, art: art, artOffset: artOffset)
+        case .id3(let file):
+            try file.rewrite(groups, from: tags, art: art, artOffset: artOffset)
         case .flac(let file):
             try file.rewrite(groups, from: tags, art: art, artOffset: artOffset)
         }

@@ -68,9 +68,9 @@ struct ID3File {
 
     func rewrite(
         _ groups: [TagGroup], from tags: TrackTags, art: ArtChange?, artOffset: Int?
-    ) -> [Segment] {
+    ) throws(ParseFailure) -> [Segment] {
         var tag = self.tag
-        tag.apply(groups, from: tags, art: art, artOffset: artOffset)
+        try tag.apply(groups, from: tags, art: art, artOffset: artOffset)
         let bytes = tag.rewritten()
         switch host {
         case .mp3:

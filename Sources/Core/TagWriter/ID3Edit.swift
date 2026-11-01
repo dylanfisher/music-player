@@ -1,18 +1,16 @@
 import Foundation
 import Metadata
 
-/// The frame each group is written as, in 2.3 and 2.4. 2.3 has no `TDRC`; its `TYER` holds only
-/// a year, so other dates go in `TDRC`, which the reader takes in either version.
-private func frameID(_ group: TagGroup, version: UInt8, text: String) -> String {
+/// The frame each group is written as. A 2.3 date is split across `TYER`, `TDAT` and `TIME`
+/// by `v23DateFrames`.
+private func frameID(_ group: TagGroup) -> String {
     switch group {
     case .title: "TIT2"
     case .artist: "TPE1"
     case .album: "TALB"
     case .albumArtist: "TPE2"
     case .genre: "TCON"
-    case .date:
-        version == 3 && text.count == 4 && text.allSatisfy({ $0.isASCII && $0.isNumber })
-            ? "TYER" : "TDRC"
+    case .date: "TDRC"
     case .composer: "TCOM"
     case .comment: "COMM"
     case .track: "TRCK"
@@ -21,7 +19,8 @@ private func frameID(_ group: TagGroup, version: UInt8, text: String) -> String 
     }
 }
 
-private let pictureFrameID = "APIC"
+/// 2.3 and 2.4's picture frame; the reader also takes 2.2's three-letter one.
+private let pictureFrameID = id3PictureFrameIDs.first { $0.count == 4 }!
 /// The language a new comment gets when the old one gave none.
 private let defaultCommentLanguage = Array("eng".utf8)
 /// ID3's picture type for the front cover, which the reader prefers.
@@ -32,7 +31,7 @@ extension ID3Tag {
     /// found the current art, which picks the picture frame to replace.
     mutating func apply(
         _ groups: [TagGroup], from tags: TrackTags, art: ArtChange?, artOffset: Int?
-    ) {
+    ) throws(ParseFailure) {
         if let art { applyArt(art, artOffset: artOffset) }
         for group in groups {
             let ids = Set(group.readerFields.flatMap { id3FrameIDs(for: $0) })
@@ -43,15 +42,16 @@ extension ID3Tag {
                 group == .comment
                 ? frames.first(where: replaced).map { Array($0.body.dropFirst().prefix(3)) }
                 : nil
-            replace(
-                where: replaced, with: frame(group, tags, language: language).map { [$0] } ?? [])
+            replace(where: replaced, with: try frames(group, tags, language: language))
         }
     }
 
-    private func frame(_ group: TagGroup, _ tags: TrackTags, language: [UInt8]?) -> ID3Frame? {
+    private func frames(_ group: TagGroup, _ tags: TrackTags, language: [UInt8]?)
+        throws(ParseFailure) -> [ID3Frame]
+    {
         let text = group.isPair ? numberPairText(group.numbers(in: tags)) : group.text(in: tags)
-        guard let text else { return nil }
-        let id = frameID(group, version: version, text: text)
+        guard let text else { return [] }
+        if group == .date, version == 3 { return try v23DateFrames(text) }
         var body: [UInt8]
         switch group {
         case .comment:
@@ -65,7 +65,39 @@ extension ID3Tag {
         default:
             body = [textEncoding(text)] + encode(text, textEncoding(text))
         }
-        return ID3Frame(id: id, body: body, version: version)
+        return [ID3Frame(id: frameID(group), body: body, version: version)]
+    }
+
+    /// "1997", "1997-05-12" or "1997-05-12T14:30" as 2.3's year, DDMM day and HHMM time.
+    /// Anything else, a month without a day among them, 2.3 can't hold, so it's refused.
+    private func v23DateFrames(_ text: String) throws(ParseFailure) -> [ID3Frame] {
+        func digits(_ part: String) -> Bool { part.allSatisfy { $0.isASCII && $0.isNumber } }
+        let characters = Array(text)
+        func part(_ range: Range<Int>) -> String { String(characters[range]) }
+        func frame(_ id: String, _ value: String) -> ID3Frame {
+            ID3Frame(id: id, body: [0] + Array(value.utf8), version: version)
+        }
+        let shapes = [4, 10, 16]
+        guard shapes.contains(characters.count), digits(part(0..<4)),
+            characters.count == 4
+                || (characters[4] == "-" && digits(part(5..<7)) && characters[7] == "-"
+                    && digits(part(8..<10))),
+            characters.count < 16
+                || (characters[10] == "T" && digits(part(11..<13)) && characters[13] == ":"
+                    && digits(part(14..<16)))
+        else {
+            throw .unsupported(
+                at: nil,
+                "ID3v2.3 holds a date as a year, a day and a time; \"\(text)\" doesn't fit")
+        }
+        var result = [frame(id3v23YearFrameID, part(0..<4))]
+        if characters.count >= 10 {
+            result.append(frame(id3v23DayFrameID, part(8..<10) + part(5..<7)))
+        }
+        if characters.count == 16 {
+            result.append(frame(id3v23TimeFrameID, part(11..<13) + part(14..<16)))
+        }
+        return result
     }
 
     private mutating func applyArt(_ art: ArtChange, artOffset: Int?) {
