@@ -65,6 +65,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var problems: ProblemsWindow?
     /// Counts folder tree reads, so only the newest is shown.
     private var treeReads = 0
+    let health: HealthModel
     /// Set from the read of another player's library until its preview sheet closes.
     private var isImporting = false
     private(set) var importSheet: PlayerImportSheet?
@@ -148,6 +149,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
         sidebarController.dropPlaylistFiles = { urls in owner?.importPlaylists(from: urls) }
         content = NSViewController()
+        health = HealthModel(
+            build: { try await reader.healthReport() }, show: { try await reader.showHealth($0) })
         let (events, continuation) = AsyncStream.makeStream(of: WatcherEvent.self)
         watcherEvents = { continuation.yield($0) }
         super.init()
@@ -173,6 +176,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             self?.showStatus()
         }
         timelineModel.failed = { [weak self] message in self?.show(failure: message) }
+        health.changed = { [weak self] in self?.healthChanged() }
+        health.failed = { [weak self] message in self?.report(message) }
     }
 
     private func makeContent() -> NSView {
@@ -285,10 +290,48 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         case .scanning:
             scheduleRefresh()
         case .scanned(_, let summary):
-            if summary.read > 0 || summary.removed > 0 { refreshNow() }
-        case .scanFailed, .removed:
+            let changed = summary.read > 0 || summary.removed > 0
+            if changed { refreshNow() }
+            // A network folder's scans come from polling, so one that changed nothing doesn't
+            // run the report again; the first scan's end runs it once.
+            if changed || (health.report == nil && !health.isRunning) { runHealth() }
+        case .scanFailed:
             refreshNow()
+        case .removed:
+            refreshNow()
+            runHealth()
         }
+    }
+
+    // MARK: Library health
+
+    /// Runs the health report again, from Check Library Health, and opens its rows.
+    public func checkHealth() {
+        sidebarController.openHealth()
+        show(failure: "Checking the library's health…")
+        runHealth()
+    }
+
+    private func runHealth() {
+        Task { await health.run() }
+    }
+
+    /// A newer report: the sidebar counts it, and a check shown lists it.
+    private func healthChanged() {
+        guard let report = health.report else { return }
+        sidebarController.show(health: report)
+        if case .health = model.filter.source {
+            Task { await model.refresh() }
+        } else {
+            showStatus()
+        }
+    }
+
+    /// A check shown before any report has run starts one.
+    private func runHealthIfShownFirst() {
+        guard case .health = model.filter.source, health.report == nil, !health.isRunning
+        else { return }
+        runHealth()
     }
 
     private func scheduleRefresh() {
@@ -325,6 +368,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         if change.panes { panes.reload() }
         table.reload(change)
         showTimelineIfItIsTheSource()
+        runHealthIfShownFirst()
         showStatus()
         stateChanged(model.state)
     }
@@ -353,6 +397,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     private func showStatus() {
+        let found: HealthFindings? =
+            if case .health(let check) = model.filter.source { health.report?[check] } else { nil }
+        status.healthLines = found?.lines ?? []
+        status.healthOtherCount = found?.otherCount ?? 0
         statusLabel.stringValue = status.text(
             trackCount: model.trackIDs.count, missingCount: model.missingTracks,
             playCount: showsTimeline ? timelineModel.playCount : nil)

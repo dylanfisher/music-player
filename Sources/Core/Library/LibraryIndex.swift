@@ -120,6 +120,7 @@ public final class LibraryIndex {
         let rebuilt = Result { try rebuildStaleParts() }
         try database.execute("PRAGMA foreign_keys = ON")
         try rebuilt.get()
+        try database.execute(healthTracksSchema)
     }
 
     private func rebuildStaleParts() throws {

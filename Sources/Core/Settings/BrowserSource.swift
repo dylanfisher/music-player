@@ -1,6 +1,6 @@
-/// What the sidebar shows instead of the whole library: a watched folder, a playlist, History
-/// or the play timeline. Saved as one string: the folder's path, `playlist:<id>`, `history` or
-/// `timeline`.
+/// What the sidebar shows instead of the whole library: a folder, a playlist, History, the play
+/// timeline or a health check. Saved as one string: the folder's path, `playlist:<id>`,
+/// `history`, `timeline` or `health:<check>`.
 public enum BrowserSource: SettingValue, Hashable {
     case folder(String)
     /// A playlist's ID, which an index rebuild keeps (ADR 0018).
@@ -9,10 +9,13 @@ public enum BrowserSource: SettingValue, Hashable {
     case history
     /// Every play, newest first, a track as often as it was played (ADR 0022).
     case timeline
+    /// The tracks a check of the health report found (ADR 0034).
+    case health(HealthCheck)
 
     private static let playlistPrefix = "playlist:"
     private static let historyText = "history"
     private static let timelineText = "timeline"
+    private static let healthPrefix = "health:"
 
     /// The source as one string, which the state file saves and the palette keys a playlist
     /// by.
@@ -22,10 +25,11 @@ public enum BrowserSource: SettingValue, Hashable {
         case .playlist(let id): Self.playlistPrefix + String(id)
         case .history: Self.historyText
         case .timeline: Self.timelineText
+        case .health(let check): Self.healthPrefix + check.rawValue
         }
     }
 
-    /// Reads `text`; nil for a string that isn't a path, a playlist, History or the timeline.
+    /// Reads `text`; nil for a string that isn't one of the sources.
     public init?(text: String) {
         if text.hasPrefix("/") {
             self = .folder(text)
@@ -37,6 +41,10 @@ public enum BrowserSource: SettingValue, Hashable {
             let id = Int64(text.dropFirst(Self.playlistPrefix.count))
         {
             self = .playlist(id)
+        } else if text.hasPrefix(Self.healthPrefix),
+            let check = HealthCheck(rawValue: String(text.dropFirst(Self.healthPrefix.count)))
+        {
+            self = .health(check)
         } else {
             return nil
         }
@@ -48,7 +56,7 @@ public enum BrowserSource: SettingValue, Hashable {
         guard let source = BrowserSource(text: text) else {
             throw DecodingError.dataCorruptedError(
                 in: container,
-                debugDescription: "\"\(text)\" isn't a path, playlist, history or timeline")
+                debugDescription: "\"\(text)\" isn't \(BrowserSource.typeName)")
         }
         self = source
     }
@@ -59,7 +67,8 @@ public enum BrowserSource: SettingValue, Hashable {
     }
 
     public static var typeName: String {
-        "a folder's path, \"\(playlistPrefix)<id>\", \"\(historyText)\" or \"\(timelineText)\""
+        "a folder's path, \"\(playlistPrefix)<id>\", \"\(historyText)\", \"\(timelineText)\" or"
+            + " \"\(healthPrefix)<check>\""
     }
     public static var kind: SettingKind { .windowState }
 }

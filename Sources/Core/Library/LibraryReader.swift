@@ -14,6 +14,16 @@ public actor LibraryReader {
         self.databaseURL = databaseURL
     }
 
+    /// Builds the health report on a connection of its own, so the window's queries don't wait
+    /// for it.
+    public nonisolated func healthReport() async throws -> HealthReport {
+        let url = databaseURL
+        return try await Task.detached { try LibraryIndex(at: url).healthReport() }.value
+    }
+
+    /// Lists `report`'s tracks for the `.health` sources.
+    public func showHealth(_ report: HealthReport) throws { try index.showHealth(report) }
+
     public func folderTree(roots: [String]) throws -> FolderTree {
         try index.folderTree(roots: roots)
     }

@@ -47,8 +47,8 @@ public struct AppState: SettingsSchema {
         "The track table's columns, left to right, with their widths, and the column it sorts by.")
     public let source = Setting<BrowserSource?>(
         "browser.source", title: "Source", default: nil,
-        "The watched folder, playlist or history the sidebar shows. Null shows the whole"
-            + " library.")
+        "The folder, playlist, History, timeline or health check the sidebar shows. Null shows"
+            + " the whole library.")
     public let selectedGenre = Setting<String?>(
         "browser.genre", title: "Genre", default: nil,
         "The genre selected in the browser. Null is All.")

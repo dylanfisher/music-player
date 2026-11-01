@@ -54,3 +54,12 @@ import Testing
                     + #" "artImages": 1, "artFailures": 0, "extra": 1}"#).utf8))
     }
 }
+
+@Test func aHealthCheckCountsWhatTheTableCantListAndListsIt() {
+    var status = LibraryStatus()
+    status.healthLines = ["/M/bad.flac: failure malformed: no header"]
+    status.healthOtherCount = 1
+    #expect(status.text(trackCount: 2) == "2 tracks · 1 more item with no track to list")
+    #expect(status.hasProblems)
+    #expect(status.problemLines == ["/M/bad.flac: failure malformed: no header"])
+}

@@ -17,6 +17,9 @@ extension AppDelegate {
         registerPlaylistCommands(dispatcher)
         registerTagCommands(dispatcher)
         dispatcher.handle(.addFolder, enabled: hasWindow) { [weak self] in self?.addFolder() }
+        dispatcher.handle(.checkHealth, enabled: hasWindow) { [weak self] in
+            self?.browser?.checkHealth()
+        }
     }
 
     /// Whether the main window is open, for the commands that need it.

@@ -37,6 +37,7 @@ extension CommandID {
     public static let focusNextArea = CommandID("focus.nextArea")
 
     public static let addFolder = CommandID("library.addFolder")
+    public static let checkHealth = CommandID("library.checkHealth")
     public static let revealInFinder = CommandID("track.revealInFinder")
     public static let copyPath = CommandID("track.copyPath")
     public static let editTags = CommandID("track.editTags")
@@ -131,6 +132,7 @@ public enum AppCommands {
             Command(.focusNextArea, "Focus Next Area", [.init(.tab)]),
 
             Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
+            Command(.checkHealth, "Check Library Health"),
             Command(
                 .revealInFinder, "Reveal in Finder",
                 [.init("r", [cmd, shift]), .init("r", [opt, cmd])]),

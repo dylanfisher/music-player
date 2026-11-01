@@ -260,3 +260,25 @@ private final class LockedFailures: @unchecked Sendable {
         try database.prepare("SELECT v FROM t ORDER BY rowid").map { $0.storageClass(0) }
             == [.integer, .real, .text, .blob, .null])
 }
+
+@Test func aReadSeesOneSnapshotWhileAnotherConnectionWrites() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("sqlite-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appendingPathComponent("test.sqlite")
+    let reader = try Database(at: url)
+    let writer = try Database(at: url)
+    try writer.execute("CREATE TABLE t (i INTEGER); INSERT INTO t VALUES (1)")
+    let count = { try reader.prepare("SELECT count(*) FROM t").map { try $0.int(0) }[0] }
+    let counts = try reader.read {
+        let before = try count()
+        try writer.execute("INSERT INTO t VALUES (2)")
+        return [before, try count()]
+    }
+    #expect(counts == [1, 1])
+    #expect(!reader.isInTransaction)
+    #expect(try count() == 2)
+    // A failure ends the transaction and is thrown.
+    #expect(throws: SQLiteError.self) { try reader.read { try reader.execute("SELECT nope") } }
+    #expect(!reader.isInTransaction)
+}

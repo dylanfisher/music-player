@@ -16,6 +16,9 @@ struct LibraryStatus: Equatable, Sendable {
     var notices: [String] = []
     /// What the last playlist import or export couldn't carry over.
     var playlistFileReport: [String] = []
+    /// What the health check shown found that the table can't list, and how many such items.
+    var healthLines: [String] = []
+    var healthOtherCount = 0
 
     init() {}
 
@@ -38,7 +41,7 @@ struct LibraryStatus: Equatable, Sendable {
     /// Whether there's anything for the problems list to show.
     var hasProblems: Bool {
         fileIssueCount > 0 || !folderIssues.isEmpty || !failures.isEmpty || !notices.isEmpty
-            || !playlistFileReport.isEmpty
+            || !playlistFileReport.isEmpty || !healthLines.isEmpty
     }
 
     /// "1,204 tracks · scanning Music: 300 of 1,200 read · 3 files and 1 folder with problems".
@@ -48,6 +51,9 @@ struct LibraryStatus: Equatable, Sendable {
         var parts = [playCount.map { count($0, "play") } ?? tracks(trackCount)]
         if !notices.isEmpty { parts.append("earlier play counts and playlists discarded") }
         if missingCount > 0 { parts.append(tracks(missingCount) + " not in the library") }
+        if healthOtherCount > 0 {
+            parts.append(count(healthOtherCount, "more item") + " with no track to list")
+        }
         for (folder, progress) in scanning.sorted(by: { $0.key < $1.key }) {
             let name = (folder as NSString).lastPathComponent
             parts.append(
@@ -68,7 +74,7 @@ struct LibraryStatus: Equatable, Sendable {
 
     /// Every notice and folder problem as a line, for the top of the problems list.
     var problemLines: [String] {
-        notices + playlistFileReport
+        notices + playlistFileReport + healthLines
             + failures.sorted { $0.key < $1.key }.map { "\($0.key): the scan failed: \($0.value)" }
             + folderIssues.sorted { $0.key < $1.key }.flatMap { $0.value.map(\.description) }
     }

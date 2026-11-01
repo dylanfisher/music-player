@@ -8,7 +8,9 @@ private func decode(_ json: String) throws -> BrowserSource {
 }
 
 @Test func aSourceIsSavedAsOneString() throws {
-    for source in [BrowserSource.folder("/Volumes/music"), .playlist(42), .history, .timeline] {
+    for source in [BrowserSource.folder("/Volumes/music"), .playlist(42), .history, .timeline]
+        + HealthCheck.allCases.map(BrowserSource.health)
+    {
         let data = try JSONEncoder().encode(source)
         #expect(try JSONDecoder().decode(BrowserSource.self, from: data) == source)
     }
@@ -16,11 +18,14 @@ private func decode(_ json: String) throws -> BrowserSource {
     #expect(try decode(#""/a/b""#) == .folder("/a/b"))
     #expect(try decode(#""history""#) == .history)
     #expect(try decode(#""timeline""#) == .timeline)
+    #expect(try decode(#""health:noArt""#) == .health(.noArt))
 }
 
 @Test func aSourceThatIsntAPathPlaylistOrHistoryFails() {
     for json in [
-        #""music""#, #""playlist:""#, #""playlist:x""#, #""History""#, #""Timeline""#, "3", "{}",
+        #""music""#, #""playlist:""#, #""playlist:x""#, #""History""#, #""Timeline""#,
+        #""health:""#,
+        #""health:NoArt""#, #""health:noArt ""#, "3", "{}",
     ] {
         #expect(throws: DecodingError.self, "\(json)") { try decode(json) }
     }

@@ -86,6 +86,16 @@ public final class Database {
         return try result.get()
     }
 
+    /// Runs `body`'s reads in one deferred transaction, so they all see the same snapshot while
+    /// other connections write. It takes no write lock.
+    public func read<T>(_ body: () throws -> T) throws -> T {
+        try execute("BEGIN")
+        let result = Result(catching: body)
+        // Nothing was written, so ending it either way leaves nothing behind.
+        if isInTransaction { try execute("COMMIT") }
+        return try result.get()
+    }
+
     /// What SQLite adds to a database's path for its write-ahead log and its shared-memory index.
     public static let walSuffix = "-wal"
     public static let shmSuffix = "-shm"

@@ -292,6 +292,11 @@ extension LibraryIndex {
             case .unreadable(let detail):
                 throw LibraryError.unreadableRules(playlist: playlist.name, detail: detail)
             }
+        case .health(let check):
+            return (
+                "t.file_id IN (SELECT file_id FROM \(healthTracksTable) WHERE check_name = ?)",
+                [check.rawValue]
+            )
         case .timeline:
             // The timeline pages through plays with `timeline(before:limit:)` instead.
             throw LibraryError.playsNotTracks
