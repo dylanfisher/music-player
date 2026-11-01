@@ -70,6 +70,11 @@ enum TagGroup: CaseIterable {
         isPair ? numbers(in: a) == numbers(in: b) : text(in: a) == text(in: b)
     }
 
+    /// The group one of whose reader fields `matches`: the group a format's key belongs to.
+    static func of(matching matches: (TagField) -> Bool) -> TagGroup? {
+        allCases.first { $0.readerFields.contains(where: matches) }
+    }
+
     /// The groups whose values differ between `old` and `new`, among those `edit` names.
     static func changed(by edit: TagEdit, from old: TrackTags, to new: TrackTags) -> [TagGroup] {
         allCases.filter { group in

@@ -1,4 +1,5 @@
 import Foundation
+import Testing
 
 @testable import Metadata
 @testable import TagWriter
@@ -21,5 +22,28 @@ func mp3(withTag tag: [UInt8]) throws -> URL {
     let url = try Sample.mp3Untagged.copy()
     let audio = try Data(contentsOf: url)
     try (Data(tag) + audio).write(to: url)
+    return url
+}
+
+/// The FLAC sample's STREAMINFO and audio frames, with a Vorbis comment block of `comments`
+/// and, when `padding` isn't nil, a PADDING block of that many bytes.
+func flac(comments: [String], padding: Int?) throws -> URL {
+    let url = try Sample.flac.copy()
+    let file = try FLACFile(ByteReader(FileSource(path: url.path)))
+    let streamInfo = try #require(file.blocks.first { $0.type == 0 }).body
+    let audio = try Data(contentsOf: url)[file.audioStart...]
+    let vendor = Array("hand built".utf8)
+    var vorbis = littleEndianBytes(vendor.count, 4) + vendor + littleEndianBytes(comments.count, 4)
+    for comment in comments {
+        vorbis += littleEndianBytes(comment.utf8.count, 4) + Array(comment.utf8)
+    }
+    var blocks: [(UInt8, [UInt8])] = [(0, streamInfo), (4, vorbis)]
+    if let padding { blocks.append((1, [UInt8](repeating: 0, count: padding))) }
+    var bytes = FLACFile.marker
+    for (index, block) in blocks.enumerated() {
+        bytes.append(block.0 | (index == blocks.count - 1 ? 0x80 : 0))
+        bytes += bigEndianBytes(block.1.count, 3) + block.1
+    }
+    try (Data(bytes) + audio).write(to: url)
     return url
 }

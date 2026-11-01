@@ -48,7 +48,8 @@ public final class TagEditing {
             let sheet = TagEditorSheet(model: TagEditorModel(tracks: tracks))
             sheet.replaceArtwork = { [weak self] in self?.replaceArtwork() }
             sheet.removeArtwork = { [weak self] in self?.removeArtwork() }
-            sheet.saved = { [weak self] edit in
+            sheet.saved = { [weak self, weak sheet] edit in
+                if let note = sheet?.model.collapseNote { logger.notice("\(note)") }
                 self?.sheet = nil
                 self?.confirm(edit, tracks.map(\.path), over: window)
             }

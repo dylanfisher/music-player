@@ -21,6 +21,8 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
     private let artNote = NSTextField(labelWithString: "")
     private let removeButton = NSButton(title: "Remove", target: nil, action: nil)
     private let problemLabel = NSTextField(labelWithString: "")
+    /// Says, as soon as such a field is edited, that saving keeps one of its several values.
+    private let collapseLabel = NSTextField(wrappingLabelWithString: "")
 
     static let width = 560.0
     static let artPoints = 120.0
@@ -105,12 +107,14 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
         save.keyEquivalent = "\r"
         let buttons = NSStackView(views: [problemLabel, cancel, save])
 
-        let stack = NSStackView(views: [heading, grid, artRow, buttons])
+        collapseLabel.textColor = .systemOrange
+        collapseLabel.isHidden = true
+        let stack = NSStackView(views: [heading, grid, artRow, collapseLabel, buttons])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-        for view in [heading, buttons] {
+        for view in [heading, collapseLabel, buttons] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
         }
@@ -153,12 +157,19 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
             let field = fields.first(where: { $0.value === view })?.key
         else { return }
         model.set(field, view.stringValue)
+        showCollapse()
+    }
+
+    private func showCollapse() {
+        collapseLabel.stringValue = model.collapseNote ?? ""
+        collapseLabel.isHidden = model.collapseNote == nil
     }
 
     @objc private func compilationChanged() {
         // The mixed state is only where it starts; a click sets the flag for every track.
         if compilationBox.state == .mixed { compilationBox.state = .on }
         model.set(.compilation, compilationBox.state == .on ? "1" : "")
+        showCollapse()
     }
 
     @objc private func replaceClicked() { replaceArtwork() }

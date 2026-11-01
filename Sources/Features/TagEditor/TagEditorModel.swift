@@ -8,11 +8,14 @@ public struct EditableTrack: Equatable, Sendable {
     public var path: String
     public var tags: TrackTags
     public var art: Data?
+    /// Fields whose frame or item holds several values, of which the editor shows the first.
+    public var multiValued: Set<TagEditField>
 
-    public init(path: String, tags: TrackTags, art: Data?) {
+    public init(path: String, tags: TrackTags, art: Data?, multiValued: Set<TagEditField> = []) {
         self.path = path
         self.tags = tags
         self.art = art
+        self.multiValued = multiValued
     }
 }
 
@@ -50,6 +53,25 @@ public struct TagEditorModel: Equatable, Sendable {
     public func text(_ field: TagEditField) -> String { typed[field] ?? shared(field) ?? "" }
 
     public mutating func set(_ field: TagEditField, _ text: String) { typed[field] = text }
+
+    /// Fields the edit changes that hold several values in some track, which saving collapses
+    /// to the one shown.
+    public var collapsedFields: [TagEditField] {
+        let typedChanges = Set(typed.filter { shared($0.key) != $0.value }.keys)
+        return TagEditField.allCases.filter { field in
+            typedChanges.contains(field) && tracks.contains { $0.multiValued.contains(field) }
+        }
+    }
+
+    /// What the sheet says about `collapsedFields` before the user saves; nil when none.
+    public var collapseNote: String? {
+        let fields = collapsedFields
+        guard !fields.isEmpty else { return nil }
+        let files = tracks.filter { !$0.multiValued.isDisjoint(with: fields) }.count
+        let names = fields.map(\.title).joined(separator: ", ")
+        return "\(names) \(fields.count == 1 ? "holds" : "hold") several values in \(files)"
+            + " file\(files == 1 ? "" : "s"). Saving keeps only the value shown."
+    }
 
     /// The art to show: the new art, none once removed, or the tracks' art when they share it.
     public var shownArt: Data? {
@@ -126,7 +148,10 @@ public func readEditableTracks(_ paths: [String]) -> (tracks: [EditableTrack], p
         do {
             let parsed = try readMetadata(at: url)
             let art = try parsed.metadata.art.map { try readArt($0, at: url) }
-            tracks.append(EditableTrack(path: path, tags: parsed.metadata.tags, art: art))
+            tracks.append(
+                EditableTrack(
+                    path: path, tags: parsed.metadata.tags, art: art,
+                    multiValued: try multiValuedFields(at: url)))
         } catch {
             problems.append("\(error)")
         }

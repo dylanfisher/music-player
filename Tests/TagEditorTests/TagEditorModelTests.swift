@@ -89,3 +89,17 @@ private func track(_ name: String, album: String?, number: Int?, art: Data? = ni
     #expect(tracks.isEmpty)
     #expect(problems.count == 2)
 }
+
+@Test func editingAFieldWithSeveralValuesSaysOnlyOneIsKept() {
+    var several = track("A", album: "X", number: 1)
+    several.multiValued = [.artist]
+    var model = TagEditorModel(tracks: [several, track("B", album: "X", number: 2)])
+    #expect(model.collapseNote == nil, "nothing edited yet")
+    model.set(.album, "Y")
+    #expect(model.collapseNote == nil, "the album holds one value")
+    model.set(.artist, "Both")
+    #expect(model.collapsedFields == [.artist])
+    #expect(
+        model.collapseNote
+            == "Artist holds several values in 1 file. Saving keeps only the value shown.")
+}
