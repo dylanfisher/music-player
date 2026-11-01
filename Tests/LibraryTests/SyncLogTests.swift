@@ -260,3 +260,34 @@ private func folder(with lines: [String], name: String = String(repeating: "c", 
         #expect(found.map { $0.count < 400 } == true, "\(found?.count ?? 0) characters")
     }
 }
+
+@Test func aLogThatShrinksMidReadStopsOnlyThatLog() throws {
+    let lines = (1...20_000).map {
+        SyncRecord(
+            seq: Int64($0), clock: clock,
+            event: .play(path: "music/library/a.flac", at: 1_700_000_000)
+        ).line
+    }
+    let other = String(repeating: "f", count: 32)
+    let (sync, index) = try folder(with: lines)
+    let late = SyncRecord(
+        seq: 1, clock: SyncClock(ms: clock.ms + 1, counter: 0),
+        event: .skip(path: "music/library/b.flac")
+    ).line
+    try Data((late + "\n").utf8).write(to: sync.appendingPathComponent(syncLogName(other)))
+    let shrinking = sync.appendingPathComponent(syncLogName(String(repeating: "c", count: 32)))
+    var calls = 0
+    index.wallClockMs = {
+        calls += 1
+        // Once the first chunk is read, the log is cut short under the reader.
+        if calls == 3 { truncate(shrinking.path, 100) }
+        return clock.ms
+    }
+    let report = try index.sync(folder: "sync", at: sync.path)
+    #expect(report.problems.contains { $0.contains("it got shorter") }, "\(report.problems)")
+    #expect(report.applied > 1 && report.applied < lines.count + 1)
+    let skips = try index.database.prepare("SELECT sum(skip_count) FROM plays").map {
+        try $0.int(0)
+    }
+    #expect(skips == [1])
+}

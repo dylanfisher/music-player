@@ -177,7 +177,12 @@ extension LibraryIndex {
                     if let problem = try apply(record, from: cursors[next].machine, &merge) {
                         cursors[next].note("event \(record.seq): \(problem)")
                     }
-                    try cursors[next].applied(wallMs: wallClockMs())
+                    do {
+                        try cursors[next].applied(wallMs: wallClockMs())
+                    } catch let error as SyncFileError {
+                        // Read no more of that log this pass; the rest waits for the next.
+                        cursors[next].note("\(error)")
+                    }
                     applied += 1
                 }
                 report.applied += applied
