@@ -25,28 +25,25 @@ extension LibraryIndex {
         }
     }
 
-    /// Every lost path, by path, with the tracks it could have moved to.
+    /// Every lost path, by path, with the first `lostCandidatesListed` tracks it could have
+    /// moved to. Grouped here rather than joined in SQL: a reorganize of files that share
+    /// lengths would join every lost path with thousands of tracks.
     public func lostFiles() throws -> [LostFile] {
-        var lost: [LostFile] = []
-        try statement(
-            """
-            SELECT p.id, p.path, c.id FROM paths p
-            LEFT JOIN paths c ON c.length_frames = p.length_frames AND c.codec = p.codec
-                AND c.sample_rate_hz = p.sample_rate_hz
-                AND EXISTS (SELECT 1 FROM tracks WHERE file_id = c.id) AND NOT \(hasStats("c.id"))
-            WHERE \(lostCondition)
-            ORDER BY p.path, p.id, c.id
-            """
-        ).query { row in
-            let id = try row.int64(0)
-            if lost.last?.id != id {
-                lost.append(LostFile(id: id, path: try row.text(1), candidates: []))
-            }
-            if let candidate = row.optionalInt(2) {
-                lost[lost.count - 1].candidates.append(Int64(candidate))
-            }
+        let lost = try statement(movableSelect + " WHERE \(lostCondition) ORDER BY p.path, p.id")
+            .map(row: movable)
+        guard !lost.isEmpty else { return [] }
+        let free = Dictionary(
+            grouping: try statement(
+                movableSelect + " JOIN tracks t ON t.file_id = p.id"
+                    + " WHERE p.codec IS NOT NULL AND NOT \(hasStats("p.id")) ORDER BY p.id"
+            ).map(row: movable), by: \.audio)
+        return lost.map { path in
+            let matching = free[path.audio] ?? []
+            return LostFile(
+                id: path.id, path: path.path,
+                candidates: matching.prefix(lostCandidatesListed).map(\.id),
+                matching: matching.count)
         }
-        return lost
     }
 
     /// Lost Stats: each lost path as a line, and the tracks it may have moved to.
@@ -55,7 +52,7 @@ extension LibraryIndex {
         return HealthFindings(
             trackIDs: Set(lost.flatMap(\.candidates)).sorted(),
             others: lost.map { file in
-                terminalSafe("\(file.path): matching tracks: \(file.candidates.count)")
+                terminalSafe("\(file.path): matching tracks: \(file.matching)")
             })
     }
 
@@ -120,6 +117,9 @@ extension LibraryIndex {
         }
     }
 }
+
+/// How many of a lost path's matching tracks Resolve Lost Stats offers.
+let lostCandidatesListed = 50
 
 /// A path with stats that a file once had, which has left the index and wasn't dismissed.
 private let lostCondition = """

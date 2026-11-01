@@ -176,3 +176,21 @@ private func index(under root: String, names: [String] = ["a.flac", "Caf\u{e9}/b
     #expect(try index.folders([local, music], without: "/V/music/library") == [local])
     #expect(try index.folders([local, music], without: "/M") == [music])
 }
+
+@Test func aRefusedRewriteLeavesTheFolderWhereItWasAndFindsTheOthers() throws {
+    let index = try craftedIndex([])
+    let video = WatchedFolder(path: "", share: "smb://nas.local/video", kind: .network)
+    _ = try index.locate([music], among: [share("smb://nas.local/music", at: "/V/music")])
+    // Mounted again inside its old folder, which a prefix rewrite would mix up.
+    let located = try index.locate(
+        [music, video],
+        among: [
+            share("smb://nas.local/music", at: "/V/music/library/x"),
+            share("smb://nas.local/video", at: "/V/video"),
+        ])
+    #expect(
+        located == [
+            WatchedFolder(path: "/V/music/library", kind: .network),
+            WatchedFolder(path: "/V/video", kind: .network),
+        ])
+}

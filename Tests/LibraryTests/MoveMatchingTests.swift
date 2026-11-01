@@ -132,8 +132,8 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
     let new = try #require(try index.track(path: "/N/new.flac")).id
     #expect(
         try index.lostFiles() == [
-            LostFile(id: one, path: "/M/1.flac", candidates: [new]),
-            LostFile(id: two, path: "/M/2.flac", candidates: [new]),
+            LostFile(id: one, path: "/M/1.flac", candidates: [new], matching: 1),
+            LostFile(id: two, path: "/M/2.flac", candidates: [new], matching: 1),
         ])
     let findings = try index.healthReport()[.lostStats]
     #expect(findings.trackIDs == [new])
@@ -144,7 +144,9 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
     let picked = try #require(try index.track(path: "/N/new.flac"))
     #expect(picked.id == one)
     #expect(picked.playCount == 1)
-    #expect(try index.lostFiles() == [LostFile(id: two, path: "/M/2.flac", candidates: [])])
+    #expect(
+        try index.lostFiles() == [LostFile(id: two, path: "/M/2.flac", candidates: [], matching: 0)]
+    )
     #expect(throws: LibraryError.statsNotMovable(from: two, to: one)) {
         try index.moveStats(from: two, to: one)
     }
@@ -201,4 +203,14 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
         added: [path(5, 10, "Z"), path(6, 20, "B"), path(7, 30, nil), path(8, 40, "A")])
     // 1 and 5 are alone at 10 frames; 2 and 3 tie on title too; 4 and 7 are alone at 30.
     #expect(pairs.map { [$0.0.id, $0.1.id] } == [[1, 5], [4, 7]])
+}
+
+@Test func aLostFileOffersAtMostSoManyTracks() throws {
+    let count = lostCandidatesListed + 2
+    let index = try craftedIndex(
+        (0..<count).map { Crafted(path: "/N/\($0).flac", seconds: 9).scanned })
+    _ = try gone(Crafted(path: "/M/a.flac", seconds: 9), in: index)
+    let lost = try #require(try index.lostFiles().first)
+    #expect(lost.candidates.count == lostCandidatesListed)
+    #expect(lost.matching == count)
 }

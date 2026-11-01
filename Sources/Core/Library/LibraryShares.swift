@@ -18,8 +18,13 @@ extension LibraryIndex {
             case .mounted(let mountPoint):
                 let root = canonicalPath(
                     folder.path.isEmpty ? mountPoint : mountPoint + "/" + folder.path)
-                try relocate(share: share, path: folder.path, to: root)
-                return folder.located(at: root)
+                do {
+                    try relocate(share: share, path: folder.path, to: root)
+                    return folder.located(at: root)
+                } catch let error as LibraryError {
+                    // Only this folder's paths are wrong, so the others are still found.
+                    logger.error("\(error)")
+                }
             case .unmounted:
                 logger.error("\(share) isn't mounted, so its folder \(folder.path) is offline")
             case .ambiguous(let mountPoints):

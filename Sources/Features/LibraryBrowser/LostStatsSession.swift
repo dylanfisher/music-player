@@ -32,7 +32,10 @@ final class LostStatsSession {
         }
         try await move(file.id, track)
         lost.removeFirst()
-        for index in lost.indices { lost[index].candidates.removeAll { $0 == track } }
+        for index in lost.indices where lost[index].candidates.contains(track) {
+            lost[index].candidates.removeAll { $0 == track }
+            lost[index].matching -= 1
+        }
     }
 
     /// Takes the shown file out of Lost Stats.

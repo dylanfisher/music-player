@@ -5,6 +5,8 @@ public struct LostFile: Equatable, Sendable {
     public var id: Int64
     public var path: String
     /// The tracks with no stats of their own whose codec, sample rate and length match it, in
-    /// ID order.
+    /// ID order: the first `lostCandidatesListed` of them.
     public var candidates: [Int64]
+    /// How many tracks match it, listed or not.
+    public var matching: Int
 }
