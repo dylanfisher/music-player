@@ -2067,3 +2067,13 @@ Not phases yet. Each becomes one when the owner asks.
 - **Library quality audit:** a background pass that finds upsampled "hi-res" files, lossy files
   transcoded to FLAC, clipping, true peak and a dynamic range score, stored in the index and
   usable in smart playlists. The same pass could draw a waveform for the seek bar.
+- **Discogs lookup:** fetch release data from the Discogs API and offer it as a tag edit the user
+  confirms in the tag editor, written through `TagWriter` (ADR 0020). Start with files that
+  already carry `DISCOGS_RELEASE_ID` (39 of the 159 reference files), which need one
+  `GET /releases/{id}` and no matching. Searching for other files needs a Discogs token, which
+  breaks the no-secrets rule, so the owner decides how a user-supplied token is stored first.
+  Candidates are matched per album by track count and durations, with Discogs positions
+  (`A1`, `CD2-4`), headings and `Artist (2)` names folded. It is the app's first outbound
+  internet connection, so ADR 0025 gains rows for it; responses are paced by the rate-limit
+  headers and cached in the index, and tests use recorded JSON. MusicBrainz with AcoustID is the
+  alternative to weigh: no key, and it matches by fingerprint.
