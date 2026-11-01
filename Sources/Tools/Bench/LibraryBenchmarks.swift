@@ -208,6 +208,11 @@ let libraryBenchmarks = [
             { _ = try index.genres() }, { _ = try index.artists() }, { _ = try index.albums() },
         ]
         runs += genres.map { genre in { _ = try index.artists(TrackFilter(genre: genre.id)) } }
+        // The Artist pane grouped by album artist, as `library.groupByAlbumArtist` lists it.
+        runs.append { _ = try index.artists(TrackFilter(groupByAlbumArtist: true)) }
+        runs += genres.map { genre in
+            { _ = try index.artists(TrackFilter(genre: genre.id, groupByAlbumArtist: true)) }
+        }
         runs += artists.prefix(200).map { artist in
             { _ = try index.albums(TrackFilter(artist: artist.id)) }
         }
