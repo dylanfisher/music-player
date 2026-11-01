@@ -204,3 +204,69 @@ private func dacBackWhileSpeakersPlay() async throws -> TwoDevices {
     await rig.engine.stop()
     #expect(try await rig.returns.next() == "DAC")
 }
+
+/// A provider whose state reports outlive `stopWatching`, as one queued by the HAL just before it
+/// would.
+private final class LingeringProvider: PCMDeviceProvider, @unchecked Sendable {
+    let deviceName = "Lingering"
+    var deviceUID: String { deviceName }
+    private let lock = NSLock()
+    private var state: (@Sendable (DeviceState) -> Void)?
+
+    func open() throws -> (any PCMDevice)? { nil }
+    func isConnected() -> Bool { true }
+    func watch(
+        _ changed: @escaping @Sendable () -> Void,
+        state: @escaping @Sendable (DeviceState) -> Void
+    ) throws {
+        lock.withLock { self.state = state }
+        report(rateHz: 44_100)
+    }
+    func stopWatching() {}
+    func deviceReturned() {}
+
+    func report(rateHz: Double) {
+        let format = SignalFormat(
+            formatID: linearPCMFormatID, sampleRateHz: rateHz, bitsPerChannel: 32, channels: 2,
+            isFloat: false)
+        lock.withLock { state }?(
+            .connected(
+                DeviceSignal(
+                    nominalSampleRateHz: rateHz, physical: format, isMixable: false,
+                    hogMode: .free, volumes: [], formats: NullDevice.anyRate)))
+    }
+}
+
+@Test func aStateFromTheDeviceSwitchedAwayFromIsDropped() async throws {
+    let lingering = LingeringProvider()
+    let speakers = NullDevice(name: "Speakers")
+    let output = try DeviceOutput(
+        DeviceChoice(provider: lingering, digitalVolume: false, gain: 1, formats: nil))
+    defer { output.close() }
+    let paths = Collected(output.signalPaths)
+    func sinks(until done: (DeviceSink) -> Bool) async throws -> [DeviceSink] {
+        var seen: [DeviceSink] = []
+        while true {
+            guard case .device(let sink) = try await paths.next().sink else { continue }
+            seen.append(sink)
+            if done(sink) { return seen }
+        }
+    }
+    _ = try await sinks { $0.name == "Lingering" }
+    output.use(DeviceChoice(provider: speakers, digitalVolume: false, gain: 1, formats: nil))
+    _ = try await sinks { $0.name == "Speakers" }
+
+    lingering.report(rateHz: 12_345)
+    // Apart, so a path taken from the stale state would be published before the next one.
+    try await Task.sleep(nanoseconds: 200_000_000)
+    speakers.changeRate(to: 48_000)
+    let seen = try await sinks { sink in
+        guard case .connected(let signal) = sink.state else { return false }
+        return signal.nominalSampleRateHz == 48_000
+    }
+    #expect(
+        !seen.contains { sink in
+            guard case .connected(let signal) = sink.state else { return false }
+            return signal.nominalSampleRateHz == 12_345
+        }, "\(seen)")
+}
