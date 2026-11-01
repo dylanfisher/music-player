@@ -32,8 +32,10 @@ flag nothing calls the hooks; a worker that sees no edges refuses to start.
 Then the files the app reads at launch, each through its public API on a file in the target's
 work folder: `config-file` (read, change a setting, read again; a good file must read back),
 `state-file` (the same with a save), `undo-journal` (a record and a bytes file, read by
-`TagUndoJournal.latest`, never undone, since a record names a path) and `smart-rules` (decode,
-re-encode, store in a library and list; valid rules must list). `tag-writer` writes each input
+`TagUndoJournal.latest`, never undone, since a record names a path), `smart-rules` (decode,
+re-encode, store in a library and list; valid rules must list) and `playlist-file` (M3U, M3U8
+or PLS by the first byte; entries must be folded absolute paths, and written as M3U8,
+absolute and relative, they must read back the same). `tag-writer` writes each input
 to a file, applies an edit and undoes it, and the bytes must match. A broken invariant is a
 `preconditionFailure`, which the fuzzer catches like any crash.
 

@@ -1621,7 +1621,8 @@ Implementation plan:
    choices (encoding, NFC, order, what's reported).
 6. **Tests:** LibraryTests (round trip, relative and absolute paths, `file://`, non-ASCII in
    both forms, CRLF, BOM, Windows-1252, missing, duplicates, hostile files, caps),
-   LibraryBrowserTests (import report, export file), CommandsTests (the new commands).
+   LibraryBrowserTests (import report, export file, the drop's pasteboard); the menu and
+   registry tests already cover every new command.
 
 ### 18. Import from other players
 

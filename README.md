@@ -21,6 +21,9 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   and follow the library as it changes. Plays, skips, ratings and History are kept in the
   library database, never in the music files; a play counts after half the track or 4 minutes.
   History lists each track played once; **Timeline** lists every play, newest first.
+- **Import Playlist…** reads M3U, M3U8 and PLS files, also dropped on the sidebar, as new
+  playlists, and lists the entries the library doesn't hold. **Export Playlist…** writes the
+  playlist shown as M3U8, in the table's order, with absolute or relative paths.
 
 ## Develop
 
