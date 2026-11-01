@@ -25,6 +25,9 @@ public struct MetadataError: Error, Equatable, CustomStringConvertible {
 /// " (at byte 12)", or nothing without an offset, after a problem's detail.
 package func byteNote(_ offset: Int?) -> String { offset.map { " (at byte \($0))" } ?? "" }
 
+/// How a parse message names the whole file, beside the atoms and chunks inside it.
+let wholeFileName = "the file"
+
 extension MetadataError {
     /// For the simulated NAS (Fixtures), which fails reads as a dropped volume would.
     package init(unreadable path: String, detail: String) {

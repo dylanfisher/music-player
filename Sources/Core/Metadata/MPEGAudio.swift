@@ -96,7 +96,7 @@ private func firstMP3Frame(_ reader: ByteReader) throws(ParseFailure) -> (
     var tag: ID3v2Tag?
     var audioStart = 0
     if try reader.bytes(0..<min(3, reader.size)).matches(id3v2Identifier, at: 0) {
-        tag = try parseID3v2(reader, at: 0, end: reader.size, container: "the file")
+        tag = try parseID3v2(reader, at: 0, end: reader.size, container: wholeFileName)
         audioStart = tag!.byteCount
     }
 

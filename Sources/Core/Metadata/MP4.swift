@@ -63,7 +63,7 @@ package func forEachAtom(
     _ reader: ByteReader, in range: Range<Int>, parent: Atom?,
     _ body: (Atom) throws(ParseFailure) -> Bool
 ) throws(ParseFailure) {
-    let parentName = parent.map { "'\($0.type)'" } ?? "the file"
+    let parentName = parent.map { "'\($0.type)'" } ?? wholeFileName
     var offset = range.lowerBound
     while offset < range.upperBound {
         guard range.upperBound - offset >= 8 else {
