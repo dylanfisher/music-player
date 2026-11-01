@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Kills the app's writes at random points and checks what each kill left (ADR 0023). Not part of
+# ./scripts/check: 500 kills take about a quarter of an hour.
+#   ./scripts/kill-test [--kills <n>] [--seed <n>]
+# Generates a fixture library under ~/Library/Caches/MusicPlayer/kill-test and clones some of
+# its files with `cp -c` into ~/Library/Caches/MusicPlayer/tag-corpus/kill-test for the tag
+# writer. Then, for each kill in turn, it runs one of FailureDrill's operations (a scan, a tag
+# write and undo, a playlist edit, a state save) against that operation's --home folder, sends
+# SIGKILL a seeded random time later, and runs `FailureDrill verify`. A kill fails when verify
+# finds a damaged database, config or state file or a journaled edit that doesn't undo, or when
+# any music file differs from its hash from before the run. The kill times repeat with the
+# seed; where in an operation each lands depends on the machine.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+kills=500
+seed=1
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --kills|--seed)
+      if [ $# -lt 2 ]; then echo "error: $1 needs a number" >&2; exit 1; fi
+      case "$2" in
+        ''|*[!0-9]*) echo "error: $1 needs a number, not $2" >&2; exit 1 ;;
+      esac
+      if [ "$1" = --kills ]; then kills=$2; else seed=$2; fi
+      shift 2 ;;
+    *) echo "error: $1 isn't an option" >&2; exit 1 ;;
+  esac
+done
+
+swift build -c release --product FailureDrill >&2
+swift build -c release --product GenerateFixtures >&2
+bin="$(swift build -c release --show-bin-path)"
+drill="$bin/FailureDrill"
+
+caches="$HOME/Library/Caches/MusicPlayer"
+root="$caches/kill-test"
+fixtures="$root/fixtures"
+tags="$caches/tag-corpus/kill-test"
+mkdir -p "$root"
+"$bin/GenerateFixtures" --count 300 --output "$fixtures" >&2
+
+rm -rf "$tags" "$root"/home-*
+mkdir -p "$tags"
+number=0
+"$drill" tag-files --fixtures "$fixtures" | while IFS= read -r file; do
+  number=$((number + 1))
+  cp -c "$file" "$tags/$number $(basename "$file")"
+done
+if [ -z "$(ls "$tags")" ]; then echo "error: no fixture file the tag writer can edit" >&2; exit 1; fi
+
+# Every file but hidden ones (the tag writer's temp files), by path, with its SHA-256.
+hashes() {
+  (cd "$1" && find . -type f ! -name '.*' -print0 | sort -z | xargs -0 shasum -a 256)
+}
+hashes "$fixtures" > "$root/fixtures.sha256"
+hashes "$tags" > "$root/tags.sha256"
+
+operations=(scan tag-write playlist-edit state-save)
+failed=0
+RANDOM=$seed
+started=$(date +%s)
+for kill in $(seq 1 "$kills"); do
+  operation=${operations[$(( (kill - 1) % ${#operations[@]} ))]}
+  home="$root/home-$operation"
+  mkdir -p "$home"
+  delay=$((50 + RANDOM % 1500))
+  "$drill" run "$operation" --home "$home" --scan "$fixtures" --tags "$tags" \
+    2> "$root/run.log" &
+  pid=$!
+  sleep "$(printf '%d.%03d' $((delay / 1000)) $((delay % 1000)))"
+  kill -9 "$pid" 2> /dev/null || true
+  status=0
+  wait "$pid" 2> /dev/null || status=$?
+  problems=""
+  # 137 is SIGKILL; anything else means the operation stopped on its own first.
+  if [ "$status" -ne 137 ]; then
+    problems="the run ended with status $status: $(cat "$root/run.log")"
+  fi
+  if ! report=$("$drill" verify --home "$home" 2>&1); then
+    problems="$problems $report"
+  fi
+  if ! hashes "$fixtures" | cmp -s - "$root/fixtures.sha256"; then
+    problems="$problems a fixture file changed"
+  fi
+  if ! hashes "$tags" | cmp -s - "$root/tags.sha256"; then
+    problems="$problems a tag-write clone differs from its hash once its edits are undone"
+  fi
+  if [ -n "$problems" ]; then
+    failed=$((failed + 1))
+    echo "kill $kill ($operation after $delay ms): FAILED$problems"
+  fi
+  if [ $((kill % 50)) -eq 0 ]; then echo "$kill kills, $failed failed" >&2; fi
+done
+
+echo "kills: $kills across ${operations[*]}, seed $seed, integrity failures: $failed," \
+  "$(( $(date +%s) - started )) s"
+[ "$failed" -eq 0 ]

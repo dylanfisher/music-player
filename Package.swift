@@ -169,6 +169,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .executableTarget(
+            name: "FailureDrill",
+            dependencies: ["Fixtures", "Library", "Log", "SQLite", "Settings", "TagWriter"],
+            path: "Sources/Tools/FailureDrill",
+            swiftSettings: strictSwift
+        ),
+        .executableTarget(
             name: "Bench",
             dependencies: [
                 "Commands", "DisplayText", "Fixtures", "HALOutput", "Library", "LibraryBrowser",
