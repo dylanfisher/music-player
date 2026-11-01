@@ -51,3 +51,31 @@ private func mp4(withInMoov extra: Data) throws -> URL {
     let info = try FileManager.default.attributesOfItem(atPath: link.path)
     #expect(info[.type] as? FileAttributeType == .typeSymbolicLink)
 }
+
+@Test func aLinkPlantedAtTheTempNameIsRemovedAndItsTargetUnchanged() throws {
+    let url = try Sample.mp3v24.copy()
+    let target = scratchFolder().appendingPathComponent("elsewhere")
+    let elsewhere = Data("not music".utf8)
+    try elsewhere.write(to: target)
+    #expect(symlink(target.path, tempPath(for: url.path)) == 0)
+    expectChanged(scratchWriter().write(titleEdit, to: [url.path]), [url])
+    #expect(try tags(url).title == "Edited")
+    #expect(try Data(contentsOf: target) == elsewhere)
+    #expect(!FileManager.default.fileExists(atPath: tempPath(for: url.path)))
+}
+
+@Test func theClonedTempFileIsntOpenedThroughALink() throws {
+    let folder = scratchFolder()
+    let target = folder.appendingPathComponent("elsewhere")
+    try Data("not music".utf8).write(to: target)
+    let temp = folder.appendingPathComponent(".track.flac.tagwrite").path
+    #expect(symlink(target.path, temp) == 0)
+    for cloned in [true, false] {
+        let descriptor = openTemp(temp, cloned: cloned)
+        let failure = errno
+        if descriptor >= 0 { close(descriptor) }
+        #expect(descriptor < 0, "cloned: \(cloned)")
+        #expect(failure == (cloned ? ELOOP : EEXIST), "cloned: \(cloned)")
+    }
+    #expect(try Data(contentsOf: target) == Data("not music".utf8))
+}

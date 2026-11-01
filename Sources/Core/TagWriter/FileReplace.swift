@@ -117,8 +117,7 @@ func writeTemp(_ segments: [Segment], from original: String, to temp: String)
             throw systemError(original, .writeFailed, "can't clone it to \(temp)")
         }
     }
-    let flags = cloned ? O_WRONLY | O_CLOEXEC : O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC
-    let destination = open(temp, flags, 0o600)
+    let destination = openTemp(temp, cloned: cloned)
     guard destination >= 0 else {
         throw systemError(original, .writeFailed, "can't create the temp file \(temp)")
     }
@@ -149,6 +148,15 @@ func writeTemp(_ segments: [Segment], from original: String, to temp: String)
         unlink(temp)
         throw error
     }
+}
+
+/// Opens the temp file for writing. A clone already exists, and someone else who can write the
+/// folder (a NAS share) could swap a symbolic link in after the clone, so the open doesn't follow
+/// one; otherwise the write would land wherever it points. A whole write creates the file, which
+/// refuses any existing name.
+func openTemp(_ temp: String, cloned: Bool) -> Int32 {
+    let create = cloned ? 0 : O_CREAT | O_EXCL
+    return open(temp, O_WRONLY | create | O_NOFOLLOW | O_CLOEXEC, 0o600)
 }
 
 private func writeAll(
