@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Checks a bundled app's signature (ADR 0025): it verifies, the hardened runtime is on, and it
+# claims no entitlement but those listed below. scripts/bundle runs it on every bundle.
+#   scripts/check-signature <MusicPlayer.app> [--launch]
+# --launch also runs the app with --home in a temp folder and --snapshot, and fails unless the
+# hardened app opens its window and draws it within a minute. Not part of ./scripts/check, which
+# stays hermetic: it opens a window.
+set -euo pipefail
+
+# Each entitlement the app may claim, with its reason. None so far: the app isn't sandboxed,
+# loads only system frameworks, and runs no JIT or unsigned code.
+allowed_entitlements=()
+
+app=""
+launch=false
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --launch) launch=true; shift ;;
+    --*) echo "error: $1 isn't an option" >&2; exit 1 ;;
+    *)
+      if [ -n "$app" ]; then echo "error: one app at a time, not $app and $1" >&2; exit 1; fi
+      app="$1"; shift ;;
+  esac
+done
+if [ -z "$app" ]; then echo "error: needs the path to a .app" >&2; exit 1; fi
+if [ ! -d "$app/Contents/MacOS" ]; then echo "error: $app isn't an app bundle" >&2; exit 1; fi
+
+codesign --verify --strict "$app"
+
+details=$(codesign -dv "$app" 2>&1)
+flags=$(printf '%s\n' "$details" | sed -n 's/^CodeDirectory .* flags=\([^ ]*\) .*/\1/p')
+case "$flags" in
+  *runtime*) ;;
+  *) echo "error: $app isn't signed with the hardened runtime (flags: ${flags:-none})" >&2; exit 1 ;;
+esac
+
+entitlements=$(codesign -d --entitlements - --xml "$app" 2>/dev/null)
+claimed=$(printf '%s' "$entitlements" | python3 -I -c '
+import plistlib, sys
+data = sys.stdin.buffer.read()
+print("\n".join(sorted(plistlib.loads(data))) if data.strip() else "")')
+unexpected=""
+for key in $claimed; do
+  ok=false
+  for allowed in ${allowed_entitlements[@]+"${allowed_entitlements[@]}"}; do
+    [ "$key" = "$allowed" ] && ok=true
+  done
+  $ok || unexpected="$unexpected $key"
+done
+if [ -n "$unexpected" ]; then
+  echo "error: $app claims entitlements scripts/check-signature doesn't list:$unexpected" >&2
+  exit 1
+fi
+echo "signature: verified, flags $flags, entitlements: ${claimed:-none}"
+
+if $launch; then
+  home=$(mktemp -d "${TMPDIR:-/tmp}/check-signature.XXXXXX")
+  pid=""
+  cleanup() {
+    if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+    rm -rf "$home"
+  }
+  trap cleanup EXIT
+  "$app/Contents/MacOS/MusicPlayer" --home "$home" --snapshot "$home/window.png" \
+    >"$home/output.txt" 2>&1 &
+  pid=$!
+  for _ in $(seq 60); do
+    [ -s "$home/window.png" ] && break
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "error: the hardened app exited before drawing its window:" >&2
+      cat "$home/output.txt" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+  if [ ! -s "$home/window.png" ]; then
+    echo "error: the hardened app didn't draw its window within 60 s" >&2; exit 1
+  fi
+  echo "launch: the hardened app opened and drew its window"
+fi
