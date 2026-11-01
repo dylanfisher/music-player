@@ -1600,6 +1600,29 @@ every budget holds.
 - [ ] Tests: round trip, relative and absolute paths, non-ASCII names, CRLF, a BOM, missing
       entries, and hostile files.
 
+Implementation plan:
+
+1. **`PlaylistFile` in Core/Library**, pure: bytes, a format (M3U, M3U8, PLS) and the file's
+   folder in; absolute paths plus typed problems out, each with its line. 16 MiB and 4 KiB a
+   line caps, 100,000 entries, 100 problems listed then a count. `.m3u8` is UTF-8; `.m3u` and
+   `.pls` are UTF-8 when valid, else Windows-1252. A BOM and CRLF are dropped. Only `file:`
+   URLs; relative paths are joined to the folder and `..` folded by text, never the disk.
+   Writing: `#EXTM3U`, `#EXTINF:<seconds>,<artist> - <title>`, NFC paths, absolute or relative.
+2. **Index lookup** `LibraryIndex.trackIDs(atPaths:)`: the path as written, then compared in
+   NFC, since a share's names are NFC under a root kept NFD. Import makes a manual playlist and
+   returns what was added, missing, listed twice and unreadable. Export reads the playlist's
+   rows in the table's sort, skips paths a line can't hold and reports them.
+3. **Browser:** import and export through the reader, the import report in the Problems
+   window; dropping `.m3u`, `.m3u8` or `.pls` files on the sidebar imports them.
+4. **Commands** `playlist.import` and `playlist.export` in the registry and File menu, no
+   default chords; the App opens the panels (export with a "Relative paths" checkbox).
+5. **Fuzz target** `playlist-file`: every format parses without a trap, entries are absolute
+   and NUL-free, and written entries parse back the same. ADR 0025 rows; ADR 0032 for the
+   choices (encoding, NFC, order, what's reported).
+6. **Tests:** LibraryTests (round trip, relative and absolute paths, `file://`, non-ASCII in
+   both forms, CRLF, BOM, Windows-1252, missing, duplicates, hostile files, caps),
+   LibraryBrowserTests (import report, export file), CommandsTests (the new commands).
+
 ### 18. Import from other players
 
 Bring plays, ratings, dates and playlists across from the player someone used before. The owner
