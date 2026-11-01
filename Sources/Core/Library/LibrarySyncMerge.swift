@@ -183,7 +183,7 @@ extension LibraryIndex {
         merge.pathIDs[to] = nil
         let oldNFC = fromPath.precomposedStringWithCanonicalMapping
         let newNFC = toPath.precomposedStringWithCanonicalMapping
-        guard oldNFC != newNFC else { return "it moves \(from) onto itself" }
+        guard oldNFC != newNFC else { return "it moves \(clipped(from)) onto itself" }
         guard let old = try existingPathID(oldNFC) else { return nil }
         guard let new = try existingPathID(newNFC) else {
             try statement("UPDATE paths SET path = ? WHERE id = ?").run(newNFC, old)
@@ -194,7 +194,8 @@ extension LibraryIndex {
         if try !hasFile.map(old, row: { _ in () }).isEmpty,
             try !hasFile.map(new, row: { _ in () }).isEmpty
         {
-            return "this Mac has files at both \(from) and \(to), so neither took the other's stats"
+            return "this Mac has files at both \(clipped(from)) and \(clipped(to)), so neither took"
+                + " the other's stats"
         }
         try absorb(new, into: old)
         try move(old, to: new)

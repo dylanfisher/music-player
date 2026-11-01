@@ -77,6 +77,10 @@ private func problem(_ line: String) -> String? {
             #"{\#(head),"event":"playlistRename","playlist":"\#(playlist)","name":"a\nb"}"#,
             "control"
         ),
+        (
+            #"{\#(head),"event":"playlistRename","playlist":"\#(playlist)","name":"a\u202eb"}"#,
+            "format"
+        ),
         (#"{\#(head),"event":"playlistRules","playlist":"\#(playlist)","rules":"{}"}"#, "rules"),
         (
             #"{\#(head),"event":"playlistEntries","playlist":"\#(playlist)","paths":["a",1]}"#,
@@ -243,4 +247,16 @@ private func folder(with lines: [String], name: String = String(repeating: "c", 
     let report = try index.sync(folder: "sync", at: sync.path)
     #expect(report.problems.count == 1)
     #expect(try index.database.prepare("SELECT play_count FROM plays").map { try $0.int(0) } == [1])
+}
+
+@Test func aLongKeyFromALogIsCutInItsProblem() {
+    let long = String(repeating: "k", count: 100_000)
+    for line in [
+        #"{"seq":1,"ms":1,"n":0,"event":"skip","path":"a","\#(long)":1}"#,
+        #"{"seq":1,"ms":1,"n":0,"event":"\#(long)","path":"a"}"#,
+        #"{"\#(long)":1,"\#(long)":1}"#,
+    ] {
+        let found = problem(line)
+        #expect(found.map { $0.count < 400 } == true, "\(found?.count ?? 0) characters")
+    }
 }

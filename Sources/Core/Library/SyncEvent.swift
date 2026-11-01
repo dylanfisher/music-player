@@ -62,7 +62,7 @@ package struct SyncRecord: Equatable, Sendable {
             ms: try fields.take(.ms).integer(.ms, in: SyncClock.msRange),
             counter: try fields.take(.n).integer(.n, in: SyncClock.counterRange))
         event = try SyncEvent(try fields.take(.event).string(.event), &fields)
-        if let extra = fields.object.keys.sorted().first { throw .unknownKey(extra) }
+        if let extra = fields.object.keys.sorted().first { throw .unknownKey(clipped(extra)) }
     }
 
     init(seq: Int64, clock: SyncClock, event: SyncEvent) {
@@ -163,7 +163,7 @@ private struct SyncFields {
 extension SyncEvent {
     /// The event `name`, from its keys in `fields`.
     fileprivate init(_ name: String, _ fields: inout SyncFields) throws(SyncLineProblem) {
-        guard let known = SyncEventName(rawValue: name) else { throw .unknownEvent(name) }
+        guard let known = SyncEventName(rawValue: name) else { throw .unknownEvent(clipped(name)) }
         switch known {
         case .play:
             self = .play(path: try fields.path(.path), at: try fields.take(.at).seconds(.at))
@@ -230,6 +230,14 @@ package enum SyncLineProblem: Error, Equatable, CustomStringConvertible {
         case .badValue(let key, let reason): "\"\(key)\" \(reason)"
         }
     }
+}
+
+/// The most of a log's own text a problem keeps, so a hundred problems a log stay small.
+let maximumQuotedCharacters = 200
+
+/// `text`, cut to `maximumQuotedCharacters` with "…" when it's longer.
+func clipped(_ text: String) -> String {
+    text.count > maximumQuotedCharacters ? text.prefix(maximumQuotedCharacters) + "…" : text
 }
 
 /// A playlist's ID in every log: 32 lowercase hex digits, as `newSyncID` makes.
@@ -325,11 +333,15 @@ enum SyncJSON: Equatable {
         let name = try string(.name)
         guard name.utf8.count <= SyncRecord.maximumNameBytes,
             !name.unicodeScalars.contains(where: {
-                $0.properties.generalCategory == .control || $0 == "\u{2028}" || $0 == "\u{2029}"
+                // Format characters such as U+202E reorder what a report row shows.
+                [.control, .format].contains($0.properties.generalCategory) || $0 == "\u{2028}"
+                    || $0 == "\u{2029}"
             })
         else {
             throw .bad(
-                .name, "is over \(SyncRecord.maximumNameBytes) bytes or holds a control character")
+                .name,
+                "is over \(SyncRecord.maximumNameBytes) bytes or holds a control or format character"
+            )
         }
         return name
     }
@@ -392,7 +404,7 @@ struct SyncJSONParser {
                 let key = try string()
                 try expect(UInt8(ascii: ":"))
                 guard object.updateValue(try value(), forKey: key) == nil else {
-                    throw .notJSON("\the key \"\(key)\" appears twice")
+                    throw .notJSON("the key \"\(clipped(key))\" appears twice")
                 }
                 let next = try byte()
                 if next == UInt8(ascii: "}") { break }
