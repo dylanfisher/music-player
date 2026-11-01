@@ -126,7 +126,8 @@ extension LibraryIndex {
                     try plays.run(id, update.plays, update.skips, update.lastPlayedSeconds)
                     try logSync(pathID: id, roots) {
                         .counts(
-                            path: $0, plays: update.plays, skips: update.skips,
+                            path: $0, player: library.player, plays: update.plays,
+                            skips: update.skips,
                             lastPlayed: update.lastPlayedSeconds)
                     }
                 }

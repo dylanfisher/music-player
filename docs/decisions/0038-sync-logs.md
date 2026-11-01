@@ -55,7 +55,7 @@ the config file but music files, through the tag writer.
   |---|---|
   | `play` | `path`, `at` (seconds since 1970) |
   | `skip` | `path` |
-  | `counts` | `path`, `plays`, `skips`, `lastPlayed` (a time or null): an import's counts |
+  | `counts` | `path`, `player`, `plays`, `skips`, `lastPlayed` (a time or null): an import's counts |
   | `rating` | `path`, `stars` (0 clears) |
   | `loved` | `path`, `loved` |
   | `added` | `path`, `at`: Date Added |
@@ -155,7 +155,10 @@ the config file but music files, through the tag writer.
   file. A path under none of its share folders is skipped, and the count reported: a Mac that
   doesn't watch that folder doesn't keep its stats.
 - **The import** (0033) runs on one machine and writes events for what it changed: `counts`
-  for the plays and skips it added, `rating`, `loved`, `added` and each playlist.
+  for the plays and skips it added, with the player, and `rating`, `loved`, `added` and each
+  playlist. Merging `counts` adds them to what that player's imports counted here too, so an
+  import of the same library on another Mac, or on this one after its stats were rebuilt from
+  the logs, adds only what grew instead of counting it all again.
 - **Nothing from before this build is sent.** The log starts with this build, and a playlist
   made before it is sent whole at its next change.
 

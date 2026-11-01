@@ -384,7 +384,7 @@ private let syncLog = FuzzTarget(
             #"{"seq":2,"ms":1800000000001,"n":3,"event":"move","from":"music/tracks/a.flac","to":"music/tracks/Cafe\u0301.flac"}"#,
             #"{"seq":3,"ms":1800000000002,"n":0,"event":"playlistCreate","playlist":"\#(id)","name":"Mix","rules":null}"#,
             #"{"seq":4,"ms":1800000000003,"n":0,"event":"playlistEntries","playlist":"\#(id)","paths":["music/tracks/a.flac","music/tracks/b"]}"#,
-            #"{"seq":5,"ms":1800000000004,"n":0,"event":"counts","path":"music/tracks/a.flac","plays":2,"skips":0,"lastPlayed":null}"#,
+            #"{"seq":5,"ms":1800000000004,"n":0,"event":"counts","path":"music/tracks/a.flac","player":"swinsian","plays":2,"skips":0,"lastPlayed":null}"#,
         ]
         return [Array((lines.joined(separator: "\n") + "\n").utf8), Array(lines[0].utf8)]
     },

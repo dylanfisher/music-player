@@ -473,6 +473,19 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(synced.loved)
     #expect(synced.addedSeconds == 1_000_000_000)
     #expect(synced.lastPlayedSeconds == 1_600_000_000)
+    // Importing the same library on B, or on A after its stats were rebuilt from the logs,
+    // adds nothing.
+    _ = try b.index.applyImport(library, prefix: PathPrefix(from: a.mount, to: b.mount))
+    #expect(try b.track("x.flac")?.playCount == 7)
+    try a.index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'stats'")
+    let rebuilt = try LibraryIndex(at: a.databaseURL)
+    _ = try rebuilt.locate(
+        [WatchedFolder(path: folderInShare, share: share, kind: .network)],
+        among: [MountedShare(url: share, mountPoint: a.mount)])
+    _ = try rebuilt.sync(folder: folderName, at: nas.syncFolder)
+    try rebuilt.store([Crafted(path: a.path("x.flac"), title: "x.flac").scanned])
+    _ = try rebuilt.applyImport(library, prefix: nil)
+    #expect(try rebuilt.track(path: a.path("x.flac"))?.playCount == 7)
 }
 
 @Test func dateAddedIsTheEarliestAnyMachineSaw() throws {

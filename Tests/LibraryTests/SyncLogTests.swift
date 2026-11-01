@@ -10,8 +10,8 @@ private let playlist = String(repeating: "ab", count: 16)
 private let everyEvent: [SyncEvent] = [
     .play(path: "music/a.flac", at: 1_700_000_000.25),
     .skip(path: "music/a.flac"),
-    .counts(path: "music/a.flac", plays: 3, skips: 1, lastPlayed: nil),
-    .counts(path: "music/a.flac", plays: 0, skips: 0, lastPlayed: 12.5),
+    .counts(path: "music/a.flac", player: .swinsian, plays: 3, skips: 1, lastPlayed: nil),
+    .counts(path: "music/a.flac", player: .iTunes, plays: 0, skips: 0, lastPlayed: 12.5),
     .rating(path: "music/Caf\u{e9} \"q\"\\b.flac", stars: 0),
     .loved(path: "music/line\nbreak.flac", loved: true),
     .added(path: "music/a.flac", at: 0),

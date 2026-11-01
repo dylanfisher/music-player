@@ -42,9 +42,19 @@ extension LibraryIndex {
         case .skip(let path):
             guard let id = try mergedPathID(path, seenAt: seconds, &merge) else { return nil }
             try addCounts(id, plays: 0, skips: 1, lastPlayed: nil)
-        case .counts(let path, let plays, let skips, let lastPlayed):
+        case .counts(let path, let player, let plays, let skips, let lastPlayed):
             guard let id = try mergedPathID(path, seenAt: seconds, &merge) else { return nil }
             try addCounts(id, plays: plays, skips: skips, lastPlayed: lastPlayed)
+            // So an import of the same library here, or after a rebuild, adds only what grew.
+            try statement(
+                """
+                INSERT INTO \(importedPlaysTable) (player, path_id, play_count, skip_count)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (player, path_id) DO UPDATE SET
+                    play_count = play_count + excluded.play_count,
+                    skip_count = skip_count + excluded.skip_count
+                """
+            ).run(player.rawValue, id, plays, skips)
         case .rating(let path, let stars):
             guard let id = try mergedPathID(path, seenAt: seconds, &merge),
                 try wins(stamp, .rating, id)

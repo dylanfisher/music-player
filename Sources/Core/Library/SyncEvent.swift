@@ -5,8 +5,9 @@ import Foundation
 enum SyncEvent: Equatable, Sendable {
     case play(path: String, at: Double)
     case skip(path: String)
-    /// Plays and skips an import added, and its Last Played.
-    case counts(path: String, plays: Int, skips: Int, lastPlayed: Double?)
+    /// Plays and skips an import from `player` added, and its Last Played.
+    case counts(
+        path: String, player: PlayerLibrary.Player, plays: Int, skips: Int, lastPlayed: Double?)
     /// 0 clears the rating.
     case rating(path: String, stars: Int)
     case loved(path: String, loved: Bool)
@@ -108,9 +109,10 @@ extension SyncEvent {
         switch self {
         case .play(let path, let at): [(.path, .string(path)), (.at, .number(at))]
         case .skip(let path): [(.path, .string(path))]
-        case .counts(let path, let plays, let skips, let lastPlayed):
+        case .counts(let path, let player, let plays, let skips, let lastPlayed):
             [
-                (.path, .string(path)), (.plays, .integer(Int64(plays))),
+                (.path, .string(path)), (.player, .string(player.rawValue)),
+                (.plays, .integer(Int64(plays))),
                 (.skips, .integer(Int64(skips))),
                 (.lastPlayed, lastPlayed.map { .number($0) } ?? .null),
             ]
@@ -137,7 +139,8 @@ extension SyncEvent {
 
 /// The keys of a log line.
 enum SyncKey: String {
-    case seq, ms, n, event, path, at, plays, skips, lastPlayed, stars, loved, from, to, playlist
+    case seq, ms, n, event, path, at, player, plays, skips, lastPlayed, stars, loved, from, to
+    case playlist
     case name, rules, paths
 }
 
@@ -177,8 +180,12 @@ extension SyncEvent {
         case .skip: self = .skip(path: try fields.path(.path))
         case .counts:
             let lastPlayed = try fields.take(.lastPlayed)
+            let player = try fields.take(.player).string(.player)
+            guard let known = PlayerLibrary.Player(rawValue: player) else {
+                throw .bad(.player, "isn't a player an import reads")
+            }
             self = .counts(
-                path: try fields.path(.path),
+                path: try fields.path(.path), player: known,
                 plays: Int(try fields.take(.plays).integer(.plays, in: SyncRecord.countRange)),
                 skips: Int(try fields.take(.skips).integer(.skips, in: SyncRecord.countRange)),
                 lastPlayed: lastPlayed == .null ? nil : try lastPlayed.seconds(.lastPlayed))
