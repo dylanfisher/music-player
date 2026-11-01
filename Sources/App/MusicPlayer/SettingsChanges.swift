@@ -123,7 +123,8 @@ extension AppDelegate {
                     guard let url = settings?.fileURL else { return }
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 },
-                copyDefaultConfig: { [weak dispatcher] in dispatcher?.run(.copyDefaultConfig) }))
+                copyDefaultConfig: { [weak dispatcher] in dispatcher?.run(.copyDefaultConfig) },
+                chooseSyncFolder: { [weak self] in self?.chooseSyncFolder() }))
         settingsWindow = controller
         return controller
     }

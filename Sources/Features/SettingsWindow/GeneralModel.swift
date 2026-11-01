@@ -15,6 +15,8 @@ public final class GeneralModel {
         case text(optional: Bool)
         /// Watched folders, which the sidebar adds and removes; listed here.
         case folders
+        /// The sync folder, with buttons to choose one and to clear it.
+        case syncFolder
         /// A kind with no control of its own: the value as the config file has it, edited there.
         case readOnly
     }
@@ -52,6 +54,7 @@ public final class GeneralModel {
             case .string: .text(optional: false)
             case .optional(.string): .text(optional: true)
             case .list(.watchedFolder): .folders
+            case .optional(.syncFolder): .syncFolder
             default: .readOnly
             }
         return Row(
@@ -77,12 +80,15 @@ public final class GeneralModel {
     /// The watched folders' paths, and for a folder on a share, the share it's in; the
     /// sidebar's tooltip shows where the share is mounted now (ADR 0028).
     public func folders(_ key: String) -> [String] {
-        (value(key) as? [[String: Any]] ?? []).compactMap { folder in
-            guard let path = folder["path"] as? String else { return nil }
-            guard let share = folder["share"] as? String else { return path }
-            return path.isEmpty ? share : "\(path) on \(share)"
-        }
+        (value(key) as? [[String: Any]] ?? []).compactMap(folderText)
     }
+
+    /// The sync folder as `folders` shows a folder; nil for none.
+    public func syncFolder(_ key: String) -> String? {
+        (value(key) as? [String: Any]).flatMap(folderText)
+    }
+
+    func clear(_ key: String) throws { try set(key, NSNull()) }
 
     func setOn(_ key: String, _ on: Bool) throws { try set(key, on) }
 
@@ -108,8 +114,15 @@ public final class GeneralModel {
             try set(key, number)
         case .text(let optional):
             try set(key, trimmed.isEmpty && optional ? NSNull() : trimmed)
-        case .checkbox, .popUp, .folders, .readOnly:
+        case .checkbox, .popUp, .folders, .syncFolder, .readOnly:
             preconditionFailure("\(key) isn't a text row")
         }
     }
+}
+
+/// A folder as the config file holds it, by path or by share and the path inside it.
+private func folderText(_ folder: [String: Any]) -> String? {
+    guard let path = folder["path"] as? String else { return nil }
+    guard let share = folder["share"] as? String else { return path }
+    return path.isEmpty ? share : "\(path) on \(share)"
 }

@@ -560,6 +560,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Asks for the sync folder, stored by share when it's on one, as a watched folder is.
+    func chooseSyncFolder() {
+        guard let settings else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Sync Here"
+        panel.message =
+            "Choose a folder outside your music for the Macs that play this library to share"
+            + " their stats through. The app writes only its own log there."
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            let path = url.standardizedFileURL.path
+            do {
+                let local = try url.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal
+                let folder = folderToWatch(
+                    path, isLocal: local == true,
+                    among: local == true ? [] : try SystemShareMounts().mountedShares())
+                try settings.set(
+                    \.syncFolder, to: SyncFolder(path: folder.path, share: folder.share))
+            } catch {
+                self?.fail("Couldn't sync through \(path)", error)
+            }
+        }
+    }
+
     private func confirmRemoving(_ path: String) {
         guard let settings, let window = window?.window else { return }
         let alert = NSAlert()

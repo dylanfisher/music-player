@@ -113,7 +113,8 @@ private var appearanceChoices: [SettingKind.Choice] {
     let pane = GeneralPane(
         model: model, configPath: "/tmp/config.json",
         actions: SettingsActions(
-            openConfigFile: {}, revealConfigFile: {}, copyDefaultConfig: {}))
+            openConfigFile: {}, revealConfigFile: {}, copyDefaultConfig: {},
+            chooseSyncFolder: {}))
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 700, height: 700), styleMask: [.titled],
         backing: .buffered, defer: false)
@@ -133,4 +134,19 @@ private var appearanceChoices: [SettingKind.Choice] {
         Notification(name: NSControl.textDidEndEditingNotification, object: field))
     #expect(field.stringValue == "5")
     #expect(values()["a.count"] as? Int == 5)
+}
+
+@MainActor @Test func theSyncFolderShowsWhereItIsAndClears() throws {
+    var stored: Any? = ["path": "sync", "share": "smb://nas/music"]
+    let model = GeneralModel(
+        settings: AppSettings().settings, value: { $0 == "sync.folder" ? stored : nil },
+        set: { key, json in
+            #expect(key == "sync.folder")
+            stored = json
+        })
+    #expect(model.rows.first { $0.key == "sync.folder" }?.control == .syncFolder)
+    #expect(model.syncFolder("sync.folder") == "sync on smb://nas/music")
+    try model.clear("sync.folder")
+    #expect(stored is NSNull)
+    #expect(model.syncFolder("sync.folder") == nil)
 }

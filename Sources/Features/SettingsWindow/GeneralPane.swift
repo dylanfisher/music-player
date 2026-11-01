@@ -23,6 +23,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
     private let copyButton = NSButton()
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
     private var copiedGeneration = 0
+    private var syncFolderLabel: NSTextField?
 
     init(model: GeneralModel, configPath: String, actions: SettingsActions) {
         self.model = model
@@ -123,6 +124,18 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
                 .isActive = true
             field.setAccessibilityLabel(row.title)
             return field
+        case .syncFolder:
+            let folder = NSTextField(labelWithString: "")
+            folder.identifier = NSUserInterfaceItemIdentifier(row.key)
+            folder.font = .monospacedSystemFont(
+                ofSize: NSFont.smallSystemFontSize, weight: .regular)
+            folder.isSelectable = true
+            folder.lineBreakMode = .byTruncatingMiddle
+            let choose = button("Choose…", #selector(chooseSyncFolder))
+            let clear = button("Clear", #selector(clearSyncFolder(_:)))
+            clear.identifier = NSUserInterfaceItemIdentifier(row.key)
+            syncFolderLabel = folder
+            return NSStackView(views: [folder, choose, clear])
         case .folders, .readOnly:
             let list = NSTextField(wrappingLabelWithString: "")
             list.identifier = NSUserInterfaceItemIdentifier(row.key)
@@ -155,6 +168,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
                 (control as? NSTextField)?.stringValue =
                     paths.isEmpty
                     ? "None. Add folders with + in the sidebar." : paths.joined(separator: "\n")
+            case .syncFolder:
+                syncFolderLabel?.stringValue = model.syncFolder(row.key) ?? noValueText
             case .readOnly:
                 (control as? NSTextField)?.stringValue =
                     model.text(row.key) + " (edit in the config file)"
@@ -184,6 +199,13 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
             reload()
             return false
         }
+    }
+
+    @objc private func chooseSyncFolder() { actions.chooseSyncFolder() }
+
+    @objc private func clearSyncFolder(_ button: NSButton) {
+        guard let key = button.identifier?.rawValue else { return }
+        attempt { try model.clear(key) }
     }
 
     @objc private func toggled(_ box: NSButton) {

@@ -11,6 +11,7 @@ public indirect enum SettingKind: Sendable, Equatable {
     case optional(SettingKind)
     case list(SettingKind)
     case watchedFolder
+    case syncFolder
     /// Window layout the app saves as it changes; the settings window shows no control for it.
     case windowState
 

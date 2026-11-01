@@ -48,9 +48,11 @@ public enum ConfigFile {
 
     /// Reads `text`, collecting every problem before throwing. An unknown key, a bad value, a
     /// key set twice and a shortcut `check` refuses are each a problem on their line.
-    static func parse(_ text: ConfigText, settings: [SettingDescriptor], check: ShortcutCheck)
-        throws(ConfigErrorList) -> ConfigContents
-    {
+    /// `conflicts` checks the values in effect against each other, as the schema's does.
+    static func parse(
+        _ text: ConfigText, settings: [SettingDescriptor], check: ShortcutCheck,
+        conflicts: ([String: any SettingValue]) -> [SettingConflict] = { _ in [] }
+    ) throws(ConfigErrorList) -> ConfigContents {
         let plain: [UInt8]
         do {
             plain = try text.plainJSON()
@@ -112,6 +114,13 @@ public enum ConfigFile {
             case .success(let value): values[key] = value
             case .failure(let reason):
                 problems.append(ConfigProblem(line: line(member), message: "\"\(key)\": \(reason)"))
+            }
+        }
+        if problems.isEmpty {
+            let effective = Dictionary(
+                uniqueKeysWithValues: settings.map { ($0.key, values[$0.key] ?? $0.defaultValue) })
+            problems = conflicts(effective).map {
+                ConfigProblem(line: line(members[$0.key]), message: "\"\($0.key)\": \($0.reason)")
             }
         }
         guard problems.isEmpty else {

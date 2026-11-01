@@ -114,7 +114,23 @@ public final class ConfigStore<Schema: SettingsSchema> {
                 path: fileURL.path,
                 problems: [ConfigProblem(line: nil, message: "\"\(setting.key)\": \(reason)")])
         }
+        try checkConflicts(setting.key, value)
         apply(.setting(setting.key, value))
+    }
+
+    /// Throws what setting `key` to `value` would conflict with, leaving the settings as they
+    /// are.
+    private func checkConflicts(_ key: String, _ value: any SettingValue) throws {
+        var next = values
+        next[key] = value
+        let conflicts = schema.conflicts(next)
+        guard conflicts.isEmpty else {
+            throw ConfigError(
+                path: fileURL.path,
+                problems: conflicts.map {
+                    ConfigProblem(line: nil, message: "\"\($0.key)\": \($0.reason)")
+                })
+        }
     }
 
     /// Sets the setting `key` from a value as JSON holds it, such as `true` or `"dark"`.
@@ -123,7 +139,9 @@ public final class ConfigStore<Schema: SettingsSchema> {
             preconditionFailure("\(key) isn't a setting")
         }
         switch descriptor.decode(json) {
-        case .success(let value): apply(.setting(key, value))
+        case .success(let value):
+            try checkConflicts(key, value)
+            apply(.setting(key, value))
         case .failure(let reason):
             throw ConfigError(
                 path: fileURL.path,
@@ -225,7 +243,8 @@ public final class ConfigStore<Schema: SettingsSchema> {
         }
         do {
             let contents = try ConfigFile.parse(
-                ConfigText(bytes: bytes), settings: descriptors, check: check)
+                ConfigText(bytes: bytes), settings: descriptors, check: check,
+                conflicts: schema.conflicts)
             replace(with: contents)
             setProblems([])
             flush()
