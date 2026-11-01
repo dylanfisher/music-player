@@ -1506,15 +1506,15 @@ The Artist pane lists track artists, so a compilation or an album with guest art
 across many entries, and albums that share a title by different artists repeat by name in the
 Album pane (the known limit in phase 5's Result).
 
-- [ ] A setting `library.groupByAlbumArtist`, on by default: the Artist pane lists album
+- [x] A setting `library.groupByAlbumArtist`, on by default: the Artist pane lists album
       artists, using the track artist where a track has none, and compilations without an album
       artist under one "Various Artists" entry. Off, the pane lists track artists as now. It's in
       the Settings window and ⌘K like every other setting.
-- [ ] The Album pane tells albums with the same title apart: it shows the album artist beside
+- [x] The Album pane tells albums with the same title apart: it shows the album artist beside
       the title wherever two entries would otherwise read the same.
-- [ ] Sorting by Artist or Album with the setting on orders by album artist, then album, disc
+- [x] Sorting by Artist or Album with the setting on orders by album artist, then album, disc
       and track, so an album's tracks stay together.
-- [ ] **A column for every piece of metadata**, each one optional, sortable, and a smart-rule
+- [x] **A column for every piece of metadata**, each one optional, sortable, and a smart-rule
       field where that makes sense. The list matches Swinsian's column menu:
       - Already read, not yet a column: composer, comment, track total, disc total, compilation,
         channels.
@@ -1532,14 +1532,14 @@ Album pane (the known limit in phase 5's Result).
         never guessed.
       - Loved: a yes/no stat kept in the database beside ratings (Swinsian's heart), with a
         command to toggle it, so phase 18 can import it.
-- [ ] The default columns stay as they are; every new column is off until chosen from the
+- [x] The default columns stay as they are; every new column is off until chosen from the
       header's menu. The owner will turn on #, Album Art, Title, Artist, Album, Track of Total,
       Time, Year, Genre, Grouping, Catalog Number, Bit Rate, Sample Rate, Size, Play Count and
       Date Added, so those must work first and be tested.
-- [ ] The tag editor (phase 11) stays as it is; editing the new fields is a later change.
-- [ ] Tests: the pane with the setting on and off, compilations, same-title albums, the sort
+- [x] The tag editor (phase 11) stays as it is; editing the new fields is a later change.
+- [x] Tests: the pane with the setting on and off, compilations, same-title albums, the sort
       order, each new tag read from every format, and each new column's sort.
-- [ ] Bench: the pane, re-sort, scan, and database size budgets still hold.
+- [x] Bench: the pane, re-sort, scan, and database size budgets still hold.
 
 Implementation plan (ADR [0031](decisions/0031-album-artist-and-metadata-columns.md); the tag
 mapping is in ADR [0006](decisions/0006-tag-reader.md)):
@@ -1569,6 +1569,19 @@ mapping is in ADR [0006](decisions/0006-tag-reader.md)):
    columns' sorts and values, created dates, grouping with compilations and same-titled albums,
    loved surviving an index rebuild, the new rule fields), LibraryBrowserTests (row numbers,
    album names, the setting's reload, the art queue), SettingsTests (the setting).
+
+Result: shipped. Sixteen new tags read from FLAC, MP4, ID3v2.2 to 2.4 and WAV, keyed by
+MusicBrainz Picard's mapping (ADR 0006, written without the web; keys marked † are unverified);
+each parser target fuzzed 120 s with no crash. Every column is optional and sortable, most are
+smart-rule fields, and the owner's sixteen fit at 1440x900 with every panel open (1,029 points).
+`library.groupByAlbumArtist` is on by default; compilations without an album artist group under
+Various Artists, and an album with no artist that isn't a compilation shows its title alone.
+Loved is its own stats part and survives an index rebuild. Choices in ADR 0031: a Vorbis
+`DESCRIPTION` is the description, not the comment; the old "#" header is "Track", as "#" is
+the row's position; Album sorts by title, then album artist; bit rate is size without art over
+length. Bench: parse 4.10 s, scan 1.86 s, database 45.3 MB (from 42.7), sort 41.4 ms and re-sort
+42.1 ms (from 37.0, the added joins and the grouped order), window memory 57.4 MB, launch 0.64 s;
+every budget holds.
 
 ### 17. Playlist files
 
