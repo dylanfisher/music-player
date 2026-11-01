@@ -37,6 +37,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 | Build the fixture library (43k tagged files) | `./scripts/fixtures [--count N]` |
 | Survey the tag corpus, or edit and undo every file on clones of it (not in `check`) | `./scripts/tag-corpus [<folder> \| --round-trip]` |
 | Run the benchmarks against their budgets | `./scripts/bench [--soak <seconds>] [name]` |
+| Kill the app's writes at random points, or fill the disk under them, and check what's left (not in `check`) | `./scripts/kill-test [--kills N] [--seed N]`, `./scripts/full-disk` |
 | Everything CI runs | `./scripts/check` |
 
 `./scripts/check` runs every step even after one fails, so one run lists every problem.

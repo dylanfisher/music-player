@@ -1022,11 +1022,13 @@ Implementation plan (ADR 0023, written first):
 3. **NAS dropping** (Fixtures, Library, HALOutput). `SimulatedNAS` can drop after a number of
    operations, failing every listing and read after it as a dead SMB mount does. A rescan through
    it keeps every track and reports the issues; the next scan restores the rest. Mid-playback,
-   a file cut short while it plays reports a track failure and moves on.
+   a file cut short while it plays used to end as if finished; audio that stops more than half
+   a second before the header's length now reports a track failure and moves on.
 4. **Full disk and a locked database** (Library). A failed scan of a local folder is retried as
    a whole scan a minute later, instead of losing its changes until the next launch. Tests fill
-   the database with `PRAGMA max_page_count` (scan, playlist edit, play count, all rolled back
-   and reported) and hold its lock from a second connection.
+   the database with `PRAGMA max_page_count`, which showed SQLite's own rollback on a full disk
+   hiding `SQLITE_FULL` behind a failed second rollback (fixed in `Database.transaction`), and
+   hold its lock from a second connection.
 5. **Corrupt database and state file** (Library, Settings, App). A library file SQLite can't read
    at all is moved aside, a new one is made, and a discard notice says where the old one went.
    `StateStore` keeps why it discarded a file, and the window shows it in the config banner.
@@ -1039,9 +1041,9 @@ Implementation plan (ADR 0023, written first):
    fills a disk image under each of the database, the state file, the config file and the tag
    journal, and checks each failure is reported and nothing else changed.
 8. **Scripts.** `scripts/kill-test [--kills N] [--seed S]` generates fixtures under
-   `~/Library/Caches/MusicPlayer/kill-test`, clones the tag-write files there with `cp -c`,
-   hashes every music file, and sends seeded `SIGKILL`s across the four operations, checking
-   after each. `scripts/full-disk` attaches a small image with `hdiutil attach -nobrowse
+   `~/Library/Caches/MusicPlayer/kill-test`, clones the tag-write files with `cp -c` into
+   `~/Library/Caches/MusicPlayer/tag-corpus/kill-test`, hashes every music file, and sends
+   seeded `SIGKILL`s across the four operations, checking after each. `scripts/full-disk` attaches a small image with `hdiutil attach -nobrowse
    -mountpoint` under `~/Library/Caches/MusicPlayer`, detached by a trap on every exit. Neither
    is in `./scripts/check`, which gets the deterministic tests above.
 9. **Loaded soak** (Bench). The soak plays while a full scan of the fixture library into a new

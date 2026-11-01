@@ -26,10 +26,10 @@ cover what a test can't do quickly or hermetically.
 | NAS unmounted mid-scan | the root's `st_dev` changes, or a reader finds it gone | status bar problem: the folder went away; no track removed | next poll | `lostRootStopsReadingAndStoresNothing` |
 | NAS mount dead mid-scan (listings and reads fail, mount stays) | each failed listing and read | unreadable folders and files in Problems; every earlier track kept | next poll reads them again | `aNASThatDropsMidScanKeepsEveryTrack` |
 | NAS missing or empty at a scan | the root doesn't stat, or lists nothing while indexed | status bar problem; index kept | next poll | `missingFolderRemovesNothing`, `emptyMountPointRemovesNothing` |
-| NAS drops mid-playback | the decoder's read fails | Now Playing names the track that failed; the next one plays | play again once it's back | `aFileCutShortWhilePlayingIsReportedAndSkipped`, `aQueueOfBrokenFilesEndsInsteadOfLooping` |
+| NAS drops mid-playback | the decoder's read fails, or its audio ends well before its length | Now Playing names the track that failed, and where its audio ended; the next one plays | play again once it's back | `aFileCutShortWhilePlayingIsReportedAndSkipped`, `aQueueOfBrokenFilesEndsInsteadOfLooping` |
 | DAC unplugged while playing or before playing | the HAL's alive and device-list listeners | paused, "device lost"; then "device returned" | press Play | `losingTheDevicePausesAndItsReturnLetsPlaybackResume`, `playingWithTheDeviceUnpluggedReportsItLost` |
 | DAC gone during a rate switch: stop, format, start | the step fails while the device reads as gone | as unplugged, resuming at the new track's start | press Play | `theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost` |
-| Disk full: database | `SQLITE_FULL`; the transaction rolls back | status bar: the scan or edit failed, with SQLite's reason | free space; a local folder rescans a minute later, a network one at its poll | `aFullDatabaseFailsTheScanAndKeepsTheIndex`, `aFullDatabaseRollsBackEveryEdit`, `scripts/full-disk` |
+| Disk full: database | `SQLITE_FULL`; the transaction rolls back | status bar: the scan or edit failed, with SQLite's reason | free space; a local folder rescans a minute later, a network one at its poll | `aFullDatabaseFailsTheScanAndKeepsTheIndex`, `aTransactionSQLiteRolledBackItselfThrowsWhatCausedIt`, `scripts/full-disk` |
 | Disk full: state file | the atomic write fails | config banner: "couldn't save" | the change is kept and saved with the next one, or at quit | `aFailedSaveIsKeptAndSavedWithTheNext`, `scripts/full-disk` |
 | Disk full: config file | the atomic write fails | config banner | retried after 1 s, doubling to 30 s | `aNewFileThatCouldntBeWrittenIsRetried`, `scripts/full-disk` |
 | Disk full: tag journal | the record or bytes write fails | the tag editor lists the file and the ones not written | free space, save again | `aJournalThatCantBeWrittenStopsTheBatchAfterThatFile`, `scripts/full-disk` |
@@ -51,6 +51,13 @@ cover what a test can't do quickly or hermetically.
   whether the device is there; if not, it's abandoned and reported as `deviceLost` with the
   position to resume at, as an unplug at any other time is. `NullDevice` can go away during its
   next stop, configure or start to test each step.
+- **A file whose audio ends early is a failed track.** A file cut short while it plays, or a
+  partial one, read as a clean end: the track stopped early with nothing said. Decoding that
+  stops more than half a second before the length in the header now reports the track as
+  failed. The half second leaves room for lengths that are an encoder's estimate.
+- **A full database reports SQLITE_FULL.** SQLite rolls a transaction back itself on a full
+  disk, and the explicit rollback that followed failed and hid the real error behind "no
+  transaction is active". `Database.transaction` rolls back only a transaction still open.
 - **A failed scan of a local folder is retried.** FSEvents reports a change once, so a scan that
   failed (a full disk, a locked database) used to lose those directories' changes until the
   next launch. The folder is now scanned whole a minute after a failed scan; a network folder
@@ -94,5 +101,6 @@ The table is the list to extend when a phase adds a failure path; each new row n
 A device that reports itself still connected while a step fails is reported as an output
 failure, as before; the hardware checkpoint on the ADI-2 shows which order the HAL uses. A
 locked database at launch still quits after the alert, since the window can't open without
-it. Files left outside the watched folders when their removal at launch fails are only logged,
+it; opening takes a write lock to check the schema. A kill mid-save can leave Foundation's
+temp file (`state.json.sb-…`) beside the state or config file; nothing reads it. Files left outside the watched folders when their removal at launch fails are only logged,
 and go at the next launch.
