@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Library
+@testable import Metadata
 @testable import Settings
 
 /// Stands in for the system's list of mounted shares, which no test may change.
@@ -271,4 +272,53 @@ private func index(under root: String, names: [String] = ["a.flac", "Caf\u{e9}/b
     )
     #expect(try index.matchMoves().count == 1)
     #expect(try index.track(path: "/M/b.flac")?.id == id)
+}
+
+/// Reads as the system does until the first read, which ejects the share under it.
+private struct EjectingAccess: ScanFileAccess {
+    let mountPoint: String
+    private let system = SystemFileAccess()
+
+    func volumeIsLocal(_ path: String) throws -> Bool? { false }
+
+    func contentsOfDirectory(_ directory: String, keys: [URLResourceKey]) throws -> [URL] {
+        try system.contentsOfDirectory(directory, keys: keys)
+    }
+
+    func readMetadata(at path: String) throws(MetadataError) -> ParsedFile {
+        if FileManager.default.fileExists(atPath: mountPoint) {
+            do {
+                try FileManager.default.moveItem(
+                    atPath: mountPoint, toPath: mountPoint + " (ejected)")
+            } catch {
+                preconditionFailure("couldn't stand in for an eject: \(error)")
+            }
+        }
+        throw MetadataError(path: path, kind: .unreadable, offset: 0, detail: "the share went away")
+    }
+}
+
+@Test func aShareThatGoesAwayMidScanMovesAndLosesNothing() throws {
+    let library = try TestLibrary()
+    let mountPoint = (library.root as NSString).deletingLastPathComponent + "/nas-music"
+    try FileManager.default.createDirectory(atPath: mountPoint, withIntermediateDirectories: true)
+    try FileManager.default.moveItem(atPath: library.root, toPath: mountPoint + "/library")
+    let index = try library.index()
+    let folder = try #require(
+        try index.locate([music], among: [share("smb://nas.local/music", at: mountPoint)]).first)
+    _ = try LibraryScanner(databaseURL: library.databaseURL).scan(folder)
+    let file = try #require(library.manifest.files.first { $0.malformation == nil })
+    let from = folder.path + "/" + file.path
+    try index.recordPlay(from, at: 100)
+    try FileManager.default.moveItem(atPath: from, toPath: folder.path + "/renamed.flac")
+
+    let summary = try LibraryScanner(
+        databaseURL: library.databaseURL, networkReaders: 1,
+        access: EjectingAccess(mountPoint: mountPoint)
+    ).scan(folder)
+    #expect(summary.issues.map(\.kind).contains(.rootVanished))
+    #expect(summary.removed == 0)
+    #expect(summary.moved == 0)
+    #expect(try index.track(path: from)?.playCount == 1)
+    #expect(try index.lostFiles().isEmpty)
 }
