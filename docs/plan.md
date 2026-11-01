@@ -1448,7 +1448,11 @@ comes from Swinsian; most other Mac users come from iTunes or Music.
       opened read-only from a copy, never the live file. Bring across play counts, last played,
       ratings, date added, and manual playlists. Smart playlists whose rules map onto ours come
       across as smart playlists; the rest are listed in the report. Loved (the heart) comes
-      across too.
+      across too. Swinsian identifies a track by a row ID, its path, and a macOS bookmark that
+      only resolves on the machine that made it, so the import matches by path. It can hold one
+      path in more than one row (the owner's library has 32 extra rows); the import merges them,
+      adding plays and keeping the latest last played and the highest rating, and the preview
+      counts them.
 - [ ] **iTunes and Music:** read an exported `Library.xml` (File ▸ Library ▸ Export Library)
       with `PropertyListSerialization`. The same fields, plus skip counts. Smart playlists are
       encoded in a private format, so they come across as manual playlists of their current
