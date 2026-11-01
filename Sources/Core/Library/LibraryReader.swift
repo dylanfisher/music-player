@@ -95,11 +95,6 @@ public actor LibraryReader {
         try index.timeline(after: id, limit: limit)
     }
 
-    /// `entries` with each one's track read again, for after a library change.
-    public func resolved(_ entries: [PlayEntry]) throws -> [PlayEntry] {
-        try index.resolved(entries)
-    }
-
     public func loggedPlayCount() throws -> Int { try index.loggedPlayCount() }
 
     public func discards() throws -> [DiscardNotice] { try index.discards() }

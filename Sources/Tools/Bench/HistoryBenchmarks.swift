@@ -24,7 +24,9 @@ let historyBenchmarks = [
                     guard page.count == pageSize else {
                         throw BenchError.expected("a full page before \(String(describing: start))")
                     }
-                    missing += page.filter { $0.track == nil }.count
+                    // A page is read with what its rows show, as the timeline draws it.
+                    let played = try index.playedTracks(ids: page.map(\.trackID))
+                    missing += page.filter { played[$0.trackID]?.track == nil }.count
                 }
             })
         return Measured(

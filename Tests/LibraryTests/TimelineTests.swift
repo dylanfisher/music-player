@@ -15,7 +15,8 @@ import Testing
     let first = try index.timeline(before: nil, limit: 4)
     #expect(first.map(\.playedSeconds) == [1008, 1007, 1006, 1005])
     #expect(first.map(\.trackID) == [rows[2].id, rows[1].id, rows[0].id, rows[2].id])
-    #expect(first.map(\.track?.path) == first.map(\.path))
+    let played = try index.playedTracks(ids: first.map(\.trackID))
+    #expect(first.map { played[$0.trackID]?.track?.path } == first.map { played[$0.trackID]?.path })
 
     // New plays don't shift the next page.
     try index.recordPlay(rows[0].path, at: 2000)
@@ -44,9 +45,30 @@ import Testing
     _ = try library.scan()
 
     let page = try index.timeline(before: nil, limit: 200)
-    #expect(page.map(\.path) == [rows[1].path, "/elsewhere/never-indexed.flac", rows[0].path])
-    #expect(page.map { $0.track != nil } == [false, false, true])
+    let played = try index.playedTracks(ids: page.map(\.trackID))
+    #expect(
+        page.map { played[$0.trackID]?.path }
+            == [rows[1].path, "/elsewhere/never-indexed.flac", rows[0].path])
+    #expect(page.map { played[$0.trackID]?.track != nil } == [false, false, true])
+    #expect(
+        page.map { played[$0.trackID]?.title } == [
+            displayName(rows[1].path), "never-indexed", rows[0].title,
+        ])
     #expect(page[0].trackID == rows[1].id)
+}
+
+@Test func rowsAndPlayedTracksReadMoreIDsThanSQLiteTakesInOneList() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let ids = try index.trackIDs(sortedBy: .path)
+    // Far past SQLite's 32,766 parameters, mostly IDs with no track, and repeats.
+    let asked = Array(1...40_000).map(Int64.init) + ids + ids
+    #expect(Set(try index.rows(ids: asked).map(\.id)) == Set(ids))
+    // Every file the scan saw has a path, and those it could read have a track.
+    let played = try index.playedTracks(ids: asked)
+    #expect(played.count == library.manifest.files.count)
+    #expect(Set(played.filter { $0.value.track != nil }.keys) == Set(ids))
 }
 
 @Test func playedAtIsInWholeSeconds() throws {

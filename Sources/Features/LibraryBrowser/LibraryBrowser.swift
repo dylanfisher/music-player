@@ -91,17 +91,31 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             failed: { message in owner?.show(failure: message) },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         table = TrackTableController(model: model, cache: cache, layout: layout, actions: actions)
-        let timelineModel = TimelineModel(reader: reader)
+        let timelineModel = TimelineModel(reader: reader) { ids in try index.playedTracks(ids: ids)
+        }
         self.timelineModel = timelineModel
         timeline = TimelineController(
             model: timelineModel,
             play: { rows, clicked in
-                guard let request = timelineModel.playRequest(selected: rows, clicked: clicked)
-                else { return }
-                owner?.play(request)
+                do {
+                    guard
+                        let request = try timelineModel.playRequest(
+                            selected: rows, clicked: clicked)
+                    else { return }
+                    owner?.play(request)
+                } catch {
+                    owner?.report("couldn't read the plays to play: \(error)")
+                }
             },
-            playNext: { rows in owner?.playNext(timelineModel.urls(ofRows: rows)) },
-            keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
+            playNext: { rows in
+                do {
+                    owner?.playNext(try timelineModel.urls(ofRows: rows))
+                } catch {
+                    owner?.report("couldn't read the plays to queue: \(error)")
+                }
+            },
+            keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound },
+            failed: { message in owner?.show(failure: message) })
         panes = PanesController(
             model: model, select: { pane, id in Task { await model.select(pane, id: id) } },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
@@ -256,7 +270,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         lastRefresh = Date()
         Task {
             await model.refresh()
-            if showsTimeline { await timelineModel.refresh() }
+            if showsTimeline { timelineModel.refresh() }
             libraryRefreshed()
             await countIssues()
         }
@@ -428,13 +442,29 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Whether the shown list's selection has a track to act on. On the timeline, plays of
     /// files no longer in the library have none.
-    public var hasSelectedTracks: Bool { !selectedTrackIDs.isEmpty }
+    public var hasSelectedTracks: Bool {
+        // A timeline selection of only missing files enables commands that then do nothing,
+        // rather than reading every selected play's track each time a menu is checked.
+        showsTimeline
+            ? !timeline.table.selectedRowIndexes.isEmpty
+            : !table.table.selectedRowIndexes.isEmpty
+    }
 
     /// The selected tracks in row order: on the timeline, each track once (ADR 0022).
-    private var selectedTrackIDs: [Int64] {
+    private func selectedTrackIDs() throws -> [Int64] {
         showsTimeline
-            ? timelineModel.trackIDs(ofRows: timeline.table.selectedRowIndexes)
+            ? try timelineModel.trackIDs(ofRows: timeline.table.selectedRowIndexes)
             : model.ids(ofRows: table.table.selectedRowIndexes)
+    }
+
+    /// `selectedTrackIDs`, or nil after reporting `failure` with why they couldn't be read.
+    private func selectedTrackIDs(else failure: String) -> [Int64]? {
+        do {
+            return try selectedTrackIDs()
+        } catch {
+            report("\(failure): \(error)")
+            return nil
+        }
     }
 
     /// Whether the track table has the keys.
@@ -454,7 +484,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// The paths of the selected tracks, in table order.
     public func selectedPaths() async throws -> [String] {
-        let ids = selectedTrackIDs
+        let ids = try selectedTrackIDs()
         let paths = try await reader.paths(ids: ids)
         return ids.compactMap { paths[$0] }
     }
@@ -498,7 +528,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Makes a playlist, smart when `rules` are given, holding the selected tracks when
     /// `withSelection` is set, and shows it.
     public func createPlaylist(named name: String, rules: SmartRules?, withSelection: Bool) {
-        let ids = withSelection ? selectedTrackIDs : []
+        let failure = "couldn't make the playlist \"\(name)\""
+        guard let ids = withSelection ? selectedTrackIDs(else: failure) : [] else { return }
         edit("couldn't make the playlist \"\(name)\"") {
             try await self.model.createPlaylist(named: name, rules: rules, trackIDs: ids)
         }
@@ -520,8 +551,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Adds the selected tracks to a manual playlist.
     public func addSelection(to playlist: Int64) {
-        let ids = selectedTrackIDs
-        edit("couldn't add the tracks to the playlist") {
+        let failure = "couldn't add the tracks to the playlist"
+        guard let ids = selectedTrackIDs(else: failure) else { return }
+        edit(failure) {
             _ = try await self.model.add(ids, to: playlist)
         }
     }
@@ -540,7 +572,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Rates the selected tracks; 0 stars clears their rating.
     public func rateSelection(_ stars: Int) {
-        let ids = selectedTrackIDs
+        guard let ids = selectedTrackIDs(else: "couldn't rate the tracks") else { return }
         edit("couldn't rate the tracks") { try await self.model.rate(ids, stars: stars) }
     }
 
@@ -622,11 +654,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// the loaded plays.
     public func trackNames() async throws -> [TrackName] {
         guard showsTimeline else { return try await model.trackNames() }
-        return timelineModel.entries.map { entry in
-            TrackName(
-                id: entry.id, title: entry.title, artist: entry.track?.artist,
-                album: entry.track?.album, genre: entry.track?.genre)
-        }
+        return try timelineModel.names()
     }
 
     /// Esc clears the search and gives the keys back to the table; ↑ and ↓ move the table's

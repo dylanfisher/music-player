@@ -94,12 +94,29 @@ extension LibraryIndex {
     /// The rows for `ids`, in the same order. An ID with no track, such as one a rescan just
     /// removed, is left out.
     public func rows(ids: [Int64]) throws -> [TrackRow] {
-        guard !ids.isEmpty else { return [] }
-        let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ", ")
-        let found = try statement(rowSelect + " WHERE t.file_id IN (\(placeholders))").map(
-            binding: ids, row: trackRow)
-        let byID = Dictionary(uniqueKeysWithValues: found.map { ($0.id, $0) })
+        let found = try inChunks(ids, { rowSelect + " WHERE t.file_id IN (\($0))" }, trackRow)
+        // An ID asked for in two chunks comes back from both.
+        let byID = Dictionary(found.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return ids.compactMap { byID[$0] }
+    }
+
+    /// Runs `sql`, given the placeholders of one `IN` list, over `ids` a chunk at a time, since
+    /// SQLite takes at most 32,766 parameters. The last chunk repeats its last ID to the full
+    /// size, which `IN` ignores, so one prepared statement serves every chunk.
+    func inChunks<T>(_ ids: [Int64], _ sql: (String) -> String, _ read: (Row) throws -> T)
+        throws -> [T]
+    {
+        guard let last = ids.last else { return [] }
+        let size = min(ids.count, inListSize)
+        let select = try statement(
+            sql(Array(repeating: "?", count: size).joined(separator: ", ")))
+        var results: [T] = []
+        for start in stride(from: 0, to: ids.count, by: size) {
+            var chunk = Array(ids[start..<min(start + size, ids.count)])
+            chunk += Array(repeating: last, count: size - chunk.count)
+            results += try select.map(binding: chunk, row: read)
+        }
+        return results
     }
 
     /// The row for the file at `path`, or nil when the index has no track for it.
@@ -245,6 +262,9 @@ extension LibraryIndex {
 private func whereClause(_ conditions: [String]) -> String {
     conditions.isEmpty ? "" : "WHERE " + conditions.joined(separator: " AND ")
 }
+
+/// The most IDs one `IN` list binds: well under SQLite's limit, and few statement shapes.
+let inListSize = 500
 
 /// Selects what `trackRow` reads, from tracks `t` and files `f`.
 private let rowSelect = """

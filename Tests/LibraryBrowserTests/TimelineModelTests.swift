@@ -20,7 +20,10 @@ private func timeline() throws -> (TimelineModel, LibraryIndex, [TrackRow]) {
     }
     let index = try LibraryIndex(at: databaseURL)
     let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
-    return (TimelineModel(reader: try LibraryReader(databaseURL: databaseURL)), index, rows)
+    let model = TimelineModel(reader: try LibraryReader(databaseURL: databaseURL)) { ids in
+        try index.playedTracks(ids: ids)
+    }
+    return (model, index, rows)
 }
 
 /// Logs `count` plays, cycling through `rows`, a second apart from `start`.
@@ -76,30 +79,71 @@ private func play(_ count: Int, of rows: [TrackRow], from start: Int, _ index: L
     try index.recordPlay(rows[0].path, at: 3)
     try index.recordPlay(rows[1].path, at: 4)
     await model.load()
-    #expect(model.entries.map { $0.track == nil } == [false, false, true, false])
-    #expect(model.entries[2].title == "x")
+    #expect(
+        try model.entries.indices.map { try model.played(at: $0)?.track == nil } == [
+            false, false, true, false,
+        ])
+    #expect(try model.played(at: 2)?.title == "x")
 
-    #expect(model.trackIDs(ofRows: [0, 1, 2, 3]) == [rows[1].id, rows[0].id])
-    #expect(model.trackIDs(ofRows: [2]).isEmpty)
+    #expect(try model.trackIDs(ofRows: [0, 1, 2, 3]) == [rows[1].id, rows[0].id])
+    #expect(try model.trackIDs(ofRows: [2]).isEmpty)
     let a = URL(fileURLWithPath: rows[0].path)
     let b = URL(fileURLWithPath: rows[1].path)
-    #expect(model.urls(ofRows: [0, 1, 2, 3]) == [b, a, a])
-    #expect(model.playRequest(selected: [], clicked: 1) == PlayRequest(urls: [b, a, a], first: 1))
+    #expect(try model.urls(ofRows: [0, 1, 2, 3]) == [b, a, a])
+    #expect(
+        try model.playRequest(selected: [], clicked: 1) == PlayRequest(urls: [b, a, a], first: 1))
     // A missing row clicked starts at the next row that plays.
-    #expect(model.playRequest(selected: [], clicked: 2) == PlayRequest(urls: [b, a, a], first: 2))
+    #expect(
+        try model.playRequest(selected: [], clicked: 2) == PlayRequest(urls: [b, a, a], first: 2))
     #expect(model.rows(holding: [model.entries[3].id, 999]) == [3])
 }
 
-@MainActor @Test func aLibraryChangeReResolvesOnlyTheLoadedRows() async throws {
+@MainActor @Test func aLibraryChangeReadsTheRowsAgain() async throws {
     let (model, index, rows) = try timeline()
     try index.recordPlay(rows[0].path, at: 1)
     try index.recordPlay(rows[1].path, at: 2)
     await model.load()
-    #expect(model.entries.allSatisfy { $0.track != nil })
+    #expect(try model.played(at: 0)?.track != nil)
     try index.remove([rows[1].id])
-    await model.refresh()
-    #expect(model.entries.map { $0.track == nil } == [true, false])
-    #expect(model.entries.map(\.path) == [rows[1].path, rows[0].path])
+    var changes = 0
+    model.changed = { _ in changes += 1 }
+    model.refresh()
+    #expect(changes == 1)
+    #expect(try model.played(at: 0)?.track == nil)
+    #expect(try model.played(at: 0)?.path == rows[1].path)
+    #expect(try model.played(at: 1)?.track != nil)
+}
+
+@MainActor @Test func scrollingTwentyThousandPlaysKeepsTheCacheBounded() async throws {
+    let (model, index, rows) = try timeline()
+    let count = 20_000
+    try index.database.transaction {
+        let insert = try index.database.prepare(
+            "INSERT INTO history (path_id, played_at) VALUES (?, ?)")
+        for play in 0..<count { try insert.run(rows[play % rows.count].id, play) }
+    }
+    await model.load()
+    while !model.reachedEnd { await model.loadMore() }
+    #expect(model.entries.count == count)
+    var most = 0
+    for row in model.entries.indices {
+        _ = try model.played(at: row)
+        most = max(most, model.cachedPageCount)
+    }
+    #expect(most == TimelineModel.cachePages)
+    // A loaded play is three numbers; what it shows lives only in the cache.
+    #expect(MemoryLayout<PlayEntry>.size == 24)
+}
+
+@MainActor @Test func aRequestThatChangesNothingDoesntReload() async throws {
+    let (model, index, rows) = try timeline()
+    try index.recordPlay(rows[0].path, at: 1)
+    await model.load()
+    var changes = 0
+    model.changed = { _ in changes += 1 }
+    await model.addNewPlays()
+    await model.loadMore()
+    #expect(changes == 0)
 }
 
 @MainActor @Test func aLoadOverTakenByClearIsDropped() async throws {
@@ -113,7 +157,8 @@ private func play(_ count: Int, of rows: [TrackRow], from start: Int, _ index: L
     model.clear()
     await load.value
     #expect(model.entries.isEmpty)
-    #expect(changes == 1)
+    // Neither the dropped load nor clearing rows that never showed reloads the table.
+    #expect(changes == 0)
     await model.load()
     #expect(model.entries.count == 1)
 }

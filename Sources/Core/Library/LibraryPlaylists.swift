@@ -188,29 +188,26 @@ extension LibraryIndex {
     /// Up to `limit` plays logged before the play `id`, or the latest for nil, newest first.
     /// Paged by key, so a page costs the same at any depth and new plays don't shift it.
     public func timeline(before id: Int64?, limit: Int) throws -> [PlayEntry] {
-        try resolved(
-            statement(timelineSelect + " WHERE h.id < ? ORDER BY h.id DESC LIMIT ?").map(
-                id ?? Int64.max, limit, row: playEntry))
+        try statement(timelineSelect + " WHERE id < ? ORDER BY id DESC LIMIT ?").map(
+            id ?? Int64.max, limit, row: playEntry)
     }
 
     /// Up to `limit` of the plays logged after the play `id`, the newest first.
     public func timeline(after id: Int64, limit: Int) throws -> [PlayEntry] {
-        try resolved(
-            statement(timelineSelect + " WHERE h.id > ? ORDER BY h.id DESC LIMIT ?").map(
-                id, limit, row: playEntry))
+        try statement(timelineSelect + " WHERE id > ? ORDER BY id DESC LIMIT ?").map(
+            id, limit, row: playEntry)
     }
 
-    /// `entries` with each one's track, where the index still has it.
-    func resolved(_ entries: [PlayEntry]) throws -> [PlayEntry] {
-        let tracks = Dictionary(
-            uniqueKeysWithValues: try rows(ids: Array(Set(entries.map(\.trackID)))).map {
-                ($0.id, $0)
-            })
-        return entries.map { entry in
-            var entry = entry
-            entry.track = tracks[entry.trackID]
-            return entry
-        }
+    /// The file and, where the index still has it, the track of each of the paths `ids`.
+    public func playedTracks(ids: [Int64]) throws -> [Int64: PlayedTrack] {
+        let unique = Array(Set(ids))
+        let tracks = Dictionary(uniqueKeysWithValues: try rows(ids: unique).map { ($0.id, $0) })
+        let paths = try inChunks(
+            unique, { "SELECT id, path FROM paths WHERE id IN (\($0))" },
+            { (try $0.int64(0), try $0.text(1)) })
+        return Dictionary(
+            paths.map { ($0.0, PlayedTrack(path: $0.1, track: tracks[$0.0])) },
+            uniquingKeysWith: { first, _ in first })
     }
 
     /// How many plays the history holds: its last ID, since rows are never deleted.
@@ -219,15 +216,10 @@ extension LibraryIndex {
     }
 }
 
-private let timelineSelect = """
-    SELECT h.id, h.path_id, pa.path, h.played_at FROM history h
-    JOIN paths pa ON pa.id = h.path_id
-    """
+private let timelineSelect = "SELECT id, path_id, played_at FROM history"
 
 private func playEntry(_ row: Row) throws -> PlayEntry {
-    PlayEntry(
-        id: try row.int64(0), trackID: try row.int64(1), path: try row.text(2),
-        playedSeconds: try row.int(3))
+    PlayEntry(id: try row.int64(0), trackID: try row.int64(1), playedSeconds: try row.int(2))
 }
 
 private func playlistRow(_ row: Row) throws -> Playlist {

@@ -15,6 +15,9 @@ final class TimelineController: NSViewController, NSTableViewDataSource, NSTable
     private let play: (IndexSet, Int) -> Void
     private let playNext: (IndexSet) -> Void
     private let keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
+    private let failed: (String) -> Void
+    /// A row read failed; reported once until the next reload.
+    private var reportedFetchFailure = false
     /// The track table's columns the timeline shows after Played, with their widths.
     private static let trackColumns: [(TrackColumn, CGFloat)] = [
         (.title, 260), (.artist, 180), (.album, 200), (.duration, 60),
@@ -30,12 +33,14 @@ final class TimelineController: NSViewController, NSTableViewDataSource, NSTable
     init(
         model: TimelineModel, play: @escaping (IndexSet, Int) -> Void,
         playNext: @escaping (IndexSet) -> Void,
-        keyCommand: @escaping ([KeyChord]) -> CommandDispatcher.KeyOutcome
+        keyCommand: @escaping ([KeyChord]) -> CommandDispatcher.KeyOutcome,
+        failed: @escaping (String) -> Void
     ) {
         self.model = model
         self.play = play
         self.playNext = playNext
         self.keyCommand = keyCommand
+        self.failed = failed
         super.init(nibName: nil, bundle: nil)
         configure()
     }
@@ -97,6 +102,7 @@ final class TimelineController: NSViewController, NSTableViewDataSource, NSTable
                 previousIDs.indices.contains($0) ? previousIDs[$0] : nil
             })
         let top = scrollAnchor(in: previousIDs)
+        reportedFetchFailure = false
         table.reloadData()
         let rows = model.rows(holding: selection)
         select(ListSelection(rows: rows, cursor: rows.first, anchor: rows.first))
@@ -134,25 +140,40 @@ final class TimelineController: NSViewController, NSTableViewDataSource, NSTable
             Task { await model.loadMore() }
         }
         let entry = model.entries[row]
+        let played = playedTrack(row)
         let column = TrackColumn(rawValue: tableColumn.identifier.rawValue)
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
             as? NSTableCellView
             ?? makeCell(tableColumn.identifier, numeric: column?.isNumeric == true)
         let text: String
-        switch (column, entry.track) {
+        switch (column, played?.track) {
         case (nil, _):
             text = dateFormat.string(
                 from: Date(timeIntervalSince1970: TimeInterval(entry.playedSeconds)))
-        case (.title?, _): text = entry.title
+        case (.title?, _): text = played?.title ?? ""
         case (.artist?, nil): text = missingText
         case (_, nil): text = ""
         case (let column?, let track?): text = column.text(track, position: row)
         }
         cell.textField?.stringValue = text
-        cell.textField?.textColor = entry.track == nil ? .tertiaryLabelColor : .labelColor
-        cell.toolTip = entry.track == nil ? "\(missingText): \(entry.path)" : nil
+        let missing = played.map { $0.track == nil } ?? false
+        cell.textField?.textColor = missing ? .tertiaryLabelColor : .labelColor
+        cell.toolTip = missing ? played.map { "\(missingText): \($0.path)" } : nil
         return cell
+    }
+
+    /// The file and track at `row`; nil, reported once, when they can't be read.
+    private func playedTrack(_ row: Int) -> PlayedTrack? {
+        do {
+            return try model.played(at: row)
+        } catch {
+            if !reportedFetchFailure {
+                reportedFetchFailure = true
+                failed("couldn't read rows for the timeline: \(error)")
+            }
+            return nil
+        }
     }
 
     private func makeCell(_ identifier: NSUserInterfaceItemIdentifier, numeric: Bool)
@@ -179,7 +200,7 @@ final class TimelineController: NSViewController, NSTableViewDataSource, NSTable
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int)
         -> (any NSPasteboardWriting)?
     {
-        guard model.entries.indices.contains(row), model.entries[row].track != nil else {
+        guard model.entries.indices.contains(row), playedTrack(row)?.track != nil else {
             return nil
         }
         return trackDragItem(model.entries[row].trackID)

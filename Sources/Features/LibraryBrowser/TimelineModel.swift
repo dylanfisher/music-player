@@ -8,31 +8,48 @@ private let logger = moduleLogger()
 /// time by history ID (ADR 0022). Its rows are plays, so they're told apart by history ID, not
 /// by track ID, which repeats.
 ///
+/// The loaded plays are small entries; what a row shows is read through a cache of at most
+/// `cachePages` pages, so scrolling through a million plays holds a few thousand tracks.
+///
 /// Each load starts a session; results of an earlier session are dropped. Other requests build
 /// on the rows as they are when their results arrive, so overlapping ones neither duplicate nor
 /// drop a row.
 @MainActor
 public final class TimelineModel {
     public static let pageSize = 200
+    /// Pages of resolved rows kept: a few screens either side of the visible ones.
+    static let cachePages = 20
 
     public private(set) var entries: [PlayEntry] = []
     /// Whether the oldest play is loaded.
     public private(set) var reachedEnd = false
     /// How many plays the history holds, loaded or not.
     public private(set) var playCount = 0
-    /// Called after the rows change, with the history IDs shown before, so the view can find
-    /// its selection again.
+    /// Called after the rows or what they show change, with the history IDs shown before, so
+    /// the view can find its selection again.
     public var changed: (_ previousIDs: [Int64]) -> Void = { _ in }
     public var failed: (String) -> Void = { _ in }
 
     private let reader: LibraryReader
+    /// Reads the files and tracks of path IDs, on the main thread's own connection, for the
+    /// rows as the table draws them.
+    private let resolve: ([Int64]) throws -> [Int64: PlayedTrack]
     private var session = 0
     /// The session a page load is running for, so scrolling asks for each page once.
     private var loadingMore: Int?
+    /// Resolved rows by row page, least recently used first; cleared whenever rows shift.
+    private var pages: [Int: [Int64: PlayedTrack]] = [:]
+    private var recency: [Int] = []
 
-    public init(reader: LibraryReader) {
+    public init(
+        reader: LibraryReader, resolve: @escaping ([Int64]) throws -> [Int64: PlayedTrack]
+    ) {
         self.reader = reader
+        self.resolve = resolve
     }
+
+    /// Pages of resolved rows held now, for checking the cache stays bounded.
+    var cachedPageCount: Int { pages.count }
 
     /// Reads the newest page, replacing what was loaded.
     public func load() async {
@@ -42,11 +59,9 @@ public final class TimelineModel {
             let page = try await reader.timeline(before: nil, limit: Self.pageSize)
             let count = try await reader.loggedPlayCount()
             guard mine == session else { return }
-            apply { entries in
-                entries = page
-                self.reachedEnd = page.count < Self.pageSize
-                self.playCount = count
-            }
+            reachedEnd = page.count < Self.pageSize
+            playCount = count
+            apply(page, forced: true)
         } catch {
             fail(mine, "couldn't read the play timeline: \(error)")
         }
@@ -56,7 +71,7 @@ public final class TimelineModel {
     public func clear() {
         session += 1
         loadingMore = nil
-        apply { entries in entries = [] }
+        apply([])
     }
 
     /// Reads the page after the oldest loaded row, unless one is already being read.
@@ -68,12 +83,10 @@ public final class TimelineModel {
         do {
             let page = try await reader.timeline(before: last.id, limit: Self.pageSize)
             guard mine == session else { return }
-            apply { entries in
-                // Rows that arrived meanwhile are only ever above, so the oldest is still last.
-                let oldest = entries.last?.id ?? Int64.max
-                entries += page.filter { $0.id < oldest }
-                if page.count < Self.pageSize { self.reachedEnd = true }
-            }
+            if page.count < Self.pageSize { reachedEnd = true }
+            // Rows that arrived meanwhile are only ever above, so the oldest is still last.
+            let oldest = entries.last?.id ?? Int64.max
+            apply(entries + page.filter { $0.id < oldest })
         } catch {
             fail(mine, "couldn't read more of the play timeline: \(error)")
         }
@@ -95,32 +108,39 @@ public final class TimelineModel {
                 await load()
                 return
             }
-            apply { entries in
-                let top = entries.first?.id ?? 0
-                entries.insert(contentsOf: page.filter { $0.id > top }, at: 0)
-                self.playCount = count
-            }
+            playCount = count
+            let top = entries.first?.id ?? 0
+            apply(page.filter { $0.id > top } + entries)
         } catch {
             fail(mine, "couldn't read the latest plays: \(error)")
         }
     }
 
-    /// Reads the loaded rows' tracks again after the library changed: a file that left the
-    /// index shows as missing, and one that came back shows again.
-    public func refresh() async {
-        let mine = session
-        do {
-            let resolved = try await reader.resolved(entries)
-            guard mine == session else { return }
-            let tracks = Dictionary(uniqueKeysWithValues: resolved.map { ($0.id, $0.track) })
-            apply { entries in
-                for index in entries.indices {
-                    if let track = tracks[entries[index].id] { entries[index].track = track }
-                }
+    /// Reads what the rows show again after the library changed: a file that left the index
+    /// shows as missing, and one that came back shows again. Only rows drawn again are read.
+    public func refresh() {
+        pages = [:]
+        recency = []
+        changed(entries.map(\.id))
+    }
+
+    /// The file and track of the play at `row`, read with its page if that isn't cached.
+    public func played(at row: Int) throws -> PlayedTrack? {
+        precondition(entries.indices.contains(row), "row \(row) is outside the timeline")
+        let page = row / Self.pageSize
+        if let rows = pages[page] {
+            if recency.last != page {
+                recency.removeAll { $0 == page }
+                recency.append(page)
             }
-        } catch {
-            fail(mine, "couldn't read the play timeline's tracks: \(error)")
+            return rows[entries[row].trackID]
         }
+        let range = (page * Self.pageSize)..<min(entries.count, (page + 1) * Self.pageSize)
+        let rows = try resolve(entries[range].map(\.trackID))
+        pages[page] = rows
+        recency.append(page)
+        while recency.count > Self.cachePages { pages[recency.removeFirst()] = nil }
+        return rows[entries[row].trackID]
     }
 
     /// The rows now holding the plays `ids`, for keeping a selection across a change.
@@ -130,39 +150,62 @@ public final class TimelineModel {
 
     /// The tracks of the plays at `rows`, each once, in row order, leaving out missing files:
     /// what rating, playlists and the tag editor act on.
-    public func trackIDs(ofRows rows: IndexSet) -> [Int64] {
+    public func trackIDs(ofRows rows: IndexSet) throws -> [Int64] {
         var seen = Set<Int64>()
-        return present(rows).map(\.trackID).filter { seen.insert($0).inserted }
+        return try present(rows).map(\.entry.trackID).filter { seen.insert($0).inserted }
     }
 
     /// The files of the plays at `rows`, in row order, a track as often as its rows, leaving
     /// out missing files: what Play Next queues.
-    public func urls(ofRows rows: IndexSet) -> [URL] {
-        present(rows).map { URL(fileURLWithPath: $0.path) }
+    public func urls(ofRows rows: IndexSet) throws -> [URL] {
+        try present(rows).map { URL(fileURLWithPath: $0.played.path) }
     }
 
     /// The queue a double-click on `clicked` plays, by the track table's rule, leaving out
-    /// missing files.
-    public func playRequest(selected: IndexSet, clicked: Int) -> PlayRequest? {
+    /// missing files. A missing clicked row starts at the next row that plays.
+    public func playRequest(selected: IndexSet, clicked: Int) throws -> PlayRequest? {
         let (rows, first) = playOrder(
             rowCount: entries.count, selected: selected, clicked: clicked)
+        let played = try resolve(rows.map { entries[$0].trackID })
         var urls: [URL] = []
-        // A missing clicked row starts at the next row that plays.
         var start: Int?
-        for (position, row) in rows.enumerated() where entries[row].track != nil {
+        for (position, row) in rows.enumerated() {
+            guard let file = played[entries[row].trackID], file.track != nil else { continue }
             if start == nil, position >= first { start = urls.count }
-            urls.append(URL(fileURLWithPath: entries[row].path))
+            urls.append(URL(fileURLWithPath: file.path))
         }
         return urls.isEmpty ? nil : PlayRequest(urls: urls, first: start ?? 0)
     }
 
-    private func present(_ rows: IndexSet) -> [PlayEntry] {
-        rows.filter { entries.indices.contains($0) }.map { entries[$0] }.filter { $0.track != nil }
+    /// Every loaded play's names in row order, each with its history ID, for Go to Item.
+    public func names() throws -> [TrackName] {
+        let played = try resolve(entries.map(\.trackID))
+        return entries.map { entry in
+            let file = played[entry.trackID]
+            return TrackName(
+                id: entry.id, title: file?.title ?? "", artist: file?.track?.artist,
+                album: file?.track?.album, genre: file?.track?.genre)
+        }
     }
 
-    private func apply(_ change: (inout [PlayEntry]) -> Void) {
+    private func present(_ rows: IndexSet) throws -> [(entry: PlayEntry, played: PlayedTrack)] {
+        let picked = rows.filter { entries.indices.contains($0) }.map { entries[$0] }
+        let played = try resolve(picked.map(\.trackID))
+        return picked.compactMap { entry in
+            played[entry.trackID].flatMap { $0.track == nil ? nil : (entry, $0) }
+        }
+    }
+
+    /// Takes `next` as the rows and reports it, unless nothing changed. Rows shifted by plays
+    /// added above drop the cached pages, which are by row.
+    private func apply(_ next: [PlayEntry], forced: Bool = false) {
+        guard forced || next != entries else { return }
         let previous = entries.map(\.id)
-        change(&entries)
+        if next.first?.id != entries.first?.id || next.count < entries.count {
+            pages = [:]
+            recency = []
+        }
+        entries = next
         changed(previous)
     }
 
