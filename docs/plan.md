@@ -1079,6 +1079,42 @@ checkpoint: the order the real HAL reports a device lost mid switch.
 - **Exit:** `scripts/dupes` reports nothing outside the allowlist, runs in `./scripts/check` in
   under 5 s, and has a test that a planted duplicate fails it.
 
+Implementation plan (ADR 0024, written with the script):
+
+1. **The check.** `scripts/dupes.swift`, Foundation only and run as `swift scripts/dupes.swift`
+   like `scripts/arch.swift`, lexes every `.swift`, `.c` and `.h` file under `Sources`: comments,
+   raw and multi-line strings and interpolations, whose own literals count too. It reports each
+   string literal of 4 or more characters of its own (interpolations, format specifiers and
+   escapes taken out) found in more than one file, with every `file:line`. Messages to
+   `fatalError`, `precondition` and `assert` are skipped. Blocks: windows of 8 lines that aren't
+   only punctuation, compared with identifiers and literals normalized, fail at a third copy;
+   a second copy of 20 lines or more prints as advisory. `scripts/dupes-allow.txt` holds
+   `literal "…" | reason`, `block <files> | reason` and `oracle <dir> | reason` (a Tools module
+   that re-types format facts on purpose, like a test, so its literals aren't compared); an
+   entry without a reason, or one that matches nothing, fails.
+2. **Survey and ADR 0024.** What counts as a literal worth flagging and what's excluded, the
+   oracle rule, the block rule, and every category the first run found with its count.
+3. **Fixes, one commit per module group,** each fact moved to the lowest module its users share:
+   - Metadata and TagWriter: ID3 frame IDs, Vorbis keys, MP4 atom and item types, AIFF and WAV
+     chunk IDs, and the error details both sides write, as `package` constants in Metadata
+     beside `MP4Type`.
+   - SQLite, Library and Bench: the WAL and shared-memory suffixes in `Database`, the library
+     file name, the history insert and the checkpoint, which Bench takes from Library.
+   - Settings and Commands: setting keys in the menus from `AppSettings`, the view toggles'
+     titles from `AppState`, a public `AppCommands.title(of:)`, one spelling of a key problem.
+   - Features: field titles from `TagField` in Metadata (the tag editor, smart rules, the browser
+     panes and the track columns), command titles for buttons that run a command, the settings
+     symbol and the bit-depth text in DisplayText, the Go to Item key in Palette.
+   - App: the command-line flags named once, one error printer.
+   - What stays is allowlisted with its reason: the same word for different things, standard
+     AppKit button titles, separate executables' own messages, and the strict-decoding shape.
+4. **Tests.** `scripts/dupes-test` builds fixture trees under `.build/dupes-test` and runs the
+   script on each: a clean tree passes; a planted literal, a third copy of a block, a stale
+   entry and an entry with no reason each fail with the expected line. Tests that assert a
+   user-facing string import it where the module exposes it.
+5. **Wire it in.** `./scripts/check` runs `dupes` and `dupes-test` and lints the script; time
+   `dupes` on the whole tree (budget 5 s), then `./scripts/bench` and `./scripts/bundle release`.
+
 #### 14c. Security
 
 - **Goal:** a written threat model, and a test or check for every threat in it.
