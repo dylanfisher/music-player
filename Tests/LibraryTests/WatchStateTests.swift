@@ -105,3 +105,26 @@ private struct FakeEngine {
     engine.report(.stopped, to: &state)
     #expect(state.start(now: start) == WatchJob(folder: nas, subtrees: ["/Volumes/Music/C"]))
 }
+
+@Test func aFailedLocalScanIsRetriedWholeAMinuteLater() {
+    var state = WatchState(folders: [local, nas], pausePollingDuringPlayback: false, now: start)
+    _ = state.start(now: start)
+    state.finished(now: start)
+    _ = state.start(now: start)
+    state.finished(now: start)
+    let changed = local.path + "/Album"
+    state.directoriesChanged([changed])
+    #expect(state.start(now: minutes(1)) == WatchJob(folder: local, subtrees: [changed]))
+    state.failed(now: minutes(1))
+    #expect(state.start(now: minutes(1.5)) == nil, "a full disk doesn't make it spin")
+    let retry = minutes(1).addingTimeInterval(WatchState.failedScanRetrySeconds)
+    #expect(state.nextPoll(after: minutes(1.5)) == retry)
+    #expect(state.start(now: retry) == WatchJob(folder: local, subtrees: []))
+    state.finished(now: retry)
+    #expect(state.nextPoll(after: retry) == minutes(15), "only the NAS's poll is left")
+
+    // A failed poll waits for its next poll, as one that finished does.
+    #expect(state.start(now: minutes(15)) == WatchJob(folder: nas, subtrees: []))
+    state.failed(now: minutes(15))
+    #expect(state.nextPoll(after: minutes(15)) == minutes(30))
+}

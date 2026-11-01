@@ -147,12 +147,13 @@ public final class LibraryWatcher: @unchecked Sendable {
     private func finished(_ job: WatchJob, _ result: Result<ScanSummary, any Error>) {
         control = nil
         guard state != nil else { return }
-        state?.finished(now: Date())
         switch result {
         case .success(let summary):
+            state?.finished(now: Date())
             for issue in summary.issues { logger.error("\(issue.description)") }
             events(.scanned(folder: job.folder.path, summary))
         case .failure(let error):
+            state?.failed(now: Date())
             logger.error("scanning \(job.folder.path) failed: \(error)")
             events(.scanFailed(folder: job.folder.path, reason: "\(error)"))
         }

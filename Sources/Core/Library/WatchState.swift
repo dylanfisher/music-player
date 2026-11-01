@@ -15,6 +15,11 @@ struct WatchJob: Equatable, Sendable {
 /// folders are polled: at start, then `pollIntervalMinutes` after each scan ends, and never
 /// while playback holds polls back.
 struct WatchState {
+    /// How long after a failed scan of a local folder it's scanned again, whole. FSEvents
+    /// reports a change once, so a failed scan would otherwise lose it until the next launch;
+    /// the wait keeps a full disk or a locked database from making it spin.
+    static let failedScanRetrySeconds = 60.0
+
     let folders: [WatchedFolder]
     private(set) var running: WatchJob?
     private var activity = PlaybackActivity.stopped
@@ -26,6 +31,8 @@ struct WatchState {
     private var changed: [String: Set<String>] = [:]
     /// When each network folder's next poll is due, by path. Absent while it's being scanned.
     private var pollDue: [String: Date] = [:]
+    /// When each local folder whose scan failed is scanned again, by path.
+    private var retryDue: [String: Date] = [:]
 
     init(folders: [WatchedFolder], pausePollingDuringPlayback: Bool, now: Date) {
         self.folders = folders
@@ -94,6 +101,13 @@ struct WatchState {
         } else if !wholeScans.isEmpty {
             let path = wholeScans.removeFirst()
             changed[path] = nil
+            retryDue[path] = nil
+            job = WatchJob(folder: folder(path), subtrees: [])
+        } else if let (path, _) = retryDue.filter({ $0.value <= now }).min(by: {
+            $0.value < $1.value
+        }) {
+            retryDue[path] = nil
+            changed[path] = nil
             job = WatchJob(folder: folder(path), subtrees: [])
         } else if pollsAllowed,
             let (path, _) = pollDue.filter({ $0.value <= now }).min(by: { $0.value < $1.value })
@@ -117,12 +131,21 @@ struct WatchState {
         }
     }
 
-    /// When the next poll falls due, for a one-shot timer. Nil when none is pending or polls
-    /// are held back, since `playbackChanged` wakes the watcher then; a poll already due runs
-    /// when the running scan finishes.
+    /// The running scan failed at `now`, as on a full disk. A polled folder waits for its next
+    /// poll; a local folder is scanned whole `failedScanRetrySeconds` later.
+    mutating func failed(now: Date) {
+        guard let job = running else { preconditionFailure("no scan is running") }
+        guard job.folder.kind == .local else { return finished(now: now) }
+        running = nil
+        retryDue[job.folder.path] = now.addingTimeInterval(Self.failedScanRetrySeconds)
+    }
+
+    /// When the next poll or retry falls due, for a one-shot timer. Nil when none is pending;
+    /// polls held back don't count, since `playbackChanged` wakes the watcher then. One already
+    /// due runs when the running scan finishes.
     func nextPoll(after now: Date) -> Date? {
-        guard pollsAllowed else { return nil }
-        return pollDue.values.filter { $0 > now }.min()
+        let polls = pollsAllowed ? Array(pollDue.values) : []
+        return (polls + retryDue.values).filter { $0 > now }.min()
     }
 
     private func localFolder(containing path: String) -> WatchedFolder? {
