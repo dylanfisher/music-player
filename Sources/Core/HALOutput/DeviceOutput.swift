@@ -53,7 +53,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private var device: (any PCMDevice)?
     private var stream: RenderStream?
     /// The tracks in the ring buffer, oldest first. The first is the one playing.
-    private var segments: [Segment] = []
+    private var segments: [Segment] = [] {
+        didSet { signalDirty = true }
+    }
     /// The track being decoded into the ring buffer.
     private var feeding: Track?
     /// Opened as soon as the engine names it, so a slow NAS open happens while the current track
@@ -78,6 +80,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// Nil until the provider first reports it.
     private var deviceState: DeviceState?
     private var publishedSignal: SignalPath?
+    /// Set by whatever a signal path is built from, so a pass that changed none of it skips it.
+    private var signalDirty = false
+    /// Paths built, for tests. Guarded by `condition`.
+    private var signalBuilds = 0
     /// Streams whose IO proc may still be called because stopping it failed. They are never freed.
     private var retired: [RenderStream] = []
 
@@ -106,6 +112,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     public func seek(toSeconds seconds: Double) { post(.seek(seconds)) }
     public func setVolume(_ gain: Double) { post(.volume(gain)) }
     public func position() -> OutputPosition? { condition.withLock { published } }
+    var signalPathBuilds: Int { condition.withLock { signalBuilds } }
 
     public func close() {
         let done = DispatchSemaphore(value: 0)
@@ -190,9 +197,12 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         case .seek(let seconds): seekTrack(toSeconds: seconds)
         case .volume(let gain):
             self.gain = gain
+            signalDirty = true
             if let stream { HALRenderSetGain(stream.render, Float(gain)) }
         case .devicesChanged: checkDevice()
-        case .deviceState(let state): deviceState = state
+        case .deviceState(let state):
+            deviceState = state
+            signalDirty = true
         case .close: preconditionFailure("close is handled by the run loop")
         }
     }
@@ -698,9 +708,11 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     private func emit(_ event: OutputEvent) { continuation.yield(event) }
 
-    /// Runs after every pass of the control thread, so it costs a comparison when nothing moved.
+    /// Runs after every pass of the control thread, and builds a path only when its sources moved.
     private func publishSignal() {
-        guard let deviceState else { return }
+        guard signalDirty, let deviceState else { return }
+        signalDirty = false
+        condition.withLock { signalBuilds += 1 }
         let path = SignalPath(
             track: segments.first?.signal,
             sink: .device(

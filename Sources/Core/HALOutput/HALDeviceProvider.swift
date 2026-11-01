@@ -116,16 +116,18 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
     }
 
     /// Reads the device's state, moves the signal listeners to what it has now, and reports it.
-    /// Runs on the queue only.
+    /// Runs on the queue only, which is what serializes `signalListeners`; the lock covers just
+    /// the copy, so no HAL call waits on it.
     private func reportState() {
-        let report = lock.withLock { () -> (@Sendable (DeviceState) -> Void, DeviceState)? in
+        let watching = lock.withLock {
+            () -> (@Sendable (DeviceState) -> Void, PropertyListeners)? in
             guard let stateChanged, let signalListeners else { return nil }
-            let state: DeviceState
-            do {
-                guard let id = try liveDeviceID() else {
-                    signalListeners.set([])
-                    return (stateChanged, .notConnected)
-                }
+            return (stateChanged, signalListeners)
+        }
+        guard let (stateChanged, signalListeners) = watching else { return }
+        let state: DeviceState
+        do {
+            if let id = try liveDeviceID() {
                 do {
                     let (signal, keys) = try readSignal(of: id)
                     signalListeners.set(keys)
@@ -134,13 +136,14 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
                     signalListeners.set(deviceSignalKeys(id))
                     throw error
                 }
-            } catch {
-                logger.error("can't read \(self.deviceName)'s state: \(error)")
-                state = .unreadable("\(error)")
+            } else {
+                signalListeners.set([])
+                state = .notConnected
             }
-            return (stateChanged, state)
+        } catch {
+            logger.error("can't read \(self.deviceName)'s state: \(error)")
+            state = .unreadable("\(error)")
         }
-        guard let (stateChanged, state) = report else { return }
         stateChanged(state)
     }
 
@@ -173,8 +176,8 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
     }
 
     public func stopWatching() {
-        lock.withLock {
-            guard let listener else { return }
+        let signalListeners = lock.withLock { () -> PropertyListeners? in
+            guard let listener else { return nil }
             var devices = address(kAudioHardwarePropertyDevices)
             removeListener(listener, from: systemObject, &devices)
             if let device = aliveListenerDevice {
@@ -183,10 +186,12 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
             }
             self.listener = nil
             aliveListenerDevice = nil
-            signalListeners?.set([])
-            signalListeners = nil
             stateChanged = nil
+            defer { self.signalListeners = nil }
+            return self.signalListeners
         }
+        // After a `reportState` already running finishes; one queued later finds nothing to do.
+        queue.sync { signalListeners?.set([]) }
     }
 
     private func removeListener(
