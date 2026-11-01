@@ -340,9 +340,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Reports a command that failed. One with no track to act on also beeps, as a menu item
     /// that doesn't apply would.
     public func reportCommand(_ failure: String, _ error: any Error) {
-        if error is OnlyMissingFiles { NSSound.beep() }
+        if error is OnlyMissingFiles { beep() }
         report("\(failure): \(error)")
     }
+
+    /// The system beep; tests count it instead.
+    var beep: () -> Void = { NSSound.beep() }
+
+    /// What the status bar says, for tests.
+    var statusText: String { statusLabel.stringValue }
 
     private func show(failure message: String) {
         statusLabel.stringValue = message

@@ -55,3 +55,20 @@ import Testing
     #expect(browser.status.notices.map { $0.split(separator: " ").last } == ["first", "second"])
     #expect(try index.discards().isEmpty)
 }
+
+@MainActor @Test func aCommandWithNoTrackToActOnBeepsAndSaysSo() throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, folders: [])
+    var beeps = 0
+    browser.beep = { beeps += 1 }
+    browser.reportCommand("couldn't rate the tracks", OnlyMissingFiles())
+    #expect(beeps == 1)
+    #expect(browser.statusText == "couldn't rate the tracks: \(OnlyMissingFiles())")
+    // Other failures say so without the beep.
+    browser.reportCommand("couldn't rate the tracks", LibraryError.playsNotTracks)
+    #expect(beeps == 1)
+    #expect(browser.statusText.hasSuffix("\(LibraryError.playsNotTracks)"))
+}
