@@ -4,7 +4,7 @@
 #   ./scripts/tag-corpus --round-trip makes APFS clones of the reference, edits, checks and
 #                                     undoes each, then injects failures, one on a full disk
 # The reference is only read. Every write goes to the clone folder, which is deleted and made
-# again first; the full-disk image is attached inside it and detached on exit.
+# again first; the full-disk image is attached inside it, and detached and removed on exit.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -28,11 +28,6 @@ rm -rf "$clones"
 mkdir -p "$(dirname "$clones")"
 cp -c -Rp "$reference" "$clones"
 
-image=.build/tag-corpus-disk.dmg
-mount="$clones/.full-disk"
-mkdir -p "$mount" .build
-hdiutil create -quiet -ov -size 32m -fs HFS+ -volname TagCorpusFullDisk "$image"
-hdiutil attach -quiet -nobrowse -noautoopen -mountpoint "$mount" "$image"
-trap 'hdiutil detach -quiet "$mount" || hdiutil detach -quiet -force "$mount"' EXIT
-
-"$tool" --round-trip --full-disk "$mount"
+. scripts/disk-image
+attach_disk_image .build/tag-corpus-disk.dmg "$clones/.full-disk" 32m TagCorpusFullDisk
+"$tool" --round-trip --full-disk "$disk_mount"

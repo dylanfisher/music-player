@@ -79,6 +79,7 @@ enum DrillOperation: String, CaseIterable {
     case tagWrite = "tag-write"
     case playlistEdit = "playlist-edit"
     case stateSave = "state-save"
+    case configSave = "config-save"
 }
 
 /// The music a drill uses: the fixture library it scans and the clones the tag writer edits.

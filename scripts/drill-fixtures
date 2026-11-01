@@ -1,0 +1,28 @@
+# Sourced by scripts/kill-test and scripts/full-disk, from the repository root: builds
+# FailureDrill, generates its fixture library under ~/Library/Caches/MusicPlayer/kill-test, and
+# makes the clones the tag writer edits with `cp -c` in
+# ~/Library/Caches/MusicPlayer/tag-corpus/kill-test, from fixture files it can edit and undo.
+# Sets bin, drill, fixtures and tags.
+drill_fixture_count=300
+
+swift build -c release --product FailureDrill >&2
+swift build -c release --product GenerateFixtures >&2
+bin="$(swift build -c release --show-bin-path)"
+drill="$bin/FailureDrill"
+
+fixtures="$HOME/Library/Caches/MusicPlayer/kill-test/fixtures"
+tags="$HOME/Library/Caches/MusicPlayer/tag-corpus/kill-test"
+"$bin/GenerateFixtures" --count "$drill_fixture_count" --output "$fixtures" >&2
+rm -rf "$tags"
+mkdir -p "$tags"
+"$drill" tag-files --fixtures "$fixtures" | {
+  number=0
+  while IFS= read -r file; do
+    number=$((number + 1))
+    cp -c "$file" "$tags/$number $(basename "$file")"
+  done
+}
+if [ -z "$(ls "$tags")" ]; then
+  echo "error: no fixture file the tag writer can edit" >&2
+  exit 1
+fi

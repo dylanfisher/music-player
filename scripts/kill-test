@@ -4,12 +4,14 @@
 #   ./scripts/kill-test [--kills <n>] [--seed <n>]
 # Generates a fixture library under ~/Library/Caches/MusicPlayer/kill-test and clones some of
 # its files with `cp -c` into ~/Library/Caches/MusicPlayer/tag-corpus/kill-test for the tag
-# writer. Then, for each kill in turn, it runs one of FailureDrill's operations (a scan, a tag
-# write and undo, a playlist edit, a state save) against that operation's --home folder, sends
-# SIGKILL a seeded random time later, and runs `FailureDrill verify`. A kill fails when verify
-# finds a damaged database, config or state file or a journaled edit that doesn't undo, or when
-# any music file differs from its hash from before the run. The kill times repeat with the
-# seed; where in an operation each lands depends on the machine.
+# writer (scripts/drill-fixtures). Then, for each kill in turn, it runs one of FailureDrill's
+# operations (a scan, a tag write and undo, a playlist edit, a state save, a config save)
+# against that operation's --home folder, sends SIGKILL a seeded random time later, and runs
+# `FailureDrill verify`. A kill fails when verify finds a damaged database, config or state
+# file, a cut-short save left beside one, or a journaled edit that doesn't undo, or when any
+# music file differs from its hash from before the run. The kill times repeat with the seed;
+# where in an operation each lands depends on the machine, and the end prints how many landed
+# during a write.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -28,26 +30,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-swift build -c release --product FailureDrill >&2
-swift build -c release --product GenerateFixtures >&2
-bin="$(swift build -c release --show-bin-path)"
-drill="$bin/FailureDrill"
-
-caches="$HOME/Library/Caches/MusicPlayer"
-root="$caches/kill-test"
-fixtures="$root/fixtures"
-tags="$caches/tag-corpus/kill-test"
-mkdir -p "$root"
-"$bin/GenerateFixtures" --count 300 --output "$fixtures" >&2
-
-rm -rf "$tags" "$root"/home-*
-mkdir -p "$tags"
-number=0
-"$drill" tag-files --fixtures "$fixtures" | while IFS= read -r file; do
-  number=$((number + 1))
-  cp -c "$file" "$tags/$number $(basename "$file")"
-done
-if [ -z "$(ls "$tags")" ]; then echo "error: no fixture file the tag writer can edit" >&2; exit 1; fi
+. scripts/drill-fixtures
+root="$(dirname "$fixtures")"
+rm -rf "$root"/home-*
 
 # Every file but hidden ones (the tag writer's temp files), by path, with its SHA-256.
 hashes() {
@@ -56,8 +41,19 @@ hashes() {
 hashes "$fixtures" > "$root/fixtures.sha256"
 hashes "$tags" > "$root/tags.sha256"
 
-operations=(scan tag-write playlist-edit state-save)
+# A run still going when the script stops, as on ^C, is killed with it.
+pid=""
+stop_run() {
+  if [ -n "$pid" ]; then kill -9 "$pid" 2> /dev/null || true; fi
+}
+trap stop_run EXIT
+trap 'exit 130' INT TERM
+
+operations=(scan tag-write playlist-edit state-save config-save)
 failed=0
+before=0
+during=0
+after=0
 RANDOM=$seed
 started=$(date +%s)
 for kill in $(seq 1 "$kills"); do
@@ -66,12 +62,19 @@ for kill in $(seq 1 "$kills"); do
   mkdir -p "$home"
   delay=$((50 + RANDOM % 1500))
   "$drill" run "$operation" --home "$home" --scan "$fixtures" --tags "$tags" \
-    2> "$root/run.log" &
+    > "$root/marks.log" 2> "$root/run.log" &
   pid=$!
   sleep "$(printf '%d.%03d' $((delay / 1000)) $((delay % 1000)))"
   kill -9 "$pid" 2> /dev/null || true
   status=0
   wait "$pid" 2> /dev/null || status=$?
+  pid=""
+  # The drill marks each write's start and end, so its last mark says where the kill landed.
+  case "$(tail -n 1 "$root/marks.log")" in
+    "write begins") during=$((during + 1)) ;;
+    "write ends") after=$((after + 1)) ;;
+    *) before=$((before + 1)) ;;
+  esac
   problems=""
   # 137 is SIGKILL; anything else means the operation stopped on its own first.
   if [ "$status" -ne 137 ]; then
@@ -95,4 +98,5 @@ done
 
 echo "kills: $kills across ${operations[*]}, seed $seed, integrity failures: $failed," \
   "$(( $(date +%s) - started )) s"
+echo "landed: $during during a write, $after between writes, $before before the first"
 [ "$failed" -eq 0 ]

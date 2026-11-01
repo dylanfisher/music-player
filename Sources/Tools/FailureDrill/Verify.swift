@@ -6,18 +6,17 @@ import TagWriter
 
 /// Reopens what a killed run left, as the app's next launch would, and returns every integrity
 /// failure: a database that fails `PRAGMA integrity_check` or that the library can't open as it
-/// is, a config or state file that doesn't decode, and a journaled edit that doesn't undo. The
-/// caller then compares the music files with their hashes from before the run.
+/// is, a config or state file that doesn't decode or whose cut-short save is still beside it
+/// once its store has opened, and a journaled edit that doesn't undo. The caller then compares
+/// the music files with their hashes from before the run.
+@MainActor
 func verify(home: URL) throws -> [String] {
     let paths = AppPaths(home: home)
     var failures: [String] = []
     let databaseURL = libraryFileURL(in: paths.dataDirectory)
     if FileManager.default.fileExists(atPath: databaseURL.path) {
+        failures += integrityFailures(databaseURL)
         do {
-            let result = try Database(at: databaseURL).prepare("PRAGMA integrity_check").map {
-                try $0.text(0)
-            }
-            if result != ["ok"] { failures.append("integrity_check: \(result)") }
             let index = try LibraryIndex(at: databaseURL)
             if let discard = try index.discards().first {
                 failures.append("the library discarded data: \(discard.text)")
@@ -32,16 +31,30 @@ func verify(home: URL) throws -> [String] {
     }
     if FileManager.default.fileExists(atPath: paths.configFile.path) {
         do {
-            _ = try MainActor.assumeIsolated {
-                try ConfigStore.strict(
-                    AppSettings(), fileURL: paths.configFile, check: { _, _, _ in nil })
-            }
+            _ = try ConfigStore.strict(
+                AppSettings(), fileURL: paths.configFile, check: acceptingEveryShortcut)
         } catch {
             failures.append("the config file: \(error)")
         }
     }
+    for file in [paths.stateFile, paths.configFile] {
+        failures += leftoverAtomicWrites(beside: file).map { "a save left \($0)" }
+    }
     failures += undoEveryEdit(paths.dataDirectory)
     return failures
+}
+
+/// What's wrong with the database at `databaseURL`, by `PRAGMA integrity_check`, or that it
+/// doesn't open.
+func integrityFailures(_ databaseURL: URL) -> [String] {
+    do {
+        let result = try Database(at: databaseURL).prepare("PRAGMA integrity_check").map {
+            try $0.text(0)
+        }
+        return result == ["ok"] ? [] : ["integrity_check: \(result)"]
+    } catch {
+        return ["the database doesn't open: \(error)"]
+    }
 }
 
 /// Undoes every edit in the journal, newest first. A record whose file was never renamed over

@@ -3,34 +3,15 @@
 # nothing else (ADR 0023). Not part of ./scripts/check, since it attaches a disk image.
 #   ./scripts/full-disk
 # The image is attached at a mount point inside ~/Library/Caches/MusicPlayer, never under
-# /Volumes, and detached on every exit. The library it scans and the clones it edits are the
-# ones scripts/kill-test makes, made here too if they aren't there.
+# /Volumes, and on every exit detached and removed with its mount point. It scans and edits
+# the library and clones scripts/drill-fixtures makes.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ $# -eq 0 ] || { echo "error: takes no arguments" >&2; exit 1; }
 
-swift build -c release --product FailureDrill >&2
-swift build -c release --product GenerateFixtures >&2
-bin="$(swift build -c release --show-bin-path)"
-drill="$bin/FailureDrill"
+. scripts/drill-fixtures
+. scripts/disk-image
 
 caches="$HOME/Library/Caches/MusicPlayer"
-fixtures="$caches/kill-test/fixtures"
-tags="$caches/tag-corpus/kill-test"
-"$bin/GenerateFixtures" --count 300 --output "$fixtures" >&2
-rm -rf "$tags"
-mkdir -p "$tags"
-number=0
-"$drill" tag-files --fixtures "$fixtures" | while IFS= read -r file; do
-  number=$((number + 1))
-  cp -c "$file" "$tags/$number $(basename "$file")"
-done
-
-image="$caches/full-disk.dmg"
-mount="$caches/full-disk"
-mkdir -p "$mount"
-hdiutil create -quiet -ov -size 16m -fs HFS+ -volname MusicPlayerFullDisk "$image"
-hdiutil attach -quiet -nobrowse -noautoopen -mountpoint "$mount" "$image"
-trap 'hdiutil detach -quiet "$mount" || hdiutil detach -quiet -force "$mount"' EXIT
-
-"$drill" full-disk --mount "$mount" --scan "$fixtures" --tags "$tags"
+attach_disk_image "$caches/full-disk.dmg" "$caches/full-disk" 16m MusicPlayerFullDisk
+"$drill" full-disk --mount "$disk_mount" --scan "$fixtures" --tags "$tags"

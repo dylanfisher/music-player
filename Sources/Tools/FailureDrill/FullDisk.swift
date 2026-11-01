@@ -1,7 +1,6 @@
-import Darwin
+import Fixtures
 import Foundation
 import Library
-import SQLite
 import Settings
 import TagWriter
 
@@ -28,23 +27,19 @@ private func home(_ name: String, on mount: URL) throws -> URL {
     return home
 }
 
-/// Writes a file of zeros until the volume has no room left, down to its smallest block.
+/// Fills the volume at `mount`, with a filler file to delete to give the room back.
 private func fill(_ mount: URL) throws -> URL {
     let filler = mount.appendingPathComponent("filler")
-    let descriptor = open(filler.path, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
-    guard descriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno)!) }
-    defer { close(descriptor) }
-    for size in [1 << 20, 1 << 12, 512] {
-        let chunk = [UInt8](repeating: 0, count: size)
-        while write(descriptor, chunk, size) == size {}
-        guard errno == ENOSPC else { throw POSIXError(POSIXErrorCode(rawValue: errno)!) }
-    }
+    try fillVolume(with: filler)
     print("filled \(mount.path)", to: &standardError)
     return filler
 }
 
-/// A scan and a playlist edit with no room: each is rolled back whole and the database stays
-/// sound.
+/// The title the full-disk edits write.
+private let fullDiskTitle = "Full"
+
+/// A playlist edit and a scan with no room: each fails, is rolled back whole, and the database
+/// stays sound; with room again both work.
 private func database(on mount: URL, music: MusicFolders) throws -> [String] {
     let databaseURL = libraryFileURL(in: try home("database", on: mount))
     var failures: [String] = []
@@ -54,7 +49,20 @@ private func database(on mount: URL, music: MusicFolders) throws -> [String] {
     _ = try scanner.scan(half)
     let index = try LibraryIndex(at: databaseURL)
     let tracks = try index.trackCount()
+    let playlists = try index.playlists().count
+    // An empty log, so every write needs new room.
+    try index.checkpoint()
     let filler = try fill(mount)
+    do {
+        let id = try index.createPlaylist(named: fullDiskTitle)
+        _ = try index.addToPlaylist(id, trackIDs: try index.trackIDs(sortedBy: .path))
+        failures.append("a playlist edit with no room didn't fail")
+    } catch {
+        print("database: the playlist edit failed: \(error)", to: &standardError)
+    }
+    if try index.playlists().count != playlists {
+        failures.append("the failed playlist edit left a playlist")
+    }
     do {
         let summary = try scanner.scan(whole)
         failures.append("a scan with no room stored \(summary.read) files without failing")
@@ -62,26 +70,15 @@ private func database(on mount: URL, music: MusicFolders) throws -> [String] {
         print("database: the scan failed: \(error)", to: &standardError)
     }
     if try index.trackCount() != tracks { failures.append("the failed scan changed the tracks") }
-    let playlists = try index.playlists().count
-    do {
-        let id = try index.createPlaylist(named: "Full")
-        _ = try index.addToPlaylist(id, trackIDs: try index.trackIDs(sortedBy: .path))
-        // The log may still have room from the scan's rolled-back frames, so an edit can fit.
-        print("database: the playlist edit fit in the log", to: &standardError)
-    } catch {
-        print("database: the playlist edit failed: \(error)", to: &standardError)
-        if try index.playlists().count != playlists {
-            failures.append("the failed playlist edit left a playlist")
-        }
-    }
-    let check = try Database(at: databaseURL).prepare("PRAGMA integrity_check").map {
-        try $0.text(0)
-    }
-    if check != ["ok"] { failures.append("integrity_check: \(check)") }
+    failures += integrityFailures(databaseURL)
     try FileManager.default.removeItem(at: filler)
     let summary = try scanner.scan(whole)
     if try !summary.issues.isEmpty || index.trackCount() <= tracks {
         failures.append("the scan with room again didn't store the files: \(summary)")
+    }
+    _ = try index.createPlaylist(named: fullDiskTitle)
+    if try index.playlists().count != playlists + 1 {
+        failures.append("the playlist edit with room again didn't store the playlist")
     }
     return failures
 }
@@ -121,7 +118,7 @@ private func configFile(on mount: URL) throws -> [String] {
     let paths = AppPaths(home: try home("config", on: mount))
     var failures: [String] = []
     let config = ConfigStore(
-        AppSettings(), fileURL: paths.configFile, check: { _, _, _ in nil }, creating: true)
+        AppSettings(), fileURL: paths.configFile, check: acceptingEveryShortcut, creating: true)
     let saved = try Data(contentsOf: paths.configFile)
     let hogMode = config[\.hogMode]
     let filler = try fill(mount)
@@ -137,40 +134,44 @@ private func configFile(on mount: URL) throws -> [String] {
     RunLoop.main.run(until: Date().addingTimeInterval(2))
     if config.writeFailure != nil { failures.append("the retry with room again failed") }
     let reread = try ConfigStore.strict(
-        AppSettings(), fileURL: paths.configFile, check: { _, _, _ in nil })
+        AppSettings(), fileURL: paths.configFile, check: acceptingEveryShortcut)
     if reread[\.hogMode] == hogMode { failures.append("the retry didn't write the change") }
     return failures
 }
 
-/// A tag edit whose journal has no room stops before any music file is replaced.
+/// A tag edit whose journal runs out of room after its first file is replaced: the next file's
+/// record can't be written, so the batch stops there, before that file is replaced, and says
+/// which files it didn't write. Undo then puts the first back.
 private func tagJournal(on mount: URL, music: MusicFolders) throws -> [String] {
     let journalHome = try home("journal", on: mount)
     var failures: [String] = []
     let files = try audioFiles(in: music.tags)
+    guard files.count >= 3 else { throw DrillError("the full-disk edit needs three files") }
     let originals = try files.map { try Data(contentsOf: URL(fileURLWithPath: $0)) }
-    let writer = TagWriter(journal: TagUndoJournal(dataDirectory: journalHome))
-    let filler = try fill(mount)
-    let report = writer.write(TagEdit(values: [.title: "Full"]), to: files)
-    if let first = report.failures.first, [.diskFull, .journal].contains(first.kind) {
-        print("tag journal: \(first)", to: &standardError)
+    var writer = TagWriter(journal: TagUndoJournal(dataDirectory: journalHome))
+    let filler = mount.appendingPathComponent("filler")
+    writer.faults.beforeReplacing = { _, _ in try fillVolume(with: filler) }
+    let report = writer.write(TagEdit(values: [.title: fullDiskTitle]), to: files)
+    if report.failures.map(\.kind) == [.diskFull],
+        report.failures[0].path.hasPrefix(journalHome.path)
+    {
+        print("tag journal: \(report.failures[0])", to: &standardError)
     } else {
-        failures.append("expected a full-disk or journal failure, got \(report)")
+        failures.append("expected one full-disk failure in the journal, got \(report.failures)")
     }
-    if !report.changed.isEmpty { failures.append("files were written: \(report.changed)") }
-    if report.notWritten.count + report.failures.count < files.count {
-        failures.append("files weren't reported: \(report)")
+    if report.changed != [files[0]] { failures.append("written: \(report.changed)") }
+    if report.notWritten != Array(files[2...]) {
+        failures.append("reported as not written: \(report.notWritten)")
     }
     let now = try files.map { try Data(contentsOf: URL(fileURLWithPath: $0)) }
-    if now != originals { failures.append("a music file changed") }
-    let temps = try FileManager.default.contentsOfDirectory(atPath: music.tags.path)
-        .filter { $0.hasSuffix(".tagwrite") }
+    if now[1...] != originals[1...] { failures.append("a file after the first changed") }
+    let temps = files.map(tempPath(for:)).filter { FileManager.default.fileExists(atPath: $0) }
     if !temps.isEmpty { failures.append("temp files were left: \(temps)") }
     try FileManager.default.removeItem(at: filler)
-    let written = writer.write(TagEdit(values: [.title: "Full"]), to: files)
     let undone = writer.undoLast()
     let restored = try files.map { try Data(contentsOf: URL(fileURLWithPath: $0)) }
-    if !written.failures.isEmpty || !undone.failures.isEmpty || restored != originals {
-        failures.append("with room again the edit and undo failed: \(written), \(undone)")
+    if !undone.failures.isEmpty || restored != originals {
+        failures.append("with room again the undo failed: \(undone)")
     }
     return failures
 }

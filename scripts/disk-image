@@ -1,0 +1,28 @@
+# Sourced by scripts/full-disk and scripts/tag-corpus: a small disk image for full-disk tests,
+# attached at a mount point the caller names, never under /Volumes.
+#   attach_disk_image <image file> <mount point> <size, such as 16m> <volume name>
+# The trap is set before anything is made, so every exit, an interrupt included, detaches the
+# image if it's attached and removes the image and the mount point.
+attach_disk_image() {
+  disk_image=$1
+  disk_mount=$2
+  case "$disk_mount" in
+    /Volumes/*) echo "error: the disk image mounts outside /Volumes, not at $disk_mount" >&2; exit 1 ;;
+  esac
+  trap detach_disk_image EXIT
+  trap 'exit 130' INT TERM
+  mkdir -p "$disk_mount" "$(dirname "$disk_image")"
+  hdiutil create -quiet -ov -size "$3" -fs HFS+ -volname "$4" "$disk_image"
+  hdiutil attach -quiet -nobrowse -noautoopen -mountpoint "$disk_mount" "$disk_image"
+}
+
+detach_disk_image() {
+  if mount | grep -qF " on $disk_mount ("; then
+    hdiutil detach -quiet "$disk_mount" || hdiutil detach -quiet -force "$disk_mount"
+  fi
+  # Only once detached is the mount point empty; a busy one is left and said so.
+  if [ -d "$disk_mount" ] && ! rmdir "$disk_mount"; then
+    echo "warning: $disk_mount is still there" >&2
+  fi
+  rm -f "$disk_image"
+}

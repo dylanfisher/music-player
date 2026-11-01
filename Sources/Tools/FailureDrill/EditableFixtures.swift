@@ -9,7 +9,14 @@ func editableFixtureFiles(in fixtures: URL) throws -> [String] {
     let scratch = FileManager.default.temporaryDirectory
         .appendingPathComponent("drill-tag-files-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: scratch) }
+    defer {
+        do {
+            try FileManager.default.removeItem(at: scratch)
+        } catch {
+            // Copies in the temp directory, which the system clears; worth a line, not a failure.
+            print("couldn't remove \(scratch.path): \(error)", to: &standardError)
+        }
+    }
     let writer = TagWriter(journal: TagUndoJournal(dataDirectory: scratch))
     var picked: [String] = []
     for container in [FixtureFile.Container.flac, .mp4, .mp3] {
@@ -22,7 +29,7 @@ func editableFixtureFiles(in fixtures: URL) throws -> [String] {
             let original = fixtures.appendingPathComponent(file.path)
             let copy = scratch.appendingPathComponent(original.lastPathComponent)
             try FileManager.default.copyItem(at: original, to: copy)
-            let written = writer.write(TagEdit(values: [.title: "Drill"]), to: [copy.path])
+            let written = writer.write(TagEdit(values: [.title: drillTitle]), to: [copy.path])
             let undone = writer.undoLast()
             if written.failures.isEmpty, undone.failures.isEmpty,
                 try Data(contentsOf: copy) == Data(contentsOf: original)

@@ -166,7 +166,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "TagCorpus",
-            dependencies: ["Metadata", "TagWriter"],
+            dependencies: ["Fixtures", "Metadata", "TagWriter"],
             path: "Sources/Tools/TagCorpus",
             swiftSettings: strictSwift
         ),
@@ -203,6 +203,11 @@ let package = Package(
         .testTarget(
             name: "DisplayTextTests",
             dependencies: ["DisplayText"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "FailureDrillTests",
+            dependencies: ["FailureDrill"],
             swiftSettings: strictSwift
         ),
         .testTarget(

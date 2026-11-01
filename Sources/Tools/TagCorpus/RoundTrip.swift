@@ -1,3 +1,4 @@
+import Fixtures
 import Foundation
 import Metadata
 import TagWriter
@@ -289,25 +290,13 @@ struct RoundTrip {
         let sizes = try originals.map {
             ($0, try FileManager.default.attributesOfItem(atPath: $0.path)[.size] as! Int)
         }
-        guard let (original, size) = sizes.min(by: { $0.1 < $1.1 }) else { return }
+        guard let (original, _) = sizes.min(by: { $0.1 < $1.1 }) else { return }
         let copy = mount.appendingPathComponent(original.lastPathComponent)
         let filler = mount.appendingPathComponent("filler")
         try requireCorpusWrite(copy.path, roots: roots)
         try requireCorpusWrite(filler.path, roots: roots)
         try FileManager.default.copyItem(at: original, to: copy)
-        let free =
-            try mount.resourceValues(forKeys: [.volumeAvailableCapacityKey]).volumeAvailableCapacity
-            ?? 0
-        let room = free - size / 2
-        guard room > 0 else {
-            throw CorpusError(
-                "the disk image at \(mount.path) is too small for \(original.lastPathComponent)")
-        }
-        FileManager.default.createFile(atPath: filler.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: filler)
-        try handle.truncate(atOffset: UInt64(room))
-        try handle.write(contentsOf: Data(count: 1))
-        try handle.close()
+        try fillVolume(with: filler)
         let layout = try readTagLayout(at: copy)
         let edit = TagEdit(values: [
             .title: String(repeating: "Full ", count: layout.paddingBytes / 5 + 200)

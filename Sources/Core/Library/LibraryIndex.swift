@@ -420,7 +420,7 @@ public final class LibraryIndex {
     }
 
     /// Folds the write-ahead log into the database file, so its size is the library's size.
-    func checkpoint() throws {
+    package func checkpoint() throws {
         try database.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     }
 
