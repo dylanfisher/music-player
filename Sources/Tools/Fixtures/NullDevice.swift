@@ -157,7 +157,11 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
             self.finished = finished
             let device = device
             let bytes = device.ioFrames * 8
-            let cycleSeconds = Double(device.ioFrames) / sampleRateHz / device.speed
+            var timebase = mach_timebase_info()
+            mach_timebase_info(&timebase)
+            let cycleTicks =
+                Double(device.ioFrames) / sampleRateHz / device.speed * 1e9
+                * Double(timebase.denom) / Double(timebase.numer)
             // The pointer crosses to the IO thread the way CoreAudio's client data would.
             let renderAddress = UInt(bitPattern: render)
             let thread = Thread {
@@ -165,7 +169,10 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
                 defer { buffer.deallocate() }
                 var time = AudioTimeStamp()
                 var input = AudioBufferList()
-                var deadline = ProcessInfo.processInfo.systemUptime
+                // Paced on the clock CoreAudio's IO thread waits on, so the playback benchmark
+                // counts the wakeups a device costs and not Foundation's sleep on top of them.
+                let start = Double(mach_absolute_time())
+                var cycles = 0.0
                 while !stop.isSet {
                     var list = AudioBufferList(
                         mNumberBuffers: 1,
@@ -175,9 +182,9 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
                         0, &time, &input, &time, &list, &time,
                         UnsafeMutableRawPointer(bitPattern: renderAddress))
                     device.pulled(UnsafeRawBufferPointer(start: buffer, count: bytes))
-                    deadline += cycleSeconds
-                    let wait = deadline - ProcessInfo.processInfo.systemUptime
-                    if wait > 0 { Thread.sleep(forTimeInterval: wait) }
+                    cycles += 1
+                    let deadline = UInt64(start + cycles * cycleTicks)
+                    if deadline > mach_absolute_time() { mach_wait_until(deadline) }
                 }
                 finished.signal()
             }
