@@ -1357,6 +1357,18 @@ Implementation plan:
       on the old Mac and send back the file it writes:
       `cd ~/projects/music-player && git pull --ff-only && ./scripts/bench 2>&1 | tee ~/Desktop/bench-14e-old-mac.txt`
 
+Result: shipped up to the owner's checkpoint, which is pending. Playback CPU 2.00, 2.10 and
+1.99% of 3% (70% at worst; the gate's own runs 2.04 to 2.13%), from an 8 s ring whose longer
+refills the scheduler keeps on a fast core (ADR 0029) and a null device paced with
+`mach_wait_until`. Metadata parse 4.01, 4.00 and 4.24 s of 5 s (85% at worst, the gate's run
+4.00 s), from a one-pass Latin-1 decode and URLs built without a stat; the rest is `open` and
+`pread`. The same stat fix took a full scan from 1.80 to 1.56 s. Idle: 0.00% CPU and 0 wakeups a
+second over 10 minutes, as the control thread no longer ticks while stopped; two idle benches
+join the table. Memory over a 30-minute soak of playback, scans and searches: -3.8 MB; it doesn't
+scroll, which the window memory bench covers. Eleven Apple Silicon budgets the code beat by more
+than 3x are now about 2x the worst of three runs; the old Mac's column waits for its checkpoint.
+The ring costs twice the memory: 16 MB at 192 kHz, 64 MB at 768 kHz.
+
 #### 14f. Architecture and docs
 
 - **Goal:** the docs describe the code, and the code exposes only what's used.
