@@ -210,6 +210,28 @@ func theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost(
     #expect(contiguousFrames(of: high, from: frame, in: resumed.samples)?.start == 0)
 }
 
+@Test func aFileCutShortWhilePlayingIsReportedAndSkipped() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("cut-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let cut = directory.appendingPathComponent("cut.flac")
+    try FileManager.default.copyItem(
+        at: try hiResTrack(in: try defaultPlaybackFixturesDirectory()), to: cut)
+    let next = try album(44_100, 16).tracks[1]
+
+    let rig = try await Rig(speed: 1)
+    await rig.engine.setQueue([cut, next])
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    // What's left of the file goes, as when the NAS drops while it plays.
+    #expect(truncate(cut.path, 256 * 1024) == 0)
+    try await rig.wait(for: .trackStarted(index: 1))
+    #expect(rig.events.contains { if case .trackFailed(cut, _) = $0 { true } else { false } })
+    let ended = try #require(await rig.engine.position())
+    #expect(ended < 1, "the next track plays from its start")
+}
+
 @Test func aFileThatWontOpenIsSkipped() async throws {
     let album = try album(44_100, 16)
     let broken = FileManager.default.temporaryDirectory

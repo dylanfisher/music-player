@@ -10,10 +10,15 @@ private let logger = moduleLogger()
 public enum DeviceOutputError: Error, CustomStringConvertible {
     case outOfMemory
     case noVolumeForFormat(String)
+    /// The file's audio stopped well before the length its header gives, as a partial file's
+    /// or one cut short while it played does.
+    case endedEarly(atSeconds: Double, ofSeconds: Double)
 
     public var description: String {
         switch self {
         case .outOfMemory: "couldn't allocate the playback buffer"
+        case .endedEarly(let at, let length):
+            String(format: "the audio ends at %.1f s of %.1f s; the file is cut short", at, length)
         case .noVolumeForFormat(let format):
             "the digital volume can't scale samples in this device format: \(format)"
         }
@@ -365,6 +370,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                     frames = 0
                 }
                 if frames == 0 {
+                    if let cutShort = track.endedEarly {
+                        emit(.trackFailed(track.item.id, cutShort))
+                    }
                     advanceFeed(stream)
                     continue
                 }
@@ -679,6 +687,18 @@ private struct Track {
     func frame(atSeconds seconds: Double) -> Int64 { clamped(Int64(seconds * sampleRateHz)) }
 
     func clamped(_ frame: Int64) -> Int64 { min(max(0, frame), decoder.lengthFrames) }
+
+    /// Why decoding stopped short, once it has: nil unless it's more than
+    /// `endedEarlySeconds` before the stated length, which leaves room for a length that's
+    /// only an estimate, as some encoders write.
+    var endedEarly: DeviceOutputError? {
+        let missing = Double(decoder.lengthFrames - decoder.nextFrame) / sampleRateHz
+        guard missing > Self.endedEarlySeconds else { return nil }
+        return .endedEarly(
+            atSeconds: Double(decoder.nextFrame) / sampleRateHz, ofSeconds: durationSeconds)
+    }
+
+    static let endedEarlySeconds = 0.5
 }
 
 private struct Predecoded {

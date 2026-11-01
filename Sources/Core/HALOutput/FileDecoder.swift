@@ -10,6 +10,9 @@ final class FileDecoder {
     let lengthFrames: Int64
     private let file: ExtAudioFileRef
     private var bytesPerFrame: UInt32 = 0
+    /// The frame the next `read` starts at. The client format keeps the file's rate, so a frame
+    /// read is a frame of the file.
+    private(set) var nextFrame: Int64 = 0
 
     init(url: URL) throws {
         var file: ExtAudioFileRef?
@@ -50,6 +53,7 @@ final class FileDecoder {
     /// Makes the next `read` start at `frame`, counted at the file's rate.
     func seek(toFrame frame: Int64) throws {
         try throwIfError("ExtAudioFileSeek", ExtAudioFileSeek(file, frame))
+        nextFrame = frame
     }
 
     /// Decodes up to `frames` frames into `buffer`. Returns how many were decoded: 0 at the end.
@@ -62,6 +66,7 @@ final class FileDecoder {
                 mNumberChannels: fileFormat.mChannelsPerFrame,
                 mDataByteSize: frames * bytesPerFrame, mData: buffer))
         try throwIfError("ExtAudioFileRead", ExtAudioFileRead(file, &frames, &list))
+        nextFrame += Int64(frames)
         return frames
     }
 }
