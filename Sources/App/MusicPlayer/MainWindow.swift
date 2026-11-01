@@ -8,7 +8,7 @@ import Settings
 let appName = ProcessInfo.processInfo.processName
 
 /// The main window: the config file's banner when it has a problem, the now-playing bar and
-/// search field across the top, then the sidebar, the
+/// search field across the top, the signal path when shown, then the sidebar, the
 /// browser and the queue side by side. It places the features' views and reports layout
 /// changes; it holds no logic of its own.
 @MainActor
@@ -20,6 +20,7 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
     private let split = NSSplitView()
     private let browser: LibraryBrowser
     private let queue: QueuePanel
+    private let signalPath: SignalPathPanel
     private let saver: LayoutSaver
     private var queueWidth: Int
     private var sidebarWidth: Int
@@ -27,10 +28,12 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
 
     init(
         settings: WindowSettings, banner: NSView, browser: LibraryBrowser,
-        nowPlaying: NowPlayingBar, queue: QueuePanel, saver: LayoutSaver
+        nowPlaying: NowPlayingBar, signalPath: SignalPathPanel, queue: QueuePanel,
+        saver: LayoutSaver
     ) {
         self.browser = browser
         self.queue = queue
+        self.signalPath = signalPath
         self.saver = saver
         queueWidth = settings.queueWidth
         sidebarWidth = settings.sidebarWidth
@@ -66,10 +69,11 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
 
         let line = NSBox()
         line.boxType = .separator
-        let stack = NSStackView(views: [banner, top, line, split])
+        signalPath.view.isHidden = !settings.signalPathVisible
+        let stack = NSStackView(views: [banner, top, signalPath.view, line, split])
         stack.orientation = .vertical
         stack.spacing = 0
-        for view in [banner, top, line, split] {
+        for view in [banner, top, signalPath.view, line, split] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
@@ -95,6 +99,7 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
 
     var isSidebarVisible: Bool { !browser.sidebar.view.isHidden }
     var isQueueVisible: Bool { !queue.view.isHidden }
+    var isSignalPathVisible: Bool { !signalPath.view.isHidden }
 
     func toggleSidebar() {
         browser.sidebar.view.isHidden.toggle()
@@ -113,6 +118,11 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
         split.adjustSubviews()
         placeQueueDivider()
         saver.set(\.queueVisible, !queue.view.isHidden)
+    }
+
+    func toggleSignalPath() {
+        signalPath.view.isHidden.toggle()
+        saver.set(\.signalPathVisible, isSignalPathVisible)
     }
 
     private func placeQueueDivider() {

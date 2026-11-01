@@ -29,6 +29,7 @@ extension CommandID {
     public static let focusSidebar = CommandID("view.focusSidebar")
     public static let toggleStatusBar = CommandID("view.toggleStatusBar")
     public static let toggleQueue = CommandID("view.toggleQueue")
+    public static let toggleSignalPath = CommandID("view.toggleSignalPath")
     public static let showCurrentTrack = CommandID("view.showCurrentTrack")
     public static let back = CommandID("go.back")
     public static let forward = CommandID("go.forward")
@@ -124,6 +125,8 @@ public enum AppCommands {
             Command(.focusSidebar, "Focus Sidebar", [.init("0", cmd)]),
             Command(.toggleStatusBar, state.statusBarVisible.title, [.init("/", cmd)]),
             Command(.toggleQueue, state.queueVisible.title, [.init("u", [opt, cmd])]),
+            Command(
+                .toggleSignalPath, state.signalPathVisible.title, [.init("s", [opt, cmd])]),
             Command(.showCurrentTrack, "Show Current Track", [.init("l", cmd)]),
             Command(.back, "Back", [.init("[", cmd)]),
             Command(.forward, "Forward", [.init("]", cmd)]),

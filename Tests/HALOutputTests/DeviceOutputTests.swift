@@ -5,14 +5,14 @@ import Testing
 @testable import HALOutput
 @testable import Playback
 
-private struct TimedOut: Error, CustomStringConvertible {
+struct TimedOut: Error, CustomStringConvertible {
     var seen: String
     var description: String { "timed out; events so far: \(seen)" }
 }
 
 /// Collects a stream's elements on a task of its own, so each wait for the next one is bounded
 /// and a missing event fails the test instead of hanging it.
-private final class Collected<Element: Sendable>: @unchecked Sendable {
+final class Collected<Element: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var elements: [Element] = []
     private var read = 0
@@ -51,15 +51,15 @@ private final class Collected<Element: Sendable>: @unchecked Sendable {
 }
 
 /// An engine playing through a `DeviceOutput` on a null device, and every update it published.
-private final class Rig: @unchecked Sendable {
+final class Rig: @unchecked Sendable {
     let device: NullDevice
     let output: DeviceOutput
     let engine: PlaybackEngine
     private let updates: Collected<PlaybackUpdate>
 
-    init(speed: Double = 4) async throws {
+    init(speed: Double = 4, digitalVolume: Bool = false) async throws {
         device = NullDevice(speed: speed, keepsSamples: true)
-        output = try DeviceOutput(provider: device, digitalVolume: false)
+        output = try DeviceOutput(provider: device, digitalVolume: digitalVolume)
         engine = PlaybackEngine(output: output)
         updates = Collected(await engine.updates())
     }
@@ -87,7 +87,7 @@ private final class Rig: @unchecked Sendable {
     var events: [PlaybackEvent] { seen.compactMap(\.event) }
 }
 
-private func album(_ rate: Int, _ bits: Int) throws -> RampAlbum {
+func album(_ rate: Int, _ bits: Int) throws -> RampAlbum {
     try rampAlbum(
         sampleRateHz: rate, bitsPerSample: bits, in: try defaultPlaybackFixturesDirectory())
 }

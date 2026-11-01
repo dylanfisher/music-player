@@ -23,6 +23,15 @@ private func store() throws -> StateStore<AppState> {
     #expect(reloaded[\.queueVisible])
 }
 
+@MainActor @Test func theSignalPathIsHiddenUntilShownAndThenStaysShown() throws {
+    let settings = try store()
+    #expect(!settings[\.signalPathVisible])
+    let saver = LayoutSaver(settings)
+    saver.set(\.signalPathVisible, true)
+    saver.flush()
+    #expect(try StateStore(AppState(), fileURL: settings.fileURL)[\.signalPathVisible])
+}
+
 @MainActor @Test func aFlushWritesEachChangeOnce() throws {
     let settings = try store()
     let saver = LayoutSaver(settings)

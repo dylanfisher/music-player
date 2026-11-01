@@ -109,6 +109,10 @@ extension AppDelegate {
             isOn: { [weak self] in self?.window?.isQueueVisible == true },
             run: { [weak self] in self?.window?.toggleQueue() })
         dispatcher.handle(
+            .toggleSignalPath, enabled: hasWindow,
+            isOn: { [weak self] in self?.window?.isSignalPathVisible == true },
+            run: { [weak self] in self?.window?.toggleSignalPath() })
+        dispatcher.handle(
             .showCurrentTrack, enabled: { [weak self] in self?.currentTrackPath != nil },
             run: { [weak self] in
                 guard let self, let path = self.currentTrackPath, let browser = self.browser else {

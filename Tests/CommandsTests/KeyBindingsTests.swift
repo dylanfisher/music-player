@@ -53,6 +53,13 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
     #expect(bindings.chord(of: .revealInFinder, at: .alternate) == KeyChord("r", [.option, cmd]))
 }
 
+@Test func optionCommandSShowsTheSignalPath() throws {
+    let bindings = try KeyBindings(
+        AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
+    #expect(bindings.dropped.isEmpty)
+    #expect(bindings.registry.command(for: KeyChord("s", [.option, cmd])) == .toggleSignalPath)
+}
+
 @Test func theUsersChordBeatsADefault() throws {
     let bindings = try bindings([
         close.rawValue: ShortcutOverride(alternate: .chord(KeyChord("o", cmd)))

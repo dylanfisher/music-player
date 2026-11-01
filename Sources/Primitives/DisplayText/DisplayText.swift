@@ -16,6 +16,11 @@ public func kilohertz(_ hertz: Double) -> String {
 /// 24 -> "24-bit".
 public func bitDepth(_ bits: some BinaryInteger) -> String { "\(bits)-bit" }
 
+/// "24-bit int", "32-bit float".
+public func sampleType(bits: some BinaryInteger, isFloat: Bool) -> String {
+    "\(bitDepth(bits)) \(isFloat ? "float" : "int")"
+}
+
 /// 3 -> "★★★"; 0, unrated, -> "".
 public func stars(_ count: Int) -> String {
     String(repeating: "★", count: max(0, count))

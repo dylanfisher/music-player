@@ -1,0 +1,128 @@
+import DisplayText
+import Foundation
+import Playback
+
+/// What the signal path panel shows: the verdict, then one row per stage.
+struct SignalPathLines: Equatable {
+    struct Row: Equatable {
+        var label: String
+        var value: String
+    }
+
+    var verdict: String
+    var isBitPerfect: Bool
+    var rows: [Row]
+}
+
+/// The panel's text for `path`, or for no output at all when it's nil.
+func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
+    guard let path else {
+        return SignalPathLines(verdict: "No output device", isBitPerfect: false, rows: [])
+    }
+    let verdict: String
+    switch signalVerdict(path) {
+    case .idle: verdict = "Nothing playing"
+    case .bitPerfect: verdict = "Bit-perfect"
+    case .changed(let changes):
+        verdict = "Not bit-perfect: " + changes.map(describe).joined(separator: "; ")
+    }
+    var rows: [SignalPathLines.Row] = []
+    if let track = path.track {
+        rows.append(.init(label: "File", value: describe(track.file)))
+        rows.append(.init(label: "Decoder", value: describe(track.decoded)))
+    }
+    switch path.sink {
+    case .device(let sink): rows += deviceRows(sink)
+    }
+    return SignalPathLines(
+        verdict: verdict, isBitPerfect: signalVerdict(path) == .bitPerfect, rows: rows)
+}
+
+private func deviceRows(_ sink: DeviceSink) -> [SignalPathLines.Row] {
+    let gain = "digital \(sink.gain == 1 ? "unity" : decibels(sink.gain))"
+    switch sink.state {
+    case .notConnected:
+        return [.init(label: "Device", value: "\(sink.name), not connected")]
+    case .unreadable(let why):
+        return [.init(label: "Device", value: "\(sink.name), can't be read: \(why)")]
+    case .connected(let device):
+        let mixing = device.isMixable ? "mixable" : "non-mixable"
+        let hog: String
+        switch device.hogMode {
+        case .thisProcess: hog = "held by this app"
+        case .free: hog = "not held"
+        case .otherProcess(let pid): hog = "held by another process (pid \(pid))"
+        }
+        let volumes =
+            device.volumes.isEmpty
+            ? "no device controls"
+            : device.volumes.map { "\(name(of: $0.kind)) \(percent($0.scalar))" }
+                .joined(separator: ", ")
+        return [
+            .init(
+                label: "Device",
+                value:
+                    "\(sink.name) at \(kilohertz(device.nominalSampleRateHz)) kHz: "
+                    + "\(describe(device.physical)), \(mixing)"),
+            .init(label: "Hog mode", value: hog),
+            .init(label: "Volume", value: "\(volumes); \(gain)"),
+        ]
+    }
+}
+
+private func describe(_ change: SignalChange) -> String {
+    switch change {
+    case .decoderResamples(let from, let to):
+        "the decoder resamples \(kilohertz(from)) kHz to \(kilohertz(to)) kHz"
+    case .decoderRemixes(let from, let to): "the decoder mixes \(from) channels into \(to)"
+    case .decoderLosesPrecision(let format):
+        "the decoder rounds the samples to \(sampleType(format))"
+    case .deviceResamples(let from, let to):
+        "the device runs at \(kilohertz(to)) kHz, so macOS resamples from \(kilohertz(from)) kHz"
+    case .deviceRemixes(let from, let to):
+        "macOS maps \(from) channels onto the device's \(to)"
+    case .deviceLosesPrecision(let format):
+        "the device's \(sampleType(format)) format rounds the samples"
+    case .mixableFormat: "the format is mixable, so macOS mixes other apps' sound in"
+    case .hogModeFree: "hog mode isn't held, so other apps can play through the device"
+    case .hogModeHeld(let pid): "another process (pid \(pid)) holds hog mode"
+    case .deviceVolume(let control):
+        "the device's \(name(of: control.kind)) volume is at \(percent(control.scalar))"
+    case .digitalVolume(let gain): "the digital volume is at \(decibels(gain))"
+    case .deviceNotConnected: "the device isn't connected"
+    case .deviceUnreadable(let why): "the device can't be read: \(why)"
+    }
+}
+
+/// For example `FLAC 24-bit int, 96 kHz, 2 ch`, or `MP3 44.1 kHz, 2 ch` for a lossy codec.
+private func describe(_ format: SignalFormat) -> String {
+    let codec =
+        format.formatID == "lpcm"
+        ? "PCM"
+        : format.formatID.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
+            .uppercased()
+    let sample = format.bitsPerChannel == nil ? "" : " \(sampleType(format)),"
+    return "\(codec)\(sample) \(kilohertz(format.sampleRateHz)) kHz, \(format.channels) ch"
+}
+
+private func sampleType(_ format: SignalFormat) -> String {
+    sampleType(bits: format.bitsPerChannel ?? 0, isFloat: format.isFloat)
+}
+
+private func name(of kind: VolumeControl.Kind) -> String {
+    switch kind {
+    case .virtualMain: "system"
+    case .main: "main"
+    case .channel(let channel): "channel \(channel)"
+    }
+}
+
+/// Exactly 1 reads as unity; anything else rounds down, so a scalar just below 1 never reads as
+/// 100%.
+private func percent(_ scalar: Float) -> String {
+    scalar == 1 ? "unity" : String(format: "%.1f%%", (Double(scalar) * 1000).rounded(.down) / 10)
+}
+
+private func decibels(_ gain: Double) -> String {
+    gain <= 0 ? "silence" : String(format: "%.1f dB", 20 * log10(gain))
+}

@@ -1,6 +1,7 @@
 import CoreAudio
 import Foundation
 import Log
+import Playback
 
 private let logger = moduleLogger()
 
@@ -15,7 +16,8 @@ enum HALDeviceProviderError: Error, CustomStringConvertible {
 }
 
 /// The CoreAudio device with one UID. It listens for the device list changing and for the device
-/// dying, and never substitutes another device.
+/// dying, and never substitutes another device. It also follows the properties that decide
+/// whether the device plays samples unchanged, and reports its state each time one changes.
 ///
 /// The first open in a run snapshots the device and the system's default outputs, and every later
 /// session restores that snapshot, so a device that was unplugged and came back is still put back
@@ -32,6 +34,8 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
     private var listener: AudioObjectPropertyListenerBlock?
     /// The device the `IsAlive` listener is on, which changes when it is plugged back in.
     private var aliveListenerDevice: AudioObjectID?
+    private var stateChanged: (@Sendable (DeviceState) -> Void)?
+    private var signalListeners: PropertyListeners?
 
     /// `deviceUID` nil means the system's default output now. It is resolved once, so when that
     /// device goes away playback pauses instead of following macOS to another one.
@@ -84,17 +88,60 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
         return alive == 0 ? nil : id
     }
 
-    public func watch(_ changed: @escaping @Sendable () -> Void) throws {
+    public func watch(
+        _ changed: @escaping @Sendable () -> Void,
+        state: @escaping @Sendable (DeviceState) -> Void
+    ) throws {
         let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
             self?.followDevice()
             changed()
+            self?.reportState()
         }
-        lock.withLock { listener = block }
+        let signalBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            self?.reportState()
+        }
+        lock.withLock {
+            listener = block
+            stateChanged = state
+            signalListeners = PropertyListeners(
+                HALPropertyListening(), queue: queue, block: signalBlock)
+        }
         var devices = address(kAudioHardwarePropertyDevices)
         try throwIfError(
             "AudioObjectAddPropertyListenerBlock(devices)",
             AudioObjectAddPropertyListenerBlock(systemObject, &devices, queue, block))
         followDevice()
+        // On the queue, after any listener already queued, so states arrive in order.
+        queue.async { [weak self] in self?.reportState() }
+    }
+
+    /// Reads the device's state, moves the signal listeners to what it has now, and reports it.
+    /// Runs on the queue only.
+    private func reportState() {
+        let report = lock.withLock { () -> (@Sendable (DeviceState) -> Void, DeviceState)? in
+            guard let stateChanged, let signalListeners else { return nil }
+            let state: DeviceState
+            do {
+                guard let id = try liveDeviceID() else {
+                    signalListeners.set([])
+                    return (stateChanged, .notConnected)
+                }
+                do {
+                    let (signal, keys) = try readSignal(of: id)
+                    signalListeners.set(keys)
+                    state = .connected(signal)
+                } catch {
+                    signalListeners.set(deviceSignalKeys(id))
+                    throw error
+                }
+            } catch {
+                logger.error("can't read \(self.deviceName)'s state: \(error)")
+                state = .unreadable("\(error)")
+            }
+            return (stateChanged, state)
+        }
+        guard let (stateChanged, state) = report else { return }
+        stateChanged(state)
     }
 
     /// Moves the `IsAlive` listener to the device's current object ID.
@@ -136,6 +183,9 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
             }
             self.listener = nil
             aliveListenerDevice = nil
+            signalListeners?.set([])
+            signalListeners = nil
+            stateChanged = nil
         }
     }
 

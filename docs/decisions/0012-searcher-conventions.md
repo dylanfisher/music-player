@@ -122,6 +122,7 @@ The player's own:
 | Volume Up / Down | ⌃⌘↑ / ⌃⌘↓ | Enabled only while digital volume is on |
 | Show Current Track | ⌘L | |
 | Show Queue | ⌥⌘U | |
+| Show Signal Path | ⌥⌘S | phase 20 |
 | New Playlist / New Smart Playlist | ⌘N / ⌥⌘N | phase 7 |
 | Add Watched Folder… | ⌘O | |
 | Remove from Queue or Playlist | ⌘⌫ | Never touches files (AGENTS.md) |

@@ -28,6 +28,10 @@ public struct AppState: SettingsSchema {
     public let queueVisible = Setting(
         "window.queueVisible", title: "Show Queue", default: false,
         "Show the queue beside the track table.")
+    public let signalPathVisible = Setting(
+        "window.signalPathVisible", title: "Show Signal Path", default: false,
+        "Show what happens to the samples between the file and the device, under the"
+            + " now-playing bar.")
     public let queueWidth = Setting(
         "window.queueWidth", title: "Queue Width", default: 220, range: queueWidthRange,
         "Width of the queue, in points.")

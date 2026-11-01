@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var window: MainWindow?
     private(set) var browser: LibraryBrowser?
     private var nowPlaying: NowPlayingBar?
+    private var signalPath: SignalPathPanel?
     /// Media keys, headphone buttons, Now Playing in Control Center, and the Dock menu.
     private var mediaControls: MediaControls?
     private var dockMenu: DockMenu?
@@ -64,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The output settings changed while playing; the output reopens once playback stops.
     var outputChanged = false
     private var playbackUpdates: Task<Void, Never>?
+    private var signalPathUpdates: Task<Void, Never>?
     /// Plays and skips, counted from the engine's updates.
     private lazy var playTracker = PlayTracker { [weak self] in self?.record($0) }
     /// The smart playlist editor while it's open.
@@ -142,11 +144,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
         if let dispatcher { makeMediaControls(dispatcher, lookup: lookup) }
         let queue = QueuePanel(model: QueueModel(lookup: lookup))
+        let signalPath = SignalPathPanel()
         let window = MainWindow(
             settings: layout, banner: banner.view, browser: browser, nowPlaying: nowPlaying,
-            queue: queue, saver: saver)
+            signalPath: signalPath, queue: queue, saver: saver)
         self.browser = browser
         self.nowPlaying = nowPlaying
+        self.signalPath = signalPath
         self.queue = queue
         self.window = window
 
@@ -297,6 +301,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             nowPlaying?.connect(engine)
             mediaControls?.connect(engine)
             queue?.connect(engine)
+            // The output's stream ends when it closes, so a reopened output replaces this.
+            signalPathUpdates?.cancel()
+            signalPathUpdates = Task { [weak self] in
+                for await path in output.signalPaths { self?.signalPath?.show(path) }
+            }
             playbackUpdates = Task { [weak self] in
                 for await update in await engine.updates() {
                     self?.playback = update.state
@@ -311,6 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             logger.error("no output: \(error)")
             mediaControls?.refreshCommands()
             nowPlaying?.showUnavailable("No output device: \(error)")
+            signalPath?.show(nil)
         }
     }
 

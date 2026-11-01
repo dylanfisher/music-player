@@ -2,11 +2,14 @@ import CoreAudio
 import Foundation
 import HALOutput
 import HALRender
+import Playback
 
 /// An output device that plays nothing: it runs `HALRenderIOProc` on its own thread, as CoreAudio
 /// would, at real-time pace or faster, and can keep every sample it pulls. Tests and benchmarks
 /// use it so playback never sounds on the build Mac. It reports a stereo 32-bit integer format at
-/// any rate, like the owner's DAC, and can be unplugged and plugged back in.
+/// any rate, like the owner's DAC, and can be unplugged and plugged back in. Tests can change its
+/// rate, hog mode and volume as another app would, and it reports its state as the HAL's
+/// listeners would.
 public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     public let deviceName = "null device"
     /// How many times faster than real time the IO proc runs.
@@ -16,6 +19,10 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     private let lock = NSLock()
     private var connected = true
     private var watcher: (@Sendable () -> Void)?
+    private var stateWatcher: (@Sendable (DeviceState) -> Void)?
+    private var nominalSampleRateHz = 44_100.0
+    private var otherHogOwner: Int32?
+    private var volumes: [VolumeControl] = []
     private var runs: [CapturedRun] = []
     private var restoredDefaults = 0
     private var openSessions = 0
@@ -52,7 +59,54 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     var openSessionCount: Int { lock.withLock { openSessions } }
     var defaultsRestoredCount: Int { lock.withLock { restoredDefaults } }
 
+    /// Whether a watcher is registered, which closing the output must undo.
+    var isWatched: Bool { lock.withLock { watcher != nil || stateWatcher != nil } }
+
     func unplug() { setConnected(false) }
+
+    /// Another app setting the device's rate, as in Audio MIDI Setup.
+    func changeRate(to hertz: Double) {
+        lock.withLock { nominalSampleRateHz = hertz }
+        reportState()
+    }
+
+    /// Another process taking exclusive access, or nil to give it back.
+    func hogMode(heldBy pid: Int32?) {
+        lock.withLock { otherHogOwner = pid }
+        reportState()
+    }
+
+    func setVolumes(_ controls: [VolumeControl]) {
+        lock.withLock { volumes = controls }
+        reportState()
+    }
+
+    private func reportState() {
+        let (watcher, state) = lock.withLock { (stateWatcher, state) }
+        watcher?(state)
+    }
+
+    /// Called with the lock held.
+    private var state: DeviceState {
+        guard connected else { return .notConnected }
+        let hog: HogMode =
+            otherHogOwner.map { .otherProcess(pid: $0) }
+            ?? (openSessions > 0 ? .thisProcess : .free)
+        return .connected(
+            DeviceSignal(
+                nominalSampleRateHz: nominalSampleRateHz,
+                physical: SignalFormat(Self.format(sampleRateHz: nominalSampleRateHz)),
+                isMixable: false, hogMode: hog, volumes: volumes))
+    }
+
+    static func format(sampleRateHz: Double) -> AudioStreamBasicDescription {
+        AudioStreamBasicDescription(
+            mSampleRate: sampleRateHz, mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked
+                | kAudioFormatFlagIsNonMixable,
+            mBytesPerPacket: 8, mFramesPerPacket: 1, mBytesPerFrame: 8, mChannelsPerFrame: 2,
+            mBitsPerChannel: 32, mReserved: 0)
+    }
     func plugIn() { setConnected(true) }
     /// Connects the device without telling the watcher, as when a change notification is missed.
     func plugInUnannounced() { lock.withLock { connected = true } }
@@ -92,27 +146,44 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
             return self.watcher
         }
         watcher?()
+        reportState()
     }
 
     public func open() throws -> (any PCMDevice)? {
-        lock.withLock {
+        let session = lock.withLock { () -> Session? in
             guard connected else { return nil }
             openSessions += 1
             return Session(self)
         }
+        if session != nil { reportState() }
+        return session
     }
 
     public func isConnected() -> Bool { lock.withLock { connected } }
-    public func watch(_ changed: @escaping @Sendable () -> Void) throws {
-        lock.withLock { watcher = changed }
+    public func watch(
+        _ changed: @escaping @Sendable () -> Void,
+        state: @escaping @Sendable (DeviceState) -> Void
+    ) throws {
+        lock.withLock {
+            watcher = changed
+            stateWatcher = state
+        }
+        reportState()
     }
-    public func stopWatching() { lock.withLock { watcher = nil } }
+    public func stopWatching() {
+        lock.withLock {
+            watcher = nil
+            stateWatcher = nil
+        }
+    }
     public func deviceReturned() { lock.withLock { restoredDefaults += 1 } }
 
     fileprivate func began(sampleRateHz: Double) {
         lock.withLock {
+            nominalSampleRateHz = sampleRateHz
             runs.append(CapturedRun(sampleRateHz: sampleRateHz, samples: []))
         }
+        reportState()
     }
 
     fileprivate func pulled(_ buffer: UnsafeRawBufferPointer) {
@@ -120,7 +191,10 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
         lock.withLock { runs[runs.count - 1].samples += buffer.bindMemory(to: Int32.self) }
     }
 
-    fileprivate func ended() { lock.withLock { openSessions -= 1 } }
+    fileprivate func ended() {
+        lock.withLock { openSessions -= 1 }
+        reportState()
+    }
 
     private final class Session: PCMDevice {
         private let device: NullDevice
@@ -136,12 +210,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
             try device.perform(.configure)
             self.sampleRateHz = sampleRateHz
             device.began(sampleRateHz: sampleRateHz)
-            let format = AudioStreamBasicDescription(
-                mSampleRate: sampleRateHz, mFormatID: kAudioFormatLinearPCM,
-                mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked
-                    | kAudioFormatFlagIsNonMixable,
-                mBytesPerPacket: 8, mFramesPerPacket: 1, mBytesPerFrame: 8, mChannelsPerFrame: 2,
-                mBitsPerChannel: 32, mReserved: 0)
+            let format = NullDevice.format(sampleRateHz: sampleRateHz)
             return DeviceFormat(
                 stream: format,
                 summary: "\(device.deviceName): \(PhysicalFormat(format).summary)",

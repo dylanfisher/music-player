@@ -67,8 +67,12 @@ public protocol PCMDeviceProvider: AnyObject, Sendable {
     func open() throws -> (any PCMDevice)?
     func isConnected() -> Bool
     /// Calls `changed`, on any thread, whenever the device may have appeared or disappeared,
-    /// until `stopWatching()`.
-    func watch(_ changed: @escaping @Sendable () -> Void) throws
+    /// and `state` with the device's state soon after watching starts and whenever it may have
+    /// changed, in order, until `stopWatching()`.
+    func watch(
+        _ changed: @escaping @Sendable () -> Void,
+        state: @escaping @Sendable (DeviceState) -> Void
+    ) throws
     func stopWatching()
     /// The device is back while no session holds it: put back what can be put back without
     /// opening it, such as the system's default output.

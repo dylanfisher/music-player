@@ -36,8 +36,12 @@ enum DeviceOutputError: Error, CustomStringConvertible {
 /// drained and the device has played its last buffer, then the device is reconfigured.
 public final class DeviceOutput: Output, @unchecked Sendable {
     public let events: AsyncStream<OutputEvent>
+    /// The signal path each time the audible track, the gain or the device's state changes,
+    /// from the device's first reported state on. Ends on `close()`.
+    public let signalPaths: AsyncStream<SignalPath>
     public let hasVolume: Bool
     private let continuation: AsyncStream<OutputEvent>.Continuation
+    private let signalContinuation: AsyncStream<SignalPath>.Continuation
     private let provider: any PCMDeviceProvider
     /// Guards `pending`, `published` and `isClosed`, and wakes the control thread.
     private let condition = NSCondition()
@@ -71,6 +75,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// the device's own: the HAL can report the removal a moment after the call fails.
     static let deviceSettleSeconds = 0.25
     private var gain = 1.0
+    /// Nil until the provider first reports it.
+    private var deviceState: DeviceState?
+    private var publishedSignal: SignalPath?
     /// Streams whose IO proc may still be called because stopping it failed. They are never freed.
     private var retired: [RenderStream] = []
 
@@ -79,7 +86,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         self.provider = provider
         hasVolume = digitalVolume
         (events, continuation) = AsyncStream.makeStream(of: OutputEvent.self)
-        try provider.watch { [weak self] in self?.post(.devicesChanged) }
+        (signalPaths, signalContinuation) = AsyncStream.makeStream(of: SignalPath.self)
+        try provider.watch(
+            { [weak self] in self?.post(.devicesChanged) },
+            state: { [weak self] in self?.post(.deviceState($0)) })
         let thread = Thread { [self] in run() }
         thread.name = "DeviceOutput"
         thread.qualityOfService = .userInteractive
@@ -110,6 +120,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         case seek(Double)
         case volume(Double)
         case devicesChanged
+        case deviceState(DeviceState)
         case close(DispatchSemaphore)
     }
 
@@ -146,12 +157,14 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                     provider.stopWatching()
                     publishPosition()
                     continuation.finish()
+                    signalContinuation.finish()
                     done.signal()
                     return
                 }
                 perform(command)
             }
             service()
+            publishSignal()
         }
     }
 
@@ -179,6 +192,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             self.gain = gain
             if let stream { HALRenderSetGain(stream.render, Float(gain)) }
         case .devicesChanged: checkDevice()
+        case .deviceState(let state): deviceState = state
         case .close: preconditionFailure("close is handled by the run loop")
         }
     }
@@ -283,7 +297,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         segments.append(
             Segment(
                 item: track.item, startByte: stream.produced, startFrame: frame,
-                durationSeconds: track.durationSeconds))
+                durationSeconds: track.durationSeconds, signal: track.signal(into: stream)))
         HALRenderSetDraining(stream.render, false)
         drainedAt = nil
     }
@@ -516,7 +530,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                 segments.append(
                     Segment(
                         item: track.item, startByte: 0, startFrame: 0,
-                        durationSeconds: track.durationSeconds))
+                        durationSeconds: track.durationSeconds, signal: track.signal(into: next)))
                 ahead = predecoded.audio
             } else {
                 try track.decoder.seek(toFrame: 0)
@@ -683,6 +697,19 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 
     private func emit(_ event: OutputEvent) { continuation.yield(event) }
+
+    /// Runs after every pass of the control thread, so it costs a comparison when nothing moved.
+    private func publishSignal() {
+        guard let deviceState else { return }
+        let path = SignalPath(
+            track: segments.first?.signal,
+            sink: .device(
+                DeviceSink(
+                    name: provider.deviceName, state: deviceState, gain: hasVolume ? gain : 1)))
+        guard path != publishedSignal else { return }
+        publishedSignal = path
+        signalContinuation.yield(path)
+    }
 }
 
 private func uptime() -> Double { ProcessInfo.processInfo.systemUptime }
@@ -731,6 +758,11 @@ private struct Track {
 
     func clamped(_ frame: Int64) -> Int64 { min(max(0, frame), decoder.lengthFrames) }
 
+    func signal(into stream: RenderStream) -> TrackSignal {
+        TrackSignal(
+            file: SignalFormat(decoder.fileFormat), decoded: SignalFormat(stream.decoderFormat))
+    }
+
     /// Why decoding stopped short, once it has: nil unless it's more than
     /// `endedEarlySeconds` before the stated length, which leaves room for encoders' rounding.
     /// An MP3 that doesn't state its length isn't checked.
@@ -759,6 +791,7 @@ private struct Segment {
     /// The frame of the file it starts at, after a seek.
     let startFrame: Int64
     let durationSeconds: Double
+    let signal: TrackSignal
 
     func info(_ stream: RenderStream) -> TrackInfo {
         TrackInfo(durationSeconds: durationSeconds, outputFormat: stream.format.summary)

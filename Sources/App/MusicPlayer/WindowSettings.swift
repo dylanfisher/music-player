@@ -10,6 +10,7 @@ struct WindowSettings {
     var sidebarVisible: Bool
     var statusBarVisible: Bool
     var queueVisible: Bool
+    var signalPathVisible: Bool
     var queueWidth: Int
     var trackTable: TrackTableLayout
     var browser: BrowserState
@@ -23,6 +24,7 @@ struct WindowSettings {
         sidebarVisible = state[\.sidebarVisible]
         statusBarVisible = state[\.statusBarVisible]
         queueVisible = state[\.queueVisible]
+        signalPathVisible = state[\.signalPathVisible]
         queueWidth = state[\.queueWidth]
         trackTable = state[\.trackTable]
         browser = BrowserState(

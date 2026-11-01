@@ -111,6 +111,7 @@ public enum AppMenus {
                 entries: [
                     .command(.showPalette), .command(.goToItem), .separator,
                     .command(.toggleSidebar), .command(.toggleStatusBar), .command(.toggleQueue),
+                    .command(.toggleSignalPath),
                     .separator, .command(.focusSidebar), .command(.focusNextPane),
                     .command(.focusPreviousPane), .command(.focusNextArea), .separator,
                     .submenu(
