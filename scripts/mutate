@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Mutation testing of the core state machines (ADR 0027). Not part of ./scripts/check.
+#   ./scripts/mutate [--jobs <n>] [<part of a file path>]
+# Lists the mutants of each entry in scripts/mutate-files.txt with scripts/mutate.swift, then
+# runs them in git worktrees of HEAD under .build/mutate, one per job: each mutant is applied,
+# its entry's test target is built and run, and the file is checked out again. A mutant the
+# tests fail on is killed; one they pass survives; one that doesn't build isn't counted. The
+# main checkout is never written. Results are in .build/mutate/results.tsv, and each file's
+# score and survivors are printed. The worktrees are removed on exit; their builds are kept in
+# .build/mutate/build-<n>, so a second run builds less.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+repo=$(pwd)
+
+jobs=4
+only=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --jobs)
+      if [ $# -lt 2 ]; then echo "error: --jobs needs a number" >&2; exit 1; fi
+      case "$2" in
+        ''|*[!0-9]*|0) echo "error: --jobs needs a number above 0, not $2" >&2; exit 1 ;;
+      esac
+      jobs=$2
+      shift 2 ;;
+    --*) echo "error: $1 isn't an option" >&2; exit 1 ;;
+    *)
+      if [ -n "$only" ]; then echo "error: give one part of a path, not $only and $1" >&2; exit 1; fi
+      only=$1
+      shift ;;
+  esac
+done
+
+out="$repo/.build/mutate"
+mkdir -p "$out"
+worktrees=()
+cleanup() {
+  for tree in "${worktrees[@]+"${worktrees[@]}"}"; do
+    git -C "$repo" worktree remove --force "$tree" 2> /dev/null || rm -rf "$tree"
+  done
+  git -C "$repo" worktree prune
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+tool="$out/mutate-tool"
+swiftc -O -o "$tool" scripts/mutate.swift
+
+# Every mutant: file, id, line, what changed, test target.
+plan="$out/plan.tsv"
+: > "$plan"
+grep -v '^#' scripts/mutate-files.txt | grep -v '^ *$' | while read -r file lines target; do
+  [ -z "$only" ] || [[ "$file" == *"$only"* ]] || continue
+  [ -f "$file" ] || { echo "error: scripts/mutate-files.txt names $file, which doesn't exist" >&2; exit 1; }
+  range=()
+  [ "$lines" = all ] || range=("$lines")
+  "$tool" list "$file" "${range[@]+"${range[@]}"}" \
+    | awk -F'\t' -v file="$file" -v target="$target" '{ print file "\t" $1 "\t" $2 "\t" $3 "\t" target }'
+done >> "$plan"
+total=$(wc -l < "$plan" | tr -d ' ')
+[ "$total" -gt 0 ] || { echo "error: no mutants${only:+ in files matching $only}" >&2; exit 1; }
+echo "$total mutants in $jobs jobs" >&2
+
+run_job() {
+  local job=$1 tree="$out/tree-$1" build="$out/build-$1" results="$out/results-$1.tsv"
+  : > "$results"
+  local flags=(--scratch-path "$build")
+  (cd "$tree" && swift build --build-tests "${flags[@]}" > "$out/job-$job.log" 2>&1) || {
+    echo "error: job $job's unmutated build failed; see $out/job-$job.log" >&2
+    return 1
+  }
+  awk -v jobs="$jobs" -v job="$job" 'NR % jobs == job' "$plan" | while IFS=$'\t' read -r file id line summary target; do
+    local outcome
+    (cd "$tree" && "$tool" apply "$file" "$id")
+    if ! (cd "$tree" && swift build "${flags[@]}" --product "$target" >> "$out/job-$job.log" 2>&1); then
+      outcome=uncompilable
+    elif (cd "$tree" && /usr/bin/timeout -k 5 300 swift test "${flags[@]}" --skip-build \
+      --filter "^$target\." >> "$out/job-$job.log" 2>&1); then
+      outcome=survived
+    else
+      outcome=killed
+    fi
+    git -C "$tree" checkout -q -- "$file"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$file" "$id" "$line" "$summary" "$outcome" >> "$results"
+  done
+}
+
+for job in $(seq 0 $((jobs - 1))); do
+  tree="$out/tree-$job"
+  git -C "$repo" worktree remove --force "$tree" 2> /dev/null || rm -rf "$tree"
+  git -C "$repo" worktree add -q --detach "$tree" HEAD
+  worktrees+=("$tree")
+done
+pids=()
+for job in $(seq 0 $((jobs - 1))); do
+  run_job "$job" &
+  pids+=($!)
+done
+failed=0
+for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
+cat "$out"/results-*.tsv | sort -t$'\t' -k1,1 -k2,2n > "$out/results.tsv"
+[ "$failed" -eq 0 ] || { echo "error: a job failed" >&2; exit 1; }
+
+awk -F'\t' '
+  { files[$1] = 1; count[$1, $5]++ }
+  $5 == "survived" { survivors[$1] = survivors[$1] "    line " $3 ": " $4 "\n" }
+  END {
+    for (file in files) {
+      killed = count[file, "killed"] + 0; survived = count[file, "survived"] + 0
+      scored = killed + survived
+      printf "%s: %.1f%% (%d killed, %d survived, %d uncompilable)\n", file,
+        scored ? 100 * killed / scored : 100, killed, survived, count[file, "uncompilable"] + 0
+      printf "%s", survivors[file]
+    }
+  }' "$out/results.tsv"

@@ -1,0 +1,17 @@
+# What scripts/mutate mutates (ADR 0027), one entry per line: `<file> <lines> <test target>`.
+# <lines> is `all` or `<first>-<last>`; a file may have several entries. Each mutant runs only
+# that test target.
+
+# The playback engine and queue, and the play counting.
+Sources/Core/Playback/PlaybackEngine.swift all PlaybackTests
+Sources/Core/Playback/PlayQueue.swift all PlaybackTests
+Sources/Core/Playback/PlayCounter.swift all PlaybackTests
+Sources/Core/Playback/PlayTracker.swift all PlaybackTests
+# The config file's reads, writes, retries and watch.
+Sources/Core/Settings/ConfigStore.swift all SettingsTests
+# The scanner's rescan rules: what's read again and what's removed.
+Sources/Core/Library/LibraryScanner.swift all LibraryTests
+# The tag writer's checks: undo's identity check, the checks before the rename, the read-back
+# check and the MP4 chunk offsets.
+Sources/Core/TagWriter/TagWriter.swift 199-303 TagWriterTests
+Sources/Core/TagWriter/TagWriter.swift 386-413 TagWriterTests

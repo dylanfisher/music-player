@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# The whole test suite under AddressSanitizer, ThreadSanitizer and UndefinedBehaviorSanitizer
+# (ADR 0027), each in its own scratch path, with 1,000 cases per property test. Not part of
+# ./scripts/check.
+#   ./scripts/sanitize [--thread-runs <n>] [address] [thread] [undefined]
+# With no sanitizer named, runs all three. --thread-runs repeats the TSan run, to find tests that
+# depend on start order; the repeats run the default 50 property cases. Each run's log is in
+# .build/sanitize. Exits 1 if any run failed, after listing the failed tests.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+thread_runs=1
+sanitizers=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --thread-runs)
+      if [ $# -lt 2 ]; then echo "error: --thread-runs needs a number" >&2; exit 1; fi
+      case "$2" in
+        ''|*[!0-9]*|0) echo "error: --thread-runs needs a number above 0, not $2" >&2; exit 1 ;;
+      esac
+      thread_runs=$2
+      shift 2 ;;
+    address|thread|undefined) sanitizers+=("$1"); shift ;;
+    *) echo "error: $1 isn't an option or a sanitizer" >&2; exit 1 ;;
+  esac
+done
+[ ${#sanitizers[@]} -gt 0 ] || sanitizers=(address thread undefined)
+
+mkdir -p .build/sanitize
+failed=()
+for sanitizer in "${sanitizers[@]}"; do
+  flags=(--scratch-path ".build/$sanitizer" --sanitize="$sanitizer")
+  if [ "$sanitizer" = undefined ]; then
+    # swiftc links no UBSan runtime for the C targets' checks, so it's linked by hand.
+    runtime=$(xcrun clang -print-file-name=lib/darwin/libclang_rt.ubsan_osx_dynamic.dylib)
+    [ -f "$runtime" ] || { echo "error: no UBSan runtime at $runtime" >&2; exit 1; }
+    flags+=(-Xlinker "$runtime" -Xlinker -rpath -Xlinker "$(dirname "$runtime")")
+  fi
+  runs=1
+  [ "$sanitizer" = thread ] && runs=$thread_runs
+  for run in $(seq 1 "$runs"); do
+    log=".build/sanitize/$sanitizer-$run.log"
+    cases=1000
+    [ "$run" -gt 1 ] && cases=50
+    started=$(date +%s)
+    if PROPERTY_CASES=$cases swift test "${flags[@]}" > "$log" 2>&1; then
+      result=passed
+    else
+      result=failed
+      failed+=("$sanitizer run $run")
+    fi
+    echo "$sanitizer run $run: $result in $(( $(date +%s) - started )) s, $cases property cases ($log)"
+    grep -E "^✘ Test .* failed|ERROR: AddressSanitizer|WARNING: ThreadSanitizer|runtime error:" "$log" \
+      | sed 's/\x1b\[[0-9;]*m//g' | sort -u | head -20 || true
+  done
+done
+
+if [ ${#failed[@]} -gt 0 ]; then
+  echo "failed: ${failed[*]}" >&2
+  exit 1
+fi
+echo "all sanitizer runs passed"
