@@ -314,8 +314,8 @@ struct RoundTrip {
         ])
         let report = writer.write(edit, to: [copy.path])
         edits += 1
-        if report.failures.map(\.kind) != [.writeFailed] {
-            failures.append("full disk: expected a write failure, got \(report)")
+        if report.failures.map(\.kind) != [.diskFull] {
+            failures.append("full disk: expected a full-disk failure, got \(report)")
         } else {
             print("full disk: \(report.failures[0].detail)", to: &standardError)
         }
