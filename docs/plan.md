@@ -109,6 +109,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | History, one row per track played, 1M synthetic plays (p95) | < 30 ms | < 80 ms |
 | Record a play, 1M synthetic plays (p95) | < 1 ms | < 6 ms |
 | History table plus its index, 1M synthetic plays | < 40 MB | < 40 MB |
+| Build the library health report over every fixture track (p95); the old Mac figure is an estimate until its checkpoint | < 1 s | < 3 s |
 
 ## Phases
 
