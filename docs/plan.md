@@ -1029,7 +1029,8 @@ Implementation plan (ADR [0022](decisions/0022-stable-track-identity-and-play-ti
    AppKit table). The browser swaps it in for the panes and track table, routes play, drag,
    Go to Item and the selection commands to it, and turns ⌘⌫, search and sorts off there.
 5. **App:** the sidebar row, the Go to Item rows, the commands' enabled states, and the
-   discard notice. `--snapshot-of timeline`.
+   discard notice. The timeline is checked with `--snapshot` from a home whose saved source
+   is `timeline`.
 6. **Bench:** 1M synthetic plays under `.build/bench-plays`, four benchmarks with the budgets
    above, and the smart playlist, sort, search and launch numbers before and after.
 7. **Tests:** LibraryTests (IDs and Date Added across a rebuild and a file leaving and coming
