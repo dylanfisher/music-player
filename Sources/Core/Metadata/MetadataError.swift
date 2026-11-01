@@ -21,3 +21,10 @@ public struct MetadataError: Error, Equatable, CustomStringConvertible {
         "\(path): \(detail)" + (offset.map { " (at byte \($0))" } ?? "")
     }
 }
+
+extension MetadataError {
+    /// For the simulated NAS (Fixtures), which fails reads as a dropped volume would.
+    package init(unreadable path: String, detail: String) {
+        self.init(path: path, kind: .unreadable, offset: nil, detail: detail)
+    }
+}

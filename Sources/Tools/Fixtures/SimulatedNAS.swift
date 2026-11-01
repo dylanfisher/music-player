@@ -38,6 +38,8 @@ public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
     private let lock = NSLock()
     private var reading = 0
     private var mostReading = 0
+    /// Operations served before the NAS drops, or nil while it stays up.
+    private var operationsBeforeDrop: Int?
     // Seeded, so the same delays are drawn every run, though threads take them in any order.
     private var random = SplitMix64(seed: 0x4E41_5344_454C_4159)
 
@@ -53,13 +55,26 @@ public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
         slots = DispatchSemaphore(value: capacity)
     }
 
+    /// Drops the NAS after `operations` more operations: every listing and file operation after
+    /// that fails, as on an SMB mount whose server went away while the mount stayed.
+    public func drop(afterOperations operations: Int) {
+        lock.withLock { operationsBeforeDrop = operations }
+    }
+
+    /// Brings a dropped NAS back.
+    public func reconnect() { lock.withLock { operationsBeforeDrop = nil } }
+
     /// The most files that were being read at once.
     public var mostFilesReadAtOnce: Int { lock.withLock { mostReading } }
 
     public func volumeIsLocal(_ path: String) throws -> Bool? { false }
 
     public func contentsOfDirectory(_ directory: String, keys: [URLResourceKey]) throws -> [URL] {
-        serve(1, seconds: listingSeconds)
+        guard serve(1, seconds: listingSeconds) else {
+            throw CocoaError(
+                .fileReadUnknown,
+                userInfo: [NSFilePathErrorKey: directory, NSUnderlyingErrorKey: POSIXError(.EIO)])
+        }
         return try system.contentsOfDirectory(directory, keys: keys)
     }
 
@@ -69,8 +84,9 @@ public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
             mostReading = max(mostReading, reading)
         }
         defer { lock.withLock { reading -= 1 } }
+        let dropped = MetadataError(unreadable: path, detail: "the simulated NAS dropped")
         // Opening, then each read the parser made (one, when it failed), then closing.
-        serve(1, seconds: operationSeconds)
+        guard serve(1, seconds: operationSeconds) else { throw dropped }
         if let fileDelay {
             // Box-Muller, from two uniform draws in (0, 1].
             let (u, v) = lock.withLock {
@@ -80,7 +96,9 @@ public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
                 )
             }
             let normal = (-2 * log(u)).squareRoot() * cos(2 * .pi * v)
-            serve(1, seconds: fileDelay.medianSeconds * exp(fileDelay.sigma * normal))
+            guard serve(1, seconds: fileDelay.medianSeconds * exp(fileDelay.sigma * normal)) else {
+                throw dropped
+            }
         }
         let result = Result { () throws(MetadataError) -> ParsedFile in
             try system.readMetadata(at: path)
@@ -90,15 +108,23 @@ public final class SimulatedNAS: ScanFileAccess, @unchecked Sendable {
             case .success(let parsed): parsed.readCount
             case .failure: 1
             }
-        serve(reads + 1, seconds: operationSeconds)
+        guard serve(reads + 1, seconds: operationSeconds) else { throw dropped }
         return try result.get()
     }
 
-    private func serve(_ operations: Int, seconds: Double) {
+    /// Serves `operations` one at a time; false once the NAS has dropped.
+    private func serve(_ operations: Int, seconds: Double) -> Bool {
         for _ in 0..<operations {
+            let up = lock.withLock {
+                guard let left = operationsBeforeDrop else { return true }
+                operationsBeforeDrop = max(0, left - 1)
+                return left > 0
+            }
+            guard up else { return false }
             slots.wait()
             usleep(useconds_t(seconds * 1e6))
             slots.signal()
         }
+        return true
     }
 }

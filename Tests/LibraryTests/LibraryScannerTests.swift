@@ -1,9 +1,11 @@
 import Foundation
+import SQLite3
 import Testing
 
 @testable import Fixtures
 @testable import Library
 @testable import Metadata
+@testable import SQLite
 @testable import Settings
 
 @Test func indexesEveryFileAndStoresEachProblem() throws {
@@ -357,4 +359,68 @@ private struct FailingReads: ScanFileAccess {
         LibraryError.notWatched("/x").description
             == "/x isn't a watched folder; add it in settings,"
             + " or pass --db <file> to scan into a separate index")
+}
+
+@Test func aNASThatDropsMidScanKeepsEveryTrack() throws {
+    let library = try TestLibrary()
+    let nas = SimulatedNAS(operationSeconds: 0, listingSeconds: 0, capacity: 4, fileDelay: nil)
+    let scanner = LibraryScanner(databaseURL: library.databaseURL, networkReaders: 2, access: nas)
+    let folder = WatchedFolder(path: library.root, kind: .network)
+    _ = try scanner.scan(folder)
+    let index = try library.index()
+    let before = try index.trackIDs(TrackFilter(), sortedBy: .title)
+    // Every file changed, so the rescan reads each one, and the NAS drops partway through.
+    for file in library.manifest.files where file.malformation == nil {
+        let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: library.path(file)))
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(count: 16))
+        try handle.close()
+    }
+    nas.drop(afterOperations: 12)
+
+    let dropped = try scanner.scan(folder)
+    #expect(dropped.removed == 0)
+    #expect(try index.trackIDs(TrackFilter(), sortedBy: .title) == before)
+    let unreadable = try index.fileIssues().filter { $0.problem == .failure(.unreadable) }
+    #expect(!unreadable.isEmpty || dropped.issues.contains { $0.kind == .unreadable })
+
+    nas.reconnect()
+    let back = try scanner.scan(folder)
+    #expect(back.removed == 0)
+    #expect(back.issues.isEmpty)
+    #expect(try index.trackCount() == library.readableCount)
+    #expect(try !index.fileIssues().contains { $0.problem == .failure(.unreadable) })
+}
+
+@Test func aFullDatabaseFailsTheScanAndKeepsTheIndex() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let before = try index.trackIDs(TrackFilter(), sortedBy: .title)
+    let issues = try index.fileIssues()
+    for file in library.manifest.files where file.malformation == nil {
+        let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: library.path(file)))
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(count: 16))
+        try handle.close()
+    }
+    // No more pages than it has: SQLITE_FULL, as on a full disk.
+    let pages = try index.database.prepare("PRAGMA page_count").map { try $0.int(0) }[0]
+    try index.database.execute("PRAGMA max_page_count = \(pages)")
+    let pipeline = ScanPipeline(
+        [library.root], root: library.root, filter: FolderFilter(include: [], exclude: []),
+        known: try index.knownFiles(under: library.root), index: index, controller: nil,
+        readers: 2, access: SystemFileAccess(), control: ScanControl(),
+        counter: ProgressCounter(nil), rootIsThere: { true })
+    #expect {
+        try pipeline.run()
+    } throws: { error in
+        ((error as? SQLiteError)?.code ?? 0) & 0xFF == SQLITE_FULL
+    }
+    #expect(try index.trackIDs(TrackFilter(), sortedBy: .title) == before)
+    #expect(try index.fileIssues() == issues)
+    // With room again, the next scan stores every change.
+    try index.database.execute("PRAGMA max_page_count = 1073741823")
+    #expect(
+        try library.scan().read == library.manifest.files.filter { $0.malformation == nil }.count)
 }
