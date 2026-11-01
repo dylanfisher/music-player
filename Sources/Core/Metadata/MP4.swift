@@ -1,3 +1,15 @@
+/// The atom types the reader and the tag writer both name.
+package enum MP4Type {
+    package static let moov = "moov"
+    package static let udta = "udta"
+    package static let meta = "meta"
+    package static let ilst = "ilst"
+    package static let mdat = "mdat"
+    package static let free = "free"
+    package static let data = "data"
+    package static let co64 = "co64"
+}
+
 /// An MP4 atom: a 32-bit size (1 means a 64-bit size follows, 0 means "to the end of the file" at
 /// the top level), a four-character type, then the body.
 package struct Atom {
@@ -11,7 +23,7 @@ package struct Atom {
 func parseMP4(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     var moov: Atom?
     try forEachAtom(reader, in: 0..<reader.size, parent: nil) { atom throws(ParseFailure) in
-        if atom.type == "moov" { moov = atom }
+        if atom.type == MP4Type.moov { moov = atom }
         return moov == nil
     }
     guard let moov else { throw .malformed(at: 0, "MP4 without a moov atom") }
@@ -21,7 +33,7 @@ func parseMP4(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     try forEachAtom(reader, in: moov.body, parent: moov) { child throws(ParseFailure) in
         switch child.type {
         case "trak" where track == nil: track = try soundTrack(reader, child)
-        case "udta": items = try metadataItems(reader, child)
+        case MP4Type.udta: items = try metadataItems(reader, child)
         default: break
         }
         return true

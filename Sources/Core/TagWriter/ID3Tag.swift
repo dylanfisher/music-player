@@ -151,9 +151,7 @@ struct ID3Tag {
     /// The fields an edit replaces this frame for. A described comment is a player's own data.
     private func id3Fields(of frame: ID3Frame) -> Set<TagEditField> {
         guard
-            let group = TagGroup.allCases.first(where: { group in
-                group.readerFields.contains { id3FrameIDs(for: $0).contains(frame.id) }
-            })
+            let group = TagGroup.of(matching: { id3FrameIDs(for: $0).contains(frame.id) })
         else { return [] }
         if group == .comment, !frame.isUserComment(version: version) { return [] }
         return Set(group.fields)

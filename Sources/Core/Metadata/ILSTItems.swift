@@ -64,12 +64,12 @@ private func sniffedMIMEType(_ head: [UInt8]) -> String? {
 func metadataItems(_ reader: ByteReader, _ udta: Atom) throws(ParseFailure) -> ILSTItems {
     var items = ILSTItems()
     try forEachAtom(reader, in: udta.body, parent: udta) { meta throws(ParseFailure) in
-        guard meta.type == "meta" else { return true }
+        guard meta.type == MP4Type.meta else { return true }
         let first = meta.body.lowerBound..<min(meta.body.upperBound, meta.body.lowerBound + 4)
         let isFullBox = try reader.bytes(first).uint32BE(0) == 0
         let children = (meta.body.lowerBound + (isFullBox ? 4 : 0))..<meta.body.upperBound
         try forEachAtom(reader, in: children, parent: meta) { ilst throws(ParseFailure) in
-            guard ilst.type == "ilst" else { return true }
+            guard ilst.type == MP4Type.ilst else { return true }
             try forEachAtom(reader, in: ilst.body, parent: ilst) { item throws(ParseFailure) in
                 // The item is inside `ilst`, so damage within it spoils only that field.
                 reader.skippingUnreadableField(at: item.start) { () throws(ParseFailure) in
@@ -95,7 +95,7 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
     var name: String?
     try forEachAtom(reader, in: item.body, parent: item) { child throws(ParseFailure) in
         switch child.type {
-        case "data" where data == nil: data = child
+        case MP4Type.data where data == nil: data = child
         case "mean": mean = latin1(try reader.bytes(child.body).suffix(from: 4).array)
         case "name": name = latin1(try reader.bytes(child.body).suffix(from: 4).array)
         default: break

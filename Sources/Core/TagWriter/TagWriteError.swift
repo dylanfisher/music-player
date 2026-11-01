@@ -27,7 +27,7 @@ public struct TagWriteError: Error, Equatable, CustomStringConvertible {
     public var kind: Kind
     public var detail: String
 
-    public init(path: String, kind: Kind, detail: String) {
+    package init(path: String, kind: Kind, detail: String) {
         self.path = path
         self.kind = kind
         self.detail = detail
@@ -36,5 +36,5 @@ public struct TagWriteError: Error, Equatable, CustomStringConvertible {
     public var description: String { "\(path): \(detail)" }
 
     /// Whether the rest of a batch would fail the same way, so it stops after this file.
-    public var stopsBatch: Bool { kind == .journal || kind == .diskFull }
+    var stopsBatch: Bool { kind == .journal || kind == .diskFull }
 }

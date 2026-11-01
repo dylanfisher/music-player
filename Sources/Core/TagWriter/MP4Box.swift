@@ -184,15 +184,3 @@ func mp4ItemKey(_ item: MP4Box) -> String {
 func bigEndianValue(_ bytes: some Collection<UInt8>) -> UInt64 {
     bytes.reduce(0) { $0 << 8 | UInt64($1) }
 }
-
-/// The atom types the writer names more than once.
-enum MP4Type {
-    static let moov = "moov"
-    static let udta = "udta"
-    static let meta = "meta"
-    static let ilst = "ilst"
-    static let mdat = "mdat"
-    static let free = "free"
-    static let data = "data"
-    static let co64 = "co64"
-}

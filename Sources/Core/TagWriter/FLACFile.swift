@@ -21,7 +21,7 @@ struct FLACFile {
     /// The most a block's 24-bit length holds.
     static let maximumBlockBytes = 1 << 24 - 1
     static let rewritePaddingBytes = 2048
-    static let marker = Array("fLaC".utf8)
+    static let marker = Array(flacMarker.utf8)
 
     var size: Int
     var blocks: [Block]
@@ -184,7 +184,7 @@ struct FLACFile {
     // MARK: Layout
 
     func layout() throws(ParseFailure) -> TagLayout {
-        var blocks = [TagBlock(String(decoding: Self.marker, as: UTF8.self), 0..<4, .header)]
+        var blocks = [TagBlock(flacMarker, 0..<4, .header)]
         for block in self.blocks {
             let range = block.original!
             let name = BlockType(rawValue: block.type).map { "\($0)" } ?? "block\(block.type)"
@@ -203,9 +203,7 @@ struct FLACFile {
                 blocks.append(TagBlock("\(name)/count", count..<count + 4, .header))
                 for comment in comments {
                     let key = vorbisKey(comment.raw)
-                    let group = TagGroup.allCases.first { group in
-                        group.readerFields.contains { vorbisKeys(for: $0).contains(key) }
-                    }
+                    let group = TagGroup.of(matching: { vorbisKeys(for: $0).contains(key) })
                     blocks.append(
                         TagBlock(
                             "\(name)/\(key)", comment.range, .field,

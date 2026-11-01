@@ -8,15 +8,8 @@ public enum TagEditField: String, CaseIterable, Sendable {
     /// "1" sets the flag; empty text or "0" clears it.
     case compilation
 
-    public var isNumber: Bool {
-        switch self {
-        case .trackNumber, .trackTotal, .discNumber, .discTotal: true
-        default: false
-        }
-    }
-
     /// The largest track or disc number every format holds: MP4 stores them in 16 bits.
-    public static let maximumNumber = Int(UInt16.max)
+    static let maximumNumber = Int(UInt16.max)
 }
 
 /// New art for a file, or none.

@@ -1,3 +1,6 @@
+/// The first four bytes of a FLAC file.
+package let flacMarker = "fLaC"
+
 /// FLAC: "fLaC", then metadata blocks, each a type byte (the top bit marks the last) and a 24-bit
 /// length. Reads STREAMINFO, VORBIS_COMMENT and PICTURE, and skips the rest by length.
 func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {

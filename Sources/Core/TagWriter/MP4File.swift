@@ -269,9 +269,7 @@ struct MP4File {
             }
             if path.hasPrefix("moov/udta/meta/ilst/") {
                 if box.type == mp4CoverItemType { return [TagBlock(path, range, .art)] }
-                let group = TagGroup.allCases.first { group in
-                    group.readerFields.contains { mp4ItemTypes(for: $0).contains(box.type) }
-                }
+                let group = TagGroup.of(matching: { mp4ItemTypes(for: $0).contains(box.type) })
                 return [
                     TagBlock(
                         String(path.dropLast(box.type.count)) + mp4ItemKey(box), range, .field,

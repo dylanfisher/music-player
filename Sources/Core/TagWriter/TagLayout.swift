@@ -1,26 +1,26 @@
 /// Where a file keeps its tags and its audio: every block the writer knows, in file order. The
 /// corpus survey prints it, and the round trip compares two files' blocks to show an edit left
 /// the rest alone.
-public struct TagLayout: Equatable, Sendable {
-    public enum Container: String, Sendable, CaseIterable {
+package struct TagLayout: Equatable, Sendable {
+    package enum Container: String, Sendable {
         case flac, mp4, mp3, wav, aiff
     }
 
-    public var container: Container
-    public var blocks: [TagBlock]
+    package var container: Container
+    package var blocks: [TagBlock]
     /// The audio's bytes, which an edit must never change. MP4 can have several `mdat`s.
-    public var payload: [Range<Int>]
+    package var payload: [Range<Int>]
     /// Facts about the layout a writer has to respect, such as "moov after mdat" or "ID3v2.4".
-    public var notes: [String]
+    package var notes: [String]
 
     /// Bytes the tags can grow into without moving the audio.
-    public var paddingBytes: Int {
+    package var paddingBytes: Int {
         blocks.filter { $0.kind == .padding }.reduce(0) { $0 + $1.range.count }
     }
 }
 
-public struct TagBlock: Equatable, Sendable {
-    public enum Kind: String, Sendable {
+package struct TagBlock: Equatable, Sendable {
+    package enum Kind: String, Sendable {
         /// A container's header or a tag's header, whose sizes change with its contents.
         case header
         /// A tag field: an ID3 frame, an MP4 `ilst` item or a Vorbis comment.
@@ -35,11 +35,11 @@ public struct TagBlock: Equatable, Sendable {
     }
 
     /// Where the block sits, such as "moov/udta/meta/ilst/©nam" or "ID3/TIT2".
-    public var path: String
-    public var range: Range<Int>
-    public var kind: Kind
+    package var path: String
+    package var range: Range<Int>
+    package var kind: Kind
     /// The fields whose edit replaces this block. Empty for blocks no edit replaces.
-    public var fields: Set<TagEditField>
+    package var fields: Set<TagEditField>
 
     init(_ path: String, _ range: Range<Int>, _ kind: Kind, fields: Set<TagEditField> = []) {
         self.path = path

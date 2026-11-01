@@ -53,7 +53,7 @@ enum TagFile {
 
 /// Every block of the file at `url` and where its audio is, for the corpus survey and for
 /// checking that an edit left the other blocks alone.
-public func readTagLayout(at url: URL) throws(MetadataError) -> TagLayout {
+package func readTagLayout(at url: URL) throws(MetadataError) -> TagLayout {
     do throws(ParseFailure) {
         return try TagFile(path: url.path).layout()
     } catch {

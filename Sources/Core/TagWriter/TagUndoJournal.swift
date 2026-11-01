@@ -8,20 +8,24 @@ import Foundation
 /// square, and every record is on the disk before its music file is replaced.
 public struct TagUndoJournal: Sendable {
     /// Edits kept; older ones are dropped once a new one is written.
-    public static let capacity = 50
+    package static let capacity = 50
     /// The bytes the kept edits may take by default; older ones are dropped past it. The newest
     /// edit is kept whatever its size, so it can always be undone.
-    public static let defaultCapacityBytes = 512 * 1024 * 1024
+    package static let defaultCapacityBytes = 512 * 1024 * 1024
     static let folderName = "tag-undo"
     /// Entry folders and record files are numbers, zero-padded so they sort by name.
     fileprivate static let sequenceDigits = 8
     private static let recordSuffix = ".json"
     private static let bytesSuffix = ".bytes"
 
-    public let directory: URL
+    package let directory: URL
     let capacityBytes: Int
 
-    public init(dataDirectory: URL, capacityBytes: Int = defaultCapacityBytes) {
+    public init(dataDirectory: URL) {
+        self.init(dataDirectory: dataDirectory, capacityBytes: Self.defaultCapacityBytes)
+    }
+
+    package init(dataDirectory: URL, capacityBytes: Int) {
         directory = dataDirectory.appendingPathComponent(Self.folderName)
         self.capacityBytes = capacityBytes
     }

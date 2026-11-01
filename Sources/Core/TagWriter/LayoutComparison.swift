@@ -5,7 +5,7 @@ import Metadata
 /// field, picture and other block outside the edit must be there, in the same order, byte for
 /// byte. Headers, padding and chunk offsets change with the edit, and the audio is compared by
 /// hash elsewhere, so they're left out, as are blocks the edit added.
-public func untouchedBlockDifferences(original: URL, edited: URL, edit: TagEdit)
+package func untouchedBlockDifferences(original: URL, edited: URL, edit: TagEdit)
     throws(MetadataError) -> [String]
 {
     let before = try kept(readTagLayout(at: original), edit)
