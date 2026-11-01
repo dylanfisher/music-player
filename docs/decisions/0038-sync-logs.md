@@ -75,8 +75,12 @@ the config file but music files, through the tag writer.
   `O_APPEND` and must be a regular file of this user with one link. Its size says how much
   arrived; bytes past what `sync_state` recorded (a push that died before recording) must be
   the outbox's next bytes, so the push continues from there, even mid-line. A file shorter
-  than recorded, or one that doesn't match, isn't written and is reported: some other process
-  wrote it. A new folder gets the whole outbox.
+  than recorded, or one that doesn't match, isn't written and is reported, and the other logs
+  are still read: some other process wrote it. To start it again the owner moves the log out
+  of the folder, which the report says; an empty log gets the whole outbox, as a new folder
+  does, and the other machines read it again from the start without counting twice. A lock
+  file beside the database, held with `flock` for the whole push, keeps a second copy of the
+  app from pushing at the same time; that copy reports it and waits.
 - **Caps**, shared by the writer and every reader: 4 MiB a line, 1 GiB and 4,000,000 events
   a log. A log at a cap takes no more events and says so once in the window's notices; a
   playlist whose list doesn't fit a line isn't synced, also with a notice. A million plays are
@@ -109,7 +113,8 @@ the config file but music files, through the tag writer.
   for the next read. The logs are merged in clock order, so a playlist's creation comes before
   its rename from another machine, and applied in transactions of 20,000 events, each storing
   how far it read every log (`sync_logs`), so a crash repeats nothing. A log shorter than where
-  reading stopped is read again from the start and reported; its sequence numbers keep events
+  reading stopped, or where that offset no longer ends a line, was replaced: it's read again
+  from the start and reported; its sequence numbers keep events
   already applied from counting twice.
 - **Plays and skips** are a union: each event applies once, by its sequence number. A play
   adds a history row and a play, and keeps the latest Last Played. Merged plays join the

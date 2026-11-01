@@ -161,7 +161,8 @@ enum SyncFileError: Error, Equatable, CustomStringConvertible {
             "writing \(name) failed: \(String(cString: strerror(code)))"
         case .notOurs(let name, let reason):
             "\(name) isn't what this Mac logged (\(reason)), so it isn't written; another"
-                + " program or another Mac with this one's library wrote it"
+                + " program or another Mac with this one's library wrote it. To start it again,"
+                + " move \(name) out of the sync folder: the next sync writes this Mac's whole log"
         }
     }
 }

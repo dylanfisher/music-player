@@ -364,14 +364,43 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(try b.track("x.flac")?.playCount == 2)
 }
 
-@Test func aLogSomeoneElseWroteIsntWrittenAgain() throws {
+@Test func aLogSomeoneElseWroteIsntWrittenButTheOthersAreReadAndItCanStartAgain() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    try a.scanned("x.flac")
+    try b.scanned("x.flac")
+    try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_000)
+    try a.sync()
+    let log = URL(fileURLWithPath: nas.log(try a.id))
+    try Data("{}\n".utf8).write(to: log)
+    try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_100)
+    try b.index.recordPlay(b.path("x.flac"), at: 1_700_000_200)
+    try b.sync()
+    let report = try a.sync()
+    #expect(report.problems.contains { $0.contains("isn't what this Mac logged") })
+    #expect(try Data(contentsOf: log) == Data("{}\n".utf8))
+    // B's play still arrived.
+    #expect(try a.track("x.flac")?.playCount == 3)
+    // Moved away, the log is written again whole, and B counts nothing twice.
+    try FileManager.default.removeItem(at: log)
+    #expect(try a.sync().pushed == 3)
+    let again = try b.sync()
+    #expect(again.problems.allSatisfy { $0.contains("read again from the start") }, "\(again)")
+    #expect(try b.track("x.flac")?.playCount == 3)
+}
+
+@Test func asecondCopyOfTheAppDoesntPushAtTheSameTime() throws {
     let nas = try SimulatedNAS()
     let a = try machines(1, nas)[0]
     try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_000)
-    try a.sync()
-    try Data("{}\n".utf8).write(to: URL(fileURLWithPath: nas.log(try a.id)))
-    try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_100)
-    #expect(throws: SyncFileError.self) { try a.sync() }
+    let lock = open(a.databaseURL.path + ".sync-lock", O_CREAT | O_RDWR, 0o644)
+    defer { close(lock) }
+    #expect(flock(lock, LOCK_EX) == 0)
+    let report = try a.sync()
+    #expect(report.pushed == 0)
+    #expect(report.problems.contains { $0.contains("another copy of the app") })
+    flock(lock, LOCK_UN)
+    #expect(try a.sync().pushed == 1)
 }
 
 @Test func anImportReachesTheOtherMachinesAsEvents() throws {

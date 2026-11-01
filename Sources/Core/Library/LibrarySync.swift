@@ -15,11 +15,17 @@ extension LibraryIndex {
     /// Pushes this machine's log to the folder at `path`, which is named `folder` in the
     /// config, then reads and applies every other machine's log there. Only the push runs when
     /// `pushOnly`. A problem with one log is in the report, and the others carry on; a folder
-    /// that can't be opened, or this machine's log there not matching, throws.
+    /// that can't be opened throws. A push that can't go, such as to a log some other process
+    /// wrote, is in the report, and the others' logs are still read.
     public func sync(folder: String, at path: String, pushOnly: Bool = false) throws -> SyncReport {
         let directory = try SyncDirectory(path: path)
         var report = SyncReport()
-        report.pushed = try push(to: directory, folder: folder)
+        do {
+            report.pushed = try push(to: directory, folder: folder)
+        } catch let error as SyncFileError {
+            logger.error("\(error)")
+            report.problems.append("\(error)")
+        }
         if !pushOnly { try merge(from: directory, folder: folder, into: &report) }
         return report
     }
@@ -45,7 +51,20 @@ extension LibraryIndex {
         }[0]
         // Nothing waiting means no call to the folder at all.
         guard last > seq || !same else { return 0 }
+        // One push at a time, should a second copy of the app open this library.
+        let lock = open(fileURL.path + ".sync-lock", O_CREAT | O_RDWR | O_CLOEXEC, 0o644)
+        guard lock >= 0 else { throw SyncFileError.open(fileURL.path + ".sync-lock", errno) }
+        defer { close(lock) }
+        guard flock(lock, LOCK_EX | LOCK_NB) == 0 else {
+            throw SyncFileError.refused(
+                fileURL.path + ".sync-lock", "is held by another copy of the app, which pushes")
+        }
         let file = try directory.openForAppending(syncLogName(state.machine))
+        // An empty log is one the owner moved away to start it again: it gets the whole log.
+        if file.size == 0 {
+            seq = 0
+            bytes = 0
+        }
         guard file.size >= bytes else {
             throw SyncFileError.notOurs(
                 file.name, "it's \(file.size) bytes, and \(bytes) were written to it")
@@ -123,12 +142,17 @@ extension LibraryIndex {
                 if let stored {
                     cursor.seq = stored.seq
                     cursor.quietThrough = stored.seq
-                    if stored.folder == folder, stored.offset <= file.size {
+                    // Where reading stopped must still end a line, or the log was replaced.
+                    let endsLine =
+                        try stored.offset <= file.size
+                        && (stored.offset == 0
+                            || file.read((stored.offset - 1)..<stored.offset) == [0x0A])
+                    if stored.folder == folder, endsLine {
                         cursor.restart(at: stored.offset, lines: stored.lines)
                     } else if stored.folder == folder {
                         cursor.note(
-                            "it's \(file.size) bytes, shorter than the \(stored.offset) read"
-                                + " before, so it's read again from the start")
+                            "it's no longer what was read before (\(file.size) bytes, read to"
+                                + " \(stored.offset)), so it's read again from the start")
                     }
                 }
                 try cursor.advance(wallMs: wallClockMs())

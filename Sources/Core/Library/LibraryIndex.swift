@@ -17,6 +17,8 @@ public func libraryFileURL(in dataDirectory: URL) -> URL {
 /// scanner writes through its own; readers on other connections see each committed batch.
 public final class LibraryIndex {
     let database: Database
+    /// Where the database is; other files of the library sit beside it.
+    let fileURL: URL
     /// Name to row ID, loaded on first use and cleared when orphans are deleted.
     private var artistIDs: [String: Int64]?
     private var genreIDs: [String: Int64]?
@@ -39,6 +41,7 @@ public final class LibraryIndex {
     /// saying where, and a new library is made (ADR 0023). Any other open moving it could leave
     /// a connection opened before on the old file, and the library split in two.
     public init(at url: URL, movingAsideIfUnreadable: Bool = false) throws {
+        fileURL = url
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let detail: String?
