@@ -1381,7 +1381,7 @@ itself drawn before the timeline's first page, and kept the one-time stats-disca
 it's shown. Known limits: paths are byte-exact, so a Unicode or case variant reached another way
 gets a second ID; commands on timeline rows whose files are all missing do nothing.
 
-### 16. Album artist and more columns
+### 16. Album artist and every metadata column
 
 The Artist pane lists track artists, so a compilation or an album with guest artists spreads
 across many entries, and albums that share a title by different artists repeat by name in the
@@ -1395,12 +1395,31 @@ Album pane (the known limit in phase 5's Result).
       the title wherever two entries would otherwise read the same.
 - [ ] Sorting by Artist or Album with the setting on orders by album artist, then album, disc
       and track, so an album's tracks stay together.
-- [ ] Columns for every field the index already reads that the table can't show yet: composer,
-      comment, track total, disc total, compilation, channels, file size and bit rate. Each is
-      sortable and available to smart rules where it makes sense.
+- [ ] **A column for every piece of metadata**, each one optional, sortable, and a smart-rule
+      field where that makes sense. The list matches Swinsian's column menu:
+      - Already read, not yet a column: composer, comment, track total, disc total, compilation,
+        channels.
+      - From the file and the index: file size, bit rate, file name, file type, date created and
+        date modified (from the file system at scan time), and "#" (the row's position in the
+        list as shown).
+      - Display forms: "track of total" (3 of 12) and "disc of total", which sort as the
+        track and disc numbers do; Album Art, a thumbnail through `ArtworkLoader`, sorting by
+        whether a track has art.
+      - New tags for the tag reader to index, for every format it reads: grouping, catalog
+        number, barcode, BPM, key, conductor, lyricist, publisher, copyright, encoder,
+        description, disc subtitle, work, movement number and movement name, and original
+        release date. Each format's key for each field follows MusicBrainz Picard's tag mapping
+        table; record the mapping in the tag-reader ADR. A field missing from a file is empty,
+        never guessed.
+      - Loved: a yes/no stat kept in the database beside ratings (Swinsian's heart), with a
+        command to toggle it, so phase 18 can import it.
+- [ ] The owner's minimum, shown by default in this order: #, Album Art, Title, Artist, Album,
+      Track of Total, Time, Year, Genre, Grouping, Catalog Number, Bit Rate, Sample Rate, Size,
+      Play Count, Date Added. The rest are off until chosen.
+- [ ] The tag editor (phase 11) stays as it is; editing the new fields is a later change.
 - [ ] Tests: the pane with the setting on and off, compilations, same-title albums, the sort
-      order, and each new column's sort.
-- [ ] Bench: the pane and re-sort budgets still hold with the setting on.
+      order, each new tag read from every format, and each new column's sort.
+- [ ] Bench: the pane, re-sort, scan, and database size budgets still hold.
 
 ### 17. Playlist files
 
@@ -1427,7 +1446,8 @@ comes from Swinsian; most other Mac users come from iTunes or Music.
 - [ ] **Swinsian:** read its library database (`~/Library/Application Support/Swinsian/`),
       opened read-only from a copy, never the live file. Bring across play counts, last played,
       ratings, date added, and manual playlists. Smart playlists whose rules map onto ours come
-      across as smart playlists; the rest are listed in the report.
+      across as smart playlists; the rest are listed in the report. Loved (the heart) comes
+      across too.
 - [ ] **iTunes and Music:** read an exported `Library.xml` (File ▸ Library ▸ Export Library)
       with `PropertyListSerialization`. The same fields, plus skip counts. Smart playlists are
       encoded in a private format, so they come across as manual playlists of their current
