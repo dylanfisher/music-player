@@ -43,15 +43,9 @@ public final class ArtworkLoader: @unchecked Sendable {
         } catch {
             throw ArtworkError.unreadable(path: path, reason: "\(error)")
         }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-        ]
-        guard let source = CGImageSourceCreateWithData(bytes as CFData, nil),
-            let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
-        else { throw ArtworkError.undecodable(path: path, mimeType: art.mimeType) }
+        guard let image = thumbnail(of: bytes, maxPixelSize: maxPixelSize) else {
+            throw ArtworkError.undecodable(path: path, mimeType: art.mimeType)
+        }
         lock.withLock {
             if images.updateValue(image, forKey: key) == nil {
                 recency.append(key)
@@ -69,6 +63,20 @@ public final class ArtworkLoader: @unchecked Sendable {
         recency.remove(at: index)
         recency.append(key)
     }
+}
+
+/// `bytes` decoded straight to an image whose longest side is at most `maxPixelSize`, or nil
+/// when they aren't an image. Every decode of art goes through this: the full-size image is
+/// never made, so a small file that declares a huge image costs only the thumbnail.
+public func thumbnail(of bytes: Data, maxPixelSize: Int) -> CGImage? {
+    let options: [CFString: Any] = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceShouldCacheImmediately: true,
+    ]
+    guard let source = CGImageSourceCreateWithData(bytes as CFData, nil) else { return nil }
+    return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
 }
 
 /// One picture in one file.

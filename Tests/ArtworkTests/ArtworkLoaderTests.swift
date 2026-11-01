@@ -98,3 +98,57 @@ private func fileWithArt(width: Int, height: Int, prefix: Int = 100) throws -> (
     #expect(image.width == 96)
     #expect(image.height == 96)
 }
+
+/// A 16-pixel image encoded as `type`, then its header changed to declare `side` by `side`
+/// pixels, as a hostile file's art could: a few hundred bytes claiming billions of pixels.
+private func imageDeclaring(side: Int, type: String) throws -> Data {
+    let context = try #require(
+        CGContext(
+            data: nil, width: 16, height: 16, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+    let encoded = NSMutableData()
+    let destination = try #require(
+        CGImageDestinationCreateWithData(encoded, type as CFString, 1, nil))
+    CGImageDestinationAddImage(destination, try #require(context.makeImage()), nil)
+    #expect(CGImageDestinationFinalize(destination))
+    var bytes = [UInt8](encoded as Data)
+    func put(_ value: Int, _ count: Int, at offset: Int) {
+        for index in 0..<count {
+            bytes[offset + index] = UInt8(value >> (8 * (count - 1 - index)) & 0xFF)
+        }
+    }
+    if type == "public.png" {
+        // IHDR's width and height, then its CRC over the type and the fields.
+        put(side, 4, at: 16)
+        put(side, 4, at: 20)
+        put(Int(crc32(bytes[12..<29])), 4, at: 29)
+    } else {
+        // The baseline frame header: length, precision, then height and width.
+        let frame = try #require(
+            bytes.indices.dropLast().first { bytes[$0] == 0xFF && bytes[$0 + 1] == 0xC0 })
+        put(side, 2, at: frame + 5)
+        put(side, 2, at: frame + 7)
+    }
+    return Data(bytes)
+}
+
+private func crc32(_ bytes: ArraySlice<UInt8>) -> UInt32 {
+    var crc: UInt32 = 0xFFFF_FFFF
+    for byte in bytes {
+        crc ^= UInt32(byte)
+        for _ in 0..<8 { crc = crc & 1 == 1 ? crc >> 1 ^ 0xEDB8_8320 : crc >> 1 }
+    }
+    return ~crc
+}
+
+@Test(arguments: ["public.png", "public.jpeg"])
+func aTinyImageDeclaringAHugeOneDecodesOnlyToAThumbnailOrNot(_ type: String) throws {
+    let side = type == "public.png" ? 1_000_000 : 65_000
+    let bytes = try imageDeclaring(side: side, type: type)
+    #expect(bytes.count < 4096)
+    let started = Date()
+    let image = thumbnail(of: bytes, maxPixelSize: 96)
+    #expect(Date().timeIntervalSince(started) < 5, "\(type)")
+    if let image { #expect(max(image.width, image.height) <= 96, "\(type)") }
+}

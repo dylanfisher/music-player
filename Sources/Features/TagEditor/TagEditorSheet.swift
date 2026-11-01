@@ -1,4 +1,5 @@
 import AppKit
+import Artwork
 import TagWriter
 
 /// The tag editor: a sheet with a field per tag, the art with Replace and Remove beside it, and
@@ -141,7 +142,10 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
     }
 
     private func showArt() {
-        artView.image = model.shownArt.flatMap(NSImage.init(data:))
+        // A Retina screen draws two pixels a point.
+        artView.image = model.shownArt
+            .flatMap { thumbnail(of: $0, maxPixelSize: Int(Self.artPoints) * 2) }
+            .map { NSImage(cgImage: $0, size: .zero) }
         artNote.stringValue =
             switch model.art {
             case .replaced: "New artwork"
