@@ -6,8 +6,48 @@ import Testing
 @testable import HALOutput
 
 private struct TimedOut: Error, CustomStringConvertible {
-    var seen: [PlaybackEvent?]
+    var seen: String
     var description: String { "timed out; events so far: \(seen)" }
+}
+
+/// Collects a stream's elements on a task of its own, so each wait for the next one is bounded
+/// and a missing event fails the test instead of hanging it.
+private final class Collected<Element: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var elements: [Element] = []
+    private var read = 0
+    private var reader: Task<Void, Never>?
+
+    init(_ stream: AsyncStream<Element>) {
+        reader = Task { [weak self] in
+            for await element in stream {
+                guard let self else { return }
+                self.lock.withLock { self.elements.append(element) }
+            }
+        }
+    }
+
+    deinit { reader?.cancel() }
+
+    /// The next element not yet returned, waiting at most `seconds` for it.
+    func next(within seconds: Double = 20) async throws -> Element {
+        let deadline = Date().addingTimeInterval(seconds)
+        while true {
+            let element = lock.withLock { () -> Element? in
+                guard read < elements.count else { return nil }
+                read += 1
+                return elements[read - 1]
+            }
+            if let element { return element }
+            guard Date() < deadline else {
+                throw TimedOut(seen: "\(lock.withLock { elements })")
+            }
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+    }
+
+    /// Every element returned so far.
+    var returned: [Element] { lock.withLock { Array(elements.prefix(read)) } }
 }
 
 /// An engine playing through a `DeviceOutput` on a null device, and every update it published.
@@ -15,30 +55,29 @@ private final class Rig: @unchecked Sendable {
     let device: NullDevice
     let output: DeviceOutput
     let engine: PlaybackEngine
-    private var updates: AsyncStream<PlaybackUpdate>.Iterator
-    private(set) var seen: [PlaybackUpdate] = []
+    private let updates: Collected<PlaybackUpdate>
 
     init(speed: Double = 4) async throws {
         device = NullDevice(speed: speed, keepsSamples: true)
         output = try DeviceOutput(provider: device, digitalVolume: false)
         engine = PlaybackEngine(output: output)
-        updates = await engine.updates().makeAsyncIterator()
+        updates = Collected(await engine.updates())
     }
 
     deinit { output.close() }
 
-    /// Waits for the first update from now that matches, and returns it.
+    var seen: [PlaybackUpdate] { updates.returned }
+
+    /// Waits up to `seconds` for the first update from now that matches, and returns it.
     @discardableResult
     func wait(
         seconds: Double = 20, for matches: @escaping @Sendable (PlaybackUpdate) -> Bool
     ) async throws -> PlaybackUpdate {
         let deadline = Date().addingTimeInterval(seconds)
-        while Date() < deadline {
-            guard let update = await updates.next() else { break }
-            seen.append(update)
+        while true {
+            let update = try await updates.next(within: deadline.timeIntervalSinceNow)
             if matches(update) { return update }
         }
-        throw TimedOut(seen: seen.map(\.event))
     }
 
     func wait(for event: PlaybackEvent) async throws {
@@ -179,6 +218,10 @@ private func contiguousFrames(of album: RampAlbum, from first: Int = 0, in sampl
     #expect(rig.device.captured.isEmpty)
 }
 
+/// Which call of `step` is the rate switch's when two tracks of different rates play: the first
+/// track configures and starts once, and nothing stops before the switch.
+private func switchCall(_ step: NullDevice.SessionStep) -> Int { step == .stop ? 1 : 2 }
+
 /// Gone before the step's error, and a moment after it, within the settle time.
 private let goneBeforeAndAfterTheError = [0, DeviceOutput.deviceSettleSeconds / 5]
 
@@ -189,12 +232,10 @@ func theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost(
     let low = try album(44_100, 16)
     let high = try album(96_000, 24)
     let rig = try await Rig(speed: 1)
+    rig.device.goAway(
+        during: step, call: switchCall(step), afterSeconds: goneAfterSeconds)
     await rig.engine.setQueue([low.tracks[0], high.tracks[1]])
     await rig.engine.play()
-    try await rig.wait(for: .trackStarted(index: 0))
-    // The first track has about a second left, and the next call of `step` is the switch's:
-    // nothing pauses or reconfigures before it.
-    rig.device.goAway(during: step, afterSeconds: goneAfterSeconds)
     let lost = try await rig.wait { $0.event == .deviceLost }
     #expect(lost.state.status == .paused)
     #expect(lost.state.currentIndex == 1)
@@ -217,10 +258,11 @@ func theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost(
     let low = try album(44_100, 16)
     let high = try album(96_000, 24)
     let rig = try await Rig(speed: 1)
+    rig.device.goAway(
+        during: .start, call: switchCall(.start),
+        afterSeconds: DeviceOutput.deviceSettleSeconds * 3)
     await rig.engine.setQueue([low.tracks[0], high.tracks[1]])
     await rig.engine.play()
-    try await rig.wait(for: .trackStarted(index: 0))
-    rig.device.goAway(during: .start, afterSeconds: DeviceOutput.deviceSettleSeconds * 3)
 
     // The device still reads as there when the step fails, so the output failed; once it
     // reads as gone, that's a loss, and its return is offered.
@@ -356,26 +398,27 @@ private func samples(of album: RampAlbum, _ ranges: [Range<Int>]) -> [Int32] {
     let device = NullDevice(speed: 8)
     let output = try DeviceOutput(provider: device, digitalVolume: false)
     defer { output.close() }
-    var events = output.events.makeAsyncIterator()
-    func next() async -> OutputEvent? { await events.next() }
+    let events = Collected(output.events)
+    func next() async throws -> OutputEvent { try await events.next() }
 
     device.unplug()
     output.load(OutputItem(id: 1, url: album.tracks[1]), startSeconds: 0, playing: true)
-    guard case .deviceLost = await next() else {
+    guard case .deviceLost = try await next() else {
         Issue.record("expected deviceLost")
         return
     }
     // The change notification is missed, but the next load opens the device anyway.
     device.plugInUnannounced()
     output.load(OutputItem(id: 2, url: album.tracks[1]), startSeconds: 0, playing: true)
-    while let event = await next() {
-        if case .finished = event { break }
+    while true {
+        if case .finished = try await next() { break }
     }
     // Now stopped, an unplug and replug must not report a return: nothing was waiting on it.
     device.unplug()
     device.plugIn()
     output.load(OutputItem(id: 3, url: album.tracks[1]), startSeconds: 0, playing: true)
-    while let event = await next() {
+    while true {
+        let event = try await next()
         if case .deviceReturned = event { Issue.record("reported a return after a clean open") }
         if case .trackStarted = event { break }
     }

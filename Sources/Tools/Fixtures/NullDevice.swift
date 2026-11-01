@@ -19,7 +19,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     private var runs: [CapturedRun] = []
     private var restoredDefaults = 0
     private var openSessions = 0
-    private var goesAwayDuring: (step: SessionStep, afterSeconds: Double)?
+    private var goesAwayDuring: (step: SessionStep, callsLeft: Int, afterSeconds: Double)?
 
     /// A call on a session the device can go away during.
     public enum SessionStep: String, CaseIterable, Sendable {
@@ -57,16 +57,23 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     /// Connects the device without telling the watcher, as when a change notification is missed.
     public func plugInUnannounced() { lock.withLock { connected = true } }
 
-    /// Makes the device go away during the next `step` of a session, as a DAC unplugged
-    /// mid-switch does: the call fails, and the device reads as gone and the watcher is told,
-    /// at once or `afterSeconds` after the call fails, as the HAL may report it later.
-    public func goAway(during step: SessionStep, afterSeconds: Double = 0) {
-        lock.withLock { goesAwayDuring = (step, afterSeconds) }
+    /// Makes the device go away during the `call`th call of `step` from now, counting every
+    /// session's, as a DAC unplugged mid-switch does: the call fails, and the device reads as
+    /// gone and the watcher is told, at once or `afterSeconds` after the call fails, as the HAL
+    /// may report it later. Counting calls lets a test arm it before playing, so it never
+    /// depends on when an event reaches the test.
+    public func goAway(during step: SessionStep, call: Int = 1, afterSeconds: Double = 0) {
+        precondition(call >= 1, "calls count from 1")
+        lock.withLock { goesAwayDuring = (step, call, afterSeconds) }
     }
 
     fileprivate func perform(_ step: SessionStep) throws {
         let delay = lock.withLock { () -> Double? in
             guard let goes = goesAwayDuring, goes.step == step else { return nil }
+            guard goes.callsLeft == 1 else {
+                goesAwayDuring?.callsLeft -= 1
+                return nil
+            }
             goesAwayDuring = nil
             return goes.afterSeconds
         }
