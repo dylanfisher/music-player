@@ -2,7 +2,8 @@ import Foundation
 import Log
 
 /// The owner's reference corpus, which is only ever read (ADR 0020).
-let referenceCorpusPath = "/Users/dylanfisher/Music/music-player/test"
+let referenceCorpusPath = FileManager.default.homeDirectoryForCurrentUser
+    .appendingPathComponent("Music/music-player/test").path
 
 /// Where corpus runs write: APFS clones of the reference, made again before each run by
 /// `scripts/tag-corpus`.
@@ -20,14 +21,19 @@ func writableRoots() throws -> [URL] {
 }
 
 /// Fails unless `path` is inside one of `roots` once symbolic links and ".." are resolved, and
-/// outside the reference corpus and `/Volumes`. Called before every write the tool makes.
+/// outside the reference corpus and `/Volumes`. A path must exist, or be a new name in a folder
+/// that does; a dangling link or a missing folder on the way is refused. Called before every
+/// write the tool makes.
 func requireCorpusWrite(_ path: String, roots: [URL]) throws {
-    let resolved = resolvedPath(path)
-    for forbidden in [referenceCorpusPath, "/Volumes"]
-    where resolved == resolvedPath(forbidden) || resolved.hasPrefix(resolvedPath(forbidden) + "/") {
-        throw CorpusError("refusing to write \(path): it's under \(forbidden)")
+    let resolved = try resolvedPath(path)
+    for forbidden in [referenceCorpusPath, "/Volumes"] {
+        // A forbidden folder that doesn't exist on this Mac is compared as written.
+        let place = (try? resolvedPath(forbidden)) ?? forbidden
+        if resolved == place || resolved.hasPrefix(place + "/") {
+            throw CorpusError("refusing to write \(path): it's under \(forbidden)")
+        }
     }
-    let allowed = roots.map { resolvedPath($0.path) }
+    let allowed = try roots.map { try resolvedPath($0.path) }
     guard allowed.contains(where: { resolved.hasPrefix($0 + "/") }) else {
         throw CorpusError(
             "refusing to write \(path): it isn't under \(roots.map(\.path).joined(separator: " or "))"
@@ -35,18 +41,22 @@ func requireCorpusWrite(_ path: String, roots: [URL]) throws {
     }
 }
 
-/// `path` with ".." and symbolic links resolved, as far up as the path exists, so a link can't
-/// lead a write out of the clone folder.
-func resolvedPath(_ path: String) -> String {
+/// `path` with ".." and symbolic links resolved. Throws for a path that is a dangling link or
+/// whose folder doesn't resolve.
+func resolvedPath(_ path: String) throws -> String {
     let standard = URL(fileURLWithPath: path).standardizedFileURL.path
-    var existing = standard
-    var rest: [String] = []
-    while !FileManager.default.fileExists(atPath: existing), existing != "/" {
-        rest.insert((existing as NSString).lastPathComponent, at: 0)
-        existing = (existing as NSString).deletingLastPathComponent
+    if let real = realpath(standard, nil) {
+        defer { free(real) }
+        return String(cString: real)
     }
-    guard let real = realpath(existing, nil) else { return standard }
+    var info = stat()
+    guard lstat(standard, &info) != 0, errno == ENOENT else {
+        throw CorpusError("refusing \(path): it's a link to nothing, or can't be resolved")
+    }
+    let folder = (standard as NSString).deletingLastPathComponent
+    guard let real = realpath(folder, nil) else {
+        throw CorpusError("refusing \(path): its folder \(folder) doesn't resolve")
+    }
     defer { free(real) }
-    return ([String(cString: real)] + rest).joined(separator: "/")
-        .replacingOccurrences(of: "//", with: "/")
+    return String(cString: real) + "/" + (standard as NSString).lastPathComponent
 }

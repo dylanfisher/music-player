@@ -3,25 +3,55 @@ import Testing
 
 @testable import TagCorpus
 
-@Test func writesGoOnlyToTheClonesAndTheTempDirectory() throws {
-    let roots = try writableRoots()
+@Test func writesGoOnlyUnderTheRoots() throws {
     let temp = FileManager.default.temporaryDirectory.appendingPathComponent("corpus-\(UUID())")
-    try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+    let clones = temp.appendingPathComponent("clones")
+    let elsewhere = temp.appendingPathComponent("clones-elsewhere")
+    for folder in [clones.appendingPathComponent("Artist"), elsewhere] {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
     defer { try? FileManager.default.removeItem(at: temp) }
-    try requireCorpusWrite(temp.appendingPathComponent("a.m4a").path, roots: roots)
-    try requireCorpusWrite(roots[0].appendingPathComponent("Artist/a.m4a").path, roots: roots)
+    let roots = [clones]
+    try requireCorpusWrite(clones.appendingPathComponent("a.m4a").path, roots: roots)
+    try requireCorpusWrite(clones.appendingPathComponent("Artist/a.m4a").path, roots: roots)
+    #expect(try writableRoots().contains(FileManager.default.temporaryDirectory))
 
-    let link = temp.appendingPathComponent("reference")
+    let link = clones.appendingPathComponent("reference")
     try FileManager.default.createSymbolicLink(
         atPath: link.path, withDestinationPath: referenceCorpusPath)
     for refused in [
         referenceCorpusPath + "/Vladislav Delay/Anima/01 Anima.m4a",
         "/Volumes/music/library/a.flac",
         NSHomeDirectory() + "/Music/a.mp3",
-        temp.path + "/../../../../.." + NSHomeDirectory() + "/Music/a.mp3",
+        clones.path + "/../../../../../.." + NSHomeDirectory() + "/Music/a.mp3",
         link.appendingPathComponent("Vladislav Delay/Anima/01 Anima.m4a").path,
-        roots[0].path,
-        roots[0].path + "-elsewhere/a.m4a",
+        clones.path,
+        elsewhere.appendingPathComponent("a.m4a").path,
+    ] {
+        #expect(throws: CorpusError.self, "\(refused)") {
+            try requireCorpusWrite(refused, roots: roots)
+        }
+    }
+}
+
+@Test func theReferenceIsFoundFromTheHomeFolder() {
+    #expect(referenceCorpusPath == NSHomeDirectory() + "/Music/music-player/test")
+}
+
+@Test func danglingLinksAndMissingFoldersAreRefused() throws {
+    let temp = FileManager.default.temporaryDirectory.appendingPathComponent("corpus-\(UUID())")
+    try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: temp) }
+    let roots = try writableRoots()
+    let dangling = temp.appendingPathComponent("dangling.m4a")
+    try FileManager.default.createSymbolicLink(
+        atPath: dangling.path, withDestinationPath: temp.appendingPathComponent("gone").path)
+    let danglingFolder = temp.appendingPathComponent("folder")
+    try FileManager.default.createSymbolicLink(
+        atPath: danglingFolder.path, withDestinationPath: "/nowhere/at/all")
+    for refused in [
+        dangling.path, danglingFolder.appendingPathComponent("a.m4a").path,
+        temp.appendingPathComponent("missing/a.m4a").path,
     ] {
         #expect(throws: CorpusError.self, "\(refused)") {
             try requireCorpusWrite(refused, roots: roots)
