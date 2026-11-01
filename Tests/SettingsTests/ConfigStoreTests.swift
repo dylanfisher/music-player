@@ -247,3 +247,146 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
         #expect(try StateStore(AppState(), fileURL: stateURL).discardReason != nil, "\(depth)")
     }
 }
+
+@MainActor @Test func changesWaitingOnABrokenFileAreAllWrittenOnceItsFixed() throws {
+    let url = configURL()
+    try write(#"{"a.cont": 3}"#, to: url)
+    let settings = store(url)
+    try settings.set(\.flag, to: true)
+    try settings.set(\.count, to: 6)
+    try settings.set(\.count, to: 7)
+    try write("{}", to: url)
+    settings.read(confirmed: true)
+    let reread = try ConfigStore.strict(Schema(), fileURL: url, check: { _, _, _ in nil })
+    #expect(reread[\.flag] && reread[\.count] == 7)
+}
+
+@MainActor @Test func aFileThatCantBeReadIsAProblem() throws {
+    let url = configURL()
+    try write(#"{"a.count": 3}"#, to: url)
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: url.path)
+    defer {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+    }
+    let settings = store(url, creating: false)
+    #expect(settings.problems.first?.message.hasPrefix("can't read the file") == true)
+}
+
+@MainActor @Test func aChangeWaitsWhileAnEmptyReadIsConfirmed() throws {
+    let url = configURL()
+    try write(#"{"a.count": 3}"#, to: url)
+    let settings = store(url)
+    try write("", to: url)
+    settings.read(confirmed: false)
+    try settings.set(\.flag, to: true)
+    // Nothing is written over the empty file until the second read decides what it is.
+    #expect(try read(url) == "")
+}
+
+@MainActor @Test func aBrokenFileThatsDeletedLeavesNoProblems() throws {
+    let url = configURL()
+    try write(#"{"a.cont": 3}"#, to: url)
+    let settings = store(url)
+    #expect(!settings.problems.isEmpty)
+    try FileManager.default.removeItem(at: url)
+    settings.read(confirmed: true)
+    #expect(settings.problems.isEmpty)
+}
+
+@MainActor @Test func anEditNotReadYetIsKeptUnderAChange() throws {
+    let url = configURL()
+    try write(#"{"a.count": 3}"#, to: url)
+    let settings = store(url)
+    try write(#"{"a.count": 4}"#, to: url)
+    try settings.set(\.flag, to: true)
+    #expect(settings[\.count] == 4)
+    #expect(try read(url) == #"{"a.count": 4, "a.flag": true}"#)
+}
+
+@MainActor @Test func aChangeWithNoFileWritesANewOne() throws {
+    let url = configURL()
+    let settings = store(url, creating: false)
+    #expect(!FileManager.default.fileExists(atPath: url.path))
+    try settings.set(\.flag, to: true)
+    #expect(try ConfigStore.strict(Schema(), fileURL: url, check: { _, _, _ in nil })[\.flag])
+}
+
+@MainActor @Test func aChangeWrittenDoesntComeBackOverALaterEdit() throws {
+    let url = configURL()
+    let settings = store(url)
+    try settings.set(\.count, to: 6)
+    try write(#"{"a.count": 4}"#, to: url)
+    settings.read(confirmed: true)
+    #expect(settings[\.count] == 4)
+}
+
+@MainActor @Test func createIfMissingWritesTheDefaults() throws {
+    let url = configURL()
+    let settings = store(url, creating: false)
+    try settings.createIfMissing()
+    #expect(try read(url) == settings.defaultText)
+}
+
+@MainActor @Test func aFileThatAppearsWhileANewOneWaitsIsRead() async throws {
+    let url = configURL()
+    let folder = url.deletingLastPathComponent()
+    try FileManager.default.createDirectory(
+        at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o555])
+    let settings = store(url)
+    #expect(settings.writeFailure != nil)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+    try write(#"{"a.count": 4}"#, to: url)
+    await wait(seconds: 3) { settings[\.count] == 4 }
+    #expect(settings[\.count] == 4)
+    #expect(try read(url) == #"{"a.count": 4}"#)
+}
+
+@MainActor @Test func aFailedChangeIsRetriedOnceAndThenWritten() async throws {
+    let url = configURL()
+    let folder = url.deletingLastPathComponent()
+    try write(#"{"a.count": 3}"#, to: url)
+    let settings = store(url)
+    var reported = 0
+    settings.problemsChanged = { reported += 1 }
+    // An atomic write needs to make a file in the folder.
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
+    defer {
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: folder.path)
+    }
+    try settings.set(\.flag, to: true)
+    #expect(settings.writeFailure != nil)
+    #expect(reported == 1)
+    // A second change while the retry waits doesn't try again on its own.
+    try settings.set(\.count, to: 8)
+    #expect(reported == 1)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+    await wait(seconds: 3) { settings.writeFailure == nil }
+    #expect(reported == 2)
+    #expect(try read(url) == #"{"a.count": 8, "a.flag": true}"#)
+}
+
+@MainActor @Test func aWatchedFileIsReadWhenItChanges() async throws {
+    let url = configURL()
+    let settings = store(url)
+    settings.startWatching()
+    try write(#"{"a.count": 4}"#, to: url)
+    await wait(seconds: 5) { settings[\.count] == 4 }
+    #expect(settings[\.count] == 4)
+}
+
+@MainActor @Test func aWatchThatsGoneCallsNothing() async throws {
+    let folder = configURL().deletingLastPathComponent()
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    var calls = 0
+    var watch: DirectoryWatch? = DirectoryWatch(folders: [folder.path]) { calls += 1 }
+    try write("x", to: folder.appendingPathComponent("one"))
+    await wait(seconds: 5) { calls > 0 }
+    #expect(calls > 0)
+    _ = watch
+    watch = nil
+    let before = calls
+    try write("y", to: folder.appendingPathComponent("two"))
+    await wait(seconds: 1) { false }
+    #expect(calls == before)
+}

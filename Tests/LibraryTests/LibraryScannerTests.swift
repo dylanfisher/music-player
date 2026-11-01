@@ -434,3 +434,66 @@ private struct FailingReads: ScanFileAccess {
     #expect(
         try library.scan().read == library.manifest.files.filter { $0.malformation == nil }.count)
 }
+
+/// A file that can't be opened is that file's problem: the root is still there, so the rescan
+/// carries on and removes what's gone.
+@Test func anUnreadableFileDoesntStopTheRescan() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let files = library.manifest.files.filter { $0.malformation == nil }
+    try Data(count: 16).write(to: URL(fileURLWithPath: library.path(files[0])), options: .atomic)
+    try FileManager.default.setAttributes(
+        [.posixPermissions: 0], ofItemAtPath: library.path(files[0]))
+    defer {
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o644], ofItemAtPath: library.path(files[0]))
+    }
+    try FileManager.default.removeItem(atPath: library.path(files[1]))
+    let summary = try library.scan()
+    #expect(!summary.issues.contains { $0.kind == .rootVanished })
+    #expect(summary.failed == 1)
+    #expect(summary.removed == 1)
+}
+
+@Test func anUnreadableFolderKeepsOnlyItsOwnFiles() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let files = library.manifest.files.filter { $0.malformation == nil }
+    let folder = { (file: FixtureFile) in (file.path as NSString).deletingLastPathComponent }
+    let locked = (library.path(files[0]) as NSString).deletingLastPathComponent
+    let gone = try #require(files.first { folder($0) != folder(files[0]) })
+    try FileManager.default.removeItem(atPath: library.path(gone))
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: locked)
+    defer {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked)
+    }
+    let summary = try library.scan()
+    #expect(summary.issues.map(\.kind) == [.unreadable])
+    #expect(summary.removed == 1)
+}
+
+/// A local folder that turns out to be on a network volume is reported, and still rescans.
+@Test func aLocalFolderOnANetworkVolumeStillRemovesWhatsGone() throws {
+    let library = try TestLibrary()
+    let nas = SimulatedNAS(operationSeconds: 0, listingSeconds: 0, capacity: 4, fileDelay: nil)
+    let scanner = LibraryScanner(databaseURL: library.databaseURL, networkReaders: 2, access: nas)
+    _ = try scanner.scan(library.folder)
+    let file = try #require(library.manifest.files.first { $0.malformation == nil })
+    try FileManager.default.removeItem(atPath: library.path(file))
+    let summary = try scanner.scan(library.folder)
+    #expect(summary.issues.map(\.kind) == [.networkFolderMarkedLocal])
+    #expect(summary.removed == 1)
+}
+
+@Test func anAlbumWhoseFilesAreAllGoneLeavesTheBrowser() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let album = try #require(index.albums().first)
+    let ids = try index.trackIDs(TrackFilter(album: album.id), sortedBy: .title)
+    for path in try index.paths(ids: ids).values {
+        try FileManager.default.removeItem(atPath: path)
+    }
+    _ = try library.scan()
+    #expect(try !index.albums().contains { $0.id == album.id })
+}

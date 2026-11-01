@@ -457,3 +457,255 @@ private final class ClosingOutput: Output, @unchecked Sendable {
         break
     }
 }
+
+// MARK: State and events after each command, found missing by mutation testing (ADR 0027).
+
+/// The updates published from now until `act` is done, ended by an underrun the test sends.
+private func published(
+    _ engine: PlaybackEngine, _ act: () async -> Void
+) async -> [PlaybackUpdate] {
+    let updates = await engine.updates()
+    await act()
+    await engine.handle(.underrun(frames: -1))
+    var seen: [PlaybackUpdate] = []
+    for await update in updates {
+        if update.event == .underrun(frames: -1) { break }
+        if update.event != nil { seen.append(update) }
+    }
+    return seen
+}
+
+@Test func aNewQueueStopsWhatPlayedAndStartsWhereItSays() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+    let other = (0..<3).map { URL(fileURLWithPath: "/other/\($0).flac") }
+    let updates = await published(engine) { await engine.setQueue(other, first: 2) }
+    #expect(output.takeCalls() == [.stop])
+    #expect(updates.map(\.event) == [.queueChanged])
+    let state = await engine.state
+    #expect(state.queue == other && state.order == [0, 1, 2])
+    #expect(state.currentIndex == 2 && state.status == .stopped && state.durationSeconds == nil)
+    #expect(await engine.position() == nil)
+    await engine.play()
+    #expect(output.takeCalls().first == .load(3, other[2], startSeconds: 0, playing: true))
+}
+
+@Test func togglePausePausesAndResumes() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    _ = output.takeCalls()
+    await engine.togglePause()
+    #expect(await engine.state.status == .paused)
+    await engine.togglePause()
+    #expect(await engine.state.status == .playing)
+    #expect(output.takeCalls() == [.pause, .play])
+}
+
+@Test func stopIsPublishedAndPlayStartsTheSameTrackAgain() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    await engine.next()
+    let updates = await published(engine) { await engine.stop() }
+    #expect(updates.map(\.event) == [.stopped])
+    _ = output.takeCalls()
+    await engine.play()
+    #expect(output.takeCalls().first == .load(5, urls[1], startSeconds: 0, playing: true))
+}
+
+@Test func previousAtExactlyThreeSecondsGoesBackAndAtTheFirstTrackRestarts() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+    output.setPosition(OutputPosition(item: 1, seconds: 2))
+    let updates = await published(engine) { await engine.previous() }
+    #expect(output.takeCalls() == [.seek(0)])
+    #expect(updates.map(\.event) == [.seeked(seconds: 0)])
+    await engine.next()
+    await engine.handle(.trackStarted(3, info))
+    _ = output.takeCalls()
+    output.setPosition(OutputPosition(item: 3, seconds: 3))
+    await engine.previous()
+    #expect(output.takeCalls().first == .load(5, urls[0], startSeconds: 0, playing: true))
+}
+
+@Test func nextWhileStoppedMovesTheCursorAndSaysSo() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.setQueue(urls)
+    let updates = await published(engine) { await engine.next() }
+    #expect(updates.map(\.event) == [.queueChanged])
+    #expect(updates.last?.state.currentIndex == 1)
+    #expect(await engine.state.currentIndex == 1)
+    #expect(output.takeCalls().isEmpty)
+}
+
+@Test func repeatAndShuffleAreInTheState() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output, shuffled: { $0.reversed() })
+    await engine.setQueue(urls)
+    let updates = await published(engine) {
+        await engine.setRepeat(.all)
+        await engine.setShuffle(true)
+    }
+    #expect(updates.map(\.event) == [.repeatChanged, .shuffleChanged])
+    let state = await engine.state
+    #expect(state.repeatMode == .all && state.shuffle && state.order == [0, 2, 1])
+}
+
+@Test func playNextIntoAnEmptyQueueStartsIt() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.playNext(urls)
+    #expect(await engine.state.queue == urls)
+    #expect(await engine.state.currentIndex == 0)
+}
+
+@Test func tracksMoveToTheStartOfTheQueue() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.setQueue(urls)
+    await engine.moveQueueItems([2], to: 0)
+    #expect(await engine.state.queue == [urls[2], urls[0], urls[1]])
+}
+
+@Test func removingTheCurrentTrackPlaysTheOneThatFollowedIt() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+    await engine.removeQueueItems([0])
+    #expect(output.takeCalls().first == .load(3, urls[1], startSeconds: 0, playing: true))
+}
+
+@Test func removingTheLastTrackWhilePlayingStopsAtTheStart() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.setQueue(urls, first: 2)
+    await engine.play()
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+    await engine.removeQueueItems([2])
+    #expect(output.takeCalls() == [.stop])
+    let state = await engine.state
+    #expect(state.status == .stopped && state.currentIndex == 0)
+    await engine.play()
+    #expect(output.takeCalls().first == .load(2, urls[0], startSeconds: 0, playing: true))
+}
+
+@Test func editsWhileStoppedKeepTheTrackPlayWouldStart() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.setQueue(urls, first: 2)
+    let updates = await published(engine) { await engine.removeQueueItems([0]) }
+    #expect(updates.map(\.event) == [.queueChanged])
+    #expect(await engine.state.currentIndex == 1)
+    await engine.play()
+    #expect(output.takeCalls().first == .load(1, urls[2], startSeconds: 0, playing: true))
+}
+
+@Test func theRemovedNextTrackIsReplacedEvenWhenTheNewOneHasItsNumber() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.setQueue(urls, first: 2)
+    await engine.setRepeat(.all)
+    await engine.play()
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+    // The next track wraps to the first, which goes; the new first is next.
+    await engine.removeQueueItems([0])
+    #expect(output.takeCalls() == [.setNext(3, urls[1])])
+}
+
+@Test func thePositionIsOnlyThatOfTheTracksTheEngineLoaded() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    output.setPosition(OutputPosition(item: 1, seconds: 5))
+    #expect(await engine.position() == 5)
+    output.setPosition(OutputPosition(item: 2, seconds: 6))
+    #expect(await engine.position() == 6)
+    output.setPosition(OutputPosition(item: 9, seconds: 7))
+    #expect(await engine.position() == nil)
+}
+
+@Test func movingOnClearsTheOldTracksDurationAndPointsAtTheNewOne() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    await engine.next()
+    let state = await engine.state
+    #expect(state.durationSeconds == nil && state.currentIndex == 1)
+}
+
+@Test func aStartedTrackSetsTheFormatAndAFormatChangeUpdatesIt() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    let updates = await published(engine) {
+        await engine.handle(.trackStarted(1, info))
+        await engine.handle(.formatChanged(1, FormatChange(from: "a", to: "b", switchSeconds: nil)))
+        await engine.handle(.trackEnded(1))
+    }
+    #expect(
+        updates.map(\.event) == [
+            .trackStarted(index: 0),
+            .formatChanged(FormatChange(from: "a", to: "b", switchSeconds: nil)),
+            .trackEnded(index: 0),
+        ])
+    #expect(updates[0].state.outputFormat == "test format")
+    #expect(await engine.state.outputFormat == "b")
+}
+
+@Test func theQueueFinishedLeavesNothingLoaded() async {
+    let output = FakeOutput()
+    let engine = await playing([urls[0]], output)
+    await engine.handle(.trackStarted(1, info))
+    output.setPosition(OutputPosition(item: 1, seconds: 199))
+    await engine.handle(.finished(1))
+    let state = await engine.state
+    #expect(state.status == .stopped && state.durationSeconds == nil && state.currentIndex == 0)
+    #expect(await engine.position() == nil)
+    _ = output.takeCalls()
+    await engine.play()
+    #expect(output.takeCalls().first == .load(2, urls[0], startSeconds: 0, playing: true))
+}
+
+@Test func theDeviceLostOnTheNextTrackResumesThatTrackAtTheStartOfTheOthers() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    // Lost with no item named: the current track picks up from its start.
+    await engine.handle(.deviceLost(nil, positionSeconds: 30))
+    #expect(await engine.position() == 0)
+    _ = output.takeCalls()
+    await engine.play()
+    #expect(
+        output.takeCalls() == [
+            .load(3, urls[0], startSeconds: 0, playing: true), .setNext(4, urls[1]),
+        ])
+}
+
+@Test func anOutputFailureNamingAnotherItemIsIgnored() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    await engine.handle(.failed(9, Broken()))
+    #expect(await engine.state.status == .playing)
+    await engine.handle(.failed(nil, Broken()))
+    #expect(await engine.state.status == .stopped)
+    #expect(await engine.position() == nil)
+    _ = output.takeCalls()
+    await engine.play()
+    #expect(output.takeCalls().first == .load(3, urls[0], startSeconds: 0, playing: true))
+}
+
+@Test func whenEveryTrackHasFailedTheNextIsCleared() async {
+    let output = FakeOutput()
+    let engine = await playing(Array(urls.prefix(2)), output)
+    await engine.handle(.trackFailed(1, Broken()))
+    _ = output.takeCalls()
+    await engine.handle(.trackFailed(2, Broken()))
+    #expect(output.takeCalls() == [.setNext(nil, nil)])
+}

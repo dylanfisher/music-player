@@ -208,3 +208,29 @@ private func attributes(_ path: String) throws -> [String] {
     #expect(!frame.isUserComment(version: 3), "encrypted in 2.3")
     #expect(!frame.isUserComment(version: 4), "grouped in 2.4")
 }
+
+@Test func undoRefusesAFileLockedSinceTheEdit() throws {
+    let url = try Sample.flac.copy()
+    let writer = scratchWriter()
+    expectChanged(writer.write(titleEdit, to: [url.path]), [url])
+    let edited = try Data(contentsOf: url)
+    chflags(url.path, UInt32(UF_IMMUTABLE))
+    defer { chflags(url.path, 0) }
+    #expect(writer.undoLast().failures.map(\.kind) == [.notWritable])
+    #expect(try Data(contentsOf: url) == edited)
+}
+
+@Test func anUndoThatFailsItsCheckLeavesNoTempFile() throws {
+    let url = try Sample.flac.copy()
+    let journal = TagUndoJournal(dataDirectory: scratchFolder())
+    let writer = TagWriter(journal: journal)
+    expectChanged(writer.write(titleEdit, to: [url.path]), [url])
+    // Old bytes of the right length but the wrong content: the rebuilt file fails its hash.
+    let (_, files, _) = try journal.latest()
+    let bytes = try #require(files.first).0.bytes
+    let size = try Data(contentsOf: bytes).count
+    try Data(repeating: 0x5A, count: size).write(to: bytes)
+    #expect(writer.undoLast().failures.map(\.kind) == [.checkFailed])
+    let folder = url.deletingLastPathComponent().path
+    #expect(try FileManager.default.contentsOfDirectory(atPath: folder) == [url.lastPathComponent])
+}

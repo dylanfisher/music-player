@@ -67,3 +67,21 @@ func id3TagsTheWriterCantRewriteAreRefused(_ name: String, _ flags: UInt8, _ ext
     #expect(report.failures.first?.detail.contains("fragmented") == true)
     #expect(try Data(contentsOf: url) == original)
 }
+
+/// A chunk offset that points outside every `mdat` is left as it is, and the check accepts it.
+@Test func aChunkOffsetOutsideTheAudioIsKept() throws {
+    let url = try Sample.mp4.copy()
+    let file = try MP4File(ByteReader(FileSource(path: url.path)))
+    var moov = file.moov
+    let path = try #require(moov.chunkOffsetTables().first)
+    var body = moov[path].body
+    // The last 4-byte entry, set to an offset inside `ftyp`.
+    body.replaceSubrange(body.count - 4..<body.count, with: bigEndianBytes(8, 4))
+    moov[path] = MP4Box(type: moov[path].type, body: body)
+    let bytes = try Data(contentsOf: url)
+    var changed = bytes[..<file.moovAtom.start]
+    changed += moov.serialized()
+    changed += bytes[file.moovAtom.body.upperBound...]
+    try changed.write(to: url)
+    try growAndUndo(url)
+}

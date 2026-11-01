@@ -113,3 +113,33 @@ private struct Feed {
     _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
     #expect(feed.send(.stopped, status: .stopped, at: 60) == [.played(urls[0])])
 }
+
+@Test func aTrackPausedJustShortOfItsPlayDoesntCountWhilePaused() {
+    var feed = Feed(durations: [100, 600, 100])
+    _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
+    #expect(feed.send(.paused, status: .paused, at: 49.5).isEmpty)
+    #expect(feed.tick(at: 60).isEmpty)
+}
+
+@Test func aTrackWithoutADurationCountsAtFourMinutes() {
+    var counter = PlayCounter()
+    var state = PlaybackState()
+    state.queue = urls
+    state.status = .playing
+    state.durationSeconds = nil
+    _ = counter.handle(PlaybackUpdate(state: state, event: .trackStarted(index: 0)), at: start)
+    #expect(counter.deadline == start.addingTimeInterval(PlayCounter.playSeconds))
+}
+
+@Test func aOneSecondTrackCountsAtHalfASecond() {
+    var feed = Feed(durations: [1, 600, 100])
+    _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
+    #expect(feed.counter.deadline == start.addingTimeInterval(0.5))
+}
+
+@Test func aPlayReachedBeforeAPauseCountsAtThePause() {
+    var feed = Feed(durations: [100, 600, 100])
+    _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
+    // No tick came at 50 s; the pause finds the play.
+    #expect(feed.send(.paused, status: .paused, at: 70) == [.played(urls[0])])
+}
