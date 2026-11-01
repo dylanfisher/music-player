@@ -1399,6 +1399,16 @@ Implementation plan:
    read against the code; drift fixed, superseded ADRs link their successor.
 5. A final `./scripts/check` and `./scripts/bench`.
 
+Result: shipped; the exit passes. `scripts/surface.swift` (Foundation only, ADR 0030) runs in
+`./scripts/check` in 0.95 s and reports nothing outside its 11-entry allowlist, all AppKit
+delegate methods the compiler needs public. The first run flagged 154 of 1,648 public and package
+declarations; the tree now has 1,402, each called from another module, and tests reach the rest
+with `@testable import`. One deletion, `KeyBindings.menuChord`, which only tests called. Drift
+fixed in ADRs 0011 and 0012, "Amended by" lines on 0009, 0011, 0012, 0015 and 0022, map.md
+states the surface rule, and AGENTS.md is 50 lines. Matching is by name, so a member name shared
+across modules can hide an unused declaration. Final bench: every budget passes; playback CPU
+2.03%, metadata parse 4.17 s, launch 0.61 s, idle 0.00% CPU with 0 wakeups.
+
 
 ### 15. Stable track identity and full play history
 
