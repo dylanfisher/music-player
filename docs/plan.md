@@ -1284,9 +1284,9 @@ Implementation plan (ADR 0027, written first):
 2. **Coverage hooks** (`Sources/Tools/FuzzCoverage`, C). The `trace_pc_guard` callbacks count
    hits per edge; after each input the driver asks for new (edge, hit-count bucket) features. A
    crash handler and ASan's death callback write the input being run to a file opened up front.
-3. **Fuzzer** (`Sources/Tools/Fuzz`). One target per parser: `mp4`, `id3v2` (MP3 files),
-   `flac`, `vorbis`, `wav`, `aiff`, `config`, `state`, `journal`, `rules`, and `tagwriter` (edit,
-   undo and byte compare on a temp file). A supervisor runs workers as child processes, restarts
+3. **Fuzzer** (`Sources/Tools/Fuzz`). One target per parser: `mp4`, `mp3` (ID3v1, ID3v2 and
+   MPEG frames), `flac`, `vorbis`, `wav`, `aiff`, `config-file`, `state-file`, `undo-journal`,
+   `smart-rules`, and `tag-writer` (edit, undo and byte compare on a temp file). A supervisor runs workers as child processes, restarts
    one after a crash, minimises the crashing input and saves it under `.build/fuzz/<target>`.
    Seeds: a generated fixture library under `~/Library/Caches/MusicPlayer/fuzz`, and the
    tag-corpus clones `scripts/fuzz` makes again with `cp -c`; the reference is never read by the
