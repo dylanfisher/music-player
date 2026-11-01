@@ -22,9 +22,3 @@ public func deviceReport(_ devices: [AudioDevice]) -> String {
     }
     return lines.joined(separator: "\n")
 }
-
-func kilohertz(_ range: ClosedRange<Double>) -> String {
-    range.lowerBound == range.upperBound
-        ? kilohertz(range.lowerBound)
-        : "\(kilohertz(range.lowerBound))–\(kilohertz(range.upperBound))"
-}

@@ -1,4 +1,5 @@
 import CoreAudio
+import Playback
 import Testing
 
 @testable import HALOutput

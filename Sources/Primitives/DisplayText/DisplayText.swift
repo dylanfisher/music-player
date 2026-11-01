@@ -13,6 +13,13 @@ public func kilohertz(_ hertz: Double) -> String {
     return khz.rounded() == khz ? String(Int(khz)) : String(khz)
 }
 
+/// 44100...44100 -> "44.1", 44100...192000 -> "44.1–192".
+public func kilohertz(_ range: ClosedRange<Double>) -> String {
+    range.lowerBound == range.upperBound
+        ? kilohertz(range.lowerBound)
+        : "\(kilohertz(range.lowerBound))–\(kilohertz(range.upperBound))"
+}
+
 /// 24 -> "24-bit".
 public func bitDepth(_ bits: some BinaryInteger) -> String { "\(bits)-bit" }
 

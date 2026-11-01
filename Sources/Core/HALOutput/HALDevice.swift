@@ -3,6 +3,7 @@ import DisplayText
 import Foundation
 import HALRender
 import Log
+import Playback
 
 private let logger = moduleLogger()
 

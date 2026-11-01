@@ -1,4 +1,5 @@
 import CoreAudio
+import Playback
 
 /// A snapshot of an output device's properties, read once from the HAL.
 public struct AudioDevice: Sendable {
