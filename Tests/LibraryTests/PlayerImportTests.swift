@@ -142,15 +142,14 @@ private func track(
     let (_, index, rows) = try scanned()
     let path = { (row: TrackRow) in row.path.replacingOccurrences(of: "'", with: "''") }
     let url = try swinsianDatabase(
-        """
-        INSERT INTO track VALUES (1, '\(path(rows[0]))', 3, NULL, NULL, 4, 1);
-        INSERT INTO track VALUES (2, '\(path(rows[0]))', 2, NULL, NULL, 5, 0);
-        INSERT INTO playlist VALUES (1, 'Mix', 0, NULL);
-        INSERT INTO playlisttrack VALUES (1, 2, 1);
-        """)
+        swinsianRows(
+            0, "(1, '\(path(rows[0]))', 3, NULL, NULL, 4, 1)",
+            "(2, '\(path(rows[0]))', 2, NULL, NULL, 4.5, 0)")
+            + swinsianRows(1, "(1, 'Mix', 0, NULL, NULL, NULL)") + swinsianRows(2, "(1, 2, 1)"))
     let library = try PlayerLibrary(swinsianAt: url)
     let plan = try index.applyImport(library, prefix: nil)
     #expect(plan.mergedRows == 1 && plan.playsAdded == 5 && plan.ratings == 1)
+    #expect(plan.roundedRatings == 1)
     let row = try index.rows(ids: [rows[0].id])[0]
     #expect(row.playCount == 5 && row.rating == 5 && row.loved)
 }

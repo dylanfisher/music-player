@@ -20,6 +20,8 @@ extension ImportPlan {
             "Last played: later on \(tracks(lastPlayed))",
             "Date added: earlier on \(tracks(dateAdded))",
             "Ratings: \(tracks(ratings)) rated"
+                + (roundedRatings > 0
+                    ? ", \(number(roundedRatings)) from a half star rounded up" : "")
                 + (ratingsKept > 0
                     ? ", \(number(ratingsKept)) keep the rating they have here" : ""),
             "Loved: \(tracks(loved))",

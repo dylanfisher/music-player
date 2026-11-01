@@ -1,4 +1,5 @@
 import Darwin
+import Fixtures
 import Foundation
 import SQLite
 import Testing
@@ -6,7 +7,7 @@ import Testing
 @testable import Library
 
 private let now = 2_000_000_000.0
-/// Seconds from 1970 to 2001, which Swinsian's dates are assumed to count from.
+/// Seconds from 1970 to 2001, which Swinsian's dates count from.
 private let epoch2001 = Date.timeIntervalBetween1970AndReferenceDate
 
 private func temporaryFolder() throws -> URL {
@@ -16,34 +17,38 @@ private func temporaryFolder() throws -> URL {
     return url
 }
 
-/// The schema ADR 0033 assumes, with `leaving` left out: a table name or "table.column".
-func swinsianSchemaSQL(leaving omitted: Set<String> = []) -> String {
-    swinsianSchema.compactMap { table in
-        guard !omitted.contains(table.name) else { return nil }
-        let kept = table.columns.filter { !omitted.contains("\(table.name).\($0)") }
-        return "CREATE TABLE \(table.name) (\(kept.joined(separator: ", ")));"
-    }.joined(separator: "\n")
+/// INSERTs of `rows` into the columns the reader reads of `swinsianSchema[table]`: 0 for
+/// tracks, 1 for playlists, 2 for their entries.
+func swinsianRows(_ table: Int, _ rows: String...) -> String {
+    let read = swinsianSchema[table]
+    return rows.map {
+        "INSERT INTO \(read.name) (\(read.columns.joined(separator: ", "))) VALUES \($0);\n"
+    }.joined()
 }
 
-/// A generated Swinsian database at a new path, filled by `sql`.
-func swinsianDatabase(_ sql: String, schema: String = swinsianSchemaSQL()) throws -> URL {
+/// A generated Swinsian database at a new path, of the real schema with `sql` run after it.
+func swinsianDatabase(_ sql: String) throws -> URL {
     let url = try temporaryFolder().appendingPathComponent("Library.sqlite")
     let database = try Database(at: url)
-    try database.execute(schema + sql)
+    try database.execute(swinsianSchemaSQL + sql)
     try database.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     return url
 }
 
+/// `bytes` as an SQL blob literal.
+func blobSQL(_ bytes: [UInt8]) -> String {
+    "X'" + bytes.map { String(format: "%02X", $0) }.joined() + "'"
+}
+
 @Test func readsSwinsianTracksMergingRowsForOnePath() throws {
     let url = try swinsianDatabase(
-        """
-        INSERT INTO track VALUES (1, '/Music/a.flac', 3, 100.5, 50, 2, 0);
-        INSERT INTO track VALUES (2, '/Music/b.flac', NULL, NULL, NULL, 0, 1);
-        -- The same file again: plays add, the latest play and the highest rating win.
-        INSERT INTO track VALUES (3, '/Music/a.flac', 4, 200, 10, 4, 1);
-        INSERT INTO track VALUES (4, '/Music/Cafe\u{301}.flac', 1, NULL, NULL, 5, 0);
-        INSERT INTO track VALUES (5, '/Music/Café.flac', 2, NULL, NULL, 1, 0);
-        """)
+        swinsianRows(
+            0, "(1, '/Music/a.flac', 3, 100.5, 50, 2, 0)",
+            "(2, '/Music/b.flac', NULL, 0, NULL, NULL, 1)",
+            // The same file again: plays add, the latest play and the highest rating win.
+            "(3, '/Music/a.flac', 4, 200, 10, 4, NULL)",
+            "(4, '/Music/Cafe\u{301}.flac', 1, 0.0, NULL, 5, 0)",
+            "(5, '/Music/Café.flac', 2, NULL, NULL, 1, 0)"))
     let library = try PlayerLibrary(swinsianAt: url, now: now)
     #expect(library.problems.isEmpty)
     #expect(library.mergedRows == 2)
@@ -53,78 +58,248 @@ func swinsianDatabase(_ sql: String, schema: String = swinsianSchemaSQL()) throw
     a.lastPlayedSeconds = 200 + epoch2001
     a.addedSeconds = 10 + epoch2001
     a.rating = 4
-    a.loved = true
     #expect(library.tracks[0] == a)
+    // A last played of 0 is never.
     var b = PlayerTrack(path: "/Music/b.flac")
     b.loved = true
     #expect(library.tracks[1] == b)
     #expect(library.tracks[2].path == "/Music/Cafe\u{301}.flac")
     #expect(library.tracks[2].plays == 3)
     #expect(library.tracks[2].rating == 5)
+    #expect(library.tracks[2].lastPlayedSeconds == nil)
 }
 
-@Test func readsSwinsianPlaylistsAndMapsTheRulesThatFit() throws {
-    let url = try swinsianDatabase(
-        """
-        INSERT INTO track VALUES (1, '/Music/a.flac', 0, NULL, NULL, 0, 0);
-        INSERT INTO track VALUES (2, '/Music/b.flac', 0, NULL, NULL, 0, 0);
-        INSERT INTO playlist VALUES (10, 'Mix', 0, NULL);
-        INSERT INTO playlisttrack VALUES (10, 2, 1), (10, 1, 2), (10, 99, 3);
-        INSERT INTO playlist VALUES (11, 'Loud', 1, 1);
-        INSERT INTO smartrule VALUES (11, 1, 'genre', 'contains', 'Rock');
-        INSERT INTO smartrule VALUES (11, 2, 'rating', 'greaterthan', 3);
-        INSERT INTO smartrule VALUES (11, 3, 'lastplayed', 'inlast', '30');
-        INSERT INTO playlist VALUES (12, 'Odd', 1, 0);
-        INSERT INTO smartrule VALUES (12, 1, 'kind', 'is', 'MP3');
-        INSERT INTO smartrule VALUES (12, 2, 'title', 'matchesregex', 'x');
-        INSERT INTO smartrule VALUES (12, 3, 'rating', 'is', 9);
-        """)
+@Test func theOwners32ExtraRowsForOnePathMergeAndAreCounted() throws {
+    let rows = (1...40).map {
+        "(\($0), '/Music/\($0 <= 8 ? $0 : $0 % 8 + 1).flac', 1, NULL, NULL, NULL, NULL)"
+    }
+    let url = try swinsianDatabase(rows.map { swinsianRows(0, $0) }.joined())
     let library = try PlayerLibrary(swinsianAt: url, now: now)
-    #expect(library.playlists.count == 3)
+    #expect(library.tracks.count == 8)
+    #expect(library.mergedRows == 32)
+    #expect(library.tracks.map(\.plays).reduce(0, +) == 40)
+}
+
+@Test func halfStarsRoundUpAndAreMarked() throws {
+    // Swinsian stores a rating as REAL in an INTEGER column, so a whole one reads as an integer.
+    let url = try swinsianDatabase(
+        swinsianRows(
+            0, "(1, '/a', 0, NULL, NULL, 0.5, NULL)", "(2, '/b', 0, NULL, NULL, 3.0, NULL)",
+            "(3, '/c', 0, NULL, NULL, 4.5, NULL)", "(4, '/d', 0, NULL, NULL, NULL, NULL)",
+            "(5, '/e', 0, NULL, NULL, 0, NULL)", "(6, '/f', 0, NULL, NULL, 2.25, NULL)",
+            "(7, '/g', 0, NULL, NULL, 5.5, NULL)", "(8, '/h', 0, NULL, NULL, 'x', NULL)",
+            // A whole 4 beats a rounded 3.5, and is whole.
+            "(9, '/i', 0, NULL, NULL, 3.5, NULL)", "(10, '/i', 0, NULL, NULL, 4, NULL)",
+            "(11, '/j', 0, NULL, NULL, 1.5, NULL)", "(12, '/j', 0, NULL, NULL, 1, NULL)"))
+    let library = try PlayerLibrary(swinsianAt: url, now: now)
+    #expect(library.tracks.map(\.rating) == [1, 3, 5, nil, nil, nil, nil, nil, 4, 2])
+    #expect(
+        library.tracks.map(\.ratingRounded)
+            == [true, false, true, false, false, false, false, false, false, true])
+    #expect(
+        library.problems.map(\.description) == [
+            "track 6: rating 2.25 is out of range", "track 7: rating 5.5 is out of range",
+            "track 8: rating isn't a number",
+        ])
+}
+
+@Test func readsSwinsianPlaylistsInOrderSkippingFoldersAndLimits() throws {
+    let rules = try swinsianPredicateArchive(#"genre CONTAINS[c] "Rock""#)
+    let url = try swinsianDatabase(
+        swinsianRows(
+            0, "(1, '/Music/a.flac', 0, NULL, NULL, 0, 0)",
+            "(2, '/Music/b.flac', 0, NULL, NULL, 0, 0)")
+            + swinsianRows(
+                1, "(10, 'Mix', 0, NULL, NULL, NULL)",
+                "(11, 'Loud', 1, \(blobSQL(rules)), NULL, 0)",
+                "(12, 'Folder', 0, NULL, 1, NULL)", "(13, 'Top', 1, \(blobSQL(rules)), 0, 1)",
+                "(14, 'Empty', 1, NULL, NULL, NULL)")
+            + swinsianRows(2, "(10, 2, 1)", "(10, 1, 2)", "(10, 99, 3)"))
+    let library = try PlayerLibrary(swinsianAt: url, now: now)
+    #expect(library.playlists.map(\.name) == ["Mix", "Loud", "Top", "Empty"])
+    #expect(library.builtInPlaylists == 1)
     #expect(library.playlists[0].kind == .manual)
     #expect(library.playlists[0].paths == ["/Music/b.flac", "/Music/a.flac"])
     #expect(library.problems == [PlayerLibraryProblem("playlist “Mix”", .unknownTrack(99))])
     #expect(
         library.playlists[1].kind
-            == .smart(
-                SmartRules(
-                    match: .all,
-                    rules: [
-                        SmartRule(.genre, .contains, .text("Rock")),
-                        SmartRule(.rating, .greaterThan, .number(3)),
-                        SmartRule(.lastPlayed, .inLast, .number(30)),
-                    ])))
-    guard case .unmapped(let reasons) = library.playlists[2].kind else {
-        Issue.record("“Odd” mapped: \(library.playlists[2].kind)")
-        return
+            == .smart(SmartRules(match: .all, rules: [SmartRule(.genre, .contains, .text("Rock"))]))
+    )
+    #expect(
+        library.playlists[2].kind
+            == .unmapped(["it's limited to some of its tracks, which isn't read"]))
+    #expect(
+        library.playlists[3].kind
+            == .unmapped([SwinsianPredicate.Archive.notAnArchive.description]))
+}
+
+@Test func eachOfTheOwnersRuleShapesMaps() throws {
+    func genre(_ comparison: SmartComparison, _ text: String) -> SmartRule {
+        SmartRule(.genre, comparison, .text(text))
+    }
+    func all(_ rules: SmartRule...) -> PlayerPlaylist.Kind {
+        .smart(SmartRules(match: .all, rules: rules))
+    }
+    let expected: [PlayerPlaylist.Kind] = [
+        all(SmartRule(.dateAdded, .inLast, .number(1))),
+        all(SmartRule(.dateAdded, .inLast, .number(7))),
+        all(SmartRule(.dateAdded, .inLast, .number(30))),
+        all(SmartRule(.bitRate, .greaterThan, .number(1000))),
+        all(SmartRule(.lastPlayed, .inLast, .number(7))),
+        all(genre(.startsWith, "Genre A - ")), all(genre(.startsWith, "Genre B - ")),
+        all(genre(.startsWith, "Genre C - ")), all(genre(.startsWith, "Genre D - ")),
+        all(genre(.startsWith, "Genre E - ")),
+        all(
+            genre(.startsWith, "Genre E - "), genre(.contains, "Style F"),
+            genre(.doesNotContain, "Style G"), genre(.doesNotContain, "Style H")),
+        .smart(
+            SmartRules(
+                match: .any,
+                rules: [
+                    SmartRule(.fileType, .is, .text("dsf")),
+                    SmartRule(.fileType, .is, .text("dsd")),
+                ])),
+        all(SmartRule(.sampleRate, .greaterThan, .number(44100))),
+        all(genre(.startsWith, "Genre F - ")),
+        all(SmartRule(.grouping, .isNot, .text(""))),
+        all(genre(.startsWith, "Genre A - "), genre(.contains, "Style I")),
+        all(genre(.startsWith, "Genre A - "), genre(.contains, "Style J")),
+        all(genre(.startsWith, "Genre A - "), genre(.contains, "Style J K")),
+    ]
+    #expect(swinsianPredicateShapes.count == 18)
+    for (format, kind) in zip(swinsianPredicateShapes, expected) {
+        #expect(SwinsianPredicate.kind(try swinsianPredicateArchive(format)) == kind, "\(format)")
+    }
+}
+
+@Test func predicatesOurRulesCantSayAreListedWithWhy() throws {
+    let cases: [(String, String)] = [
+        (
+            #"genre BEGINSWITH "Rock""#,
+            "compares with case or other options that have no match here"
+        ),
+        (#"genre ENDSWITH[c] "Rock""#, "the comparison has no match here"),
+        (#"title CONTAINS[c] "Love""#, "the field “title” has no match here"),
+        (
+            #"dateAdded > CAST(700000000, "NSDate")"#,
+            "only a date within the last so many days has a match here"
+        ),
+        (
+            #"dateAdded > CAST(CAST(now(), "NSNumber") - 3600, "NSDate")"#,
+            "the time isn't a whole number of days"
+        ),
+        (#"groupingLength > 2"#, "only a grouping longer than 0 has a match here"),
+        (#"sampleRate > "fast""#, "the value isn't what the field takes"),
+        (#"ANY genre CONTAINS[c] "Rock""#, "not a key compared with a value"),
+    ]
+    for (format, reason) in cases {
+        let predicate = NSPredicate(format: format)
+        let kind = SwinsianPredicate.kind(try swinsianPredicateArchive(format))
+        #expect(kind == .unmapped(["“\(predicate.predicateFormat)”: \(reason)"]), "\(format)")
     }
     #expect(
-        reasons == [
-            "the field “kind” has no match here", "the comparison “matchesregex” has no match here",
-            "a rating is 0 to 5 stars, not 9",
-        ])
+        SwinsianPredicate.kind(try swinsianPredicateArchive(#"NOT genre BEGINSWITH[c] "Rock""#))
+            == .unmapped([
+                #"“genre BEGINSWITH[c] "Rock"”: the comparison's negation has no match here"#
+            ]))
+    #expect(
+        SwinsianPredicate.kind(try swinsianPredicateArchive("TRUEPREDICATE"))
+            == .unmapped(["“TRUEPREDICATE” isn't a comparison or AND, OR or NOT"]))
+    // All of an any can't be one list of rules; NOT (a AND b) is NOT a OR NOT b, which can.
+    let mixed = #"genre CONTAINS[c] "a" AND (genre CONTAINS[c] "b" OR genre CONTAINS[c] "c")"#
+    #expect(
+        SwinsianPredicate.kind(try swinsianPredicateArchive(mixed))
+            == .unmapped([
+                #"“genre CONTAINS[c] "b" OR genre CONTAINS[c] "c"”: all and any mixed in one playlist"#
+            ]))
+    let negated = #"NOT (genre CONTAINS[c] "a" AND fileType ==[c] "mp3")"#
+    #expect(
+        SwinsianPredicate.kind(try swinsianPredicateArchive(negated))
+            == .smart(
+                SmartRules(
+                    match: .any,
+                    rules: [
+                        SmartRule(.genre, .doesNotContain, .text("a")),
+                        SmartRule(.fileType, .isNot, .text("mp3")),
+                    ])))
+}
+
+@Test func aHostilePredicateArchiveIsRefusedBeforeItsDecoded() throws {
+    func reason(_ archive: Archive) -> PlayerPlaylist.Kind { .unmapped([archive.description]) }
+    typealias Archive = SwinsianPredicate.Archive
+    #expect(
+        SwinsianPredicate.kind([UInt8](repeating: 0, count: SwinsianPredicate.maximumBytes + 1))
+            == reason(.tooLarge))
+    #expect(SwinsianPredicate.kind(Array("bplist00junk".utf8)) == reason(.notAnArchive))
+    // An archive of a class off the list: a URL.
+    let url = [UInt8](
+        try NSKeyedArchiver.archivedData(
+            withRootObject: NSURL(fileURLWithPath: "/"), requiringSecureCoding: true))
+    guard case .unmapped(let refused) = SwinsianPredicate.kind(url) else {
+        Issue.record("a URL mapped")
+        return
+    }
+    #expect(refused.first?.hasPrefix("its rules couldn't be read: ") == true, "\(refused)")
+    var deep: NSPredicate = NSPredicate(format: #"genre CONTAINS[c] "a""#)
+    for _ in 0..<SwinsianPredicate.maximumDepth {
+        deep = NSCompoundPredicate(notPredicateWithSubpredicate: deep)
+    }
+    #expect(
+        SwinsianPredicate.kind(
+            [UInt8](
+                try NSKeyedArchiver.archivedData(withRootObject: deep, requiringSecureCoding: true))
+        )
+            == reason(.tooDeep))
+    // Written as XML, where a reference is a CF$UID dictionary.
+    func archive(_ objects: String, count: Int = 0) -> [UInt8] {
+        let filler = String(repeating: "<string>x</string>", count: count)
+        return Array(
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <plist version="1.0"><dict>
+            <key>$archiver</key><string>NSKeyedArchiver</string>
+            <key>$version</key><integer>100000</integer>
+            <key>$top</key><dict><key>root</key><dict><key>CF$UID</key><integer>1</integer></dict></dict>
+            <key>$objects</key><array><string>$null</string>\(objects)\(filler)</array>
+            </dict></plist>
+            """.utf8)
+    }
+    let cycle =
+        "<dict><key>NSSubpredicates</key><dict><key>CF$UID</key><integer>1</integer></dict></dict>"
+    #expect(SwinsianPredicate.kind(archive(cycle)) == reason(.cycle))
+    #expect(
+        SwinsianPredicate.kind(
+            archive("<string>x</string>", count: SwinsianPredicate.maximumObjects))
+            == reason(.tooManyObjects))
+    let dangling = "<dict><key>a</key><dict><key>CF$UID</key><integer>9</integer></dict></dict>"
+    #expect(SwinsianPredicate.kind(archive(dangling)) == reason(.notAnArchive))
 }
 
 @Test func aMissingTableOrColumnIsNamedAndNothingIsGuessed() throws {
     let url = try swinsianDatabase(
-        "", schema: swinsianSchemaSQL(leaving: ["smartrule", "track.loved", "playlist.smart"]))
+        """
+        DROP TABLE playlisttrack;
+        ALTER TABLE track DROP COLUMN favourite;
+        ALTER TABLE playlist DROP COLUMN smartpredicate;
+        """)
     let error = #expect(throws: PlayerImportError.self) {
         try PlayerLibrary(swinsianAt: url, now: now)
     }
     #expect(
-        error == .missingSchema(["column track.loved", "column playlist.smart", "table smartrule"]))
+        error
+            == .missingSchema([
+                "column track.favourite", "column playlist.smartpredicate", "table playlisttrack",
+            ]))
 }
 
 @Test func swinsianValuesOfTheWrongTypeOrRangeAreProblemsNotZeros() throws {
     let url = try swinsianDatabase(
-        """
-        INSERT INTO track VALUES (1, '/Music/a.flac', 'many', 'yesterday', 0, 80, 2);
-        -- A Unix time read as seconds since 2001 lands in 2056: out of range, not a date.
-        INSERT INTO track VALUES (2, '/Music/b.flac', -1, 1700000000, NULL, 3, 0);
-        INSERT INTO track VALUES (3, NULL, 1, NULL, NULL, 0, 0);
-        INSERT INTO track VALUES (4, 'Music/relative.flac', 1, NULL, NULL, 0, 0);
-        INSERT INTO track VALUES (5, X'2F61', 1, NULL, NULL, 0, 0);
-        """)
+        swinsianRows(
+            0, "(1, '/Music/a.flac', 'many', 'yesterday', 0, 80, 2)",
+            // A Unix time read as seconds since 2001 lands in 2056: out of range, not a date.
+            "(2, '/Music/b.flac', -1, 1700000000, NULL, 3, 0)",
+            "(3, NULL, 1, NULL, NULL, 0, 0)", "(4, 'Music/relative.flac', 1, NULL, NULL, 0, 0)",
+            "(5, X'2F61', 1, NULL, NULL, 0, 0)"))
     let library = try PlayerLibrary(swinsianAt: url, now: now)
     #expect(library.tracks.map(\.path) == ["/Music/a.flac", "/Music/b.flac"])
     #expect(library.tracks[0].plays == 0)
@@ -135,7 +310,7 @@ func swinsianDatabase(_ sql: String, schema: String = swinsianSchemaSQL()) throw
     #expect(
         library.problems.map(\.description) == [
             "track 1: playcount isn't an integer", "track 1: lastplayed isn't a number",
-            "track 1: rating 80 is out of range", "track 1: loved isn't true or false",
+            "track 1: rating 80 is out of range", "track 1: favourite isn't true or false",
             "track 2: playcount -1 is out of range",
             "track 2: lastplayed \(1_700_000_000 + epoch2001) is out of range",
             "track 3: has no file path", "track 4: its path isn't absolute",
@@ -147,10 +322,10 @@ func swinsianDatabase(_ sql: String, schema: String = swinsianSchemaSQL()) throw
     let folder = try temporaryFolder()
     let url = folder.appendingPathComponent("Library.sqlite")
     let writer = try Database(at: url)
-    try writer.execute(swinsianSchemaSQL())
+    try writer.execute(swinsianSchemaSQL)
     try writer.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     // Left in the log while the writer stays open, as Swinsian running would leave it.
-    try writer.execute("INSERT INTO track VALUES (1, '/Music/a.flac', 5, NULL, NULL, 0, 0)")
+    try writer.execute(swinsianRows(0, "(1, '/Music/a.flac', 5, NULL, NULL, 0, 0)"))
     let before = try [url.path, url.path + Database.walSuffix].map {
         try Data(contentsOf: URL(fileURLWithPath: $0))
     }
@@ -299,13 +474,19 @@ private func readITunes(_ data: Data) throws -> PlayerLibrary {
 
 @Test func anOversizedCellIsRefusedByItsLength() throws {
     let long = String(repeating: "a", count: SmartRule.maximumTextBytes + 1)
+    let predicate = NSPredicate(format: "genre CONTAINS[c] %@", long)
+    let rules = [UInt8](
+        try NSKeyedArchiver.archivedData(withRootObject: predicate, requiringSecureCoding: true))
     let url = try swinsianDatabase(
-        """
-        INSERT INTO track VALUES (1, '/\(String(repeating: "p", count: PlayerLibrary.maximumPathBytes))', 1, NULL, NULL, 0, 0);
-        INSERT INTO playlist VALUES (1, '\(String(repeating: "n", count: PlayerLibrary.maximumNameBytes + 1))', 0, NULL);
-        INSERT INTO playlist VALUES (2, 'Big', 1, 1);
-        INSERT INTO smartrule VALUES (2, 1, 'title', 'contains', '\(long)');
-        """)
+        swinsianRows(
+            0,
+            "(1, '/\(String(repeating: "p", count: PlayerLibrary.maximumPathBytes))', 1, NULL, NULL, 0, 0)"
+        )
+            + swinsianRows(
+                1,
+                "(1, '\(String(repeating: "n", count: PlayerLibrary.maximumNameBytes + 1))', 0, NULL, NULL, NULL)",
+                "(2, 'Big', 1, \(blobSQL(rules)), NULL, NULL)",
+                "(3, 'Huge', 1, zeroblob(\(SwinsianPredicate.maximumBytes + 1)), NULL, NULL)"))
     let library = try PlayerLibrary(swinsianAt: url, now: now)
     #expect(library.tracks.isEmpty)
     #expect(
@@ -313,7 +494,14 @@ private func readITunes(_ data: Data) throws -> PlayerLibrary {
             "track 1: over \(PlayerLibrary.maximumPathBytes) bytes",
             "playlist 1: over \(PlayerLibrary.maximumNameBytes) bytes",
         ])
-    #expect(library.playlists.map(\.kind) == [.unmapped([SmartRule.textTooLong])])
+    #expect(
+        library.playlists.map(\.kind) == [
+            .unmapped([
+                "“\(predicate.predicateFormat.prefix(SwinsianPredicate.maximumQuotedCharacters))…”: "
+                    + SmartRule.textTooLong
+            ]),
+            .unmapped([SwinsianPredicate.Archive.tooLarge.description]),
+        ])
 }
 
 @Test func aDatabaseOrLogChangedDuringTheCopyIsRefused() throws {
@@ -321,7 +509,7 @@ private func readITunes(_ data: Data) throws -> PlayerLibrary {
         let folder = try temporaryFolder()
         let url = folder.appendingPathComponent("Library.sqlite")
         let writer = try Database(at: url)
-        try writer.execute(swinsianSchemaSQL())
+        try writer.execute(swinsianSchemaSQL)
         let copy = folder.appendingPathComponent("copy.sqlite").path
         let error = #expect(throws: PlayerImportError.self) {
             try copyAside(url.path, to: copy) { from, to, budget in

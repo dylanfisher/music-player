@@ -1,3 +1,4 @@
+import Fixtures
 import Foundation
 import Library
 import Metadata
@@ -32,7 +33,8 @@ struct FuzzTarget: Sendable {
         parser(.mp3, "ID3v1 and ID3v2 tags and MPEG audio frames"),
         parser(.wav, "RIFF chunks, INFO lists and ID3 chunks"),
         parser(.aiff, "AIFF and AIFF-C chunks and ID3 chunks"),
-        vorbis, config, state, journal, rules, playlistFile, swinsian, iTunesXML, tagWriter,
+        vorbis, config, state, journal, rules, playlistFile, swinsian, swinsianPredicate, iTunesXML,
+        tagWriter,
     ]
 
     static func named(_ name: String) -> FuzzTarget? { all.first { $0.name == name } }
@@ -364,25 +366,25 @@ private let playlistFile = FuzzTarget(
 private let swinsian = FuzzTarget(
     name: "swinsian", summary: "a Swinsian library database, copied aside and read",
     seedFormats: [],
-    tokens: ["CREATE TABLE", "smartrule", "playlisttrack", "playcount", "lastplayed"],
+    tokens: ["CREATE TABLE", "smartpredicate", "playlisttrack", "playcount", "favourite"],
     madeSeeds: { work, _ in
         let url = work.appendingPathComponent("seed.sqlite")
         try? FileManager.default.removeItem(at: url)
         let database = try Database(at: url)
-        // The schema ADR 0033 assumes, with values of every type the reader checks for.
+        // Swinsian's schema, with values of every type the reader checks for.
+        try database.execute("PRAGMA journal_mode = DELETE;" + swinsianSchemaSQL)
+        let rules = try swinsianPredicateShapes.prefix(2).map {
+            "X'" + (try swinsianPredicateArchive($0)).map { String(format: "%02X", $0) }.joined()
+                + "'"
+        }
         try database.execute(
             """
-            PRAGMA journal_mode = DELETE;
-            CREATE TABLE track (track_id, path, playcount, lastplayed, dateadded, rating, loved);
-            CREATE TABLE playlist (playlist_id, name, smart, matchall);
-            CREATE TABLE playlisttrack (playlist_id, track_id, position);
-            CREATE TABLE smartrule (playlist_id, position, field, operator, value);
-            INSERT INTO track VALUES (1, '/Music/Café.flac', 3, 700000000.5, 600000000, 4, 1);
-            INSERT INTO track VALUES (2, '/Music/Cafe\u{301}.flac', 'x', NULL, -5, 9, 2);
-            INSERT INTO playlist VALUES (1, 'Mix', 0, NULL), (2, 'Smart', 1, 1);
-            INSERT INTO playlisttrack VALUES (1, 2, 1), (1, 1, 2), (1, 7, 3);
-            INSERT INTO smartrule VALUES (2, 1, 'genre', 'contains', 'Rock');
-            INSERT INTO smartrule VALUES (2, 2, 'lastplayed', 'inlast', 30);
+            INSERT INTO track (track_id, path, playcount, lastplayed, dateadded, rating, favourite)
+            VALUES (1, '/Music/Café.flac', 3, 700000000.5, 600000000, 4.5, 1),
+                (2, '/Music/Cafe\u{301}.flac', 'x', 0, -5, 9, 2);
+            INSERT INTO playlist (playlist_id, name, smart, smartpredicate)
+            VALUES (1, 'Mix', 0, NULL), (2, 'New', 1, \(rules[0])), (3, 'Week', 1, \(rules[1]));
+            INSERT INTO playlisttrack (playlist_id, track_id, tindex) VALUES (1, 2, 1), (1, 1, 2), (1, 7, 3);
             """)
         return [try [UInt8](Data(contentsOf: url))]
     },
@@ -398,6 +400,29 @@ private let swinsian = FuzzTarget(
             }
             checkPlayerLibrary(library)
             return !library.tracks.isEmpty
+        }
+    })
+
+private let swinsianPredicate = FuzzTarget(
+    name: "swinsian-predicate", summary: "a Swinsian smart playlist's archived predicate",
+    seedFormats: [],
+    tokens: ["NSSubpredicates", "NSPredicateOperator", "NSOperand", "NSArguments"],
+    madeSeeds: { _, _ in try swinsianPredicateShapes.map(swinsianPredicateArchive) },
+    prepare: { _ in
+        { input in
+            switch SwinsianPredicate.kind(input) {
+            case .smart(let rules):
+                precondition(
+                    rules.rules.allSatisfy { $0.problem == nil },
+                    "a mapped rule is invalid: \(rules)")
+                return true
+            case .unmapped(let reasons):
+                precondition(
+                    !reasons.isEmpty && reasons.count <= SwinsianPredicate.maximumReasons + 1,
+                    "\(reasons.count) reasons")
+                return false
+            case .manual, .smartAsManual: preconditionFailure("an archive made a manual playlist")
+            }
         }
     })
 

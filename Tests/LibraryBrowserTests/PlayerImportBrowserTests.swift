@@ -1,4 +1,5 @@
 import AppKit
+import Fixtures
 import Foundation
 import SQLite
 import Settings
@@ -45,6 +46,9 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     ]
     plan.library.problems = [PlayerLibraryProblem("track 3", .noPath)]
     plan.library.unlistedProblemCount = 2
+    plan.ratings = 3
+    plan.roundedRatings = 2
+    #expect(plan.previewLines.contains("Ratings: 3 tracks rated, 2 from a half star rounded up"))
     let lines = plan.detailLines
     let source = "/s/Library.sqlite"
     #expect(lines.filter { $0.hasPrefix("\(source): not in the library: ") }.count == 100)
@@ -73,14 +77,13 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     let url = folder.appendingPathComponent("Library.sqlite")
     let database = try Database(at: url)
     try database.execute(
-        swinsianSchema.map { "CREATE TABLE \($0.name) (\($0.columns.joined(separator: ", ")));" }
-            .joined()
-                + """
-                INSERT INTO track VALUES (1, '\(quoted[0])', 7, NULL, NULL, 3, 0);
-                INSERT INTO track VALUES (2, '\(quoted[1])', 0, NULL, NULL, 0, 1);
-                INSERT INTO playlist VALUES (1, 'From Swinsian', 0, NULL);
-                INSERT INTO playlisttrack VALUES (1, 2, 1), (1, 1, 2);
-                """)
+        swinsianSchemaSQL
+            + """
+            INSERT INTO track (track_id, path, playcount, rating, favourite)
+                VALUES (1, '\(quoted[0])', 7, 3, 0), (2, '\(quoted[1])', 0, 0, 1);
+            INSERT INTO playlist (playlist_id, name, smart) VALUES (1, 'From Swinsian', 0);
+            INSERT INTO playlisttrack (playlist_id, track_id, tindex) VALUES (1, 2, 1), (1, 1, 2);
+            """)
     let library = try PlayerLibrary.read(.swinsian, at: url)
     let preview = try await model.importPlan(library, prefix: nil)
     #expect(preview.playsAdded == 7 && preview.ratings == 1 && preview.loved == 1)
@@ -107,10 +110,8 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     let url = folder.appendingPathComponent("Library.sqlite")
     try Database(at: url).execute(
-        swinsianSchema.map { "CREATE TABLE \($0.name) (\($0.columns.joined(separator: ", ")));" }
-            .joined()
-            + "INSERT INTO track VALUES (1, '\(path.replacingOccurrences(of: "'", with: "''"))',"
-            + " 4, NULL, NULL, 0, 0);")
+        swinsianSchemaSQL + "INSERT INTO track (track_id, path, playcount) VALUES"
+            + " (1, '\(path.replacingOccurrences(of: "'", with: "''"))', 4);")
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled],
         backing: .buffered, defer: false)

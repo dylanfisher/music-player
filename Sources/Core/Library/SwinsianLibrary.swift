@@ -7,8 +7,8 @@ import Settings
 
 private let logger = moduleLogger()
 
-/// Reads a Swinsian library database (ADR 0033). The schema is assumed, not known: every table
-/// and column read is checked first, and one missing fails the read naming each.
+/// Reads a Swinsian library database (ADR 0033). Every table and column read is checked first,
+/// and one missing fails the read naming each, so a Swinsian that changed its schema says so.
 extension PlayerLibrary {
     /// The database and its write-ahead log together; the owner's 43k tracks take about 100 MB.
     static let maximumDatabaseBytes = 4 << 30
@@ -68,7 +68,7 @@ extension PlayerLibrary {
             case .null:
                 note(PlayerLibraryProblem(item, .noPath))
                 return
-            case .longText:
+            case .long:
                 note(PlayerLibraryProblem(item, .tooLong(Self.maximumPathBytes)))
                 return
             default:
@@ -85,9 +85,16 @@ extension PlayerLibrary {
             }
             var track = PlayerTrack(path: path)
             track.plays = count(Cell(row, 2), item, columns[2]) ?? 0
-            track.lastPlayedSeconds = date(Cell(row, 3), item, columns[3], now: now)
+            // Swinsian writes 0 for never played.
+            let played = Cell(row, 3)
+            track.lastPlayedSeconds =
+                played == .integer(0) || played == .real(0)
+                ? nil : date(played, item, columns[3], now: now)
             track.addedSeconds = date(Cell(row, 4), item, columns[4], now: now)
-            track.rating = stars(Cell(row, 5), item, columns[5])
+            if let (stars, rounded) = stars(Cell(row, 5), item, columns[5]) {
+                track.rating = stars
+                track.ratingRounded = rounded
+            }
             track.loved = flag(Cell(row, 6), item, columns[6])
             paths[id] = add(track)
         }
@@ -109,15 +116,6 @@ extension PlayerLibrary {
             guard case .integer(let playlist) = Cell(row, 0) else { return }
             entries[playlist, default: []].append(Cell(row, 1))
         }
-        var rules: [Int64: [SwinsianRule]] = [:]
-        try database.prepare(ruleTable.select(orderedBy: [0, 1])).query { row in
-            guard case .integer(let playlist) = Cell(row, 0) else { return }
-            rules[playlist, default: []].append(
-                SwinsianRule(
-                    field: Cell(row, 2, maximumTextBytes: SmartRule.maximumTextBytes),
-                    operator: Cell(row, 3, maximumTextBytes: SmartRule.maximumTextBytes),
-                    value: Cell(row, 4, maximumTextBytes: SmartRule.maximumTextBytes)))
-        }
         let columns = playlistTable.columns
         var playlistCount = 0
         try database.prepare(playlistTable.select(orderedBy: [0]) + " LIMIT ?").query(
@@ -136,9 +134,9 @@ extension PlayerLibrary {
             }
             let numbered = PlayerLibraryProblem.playlist(id)
             let written: String
-            switch Cell(row, 1, maximumTextBytes: Self.maximumNameBytes) {
+            switch Cell(row, 1, maximumBytes: Self.maximumNameBytes) {
             case .text(let text): written = text
-            case .longText:
+            case .long:
                 note(PlayerLibraryProblem(numbered, .tooLong(Self.maximumNameBytes)))
                 return
             default:
@@ -150,10 +148,15 @@ extension PlayerLibrary {
             guard let name = checkedText(written, numbered, maximumBytes: Self.maximumNameBytes)
             else { return }
             let item = PlayerLibraryProblem.playlist(named: name)
+            if flag(Cell(row, 4), item, columns[4]) {
+                builtInPlaylists += 1
+                return
+            }
             var playlist = PlayerPlaylist(name: name, kind: .manual)
             if flag(Cell(row, 2), item, columns[2]) {
-                let matchAll = flag(Cell(row, 3), item, columns[3])
-                playlist.kind = swinsianKind(rules[id] ?? [], matchAll: matchAll)
+                playlist.kind = smartKind(
+                    Cell(row, 3, maximumBytes: SwinsianPredicate.maximumBytes),
+                    limited: flag(Cell(row, 5), item, columns[5]))
             } else {
                 for entry in entries[id] ?? [] {
                     guard case .integer(let track) = entry else {
@@ -170,6 +173,17 @@ extension PlayerLibrary {
                 }
             }
             playlists.append(playlist)
+        }
+    }
+
+    /// A smart playlist from its archived predicate. Swinsian's limits aren't read, so one with
+    /// a limit isn't imported rather than imported with more tracks than it holds.
+    private func smartKind(_ predicate: Cell, limited: Bool) -> PlayerPlaylist.Kind {
+        if limited { return .unmapped(["it's limited to some of its tracks, which isn't read"]) }
+        switch predicate {
+        case .blob(let bytes): return SwinsianPredicate.kind(bytes)
+        case .long: return .unmapped([SwinsianPredicate.Archive.tooLarge.description])
+        default: return .unmapped([SwinsianPredicate.Archive.notAnArchive.description])
         }
     }
 
@@ -203,13 +217,29 @@ extension PlayerLibrary {
             seconds + Date.timeIntervalBetween1970AndReferenceDate, item, column, now: now)
     }
 
-    private mutating func stars(_ cell: Cell, _ item: String, _ column: String) -> Int? {
-        guard let stars = count(cell, item, column) else { return nil }
-        guard stars <= SmartField.maxRating else {
-            note(PlayerLibraryProblem(item, .outOfRange(column, "\(stars)")))
+    /// Whole stars from Swinsian's 0 to 5 in half steps, a half rounded up as iTunes's are
+    /// (ADR 0033), and whether it was rounded; nil for none, or after noting why not.
+    private mutating func stars(_ cell: Cell, _ item: String, _ column: String)
+        -> (Int, rounded: Bool)?
+    {
+        let stars: Double
+        let written: String
+        switch cell {
+        case .null: return nil
+        case .integer(let value): (stars, written) = (Double(value), "\(value)")
+        case .real(let value): (stars, written) = (value, "\(value)")
+        default:
+            note(PlayerLibraryProblem(item, .wrongType(column, expected: Double.typeName)))
             return nil
         }
-        return stars == 0 ? nil : stars
+        let halves = stars * 2
+        guard halves >= 0, halves <= Double(2 * SmartField.maxRating), halves == halves.rounded()
+        else {
+            note(PlayerLibraryProblem(item, .outOfRange(column, written)))
+            return nil
+        }
+        let whole = (Int(halves) + 1) / 2
+        return whole == 0 ? nil : (whole, Int(halves) % 2 == 1)
     }
 
     private mutating func flag(_ cell: Cell, _ item: String, _ column: String) -> Bool {
@@ -220,22 +250,6 @@ extension PlayerLibrary {
             note(PlayerLibraryProblem(item, .wrongType(column, expected: Bool.typeName)))
             return false
         }
-    }
-
-    private func swinsianKind(_ rules: [SwinsianRule], matchAll: Bool) -> PlayerPlaylist.Kind {
-        guard rules.count <= Self.maximumRules else {
-            return .unmapped(["more than \(Self.maximumRules) rules"])
-        }
-        var mapped: [SmartRule] = []
-        var unmapped: [String] = []
-        for rule in rules {
-            switch rule.smartRule() {
-            case .success(let rule): mapped.append(rule)
-            case .failure(let reason): unmapped.append(reason.description)
-            }
-        }
-        return unmapped.isEmpty
-            ? .smart(SmartRules(match: matchAll ? .all : .any, rules: mapped)) : .unmapped(unmapped)
     }
 }
 
@@ -252,12 +266,11 @@ struct SwinsianTable: Sendable {
     }
 }
 
-/// The schema ADR 0033 assumes, unverified: a table on each line, then its columns.
+/// What the reader uses of Swinsian's schema (ADR 0033): a table on each line, then its columns.
 let swinsianSchema = """
-    track track_id path playcount lastplayed dateadded rating loved
-    playlist playlist_id name smart matchall
-    playlisttrack playlist_id track_id position
-    smartrule playlist_id position field operator value
+    track track_id path playcount lastplayed dateadded rating favourite
+    playlist playlist_id name smart smartpredicate folder limited
+    playlisttrack playlist_id track_id tindex
     """.split(separator: "\n").map { line in
         let words = line.split(separator: " ").map(String.init)
         return SwinsianTable(name: words[0], columns: Array(words.dropFirst()))
@@ -266,7 +279,6 @@ let swinsianSchema = """
 private let trackTable = swinsianSchema[0]
 private let playlistTable = swinsianSchema[1]
 private let entryTable = swinsianSchema[2]
-private let ruleTable = swinsianSchema[3]
 
 /// Throws `missingSchema` naming each table and column of `swinsianSchema` the database
 /// doesn't have. Names compare ignoring ASCII case, as SQLite's do.
@@ -297,20 +309,23 @@ enum Cell: Equatable, Sendable {
     case integer(Int64)
     case real(Double)
     case text(String)
-    /// Text over the cap it was read with, by its byte count; it was never read.
-    case longText(Int)
-    case blob
+    case blob([UInt8])
+    /// Text or a blob over the cap it was read with, by its byte count; it was never read.
+    case long(Int)
 
-    /// Text past `maximumTextBytes` is refused by its length before a string is made of it.
-    init(_ row: Row, _ column: Int32, maximumTextBytes: Int = PlayerLibrary.maximumPathBytes) {
-        switch row.storageClass(column) {
+    /// Text or a blob past `maximumBytes` is refused by its length before it's read.
+    init(_ row: Row, _ column: Int32, maximumBytes: Int = PlayerLibrary.maximumPathBytes) {
+        let storage = row.storageClass(column)
+        if storage == .text || storage == .blob, row.byteCount(column) > maximumBytes {
+            self = .long(row.byteCount(column))
+            return
+        }
+        switch storage {
         case .integer: self = .integer(row.optionalInt(column).map(Int64.init) ?? 0)
         case .real: self = .real(row.optionalDouble(column) ?? 0)
-        case .text where row.byteCount(column) > maximumTextBytes:
-            self = .longText(row.byteCount(column))
         case .text: self = .text(row.optionalText(column) ?? "")
+        case .blob: self = .blob(row.optionalBlob(column) ?? [])
         case .null: self = .null
-        case .blob: self = .blob
         }
     }
 }

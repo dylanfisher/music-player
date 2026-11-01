@@ -197,6 +197,15 @@ public struct Row {
         return String(decoding: UnsafeBufferPointer(start: text, count: count), as: UTF8.self)
     }
 
+    /// The bytes of a blob, or of text as stored; empty for a zero-length blob.
+    public func optionalBlob(_ column: Int32) -> [UInt8]? {
+        guard !isNull(column) else { return nil }
+        // SQLite's docs ask for the blob first, then its length; a zero-length blob is NULL.
+        guard let bytes = sqlite3_column_blob(statement, column) else { return [] }
+        let count = Int(sqlite3_column_bytes(statement, column))
+        return Array(UnsafeRawBufferPointer(start: bytes, count: count))
+    }
+
     /// A NULL where the caller expects a value means the schema and the query disagree.
     private func notNull(_ column: Int32) throws(SQLiteError) {
         guard !isNull(column) else {

@@ -9,6 +9,8 @@ public struct PlayerTrack: Equatable, Sendable {
     public var addedSeconds: Double?
     /// 1 to 5 stars; nil for none.
     public var rating: Int?
+    /// The rating was a half star rounded up (ADR 0033).
+    var ratingRounded = false
     public var loved = false
 
     init(path: String) { self.path = path }
@@ -20,6 +22,11 @@ public struct PlayerTrack: Equatable, Sendable {
         skips += other.skips
         lastPlayedSeconds = later(lastPlayedSeconds, other.lastPlayedSeconds)
         addedSeconds = earlier(addedSeconds, other.addedSeconds)
+        if (other.rating ?? 0) > (rating ?? 0) {
+            ratingRounded = other.ratingRounded
+        } else if other.rating == rating {
+            ratingRounded = ratingRounded && other.ratingRounded
+        }
         rating = [rating, other.rating].compactMap { $0 }.max()
         loved = loved || other.loved
     }

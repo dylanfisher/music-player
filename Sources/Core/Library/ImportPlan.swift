@@ -20,6 +20,8 @@ public struct ImportPlan: Equatable, Sendable {
     public var dateAdded = 0
     /// Tracks rated here for the first time.
     public var ratings = 0
+    /// Of `ratings`, those that were a half star rounded up.
+    public var roundedRatings = 0
     /// Tracks rated differently here, which keep ours.
     public var ratingsKept = 0
     public var loved = 0

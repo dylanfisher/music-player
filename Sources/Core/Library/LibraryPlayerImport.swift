@@ -58,6 +58,7 @@ extension LibraryIndex {
                 if our.rating == nil {
                     update.rating = rating
                     plan.ratings += 1
+                    if theirs.ratingRounded { plan.roundedRatings += 1 }
                 } else if our.rating != rating {
                     plan.ratingsKept += 1
                 }
