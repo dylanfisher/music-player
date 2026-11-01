@@ -283,13 +283,16 @@ private let syncSchema = """
         line TEXT NOT NULL
     );
     -- How far each other machine's log was read and applied: the byte offset in the file as
-    -- it was in the folder named, the last sequence number applied and the lines read.
+    -- it was in the folder named, the last sequence number applied and the lines read; and
+    -- the event waiting for its playlist's create, and for how many syncs.
     CREATE TABLE \(syncLogsTable) (
         machine TEXT PRIMARY KEY,
         folder TEXT NOT NULL,
         offset INTEGER NOT NULL,
         seq INTEGER NOT NULL,
-        lines INTEGER NOT NULL
+        lines INTEGER NOT NULL,
+        waiting_seq INTEGER NOT NULL,
+        waiting_syncs INTEGER NOT NULL
     );
     -- The change each synced field holds: a rating or love by path ID, a playlist's name,
     -- rules or entries by playlist ID. Last writer wins against it.

@@ -291,3 +291,44 @@ private func folder(with lines: [String], name: String = String(repeating: "c", 
     }
     #expect(skips == [1])
 }
+
+@Test func anEventForAPlaylistNeverCreatedWaitsTenSyncsThenIsSkipped() throws {
+    let rename = SyncRecord(
+        seq: 1, clock: clock, event: .playlistRename(playlist: playlist, name: "Mix")
+    ).line
+    let play = SyncRecord(
+        seq: 2, clock: clock, event: .play(path: "music/library/a.flac", at: 1_700_000_000)
+    ).line
+    let (sync, index) = try folder(with: [rename, play])
+    let plays = { try index.database.prepare("SELECT count(*) FROM plays").map { try $0.int(0) } }
+    for _ in 0..<LibraryIndex.maximumWaitingSyncs {
+        #expect(try index.sync(folder: "sync", at: sync.path).applied == 0)
+    }
+    #expect(try plays() == [0])
+    let report = try index.sync(folder: "sync", at: sync.path)
+    #expect(report.problems.contains { $0.contains("which no log created in 10 syncs") })
+    #expect(try plays() == [1])
+}
+
+@Test func aSyncAddsOnlySoManyPathsAndTheRestWait() throws {
+    let lines = (1...30).map {
+        SyncRecord(
+            seq: Int64($0), clock: clock,
+            event: .play(path: "music/library/\($0).flac", at: 1_700_000_000)
+        ).line
+    }
+    let (sync, index) = try folder(with: lines)
+    index.maximumNewPathsPerSync = 10
+    let first = try index.sync(folder: "sync", at: sync.path)
+    #expect(first.applied == 10)
+    #expect(first.problems.contains { $0.contains("the most one does") })
+    #expect(try index.sync(folder: "sync", at: sync.path).applied == 10)
+}
+
+@Test func aPlaylistEventListsOnlySoManyEntries() {
+    let paths = Array(repeating: "a", count: SyncRecord.maximumEntries + 1)
+    let line = SyncRecord(
+        seq: 1, clock: clock, event: .playlistEntries(playlist: playlist, paths: paths)
+    ).line
+    #expect(problem(line)?.contains("lists over") == true)
+}

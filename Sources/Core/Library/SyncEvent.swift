@@ -39,6 +39,8 @@ package struct SyncRecord: Equatable, Sendable {
     static let countRange: ClosedRange<Int64> = 0...Int64(Int32.max)
     static let maximumNameBytes = 4096
     static let maximumPathBytes = 4096
+    /// Entries one playlist event lists at most; a longer playlist isn't synced.
+    static let maximumEntries = 100_000
 
     /// The line, without its line break: a JSON object with its keys in a fixed order.
     package var line: String {
@@ -80,6 +82,11 @@ package struct SyncRecord: Equatable, Sendable {
 }
 
 extension SyncEvent {
+    /// What applying the event costs, toward a sync's batch: one, or one per entry.
+    var work: Int {
+        if case .playlistEntries(_, let paths) = self { max(1, paths.count) } else { 1 }
+    }
+
     var name: SyncEventName {
         switch self {
         case .play: .play
@@ -200,6 +207,9 @@ extension SyncEvent {
         case .playlistEntries:
             guard case .strings(let paths) = try fields.take(.paths) else {
                 throw .bad(.paths, "isn't a list of strings")
+            }
+            guard paths.count <= SyncRecord.maximumEntries else {
+                throw .bad(.paths, "lists over \(SyncRecord.maximumEntries) entries")
             }
             var checked: [String] = []
             for path in paths { checked.append(try SyncJSON.string(path).path(.paths)) }

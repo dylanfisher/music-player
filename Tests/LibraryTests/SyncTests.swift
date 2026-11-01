@@ -209,6 +209,36 @@ private func syncAll(_ machines: [Machine]) throws {
     for machine in all { #expect(try machine.playlists() == ["Mix 2"]) }
 }
 
+@Test func anEditOfAPlaylistWaitsForItsCreateFromALogNotReadYet() throws {
+    let nas = try SimulatedNAS()
+    let all = try machines(3, nas)
+    let (a, b, c) = (all[0], all[1], all[2])
+    for machine in all { try machine.scanned("x.flac") }
+    _ = try a.index.createPlaylist(named: "Mix")
+    try a.sync()
+    try b.sync()
+    // B's clock is an hour behind, but its first edit still comes after the create.
+    b.nowMs -= 3_600_000
+    let onB = try #require(try b.index.playlists().first).id
+    _ = try b.index.addToPlaylist(onB, trackIDs: [try #require(try b.track("x.flac")).id])
+    try b.sync()
+    let clocks = try [a, b].map { machine in
+        try machine.index.database.prepare(
+            "SELECT line FROM sync_outbox WHERE line LIKE '%playlist%' ORDER BY seq DESC LIMIT 1"
+        ).map { try SyncRecord(line: Array(try $0.text(0).utf8)[...]).clock }[0]
+    }
+    #expect(clocks[1] > clocks[0])
+    // C can't open A's log this time, so B's edit waits rather than being passed.
+    let log = nas.log(try a.id)
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: log)
+    let first = try c.sync()
+    #expect(first.problems.contains { $0.contains("can't open") })
+    #expect(try c.playlists().isEmpty)
+    try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: log)
+    #expect(try c.sync().problems.isEmpty)
+    #expect(try c.entries(of: "Mix") == ["x.flac"])
+}
+
 @Test func playlistEntriesTakeTheLatestWholeListAndADeleteWins() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair

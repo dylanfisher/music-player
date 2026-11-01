@@ -152,9 +152,11 @@ extension LibraryIndex {
     func logCreate(_ id: Int64, name: String, rules: String?) throws -> String {
         let syncID = newSyncID()
         try statement(insertSyncPlaylistSQL).run(syncID, id)
+        // Every field holds the create, so the first edit of any of them comes after it.
         if let made = try logSync(.playlistCreate(playlist: syncID, name: name, rules: rules)) {
-            try setStamp(.playlistName, id, made)
-            try setStamp(.playlistRules, id, made)
+            for field in [SyncField.playlistName, .playlistRules, .playlistEntries] {
+                try setStamp(field, id, made)
+            }
         }
         return syncID
     }
@@ -173,9 +175,15 @@ extension LibraryIndex {
             SELECT p.path FROM playlist_entries e JOIN paths p ON p.id = e.path_id
             WHERE e.playlist_id = ? ORDER BY e.position
             """
-        ).map(id) { try $0.text(0) }
-        try logSync(
-            .playlistEntries(playlist: syncID, paths: paths.compactMap(roots.syncPath)),
-            field: (.playlistEntries, id))
+        ).map(id) { try $0.text(0) }.compactMap(roots.syncPath)
+        guard paths.count <= SyncRecord.maximumEntries else {
+            let detail =
+                "a playlist of \(paths.count) tracks wasn't shared with the other Macs: a sync log"
+                + " takes \(SyncRecord.maximumEntries) at most"
+            logger.error("\(detail)")
+            try recordDiscard(detail)
+            return
+        }
+        try logSync(.playlistEntries(playlist: syncID, paths: paths), field: (.playlistEntries, id))
     }
 }

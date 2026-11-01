@@ -31,6 +31,9 @@ public final class LibraryIndex {
     /// The wall clock sync events are stamped by, in milliseconds since 1970; tests set their
     /// own to skew one machine's.
     var wallClockMs: () -> Int64 = { Int64((Date().timeIntervalSince1970 * 1000).rounded(.down)) }
+    /// New `paths` rows one sync adds at most, so a hostile log can't fill the disk in one go;
+    /// tests lower it.
+    var maximumNewPathsPerSync = 500_000
 
     /// Opens or creates the database at `url`. A part whose stored SQL differs from this build's
     /// is rebuilt: the index tables are emptied (the next scan refills them), and the stats are

@@ -81,8 +81,9 @@ the config file but music files, through the tag writer.
   does, and the other machines read it again from the start without counting twice. A lock
   file beside the database, held with `flock` for the whole push, keeps a second copy of the
   app from pushing at the same time; that copy reports it and waits.
-- **Caps**, shared by the writer and every reader: 4 MiB a line, 1 GiB and 4,000,000 events
-  a log. A log at a cap takes no more events and says so once in the window's notices; a
+- **Caps**, shared by the writer and every reader: 4 MiB a line, 100,000 entries a playlist
+  event, 1 GiB and 4,000,000 events a log. A sync adds at most 500,000 `paths` rows, leaving
+  the rest of the logs for the next, and keeps at most 100,000 looked-up paths in memory. A log at a cap takes no more events and says so once in the window's notices; a
   playlist whose list doesn't fit a line isn't synced, also with a notice. A million plays are
   about 110 MB.
 
@@ -111,7 +112,7 @@ the config file but music files, through the tag writer.
   `O_NOFOLLOW` in the folder's descriptor and checked by `fstat` as a regular file. Each is read
   from where the last read stopped to its last complete line: a line without its `\n` is left
   for the next read. The logs are merged in clock order, so a playlist's creation comes before
-  its rename from another machine, and applied in transactions of 20,000 events, each storing
+  its rename from another machine, and applied in transactions of 20,000 events (a playlist's list counting one per entry), each storing
   how far it read every log (`sync_logs`), so a crash repeats nothing. A log shorter than where
   reading stopped, or where that offset no longer ends a line, was replaced: it's read again
   from the start and reported; its sequence numbers keep events
@@ -125,6 +126,16 @@ the config file but music files, through the tag writer.
 - **A playlist's entries are one value**, the whole list: an edit on two machines at once
   keeps one machine's list. Per entry it would need an order that merges, for a playlist the
   owner edits on one Mac at a time.
+- **A playlist's create stamps all its fields**, so the first edit of its name, rules or
+  entries on another machine comes after it in clock order, however that machine's clock runs.
+  An edit read before its create (the creator's log couldn't be opened this time, or a far-off
+  clock put the create later) waits, holding its log there, until another event is applied in
+  the same sync, or the next sync; after 10 syncs it's skipped and reported.
+- **A playlist's create stamps all its fields**, so the first edit of its name, rules or
+  entries on another machine comes after it in clock order, however that machine's clock runs.
+  An edit read before its create (the creator's log couldn't be opened this time, or a far-off
+  clock put the create later) waits, holding its log there, until another event is applied in
+  the same sync, or the next sync; after 10 syncs it's skipped and reported.
 - **Deleting a playlist wins** over any change to it, earlier or later, and its ID is kept as a
   tombstone so a late create doesn't bring it back.
 - **Date Added** is the earliest any machine saw. A new path's `added` event comes from its

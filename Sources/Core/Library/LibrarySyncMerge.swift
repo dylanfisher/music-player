@@ -1,6 +1,12 @@
 import Foundation
 import SQLite
 
+/// An event for a playlist whose create hasn't been read yet, from a log not read so far or a
+/// clock that put the create later.
+struct SyncWaitsForCreate: Error {
+    var playlist: String
+}
+
 /// What a sync pass carries from one event to the next.
 struct SyncMerge {
     let roots: SyncRoots
@@ -8,6 +14,10 @@ struct SyncMerge {
     var pathIDs: [String: Int64] = [:]
     /// Events for paths outside this machine's share folders, which it doesn't keep.
     var outside = 0
+    /// `paths` rows the pass added.
+    var newPaths = 0
+    /// How many paths `pathIDs` holds before it's emptied, so a pass's memory stays bounded.
+    static let maximumCachedPaths = 100_000
     /// Whether any event changed the library, so the window reads it again.
     var changed = false
 
@@ -54,8 +64,9 @@ extension LibraryIndex {
             guard case .unknown = try mergedPlaylist(syncID) else { return nil }
             let id = try insertPlaylist(named: name, rules: rules)
             try statement(insertSyncPlaylistSQL).run(syncID, id)
-            try setStamp(.playlistName, id, stamp)
-            try setStamp(.playlistRules, id, stamp)
+            for field in [SyncField.playlistName, .playlistRules, .playlistEntries] {
+                try setStamp(field, id, stamp)
+            }
         case .playlistRename(let syncID, let name):
             guard case .local(let id) = try mergedPlaylist(syncID) else {
                 return try unknownPlaylist(syncID)
@@ -113,7 +124,15 @@ extension LibraryIndex {
             merge.outside += 1
             return nil
         }
-        let id = try pathID(path, seenAt: seconds)
+        let nfc = path.precomposedStringWithCanonicalMapping
+        let id: Int64
+        if let known = try existingPathID(nfc) {
+            id = known
+        } else {
+            id = try pathID(nfc, seenAt: seconds)
+            merge.newPaths += 1
+        }
+        if merge.pathIDs.count >= SyncMerge.maximumCachedPaths { merge.pathIDs = [:] }
         merge.pathIDs[syncPath] = id
         return id
     }
@@ -155,10 +174,11 @@ extension LibraryIndex {
         return row.map { .local($0) } ?? .deleted
     }
 
-    /// Why an event for the playlist `syncID` was skipped: nothing when it was deleted here.
+    /// Nothing, for an event for the playlist `syncID` deleted here; one for a playlist no log
+    /// read so far created waits for its create, before anything is written.
     private func unknownPlaylist(_ syncID: String) throws -> String? {
         if case .deleted = try mergedPlaylist(syncID) { return nil }
-        return "it changes the playlist \(syncID), which no log read so far created"
+        throw SyncWaitsForCreate(playlist: syncID)
     }
 
     private func isManual(_ id: Int64) throws -> Bool {

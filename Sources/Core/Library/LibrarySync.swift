@@ -11,6 +11,8 @@ extension LibraryIndex {
     /// commits and checkpoints don't dominate a long log, few enough that an edit in the window
     /// waits a fraction of a second.
     static let syncBatch = 20_000
+    /// How many syncs an event waits for its playlist's create before it's skipped.
+    static let maximumWaitingSyncs = 10
 
     /// Pushes this machine's log to the folder at `path`, which is named `folder` in the
     /// config, then reads and applies every other machine's log there. Only the push runs when
@@ -126,14 +128,15 @@ extension LibraryIndex {
             names = Array(names.prefix(SyncDirectory.maximumLogs))
         }
         let read = try statement(
-            "SELECT folder, offset, seq, lines FROM \(syncLogsTable) WHERE machine = ?")
+            "SELECT folder, offset, seq, lines, waiting_seq, waiting_syncs FROM \(syncLogsTable)"
+                + " WHERE machine = ?")
         var cursors: [SyncCursor] = []
         for name in names {
             let machine = SyncDirectory.machine(ofLog: name)!
             let stored = try read.map(machine) {
                 (
                     folder: try $0.text(0), offset: try $0.int(1), seq: try $0.int64(2),
-                    lines: try $0.int(3)
+                    lines: try $0.int(3), waiting: (seq: try $0.int64(4), syncs: try $0.int(5))
                 )
             }.first
             do {
@@ -142,6 +145,7 @@ extension LibraryIndex {
                 if let stored {
                     cursor.seq = stored.seq
                     cursor.quietThrough = stored.seq
+                    cursor.storedWaiting = stored.waiting
                     // Where reading stopped must still end a line, or the log was replaced.
                     let endsLine =
                         try stored.offset <= file.size
@@ -163,19 +167,51 @@ extension LibraryIndex {
         }
         var merge = SyncMerge(roots: try syncRoots())
         let save = try statement(
-            "INSERT OR REPLACE INTO \(syncLogsTable) (machine, folder, offset, seq, lines)"
-                + " VALUES (?, ?, ?, ?, ?)")
-        while cursors.contains(where: { $0.head != nil }) {
+            "INSERT OR REPLACE INTO \(syncLogsTable) (machine, folder, offset, seq, lines,"
+                + " waiting_seq, waiting_syncs) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        func saveAll(endingPass: Bool) throws {
+            for cursor in cursors {
+                let waiting = endingPass ? cursor.waitingAtEnd : cursor.storedWaiting
+                try save.run(
+                    cursor.machine, folder, cursor.offset, cursor.seq, cursor.lines, waiting.seq,
+                    waiting.syncs)
+            }
+        }
+        // Events applied this pass; a log waiting for a playlist's create is read again once
+        // another event was applied, which may have been the create.
+        var total = 0
+        var stopped = false
+        func eligible(_ cursor: SyncCursor) -> Bool {
+            cursor.head != nil && (cursor.waitingSince.map { $0 < total } ?? true)
+        }
+        while !stopped, cursors.contains(where: eligible) {
             try database.transaction {
-                var applied = 0
-                while applied < Self.syncBatch,
-                    let next = cursors.indices.filter({ cursors[$0].head != nil }).min(by: {
+                var work = 0
+                while work < Self.syncBatch,
+                    let next = cursors.indices.filter({ eligible(cursors[$0]) }).min(by: {
                         cursors[$0].order < cursors[$1].order
                     })
                 {
+                    guard merge.newPaths < maximumNewPathsPerSync else {
+                        report.problems.append(
+                            "this sync added \(merge.newPaths) paths, the most one does; the"
+                                + " rest of the logs wait for the next")
+                        stopped = true
+                        break
+                    }
                     let record = cursors[next].head!
-                    if let problem = try apply(record, from: cursors[next].machine, &merge) {
-                        cursors[next].note("event \(record.seq): \(problem)")
+                    do {
+                        if let problem = try apply(record, from: cursors[next].machine, &merge) {
+                            cursors[next].note("event \(record.seq): \(problem)")
+                        }
+                    } catch let waiting as SyncWaitsForCreate {
+                        guard cursors[next].givesUpWaiting else {
+                            cursors[next].waitingSince = total
+                            continue
+                        }
+                        cursors[next].note(
+                            "event \(record.seq): it changes the playlist \(waiting.playlist),"
+                                + " which no log created in \(Self.maximumWaitingSyncs) syncs")
                     }
                     do {
                         try cursors[next].applied(wallMs: wallClockMs())
@@ -183,20 +219,16 @@ extension LibraryIndex {
                         // Read no more of that log this pass; the rest waits for the next.
                         cursors[next].note("\(error)")
                     }
-                    applied += 1
+                    total += 1
+                    work += record.event.work
                 }
-                report.applied += applied
-                for cursor in cursors {
-                    try save.run(cursor.machine, folder, cursor.offset, cursor.seq, cursor.lines)
-                }
+                try saveAll(endingPass: false)
             }
         }
-        // A log with only skipped lines still records how far it was read.
-        try database.transaction {
-            for cursor in cursors {
-                try save.run(cursor.machine, folder, cursor.offset, cursor.seq, cursor.lines)
-            }
-        }
+        report.applied = total
+        // A log with only skipped lines still records how far it was read, and one waiting
+        // counts the syncs it has waited.
+        try database.transaction { try saveAll(endingPass: true) }
         if merge.outside > 0 {
             report.problems.append(
                 "events for files outside this Mac's share folders, which it doesn't keep:"
@@ -244,6 +276,22 @@ private struct SyncCursor {
 
     /// Read from the start again, events up to here were applied before.
     var quietThrough: Int64 = 0
+    /// The event that waited for its playlist's create at the end of the last syncs, and how
+    /// many of them.
+    var storedWaiting: (seq: Int64, syncs: Int) = (0, 0)
+    /// How many events the pass had applied when the head started waiting for its create.
+    var waitingSince: Int?
+
+    /// Whether the head has waited for its playlist's create as long as it may.
+    var givesUpWaiting: Bool {
+        storedWaiting.seq == head?.seq && storedWaiting.syncs >= LibraryIndex.maximumWaitingSyncs
+    }
+
+    /// What to store of the head's wait as the pass ends.
+    var waitingAtEnd: (seq: Int64, syncs: Int) {
+        guard waitingSince != nil, let head else { return (0, 0) }
+        return (head.seq, storedWaiting.seq == head.seq ? storedWaiting.syncs + 1 : 1)
+    }
 
     mutating func restart(at offset: Int, lines: Int) {
         quietThrough = 0
@@ -262,6 +310,7 @@ private struct SyncCursor {
 
     /// The head was applied: the log is applied past it, and the next event becomes the head.
     mutating func applied(wallMs: Int64) throws {
+        waitingSince = nil
         if let head { seq = head.seq }
         offset = reader.offset
         lines += 1
