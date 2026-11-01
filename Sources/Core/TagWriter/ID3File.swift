@@ -24,7 +24,7 @@ struct ID3File {
             let head = try reader.bytes(0..<min(ID3Tag.headerBytes, reader.size))
             if head.matches(id3v2Identifier, at: 0) {
                 guard let body = try head.syncsafe(6) else {
-                    throw .malformed(at: 6, "ID3v2 tag size isn't a syncsafe integer")
+                    throw .malformed(at: 6, id3SizeNotSyncsafe)
                 }
                 let count = ID3Tag.headerBytes + body
                 guard count <= reader.size else {
@@ -49,7 +49,7 @@ struct ID3File {
             try forEachChunk(reader, in: 12..<end, littleEndian: littleEndian, form: form) {
                 chunks.append($0)
             }
-            let audioID = container == .wav ? "data" : "SSND"
+            let audioID = container == .wav ? wavAudioChunkID : aiffAudioChunkID
             guard let audio = chunks.first(where: { $0.id == audioID }) else {
                 throw .malformed(at: 12, "\(form) without a '\(audioID)' chunk")
             }
@@ -115,7 +115,7 @@ struct ID3File {
     }
 
     func layout() -> TagLayout {
-        var notes = ["ID3v2.\(tag.version)"]
+        var notes = [id3VersionName(tag.version)]
         if tag.byteCount == 0 { notes = ["no ID3v2 tag"] }
         switch host {
         case .mp3:

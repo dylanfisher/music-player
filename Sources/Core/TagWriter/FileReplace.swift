@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import Log
+import Metadata
 
 private let logger = moduleLogger()
 
@@ -21,9 +22,11 @@ struct FileIdentity: Equatable {
 
     init(path: String) throws(TagWriteError) {
         var info = stat()
-        guard lstat(path, &info) == 0 else { throw systemError(path, .unreadable, "can't stat") }
+        guard lstat(path, &info) == 0 else {
+            throw systemError(path, .unreadable, FileFailure.stat)
+        }
         guard info.st_mode & S_IFMT == S_IFREG else {
-            throw TagWriteError(path: path, kind: .unsupported, detail: "not a regular file")
+            throw TagWriteError(path: path, kind: .unsupported, detail: FileFailure.notRegular)
         }
         self.init(info)
     }
@@ -53,7 +56,7 @@ package func tempPath(for path: String) -> String {
 /// too.
 func requireWritable(_ path: String) throws(TagWriteError) {
     var info = stat()
-    guard lstat(path, &info) == 0 else { throw systemError(path, .unreadable, "can't stat") }
+    guard lstat(path, &info) == 0 else { throw systemError(path, .unreadable, FileFailure.stat) }
     let locked = UInt32(UF_IMMUTABLE | SF_IMMUTABLE | UF_APPEND | SF_APPEND)
     guard info.st_flags & locked == 0 else {
         throw TagWriteError(path: path, kind: .notWritable, detail: "the file is locked")
@@ -87,10 +90,12 @@ func writeTemp(_ segments: [Segment], from original: String, to temp: String)
         throw systemError(original, .writeFailed, "can't remove the old temp file \(temp)")
     }
     let source = open(original, O_RDONLY | O_CLOEXEC)
-    guard source >= 0 else { throw systemError(original, .unreadable, "can't open") }
+    guard source >= 0 else { throw systemError(original, .unreadable, FileFailure.open) }
     defer { close(source) }
     var info = stat()
-    guard fstat(source, &info) == 0 else { throw systemError(original, .unreadable, "can't stat") }
+    guard fstat(source, &info) == 0 else {
+        throw systemError(original, .unreadable, FileFailure.stat)
+    }
 
     var placed: [(offset: Int, segment: Segment)] = []
     var offset = 0
@@ -175,7 +180,7 @@ private func copy(
         }
         if count < 0 {
             if errno == EINTR { continue }
-            throw systemError(path, .unreadable, "read failed")
+            throw systemError(path, .unreadable, FileFailure.read)
         }
         guard count > 0 else {
             throw TagWriteError(

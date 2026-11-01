@@ -11,6 +11,14 @@ public enum ReadHints: String, CaseIterable, Sendable {
     case all
 }
 
+/// What the reader and the tag writer say when a file system call fails.
+package enum FileFailure {
+    package static let open = "can't open"
+    package static let stat = "can't stat"
+    package static let read = "read failed"
+    package static let notRegular = "not a regular file"
+}
+
 /// A file opened once and read with `pread`, never mapped, so a slow NAS read stalls only the
 /// caller and a file that shrinks fails the read instead of raising SIGBUS. Reads get exactly
 /// the bytes asked for, and by default no read-ahead and no caching (ADR 0010).
@@ -20,16 +28,16 @@ package final class FileSource: ByteSource {
 
     package init(path: String, hints: ReadHints = .all) throws(ParseFailure) {
         let descriptor = open(path, O_RDONLY | O_CLOEXEC)
-        guard descriptor >= 0 else { throw unreadable(nil, "can't open") }
+        guard descriptor >= 0 else { throw unreadable(nil, FileFailure.open) }
         var info = stat()
         guard fstat(descriptor, &info) == 0 else {
-            let failure = unreadable(nil, "can't stat")
+            let failure = unreadable(nil, FileFailure.stat)
             close(descriptor)
             throw failure
         }
         guard info.st_mode & S_IFMT == S_IFREG else {
             close(descriptor)
-            throw ParseFailure(kind: .unreadable, offset: nil, detail: "not a regular file")
+            throw ParseFailure(kind: .unreadable, offset: nil, detail: FileFailure.notRegular)
         }
         // Tags are read in a few short reads spread over the file, so read-ahead would fetch
         // bytes the parser skips, and on a NAS that's transfer time, not a saved round trip.
@@ -54,7 +62,7 @@ package final class FileSource: ByteSource {
                     off_t(range.lowerBound + done))
                 if count < 0 {
                     if errno == EINTR { continue }
-                    failure = unreadable(range.lowerBound + done, "read failed")
+                    failure = unreadable(range.lowerBound + done, FileFailure.read)
                     return
                 }
                 if count == 0 {

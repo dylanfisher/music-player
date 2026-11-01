@@ -19,10 +19,11 @@ struct MP4Box {
 
     /// The containers opened under `moov`, and under them `ilst`'s items stay whole.
     static let opened: Set<String> = [
-        MP4Type.moov, "trak", "mdia", "minf", "stbl", MP4Type.udta, MP4Type.meta, MP4Type.ilst,
+        MP4Type.moov, MP4Type.trak, MP4Type.mdia, MP4Type.minf, MP4Type.stbl, MP4Type.udta,
+        MP4Type.meta, MP4Type.ilst,
     ]
     static let paddingTypes: Set<String> = [MP4Type.free, "skip"]
-    static let chunkOffsetTypes: Set<String> = ["stco", MP4Type.co64]
+    static let chunkOffsetTypes: Set<String> = [MP4Type.stco, MP4Type.co64]
 
     init(type: String, body: [UInt8]) {
         self.type = type
@@ -166,14 +167,14 @@ struct MP4Box {
 
 /// The type of an `ilst` item and, for a `----` item, its `mean` and `name`.
 func mp4ItemKey(_ item: MP4Box) -> String {
-    guard item.type == "----" else { return item.type }
+    guard item.type == MP4ItemType.freeform else { return item.type }
     var parts: [String] = []
     var cursor = 0
     while cursor + 8 <= item.body.count {
         let size = Int(bigEndianValue(item.body[cursor..<cursor + 4]))
         let type = String(decoding: item.body[cursor + 4..<cursor + 8], as: Unicode.ASCII.self)
         guard size >= 8, cursor + size <= item.body.count else { break }
-        if type == "mean" || type == "name", size >= 12 {
+        if type == MP4Type.mean || type == MP4Type.name, size >= 12 {
             parts.append(latin1(item.body[cursor + 12..<cursor + size]))
         }
         cursor += size

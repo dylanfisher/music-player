@@ -154,22 +154,25 @@ struct FLACFile {
         switch group {
         case .track, .disc:
             let (number, total) = group.numbers(in: tags)
-            let keys = group == .track ? ("TRACKNUMBER", "TRACKTOTAL") : ("DISCNUMBER", "DISCTOTAL")
+            let keys =
+                group == .track
+                ? (VorbisKey.trackNumber, VorbisKey.trackTotal)
+                : (VorbisKey.discNumber, VorbisKey.discTotal)
             return [number.map { (keys.0, "\($0)") }, total.map { (keys.1, "\($0)") }]
                 .compactMap { $0 }
         default:
             guard let text = group.text(in: tags) else { return [] }
             let key: String =
                 switch group {
-                case .title: "TITLE"
-                case .artist: "ARTIST"
-                case .album: "ALBUM"
-                case .albumArtist: "ALBUMARTIST"
-                case .genre: "GENRE"
-                case .date: "DATE"
-                case .composer: "COMPOSER"
-                case .comment: "COMMENT"
-                case .compilation: "COMPILATION"
+                case .title: VorbisKey.title
+                case .artist: VorbisKey.artist
+                case .album: VorbisKey.album
+                case .albumArtist: VorbisKey.albumArtist
+                case .genre: VorbisKey.genre
+                case .date: VorbisKey.date
+                case .composer: VorbisKey.composer
+                case .comment: VorbisKey.comment
+                case .compilation: VorbisKey.compilation
                 case .track, .disc: preconditionFailure("handled above")
                 }
             return [(key, text)]

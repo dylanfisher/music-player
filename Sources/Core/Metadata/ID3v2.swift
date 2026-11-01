@@ -20,6 +20,21 @@ private enum FrameKind {
     case day, time
 }
 
+/// The 2.3 and 2.4 frames the reader and the tag writer both name.
+package enum ID3FrameID {
+    package static let title = "TIT2"
+    package static let artist = "TPE1"
+    package static let album = "TALB"
+    package static let albumArtist = "TPE2"
+    package static let genre = "TCON"
+    package static let date = "TDRC"
+    package static let track = "TRCK"
+    package static let disc = "TPOS"
+    package static let compilation = "TCMP"
+    package static let composer = "TCOM"
+    package static let comment = "COMM"
+}
+
 /// ID3v2.2 has three-character IDs, 2.3 and 2.4 four. `TDRC` is 2.4's date and `TYER` 2.3's year;
 /// taggers mix them, so both are read in every version.
 private let frameKinds: [String: FrameKind] = [
@@ -27,10 +42,12 @@ private let frameKinds: [String: FrameKind] = [
     "TP2": .text(.albumArtist), "TCO": .genre, "TYE": .text(.date), "TRK": .text(.track),
     "TPA": .text(.disc), "TCP": .text(.compilation), "TCM": .text(.composer), "COM": .comment,
     "PIC": .picture,
-    "TIT2": .text(.title), "TPE1": .text(.artist), "TALB": .text(.album),
-    "TPE2": .text(.albumArtist), "TCON": .genre, "TDRC": .text(.date), "TYER": .text(.date),
-    "TRCK": .text(.track), "TPOS": .text(.disc), "TCMP": .text(.compilation),
-    "TCOM": .text(.composer), "COMM": .comment, "APIC": .picture,
+    ID3FrameID.title: .text(.title), ID3FrameID.artist: .text(.artist),
+    ID3FrameID.album: .text(.album), ID3FrameID.albumArtist: .text(.albumArtist),
+    ID3FrameID.genre: .genre, ID3FrameID.date: .text(.date), id3v23YearFrameID: .text(.date),
+    ID3FrameID.track: .text(.track), ID3FrameID.disc: .text(.disc),
+    ID3FrameID.compilation: .text(.compilation), ID3FrameID.composer: .text(.composer),
+    ID3FrameID.comment: .comment, "APIC": .picture,
     id3v23DayFrameID: .day, id3v23TimeFrameID: .time,
 ]
 
@@ -52,6 +69,11 @@ package func id3FrameIDs(for field: TagField) -> Set<String> {
             }
         })
 }
+
+/// "ID3v2.3" for version 3.
+package func id3VersionName(_ version: UInt8) -> String { "ID3v2.\(version)" }
+
+package let id3SizeNotSyncsafe = "ID3v2 tag size isn't a syncsafe integer"
 
 /// The frame IDs the reader takes art from.
 package let id3PictureFrameIDs = Set(
@@ -91,7 +113,7 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
     }
     let version = try header.uint8(3)
     guard (2...4).contains(version) else {
-        throw .unsupported(at: start, "ID3v2.\(version)")
+        throw .unsupported(at: start, id3VersionName(version))
     }
     let flags = try header.uint8(5)
     let knownFlags: UInt8 = [2: 0xC0, 3: 0xE0, 4: 0xF0][version]!
@@ -102,7 +124,7 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
         throw .unsupported(at: start + 5, "compressed ID3v2.2 tag")
     }
     guard let size = try header.syncsafe(6) else {
-        throw .malformed(at: start + 6, "ID3v2 tag size isn't a syncsafe integer")
+        throw .malformed(at: start + 6, id3SizeNotSyncsafe)
     }
     let footer = version == 4 && flags & 0x10 != 0 ? 10 : 0
     let byteCount = 10 + size + footer

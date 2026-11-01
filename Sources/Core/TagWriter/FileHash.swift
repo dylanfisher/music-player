@@ -1,5 +1,6 @@
 import CommonCrypto
 import Darwin
+import Metadata
 
 /// SHA-256 of a whole file and of its audio payload, from one pass over it.
 struct FileHashes: Equatable {
@@ -13,7 +14,7 @@ private let hashReadBytes = 4 * 1024 * 1024
 /// Hashes the file at `path` and, separately, the bytes in `payload`, which must be sorted.
 func fileHashes(_ path: String, payload: [Range<Int>]) throws(TagWriteError) -> FileHashes {
     let descriptor = open(path, O_RDONLY | O_CLOEXEC)
-    guard descriptor >= 0 else { throw systemError(path, .unreadable, "can't open") }
+    guard descriptor >= 0 else { throw systemError(path, .unreadable, FileFailure.open) }
     defer { close(descriptor) }
     var full = CC_SHA256_CTX()
     var audio = CC_SHA256_CTX()
@@ -27,7 +28,7 @@ func fileHashes(_ path: String, payload: [Range<Int>]) throws(TagWriteError) -> 
         }
         if count < 0 {
             if errno == EINTR { continue }
-            throw systemError(path, .unreadable, "read failed")
+            throw systemError(path, .unreadable, FileFailure.read)
         }
         if count == 0 { break }
         let chunk = offset..<offset + count

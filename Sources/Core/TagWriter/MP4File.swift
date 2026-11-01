@@ -33,7 +33,7 @@ struct MP4File {
             }
             return true
         }
-        guard let moovIndex else { throw .malformed(at: 0, "MP4 without a moov atom") }
+        guard let moovIndex else { throw .malformed(at: 0, mp4WithoutMoov) }
         self.top = top
         self.moovIndex = moovIndex
     }
@@ -118,7 +118,7 @@ struct MP4File {
             moov[udtaPath].children!.append(
                 MP4Box(
                     type: MP4Type.meta, prefix: [0, 0, 0, 0],
-                    children: [MP4Box(type: "hdlr", body: Self.metadataHandler)]))
+                    children: [MP4Box(type: MP4Type.hdlr, body: Self.metadataHandler)]))
         }
         udtaPath += [moov[udtaPath].children!.firstIndex { $0.type == MP4Type.meta }!]
         moov[udtaPath].children!.append(MP4Box(type: MP4Type.ilst, children: []))
@@ -170,14 +170,14 @@ struct MP4File {
         case .track, .disc:
             let (number, total) = group.numbers(in: tags)
             guard number != nil || total != nil else { return nil }
-            type = group == .track ? "trkn" : "disk"
+            type = group == .track ? MP4ItemType.track : MP4ItemType.disc
             dataType = 0
             value =
                 [0, 0] + bigEndianBytes(number ?? 0, 2) + bigEndianBytes(total ?? 0, 2)
                 + (group == .track ? [0, 0] : [])
         case .compilation:
             guard tags.compilation else { return nil }
-            type = "cpil"
+            type = MP4ItemType.compilation
             dataType = 21
             value = [1]
         default:
@@ -191,14 +191,14 @@ struct MP4File {
 
     private func textItemType(_ group: TagGroup) -> String {
         switch group {
-        case .title: "\u{A9}nam"
-        case .artist: "\u{A9}ART"
-        case .album: "\u{A9}alb"
-        case .albumArtist: "aART"
-        case .genre: "\u{A9}gen"
-        case .date: "\u{A9}day"
-        case .composer: "\u{A9}wrt"
-        case .comment: "\u{A9}cmt"
+        case .title: MP4ItemType.title
+        case .artist: MP4ItemType.artist
+        case .album: MP4ItemType.album
+        case .albumArtist: MP4ItemType.albumArtist
+        case .genre: MP4ItemType.genre
+        case .date: MP4ItemType.date
+        case .composer: MP4ItemType.composer
+        case .comment: MP4ItemType.comment
         case .track, .disc, .compilation: preconditionFailure("\(group) isn't text")
         }
     }

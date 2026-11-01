@@ -16,11 +16,29 @@ private enum ItemKind {
     case cover
 }
 
+/// The `ilst` item types the reader and the tag writer both name.
+package enum MP4ItemType {
+    package static let title = "\u{A9}nam"
+    package static let artist = "\u{A9}ART"
+    package static let album = "\u{A9}alb"
+    package static let albumArtist = "aART"
+    package static let genre = "\u{A9}gen"
+    package static let date = "\u{A9}day"
+    package static let composer = "\u{A9}wrt"
+    package static let comment = "\u{A9}cmt"
+    package static let track = "trkn"
+    package static let disc = "disk"
+    package static let compilation = "cpil"
+    package static let freeform = "----"
+}
+
 private let itemKinds: [String: ItemKind] = [
-    "\u{A9}nam": .text(.title), "\u{A9}ART": .text(.artist), "\u{A9}alb": .text(.album),
-    "aART": .text(.albumArtist), "\u{A9}gen": .text(.genre), "\u{A9}day": .text(.date),
-    "\u{A9}wrt": .text(.composer), "\u{A9}cmt": .text(.comment), "trkn": .track, "disk": .disc,
-    "cpil": .compilation, "gnre": .genreIndex, "----": .freeform, "covr": .cover,
+    MP4ItemType.title: .text(.title), MP4ItemType.artist: .text(.artist),
+    MP4ItemType.album: .text(.album), MP4ItemType.albumArtist: .text(.albumArtist),
+    MP4ItemType.genre: .text(.genre), MP4ItemType.date: .text(.date),
+    MP4ItemType.composer: .text(.composer), MP4ItemType.comment: .text(.comment),
+    MP4ItemType.track: .track, MP4ItemType.disc: .disc, MP4ItemType.compilation: .compilation,
+    "gnre": .genreIndex, MP4ItemType.freeform: .freeform, "covr": .cover,
 ]
 
 /// The item types the reader maps onto `field`, so a writer replaces exactly those.
@@ -96,8 +114,8 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
     try forEachAtom(reader, in: item.body, parent: item) { child throws(ParseFailure) in
         switch child.type {
         case MP4Type.data where data == nil: data = child
-        case "mean": mean = latin1(try reader.bytes(child.body).suffix(from: 4).array)
-        case "name": name = latin1(try reader.bytes(child.body).suffix(from: 4).array)
+        case MP4Type.mean: mean = latin1(try reader.bytes(child.body).suffix(from: 4).array)
+        case MP4Type.name: name = latin1(try reader.bytes(child.body).suffix(from: 4).array)
         default: break
         }
         return true

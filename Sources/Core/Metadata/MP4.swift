@@ -8,7 +8,18 @@ package enum MP4Type {
     package static let free = "free"
     package static let data = "data"
     package static let co64 = "co64"
+    package static let stco = "stco"
+    package static let trak = "trak"
+    package static let mdia = "mdia"
+    package static let minf = "minf"
+    package static let stbl = "stbl"
+    package static let hdlr = "hdlr"
+    /// A freeform item's domain and name.
+    package static let mean = "mean"
+    package static let name = "name"
 }
+
+package let mp4WithoutMoov = "MP4 without a moov atom"
 
 /// An MP4 atom: a 32-bit size (1 means a 64-bit size follows, 0 means "to the end of the file" at
 /// the top level), a four-character type, then the body.
@@ -26,13 +37,13 @@ func parseMP4(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
         if atom.type == MP4Type.moov { moov = atom }
         return moov == nil
     }
-    guard let moov else { throw .malformed(at: 0, "MP4 without a moov atom") }
+    guard let moov else { throw .malformed(at: 0, mp4WithoutMoov) }
 
     var track: TrackAudio?
     var items = ILSTItems()
     try forEachAtom(reader, in: moov.body, parent: moov) { child throws(ParseFailure) in
         switch child.type {
-        case "trak" where track == nil: track = try soundTrack(reader, child)
+        case MP4Type.trak where track == nil: track = try soundTrack(reader, child)
         case MP4Type.udta: items = try metadataItems(reader, child)
         default: break
         }
@@ -122,8 +133,8 @@ private func require(_ reader: ByteReader, _ parent: Atom, _ type: String) throw
 /// the codec, and for ALAC and AAC the real rate, which the sample entry's 16.16 field can't hold
 /// above 65535 Hz.
 private func soundTrack(_ reader: ByteReader, _ trak: Atom) throws(ParseFailure) -> TrackAudio? {
-    let mdia = try require(reader, trak, "mdia")
-    let handler = try reader.bytes(try require(reader, mdia, "hdlr").body)
+    let mdia = try require(reader, trak, MP4Type.mdia)
+    let handler = try reader.bytes(try require(reader, mdia, MP4Type.hdlr).body)
     guard try handler.fourCC(8) == "soun" else { return nil }
 
     let mdhd = try reader.bytes(try require(reader, mdia, "mdhd").body)
@@ -132,7 +143,7 @@ private func soundTrack(_ reader: ByteReader, _ trak: Atom) throws(ParseFailure)
     let duration = version == 1 ? try mdhd.uint64BE(24) : UInt64(try mdhd.uint32BE(16))
     guard timescale > 0 else { throw .malformed(at: mdhd.fileOffset(0), "MP4 mdhd timescale is 0") }
 
-    let stbl = try require(reader, try require(reader, mdia, "minf"), "stbl")
+    let stbl = try require(reader, try require(reader, mdia, MP4Type.minf), MP4Type.stbl)
     let stsd = try require(reader, stbl, "stsd")
     // Version and flags, then the entry count, then the entries.
     guard stsd.body.count >= 8 else {

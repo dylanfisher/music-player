@@ -1,11 +1,29 @@
+/// The Vorbis comment keys the reader and the tag writer both name.
+package enum VorbisKey {
+    package static let title = "TITLE"
+    package static let artist = "ARTIST"
+    package static let album = "ALBUM"
+    package static let albumArtist = "ALBUMARTIST"
+    package static let genre = "GENRE"
+    package static let date = "DATE"
+    package static let trackNumber = "TRACKNUMBER"
+    package static let trackTotal = "TRACKTOTAL"
+    package static let discNumber = "DISCNUMBER"
+    package static let discTotal = "DISCTOTAL"
+    package static let compilation = "COMPILATION"
+    package static let composer = "COMPOSER"
+    package static let comment = "COMMENT"
+}
+
 /// Vorbis comment keys, compared uppercased, and the fields they set. Several taggers' spellings
 /// of the same field are listed.
 private let vorbisFields: [String: TagField] = [
-    "TITLE": .title, "ARTIST": .artist, "ALBUM": .album, "ALBUMARTIST": .albumArtist,
-    "ALBUM ARTIST": .albumArtist, "GENRE": .genre, "DATE": .date, "TRACKNUMBER": .track,
-    "TRACKTOTAL": .trackTotal, "TOTALTRACKS": .trackTotal, "DISCNUMBER": .disc,
-    "DISCTOTAL": .discTotal, "TOTALDISCS": .discTotal, "COMPILATION": .compilation,
-    "COMPOSER": .composer, "COMMENT": .comment, "DESCRIPTION": .comment,
+    VorbisKey.title: .title, VorbisKey.artist: .artist, VorbisKey.album: .album,
+    VorbisKey.albumArtist: .albumArtist, "ALBUM ARTIST": .albumArtist, VorbisKey.genre: .genre,
+    VorbisKey.date: .date, VorbisKey.trackNumber: .track, VorbisKey.trackTotal: .trackTotal,
+    "TOTALTRACKS": .trackTotal, VorbisKey.discNumber: .disc, VorbisKey.discTotal: .discTotal,
+    "TOTALDISCS": .discTotal, VorbisKey.compilation: .compilation,
+    VorbisKey.composer: .composer, VorbisKey.comment: .comment, "DESCRIPTION": .comment,
 ]
 
 /// The keys, uppercased, that the reader maps onto `field`, so a writer replaces exactly those.

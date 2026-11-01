@@ -62,10 +62,10 @@ package enum FileFormat: String, Sendable {
             self = .flac
         } else if start.matches("ftyp", at: 4) {
             self = .mp4
-        } else if start.matches(riffFormID, at: 0), start.matches("WAVE", at: 8) {
+        } else if start.matches(riffFormID, at: 0), start.matches(wavFormType, at: 8) {
             self = .wav
         } else if start.matches(aiffFormID, at: 0),
-            start.matches("AIFF", at: 8) || start.matches("AIFC", at: 8)
+            start.matches(aiffFormType, at: 8) || start.matches(aifcFormType, at: 8)
         {
             self = .aiff
         } else if start.matches(id3v2Identifier, at: 0) || MPEGFrameHeader(start, at: 0) != nil {

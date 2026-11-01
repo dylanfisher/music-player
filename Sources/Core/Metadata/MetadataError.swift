@@ -18,9 +18,12 @@ public struct MetadataError: Error, Equatable, CustomStringConvertible {
     public var detail: String
 
     public var description: String {
-        "\(path): \(detail)" + (offset.map { " (at byte \($0))" } ?? "")
+        "\(path): \(detail)" + byteNote(offset)
     }
 }
+
+/// " (at byte 12)", or nothing without an offset, after a problem's detail.
+package func byteNote(_ offset: Int?) -> String { offset.map { " (at byte \($0))" } ?? "" }
 
 extension MetadataError {
     /// For the simulated NAS (Fixtures), which fails reads as a dropped volume would.

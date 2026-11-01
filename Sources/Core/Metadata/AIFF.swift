@@ -1,4 +1,8 @@
 package let aiffFormID = "FORM"
+/// The chunk holding the samples, which a tag must not overlap.
+package let aiffAudioChunkID = "SSND"
+let aiffFormType = "AIFF"
+let aifcFormType = "AIFC"
 
 /// AIFC compression types that are plain PCM: big-endian, little-endian ("sowt"), and float.
 private let pcmCompressionTypes: Set<String> = [
@@ -9,19 +13,19 @@ private let pcmCompressionTypes: Set<String> = [
 /// tag in `ID3 `; `SSND` is skipped. The `NAME`, `AUTH` and `ANNO` text chunks aren't read.
 func parseAIFF(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     let header = try reader.bytes(0..<12)
-    let isAIFC = header.matches("AIFC", at: 8)
+    let isAIFC = header.matches(aifcFormType, at: 8)
     let end = try formEnd(reader, size: Int(try header.uint32BE(4)), form: aiffFormID)
     var audio: TrackAudio?
     var id3: ID3v2Tag?
     var presentBytes: Int?
     try forEachChunk(
         reader, in: 12..<end, littleEndian: false, form: aiffFormID,
-        audioID: "SSND"
+        audioID: aiffAudioChunkID
     ) {
         chunk throws(ParseFailure) in
         if chunk.id == "COMM" {
             audio = try commonChunk(try reader.bytes(chunk.body), isAIFC: isAIFC)
-        } else if chunk.id == "SSND" {
+        } else if chunk.id == aiffAudioChunkID {
             // An offset and a block size precede the samples.
             if chunk.body.count < chunk.declaredSize { presentBytes = max(0, chunk.body.count - 8) }
         } else if id3 == nil {

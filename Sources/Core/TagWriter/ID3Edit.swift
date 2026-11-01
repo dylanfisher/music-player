@@ -5,17 +5,17 @@ import Metadata
 /// by `v23DateFrames`.
 private func frameID(_ group: TagGroup) -> String {
     switch group {
-    case .title: "TIT2"
-    case .artist: "TPE1"
-    case .album: "TALB"
-    case .albumArtist: "TPE2"
-    case .genre: "TCON"
-    case .date: "TDRC"
-    case .composer: "TCOM"
-    case .comment: "COMM"
-    case .track: "TRCK"
-    case .disc: "TPOS"
-    case .compilation: "TCMP"
+    case .title: ID3FrameID.title
+    case .artist: ID3FrameID.artist
+    case .album: ID3FrameID.album
+    case .albumArtist: ID3FrameID.albumArtist
+    case .genre: ID3FrameID.genre
+    case .date: ID3FrameID.date
+    case .composer: ID3FrameID.composer
+    case .comment: ID3FrameID.comment
+    case .track: ID3FrameID.track
+    case .disc: ID3FrameID.disc
+    case .compilation: ID3FrameID.compilation
     }
 }
 

@@ -21,6 +21,6 @@ public struct FileIssue: Equatable, Sendable, CustomStringConvertible {
             case .warning(let kind): "warning \(kind.rawValue)"
             case .failure(let kind): "failure \(kind.rawValue)"
             }
-        return "\(path): \(kind): \(detail)" + (offset.map { " (at byte \($0))" } ?? "")
+        return "\(path): \(kind): \(detail)" + byteNote(offset)
     }
 }

@@ -1,6 +1,9 @@
 import Foundation
 
 package let riffFormID = "RIFF"
+/// The chunk holding the samples, which a tag must not overlap.
+package let wavAudioChunkID = "data"
+let wavFormType = "WAVE"
 
 /// `LIST/INFO` fields and what they set. INFO has no album artist, totals or compilation flag.
 private let infoFields: [String: TagField] = [
@@ -22,12 +25,12 @@ func parseWAV(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     var id3: ID3v2Tag?
     try forEachChunk(
         reader, in: 12..<end, littleEndian: true, form: riffFormID,
-        audioID: "data"
+        audioID: wavAudioChunkID
     ) {
         chunk throws(ParseFailure) in
         switch chunk.id {
         case "fmt ": format = try reader.bytes(chunk.body)
-        case "data": dataBytes = chunk.body.count
+        case wavAudioChunkID: dataBytes = chunk.body.count
         case "LIST":
             let type = try reader.bytes(
                 chunk.body.lowerBound..<min(chunk.body.upperBound, chunk.body.lowerBound + 4))
