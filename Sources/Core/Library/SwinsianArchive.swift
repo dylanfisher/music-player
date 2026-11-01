@@ -4,28 +4,69 @@ import Foundation
 /// from the archive's property list without `NSKeyedUnarchiver` (ADR 0033): `NSPredicate`
 /// raises an Objective-C exception, which Swift can't catch, for a malformed archive. Only the
 /// parts the import maps are read; any other part is `unsupported`.
-indirect enum SwinsianRule: Equatable, Sendable, CustomStringConvertible {
+indirect enum SwinsianRule: Equatable, Sendable {
     case compound(NSCompoundPredicate.LogicalType, [SwinsianRule])
     case comparison(SwinsianComparison)
     /// A part the import doesn't read, by its class name.
     case unsupported(String)
 
-    var description: String {
+    /// The rule in `NSPredicate`'s format, cut at `limit` characters with "…". It's written
+    /// only up to the limit, since a rule can list one part many times.
+    func quoted(limit: Int) -> String {
+        var text = CappedText(limit: limit)
+        write(to: &text)
+        return text.text + (text.isCut ? "…" : "")
+    }
+
+    fileprivate func write(to text: inout CappedText) {
         switch self {
-        case .compound(.not, let parts) where parts.count == 1: "NOT \(parts[0].grouped)"
+        case .compound(.not, let parts) where parts.count == 1:
+            text.append("NOT ")
+            parts[0].writeGrouped(to: &text)
         case .compound(let type, let parts):
-            parts.map(\.grouped).joined(separator: type == .or ? " OR " : " AND ")
-        case .comparison(let comparison): comparison.description
-        case .unsupported(let name): name
+            for (index, part) in parts.enumerated() {
+                if text.isCut { return }
+                if index > 0 { text.append(type == .or ? " OR " : " AND ") }
+                part.writeGrouped(to: &text)
+            }
+        case .comparison(let comparison): comparison.write(to: &text)
+        case .unsupported(let name): text.append(name)
         }
     }
 
-    private var grouped: String {
-        if case .compound = self { "(\(self))" } else { description }
+    private func writeGrouped(to text: inout CappedText) {
+        guard case .compound = self else { return write(to: &text) }
+        text.append("(")
+        write(to: &text)
+        text.append(")")
     }
 }
 
-struct SwinsianComparison: Equatable, Sendable, CustomStringConvertible {
+/// Text written up to `limit` characters; past it, appends are dropped.
+struct CappedText {
+    let limit: Int
+    private(set) var text = ""
+    private(set) var count = 0
+    /// Whether something was dropped.
+    private(set) var isCut = false
+
+    init(limit: Int) { self.limit = limit }
+
+    mutating func append(_ piece: String) {
+        guard !isCut else { return }
+        let head = piece.prefix(limit - count + 1)
+        if head.count <= limit - count {
+            text += head
+            count += head.count
+        } else {
+            text += head.dropLast()
+            count = limit
+            isCut = true
+        }
+    }
+}
+
+struct SwinsianComparison: Equatable, Sendable {
     var left: SwinsianExpression
     var operatorType: UInt
     var options: NSComparisonPredicate.Options
@@ -34,13 +75,15 @@ struct SwinsianComparison: Equatable, Sendable, CustomStringConvertible {
 
     var operation: NSComparisonPredicate.Operator? { .init(rawValue: operatorType) }
 
-    var description: String {
-        let modifier = [1: "ALL ", 2: "ANY "][modifier] ?? ""
+    fileprivate func write(to text: inout CappedText) {
         let name = operation.flatMap { Self.names[$0] } ?? "operator \(operatorType)"
         let flags = zip("cdn", [.caseInsensitive, .diacriticInsensitive, .normalized]).compactMap {
             options.contains($1) ? $0 : nil
         }
-        return "\(modifier)\(left) \(name)\(flags.isEmpty ? "" : "[\(String(flags))]") \(right)"
+        text.append([1: "ALL ", 2: "ANY "][modifier] ?? "")
+        left.write(to: &text)
+        text.append(" \(name)\(flags.isEmpty ? "" : "[\(String(flags))]") ")
+        right.write(to: &text)
     }
 
     private static let names: [NSComparisonPredicate.Operator: String] = [
@@ -51,7 +94,7 @@ struct SwinsianComparison: Equatable, Sendable, CustomStringConvertible {
     ]
 }
 
-indirect enum SwinsianExpression: Equatable, Sendable, CustomStringConvertible {
+indirect enum SwinsianExpression: Equatable, Sendable {
     /// The selectors of `CAST(a, b)` and `a - b`.
     static let cast = "castObject:toType:"
     static let subtract = "from:subtract:"
@@ -64,19 +107,31 @@ indirect enum SwinsianExpression: Equatable, Sendable, CustomStringConvertible {
     case function(String, [SwinsianExpression])
     case unsupported(String)
 
-    var description: String {
+    fileprivate func write(to text: inout CappedText) {
         switch self {
-        case .keyPath(let path): path
-        case .text(let text): "\"\(text)\""
-        case .longText(let bytes): "<text of \(bytes) bytes>"
-        case .number(let number): Int(exactly: number).map(String.init) ?? "\(number)"
+        case .keyPath(let path): text.append(path)
+        case .text(let string): text.append("\"\(string)\"")
+        case .longText(let bytes): text.append("<text of \(bytes) bytes>")
+        case .number(let number): text.append(Int(exactly: number).map(String.init) ?? "\(number)")
         case .function(SwinsianExpression.cast, let arguments) where arguments.count == 2:
-            "CAST(\(arguments[0]), \(arguments[1]))"
+            text.append("CAST(")
+            arguments[0].write(to: &text)
+            text.append(", ")
+            arguments[1].write(to: &text)
+            text.append(")")
         case .function(SwinsianExpression.subtract, let arguments) where arguments.count == 2:
-            "\(arguments[0]) - \(arguments[1])"
+            arguments[0].write(to: &text)
+            text.append(" - ")
+            arguments[1].write(to: &text)
         case .function(let name, let arguments):
-            "\(name)(\(arguments.map(\.description).joined(separator: ", ")))"
-        case .unsupported(let name): name
+            text.append("\(name)(")
+            for (index, argument) in arguments.enumerated() {
+                if text.isCut { return }
+                if index > 0 { text.append(", ") }
+                argument.write(to: &text)
+            }
+            text.append(")")
+        case .unsupported(let name): text.append(name)
         }
     }
 }
@@ -89,6 +144,9 @@ enum SwinsianArchive {
     /// References from the root to the deepest object, which bounds the reader's recursion.
     static let maximumDepth = 64
     static let maximumTextBytes = SmartRule.maximumTextBytes
+    /// Objects read in all. One object can be listed many times at each level, so a small
+    /// archive can name millions of parts; the owner's largest reads under 50.
+    static let maximumReads = 4096
 
     /// The archive's root predicate, or why the archive can't be read.
     static func rule(_ archive: [UInt8]) -> Result<SwinsianRule, Problem> {
@@ -106,7 +164,9 @@ enum SwinsianArchive {
             roots.count == 1, let root = roots["root"].flatMap(objectNumber)
         else { return .failure(.notAnArchive) }
         if let problem = graphProblem(objects, root: root) { return .failure(problem) }
-        return .success(Reader(objects: objects).rule(roots["root"]))
+        let reader = Reader(objects: objects)
+        let rule = reader.rule(roots["root"])
+        return reader.reads > maximumReads ? .failure(.tooManyParts) : .success(rule)
     }
 
     /// Why the object graph from `root` is too big, too deep, cyclic or names an object that
@@ -161,15 +221,31 @@ enum SwinsianArchive {
         guard description.hasPrefix("<CFKeyedArchiverUID "), description.hasSuffix("}"),
             let start = description.range(of: "{value = ")
         else { return nil }
-        return Int(description[start.upperBound..<description.index(before: description.endIndex)])
+        guard
+            let number = Int(
+                description[start.upperBound..<description.index(before: description.endIndex)]),
+            number >= 0
+        else { return nil }
+        return number
     }
 
     /// Reads the objects of an archive whose graph `graphProblem` passed, so every reference is
-    /// in range, there's no cycle, and recursion is at most `maximumDepth` deep.
-    private struct Reader {
+    /// in range, there's no cycle, and recursion is at most `maximumDepth` deep. Past
+    /// `maximumReads` it reads nothing more.
+    private final class Reader {
         let objects: [Any]
+        private(set) var reads = 0
+
+        init(objects: [Any]) { self.objects = objects }
+
+        /// Counts a read, and whether it's within the budget.
+        private func read() -> Bool {
+            reads += 1
+            return reads <= maximumReads
+        }
 
         func rule(_ value: Any?) -> SwinsianRule {
+            guard read() else { return .unsupported("") }
             guard let (name, fields) = instance(value) else { return .unsupported("a value") }
             switch name {
             case "NSCompoundPredicate":
@@ -198,6 +274,7 @@ enum SwinsianArchive {
         }
 
         func expression(_ value: Any?) -> SwinsianExpression {
+            guard read() else { return .unsupported("") }
             guard let (name, fields) = instance(value) else { return .unsupported("a value") }
             switch name {
             case "NSKeyPathExpression":
@@ -284,7 +361,7 @@ enum SwinsianArchive {
 
     /// Why an archive can't be read.
     enum Problem: Error, Equatable, CustomStringConvertible {
-        case tooLarge, notAnArchive, tooManyObjects, tooDeep, cycle
+        case tooLarge, notAnArchive, tooManyObjects, tooDeep, cycle, tooManyParts
         case unreadable(String)
 
         var description: String {
@@ -294,6 +371,7 @@ enum SwinsianArchive {
             case .tooManyObjects: "its rules are over \(maximumObjects) objects"
             case .tooDeep: "its rules nest deeper than \(maximumDepth)"
             case .cycle: "its rules refer to themselves"
+            case .tooManyParts: "its rules have over \(maximumReads) parts"
             case .unreadable(let detail): "its rules couldn't be read: \(detail)"
             }
         }

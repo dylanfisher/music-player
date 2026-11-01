@@ -280,6 +280,26 @@ func blobSQL(_ bytes: [UInt8]) -> String {
             == reason(.tooManyObjects))
     let dangling = "<dict><key>a</key><dict><key>CF$UID</key><integer>9</integer></dict></dict>"
     #expect(SwinsianPredicate.kind(archive(dangling)) == reason(.notAnArchive))
+    // 25 levels of an AND that lists the next level 8 times: 54 objects naming 8^25 parts.
+    func uid(_ number: Int) -> String {
+        "<dict><key>CF$UID</key><integer>\(number)</integer></dict>"
+    }
+    let levels = 25
+    let leaf = 1 + 2 * levels
+    let (compoundClass, arrayClass) = (leaf + 1, leaf + 2)
+    let fanOut =
+        (0..<levels).map { level in
+            let next = level + 1 < levels ? 1 + 2 * (level + 1) : leaf
+            return "<dict><key>$class</key>\(uid(compoundClass))"
+                + "<key>NSCompoundPredicateType</key><integer>1</integer>"
+                + "<key>NSSubpredicates</key>\(uid(2 + 2 * level))</dict>"
+                + "<dict><key>$class</key>\(uid(arrayClass))<key>NS.objects</key><array>"
+                + String(repeating: uid(next), count: 8) + "</array></dict>"
+        }.joined()
+        + "<dict><key>$class</key>\(uid(compoundClass))</dict>"
+        + "<dict><key>$classname</key><string>NSCompoundPredicate</string></dict>"
+        + "<dict><key>$classname</key><string>NSArray</string></dict>"
+    #expect(SwinsianPredicate.kind(archive(fanOut)) == reason(.tooManyParts))
     // No objects at all, which the fuzzer found.
     let empty = String(decoding: archive(""), as: UTF8.self)
         .replacingOccurrences(of: "<string>$null</string>", with: "")

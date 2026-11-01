@@ -83,7 +83,7 @@ path), `NSConstantValueExpression` (a string or number) and `NSFunctionExpressio
 `now()` minus N shape with its CASTs). Any other class or shape is an unsupported rule, listed.
 First the archive's keys are checked, then its size (64 KiB), its objects (2,048) and its
 references: every one in range, no cycle, 64 deep at most, which also bounds the reader's
-recursion. A string is 10,000 bytes at most. Nothing is evaluated, and the `predicateFormat`
+recursion. At most 4,096 parts are read, since one object can be listed many times at each level, and a string is 10,000 bytes at most. Nothing is evaluated, and the `predicateFormat`
 text isn't parsed; a reason quotes the rule as the reader rebuilds it, 200 characters at most.
 
 | Swinsian | Here |

@@ -107,10 +107,7 @@ public enum SwinsianPredicate {
         }
 
         private func quoted(_ rule: SwinsianRule) -> String {
-            let format = rule.description
-            return "“"
-                + (format.count > maximumQuotedCharacters
-                    ? format.prefix(maximumQuotedCharacters) + "…" : format) + "”"
+            "“\(rule.quoted(limit: maximumQuotedCharacters))”"
         }
     }
 
