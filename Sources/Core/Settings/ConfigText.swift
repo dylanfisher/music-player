@@ -94,6 +94,10 @@ struct ConfigText {
                 ![openBrace, openBracket, commaByte].contains(last)
             {
                 pendingComma = index
+            } else if byte == commaByte {
+                // A second comma in a row isn't a trailing one. Both stay, so the parse fails;
+                // Foundation would take the second as trailing once the first was blanked.
+                pendingComma = nil
             } else if byte == closeBrace || byte == closeBracket, let comma = pendingComma {
                 out[comma] = space
                 commas.insert(comma)

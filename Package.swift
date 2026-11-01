@@ -309,6 +309,7 @@ let package = Package(
         .testTarget(
             name: "SettingsTests",
             dependencies: ["Settings"],
+            exclude: ["Crashes"],
             swiftSettings: strictSwift
         ),
         .testTarget(

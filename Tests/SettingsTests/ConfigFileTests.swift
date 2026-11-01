@@ -71,6 +71,17 @@ private func problems(_ text: String) -> [String] {
     #expect(problems("[1]") == ["must be a JSON object of settings"])
 }
 
+/// Inputs the fuzzer found that crashed the scan (ADR 0027), each a problem now.
+@Test(arguments: ["double-comma-after-a-comment", "double-comma-before-a-comment"])
+func fuzzedFilesAreProblemsNotCrashes(_ name: String) throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("Crashes/\(name).json")
+    let text = try String(contentsOf: url, encoding: .utf8)
+    #expect(problems(text).first?.contains("isn't valid JSON") == true, "\(problems(text))")
+    #expect(problems("{\"a.flag\": true,,}").count == 1)
+    #expect(problems("[1,,]").count == 1)
+}
+
 @Test func duplicatesAreFoundInsideNestedObjects() {
     let text = """
         {
