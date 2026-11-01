@@ -48,7 +48,7 @@ private func fill(_ mount: URL) throws -> URL {
 private func database(on mount: URL, music: MusicFolders) throws -> [String] {
     let databaseURL = libraryFileURL(in: try home("database", on: mount))
     var failures: [String] = []
-    let half = WatchedFolder(path: music.scan.path, kind: .local, exclude: ["?[02468] *"])
+    let half = WatchedFolder(path: music.scan.path, kind: .local, exclude: [evenTracks])
     let whole = WatchedFolder(path: music.scan.path, kind: .local)
     let scanner = LibraryScanner(databaseURL: databaseURL)
     _ = try scanner.scan(half)

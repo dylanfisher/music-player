@@ -14,8 +14,7 @@ func run(_ operation: DrillOperation, home: URL, music: MusicFolders) throws -> 
     case .scan:
         let scanner = LibraryScanner(databaseURL: databaseURL)
         while true {
-            // Fixture files start with their track number.
-            let half = pass % 2 == 0 ? "?[02468] *" : "?[13579] *"
+            let half = pass % 2 == 0 ? evenTracks : oddTracks
             let folder = WatchedFolder(path: music.scan.path, kind: .local, exclude: [half])
             let summary = try scanner.scan(folder)
             guard summary.issues.isEmpty else {
@@ -70,6 +69,11 @@ func run(_ operation: DrillOperation, home: URL, music: MusicFolders) throws -> 
         }
     }
 }
+
+/// Fixture files whose track number is even, or odd: each half of the library, as a pattern
+/// to exclude. Fixture file names start with the track number.
+let evenTracks = "?[02468] *"
+let oddTracks = "?[13579] *"
 
 /// The audio files directly in `folder`, by path; hidden ones, such as a tag writer's temp
 /// file, are left out.

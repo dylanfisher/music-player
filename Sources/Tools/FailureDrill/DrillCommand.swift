@@ -8,11 +8,36 @@ enum DrillCommand {
     case verify(home: URL)
     case fullDisk(mount: URL, music: MusicFolders)
 
+    private enum Name: String {
+        case tagFiles = "tag-files"
+        case run, verify
+        case fullDisk = "full-disk"
+
+        /// The folders it takes, each once and all of them.
+        var flags: [Flag] {
+            switch self {
+            case .tagFiles: [.fixtures]
+            case .run: [.home, .scan, .tags]
+            case .verify: [.home]
+            case .fullDisk: [.mount, .scan, .tags]
+            }
+        }
+    }
+
+    private enum Flag: String {
+        case fixtures = "--fixtures"
+        case home = "--home"
+        case scan = "--scan"
+        case tags = "--tags"
+        case mount = "--mount"
+    }
+
     init(_ arguments: [String]) throws {
-        guard let name = arguments.first else { throw DrillError("needs a command") }
+        guard let text = arguments.first else { throw DrillError("needs a command") }
+        guard let name = Name(rawValue: text) else { throw DrillError("\(text) isn't a command") }
         var rest = Array(arguments.dropFirst())
         var operation: DrillOperation?
-        if name == "run" {
+        if name == .run {
             guard let text = rest.first, !text.hasPrefix("--") else {
                 throw DrillError(
                     "run needs an operation: "
@@ -24,33 +49,27 @@ enum DrillCommand {
             operation = parsed
             rest.removeFirst()
         }
-        let allowed: [String] =
-            switch name {
-            case "tag-files": ["--fixtures"]
-            case "run": ["--home", "--scan", "--tags"]
-            case "verify": ["--home"]
-            case "full-disk": ["--mount", "--scan", "--tags"]
-            default: throw DrillError("\(name) isn't a command")
+        var values: [Flag: URL] = [:]
+        while let text = rest.first {
+            guard let flag = Flag(rawValue: text), name.flags.contains(flag) else {
+                throw DrillError("\(text) isn't an option of \(name.rawValue)")
             }
-        var values: [String: URL] = [:]
-        while let flag = rest.first {
-            guard allowed.contains(flag) else { throw DrillError("\(flag) isn't an option here") }
             guard rest.count > 1, !rest[1].hasPrefix("--") else {
-                throw DrillError("\(flag) needs a folder")
+                throw DrillError("\(text) needs a folder")
             }
-            guard values[flag] == nil else { throw DrillError("\(flag) is given twice") }
+            guard values[flag] == nil else { throw DrillError("\(text) is given twice") }
             values[flag] = try drillFolder(rest[1])
             rest.removeFirst(2)
         }
-        if let missing = allowed.first(where: { values[$0] == nil }) {
-            throw DrillError("\(name) needs \(missing)")
+        if let missing = name.flags.first(where: { values[$0] == nil }) {
+            throw DrillError("\(name.rawValue) needs \(missing.rawValue)")
         }
-        let music = values["--scan"].map { MusicFolders(scan: $0, tags: values["--tags"]!) }
+        let music = values[.scan].map { MusicFolders(scan: $0, tags: values[.tags]!) }
         switch name {
-        case "tag-files": self = .tagFiles(fixtures: values["--fixtures"]!)
-        case "run": self = .run(operation!, home: values["--home"]!, music: music!)
-        case "verify": self = .verify(home: values["--home"]!)
-        default: self = .fullDisk(mount: values["--mount"]!, music: music!)
+        case .tagFiles: self = .tagFiles(fixtures: values[.fixtures]!)
+        case .run: self = .run(operation!, home: values[.home]!, music: music!)
+        case .verify: self = .verify(home: values[.home]!)
+        case .fullDisk: self = .fullDisk(mount: values[.mount]!, music: music!)
         }
     }
 }
