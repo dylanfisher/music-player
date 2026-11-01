@@ -672,6 +672,24 @@ checkpoint: the MediaPlayer adapters' off-main path.
       - Many Denon models accept one control client at a time. When the connection is refused or
         dropped, the UI says the receiver is unreachable; it doesn't retry silently.
       - Tests run against a simulated receiver on loopback.
+- [ ] **Security requirements** ([ADR 0025](decisions/0025-threat-model.md), rows 28–30), each
+      with a test against a loopback stand-in:
+      - The HTTP server listens only on the interface address the renderer reached the Mac on,
+        on a port the system picks, and stops when no renderer is in use.
+      - It serves only tracks the index holds, by an opaque per-session token mapped to a track
+        ID, never a path in the URL. Anything else is 404 without touching the file system: no
+        directory listings, no links followed, files opened read-only.
+      - `GET` and `HEAD` only. A request line and headers over 8 KiB, a body, more than one
+        `Range`, or a range outside the file is refused; at most 8 connections, each closed after
+        30 s idle.
+      - SSDP replies, device descriptions and SOAP replies are hostile: replies only from the
+        local subnet, at most 64 KiB; a `LOCATION` followed only to `http` on that subnet;
+        descriptions and replies capped at 1 MiB, parsed by `XMLParser` with external entities
+        off, timed out after 5 s. A renderer's name is escaped like any other display text.
+      - The receiver's address comes only from SSDP on the local subnet. Its status lines are at
+        most 128 bytes, unknown ones ignored, values range-checked before the model takes them;
+        commands come from the registry, never from received text.
+      - No new entitlements unless `scripts/check-signature` lists them with a reason.
 - [ ] **Hardware checkpoint (owner):** play 16/44.1, 24/96 and 24/192 FLAC to the Denon. Report
       what its display shows, gapless behavior, seek, and volume. With the receiver's Network
       Control set to Always On, switch Pure Direct on and off, change volume and input from the
