@@ -1309,6 +1309,16 @@ Implementation plan (ADR 0027, written first):
    Each survivor gets a test or a reason in ADR 0027.
 8. `./scripts/check`, and `./scripts/bundle release` for the new targets.
 
+Result: shipped; the fuzz, sanitizer and property exits pass, and mutation passes in aggregate
+(353 of 385, 91.7%) with every survivor explained in ADR 0027. Per file: PlayQueue and the tag
+writer's checks 100%, PlayCounter 93.8%, PlaybackEngine 91.8%, LibraryScanner 89.2%, ConfigStore
+86.8%, PlayTracker 6 of 7; the survivors under 90% are tuning constants and changes no test can
+observe. Fuzzing uses SanitizerCoverage with ASan (no fallback): 11 targets ran 600 s each; the
+config file target found a crash on a doubled comma and quadratic problem reporting, both fixed
+and re-fuzzed clean. The tag edit property found that a second Undo on one file was always
+refused; fixed. ASan, UBSan and 20 TSan runs of the whole suite pass with no warnings; property
+tests run 1,000 cases each in `scripts/sanitize` and 50 in `./scripts/check`.
+
 #### 14e. Performance
 
 - **Goal:** know where the time goes on every hot path, and give the tight budgets headroom.
