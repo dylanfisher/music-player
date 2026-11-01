@@ -13,6 +13,9 @@ public func kilohertz(_ hertz: Double) -> String {
     return khz.rounded() == khz ? String(Int(khz)) : String(khz)
 }
 
+/// 24 -> "24-bit".
+public func bitDepth(_ bits: some BinaryInteger) -> String { "\(bits)-bit" }
+
 /// 3 -> "★★★"; 0, unrated, -> "".
 public func stars(_ count: Int) -> String {
     String(repeating: "★", count: max(0, count))

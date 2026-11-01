@@ -15,3 +15,8 @@ import Testing
 func formatsKilohertz(hertz: Double, expected: String) {
     #expect(kilohertz(hertz) == expected)
 }
+
+@Test func bitDepthReadsTheSameForAnyIntegerType() {
+    #expect(bitDepth(24) == "24-bit")
+    #expect(bitDepth(UInt32(32)) == "32-bit")
+}

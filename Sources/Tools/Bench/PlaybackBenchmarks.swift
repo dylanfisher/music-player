@@ -205,7 +205,7 @@ let playbackBenchmarks = [
                 return try gapFrames(album, in: session.device.captured)
             }
             worst = max(worst, gap)
-            notes.append("\(kilohertz(Double(rate))) kHz \(bits)-bit: \(gap) samples")
+            notes.append("\(kilohertz(Double(rate))) kHz \(bitDepth(bits)): \(gap) samples")
         }
         return Measured(value: Double(worst), notes: notes)
     },

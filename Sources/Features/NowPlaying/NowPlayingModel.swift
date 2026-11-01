@@ -75,7 +75,7 @@ public final class NowPlayingModel {
     /// the file's format, then what the output is running, once it says.
     public var formatLine: String {
         let source = track.map { track in
-            let bits = track.bitsPerSample.map { " \($0)-bit" } ?? ""
+            let bits = track.bitsPerSample.map { " " + bitDepth($0) } ?? ""
             return "\(kilohertz(Double(track.sampleRateHz))) kHz\(bits) \(track.codec.uppercased())"
         }
         return [source, state.outputFormat].compactMap { $0 }.joined(separator: " → ")

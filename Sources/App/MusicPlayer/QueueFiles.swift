@@ -21,7 +21,7 @@ struct QueuedFile {
         }
         format = metadata.map { metadata in
             let audio = metadata.audio
-            let bits = audio.bitsPerSample.map { " \($0)-bit" } ?? ""
+            let bits = audio.bitsPerSample.map { " " + bitDepth($0) } ?? ""
             return "\(kilohertz(Double(audio.sampleRateHz))) kHz\(bits) \(audio.codec.rawValue)"
         }
     }

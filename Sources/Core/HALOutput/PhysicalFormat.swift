@@ -49,7 +49,7 @@ public struct PhysicalFormat: Sendable, Equatable {
 extension PhysicalFormat {
     /// For example `'lpcm' 2 ch 32-bit int @ 96 kHz, non-mixable`.
     public var summary: String {
-        let sample = "\(bitsPerChannel)-bit \(isFloat ? "float" : "int")"
+        let sample = "\(bitDepth(bitsPerChannel)) \(isFloat ? "float" : "int")"
         let mixing = isMixable ? "" : ", non-mixable"
         return "'\(formatID)' \(channels) ch \(sample) @ \(kilohertz(sampleRateHz)) kHz\(mixing)"
     }
