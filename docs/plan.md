@@ -2069,6 +2069,44 @@ only for an IP literal with one candidate, or a `.local` or case difference; oth
 offline (ADR 0028). Existing network folders must be re-added, and the stats schema change
 discards the index once. Rescan after renaming every file: 5.19 s, budget 10 s.
 
+Implementation plan, part 23b: the boundary, `sync.folder`, the logs, merging, the clock and
+`move` events ([ADR 0038](decisions/0038-sync-logs.md), written first with the AGENTS.md
+boundary).
+
+1. **Settings:** `SyncFolder` (a path, or a share and the path inside it, as 0028 stores a
+   watched folder) as `sync.folder`, null by default. A schema-wide check refuses a sync folder
+   inside or equal to a watched folder, in the config file and in `set`.
+2. **Schema** (Library): a `sync` part: `sync_state` (this machine's ID, minted by the part's
+   SQL, its clock, its log's size and how much of it reached the folder), `sync_outbox` (its
+   log, one line a row, written in the transaction of the change it records), `sync_logs` (how
+   far each other machine's log was read and applied), `sync_items` (the clock of the change
+   each rating, love and playlist field holds) and `sync_playlists` (each playlist's sync ID,
+   kept as a tombstone once deleted). Rebuilding the part from an earlier shape rebuilds the
+   stats too, so a new machine ID never re-reads its own old log on top of its stats.
+3. **Events** (Library): `SyncClock` (a hybrid logical clock with a per-item step and a skew
+   bound), `SyncEvent` and its line format, strict at every level; sync paths (share name, the
+   folder's path in the share and the path under it, in NFC) from `share_roots`.
+4. **Writes** (Library): plays, skips, ratings, loves, new paths' Date Added, playlist
+   create, rename, rules, delete and entries, the import's counts and the scan's and Lost
+   Stats' moves each append an event to the outbox in their transaction.
+5. **Merging** (Library): every other `<id>.log` in the folder, opened with `O_NOFOLLOW` and
+   `fstat`, read from its offset to its last complete line under the caps, the logs merged in
+   clock order and applied in batches, each with its offsets; plays and skips once by sequence
+   number, last writer wins by clock then machine for the rest, the earliest Date Added, and
+   moves as 0026 says, merging a path's stats into the other's. Pushing appends the outbox's
+   tail to this machine's log, which is always a byte prefix of the outbox.
+6. **Watcher and app:** the watcher syncs on its scan queue at start, after each scan, on the
+   share triggers and after a local edit (pushing only), and reports `WatcherEvent.synced`; the
+   window refreshes and shows the problems.
+7. **Hostile input:** caps per line, file and event count, 100 problems per log then a count,
+   only `<32 hex digits>.log` names; ADR 0025 rows; `scripts/fuzz sync-log`.
+8. **Tests:** SyncTests with two and three machines in temporary folders: interleaved and
+   conflicting edits, skewed clocks, a different mount path on each, a rename, a move, a move
+   after the new path was played, NFD and NFC names, a truncated log, the folder going away and
+   coming back, the caps; SettingsTests for the folder check. Threaded ones 20 times.
+9. **Bench:** `sync: merge 1M play events`, its budget in the table above; full scan and
+   no-change rescan rerun.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
