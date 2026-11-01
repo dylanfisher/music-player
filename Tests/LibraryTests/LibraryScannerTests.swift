@@ -376,13 +376,23 @@ private struct FailingReads: ScanFileAccess {
         try handle.write(contentsOf: Data(count: 16))
         try handle.close()
     }
-    nas.drop(afterOperations: 12)
+    // The root lists, then every folder in it fails, as the NAS goes.
+    nas.drop(afterOperations: 1)
+    let folders = try FileManager.default.contentsOfDirectory(atPath: library.root)
+        .filter { name in
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(
+                atPath: library.root + "/" + name, isDirectory: &isDirectory)
+                && isDirectory.boolValue
+        }
 
     let dropped = try scanner.scan(folder)
+    #expect(dropped.read == 0)
     #expect(dropped.removed == 0)
+    #expect(dropped.issues.map(\.kind) == Array(repeating: .unreadable, count: folders.count))
+    #expect(
+        Set(dropped.issues.map(\.path)) == Set(folders.map { library.root + "/" + $0 }))
     #expect(try index.trackIDs(TrackFilter(), sortedBy: .title) == before)
-    let unreadable = try index.fileIssues().filter { $0.problem == .failure(.unreadable) }
-    #expect(!unreadable.isEmpty || dropped.issues.contains { $0.kind == .unreadable })
 
     nas.reconnect()
     let back = try scanner.scan(folder)
