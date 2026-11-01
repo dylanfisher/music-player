@@ -141,7 +141,9 @@ func mutants(_ bytes: [UInt8]) -> [Mutant] {
     while index < bytes.count {
         let byte = bytes[index]
         guard (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte), mask[index],
-            index == 0 || (!isIdentifier(bytes[index - 1]) && bytes[index - 1] != UInt8(ascii: "."))
+            index == 0
+                || (!isIdentifier(bytes[index - 1])
+                    && ![UInt8(ascii: "."), UInt8(ascii: "$")].contains(bytes[index - 1]))
         else {
             index += 1
             continue
