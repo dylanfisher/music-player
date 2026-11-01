@@ -100,7 +100,8 @@ play listed, not only one row per track, and expects the log to reach a million 
     Path* act on the distinct tracks of the selected rows, in row order, leaving out missing
     rows.
   - Those commands are on while any row is selected, even only missing ones, rather than read
-    every selected play's track each time a menu is checked; they then act on nothing.
+    every selected play's track each time a menu is checked; with only missing ones they beep
+    and say so in the status bar ([0023](0023-failure-table.md)).
   - *Go to Item* lists the loaded rows, keyed `track:<row>:<history ID>`; choosing one selects
     that row if it still holds that play, as the track table's rows do (0016).
   - *Type-to-select* is off: there is no sort column to type into.

@@ -3,7 +3,7 @@
 - **Date:** 2026-10-31
 - **Status:** accepted
 - **Amends:** [0009](0009-scanning-and-watching.md), [0011](0011-playback-engine-and-hal-output.md),
-  [0015](0015-config-file.md)
+  [0015](0015-config-file.md), [0022](0022-stable-track-identity-and-play-timeline.md)
 
 ## Context
 
@@ -39,7 +39,7 @@ cover what a test can't do quickly or hermetically.
 | State file corrupt or half-written | decode | config banner: the file was reset | none needed; the next save writes it | `aStateFileThatDoesntMatchIsDiscardedAndReported` |
 | Device restore record unreadable | decode | log; the record is deleted | none needed | `aRecordThatDoesntReadIsDiscardedAndReported` |
 | Tag undo record corrupt | decode, or its bytes file doesn't match | the tag editor lists it as discarded | none; that edit can't be undone | `aRecordWithAnUnknownKeyAnywhereIsDiscardedAndReported` |
-| Killed during a scan, tag write, playlist edit or state save | relaunch | nothing: each write is a transaction or a temp file renamed over the old one | none needed | `scripts/kill-test`, `aCrashBeforeTheRenameLeavesTheOriginalAndTheNextWriteRecovers` |
+| Killed during a scan, tag write, playlist edit, state save or config save | relaunch | nothing: each write is a transaction or a temp file renamed over the old one | none needed | `scripts/kill-test`, `aCrashBeforeTheRenameLeavesTheOriginalAndTheNextWriteRecovers` |
 | A command on timeline rows whose files are all missing | the selection resolves to no track | a beep and a status bar message | select a play whose file is there | `aSelectionOfOnlyMissingFilesFailsLoudly` |
 
 **What this phase changes:**
@@ -47,10 +47,12 @@ cover what a test can't do quickly or hermetically.
 - **A device error while the device is gone is a lost device.** A real DAC unplugged mid-switch
   fails the step it's in (stop, setting the format, start) before or after its listener fires.
   `DeviceOutput` used to report that as the new track failing, or the output failing, and the
-  engine then skipped through the queue or stopped. Now a failed step first asks the provider
-  whether the device is there; if not, it's abandoned and reported as `deviceLost` with the
-  position to resume at, as an unplug at any other time is. `NullDevice` can go away during its
-  next stop, configure or start to test each step.
+  engine then skipped through the queue or stopped. Now a failed step waits up to 0.25 s for
+  the provider to read the device as gone; if it does, it's abandoned and reported as
+  `deviceLost` with the position to resume at, as an unplug at any other time is. If it reads as
+  gone only later, the failure is reported as it was, and then as a loss when it does, so its
+  return is still offered. `NullDevice` can go away during its next stop, configure or start,
+  before the call fails or a set time after, to test each step and both orders.
 - **A file whose audio ends early is a failed track.** A file cut short while it plays, or a
   partial one, read as a clean end: the track stopped early with nothing said. Decoding that
   stops more than half a second before the length in the header now reports the track as
@@ -84,12 +86,16 @@ cover what a test can't do quickly or hermetically.
   enabled and fail loudly instead.
 
 **The tools.** `FailureDrill` (Tools) runs each operation against a `--home` folder until it's
-killed, and reopens everything as the app does to check it. `scripts/kill-test` sends seeded
-`SIGKILL`s across the operations and fails on any database that doesn't pass
-`PRAGMA integrity_check`, any config or state file that doesn't decode, and any music file that
-differs from its pre-run hash once the tag journal is undone. `scripts/full-disk` fills a disk
-image attached inside `~/Library/Caches/MusicPlayer`, never `/Volumes`. Neither runs in
-`./scripts/check`.
+killed, marking the start and end of each write, and reopens everything as the app does to
+check it. `scripts/kill-test` sends seeded `SIGKILL`s across the operations, counts how many
+landed during a write, and fails on any database that doesn't pass `PRAGMA integrity_check`,
+any config or state file that doesn't decode or whose cut-short save is still beside it, and
+any music file that differs from its pre-run hash once the tag journal is undone.
+`scripts/full-disk` fills a disk image attached inside `~/Library/Caches/MusicPlayer`, never
+`/Volumes`, under the database, the state file, the config file and the tag journal, the last
+between two files of a batch. Neither runs in `./scripts/check`. The layout and config save
+tests in `./scripts/check` fail the save with a folder that can't be written, since a disk
+image isn't hermetic; `scripts/full-disk` covers the same saves with `ENOSPC`.
 
 ## Alternatives considered
 
@@ -98,9 +104,9 @@ image attached inside `~/Library/Caches/MusicPlayer`, never `/Volumes`. Neither 
 - **Disabling timeline commands when every selected play is missing** — rejected: it reads every
   selected play's track whenever a menu is checked.
 - **`PRAGMA quick_check` at launch,** to catch corruption deeper than the header — rejected: it
-  reads the whole database: 184 ms of the 1 s launch budget for the 43k fixture
-  library on Apple Silicon, with the file already cached. Damage inside
-  a table shows as a failed query where it's read.
+  reads the whole database: 184 ms of the 1 s launch budget for the 43k fixture library on
+  Apple Silicon, with the file already cached. Damage inside a table shows as a failed query
+  where it's read.
 - **Retrying a failed local scan at once** — rejected: a full disk would make it spin.
 - **Deleting an unreadable library file** — rejected: its stats are the one thing a scan can't
   recreate.
@@ -108,10 +114,10 @@ image attached inside `~/Library/Caches/MusicPlayer`, never `/Volumes`. Neither 
 ## Consequences
 
 The table is the list to extend when a phase adds a failure path; each new row needs a test.
-A device that reports itself still connected while a step fails is reported as an output
-failure, as before; the hardware checkpoint on the ADI-2 shows which order the HAL uses. A
+A device that reads as connected for more than 0.25 s after a step fails is reported as an
+output failure first; the hardware checkpoint on the ADI-2 shows how long the HAL takes. A
 locked database at launch still quits after the alert, since the window can't open without
 it; opening takes a write lock to check the schema. A kill mid-save can leave Foundation's
 temp file (`state.json.sb-…`) beside the state or config file; the stores delete any at the
-next start, and the kill harness fails on one still there after that. Files left outside the watched folders when their removal at launch fails are only logged,
-and go at the next launch.
+next start, and the kill harness fails on one still there after that. Files left outside the
+watched folders when their removal at launch fails are only logged, and go at the next launch.

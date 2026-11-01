@@ -1043,9 +1043,12 @@ Implementation plan (ADR 0023, written first):
 8. **Scripts.** `scripts/kill-test [--kills N] [--seed S]` generates fixtures under
    `~/Library/Caches/MusicPlayer/kill-test`, clones the tag-write files with `cp -c` into
    `~/Library/Caches/MusicPlayer/tag-corpus/kill-test`, hashes every music file, and sends
-   seeded `SIGKILL`s across the four operations, checking after each. `scripts/full-disk` attaches a small image with `hdiutil attach -nobrowse
-   -mountpoint` under `~/Library/Caches/MusicPlayer`, detached by a trap on every exit. Neither
-   is in `./scripts/check`, which gets the deterministic tests above.
+   seeded `SIGKILL`s across the five operations (config saves added after review), checking
+   after each and counting the kills that landed during a write. `scripts/full-disk` attaches a
+   small image with `hdiutil attach -nobrowse -mountpoint` under `~/Library/Caches/MusicPlayer`,
+   detached and removed by a trap on every exit. Both share `scripts/drill-fixtures`, and
+   `scripts/disk-image` with `scripts/tag-corpus`. Neither is in `./scripts/check`, which gets
+   the deterministic tests above.
 9. **Loaded soak** (Bench). The soak plays while a full scan of the fixture library into a new
    index runs every 5 minutes and a search every second, and a second benchmark reports memory
    growth between the footprints 30 s after each scan ends, from minute 5 on, budget < 10 MB.
