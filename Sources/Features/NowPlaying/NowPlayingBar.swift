@@ -1,5 +1,6 @@
 import AppKit
 import Artwork
+import Commands
 import Library
 import Log
 import Playback
@@ -99,9 +100,13 @@ public final class NowPlayingBar: NSViewController {
         slider.isContinuous = true
         slider.controlSize = .small
         setUp(previousButton, symbol: "backward.fill", label: "Previous", #selector(previous))
-        setUp(playButton, symbol: "play.fill", label: "Play", #selector(playPause))
+        setUp(
+            playButton, symbol: "play.fill", label: AppCommands.title(of: .play),
+            #selector(playPause))
         setUp(nextButton, symbol: "forward.fill", label: "Next", #selector(next))
-        setUp(queueButton, symbol: "list.bullet", label: "Show Queue", #selector(queueClicked))
+        setUp(
+            queueButton, symbol: "list.bullet", label: AppCommands.title(of: .toggleQueue),
+            #selector(queueClicked))
 
         let transport = NSStackView(views: [previousButton, playButton, nextButton])
         transport.spacing = 4
@@ -181,10 +186,10 @@ public final class NowPlayingBar: NSViewController {
         formatLabel.textColor = model.message == nil ? .secondaryLabelColor : .systemOrange
         formatLabel.toolTip = formatLabel.stringValue
         let playing = model.isPlaying
+        let title = AppCommands.title(of: playing ? .pause : .play)
         playButton.image = NSImage(
-            systemSymbolName: playing ? "pause.fill" : "play.fill",
-            accessibilityDescription: playing ? "Pause" : "Play")
-        playButton.toolTip = playing ? "Pause" : "Play"
+            systemSymbolName: playing ? "pause.fill" : "play.fill", accessibilityDescription: title)
+        playButton.toolTip = title
     }
 
     private func startTimer() {

@@ -97,7 +97,7 @@ public final class GeneralModel {
             guard let number else {
                 throw ConfigProblem(
                     line: nil,
-                    message: "\(row.title) needs \(whole ? "a whole number" : "a number"),"
+                    message: "\(row.title) needs \(whole ? "a whole number" : Double.typeName),"
                         + " not \"\(text)\"")
             }
             try set(key, number)

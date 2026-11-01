@@ -14,7 +14,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     private let library = SidebarNode(.library, title: "Music")
     private let groups: [SidebarNode]
     private let playlistGroup = SidebarNode(.group, title: "Playlists")
-    private let folderGroup = SidebarNode(.group, title: "Watched Folders")
+    private let folderGroup = SidebarNode(.group, title: AppSettings().watchedFolders.title)
     private let selectSource: (BrowserSource?) -> Void
     /// Tracks, by ID, dropped on the manual playlist with this ID.
     var dropTracks: (Int64, [Int64]) -> Void = { _, _ in }

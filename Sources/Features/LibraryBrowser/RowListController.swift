@@ -49,7 +49,9 @@ class RowListController: NSViewController {
         table.doubleAction = #selector(playClicked)
         let menu = NSMenu()
         menu.addItem(withTitle: "Play", action: #selector(playMenuRows), keyEquivalent: "")
-        menu.addItem(withTitle: "Play Next", action: #selector(playMenuRowsNext), keyEquivalent: "")
+        menu.addItem(
+            withTitle: AppCommands.title(of: .playNext), action: #selector(playMenuRowsNext),
+            keyEquivalent: "")
         for item in menu.items { item.target = self }
         table.menu = menu
     }

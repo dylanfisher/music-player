@@ -42,7 +42,7 @@ final class ShortcutRecorder: NSControl {
     override var canBecomeKeyView: Bool { isEnabled }
 
     private var valueText: String {
-        isRecording ? "Type Shortcut" : chord?.symbols ?? "None"
+        isRecording ? "Type Shortcut" : chord?.symbols ?? noValueText
     }
 
     // MARK: Drawing: hover, pressed, focused, recording and off each look different

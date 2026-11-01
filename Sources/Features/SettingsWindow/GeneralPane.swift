@@ -1,8 +1,12 @@
 import AppKit
+import Commands
 import Log
 import Settings
 
 private let logger = moduleLogger()
+
+/// What a setting or a shortcut with no value shows.
+let noValueText = "None"
 
 /// Settings ▸ General: the config file's place and buttons, then a row per setting from the
 /// schema in a grid.
@@ -37,9 +41,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
         path.textColor = .secondaryLabelColor
         path.lineBreakMode = .byTruncatingMiddle
         path.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let open = button("Open Config File", #selector(openConfig))
+        let open = button(AppCommands.title(of: .openConfigFile), #selector(openConfig))
         let reveal = button("Reveal in Finder", #selector(revealConfig))
-        copyButton.title = "Copy Default Config"
+        copyButton.title = AppCommands.title(of: .copyDefaultConfig)
         copyButton.bezelStyle = .rounded
         copyButton.target = self
         copyButton.action = #selector(copyDefault)
@@ -112,7 +116,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
         case .number(_, let optional), .text(let optional):
             let field = NSTextField()
             field.identifier = NSUserInterfaceItemIdentifier(row.key)
-            field.placeholderString = optional ? "None" : nil
+            field.placeholderString = optional ? noValueText : nil
             field.delegate = self
             field.translatesAutoresizingMaskIntoConstraints = false
             field.widthAnchor.constraint(equalToConstant: row.control.isNumber ? 80 : 300)
@@ -221,7 +225,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
             ])
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.copiedSeconds) { [weak self] in
             guard let self, self.copiedGeneration == mine else { return }
-            self.copyButton.title = "Copy Default Config"
+            self.copyButton.title = AppCommands.title(of: .copyDefaultConfig)
         }
     }
 }

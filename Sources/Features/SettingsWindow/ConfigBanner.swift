@@ -1,4 +1,5 @@
 import AppKit
+import Commands
 import Settings
 
 /// A strip across the top of the main window while the config file has a problem or the app's
@@ -26,7 +27,8 @@ public final class ConfigBanner: NSViewController {
         label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         label.maximumNumberOfLines = 2
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let button = NSButton(title: "Open Config File", target: self, action: #selector(open))
+        let button = NSButton(
+            title: AppCommands.title(of: .openConfigFile), target: self, action: #selector(open))
         button.bezelStyle = .rounded
         button.controlSize = .small
         button.setContentHuggingPriority(.required, for: .horizontal)
