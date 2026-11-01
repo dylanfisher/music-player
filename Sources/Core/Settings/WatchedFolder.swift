@@ -67,20 +67,9 @@ public struct WatchedFolder: SettingValue {
 
     public func problem() -> String? {
         let range = Self.pollIntervalRangeMinutes
-        if let share {
-            if ShareURL(share) == nil {
-                return "share \"\(share)\" isn't a URL with a host and a share, such as"
-                    + " smb://nas/music"
-            }
-            if kind != .network { return "a folder on share \"\(share)\" needs kind network" }
-            if path.hasPrefix("/") {
-                return "path \"\(path)\" is inside share \"\(share)\", so it can't start with /"
-            }
-            if path.split(separator: "/").contains("..") {
-                return "path \"\(path)\" leaves share \"\(share)\""
-            }
-        } else if !path.hasPrefix("/") {
-            return "path \"\(path)\" isn't absolute"
+        if let problem = folderLocationProblem(path: path, share: share) { return problem }
+        if let share, kind != .network {
+            return "a folder on share \"\(share)\" needs kind network"
         }
         let standard = (path as NSString).standardizingPath
         if share == nil, Self.refusedRoots.contains(standard) || standard == NSHomeDirectory() {
@@ -93,4 +82,25 @@ public struct WatchedFolder: SettingValue {
         }
         return nil
     }
+}
+
+/// Why a folder stored as `path`, inside `share` when there is one, can't be found: a share
+/// that isn't a URL, a path inside a share that starts with / or leaves it, or a path that
+/// isn't absolute.
+func folderLocationProblem(path: String, share: String?) -> String? {
+    if let share {
+        if ShareURL(share) == nil {
+            return "share \"\(share)\" isn't a URL with a host and a share, such as"
+                + " smb://nas/music"
+        }
+        if path.hasPrefix("/") {
+            return "path \"\(path)\" is inside share \"\(share)\", so it can't start with /"
+        }
+        if path.split(separator: "/").contains("..") {
+            return "path \"\(path)\" leaves share \"\(share)\""
+        }
+    } else if !path.hasPrefix("/") {
+        return "path \"\(path)\" isn't absolute"
+    }
+    return nil
 }
