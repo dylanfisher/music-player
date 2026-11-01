@@ -2021,6 +2021,44 @@ Write the ADR first; it amends ADR 0022.
       empty `/Volumes/music` folder behind), and report whether the library and its stats came
       back.
 
+Implementation plan, part 23a: the two local items (ADRs
+[0026](decisions/0026-sync-identity-is-the-relative-path.md),
+[0028](decisions/0028-network-folders-by-share.md)). Part 23b does the boundary, `sync.folder`,
+the logs, merging, the clock and `move` events.
+
+1. **Schema** (Library): `paths.path` holds the path in NFC, which `pathID` looks up, so a name
+   listed decomposed and precomposed is one row; `files.path` stays as listed, to open it.
+   `paths` gains `codec`, `sample_rate_hz`, `length_frames` and `title`, which each stored read
+   sets, and `lost_dismissed`. A stats table `share_roots` keeps where each share folder's paths
+   were last rooted. The stats SQL changes, so the old stats are discarded once with a notice.
+2. **Move matching** (Library): the scanner notes the highest path ID before it starts; after a
+   finished walk's removals, `matchMoves(addedAfter:)` pairs gone stats rows with the stat-less
+   paths this scan added, on codec, rate and frames, then title. A match moves the files row
+   to the old ID and deletes the new paths row, in one transaction; `ScanSummary.moved` counts
+   them and each is logged with both paths.
+3. **Lost Stats** (Library, Settings, LibraryBrowser, App): a `HealthCheck.lostStats` lists each
+   unresolved gone stats row as a line and its candidate tracks; `lostFiles()`,
+   `moveStats(from:to:)` and `dismissLost(_:)` back a sheet, opened by
+   `library.resolveLostStats`, where the user gives a lost file's stats to a candidate or
+   dismisses it. `LostStatsSession` holds its logic, without AppKit.
+4. **Shares** (Settings, Library): `WatchedFolder.share`, the share's URL, with `path` then the
+   path inside it. `ShareMounts` lists mounted shares (`SystemShareMounts` reads
+   `volumeURLForRemountingKey`); `ShareURL` holds the host and share rule; `FolderLocator` turns
+   the configured folders into folders at their mount points, rewriting the `files` and `paths`
+   prefixes in one transaction when a mount point moved. An unmounted share keeps its last root,
+   so it shows offline as now.
+5. **Watcher and app:** the watcher locates at start and before each scan, and on
+   `sharesMayHaveMoved()`, which the app calls on wake, on a network change and on a mount; a
+   new location reaches the window as `WatcherEvent.folders`. Adding a folder on a share stores
+   it by share; removing one and `--scan` match it by its located path.
+6. **Bench:** `library: match moves after renaming every fixture file`, its budget in the table
+   above; the full scan and no-change rescan rerun.
+7. **Tests:** LibraryTests (NFC spellings, facts, a rename, a move, a move with a retag, two
+   gone files of one length, lost files and their resolution, the locator with a share
+   remounted at `-1`, by host name and by IP, unmounted, the prefix rewrite and its
+   conflicts, the watcher relocating), SettingsTests (`share` decoding and problems),
+   LibraryBrowserTests (`LostStatsSession`), CommandsTests (the new command).
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
