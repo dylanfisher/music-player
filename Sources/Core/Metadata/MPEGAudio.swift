@@ -1,3 +1,5 @@
+import Foundation
+
 /// An MPEG audio Layer III frame header.
 struct MPEGFrameHeader {
     var sampleRateHz: Int
@@ -52,6 +54,45 @@ private let frameSearchBytes = 64 * 1024
 /// header in the first frame when there is one, otherwise from the file size at the first frame's
 /// bit rate. ID3v1 and APE tags at the end aren't read.
 func parseMP3(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
+    let first = try firstMP3Frame(reader)
+    let header = first.header
+    let audioBytes = reader.size - (first.audioStart + first.frameOffset)
+    let frames =
+        try storedFrameCount(first.frame, header)
+        ?? Int((Double(audioBytes) / header.averageByteCount).rounded())
+    return TrackMetadata(
+        tags: first.tag?.tags ?? TrackTags(),
+        audio: TrackAudio(
+            codec: .mp3, sampleRateHz: header.sampleRateHz, bitsPerSample: nil,
+            channels: header.channels, lengthFrames: frames * header.samplesPerFrame),
+        art: first.tag?.art)
+}
+
+/// The length in samples per channel that the MP3 at `url` states in a Xing/Info or VBRI
+/// header, or nil without one, when its length is only an estimate from the file size, which a
+/// VBR file can miss by seconds. Decoders may estimate even when it's stated.
+public func mp3StatedLengthFrames(at url: URL) throws(MetadataError) -> Int? {
+    do throws(ParseFailure) {
+        let first = try firstMP3Frame(ByteReader(try FileSource(path: url.path)))
+        return try storedFrameCount(first.frame, first.header).map {
+            $0 * first.header.samplesPerFrame
+        }
+    } catch {
+        throw error.error(path: url.path)
+    }
+}
+
+private func storedFrameCount(_ frame: Bytes, _ header: MPEGFrameHeader) throws(ParseFailure)
+    -> Int?
+{
+    if let count = try xingFrameCount(frame, header) { return count }
+    return try vbriFrameCount(frame, header)
+}
+
+/// The ID3v2 tag, if any, and the first MPEG frame after it, with the bytes from there.
+private func firstMP3Frame(_ reader: ByteReader) throws(ParseFailure) -> (
+    tag: ID3v2Tag?, audioStart: Int, frameOffset: Int, header: MPEGFrameHeader, frame: Bytes
+) {
     var tag: ID3v2Tag?
     var audioStart = 0
     if try reader.bytes(0..<min(3, reader.size)).matches(id3v2Identifier, at: 0) {
@@ -79,17 +120,7 @@ func parseMP3(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
             "no MPEG Layer III frame in the \(area.count) bytes after the start of the audio")
     }
 
-    let frame = try area.suffix(from: frameOffset)
-    var frameCount = try xingFrameCount(frame, header)
-    if frameCount == nil { frameCount = try vbriFrameCount(frame, header) }
-    let audioBytes = reader.size - (audioStart + frameOffset)
-    let frames = frameCount ?? Int((Double(audioBytes) / header.averageByteCount).rounded())
-    return TrackMetadata(
-        tags: tag?.tags ?? TrackTags(),
-        audio: TrackAudio(
-            codec: .mp3, sampleRateHz: header.sampleRateHz, bitsPerSample: nil,
-            channels: header.channels, lengthFrames: frames * header.samplesPerFrame),
-        art: tag?.art)
+    return (tag, audioStart, frameOffset, header, try area.suffix(from: frameOffset))
 }
 
 /// "Xing" (VBR) or "Info" (CBR) after the side information: flags, then the frame count when

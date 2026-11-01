@@ -54,9 +54,9 @@ cover what a test can't do quickly or hermetically.
 - **A file whose audio ends early is a failed track.** A file cut short while it plays, or a
   partial one, read as a clean end: the track stopped early with nothing said. Decoding that
   stops more than half a second before the length in the header now reports the track as
-  failed. The half second leaves room for encoders' rounding. An MP3's length is an estimate
-  from its bitrate unless a Xing or LAME header gives it, so a cut-short MP3 still ends
-  quietly.
+  failed. The half second leaves room for encoders' rounding. AudioToolbox estimates an MP3's
+  length from its size, so an MP3 is checked against the frame count its Xing/Info or VBRI
+  header states, and one without such a header isn't checked.
 - **A full database reports SQLITE_FULL.** SQLite rolls a transaction back itself on a full
   disk, and the explicit rollback that followed failed and hid the real error behind "no
   transaction is active". `Database.transaction` rolls back only a transaction still open.

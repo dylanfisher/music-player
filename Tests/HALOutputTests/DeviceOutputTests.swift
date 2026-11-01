@@ -250,9 +250,57 @@ func theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost(
     // What's left of the file goes, as when the NAS drops while it plays.
     #expect(truncate(cut.path, 256 * 1024) == 0)
     try await rig.wait(for: .trackStarted(index: 1))
-    #expect(rig.events.contains { if case .trackFailed(cut, _) = $0 { true } else { false } })
+    #expect(
+        rig.events.contains { event in
+            guard case .trackFailed(cut, let reason) = event else { return false }
+            return reason.contains(endedEarlyText)
+        })
     let ended = try #require(await rig.engine.position())
     #expect(ended < 1, "the next track plays from its start")
+}
+
+/// What `DeviceOutputError.endedEarly` says, whatever the times.
+private let endedEarlyText = "the file is cut short"
+
+/// MPEG-1 Layer III frames of silence at 128 kbit/s and 44.1 kHz, `stored` of them in the file,
+/// the first an Info frame stating `stated` when given, as an encoder that wrote a length would.
+private func silentMP3(stored: Int, stated: Int?) -> Data {
+    let frameBytes = 144 * 128_000 / 44_100
+    func frame() -> [UInt8] {
+        [0xFF, 0xFB, 0x90, 0x00] + [UInt8](repeating: 0, count: frameBytes - 4)
+    }
+    var first = frame()
+    if let stated {
+        // After the header and 32 bytes of stereo side information: "Info", flags, frames.
+        let info =
+            Array("Info".utf8) + [0, 0, 0, 1]
+            + withUnsafeBytes(of: UInt32(stated).bigEndian, Array.init)
+        first.replaceSubrange(36..<36 + info.count, with: info)
+    }
+    return Data(first + (1..<stored).flatMap { _ in frame() })
+}
+
+@Test func anMP3ThatStatesALongerLengthThanItHoldsIsReported() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mp3-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    // About 1.3 s of a stated 5.2 s, as a partial download leaves it.
+    let partial = directory.appendingPathComponent("partial.mp3")
+    try silentMP3(stored: 50, stated: 200).write(to: partial)
+    // The same, stating nothing: its length is estimated from its size, so it isn't checked.
+    let unstated = directory.appendingPathComponent("unstated.mp3")
+    try silentMP3(stored: 50, stated: nil).write(to: unstated)
+
+    let rig = try await Rig(speed: 8)
+    await rig.engine.setQueue([partial, unstated])
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    let failures = rig.events.compactMap { event -> (URL, String)? in
+        if case .trackFailed(let url, let reason) = event { (url, reason) } else { nil }
+    }
+    #expect(failures.map(\.0) == [partial])
+    #expect(failures.first?.1.contains(endedEarlyText) == true)
 }
 
 @Test func aFileThatWontOpenIsSkipped() async throws {

@@ -52,7 +52,9 @@ let package = Package(
         ),
         .target(
             name: "HALOutput",
-            dependencies: ["DisplayText", "HALRender", "Log", "Playback", "RingBuffer"],
+            dependencies: [
+                "DisplayText", "HALRender", "Log", "Metadata", "Playback", "RingBuffer",
+            ],
             path: "Sources/Core/HALOutput",
             swiftSettings: strictSwift
         ),

@@ -2,6 +2,7 @@ import CoreAudio
 import Foundation
 import HALRender
 import Log
+import Metadata
 import Playback
 import RingBuffer
 
@@ -695,9 +696,25 @@ private struct Track {
     /// The start of the track, decoded while the track before it drained.
     var predecoded: Predecoded?
 
+    /// The length decoding should reach, in frames: the decoder's, except for an MP3, where
+    /// AudioToolbox estimates it from the file size, so it's the length a Xing/Info or VBRI
+    /// header states, or nil when there's none and the length can't be checked.
+    let checkedLengthFrames: Int64?
+
     init(_ item: OutputItem) throws {
         self.item = item
         decoder = try FileDecoder(url: item.url)
+        if decoder.fileFormat.mFormatID == kAudioFormatMPEGLayer3 {
+            do {
+                checkedLengthFrames = try mp3StatedLengthFrames(at: item.url).map(Int64.init)
+            } catch {
+                // AudioToolbox opened it, so this only means its length can't be checked.
+                logger.info("can't read the length \(item.url.path) states: \(error)")
+                checkedLengthFrames = nil
+            }
+        } else {
+            checkedLengthFrames = decoder.lengthFrames
+        }
     }
 
     var sampleRateHz: Double { decoder.fileFormat.mSampleRate }
@@ -710,14 +727,14 @@ private struct Track {
 
     /// Why decoding stopped short, once it has: nil unless it's more than
     /// `endedEarlySeconds` before the stated length, which leaves room for encoders' rounding.
-    /// An MP3's length is an estimate from its bitrate unless a Xing or LAME header gives it,
-    /// so MP3s aren't checked.
+    /// An MP3 that doesn't state its length isn't checked.
     var endedEarly: DeviceOutputError? {
-        guard decoder.fileFormat.mFormatID != kAudioFormatMPEGLayer3 else { return nil }
-        let missing = Double(decoder.lengthFrames - decoder.nextFrame) / sampleRateHz
+        guard let length = checkedLengthFrames else { return nil }
+        let missing = Double(length - decoder.nextFrame) / sampleRateHz
         guard missing > Self.endedEarlySeconds else { return nil }
         return .endedEarly(
-            atSeconds: Double(decoder.nextFrame) / sampleRateHz, ofSeconds: durationSeconds)
+            atSeconds: Double(decoder.nextFrame) / sampleRateHz,
+            ofSeconds: Double(length) / sampleRateHz)
     }
 
     static let endedEarlySeconds = 0.5
