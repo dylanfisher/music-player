@@ -116,6 +116,11 @@ private func problem(_ line: String) -> String? {
     let (event, state) = SyncClock.next(after: start, wallMs: 2000, field: far)
     #expect(event == SyncClock(ms: 1_000_000_000, counter: 8))
     #expect(state == SyncClock(ms: 2000 + SyncClock.skewBoundMs, counter: 0))
+    // A wall clock set back more than the bound still gives later clocks.
+    let ahead = SyncClock(ms: 10_000_000, counter: 4)
+    let back = SyncClock.next(after: ahead, wallMs: 1000)
+    #expect(back.event == SyncClock(ms: 10_000_000, counter: 5) && back.state == back.event)
+    #expect(SyncClock.next(after: back.state, wallMs: 1000).event > back.event)
     let near = SyncClock(ms: 3000, counter: 0)
     #expect(
         SyncClock.next(after: start, wallMs: 2000, field: near) == (near.successor, near.successor))

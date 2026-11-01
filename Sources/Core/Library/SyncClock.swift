@@ -27,10 +27,13 @@ struct SyncClock: Comparable, Hashable, Sendable {
     static func next(after last: SyncClock, wallMs: Int64, field: SyncClock? = nil) -> (
         event: SyncClock, state: SyncClock
     ) {
-        var event = last.ms >= wallMs ? last.successor : SyncClock(ms: wallMs, counter: 0)
-        if let field, field >= event { event = field.successor }
+        let own = last.ms >= wallMs ? last.successor : SyncClock(ms: wallMs, counter: 0)
+        guard let field, field >= own else { return (own, own) }
+        // Only a field's clock is bounded: the machine's own always moves on, even after its
+        // wall clock went back.
+        let event = field.successor
         let bound = SyncClock(ms: wallMs + skewBoundMs, counter: 0)
-        return (event, event <= bound ? event : max(last, bound))
+        return (event, max(own, min(event, bound)))
     }
 }
 
