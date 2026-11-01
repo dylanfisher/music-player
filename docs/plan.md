@@ -1800,6 +1800,35 @@ longest check name truncates in a sidebar at its narrowest, with the full name i
 - [ ] **Hardware checkpoint (owner):** on the DAC Mac with the ADI-2, play 16/44.1 and 24/192,
       then change the rate in Audio MIDI Setup while playing, and report what the panel shows.
 
+Implementation plan (ADR 0035):
+
+1. **Snapshot and verdict** (Playback, no CoreAudio): `SignalPath` holds the track's file and
+   decoder formats and a `SignalSink`, an enum whose one case today is the device (its name,
+   whether it's connected and readable, nominal rate, physical format, hog owner, volume
+   controls, and the IO proc's gain). The renderer becomes a second case in phase 9.
+   `signalVerdict(_:)` returns idle, bit-perfect, or each `SignalChange`: decoder or device
+   resampling or remixing, a format that can't hold the file's samples, a mixable format, hog
+   mode not held or held by another process, a volume control or the digital volume below
+   unity, and the device missing or unreadable.
+2. **Listeners** (HALOutput): `PropertyListeners` keeps one block's HAL listeners equal to a
+   wanted set, so a device's new object ID or quitting removes exactly what was added. The
+   provider follows the device's rate, hog mode, streams, virtual main volume and per-channel
+   volumes, and the stream's physical format, on its device-watch queue, and reports the
+   device's state through `watch`. Nothing polls and the IO proc is untouched.
+3. **Output:** `DeviceOutput` keeps the latest device state and, on its control thread, publishes
+   a `SignalPath` on `signalPaths` whenever the audible track, the gain or the device changes.
+   `NullDevice` reports a state too, and tests can change its rate, take hog mode or lower its
+   volume, as another app would.
+4. **Panel** (NowPlaying): `signalPathLines(_:)` turns a path into the verdict line and the rows
+   (file, decoder, device, hog mode, volume); `SignalPathPanel` shows them in a strip under the
+   now-playing bar. `view.toggleSignalPath` ("Show Signal Path", ⌥⌘S) in the registry and View
+   menu, and `window.signalPathVisible` in the state file, off by default. The app only hops
+   `signalPaths` to main and toggles the view.
+5. **Tests:** PlaybackTests (each verdict case), NowPlayingTests (the lines), HALOutputTests
+   (listener balance across a device change and stop with a fake HAL; with the null device: a
+   rate mismatch, volume below unity, hog mode lost, the device going and coming back mid-track,
+   another app changing the rate), CommandsTests (the chord doesn't collide).
+
 ### 21. Scripting
 
 - [ ] **Command line:** a `music-player` tool in the bundle that runs registry commands in the
