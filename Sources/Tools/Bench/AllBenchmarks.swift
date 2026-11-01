@@ -2,5 +2,6 @@
 /// file named for the module they measure, with their budgets, and lists them here.
 let benchmarks =
     settingsBenchmarks + fixtureBenchmarks + metadataBenchmarks + libraryBenchmarks
-    + playlistBenchmarks + windowBenchmarks + paletteBenchmarks + playbackBenchmarks
+    + playlistBenchmarks + historyBenchmarks + windowBenchmarks + paletteBenchmarks
+    + playbackBenchmarks
     + tagWriterBenchmarks
