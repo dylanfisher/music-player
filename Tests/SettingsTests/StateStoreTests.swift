@@ -322,3 +322,14 @@ private func problems(_ json: String) -> [SettingProblem] {
     let unsorted = VisitLog(visits: log.visits.reversed())
     #expect(throws: SettingsError.self) { try state.set(\.paletteVisits, to: unsorted) }
 }
+
+@Test func aSaveThatDidntFinishLeavesNothingAtTheNextStart() throws {
+    let url = temporaryFile()
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let leftover = url.path + ".sb-c222b5e5-9ngxFq"
+    try Data("{".utf8).write(to: URL(fileURLWithPath: leftover))
+    #expect(leftoverAtomicWrites(beside: url) == [leftover])
+    _ = try StateStore(AppState(), fileURL: url)
+    #expect(leftoverAtomicWrites(beside: url).isEmpty)
+}

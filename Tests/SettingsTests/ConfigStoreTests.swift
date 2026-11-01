@@ -220,3 +220,11 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
         #expect(try read(url) == cut)
     }
 }
+
+@MainActor @Test func aConfigSaveThatDidntFinishLeavesNothingAtTheNextStart() throws {
+    let url = configURL()
+    try write(#"{"a.count": 3}"#, to: url)
+    try write("{", to: URL(fileURLWithPath: url.path + ".sb-c222b5e5-oFWVqX"))
+    _ = store(url)
+    #expect(leftoverAtomicWrites(beside: url).isEmpty)
+}

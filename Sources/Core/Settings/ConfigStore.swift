@@ -67,6 +67,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
             preconditionFailure("two settings share the key \"\(first.key)\"")
         }
         values = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.key, $0.defaultValue) })
+        removeLeftoverAtomicWrites(beside: fileURL.resolvingSymlinksInPath())
         read(confirmed: true)
         if creating, lastBytes == nil, problems.isEmpty { writeNewFile() }
     }

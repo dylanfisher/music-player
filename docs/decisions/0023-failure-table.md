@@ -112,5 +112,6 @@ A device that reports itself still connected while a step fails is reported as a
 failure, as before; the hardware checkpoint on the ADI-2 shows which order the HAL uses. A
 locked database at launch still quits after the alert, since the window can't open without
 it; opening takes a write lock to check the schema. A kill mid-save can leave Foundation's
-temp file (`state.json.sb-…`) beside the state or config file; nothing reads it. Files left outside the watched folders when their removal at launch fails are only logged,
+temp file (`state.json.sb-…`) beside the state or config file; the stores delete any at the
+next start, and the kill harness fails on one still there after that. Files left outside the watched folders when their removal at launch fails are only logged,
 and go at the next launch.

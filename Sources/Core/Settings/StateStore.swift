@@ -27,6 +27,7 @@ public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
         byKey = Dictionary(descriptors.map { ($0.key, $0) }) { first, _ in
             preconditionFailure("two settings share the key \"\(first.key)\"")
         }
+        removeLeftoverAtomicWrites(beside: fileURL)
         let data: Data
         do {
             data = try Data(contentsOf: fileURL)
