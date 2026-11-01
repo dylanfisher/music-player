@@ -39,11 +39,16 @@ do {
 }
 let socket = scriptSocketPath(dataDirectory: paths.dataDirectory)
 
-/// The reply, or nil when nothing answers on the socket yet.
-func exchange() -> ScriptReply? {
+/// The reply, or nil when nothing answers on the socket yet. While a started app comes up,
+/// `starting` also counts a connection it closes unanswered as not ready.
+func exchange(timeoutSeconds: Double = ScriptLimits.replySeconds, starting: Bool = false)
+    -> ScriptReply?
+{
     do {
-        return try sendScriptRequest(request, path: socket)
+        return try sendScriptRequest(request, path: socket, timeoutSeconds: timeoutSeconds)
     } catch LocalSocketError.notListening {
+        return nil
+    } catch LocalSocketError.closed where starting {
         return nil
     } catch {
         fail("\(error)")
@@ -64,6 +69,8 @@ func launchAndWait() async -> ScriptReply {
             "the app isn't answering at \(socket), and this \(toolName) isn't inside it to start it"
         )
     }
+    // One deadline for the start and every try after it.
+    let deadline = Date().addingTimeInterval(launchWaitSeconds)
     let configuration = NSWorkspace.OpenConfiguration()
     configuration.arguments = invocation.launchArguments
     do {
@@ -71,9 +78,8 @@ func launchAndWait() async -> ScriptReply {
     } catch {
         fail("couldn't start \(app.path): \(error)")
     }
-    let deadline = Date().addingTimeInterval(launchWaitSeconds)
-    while Date() < deadline {
-        if let reply = exchange() { return reply }
+    while case let left = deadline.timeIntervalSinceNow, left > 0 {
+        if let reply = exchange(timeoutSeconds: left, starting: true) { return reply }
         try? await Task.sleep(nanoseconds: UInt64(retrySeconds * 1e9))
     }
     fail("the app didn't answer at \(socket) within \(Int(launchWaitSeconds)) s of starting")

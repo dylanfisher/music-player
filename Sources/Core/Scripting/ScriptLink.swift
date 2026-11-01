@@ -29,9 +29,7 @@ public func scriptRequest(link: String, names: CommandNames) throws -> ScriptReq
     guard command.runsFromLinks else {
         throw refuse("\(name) doesn't run from links; use the app or `\(toolName) \(name)`")
     }
-    guard parts.count == 2, !parts[1].isEmpty else {
-        return .run(command.id, argument: nil)
-    }
+    guard parts.count == 2 else { return .run(command.id, argument: nil) }
     let pair = parts[1].split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
     guard pair.count == 2, pair[0] == linkArgumentKey, !pair[1].contains("&"),
         !pair[1].contains("#")

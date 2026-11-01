@@ -71,6 +71,44 @@ private func mode(_ path: String) -> mode_t {
     return info.st_mode & 0o777
 }
 
+/// Replies a test keeps unsent, to fill the pending cap.
+private final class HeldReplies: @unchecked Sendable {
+    private let lock = NSLock()
+    private var replies: [LocalSocketReply] = []
+    private var requestCount = 0
+    private var problemsSeen: [LocalSocketError] = []
+
+    var problems: [LocalSocketError] { lock.withLock { problemsSeen } }
+
+    func problem(_ error: LocalSocketError) { lock.withLock { problemsSeen.append(error) } }
+
+    func hold(_ request: Data, _ reply: LocalSocketReply) {
+        lock.withLock {
+            requestCount += 1
+            replies.append(reply)
+        }
+    }
+
+    func sendAll() throws {
+        let all = lock.withLock {
+            defer { replies = [] }
+            return replies
+        }
+        for reply in all { try reply.send(Data("ok".utf8)) }
+    }
+
+    /// Waits up to two seconds for `count` requests in all.
+    func waitFor(requests count: Int) throws {
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            if lock.withLock({ requestCount >= count }) { return }
+            usleep(5000)
+        }
+        Issue.record("\(count) requests didn't arrive; problems: \(problems)")
+        throw LocalSocketError.timedOut
+    }
+}
+
 @Suite struct LocalSocketServerTests {
     @Test func aRequestIsAnsweredOnASocketOnlyThisUserCanReach() throws {
         let fixture = try Fixture()
@@ -175,6 +213,51 @@ private func mode(_ path: String) -> mode_t {
                 path: path, requestCap: 1, timeoutSeconds: 1, problem: { _ in },
                 handler: { _, _ in })
         }
+    }
+
+    @Test func losingTheBindToAnotherServerLeavesItsSocket() throws {
+        let fixture = try Fixture()
+        let winner = try fixture.server()
+        defer { winner.stop() }
+        // The step after the stale check, as a second server that passed it at the same time.
+        let address = try #require(socketAddress(fixture.path))
+        #expect(throws: LocalSocketError.system("bind", errno: EADDRINUSE)) {
+            try LocalSocketServer.listen(at: fixture.path, address: address)
+        }
+        #expect(try fixture.exchange("still") == "llits")
+    }
+
+    @Test func stopCanBeCalledTwiceAndAfterTheThreadEndedOnItsOwn() throws {
+        let fixture = try Fixture()
+        let server = try fixture.server()
+        server.stop()
+        server.stop()
+        let ended = try fixture.server()
+        ended.endThreadForTests()
+        #expect(fixture.problems == [.closed])
+        #expect(!FileManager.default.fileExists(atPath: fixture.path))
+        ended.stop()
+        ended.stop()
+    }
+
+    @Test func repliesPastTheCapAreRefusedUntilOneIsSent() throws {
+        let fixture = try Fixture()
+        let held = HeldReplies()
+        let server = try LocalSocketServer(
+            path: fixture.path, requestCap: 64, timeoutSeconds: 2, pendingCap: 1,
+            problem: { error in held.problem(error) },
+            handler: { request, reply in held.hold(request, reply) })
+        defer { server.stop() }
+        let first = Thread { _ = try? fixture.exchange("one") }
+        first.start()
+        try held.waitFor(requests: 1)
+        // Closed unread, so the write or the read fails, whichever comes first.
+        #expect(throws: LocalSocketError.self) { try fixture.exchange("two") }
+        #expect(held.problems == [.busy(1)])
+        try held.sendAll()
+        Thread { _ = try? fixture.exchange("three") }.start()
+        try held.waitFor(requests: 2)
+        try held.sendAll()
     }
 
     @Test func stopRemovesTheSocketAndNothingAnswers() throws {

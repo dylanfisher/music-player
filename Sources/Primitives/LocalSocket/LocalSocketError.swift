@@ -17,6 +17,8 @@ public enum LocalSocketError: Error, Equatable, CustomStringConvertible {
     /// A message declared longer than the cap.
     case tooLarge(bytes: Int, cap: Int)
     case timedOut
+    /// This many replies are already outstanding.
+    case busy(Int)
     /// The other end closed before a whole message.
     case closed
     case system(String, errno: Int32)
@@ -32,6 +34,7 @@ public enum LocalSocketError: Error, Equatable, CustomStringConvertible {
         case .tooLarge(let bytes, let cap):
             "a message of \(bytes) bytes is over the \(cap)-byte cap"
         case .timedOut: "the other end took too long"
+        case .busy(let count): "\(count) replies are already waiting to be sent"
         case .closed: "the other end closed before a whole message"
         case .system(let call, let code): "\(call) failed: \(String(cString: strerror(code)))"
         }

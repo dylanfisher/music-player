@@ -29,6 +29,7 @@ private func refusal(_ link: String) -> String? {
     // Decoded once: an encoded percent stays one, and a plus stays a plus.
     #expect(request("music-player://play?q=100%2541+x") == .run(.play, argument: "100%41+x"))
     #expect(request("music-player://play?q=") == .run(.play, argument: nil))
+    #expect(request("music-player://play") == .run(.play, argument: nil))
 }
 
 @Test func everyCommandNotMarkedForLinksIsRefused() {
@@ -55,6 +56,9 @@ private func refusal(_ link: String) -> String? {
     #expect(refusal("music-player://status") == "status isn't a command")
     #expect(refusal("music-player://help") == "help isn't a command")
     #expect(refusal("music-player://play?x=1") == "its query isn't one q=")
+    #expect(refusal("music-player://play?") == "its query isn't one q=")
+    #expect(
+        refusal("music-player://volumeUp")?.hasPrefix("volumeUp doesn't run from links") == true)
     #expect(refusal("music-player://play?q=a&q=b") == "its query isn't one q=")
     #expect(refusal("music-player://play?q=a#b") == "its query isn't one q=")
     #expect(refusal("music-player://next?q=a") == "next takes no argument")

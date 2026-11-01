@@ -14,13 +14,13 @@ public func scriptSocketPath(dataDirectory: URL) -> String {
 
 /// Caps on what crosses the socket. A request is a command ID and an argument; a reply is at
 /// most a status with one track's tags.
-enum ScriptLimits {
+public enum ScriptLimits {
     static let requestBytes = 4096
     static let replyBytes = 65536
     /// How long the app waits for a request to arrive whole, and for its reply to be read.
     static let socketTimeoutSeconds = 2.0
     /// How long the tool waits for a reply, which may follow a library query.
-    static let replySeconds = 10.0
+    public static let replySeconds = 10.0
     static let argumentBytes = 1024
     static let urlBytes = 2048
 }

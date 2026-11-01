@@ -21,7 +21,7 @@ import Testing
     #expect(
         linked == [
             .playPause, .play, .pause, .playSelection, .playNext, .nextTrack, .previousTrack,
-            .seekForward, .seekBack, .volumeUp, .volumeDown, .stop, .shuffle, .repeatOff,
+            .seekForward, .seekBack, .volumeDown, .stop, .shuffle, .repeatOff,
             .repeatAll, .repeatOne, .back, .forward, .showCurrentTrack,
         ])
     #expect(AppCommands.all().filter { $0.argument != nil }.map(\.id) == [.play])

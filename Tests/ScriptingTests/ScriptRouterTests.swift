@@ -12,6 +12,8 @@ private final class Recorder {
     var ran: [CommandID] = []
     var arguments: [String] = []
     var enabled = true
+    /// Seconds, for the link rate.
+    var clock = 0.0
     lazy var router = ScriptRouter(
         dispatcher: dispatcher,
         status: { ScriptStatus(PlaybackState(), positionSeconds: nil, track: nil) },
@@ -21,7 +23,7 @@ private final class Recorder {
                 if text == "fail" { throw Failure() }
                 return "Playing \(text)"
             }
-        ])
+        ], now: { [unowned self] in clock })
 
     struct Failure: Error, CustomStringConvertible {
         var description: String { "nothing matches" }
@@ -116,4 +118,22 @@ private final class Recorder {
     }
     #expect(reason.hasPrefix("the request didn't decode"))
     #expect(recorder.ran == [.nextTrack])
+}
+
+@MainActor @Test func linksPastFiveASecondAreRefusedWhateverTheyAsk() async throws {
+    let recorder = try Recorder()
+    let router = recorder.router
+    for _ in 0..<4 { #expect(await router.link("music-player://next") == .done(nil)) }
+    // A refused link counts too: a page spends its share whatever it asks for.
+    guard case .failed = await router.link("music-player://library.addFolder") else {
+        Issue.record("a command not marked for links ran")
+        return
+    }
+    let over = "over 5 links in a second came, and this one was refused"
+    #expect(await router.link("music-player://pause") == .failed(over))
+    recorder.clock = 0.99
+    #expect(await router.link("music-player://pause") == .failed(over))
+    recorder.clock = 1.0
+    #expect(await router.link("music-player://pause") == .done(nil))
+    #expect(recorder.ran == Array(repeating: .nextTrack, count: 4) + [.pause])
 }

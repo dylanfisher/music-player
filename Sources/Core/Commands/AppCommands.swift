@@ -175,7 +175,8 @@ public enum AppCommands {
             Command(.previousTrack, "Previous Track", [.init(.left, cmd)], links: true),
             Command(.seekForward, "Seek Forward", [.init(.right, [opt, cmd])], links: true),
             Command(.seekBack, "Seek Back", [.init(.left, [opt, cmd])], links: true),
-            Command(.volumeUp, "Volume Up", [.init(.up, [ctrl, cmd])], links: true),
+            // Not from links: a page could raise it to full in a loop (ADR 0036).
+            Command(.volumeUp, "Volume Up", [.init(.up, [ctrl, cmd])]),
             Command(.volumeDown, "Volume Down", [.init(.down, [ctrl, cmd])], links: true),
             Command(.stop, "Stop", links: true),
             Command(.shuffle, "Shuffle", links: true),
