@@ -33,9 +33,11 @@ extension Bool: SQLiteValue {
 }
 
 extension String: SQLiteValue {
-    /// Bound by its byte count, so text holding a NUL, which a tag can, is bound whole.
+    /// Bound by its byte count, so text holding a NUL, which a tag can, is bound whole. Text
+    /// past what an Int32 counts is too big, as SQLite says of text past its own limit.
     public func bind(to statement: OpaquePointer, at index: Int32) -> Int32 {
-        sqlite3_bind_text(statement, index, self, Int32(utf8.count), transient)
+        guard let count = Int32(exactly: utf8.count) else { return SQLITE_TOOBIG }
+        return sqlite3_bind_text(statement, index, self, count, transient)
     }
 }
 
@@ -105,6 +107,10 @@ public final class Statement {
             let index = Int32(offset + 1)
             let result =
                 value?.bind(to: statement, at: index) ?? sqlite3_bind_null(statement, index)
+            if result == SQLITE_TOOBIG {
+                throw SQLiteError(
+                    code: result, message: "value \(index) is too big to bind", sql: sql)
+            }
             guard result == SQLITE_OK else { throw SQLiteError(database.connection, sql: sql) }
         }
     }
@@ -154,7 +160,11 @@ public struct Row {
 
     public func text(_ column: Int32) throws(SQLiteError) -> String {
         try notNull(column)
-        return optionalText(column)!
+        // SQLite returns no text for a value that isn't NULL only when it runs out of memory.
+        guard let text = optionalText(column) else {
+            throw SQLiteError(code: SQLITE_NOMEM, message: "column \(column) has no text", sql: sql)
+        }
+        return text
     }
 
     /// Read by its byte count, so text holding a NUL comes back whole.

@@ -217,3 +217,15 @@ private final class LockedFailures: @unchecked Sendable {
             try $0.text(0)
         } == ["keep"])
 }
+
+@Test func textTooBigToBindThrowsSaying() throws {
+    let database = try temporaryDatabase()
+    // The same error the Int32 guard gives text past 2 GiB, at a size a test can afford.
+    sqlite3_limit(database.connection, SQLITE_LIMIT_LENGTH, 100)
+    let select = try database.prepare("SELECT ?")
+    let error = #expect(throws: SQLiteError.self) {
+        try select.map(binding: [String(repeating: "x", count: 200)]) { $0.optionalText(0) }
+    }
+    #expect(error?.code == SQLITE_TOOBIG)
+    #expect(error?.message == "value 1 is too big to bind")
+}
