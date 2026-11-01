@@ -1053,6 +1053,20 @@ Implementation plan (ADR 0023, written first):
    index runs every 5 minutes and a search every second, and a second benchmark reports memory
    growth between the footprints 30 s after each scan ends, from minute 5 on, budget < 10 MB.
 
+Result: shipped; all three exits pass. ADR 0023's failure table has 18 rows, each with a passing
+test. `scripts/kill-test`: 500 seeded kills over scans, tag writes, playlist edits, state and config
+saves, 495 of them during a write, with 0 integrity failures. The loaded hour (`--soak 3600` with 13
+full scans and 3,601 searches): 0 underruns; memory measured at the trough 30 s after each scan
+settled at 98–101 MB with no growth, peak 121 MB. The tests found and fixed: a DAC lost mid rate
+switch reported as a failed track, a full disk's rollback masked by a second error, a file cut
+short ending silently, a failed local scan dropping FSEvents changes until relaunch, a failed
+layout save dropped, and a corrupt library quitting at every launch (now moved aside at launch
+only, the 3 newest kept). The review also made device-loss detection independent of the HAL's
+event order, checked MP3s with an exact frame count for ending early, backed off failed local
+scan retries to 15 minutes, cleaned up leftover temp files at startup, and fixed a test that could
+hang forever on a loaded machine (every HAL test wait is now bounded). Pending for the ADI-2
+checkpoint: the order the real HAL reports a device lost mid switch.
+
 #### 14b. Single source of truth and DRY
 
 - **Goal:** each fact is defined once, and a check keeps it that way.
