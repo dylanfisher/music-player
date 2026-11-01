@@ -1721,11 +1721,11 @@ playlists with an unmapped rule, and playlists whose name exists, are skipped an
 
 ### 19. Finder, folders and library health
 
-- [ ] **Reveal in Finder** (⇧⌘R) for the selected tracks, from the menu, the context menu and ⌘K.
-- [ ] **Folder browsing:** a sidebar mode that shows each watched folder as a tree of its
+- [x] **Reveal in Finder** (⇧⌘R) for the selected tracks, from the menu, the context menu and ⌘K.
+- [x] **Folder browsing:** a sidebar mode that shows each watched folder as a tree of its
       subfolders, built from the paths the index already holds. Selecting a folder lists the
       tracks under it, and the panes narrow to them as they do for any source.
-- [ ] **Library health report**, as a sidebar source, each group listing its tracks so they can be
+- [x] **Library health report**, as a sidebar source, each group listing its tracks so they can be
       selected, played, revealed or fixed in the tag editor:
       - files the scanner couldn't read, and its warnings;
       - playlist entries whose file left the index;
@@ -1735,8 +1735,8 @@ playlists with an unmapped rule, and playlists whose name exists, are skipped an
         rates;
       - tracks with no art, no album or no album artist.
       It runs off the main thread on request and when a scan ends, never on a timer.
-- [ ] Tests: each group against crafted fixtures, and the folder tree.
-- [ ] Bench, with the budget added to [Performance budgets](#performance-budgets): building the
+- [x] Tests: each group against crafted fixtures, and the folder tree.
+- [x] Bench, with the budget added to [Performance budgets](#performance-budgets): building the
       report over the fixture library p95 < 1 s on Apple Silicon.
 
 Implementation plan (ADR 0034):
@@ -1772,6 +1772,17 @@ Implementation plan (ADR 0034):
    folder tree, the `.health` source), SettingsTests (`health:` sources), LibraryBrowserTests
    (HealthModel's stale runs, the sidebar's folder tree and health rows, the context menu's
    Reveal), CommandsTests (⇧⌘R bound, no collision).
+
+Result: shipped. Reveal in Finder is on ⇧⌘R, with ⌥⌘R kept as the alternate, in the menus, the
+track and timeline context menus and ⌘K. Watched folders open into their subfolders, built from
+index paths only, one level as each opens (ADR 0034). Library Health is a sidebar group of 11
+checks listed through the shared track table, built off the main thread after a scan that
+changed something, after playlist edits and imports, and on request, never on a timer; a stale
+run is dropped. Album checks key on the album and its folder, so two releases of one title don't
+merge, and Track Gaps counts each disc from its lowest number; Same Title needs a known length.
+Title duplicates are sorted in SQL and swept once. Bench: the report builds in 0.20 s (budget
+1 s; the old Mac's 3 s is an estimate), the folder tree in 62 ms on its own connection. The
+longest check name truncates in a sidebar at its narrowest, with the full name in its tooltip.
 
 ### 20. Signal path panel
 
