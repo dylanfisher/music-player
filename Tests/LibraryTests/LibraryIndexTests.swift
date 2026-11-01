@@ -375,3 +375,19 @@ private final class LockedResults: @unchecked Sendable {
     func add(_ result: Result<URL?, any Error>) { lock.withLock { results.append(result) } }
     var all: [Result<URL?, any Error>] { lock.withLock { results } }
 }
+
+@Test func aTableNamedToBreakOutOfItsQuotesIsDroppedAlone() throws {
+    let library = try TestLibrary()
+    let index = try library.index()
+    try index.recordPlay("/x.flac", at: 100)
+    // Read back from sqlite_master when the index is rebuilt; unquoted, it would end the DROP
+    // and drop the plays.
+    try index.database.execute("CREATE TABLE \"x\"\"; DROP TABLE plays; --\" (a)")
+    try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'index'")
+
+    let rebuilt = try library.index()
+    #expect(
+        try rebuilt.database.prepare("SELECT count(*) FROM sqlite_master WHERE name LIKE 'x%'")
+            .map { try $0.int(0) } == [0])
+    #expect(try rebuilt.database.prepare("SELECT count(*) FROM plays").map { try $0.int(0) } == [1])
+}

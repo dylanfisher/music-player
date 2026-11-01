@@ -158,7 +158,7 @@ public final class LibraryIndex {
             })
         var counts: [String] = []
         for table in statsTables.intersection(existing).sorted() {
-            let rows = try database.prepare("SELECT count(*) FROM \"\(table)\"").map {
+            let rows = try database.prepare("SELECT count(*) FROM \(quotedIdentifier(table))").map {
                 try $0.int(0)
             }[0]
             if rows > 0 { counts.append("\(table) \(rows)") }
@@ -211,14 +211,14 @@ public final class LibraryIndex {
                 && !keeping.contains($0.name)
         }
         for table in doomed where table.isVirtual {
-            try database.execute("DROP TABLE \"\(table.name)\"")
+            try database.execute("DROP TABLE \(quotedIdentifier(table.name))")
         }
         let remaining = Set(
             try database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").map {
                 try $0.text(0)
             })
         for table in doomed where !table.isVirtual && remaining.contains(table.name) {
-            try database.execute("DROP TABLE \"\(table.name)\"")
+            try database.execute("DROP TABLE \(quotedIdentifier(table.name))")
         }
     }
 

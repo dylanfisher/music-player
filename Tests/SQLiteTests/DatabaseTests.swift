@@ -206,3 +206,14 @@ private final class LockedFailures: @unchecked Sendable {
         try database.prepare("SELECT ?").map(binding: ["x\u{0}y"]) { $0.optionalText(0) }
             == ["x\u{0}y"])
 }
+
+@Test func aQuotedIdentifierStaysOneName() throws {
+    let database = try temporaryDatabase()
+    let name = "x\"; DROP TABLE keep; --"
+    try database.execute("CREATE TABLE keep (a); CREATE TABLE \(quotedIdentifier(name)) (a)")
+    try database.execute("DROP TABLE \(quotedIdentifier(name))")
+    #expect(
+        try database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").map {
+            try $0.text(0)
+        } == ["keep"])
+}
