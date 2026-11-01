@@ -1786,16 +1786,16 @@ longest check name truncates in a sidebar at its narrowest, with the full name i
 
 ### 20. Signal path panel
 
-- [ ] A panel, hidden by default, that shows what happens to the samples between the file and the
+- [x] A panel, hidden by default, that shows what happens to the samples between the file and the
       DAC: the file (codec, rate, bit depth, channels), the decoder's output, the device (name,
       nominal rate, physical format, bit depth), whether hog mode is held, and whether digital
       volume is at unity. A line at the top says "Bit-perfect" or names each thing that changes
       the samples.
-- [ ] It follows the device's property listeners, so another app changing the rate or taking the
+- [x] It follows the device's property listeners, so another app changing the rate or taking the
       device shows at once. Nothing polls.
-- [ ] A command and a menu item show and hide it; whether it's shown is saved in the state file.
+- [x] A command and a menu item show and hide it; whether it's shown is saved in the state file.
 - [ ] When phase 9 lands, a renderer shows its own path (original bytes sent, and what it reports).
-- [ ] Tests: the verdict for each case (rate mismatch, volume below unity, hog mode lost, a
+- [x] Tests: the verdict for each case (rate mismatch, volume below unity, hog mode lost, a
       device change mid-track) against a fake device.
 - [ ] **Hardware checkpoint (owner):** on the DAC Mac with the ADI-2, play 16/44.1 and 24/192,
       then change the rate in Audio MIDI Setup while playing, and report what the panel shows.
@@ -1828,6 +1828,17 @@ Implementation plan (ADR 0035):
    (listener balance across a device change and stop with a fake HAL; with the null device: a
    rate mismatch, volume below unity, hog mode lost, the device going and coming back mid-track,
    another app changing the rate), CommandsTests (the chord doesn't collide).
+
+Result: shipped up to the renderer line, which waits for phase 9, and the owner's checkpoint,
+which is pending. A strip under the now-playing bar (⌥⌘S, View ▸ Show Signal Path, saved in the
+state file, off by default) shows file, decoder and device formats, hog mode and every volume
+control, and says "Bit-perfect" or names each change: a rate, channel or precision change, a
+mixable format, hog mode free or held by another process, any volume control or the app's gain
+off 1.0, or a missing device (ADR 0035). A 16- or 24-bit source padded into a 32-bit integer
+stream counts as bit-perfect. It follows the HAL's property listeners on the device-watch queue,
+with HAL reads outside the provider's lock; the control thread rebuilds the snapshot only when
+something changed. Mute and DSP inside the DAC aren't visible to it. Playback CPU after the gate
+fixes: 1.27 to 1.51% of 3%.
 
 ### 21. Scripting
 
