@@ -125,8 +125,21 @@ package struct Bytes {
 }
 
 /// Bytes as Latin-1, which maps each byte to the code point of the same value.
-package func latin1(_ bytes: some Sequence<UInt8>) -> String {
-    var text = ""
-    text.unicodeScalars.append(contentsOf: bytes.map { Unicode.Scalar($0) })
-    return text
+package func latin1(_ bytes: some Collection<UInt8>) -> String {
+    // Written as UTF-8 in one pass: appending scalars one at a time cost a sixth of a full parse,
+    // most of it in the MP4 atom types.
+    String(unsafeUninitializedCapacity: bytes.count * 2) { utf8 in
+        var count = 0
+        for byte in bytes {
+            if byte < 0x80 {
+                utf8[count] = byte
+                count += 1
+            } else {
+                utf8[count] = 0xC0 | byte >> 6
+                utf8[count + 1] = 0x80 | byte & 0x3F
+                count += 2
+            }
+        }
+        return count
+    }
 }

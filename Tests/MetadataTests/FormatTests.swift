@@ -378,3 +378,10 @@ import Testing
         #expect(parsed.warnings.map(\.kind) == (mime == nil ? [.unreadableField] : []))
     }
 }
+
+@Test func latin1MapsEveryByteToTheCodePointOfTheSameValue() {
+    let bytes = (0...255).map { UInt8($0) }
+    #expect(latin1(bytes).unicodeScalars.map(\.value) == bytes.map(UInt32.init))
+    #expect(latin1(bytes[0x41..<0x45]) == "ABCD")
+    #expect(latin1([UInt8]()) == "")
+}

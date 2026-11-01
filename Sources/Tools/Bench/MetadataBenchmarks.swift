@@ -61,7 +61,10 @@ private func parseAll(_ files: [FixtureFile], in root: URL) throws -> Pass {
     pass.seconds = try seconds {
         for file in files {
             do throws(MetadataError) {
-                let parsed = try readMetadata(at: root.appendingPathComponent(file.path))
+                // Without `isDirectory`, Foundation stats the path to find out, which took a
+                // fifth of the pass and which the scanner, working on paths, never pays.
+                let parsed = try readMetadata(
+                    at: root.appendingPathComponent(file.path, isDirectory: false))
                 pass.bytesRead += parsed.bytesRead
                 pass.readCount += parsed.readCount
                 pass.mostBytesRead = max(pass.mostBytesRead, parsed.bytesRead)
