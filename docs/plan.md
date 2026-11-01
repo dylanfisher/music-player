@@ -1929,6 +1929,27 @@ keyed by the device's UID (a renderer's UDN once phase 9 lands) and kept in the 
       built-in output, switch between them, then power the ADI-2 off and on, and report what the
       app does.
 
+Implementation plan:
+
+- `refactor`: move `PhysicalFormat` to Playback (its CoreAudio inits and `summary` stay in
+  HALOutput) and `kilohertz(_ range:)` to DisplayText, so the signal path can carry formats.
+- Playback: `DeviceFormats` (the HAL's available nominal rates and the first output stream's
+  physical formats) on `DeviceSignal`, and the device's UID on `DeviceSink`. HALOutput reads
+  them in `readSignal` and listens for both properties; NullDevice reports settable ones.
+- HALOutput: `DeviceChoice` (provider, digital volume, gain, recorded formats). `DeviceOutput`
+  takes one, switches to another with `use(_:)` mid-queue at the same position, refuses a track
+  no reported format takes with `DeviceOutputError.deviceCannotTake`, and returns on its own to
+  a device that went away and came back, reported on `returns`.
+- Settings: `DeviceProfiles` in the state file (`output.profiles`), at most 32, least recently
+  used evicted, with the config-edit rule as pure functions. Settings imports Playback.
+- App: choose the profile at launch and on an output setting change, write it before the change
+  it protects, mirror it into the config, record volume changes and reported formats.
+- NowPlaying: a "Takes" row in the signal path panel.
+- Tests: DeviceProfilesTests (Settings: first seen, config edit, switch, eviction, strict
+  decoding), DeviceSwitchTests (HALOutput, two null devices: first seen, switch mid-queue,
+  reconnect paused and while playing elsewhere, unsupported format refused), SignalPathLines.
+- ADR 0037.
+
 ### 23. Sync across machines
 
 Two or three Macs play the same NAS library, and each keeps its own index. Plays, skips, ratings,
