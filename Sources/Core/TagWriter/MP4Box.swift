@@ -22,6 +22,10 @@ struct MP4Box {
         MP4Type.moov, MP4Type.trak, MP4Type.mdia, MP4Type.minf, MP4Type.stbl, MP4Type.udta,
         MP4Type.meta, MP4Type.ilst,
     ]
+    /// The deepest an opened container may sit below `moov`. The real paths are four deep
+    /// (`trak/mdia/minf/stbl`); a file that nests them further, such as `udta` in `udta` a
+    /// hundred thousand times, would recurse until the stack ran out.
+    static let maximumDepth = 8
     static let paddingTypes: Set<String> = [MP4Type.free, "skip"]
     static let chunkOffsetTypes: Set<String> = [MP4Type.stco, MP4Type.co64]
 
@@ -36,14 +40,20 @@ struct MP4Box {
         self.children = children
     }
 
-    /// Reads the atom `atom` from `reader`, opening it if it's one of `opened`.
-    init(_ atom: Atom, _ reader: ByteReader) throws(ParseFailure) {
+    /// Reads the atom `atom` from `reader`, opening it if it's one of `opened`. `depth` counts
+    /// the opened containers above it.
+    init(_ atom: Atom, _ reader: ByteReader, depth: Int = 0) throws(ParseFailure) {
         type = atom.type
         original = atom.start..<atom.body.upperBound
         largeSize = atom.body.lowerBound - atom.start == 16
         guard Self.opened.contains(type) else {
             body = try reader.bytes(atom.body).array
             return
+        }
+        guard depth <= Self.maximumDepth else {
+            throw .malformed(
+                at: atom.start,
+                "MP4 atom '\(type)' is nested more than \(Self.maximumDepth) containers deep")
         }
         var start = atom.body.lowerBound
         if type == MP4Type.meta {
@@ -58,7 +68,7 @@ struct MP4Box {
         var end = start
         try forEachAtom(reader, in: start..<atom.body.upperBound, parent: atom) {
             child throws(ParseFailure) in
-            children.append(try MP4Box(child, reader))
+            children.append(try MP4Box(child, reader, depth: depth + 1))
             end = child.body.upperBound
             return true
         }
