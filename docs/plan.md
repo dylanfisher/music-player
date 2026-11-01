@@ -1382,6 +1382,23 @@ The ring costs twice the memory: 16 MB at 192 kHz, 64 MB at 768 kHz.
 - **Exit:** `scripts/surface` reports nothing and runs in `./scripts/check`; every ADR's status is
   current; AGENTS.md is 50 lines or fewer; a final `./scripts/check` and `./scripts/bench` pass.
 
+Implementation plan:
+
+1. **`scripts/surface.swift`** (Foundation only, like `scripts/dupes.swift`): lexes every Swift
+   file under `Sources`, lists each `public` and `package` declaration, and fails on each whose
+   name no file of a module that sees it uses, and no other public signature in its own module
+   names. Tests don't count as callers: they use `@testable import`. Framework protocol
+   witnesses the compiler requires to be public go in `scripts/surface-allow.txt` with a reason.
+   ADR 0030.
+2. **Narrow** every declaration it reports to internal, until it reports nothing; tests that
+   reach a narrowed symbol switch to `@testable import`. Delete what has no caller in `Sources`
+   at all.
+3. **`scripts/surface-test`** plants each finding and each bad allowlist entry, like
+   `scripts/dupes-test`. Both run in `./scripts/check`.
+4. **Docs:** `docs/map.md`, the README, AGENTS.md, every ADR's Status line and the Result lines
+   read against the code; drift fixed, superseded ADRs link their successor.
+5. A final `./scripts/check` and `./scripts/bench`.
+
 
 ### 15. Stable track identity and full play history
 
