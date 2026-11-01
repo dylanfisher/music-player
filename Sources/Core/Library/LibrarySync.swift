@@ -169,6 +169,11 @@ extension LibraryIndex {
             }
         }
         report.outside += merge.outside
+        if merge.outside > 0 {
+            report.problems.append(
+                "events for files outside this Mac's share folders, which it doesn't keep:"
+                    + " \(merge.outside)")
+        }
         report.changed = report.changed || merge.changed
         for cursor in cursors { report.problems += cursor.reportLines(in: directory.path) }
     }

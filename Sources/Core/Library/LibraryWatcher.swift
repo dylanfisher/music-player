@@ -317,6 +317,8 @@ public final class LibraryWatcher: @unchecked Sendable {
                 guard state != nil else { return }
                 switch result {
                 case .success(let report):
+                    logger.info(
+                        "synced with \(path): \(report.pushed) events out, \(report.applied) in")
                     for problem in report.problems { logger.error("\(problem)") }
                     events(.synced(report))
                 case .failure(let error):

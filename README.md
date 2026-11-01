@@ -36,6 +36,10 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   with stats that left without a match, which **Resolve Lost Stats…** gives to a track or
   dismisses. It runs after a scan and on Check Library Health. ⇧⌘R reveals the selected tracks
   in Finder.
+- **Sync Folder** (Settings): Macs that play the same library on a share share their plays,
+  ratings, loved tracks, playlists and Date Added through a folder outside the music, where
+  each writes only its own log. They sync at launch, after each rescan and on wake; a Mac
+  away from the share keeps its changes and sends them when it's back.
 - **`music-player`**, in `MusicPlayer.app/Contents/MacOS`, runs any command in the app and
   starts it if it isn't running: `music-player next`, `music-player play "album:Kind of Blue"`,
   `music-player status --json`. `music-player help` lists the commands. Links run playback and

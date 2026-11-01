@@ -86,3 +86,31 @@ private func eventually(
     #expect(syncs.failed.first?.contains("inside the watched folder") == true)
     #expect(syncs.count == 0)
 }
+
+@Test func withTheShareAwayTheWatcherSyncsWhenItsMountedAgain() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("sync-watcher-\(UUID().uuidString)")
+    let mount = root.appendingPathComponent("music").path
+    try FileManager.default.createDirectory(
+        atPath: mount + "/sync", withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let databaseURL = root.appendingPathComponent("library.sqlite")
+    let index = try LibraryIndex(at: databaseURL)
+    let log = mount + "/sync/" + syncLogName(try index.machineID())
+    let mounts = FakeMounts([])
+    let syncs = Syncs()
+    let watcher = LibraryWatcher(
+        databaseURL: databaseURL, networkReaders: 2, mounts: mounts, events: syncs.append)
+    watcher.start(
+        folders: [], syncFolder: SyncFolder(path: "sync", share: "smb://nas/music"),
+        pausePollingDuringPlayback: false)
+    defer { watcher.stop() }
+    watcher.pushSync()
+    // Nothing is mounted, so nothing syncs, and nothing fails either.
+    try await Task.sleep(nanoseconds: 300_000_000)
+    #expect(syncs.count == 0 && syncs.failed.isEmpty)
+    mounts.set([MountedShare(url: "smb://nas/music", mountPoint: mount)])
+    watcher.sharesMayHaveMoved()
+    #expect(try await eventually(within: 10, "the sync after the mount") { syncs.count == 1 })
+    #expect(FileManager.default.fileExists(atPath: log))
+}

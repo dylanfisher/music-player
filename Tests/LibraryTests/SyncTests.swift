@@ -423,6 +423,10 @@ private func syncAll(_ machines: [Machine]) throws {
     try b.index.database.execute("DELETE FROM share_roots WHERE share = '\(share)'")
     let report = try b.sync()
     #expect(report.outside == 1)
+    #expect(
+        report.problems == [
+            "events for files outside this Mac's share folders, which it doesn't keep: 1"
+        ])
     #expect(try b.index.database.prepare("SELECT count(*) FROM plays").map { try $0.int(0) } == [0])
 }
 
