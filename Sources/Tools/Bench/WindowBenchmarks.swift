@@ -32,6 +32,25 @@ let windowBenchmarks = [
             ])
     },
     Benchmark(
+        name: "window: CPU when idle, library open and not playing",
+        budget: Budget(appleSilicon: 0.1, oldMac: 0.1, unit: .percentOfCore)
+    ) {
+        let idle = try idleUsage.get()
+        return Measured(
+            value: idle.cpuPercent,
+            notes: [
+                String(
+                    format: "%.0f s after a %.0f s settle; %.2f interrupt wakeups a second",
+                    idleSampleSeconds, idleSettleSeconds, idle.interruptWakeupsPerSecond)
+            ])
+    },
+    Benchmark(
+        name: "window: idle wakeups, library open and not playing",
+        budget: Budget(appleSilicon: 1, oldMac: 1, unit: .wakeupsPerSecond)
+    ) {
+        Measured(value: try idleUsage.get().idleWakeupsPerSecond)
+    },
+    Benchmark(
         name: "window: search keystroke through the browser model (p95)",
         budget: Budget(appleSilicon: 30, oldMac: 80, unit: .milliseconds)
     ) {
@@ -87,25 +106,96 @@ private let windowRunTimeoutSeconds = 300.0
 /// The app launched `windowRunCount` times against the fixture library, already indexed, each
 /// run in a fresh home folder holding a copy of the index.
 private let windowRuns = Result { () throws -> [WindowReport] in
-    let library = try scannedLibrary.get()
     let app = try appExecutable()
     return try (0..<windowRunCount).map { _ in
-        try withScratchDirectory("window") { directory in
-            try FileManager.default.createDirectory(
-                at: directory, withIntermediateDirectories: true)
-            let paths = AppPaths(home: directory)
-            try MainActor.assumeIsolated {
-                // No shortcuts are set, so none is checked.
-                let settings = ConfigStore(
-                    AppSettings(), fileURL: paths.configFile, check: { _, _, _ in nil },
-                    creating: true)
-                try settings.set(\.watchedFolders, to: [library.folder])
-            }
-            try FileManager.default.copyItem(
-                at: library.databaseURL, to: libraryFileURL(in: paths.dataDirectory))
-            return try measureWindow(app, home: directory)
+        try withIndexedHome { home in try measureWindow(app, home: home) }
+    }
+}
+
+/// Runs `body` with a fresh home folder whose settings watch the fixture library and which holds
+/// a copy of its index, then deletes the folder.
+private func withIndexedHome<T>(_ body: (URL) throws -> T) throws -> T {
+    let library = try scannedLibrary.get()
+    return try withScratchDirectory("window") { directory in
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let paths = AppPaths(home: directory)
+        try MainActor.assumeIsolated {
+            // No shortcuts are set, so none is checked.
+            let settings = ConfigStore(
+                AppSettings(), fileURL: paths.configFile, check: { _, _, _ in nil },
+                creating: true)
+            try settings.set(\.watchedFolders, to: [library.folder])
+        }
+        try FileManager.default.copyItem(
+            at: library.databaseURL, to: libraryFileURL(in: paths.dataDirectory))
+        return try body(directory)
+    }
+}
+
+/// How long the idle benchmark lets the app settle after launch, through the launch rescan, the
+/// first rows and their art.
+private let idleSettleSeconds = 20.0
+/// How long it then samples the app. The 10-minute run in phase 14e measured the same rates.
+private let idleSampleSeconds = 60.0
+
+/// What the app used while idle: its window open on the fixture library, nothing playing.
+private struct IdleUsage {
+    var cpuPercent: Double
+    var idleWakeupsPerSecond: Double
+    var interruptWakeupsPerSecond: Double
+}
+
+/// The app launched on an indexed fixture library and left alone, sampled after it settles.
+private let idleUsage = Result { () throws -> IdleUsage in
+    let app = try appExecutable()
+    return try withIndexedHome { home in
+        let process = Process()
+        process.executableURL = app
+        process.arguments = ["--home", home.path]
+        process.standardOutput = FileHandle.nullDevice
+        let finished = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in finished.signal() }
+        try process.run()
+        defer {
+            process.terminate()
+            finished.wait()
+        }
+        Thread.sleep(forTimeInterval: idleSettleSeconds)
+        let start = try usage(of: process.processIdentifier)
+        Thread.sleep(forTimeInterval: idleSampleSeconds)
+        let end = try usage(of: process.processIdentifier)
+        guard process.isRunning else {
+            throw BenchError.expected(
+                "the app to keep running, not exit \(process.terminationStatus)")
+        }
+        return IdleUsage(
+            cpuPercent: (end.cpuSeconds - start.cpuSeconds) / idleSampleSeconds * 100,
+            idleWakeupsPerSecond: Double(end.idleWakeups - start.idleWakeups) / idleSampleSeconds,
+            interruptWakeupsPerSecond: Double(end.interruptWakeups - start.interruptWakeups)
+                / idleSampleSeconds)
+    }
+}
+
+/// A process's CPU time so far and its wakeups: from idle, as `top` counts them in IDLEW, and
+/// from interrupts, as Activity Monitor does.
+private func usage(of pid: pid_t) throws -> (
+    cpuSeconds: Double, idleWakeups: UInt64, interruptWakeups: UInt64
+) {
+    var info = rusage_info_v4()
+    let status = withUnsafeMutablePointer(to: &info) { pointer in
+        pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
+            proc_pid_rusage(pid, RUSAGE_INFO_V4, $0)
         }
     }
+    guard status == 0 else { throw BenchError.expected("proc_pid_rusage to succeed, not \(errno)") }
+    // In mach time units, which are nanoseconds only on Intel.
+    var timebase = mach_timebase_info()
+    mach_timebase_info(&timebase)
+    let ticks = Double(info.ri_user_time + info.ri_system_time)
+    return (
+        ticks * Double(timebase.numer) / Double(timebase.denom) / 1e9, info.ri_pkg_idle_wkups,
+        info.ri_interrupt_wkups
+    )
 }
 
 /// Runs the app with `--measure-window` and reads the JSON line it prints.

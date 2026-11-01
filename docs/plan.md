@@ -98,7 +98,8 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Memory growth in that soak, from the first scan trough after minute 5 to the last (30 s after each scan ends) | < 10 MB | < 10 MB |
 | Gap between same-format tracks | 0 samples | 0 samples |
 | Track change that switches sample rate | < 500 ms | < 500 ms |
-| CPU when idle (not playing) | ~0%, no timers firing faster than settings allow | same |
+| CPU when idle, the library window open and nothing playing, over a minute after a 20 s settle; the old Mac figure is an estimate until its checkpoint | < 0.1 percent of a core | < 0.1 percent of a core |
+| Idle wakeups in the same minute, as `top` counts them | < 1 wakeups a second | < 1 wakeups a second |
 | Load and validate settings, every key changed | < 5 ms | < 20 ms |
 | Generate the fixture library | < 30 s | < 120 s |
 | Rerun the fixture generator with nothing to do | < 10 s | < 30 s |
@@ -1351,6 +1352,10 @@ Implementation plan:
    30-minute `./scripts/bench --soak 1800` for memory under playback, scans and searches.
 6. **Budgets.** `./scripts/bench` three times; any budget beaten by more than 3x is tightened.
 7. **Checkpoint** for the 2015 MacBook Pro, below.
+
+- [ ] **Hardware checkpoint (owner):** on the 2015 MacBook Pro, after pushing, run every budget
+      on the old Mac and send back the file it writes:
+      `cd ~/projects/music-player && git pull --ff-only && ./scripts/bench 2>&1 | tee ~/Desktop/bench-14e-old-mac.txt`
 
 #### 14f. Architecture and docs
 

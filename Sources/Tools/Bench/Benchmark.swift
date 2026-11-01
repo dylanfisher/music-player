@@ -23,6 +23,7 @@ struct Budget: Sendable {
         case seconds = "s"
         case megabytes = "MB"
         case percentOfCore = "percent of a core"
+        case wakeupsPerSecond = "wakeups a second"
         /// Sample frames: one sample per channel.
         case samples
         case frames
