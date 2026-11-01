@@ -228,3 +228,22 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
     _ = store(url)
     #expect(leftoverAtomicWrites(beside: url).isEmpty)
 }
+
+/// Foundation refuses JSON nested past 512 levels; under that, the scan that finds each key's
+/// line recurses once per level, which stays shallow.
+@MainActor @Test func deeplyNestedConfigAndStateAreReported() throws {
+    for depth in [500, 100_000] {
+        let nested = String(repeating: "[", count: depth) + String(repeating: "]", count: depth)
+        let url = configURL()
+        let text = #"{"a.count": \#(nested)}"#
+        try write(text, to: url)
+        let settings = store(url)
+        #expect(!settings.problems.isEmpty, "\(depth)")
+        #expect(settings[\.count] == Schema().count.defaultValue)
+        #expect(try read(url) == text)
+
+        let stateURL = url.deletingLastPathComponent().appendingPathComponent("state.json")
+        try write(#"{"window.sidebarWidth": \#(nested)}"#, to: stateURL)
+        #expect(try StateStore(AppState(), fileURL: stateURL).discardReason != nil, "\(depth)")
+    }
+}

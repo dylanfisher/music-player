@@ -75,3 +75,26 @@ private func fileWithArt(width: Int, height: Int, prefix: Int = 100) throws -> (
         return failed == path
     }
 }
+
+/// A picture of more pixels than any cover. ImageIO scales while it decodes, so only the
+/// thumbnail is made; measured on a 400-megapixel PNG, the peak was 23 MB (ADR 0025).
+@Test func aHugeImageDecodesOnlyToItsThumbnail() throws {
+    let side = 8_000
+    let context = try #require(
+        CGContext(
+            data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue))
+    let png = NSMutableData()
+    let destination = try #require(
+        CGImageDestinationCreateWithData(png, "public.png" as CFString, 1, nil))
+    CGImageDestinationAddImage(destination, try #require(context.makeImage()), nil)
+    #expect(CGImageDestinationFinalize(destination))
+    let path = FileManager.default.temporaryDirectory
+        .appendingPathComponent("artwork-\(UUID().uuidString).flac").path
+    try (png as Data).write(to: URL(fileURLWithPath: path))
+    let art = EmbeddedArt(
+        offset: 0, byteCount: png.length, mimeType: pngMIMEType, unsynchronised: false)
+    let image = try ArtworkLoader(maxPixelSize: 96, capacity: 1).image(art, path: path)
+    #expect(image.width == 96)
+    #expect(image.height == 96)
+}

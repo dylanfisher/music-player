@@ -154,3 +154,38 @@ private func expected(
         .replacingOccurrences(of: "\"a\"", with: "\"a\\u0000b\"")
     #expect(throws: DecodingError.self) { try SmartRules(json: json) }
 }
+
+@Test func hostileFilesFailAloneAndTheScanCarriesOn() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("hostile-\(UUID().uuidString)")
+    let root = directory.appendingPathComponent("Music")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let good = flac(tags: ["TITLE": "good"])
+    var oversized = good
+    oversized[oversized.startIndex + 5...oversized.startIndex + 7] = Data([0xFF, 0xFF, 0xFF])
+    let hostileFiles: [(String, Data)] = [
+        ("block past the end.flac", oversized),
+        (
+            "atom of UInt64.max.m4a",
+            Data([0, 0, 0, 1]) + Data("ftyp".utf8) + Data(repeating: 0xFF, count: 8)
+        ),
+        ("empty.mp3", Data()),
+        ("noise.wav", Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ 7) })),
+    ]
+    for (name, data) in hostileFiles { try data.write(to: root.appendingPathComponent(name)) }
+    try good.write(to: root.appendingPathComponent("good.flac"))
+
+    let databaseURL = directory.appendingPathComponent("library.sqlite")
+    let summary = try LibraryScanner(databaseURL: databaseURL).scan(
+        WatchedFolder(path: root.path, kind: .local))
+    #expect(summary.failed == hostileFiles.count)
+    let index = try LibraryIndex(at: databaseURL)
+    #expect(try index.rows(ids: try index.trackIDs(sortedBy: .path)).map(\.title) == ["good"])
+    let failures = try index.fileIssues().filter {
+        if case .failure = $0.problem { return true }
+        return false
+    }
+    #expect(
+        Set(failures.map { ($0.path as NSString).lastPathComponent })
+            == Set(hostileFiles.map(\.0)))
+}
