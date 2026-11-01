@@ -206,3 +206,17 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
     try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
     #expect(try read(url) == #"{"a.count": 3}"#)
 }
+
+@MainActor @Test func everyTruncatedConfigIsReportedAndNeverWrittenOver() throws {
+    let whole = #"{"a.count": 3, "a.flag": true}"#
+    for length in 1..<whole.count {
+        let url = configURL()
+        let cut = String(whole.prefix(length))
+        try write(cut, to: url)
+        let settings = store(url)
+        #expect(!settings.problems.isEmpty, "\(cut)")
+        #expect(settings[\.count] == Schema().count.defaultValue)
+        try settings.set(\.count, to: 7)
+        #expect(try read(url) == cut)
+    }
+}
