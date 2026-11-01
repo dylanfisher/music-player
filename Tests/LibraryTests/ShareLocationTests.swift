@@ -235,3 +235,40 @@ private func index(under root: String, names: [String] = ["a.flac", "Caf\u{e9}/b
     // This machine mounts no share in tests; the listing itself must not fail.
     _ = try SystemShareMounts().mountedShares()
 }
+
+@Test func pathsWithLoggedPlaysOrImportCountsAreRewrittenAndMoved() throws {
+    let index = try index(under: "/V/old", names: ["a.flac", "b.flac"])
+    try index.store(["a", "b"].map { Crafted(path: "/V/new/\($0).flac").scanned })
+    let newA = try #require(try index.track(path: "/V/new/a.flac")).id
+    let newB = try #require(try index.track(path: "/V/new/b.flac")).id
+    // A logged play with no count, and an import that counted nothing: rows that refer to the
+    // new paths without making plays rows.
+    try index.database.execute(
+        """
+        INSERT INTO history (path_id, played_at) VALUES (\(newA), 1);
+        INSERT INTO \(importedPlaysTable) (player, path_id, play_count, skip_count)
+            VALUES ('swinsian', \(newB), 0, 0)
+        """)
+    try index.database.transaction { try index.rewritePaths(under: "/V/old", to: "/V/new") }
+    let paths = try index.database.prepare("SELECT id FROM paths WHERE path = ?").map(
+        "/V/new/a.flac"
+    ) { try $0.int64(0) }
+    #expect(paths == [newA], "the logged play counts as stats, so the new a stays")
+    #expect(try index.track(path: "/V/new/b.flac") != nil)
+    #expect(try index.track(path: "/V/new/b.flac")?.id != newB, "the old b took its place")
+}
+
+@Test func aMoveOntoAPathWithAnImportCountOfNothingSucceeds() throws {
+    let index = try craftedIndex([])
+    try index.store([Crafted(path: "/M/a.flac", seconds: 77).scanned])
+    try index.recordPlay("/M/a.flac", at: 1)
+    let id = try #require(try index.track(path: "/M/a.flac")).id
+    try index.remove([id])
+    try index.store([Crafted(path: "/M/b.flac", seconds: 77).scanned])
+    let new = try #require(try index.track(path: "/M/b.flac")).id
+    try index.database.execute(
+        "INSERT INTO \(importedPlaysTable) (player, path_id, play_count, skip_count) VALUES ('itunes', \(new), 0, 0)"
+    )
+    #expect(try index.matchMoves(addedAfter: 0).count == 1)
+    #expect(try index.track(path: "/M/b.flac")?.id == id)
+}

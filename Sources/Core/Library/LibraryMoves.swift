@@ -80,8 +80,10 @@ extension LibraryIndex {
         }
     }
 
-    /// Deletes the path `id`, which nothing refers to. Call inside a transaction.
+    /// Deletes the path `id`, which has no stats, with what an import counted for it, which a
+    /// count of no plays leaves. Call inside a transaction.
     func deletePath(_ id: Int64) throws {
+        try statement("DELETE FROM \(importedPlaysTable) WHERE path_id = ?").run(id)
         try statement("DELETE FROM paths WHERE id = ?").run(id)
     }
 
@@ -127,10 +129,12 @@ private let lostCondition = """
         AND NOT EXISTS (SELECT 1 FROM files WHERE id = p.id) AND \(hasStats("p.id"))
     """
 
-/// Whether the path `id` has what a move keeps: plays, a rating, a love or a playlist entry.
+/// Whether the path `id` has what a move keeps: plays, logged plays, a rating, a love or a
+/// playlist entry.
 func hasStats(_ id: String) -> String {
     """
     (EXISTS (SELECT 1 FROM plays WHERE path_id = \(id))
+        OR EXISTS (SELECT 1 FROM history WHERE path_id = \(id))
         OR EXISTS (SELECT 1 FROM ratings WHERE path_id = \(id))
         OR EXISTS (SELECT 1 FROM \(lovedTable) WHERE path_id = \(id))
         OR EXISTS (SELECT 1 FROM playlist_entries WHERE path_id = \(id)))
