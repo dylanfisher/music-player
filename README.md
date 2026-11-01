@@ -20,6 +20,7 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   and reorder by dragging while sorted by Order. **Smart playlists** (⌥⌘N) pick tracks by rules
   and follow the library as it changes. Plays, skips, ratings and History are kept in the
   library database, never in the music files; a play counts after half the track or 4 minutes.
+  History lists each track played once; **Timeline** lists every play, newest first.
 
 ## Develop
 
