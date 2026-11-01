@@ -55,6 +55,8 @@ extension CommandID {
     public static let editSmartPlaylist = CommandID("playlist.editRules")
     public static let renamePlaylist = CommandID("playlist.rename")
     public static let deletePlaylist = CommandID("playlist.delete")
+    public static let importPlaylist = CommandID("playlist.import")
+    public static let exportPlaylist = CommandID("playlist.export")
 
     public static let playPause = CommandID("playback.playPause")
     public static let play = CommandID("playback.play")
@@ -145,6 +147,8 @@ public enum AppCommands {
             Command(.editSmartPlaylist, "Edit Smart Playlist…"),
             Command(.renamePlaylist, "Rename Playlist…"),
             Command(.deletePlaylist, "Delete Playlist…"),
+            Command(.importPlaylist, "Import Playlist…"),
+            Command(.exportPlaylist, "Export Playlist…"),
 
             Command(.playPause, "Play/Pause", [.init(.space)]),
             Command(.play, "Play"),

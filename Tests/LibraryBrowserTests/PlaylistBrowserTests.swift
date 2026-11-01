@@ -9,20 +9,12 @@ import Testing
 /// A model over a copy of the shared browser library, which these tests write playlists and
 /// stats to.
 @MainActor
-private func writableModel(
+func writableModel(
     _ saved: BrowserState = BrowserState(source: nil, genre: nil, artist: nil, album: nil)
 ) async throws -> (
     BrowserModel, LibraryIndex
 ) {
-    let source = try browserLibrary.get().databaseURL
-    let directory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("playlist-browser-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    let databaseURL = directory.appendingPathComponent("library.sqlite")
-    for suffix in ["", "-wal"] where FileManager.default.fileExists(atPath: source.path + suffix) {
-        try FileManager.default.copyItem(
-            atPath: source.path + suffix, toPath: databaseURL.path + suffix)
-    }
+    let databaseURL = try writableBrowserDatabase()
     let model = BrowserModel(
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
         groupByAlbumArtist: false)

@@ -138,6 +138,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 _ = try await model.add(ids, to: playlist)
             }
         }
+        sidebarController.dropPlaylistFiles = { urls in owner?.importPlaylists(from: urls) }
         content = NSViewController()
         let (events, continuation) = AsyncStream.makeStream(of: WatcherEvent.self)
         watcherEvents = { continuation.yield($0) }
@@ -570,6 +571,59 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         edit("couldn't change the playlist's rules") {
             try await self.model.setRules(rules, of: id)
         }
+    }
+
+    /// Imports each playlist file as a new manual playlist, in turn, and shows the last one.
+    /// What an import couldn't add is listed in the Problems window, which opens to show it.
+    public func importPlaylists(from urls: [URL]) {
+        Task {
+            var summaries: [String] = []
+            var lines: [String] = []
+            for url in urls {
+                do {
+                    let result = try await model.importPlaylist(from: url)
+                    summaries.append(result.summary)
+                    lines += result.reportLines
+                } catch {
+                    let failure = "couldn't import \(url.path): \(error)"
+                    logger.error("\(failure)")
+                    summaries.append(failure)
+                    lines.append(failure)
+                }
+            }
+            showSource()
+            finishPlaylistFile(summaries.joined(separator: " · "), lines)
+        }
+    }
+
+    /// Writes the playlist `id`, which must still be the one shown, to `url` as M3U8, in the
+    /// table's sort, with paths relative to the file's folder when `relativePaths` is set.
+    public func exportShownPlaylist(_ id: Int64, to url: URL, relativePaths: Bool) {
+        guard let playlist = model.shownPlaylist, playlist.id == id else {
+            report("couldn't export the playlist: it's no longer shown")
+            return
+        }
+        let missing = model.missingTracks
+        Task {
+            do {
+                let (written, unwritable) = try await model.exportPlaylist(
+                    playlist.id, to: url, relativePaths: relativePaths)
+                let (summary, lines) = exportReport(
+                    file: url.path, written: written, missing: missing, unwritable: unwritable)
+                finishPlaylistFile(summary, lines)
+            } catch {
+                report("couldn't export the playlist to \(url.path): \(error)")
+            }
+        }
+    }
+
+    /// Shows what an import or export did in the status bar, and opens the Problems window on
+    /// `lines` when there are any.
+    private func finishPlaylistFile(_ summary: String, _ lines: [String]) {
+        status.playlistFileReport = lines
+        showStatus()
+        show(failure: summary)
+        if !lines.isEmpty { showProblems() }
     }
 
     /// Adds the selected tracks to a manual playlist.

@@ -63,21 +63,26 @@ extension LibraryIndex {
     public func addToPlaylist(_ id: Int64, trackIDs ids: [Int64]) throws -> Int {
         try database.transaction {
             try manual(id)
-            var position =
-                try statement(
-                    "SELECT ifnull(max(position), -1) FROM playlist_entries WHERE playlist_id = ?"
-                ).map(id) { try $0.int(0) }[0]
-            let insert = try statement(
-                "INSERT OR IGNORE INTO playlist_entries (playlist_id, path_id, position)"
-                    + " VALUES (?, ?, ?)")
-            var added = 0
-            for track in ids {
-                position += 1
-                try insert.run(id, track, position)
-                added += database.changes
-            }
-            return added
+            return try appendEntries(id, ids)
         }
+    }
+
+    /// `addToPlaylist` inside a transaction the caller holds.
+    func appendEntries(_ id: Int64, _ ids: [Int64]) throws -> Int {
+        var position =
+            try statement(
+                "SELECT ifnull(max(position), -1) FROM playlist_entries WHERE playlist_id = ?"
+            ).map(id) { try $0.int(0) }[0]
+        let insert = try statement(
+            "INSERT OR IGNORE INTO playlist_entries (playlist_id, path_id, position)"
+                + " VALUES (?, ?, ?)")
+        var added = 0
+        for track in ids {
+            position += 1
+            try insert.run(id, track, position)
+            added += database.changes
+        }
+        return added
     }
 
     /// Moves the tracks `ids` of a manual playlist, in their current order, to just before

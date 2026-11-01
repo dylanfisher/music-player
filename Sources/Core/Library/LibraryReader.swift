@@ -77,6 +77,26 @@ public actor LibraryReader {
         try index.missingEntryCount(id)
     }
 
+    /// Reads the playlist file at `url` and makes a manual playlist named after it.
+    public func importPlaylist(from url: URL) throws -> PlaylistImport {
+        let name = url.deletingPathExtension().lastPathComponent
+            .precomposedStringWithCanonicalMapping
+        return try index.importPlaylist(
+            named: name, try PlaylistFile(contentsOf: url), from: url.path)
+    }
+
+    /// Writes a playlist's tracks, sorted as given, to `url` as M3U8, and returns how many were
+    /// written and the paths that couldn't be.
+    public func exportPlaylist(
+        _ id: Int64, sortedBy column: TrackColumn, ascending: Bool, groupByAlbumArtist: Bool,
+        to url: URL, relativePaths: Bool
+    ) throws -> (written: Int, unwritable: [String]) {
+        let tracks = try index.playlistFileTracks(
+            id, sortedBy: column, ascending: ascending, groupByAlbumArtist: groupByAlbumArtist)
+        let unwritable = try writeM3U8(tracks, to: url, relativePaths: relativePaths)
+        return (tracks.count - unwritable.count, unwritable)
+    }
+
     public func recordPlay(_ path: String, at seconds: Double) throws {
         try index.recordPlay(path, at: seconds)
     }

@@ -179,6 +179,23 @@ public final class BrowserModel {
         await setSource(.playlist(id))
     }
 
+    /// Makes a manual playlist of the tracks the playlist file at `url` names, and shows it.
+    func importPlaylist(from url: URL) async throws -> PlaylistImport {
+        let result = try await reader.importPlaylist(from: url)
+        try await reloadPlaylists()
+        await setSource(.playlist(result.playlistID))
+        return result
+    }
+
+    /// Writes the playlist `id` to `url` as M3U8, in the table's sort.
+    func exportPlaylist(_ id: Int64, to url: URL, relativePaths: Bool) async throws -> (
+        written: Int, unwritable: [String]
+    ) {
+        try await reader.exportPlaylist(
+            id, sortedBy: sortColumn, ascending: ascending,
+            groupByAlbumArtist: filter.groupByAlbumArtist, to: url, relativePaths: relativePaths)
+    }
+
     public func renamePlaylist(_ id: Int64, to name: String) async throws {
         try await reader.renamePlaylist(id, to: name)
         try await reloadPlaylists()

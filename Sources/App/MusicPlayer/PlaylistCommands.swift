@@ -3,6 +3,7 @@ import Commands
 import Library
 import Playback
 import PlaylistEditor
+import UniformTypeIdentifiers
 
 /// What a new playlist is called until the user names it.
 let untitledPlaylist = "Untitled Playlist"
@@ -31,6 +32,17 @@ extension AppDelegate {
         }
         dispatcher.handle(.deletePlaylist, enabled: shown) { [weak self] in
             self?.confirmDeletingShownPlaylist()
+        }
+        dispatcher.handle(.importPlaylist, enabled: hasWindow) { [weak self] in
+            self?.chooseFilesToImport()
+        }
+        let exportable = { [weak self] in
+            guard let playlist = self?.browser?.shownPlaylist else { return false }
+            if case .unreadable = playlist.kind { return false }
+            return true
+        }
+        dispatcher.handle(.exportPlaylist, enabled: exportable) { [weak self] in
+            self?.chooseExportFile()
         }
         let canAdd = { [weak self] in
             self?.hasSelectedTracks() == true
@@ -93,6 +105,39 @@ extension AppDelegate {
         alert.beginSheetModal(for: window) { [weak browser] response in
             guard response == .alertFirstButtonReturn else { return }
             browser?.addSelection(to: playlists[menu.indexOfSelectedItem].id)
+        }
+    }
+
+    /// Import Playlist…: an open panel for playlist files, each imported as a new playlist.
+    private func chooseFilesToImport() {
+        guard let window = window?.window else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = PlaylistFile.Format.allCases.compactMap {
+            UTType(filenameExtension: $0.rawValue)
+        }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK else { return }
+            self?.browser?.importPlaylists(from: panel.urls)
+        }
+    }
+
+    /// Export Playlist…: a save panel, with a choice of paths relative to the file's folder.
+    /// The file is written only where the user picks.
+    private func chooseExportFile() {
+        guard let playlist = browser?.shownPlaylist, let window = window?.window else { return }
+        let format = PlaylistFile.Format.m3u8.rawValue
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = playlist.name + "." + format
+        panel.allowedContentTypes = UTType(filenameExtension: format).map { [$0] } ?? []
+        let relative = NSButton(
+            checkboxWithTitle: "Paths relative to the playlist file", target: nil, action: nil)
+        panel.accessoryView = relative
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.browser?.exportShownPlaylist(
+                playlist.id, to: url, relativePaths: relative.state == .on)
         }
     }
 

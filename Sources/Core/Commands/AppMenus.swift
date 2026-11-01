@@ -70,6 +70,7 @@ public enum AppMenus {
                     .command(.newPlaylist), .command(.newPlaylistFromSelection),
                     .command(.newSmartPlaylist), .command(.editSmartPlaylist),
                     .command(.renamePlaylist), .command(.deletePlaylist), .separator,
+                    .command(.importPlaylist), .command(.exportPlaylist), .separator,
                     .command(.addFolder), .setting(settings.pausePollingDuringPlayback.key),
                     .setting(settings.groupByAlbumArtist.key),
                     .separator, .command(.revealInFinder), .command(.copyPath),

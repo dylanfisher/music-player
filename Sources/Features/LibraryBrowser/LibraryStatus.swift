@@ -14,6 +14,8 @@ struct LibraryStatus: Equatable, Sendable {
     var fileIssueCount = 0
     /// What a rebuild of the stats discarded, shown for the session it was found in.
     var notices: [String] = []
+    /// What the last playlist import or export couldn't carry over.
+    var playlistFileReport: [String] = []
 
     init() {}
 
@@ -36,6 +38,7 @@ struct LibraryStatus: Equatable, Sendable {
     /// Whether there's anything for the problems list to show.
     var hasProblems: Bool {
         fileIssueCount > 0 || !folderIssues.isEmpty || !failures.isEmpty || !notices.isEmpty
+            || !playlistFileReport.isEmpty
     }
 
     /// "1,204 tracks · scanning Music: 300 of 1,200 read · 3 files and 1 folder with problems".
@@ -65,16 +68,16 @@ struct LibraryStatus: Equatable, Sendable {
 
     /// Every notice and folder problem as a line, for the top of the problems list.
     var problemLines: [String] {
-        notices
+        notices + playlistFileReport
             + failures.sorted { $0.key < $1.key }.map { "\($0.key): the scan failed: \($0.value)" }
             + folderIssues.sorted { $0.key < $1.key }.flatMap { $0.value.map(\.description) }
     }
 }
 
-private func number(_ value: Int) -> String {
+func number(_ value: Int) -> String {
     NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
 }
 
-private func count(_ value: Int, _ noun: String) -> String {
+func count(_ value: Int, _ noun: String) -> String {
     "\(number(value)) \(noun)\(value == 1 ? "" : "s")"
 }

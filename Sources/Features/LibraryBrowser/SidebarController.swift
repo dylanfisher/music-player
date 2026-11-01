@@ -7,7 +7,7 @@ import Settings
 
 /// The source list: the library, History and the timeline, the playlists and the watched
 /// folders, with buttons to add and remove folders. Tracks dragged from the table onto a manual
-/// playlist are added to it.
+/// playlist are added to it; playlist files dropped anywhere on it are imported.
 @MainActor
 final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate {
     let outline = KeyOutlineView()
@@ -18,6 +18,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     private let selectSource: (BrowserSource?) -> Void
     /// Tracks, by ID, dropped on the manual playlist with this ID.
     var dropTracks: (Int64, [Int64]) -> Void = { _, _ in }
+    /// Playlist files, by URL, dropped on the sidebar.
+    var dropPlaylistFiles: ([URL]) -> Void = { _ in }
     private let addFolder: () -> Void
     private let removeFolder: (String) -> Void
     private let keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
@@ -59,7 +61,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.dataSource = self
         outline.delegate = self
         outline.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
-        outline.registerForDraggedTypes([trackIDsType])
+        outline.registerForDraggedTypes([trackIDsType, .fileURL])
         let scroll = NSScrollView()
         scroll.documentView = outline
         scroll.hasVerticalScroller = true
@@ -245,6 +247,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         proposedItem item: Any?,
         proposedChildIndex index: Int
     ) -> NSDragOperation {
+        if !playlistFileURLs(info.draggingPasteboard).isEmpty {
+            // A file goes to the playlists, not to the row it's over.
+            outlineView.setDropItem(nil, dropChildIndex: NSOutlineViewDropOnItemIndex)
+            return .copy
+        }
         guard index == NSOutlineViewDropOnItemIndex,
             case .playlist(let playlist) = (item as? SidebarNode)?.kind,
             playlist.isManual
@@ -256,6 +263,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         _ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?,
         childIndex index: Int
     ) -> Bool {
+        let files = playlistFileURLs(info.draggingPasteboard)
+        if !files.isEmpty {
+            dropPlaylistFiles(files)
+            return true
+        }
         guard case .playlist(let playlist) = (item as? SidebarNode)?.kind, playlist.isManual
         else { return false }
         let ids = draggedTrackIDs(info.draggingPasteboard)
@@ -273,6 +285,15 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         case .folder, .history, .timeline, .playlist: selectSource(selectedNode?.source)
         }
     }
+}
+
+/// The files on `pasteboard` with a playlist file's extension, in order. Others are left out,
+/// so a drag of only those isn't taken.
+func playlistFileURLs(_ pasteboard: NSPasteboard) -> [URL] {
+    let urls =
+        pasteboard.readObjects(
+            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+    return urls.filter { PlaylistFile.Format(fileExtension: $0.pathExtension) != nil }
 }
 
 /// A row of the source list. A class, since NSOutlineView tells items apart by identity.

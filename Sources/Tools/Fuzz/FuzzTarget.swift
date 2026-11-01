@@ -32,7 +32,7 @@ struct FuzzTarget: Sendable {
         parser(.mp3, "ID3v1 and ID3v2 tags and MPEG audio frames"),
         parser(.wav, "RIFF chunks, INFO lists and ID3 chunks"),
         parser(.aiff, "AIFF and AIFF-C chunks and ID3 chunks"),
-        vorbis, config, state, journal, rules, tagWriter,
+        vorbis, config, state, journal, rules, playlistFile, tagWriter,
     ]
 
     static func named(_ name: String) -> FuzzTarget? { all.first { $0.name == name } }
@@ -296,6 +296,68 @@ private let rules = FuzzTarget(
                 return false
             }
             return decoded != nil
+        }
+    })
+
+/// The folder relative playlist entries are read from, and written relative to.
+private let playlistFolder = "/fuzz/Playlists"
+
+private let playlistFile = FuzzTarget(
+    name: "playlist-file",
+    summary: "a playlist file (the first byte picks M3U, M3U8 or PLS), written back and read again",
+    seedFormats: [],
+    tokens: ["#EXTM3U", "#EXTINF:", "File1=", "file://", "%C3%A9", "../"],
+    madeSeeds: { _, _ in
+        let m3u8 =
+            "#EXTM3U\r\n#EXTINF:200,A - T\r\n/Music/Café.flac\r\nB/c.flac\r\nfile:///d%20e.flac\n"
+        let pls = "[playlist]\nFile2=/b.flac\nTitle2=B\nFile1=../a.flac\nNumberOfEntries=2\n"
+        return [
+            [1] + [0xEF, 0xBB, 0xBF] + Array(m3u8.utf8),
+            [0] + Array("/Caf".utf8) + [0xE9, 0x0D] + Array("x/../y.mp3\rhttp://a/b".utf8),
+            [2] + Array(pls.utf8),
+        ]
+    },
+    prepare: { _ in
+        { input in
+            guard let selector = input.first else { return false }
+            let formats = PlaylistFile.Format.allCases
+            let format = formats[Int(selector) % formats.count]
+            let file: PlaylistFile
+            do throws(PlaylistFileError) {
+                file = try PlaylistFile(
+                    Array(input.dropFirst()), format: format, folder: playlistFolder)
+            } catch {
+                return false
+            }
+            precondition(
+                file.problems.count <= PlaylistFile.maximumProblems, "problems past the cap")
+            for path in file.paths {
+                precondition(
+                    path.hasPrefix("/") && !path.unicodeScalars.contains("\0")
+                        && !path.split(separator: "/", omittingEmptySubsequences: false).dropFirst()
+                            .contains { $0.isEmpty || $0 == "." || $0 == ".." }
+                        || path == "/",
+                    "an entry isn't a folded absolute path: \(path.debugDescription)")
+            }
+            let tracks = file.paths.map {
+                PlaylistFileTrack(path: $0, durationSeconds: 1, artist: nil, title: "t")
+            }
+            for folder in [nil, playlistFolder] {
+                let (bytes, unwritable) = m3u8Bytes(tracks, relativeTo: folder)
+                let again: PlaylistFile
+                do throws(PlaylistFileError) {
+                    again = try PlaylistFile(bytes, format: .m3u8, folder: playlistFolder)
+                } catch {
+                    preconditionFailure("a written playlist doesn't read: \(error)")
+                }
+                let skipped = Set(unwritable)
+                let expected = file.paths.filter { !skipped.contains($0) }
+                    .map(\.precomposedStringWithCanonicalMapping)
+                precondition(
+                    again.paths == expected && again.problems.isEmpty,
+                    "entries don't survive being written: \(expected) became \(again.paths)")
+            }
+            return file.problems.isEmpty && !file.paths.isEmpty
         }
     })
 
