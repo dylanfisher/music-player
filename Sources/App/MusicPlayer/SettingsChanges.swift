@@ -89,7 +89,7 @@ extension AppDelegate {
         if keys.contains(schema.appearance.key) { applyAppearance(settings[\.appearance]) }
         let library = [
             schema.watchedFolders.key, schema.networkScanReaders.key,
-            schema.pausePollingDuringPlayback.key,
+            schema.pausePollingDuringPlayback.key, schema.syncFolder.key,
         ]
         if !keys.isDisjoint(with: library) { changedFolders(settings[\.watchedFolders], settings) }
         if keys.contains(schema.groupByAlbumArtist.key), let browser {

@@ -37,6 +37,12 @@ public final class LibraryWatcher: @unchecked Sendable {
     private var lookups: [ShareLookup?] = []
     /// Set by a trigger, or a failed try, until the folders are found again.
     private var locateDue = false
+    /// The sync folder as Settings has it (ADR 0038); nil syncs nothing.
+    private var syncFolder: SyncFolder?
+    /// Set by a trigger or a scan's end until the next sync, and by an edit until the next push.
+    private var syncDue = false
+    private var pushDue = false
+    private var syncing = false
 
     /// `networkReaders` is the files a network scan reads at once, or nil to tune it per scan.
     /// `mounts` finds the shares that folders on one are under. `events` is called on a
@@ -51,11 +57,16 @@ public final class LibraryWatcher: @unchecked Sendable {
     }
 
     /// Finds each of `folders` (ADR 0028), removes files outside them from the index, scans
-    /// every folder, and starts watching them. The caller reads them from Settings.
-    public func start(folders: [WatchedFolder], pausePollingDuringPlayback: Bool) {
+    /// every folder, and starts watching them, and syncs through `syncFolder` at start, after
+    /// each scan and on each trigger. The caller reads them from Settings.
+    public func start(
+        folders: [WatchedFolder], syncFolder: SyncFolder? = nil, pausePollingDuringPlayback: Bool
+    ) {
         queue.async { [self] in
             precondition(state == nil, "the watcher is already running")
             configured = folders
+            self.syncFolder = syncFolder
+            syncDue = true
             var located: [WatchedFolder]
             var locatedAll = true
             do {
@@ -125,6 +136,16 @@ public final class LibraryWatcher: @unchecked Sendable {
     public func sharesMayHaveMoved() {
         queue.async { [self] in
             locateDue = true
+            syncDue = true
+            advance()
+        }
+    }
+
+    /// The user changed something in the library window: this machine's log goes to the sync
+    /// folder, without reading the others'.
+    public func pushSync() {
+        queue.async { [self] in
+            pushDue = true
             advance()
         }
     }
@@ -206,7 +227,14 @@ public final class LibraryWatcher: @unchecked Sendable {
         if let control {
             if current.holdsRunningScan { control.pause() } else { control.resume() }
         }
-        if let job = current.start(now: Date()) {
+        // A sync reads and writes the NAS, so it waits as network scans do, and runs between
+        // scans on their queue.
+        if control == nil, !syncing, syncDue || pushDue, current.pollsAllowed,
+            startSync(among: current.folders)
+        {
+            return
+        }
+        if !syncing, let job = current.start(now: Date()) {
             let control = ScanControl()
             self.control = control
             scanQueue.async { [self, scanner, events] in
@@ -240,6 +268,7 @@ public final class LibraryWatcher: @unchecked Sendable {
         switch result {
         case .success(let summary):
             state?.finished(now: Date())
+            syncDue = true
             for issue in summary.issues { logger.error("\(issue.description)") }
             events(.scanned(folder: job.folder.path, summary))
         case .failure(let error):
@@ -250,6 +279,65 @@ public final class LibraryWatcher: @unchecked Sendable {
             }
         }
         advance()
+    }
+
+    /// Starts a sync on the scan queue, or only a push when an edit is all that's due, and
+    /// returns whether it did. Runs on `queue`, with no scan running.
+    private func startSync(among folders: [WatchedFolder]) -> Bool {
+        let pushOnly = !syncDue
+        syncDue = false
+        pushDue = false
+        guard let syncFolder else { return false }
+        let path: String
+        do {
+            guard let found = try locate(syncFolder) else {
+                logger.notice("the sync folder's share isn't mounted; changes wait in the library")
+                return false
+            }
+            path = found
+        } catch {
+            events(.syncFailed(reason: "couldn't find the sync folder: \(error)"))
+            return false
+        }
+        if let watched = folders.first(where: { isPath(path, inOrAt: $0.path) }) {
+            events(
+                .syncFailed(
+                    reason: "the sync folder \(path) is inside the watched folder \(watched.path);"
+                        + " it must be outside every watched folder, so nothing was synced"))
+            return false
+        }
+        syncing = true
+        scanQueue.async { [self, scanner] in
+            let result = Result {
+                try LibraryIndex(at: scanner.databaseURL).sync(
+                    folder: syncFolder.identity, at: path, pushOnly: pushOnly)
+            }
+            queue.async { [self] in
+                syncing = false
+                guard state != nil else { return }
+                switch result {
+                case .success(let report):
+                    for problem in report.problems { logger.error("\(problem)") }
+                    events(.synced(report))
+                case .failure(let error):
+                    logger.error("syncing with \(path) failed: \(error)")
+                    events(.syncFailed(reason: "\(path): \(error)"))
+                }
+                advance()
+            }
+        }
+        return true
+    }
+
+    /// Where the sync folder is now, in canonical form; nil while its share isn't mounted.
+    private func locate(_ folder: SyncFolder) throws -> String? {
+        guard let share = folder.share else { return canonicalPath(folder.path) }
+        guard let url = ShareURL(share) else {
+            preconditionFailure("\(share) passed the settings check")
+        }
+        guard case .mounted(let mountPoint) = ShareLookup(url, among: try mounts.mountedShares())
+        else { return nil }
+        return canonicalPath(folder.path.isEmpty ? mountPoint : mountPoint + "/" + folder.path)
     }
 
     private func schedulePoll(at date: Date?) {

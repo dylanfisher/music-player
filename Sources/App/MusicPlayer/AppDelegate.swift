@@ -193,6 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             nowPlaying.libraryChanged()
             queue.libraryChanged()
         }
+        browser.edited = { [weak self] in self?.watcher?.pushSync() }
         browser.addFolder = { [weak self] in self?.addFolder() }
         browser.removeFolder = { [weak self] path in self?.confirmRemoving(path) }
         browser.firstRowsDrawn = { [weak self] in self?.interactive() }
@@ -520,7 +521,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             databaseURL: libraryFileURL(in: paths.dataDirectory),
             networkReaders: settings[\.networkScanReaders], events: browser.watcherEvents)
         let pause = settings[\.pausePollingDuringPlayback]
-        watcher.start(folders: folders, pausePollingDuringPlayback: pause)
+        watcher.start(
+            folders: folders, syncFolder: settings[\.syncFolder], pausePollingDuringPlayback: pause)
         if activity != .stopped {
             watcher.playbackChanged(activity, pausePollingDuringPlayback: pause)
         }

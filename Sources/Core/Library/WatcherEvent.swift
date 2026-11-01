@@ -15,4 +15,8 @@ public enum WatcherEvent: Sendable {
     /// The watched folders are at these paths now, in the order Settings lists them, since a
     /// share they're on was mounted somewhere else (ADR 0028).
     case folders([WatchedFolder])
+    /// A sync with the sync folder ran (ADR 0038).
+    case synced(SyncReport)
+    /// The sync folder couldn't be used, or this machine's log there didn't match.
+    case syncFailed(reason: String)
 }

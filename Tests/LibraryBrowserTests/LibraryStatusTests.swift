@@ -63,3 +63,16 @@ import Testing
     #expect(status.hasProblems)
     #expect(status.problemLines == ["/M/bad.flac: failure malformed: no header"])
 }
+
+@Test func aSyncsProblemsShowUntilTheNextSync() {
+    var status = LibraryStatus()
+    var report = SyncReport()
+    report.problems = ["/Volumes/music/sync/ab.log: line 3 has no \"seq\""]
+    status.apply(.synced(report))
+    #expect(status.text(trackCount: 2) == "2 tracks · the sync with problems")
+    #expect(status.problemLines == report.problems)
+    status.apply(.syncFailed(reason: "can't open /Volumes/music/sync"))
+    #expect(status.problemLines == ["the sync failed: can't open /Volumes/music/sync"])
+    status.apply(.synced(SyncReport()))
+    #expect(!status.hasProblems)
+}

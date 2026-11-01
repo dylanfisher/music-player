@@ -34,6 +34,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var stateChanged: (BrowserState) -> Void = { _ in }
     /// Called after each refresh for a library change, so other views can read their rows again.
     public var libraryRefreshed: () -> Void = {}
+    /// Called after the user changed plays, ratings or playlists, which go in the sync log.
+    public var edited: () -> Void = {}
     public var addFolder: () -> Void = {}
     public var removeFolder: (String) -> Void = { _ in }
     /// Runs the command a key press in one of the browser's lists is bound to.
@@ -307,6 +309,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             // The rewrite gave the tracks under them new paths.
             refreshNow()
             Task { await setFolders(folders) }
+        case .synced(let report):
+            if report.changed {
+                refreshNow()
+                runHealth()
+            }
+        case .syncFailed:
+            break
         }
     }
 
@@ -344,6 +353,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 sheet.changed = { [weak self] in
                     self?.refreshNow()
                     self?.runHealth()
+                    self?.edited()
                 }
                 sheet.failed = { [weak self] message in self?.report(message) }
                 sheet.closed = { [weak self] in
@@ -749,6 +759,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             showSource()
             finishPlaylistFile(summaries.joined(separator: " · "), lines)
             playlistEntriesChanged()
+            edited()
         }
     }
 
@@ -815,6 +826,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 showSource()
                 finishPlaylistFile(written.summary, written.detailLines)
                 playlistEntriesChanged()
+                edited()
             } catch {
                 report(
                     terminalSafe(
@@ -892,6 +904,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             do {
                 try await body()
                 if entriesChange { playlistEntriesChanged() }
+                edited()
             } catch {
                 report("\(failure): \(error)")
             }

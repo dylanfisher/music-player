@@ -10,6 +10,8 @@ struct LibraryStatus: Equatable, Sendable {
     private(set) var folderIssues: [String: [ScanIssue]] = [:]
     /// Scans that failed outright, by folder path.
     private(set) var failures: [String: String] = [:]
+    /// What the last sync found wrong with the sync folder or the other Macs' logs.
+    private(set) var syncProblems: [String] = []
     /// Files the index stores a warning or failure for.
     var fileIssueCount = 0
     /// What a rebuild of the stats discarded, shown for the session it was found in.
@@ -33,6 +35,10 @@ struct LibraryStatus: Equatable, Sendable {
         case .scanFailed(let folder, let reason):
             scanning[folder] = nil
             failures[folder] = reason
+        case .synced(let report):
+            syncProblems = report.problems
+        case .syncFailed(let reason):
+            syncProblems = ["the sync failed: \(reason)"]
         case .removed, .folders:
             break
         }
@@ -41,7 +47,7 @@ struct LibraryStatus: Equatable, Sendable {
     /// Whether there's anything for the problems list to show.
     var hasProblems: Bool {
         fileIssueCount > 0 || !folderIssues.isEmpty || !failures.isEmpty || !notices.isEmpty
-            || !playlistFileReport.isEmpty || !healthLines.isEmpty
+            || !playlistFileReport.isEmpty || !healthLines.isEmpty || !syncProblems.isEmpty
     }
 
     /// "1,204 tracks · scanning Music: 300 of 1,200 read · 3 files and 1 folder with problems".
@@ -66,6 +72,7 @@ struct LibraryStatus: Equatable, Sendable {
         var problems: [String] = []
         if fileIssueCount > 0 { problems.append(count(fileIssueCount, "file")) }
         if folders > 0 { problems.append(count(folders, "folder")) }
+        if !syncProblems.isEmpty { problems.append("the sync") }
         if !problems.isEmpty {
             parts.append(problems.joined(separator: " and ") + " with problems")
         }
@@ -74,7 +81,7 @@ struct LibraryStatus: Equatable, Sendable {
 
     /// Every notice and folder problem as a line, for the top of the problems list.
     var problemLines: [String] {
-        notices + playlistFileReport + healthLines
+        notices + playlistFileReport + healthLines + syncProblems
             + failures.sorted { $0.key < $1.key }.map { "\($0.key): the scan failed: \($0.value)" }
             + folderIssues.sorted { $0.key < $1.key }.flatMap { $0.value.map(\.description) }
     }
