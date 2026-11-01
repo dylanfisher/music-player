@@ -19,19 +19,20 @@ database exists on the Mac this was built on, so its schema below is assumed, no
 
 ### Reading
 
-- **Swinsian.** Import from Swinsian… opens a panel in Swinsian's folder. The database file the owner picks, and its `-wal` when there is one, are copied
-  into a new folder in the user's temporary folder through `FileSource` (`O_NOFOLLOW`, a regular
-  file only), 4 GiB at most together. Each is `lstat`ed before and after; a change in size,
-  modification time or inode means Swinsian wrote during the copy, and the import stops and asks
-  for Swinsian to be quit. The copy is opened with `SQLITE_OPEN_READONLY`, `query_only` and
-  `trusted_schema = OFF`, so its WAL is read and its schema can't call functions as it's read; the live file, its WAL and
+- **Swinsian.** Import from Swinsian… opens a panel in Swinsian's folder. The database file the
+  owner picks, and its `-wal` when there is one, are copied into a new folder in the user's
+  temporary folder through `FileSource` (`O_NOFOLLOW`, a regular file only), 4 GiB at most
+  together. Each is `lstat`ed before and after; a change in size, modification time or inode
+  means Swinsian wrote during the copy, and the import stops and asks for Swinsian to be quit.
+  The copy is opened with `SQLITE_OPEN_READONLY`, `query_only` and `trusted_schema = OFF`, so
+  its WAL is read and its schema can't call functions as it's read; the live file, its WAL and
   its shared memory are never opened by SQLite. The copy is deleted when the read ends.
 - **The schema is checked before it's read.** Every table and column below is looked up in
   `sqlite_master` and `PRAGMA table_info`. Any missing fails the whole import with one error
   naming each missing table and column, rather than guessing at another name. Each value's
-  `typeof` is checked too: a count must be an integer, a date a number, a path text. A value of
-  the wrong type is a typed problem for that row, which is then left out or keeps that field
-  empty, never read as 0.
+  storage class is checked too: a count must be an integer, a date a number, a path text. A
+  value of the wrong type is a typed problem for that row, which is then left out or keeps that
+  field empty, never read as 0.
 - **iTunes and Music.** `Library.xml`, 256 MiB at most, read through `FileSource` and parsed by
   `PropertyListSerialization`. It holds dozens of keys per track; only the ones below are read,
   and the rest are ignored, since another build of Music adds keys this one doesn't need. A key

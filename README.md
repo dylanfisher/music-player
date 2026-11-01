@@ -24,6 +24,9 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
 - **Import Playlist…** reads M3U, M3U8 and PLS files, also dropped on the sidebar, as new
   playlists, and lists the entries the library doesn't hold. **Export Playlist…** writes the
   playlist shown as M3U8, in the table's order, with absolute or relative paths.
+- **Import from Swinsian…** and **Import iTunes Library…** bring play counts, last played,
+  date added, ratings, loved tracks and playlists across, matched by path, after a preview of
+  what each would change. Running one again adds only the plays since.
 
 ## Develop
 

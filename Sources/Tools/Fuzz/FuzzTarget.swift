@@ -32,7 +32,7 @@ struct FuzzTarget: Sendable {
         parser(.mp3, "ID3v1 and ID3v2 tags and MPEG audio frames"),
         parser(.wav, "RIFF chunks, INFO lists and ID3 chunks"),
         parser(.aiff, "AIFF and AIFF-C chunks and ID3 chunks"),
-        vorbis, config, state, journal, rules, playlistFile, tagWriter,
+        vorbis, config, state, journal, rules, playlistFile, swinsian, iTunesXML, tagWriter,
     ]
 
     static func named(_ name: String) -> FuzzTarget? { all.first { $0.name == name } }
@@ -360,6 +360,120 @@ private let playlistFile = FuzzTarget(
             return file.problems.isEmpty && !file.paths.isEmpty
         }
     })
+
+private let swinsian = FuzzTarget(
+    name: "swinsian", summary: "a Swinsian library database, copied aside and read",
+    seedFormats: [],
+    tokens: ["CREATE TABLE", "smartrule", "playlisttrack", "playcount", "lastplayed"],
+    madeSeeds: { work, _ in
+        let url = work.appendingPathComponent("seed.sqlite")
+        try? FileManager.default.removeItem(at: url)
+        let database = try Database(at: url)
+        // The schema ADR 0033 assumes, with values of every type the reader checks for.
+        try database.execute(
+            """
+            PRAGMA journal_mode = DELETE;
+            CREATE TABLE track (track_id, path, playcount, lastplayed, dateadded, rating, loved);
+            CREATE TABLE playlist (playlist_id, name, smart, matchall);
+            CREATE TABLE playlisttrack (playlist_id, track_id, position);
+            CREATE TABLE smartrule (playlist_id, position, field, operator, value);
+            INSERT INTO track VALUES (1, '/Music/Café.flac', 3, 700000000.5, 600000000, 4, 1);
+            INSERT INTO track VALUES (2, '/Music/Cafe\u{301}.flac', 'x', NULL, -5, 9, 2);
+            INSERT INTO playlist VALUES (1, 'Mix', 0, NULL), (2, 'Smart', 1, 1);
+            INSERT INTO playlisttrack VALUES (1, 2, 1), (1, 1, 2), (1, 7, 3);
+            INSERT INTO smartrule VALUES (2, 1, 'genre', 'contains', 'Rock');
+            INSERT INTO smartrule VALUES (2, 2, 'lastplayed', 'inlast', 30);
+            """)
+        return [try [UInt8](Data(contentsOf: url))]
+    },
+    prepare: { work in
+        let url = work.appendingPathComponent(inputFileName)
+        return { input in
+            write(input, to: url)
+            let library: PlayerLibrary
+            do {
+                library = try PlayerLibrary.read(.swinsian, at: url)
+            } catch {
+                return false
+            }
+            checkPlayerLibrary(library)
+            return !library.tracks.isEmpty
+        }
+    })
+
+private let iTunesXML = FuzzTarget(
+    name: "itunes-xml", summary: "an iTunes or Music Library.xml",
+    seedFormats: [], tokens: ["<key>", "<integer>", "<date>", "<true/>", "file://", "%C3%A9"],
+    madeSeeds: { _, _ in
+        let xml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <plist version="1.0"><dict>
+            <key>Tracks</key><dict>
+            <key>1</key><dict><key>Track ID</key><integer>1</integer>
+            <key>Location</key><string>file:///Music/Caf%C3%A9.m4a</string>
+            <key>Play Count</key><integer>3</integer><key>Skip Count</key><integer>1</integer>
+            <key>Play Date UTC</key><date>2020-01-02T03:04:05Z</date>
+            <key>Date Added</key><date>2019-01-02T03:04:05Z</date>
+            <key>Rating</key><integer>80</integer><key>Loved</key><true/></dict>
+            <key>2</key><dict><key>Track ID</key><integer>2</integer>
+            <key>Location</key><string>file://localhost/Music/b.mp3</string>
+            <key>Rating</key><integer>100</integer><key>Rating Computed</key><true/></dict>
+            </dict>
+            <key>Playlists</key><array>
+            <dict><key>Name</key><string>Library</string><key>Master</key><true/></dict>
+            <dict><key>Name</key><string>Mix</string><key>Playlist Items</key><array>
+            <dict><key>Track ID</key><integer>2</integer></dict>
+            <dict><key>Track ID</key><integer>1</integer></dict></array></dict>
+            <dict><key>Name</key><string>Smart</string><key>Smart Info</key><data>AQ==</data>
+            <key>Playlist Items</key><array><dict><key>Track ID</key><integer>1</integer></dict>
+            </array></dict>
+            </array></dict></plist>
+            """
+        return [Array(xml.utf8)]
+    },
+    prepare: { work in
+        let url = work.appendingPathComponent(inputFileName)
+        return { input in
+            write(input, to: url)
+            let library: PlayerLibrary
+            do {
+                library = try PlayerLibrary.read(.iTunes, at: url)
+            } catch {
+                return false
+            }
+            checkPlayerLibrary(library)
+            return !library.tracks.isEmpty
+        }
+    })
+
+/// What every library read must hold, whatever the file: capped problems, one track per path
+/// in NFC, absolute NUL-free paths, ratings in stars, dates from 1970, and playlists naming
+/// only tracks read.
+private func checkPlayerLibrary(_ library: PlayerLibrary) {
+    precondition(
+        library.problems.count <= PlaylistFile.maximumProblems, "problems past the cap")
+    let keys = library.tracks.map(\.path.precomposedStringWithCanonicalMapping)
+    precondition(Set(keys).count == keys.count, "two tracks for one path: \(keys)")
+    for track in library.tracks {
+        precondition(
+            track.path.hasPrefix("/") && !track.path.unicodeScalars.contains("\0"),
+            "a track's path isn't absolute and NUL-free: \(track.path.debugDescription)")
+        precondition(
+            track.rating.map { (1...5).contains($0) } ?? true, "a rating of \(track.rating!)")
+        for date in [track.lastPlayedSeconds, track.addedSeconds].compactMap({ $0 }) {
+            precondition(date >= 0 && date.isFinite, "a date of \(date)")
+        }
+    }
+    let paths = Set(library.tracks.map(\.path))
+    for playlist in library.playlists {
+        precondition(
+            playlist.paths.allSatisfy(paths.contains), "a playlist names a track not read")
+        if case .smart(let rules) = playlist.kind {
+            precondition(
+                rules.rules.allSatisfy { $0.problem == nil }, "a mapped rule is invalid: \(rules)")
+        }
+    }
+}
 
 private let tagWriter = FuzzTarget(
     name: "tag-writer", summary: "a tag edit written to the input as a file, then undone",
