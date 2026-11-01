@@ -2,6 +2,7 @@ import AppKit
 import Commands
 import KeyChord
 import Library
+import Settings
 
 /// The genre, artist and album panes, side by side, each with an All row first.
 @MainActor
@@ -176,9 +177,9 @@ private let entryIdentifier = NSUserInterfaceItemIdentifier("entry")
 extension BrowserModel.Pane {
     public var title: String {
         switch self {
-        case .genre: "Genre"
-        case .artist: "Artist"
-        case .album: "Album"
+        case .genre: TrackColumn.genre.title
+        case .artist: TrackColumn.artist.title
+        case .album: TrackColumn.album.title
         }
     }
 

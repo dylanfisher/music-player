@@ -1,20 +1,22 @@
+import Library
+import Settings
 import TagWriter
 
 extension TagEditField {
-    /// The field's label in the editor.
+    /// The field's label in the editor: the smart rule field's title where the two read the same.
     var title: String {
         switch self {
-        case .title: "Title"
-        case .artist: "Artist"
-        case .album: "Album"
-        case .albumArtist: "Album Artist"
-        case .genre: "Genre"
+        case .title: SmartField.title.title
+        case .artist: SmartField.artist.title
+        case .album: SmartField.album.title
+        case .albumArtist: SmartField.albumArtist.title
+        case .genre: SmartField.genre.title
         case .date: "Date"
-        case .composer: "Composer"
-        case .comment: "Comment"
+        case .composer: SmartField.composer.title
+        case .comment: SmartField.comment.title
         case .trackNumber: "Track"
         case .trackTotal, .discTotal: "of"
-        case .discNumber: "Disc"
+        case .discNumber: TrackColumn.discNumber.title
         case .compilation: "Part of a compilation"
         }
     }
