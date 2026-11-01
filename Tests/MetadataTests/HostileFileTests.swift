@@ -223,11 +223,18 @@ private let hostileFiles: [(String, Data, Outcome)] = [
             .contains(name)
         #expect(parsed?.warnings.contains { $0.kind == .badText } == isInvalid, "\(name)")
     }
-    // Vorbis comments are UTF-8 with lengths, so a NUL is part of the value.
-    let vorbis = flac([(0, streamInfo()), (4, vorbisComment(["TITLE=a\u{0}b", "ARTIST=\(bidi)"]))])
-    let tags = try parse(vorbis).metadata.tags
-    #expect(tags.title == "a\u{0}b")
-    #expect(tags.artist == bidi)
+    // Vorbis comments are UTF-8 with lengths, so a NUL can sit inside a value. It's read up to
+    // the NUL, as ID3 is, with a warning when text follows it; NULs only at the end are padding.
+    let vorbis = flac(
+        [
+            (0, streamInfo()),
+            (4, vorbisComment(["TITLE=a\u{0}b", "ARTIST=\(bidi)", "ALBUM=padded\u{0}\u{0}"])),
+        ])
+    let parsed = try parse(vorbis)
+    #expect(parsed.metadata.tags.title == "a")
+    #expect(parsed.metadata.tags.artist == bidi)
+    #expect(parsed.metadata.tags.album == "padded")
+    #expect(parsed.warnings.map(\.detail) == ["text holds a NUL; read up to it"])
 }
 
 @Test func artLongerThanTheMaximumIsRefusedBeforeReading() throws {

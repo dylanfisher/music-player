@@ -13,10 +13,22 @@ package enum TagField: String, CaseIterable, Sendable {
 extension TrackTags {
     /// Sets `field` from its text form unless it already has a value. Empty text counts as no
     /// value. A value that doesn't parse is read in part or dropped, with a warning naming
-    /// `offset`, where the value sits in the file.
+    /// `offset`, where the value sits in the file. Text is read up to a NUL, as ID3 reads it,
+    /// since SQLite's LIKE stops there too and a rule would match only part of the text; a NUL
+    /// with text after it warns.
     mutating func set(
         _ field: TagField, _ text: String, at offset: Int, warnings: inout [MetadataWarning]
     ) {
+        var text = text
+        if let nul = text.firstIndex(of: "\u{0}") {
+            if text[nul...].contains(where: { $0 != "\u{0}" }) {
+                warnings.append(
+                    MetadataWarning(
+                        kind: .badText, offset: offset,
+                        detail: "text holds a NUL; read up to it"))
+            }
+            text = String(text[..<nul])
+        }
         guard !text.isEmpty else { return }
         switch field {
         case .title: title = title ?? text
