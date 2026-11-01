@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-31
 - **Status:** accepted
+- **See also:** [0025](0025-threat-model.md) records the writer's threats and how the temp file is made and checked.
 
 ## Context
 
@@ -57,9 +58,10 @@ every key the reader maps onto it (`TDRC` and `TYER`; `©gen` and `gnre`; `COMME
   entry past 4 GB is refused). ID3v2.3 keeps 2.3: a date is split into `TYER`, `TDAT` (DDMM)
   and `TIME` (HHMM), which the reader joins back, and a date 2.3 can't hold (a month without a
   day, free text) is refused. A file without a tag gets 2.4.
-- **Temp file and rename.** The temp file is `.<name>.tagwrite` in the same folder: hidden, so
-  the scanner skips one a crash leaves, and the same name each time, so the next write replaces
-  it. When nothing moves it starts as an APFS clone and only the new bytes are written; where
+- **Temp file and rename.** The temp file is `.<name>.<random>.tagwrite` in the same folder:
+  hidden, so the scanner skips one a crash leaves, and random, so nobody else can make the name
+  first; the next write removes any a crash left. How it's made and checked against swaps is
+  in ADR 0025, row 13. When nothing moves it starts as an APFS clone and only the new bytes are written; where
   the volume can't clone, or the audio moves, it's written whole. It gets the original's mode,
   flags, ACL, extended attributes (Finder tags, quarantine) and creation date; the mtime is new,
   so the scanner sees the change.

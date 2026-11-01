@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-31
 - **Status:** accepted
+- **See also:** [0025](0025-threat-model.md) records the threats beside these failures: hostile files, links, SQL and the bundle.
 - **Amends:** [0009](0009-scanning-and-watching.md), [0011](0011-playback-engine-and-hal-output.md),
   [0015](0015-config-file.md), [0022](0022-stable-track-identity-and-play-timeline.md)
 

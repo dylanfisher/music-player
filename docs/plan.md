@@ -674,22 +674,32 @@ checkpoint: the MediaPlayer adapters' off-main path.
       - Tests run against a simulated receiver on loopback.
 - [ ] **Security requirements** ([ADR 0025](decisions/0025-threat-model.md), rows 28–30), each
       with a test against a loopback stand-in:
+      - "Local subnet" means, per interface that's up, its IPv4 address and netmask or its IPv6
+        prefix; an IPv6 link-local address counts only with the zone it arrived on. On a Mac
+        with several interfaces, an address is matched against the one interface whose subnet
+        holds it. The interface list is injected, so tests can make up interfaces.
       - The HTTP server listens only on the interface address the renderer reached the Mac on,
-        on a port the system picks, and stops when no renderer is in use.
-      - It serves only tracks the index holds, by an opaque per-session token mapped to a track
-        ID, never a path in the URL. Anything else is 404 without touching the file system: no
-        directory listings, no links followed, files opened read-only.
-      - `GET` and `HEAD` only. A request line and headers over 8 KiB, a body, more than one
-        `Range`, or a range outside the file is refused; at most 8 connections, each closed after
-        30 s idle.
+        on a port the system picks, accepts connections only from that subnet, and stops when
+        no renderer is in use.
+      - It serves only tracks the index holds, by a token mapped to a track ID, never a path in
+        the URL. Tokens are 128 random bits, per track per session, expiring with the session or
+        after 24 hours. Anything else is 404 without touching the file system: no directory
+        listings, no links followed, files opened read-only.
+      - `GET` and `HEAD` only, and the `Host` header must be the bound address and port, against
+        DNS rebinding. A request line and headers over 8 KiB, a body, more than one `Range`, or a
+        range outside the file is refused; at most 8 connections, each closed after 30 s idle.
       - SSDP replies, device descriptions and SOAP replies are hostile: replies only from the
-        local subnet, at most 64 KiB; a `LOCATION` followed only to `http` on that subnet;
-        descriptions and replies capped at 1 MiB, parsed by `XMLParser` with external entities
-        off, timed out after 5 s. A renderer's name is escaped like any other display text.
+        local subnet, at most 64 KiB; a `LOCATION` followed only to `http` on the subnet the
+        reply came from, with redirects refused; descriptions and replies capped at 1 MiB, parsed
+        by `XMLParser` with external entities off, timed out after 5 s. A renderer's name is
+        escaped like any other display text.
       - The receiver's address comes only from SSDP on the local subnet. Its status lines are at
-        most 128 bytes, unknown ones ignored, values range-checked before the model takes them;
-        commands come from the registry, never from received text.
-      - No new entitlements unless `scripts/check-signature` lists them with a reason.
+        most 128 bytes, and at most 128 bytes are buffered without a carriage return before the
+        connection is dropped and reported; unknown lines are ignored and values range-checked
+        before the model takes them; commands come from the registry, never from received text.
+        The protocol has no authentication, so the app sends only what the owner asked for.
+      - The Info.plist item above adds only the local network usage string and Bonjour types; no
+        new entitlements unless `scripts/check-signature` lists them with a reason.
 - [ ] **Hardware checkpoint (owner):** play 16/44.1, 24/96 and 24/192 FLAC to the Denon. Report
       what its display shows, gapless behavior, seek, and volume. With the receiver's Network
       Control set to Always On, switch Pure Direct on and off, change volume and input from the

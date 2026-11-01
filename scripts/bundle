@@ -45,7 +45,7 @@ if [ -z "$bundle_id" ]; then
 fi
 /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $bundle_id" "$app/Contents/Info.plist"
 
-# Ad-hoc signature with the hardened runtime (ADR 0025, which also has the distribution steps).
+# Ad-hoc signature with the hardened runtime; see ADR 0025, distribution included.
 # A debug bundle also gets get-task-allow so lldb can attach; a release one is checked for it.
 if [ "$config" = release ]; then
   codesign --force --options runtime --sign - "$app" >&2
