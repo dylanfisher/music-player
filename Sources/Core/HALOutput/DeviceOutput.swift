@@ -773,8 +773,8 @@ private final class RenderStream {
     /// other half sets how long each refill runs; one twice as long let the scheduler give
     /// decoding a fast core for more of it, which cut playback CPU by a quarter (ADR 0029). A
     /// seek doesn't wait for it to empty (`HALRenderDiscard`), so its size costs memory, not
-    /// responsiveness: 2.8 MB at 44.1 kHz stereo 32-bit, 12 MB at 192 kHz, 49 MB at 768 kHz, each
-    /// rounded up to a power of two.
+    /// responsiveness: 2.8 MB at 44.1 kHz stereo 32-bit, 12 MB at 192 kHz, 49 MB at 768 kHz, which
+    /// the ring rounds up to a power of two (4, 16 and 64 MB).
     static let bufferSeconds = 8.0
     /// Queued before the device starts, so a track change doesn't wait for the whole buffer.
     static let prefillSeconds = 0.5
