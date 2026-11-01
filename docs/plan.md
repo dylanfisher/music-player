@@ -964,6 +964,142 @@ in its own commits. Anything it can't fix goes in its Result line. The sub-plan 
   - Module boundaries and public surface cut to what's used.
   - Dead code removed.
 
+Each sub-phase runs on its own branch (`phase/14a-robustness` and so on) through the full
+[phase gate](#phase-gate), in the order below. A sub-phase may add tools under `Sources/Tools`
+and scripts under `scripts/`, but no dependencies: everything it uses ships with Xcode or macOS.
+Long runs (soaks, fuzzing, sanitizers, mutation) live in their own scripts and stay out of
+`./scripts/check`, which must stay hermetic and fast. Every sub-phase reports its exit numbers in
+its Result line.
+
+Known items carried in from earlier phases:
+
+- Playback CPU sits at 2.8% against its 3% budget, and the metadata parse at about 4.75 s
+  against 5 s; both have gone over once on a busy machine (14e).
+- Commands on timeline rows whose files are all missing do nothing, silently (14a).
+- A test that started two `async let` searches in either order failed one gate run (14d).
+- The MediaPlayer adapters' off-main path and the tag writer's SMB fallbacks are only exercised
+  at owner checkpoints (14c and 14d say how far a test can reach them here).
+
+#### 14a. Robustness
+
+- **Goal:** every failure the app can meet ends in a reported state the user can recover from.
+  Nothing crashes, hangs or loses data silently.
+- **Scope:** the NAS dropping mid-scan and mid-playback; the DAC vanishing at each step of a rate
+  switch (stop, write format, start); a full disk for the database, the state file, the config
+  file and the tag journal; a database locked by another process or corrupt; a corrupt or
+  half-written config and state file; the process killed at any point during a scan, a tag write,
+  a playlist edit and a state save.
+- **Method:**
+  - A failure table in an ADR: each failure, where it's detected, what the user sees, how they
+    recover. Every row gets a test that injects the failure and checks the reported state and that
+    nothing else changed.
+  - The NAS and the DAC are simulated with the existing fakes (the simulated NAS from the scan
+    benches, the null and fake HAL devices); the full disk is a small disk image attached with
+    `hdiutil attach -nobrowse -mountpoint` inside `~/Library/Caches/MusicPlayer`, never `/Volumes`.
+  - A kill harness (`scripts/kill-test`) runs the app or a Tool with `--home` in a temp folder,
+    sends `SIGKILL` at random points in each operation (seeded and repeatable), relaunches, and
+    checks the database passes `PRAGMA integrity_check`, the config and state files decode or are
+    reported, and no music file differs from its clone's reference hash.
+  - Soak under load: `./scripts/bench --soak 3600` with a concurrent fixture rescan every 5
+    minutes and a scripted search every second.
+- **Exit:** every row in the failure table has a passing test; the kill harness passes 500 seeded
+  kills across the operations with 0 integrity failures; the 1-hour loaded soak has 0 underruns and
+  memory growth under 10 MB from minute 5 to the end.
+
+#### 14b. Single source of truth and DRY
+
+- **Goal:** each fact is defined once, and a check keeps it that way.
+- **Scope:** every module: literals, constants, SQL fragments, user-facing strings, symbol names,
+  key spellings, budgets, paths, and near-duplicate code at its third occurrence.
+- **Method:** a `scripts/dupes` check (a Swift script like `scripts/arch.swift`) that lists string
+  literals of 4+ characters appearing in more than one file under `Sources`, and near-duplicate
+  blocks of 8+ lines, with a reviewed allowlist (`scripts/dupes-allow.txt`, each entry with a
+  reason). Fix what it finds, then wire it into `./scripts/check`.
+- **Exit:** `scripts/dupes` reports nothing outside the allowlist, runs in `./scripts/check` in
+  under 5 s, and has a test that a planted duplicate fails it.
+
+#### 14c. Security
+
+- **Goal:** a written threat model, and a test or check for every threat in it.
+- **Scope:** tag and container parsers fed hostile files; the tag writer (path handling, symlinks,
+  hard links, TOCTOU between read and replace); SQL from smart-playlist rules and search text;
+  paths from settings, from files and from the state file; the crash-restore, config, state and
+  journal files as inputs; hardened runtime and entitlements on the bundle; phase 9's HTTP server
+  and receiver control on the LAN, as requirements phase 9 must meet since it isn't built yet.
+- **Method:** an ADR with one row per threat: asset, attacker, entry point, mitigation, and the
+  test or check that proves it. Gaps get fixed in their own commits. `scripts/bundle` signs with
+  the hardened runtime (`--options runtime`), and a check reads the entitlements back with
+  `codesign -d --entitlements -` and fails on any it doesn't expect. Every SQL string built at
+  runtime is audited to bind its values; a test feeds every rule field and the search box
+  `'`, `"`, `;`, `--`, `%`, `_`, `\` and NUL.
+- **Exit:** every row in the threat model names a passing test or check; `scripts/bundle release`
+  produces a hardened-runtime app whose entitlement check passes; phase 9's section lists its
+  security requirements.
+
+#### 14d. Adversarial testing
+
+- **Goal:** find the inputs and interleavings the hand-written tests missed.
+- **Scope:** every parser (MP4, ID3v2, FLAC, AIFF, WAV, Vorbis comments, the config text, the
+  state file, the undo journal, smart-playlist rules) and the tag writer; the whole test suite
+  under sanitizers; the queue, the scanner's rescan rules and writer round trips as properties;
+  the core state machines under mutation.
+- **Method:**
+  - **Fuzzing:** Xcode's toolchain has no libFuzzer, so `Sources/Tools/Fuzz` is a small
+    coverage-guided fuzzer: targets are built with `-sanitize-coverage=edge,trace-pc-guard` and
+    AddressSanitizer, the tool implements the `__sanitizer_cov_trace_pc_guard` callbacks in C to
+    see new edges, and mutates a corpus seeded from the generated fixtures and the tag-corpus
+    clones (never the reference). `scripts/fuzz <target> <seconds>`. Crashes are minimised and
+    each one becomes a regression test with its file under `Tests/`. If the coverage hooks
+    can't be built with SwiftPM, fall back to a seeded mutation fuzzer without coverage and record
+    that in an ADR.
+  - **Sanitizers:** `scripts/sanitize` runs `swift test --sanitize=address`, then `thread`, then
+    `undefined`.
+  - **Properties:** a seeded generator in the test target (no library): random queue edits
+    against a reference model; random file trees mutated between rescans against a full scan;
+    random tag edits and undos against a byte compare.
+  - **Mutation:** `scripts/mutate` copies the tree into a git worktree under `.build/`, applies one
+    mutation at a time (flip a comparison, swap `&&`/`||`, drop a statement, change a constant by
+    one) to a listed set of files (the playback engine and queue, PlayCounter and PlayTracker,
+    ConfigStore, the scanner's rescan rules, the tag writer's checks), runs the matching tests, and
+    lists the survivors. Each survivor gets a test or a written reason.
+  - Concurrency tests that depend on start order are found by running the suite 20 times under
+    TSan and fixed.
+- **Exit:** each fuzz target runs 10 minutes with no open crash; ASan, TSan and UBSan runs of the
+  whole suite pass; property tests run 1,000 seeded cases each in `scripts/sanitize` and 50 in
+  `./scripts/check`; mutation score of 90% or more on the listed files, with every survivor
+  explained.
+
+#### 14e. Performance
+
+- **Goal:** know where the time goes on every hot path, and give the tight budgets headroom.
+- **Scope:** launch, search, sort, scroll, scan, decode, the palette, History and the timeline;
+  idle CPU and timer wakeups; memory over a long session; energy impact.
+- **Method:** profile each hot path with `xctrace record --template 'Time Profiler'` on the
+  release build with `--home` and the fixture library; fix what the profile shows. Idle: run the
+  app idle for 10 minutes and sample CPU and idle wakeups with `top -l` (`-stats
+  pid,cpu,idlew`); playing: the same with the null device. A long-session run scrolls, searches
+  and plays for 30 minutes and records resident memory every minute. Add the idle numbers to
+  the budget table as benches. Tighten any budget the code now beats by more than 3x, with the
+  reason in the Result line.
+- **Exit:** playback CPU and the metadata parse each measure at most 85% of their budget across
+  3 runs; idle CPU under 0.1% with fewer than 1 wakeup a second; memory growth under 10 MB over
+  the 30-minute session; every budget passes; the old Mac re-check is listed as a pending
+  checkpoint.
+
+#### 14f. Architecture and docs
+
+- **Goal:** the docs describe the code, and the code exposes only what's used.
+- **Scope:** `docs/map.md`, every ADR, the README, AGENTS.md, the plan's Result lines; module
+  boundaries and public surface; dead code.
+- **Method:** list every `public` and `package` symbol and its callers outside its module
+  (`swift-symbolgraph-extract` or a grep script under `scripts/`); narrow or delete each that
+  has none. Delete code with no caller. Read each doc against the code and fix drift. A
+  `scripts/surface` check fails when a `public` symbol has no caller outside its module, wired
+  into `./scripts/check`.
+- **Exit:** `scripts/surface` reports nothing and runs in `./scripts/check`; every ADR's status is
+  current; AGENTS.md is 50 lines or fewer; a final `./scripts/check` and `./scripts/bench` pass.
+
+
 ### 15. Stable track identity and full play history
 
 Stats key on the file's path (ADR 0008) because `files.id` is a row number that every index
