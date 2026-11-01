@@ -165,7 +165,7 @@ private func tagJournal(on mount: URL, music: MusicFolders) throws -> [String] {
     }
     let now = try files.map { try Data(contentsOf: URL(fileURLWithPath: $0)) }
     if now[1...] != originals[1...] { failures.append("a file after the first changed") }
-    let temps = files.map(tempPath(for:)).filter { FileManager.default.fileExists(atPath: $0) }
+    let temps = try files.flatMap(leftoverTemps(for:))
     if !temps.isEmpty { failures.append("temp files were left: \(temps)") }
     try FileManager.default.removeItem(at: filler)
     let undone = writer.undoLast()

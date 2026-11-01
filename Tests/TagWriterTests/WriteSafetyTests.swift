@@ -41,7 +41,7 @@ private let titleEdit = TagEdit(values: [.title: "Edited"])
     let changed = try Data(contentsOf: url)
     #expect(changed.last == 0)
     #expect(try tags(url).title != "Edited")
-    #expect(!FileManager.default.fileExists(atPath: tempPath(for: url.path)))
+    #expect(try leftoverTemps(for: url.path).isEmpty)
     #expect(writer.undoLast().nothingToUndo)
 }
 
@@ -53,7 +53,7 @@ private let titleEdit = TagEdit(values: [.title: "Edited"])
     let report = writer.write(titleEdit, to: [url.path])
     #expect(report.failures.map(\.kind) == [.writeFailed])
     #expect(try Data(contentsOf: url) == original)
-    #expect(!FileManager.default.fileExists(atPath: tempPath(for: url.path)))
+    #expect(try leftoverTemps(for: url.path).isEmpty)
     #expect(writer.undoLast().nothingToUndo)
 }
 
@@ -64,13 +64,13 @@ private let titleEdit = TagEdit(values: [.title: "Edited"])
     writer.faults.crashBeforeRename = true
     _ = writer.write(titleEdit, to: [url.path])
     #expect(try Data(contentsOf: url) == original)
-    #expect(FileManager.default.fileExists(atPath: tempPath(for: url.path)))
+    #expect(try leftoverTemps(for: url.path).count == 1)
     // The journal kept the crashed edit, which no longer matches the file.
     writer.faults.crashBeforeRename = false
     #expect(writer.undoLast().failures.map(\.kind) == [.changedSinceEdit])
     expectChanged(writer.write(titleEdit, to: [url.path]), [url])
     #expect(try tags(url).title == "Edited")
-    #expect(!FileManager.default.fileExists(atPath: tempPath(for: url.path)))
+    #expect(try leftoverTemps(for: url.path).isEmpty)
 }
 
 @Test func aFileEditedSinceIsNotUndone() throws {

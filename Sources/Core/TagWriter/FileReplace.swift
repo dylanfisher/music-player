@@ -34,6 +34,9 @@ struct FileIdentity: Equatable {
 
 /// Faults the corpus run and the tests inject between writing the temp file and renaming it.
 package struct WriteFaults: Sendable {
+    /// Runs once the file is read and planned, before the temp file is made from it. A throw
+    /// stops the write the way a failure there would.
+    package var beforeWritingTemp: (@Sendable (_ original: String) throws -> Void)?
     /// Runs once the temp file is written and checked, before the original is checked for
     /// changes and replaced. A throw stops the write the way a failure there would.
     package var beforeReplacing: (@Sendable (_ original: String, _ temp: String) throws -> Void)?
@@ -43,12 +46,34 @@ package struct WriteFaults: Sendable {
     package init() {}
 }
 
-/// The temp file beside `path`: hidden, so the scanner skips one a crash leaves, and the same
-/// name each time, so the next write replaces it.
-package func tempPath(for path: String) -> String {
-    let url = URL(fileURLWithPath: path)
-    return url.deletingLastPathComponent()
-        .appendingPathComponent(".\(url.lastPathComponent).tagwrite").path
+/// The temp files a write of `path` may have left beside it, by path:
+/// `.<name>.<random>.tagwrite`. Hidden, so the scanner skips one a crash leaves; random, so
+/// nobody else who can write the folder can create the name first.
+package func leftoverTemps(for path: String) throws -> [String] {
+    let folder = (path as NSString).deletingLastPathComponent
+    let prefix = "." + (path as NSString).lastPathComponent + "."
+    return try FileManager.default.contentsOfDirectory(atPath: folder).filter {
+        $0.hasPrefix(prefix) && $0.hasSuffix(tempSuffix)
+    }
+    .map { folder + "/" + $0 }
+}
+
+private let tempSuffix = ".tagwrite"
+
+/// A new temp name for `path`, with 128 random bits.
+private func newTempName(for path: String) -> String {
+    let random = (0..<2).map { _ in
+        let hex = String(UInt64.random(in: .min ... .max), radix: 16)
+        return String(repeating: "0", count: 16 - hex.count) + hex
+    }
+    return "." + (path as NSString).lastPathComponent + "." + random.joined() + tempSuffix
+}
+
+/// The temp file a write made, and what it was when the write finished, so the rename can
+/// check that its name still holds the same file.
+struct TempFile {
+    var path: String
+    var identity: FileIdentity
 }
 
 /// Fails unless the file and its folder can be written and the file isn't locked. A rename
@@ -79,23 +104,43 @@ func requireWritable(_ path: String) throws(TagWriteError) {
 /// How much one copy step moves when the audio has to move.
 private let copyBytes = 4 * 1024 * 1024
 
-/// Writes `segments` to `temp`, made beside `original`. When every kept range stays where it
-/// was, the temp file starts as an APFS clone and only the new bytes are written; otherwise, or
-/// where the volume can't clone (SMB), it's written whole. Then it takes the original's mode,
-/// flags, ACL, extended attributes (Finder tags among them) and creation date; its mtime is new.
-func writeTemp(_ segments: [Segment], from original: String, to temp: String)
-    throws(TagWriteError)
+/// Writes `segments` to a new temp file beside `original`, which must still be `identity`.
+/// When every kept range stays where it was, the temp file starts as an APFS clone of the open
+/// original and only the new bytes are written; otherwise, or where the volume can't clone
+/// (SMB), it's written whole. Then it takes the original's mode, flags, ACL, extended
+/// attributes (Finder tags among them) and creation date; its mtime is new. Temp files an
+/// earlier write left are removed first.
+func writeTemp(_ segments: [Segment], from original: String, identity: FileIdentity)
+    throws(TagWriteError) -> TempFile
 {
-    if unlink(temp) != 0, errno != ENOENT {
-        throw systemError(original, .writeFailed, "can't remove the old temp file \(temp)")
+    let leftovers: [String]
+    do {
+        leftovers = try leftoverTemps(for: original)
+    } catch {
+        throw TagWriteError(
+            path: original, kind: .writeFailed, detail: "can't list its folder: \(error)")
     }
-    let source = open(original, O_RDONLY | O_CLOEXEC)
+    for leftover in leftovers where unlink(leftover) != 0 && errno != ENOENT {
+        throw systemError(original, .writeFailed, "can't remove the old temp file \(leftover)")
+    }
+    // Not through a link, and the file that opened must be the one that was read: someone who
+    // can write the folder could have swapped another in.
+    let source = open(original, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
     guard source >= 0 else { throw systemError(original, .unreadable, FileFailure.open) }
     defer { close(source) }
     var info = stat()
     guard fstat(source, &info) == 0 else {
         throw systemError(original, .unreadable, FileFailure.stat)
     }
+    guard FileIdentity(info) == identity, info.st_mode & S_IFMT == S_IFREG else {
+        throw TagWriteError(path: original, kind: .changedDuringWrite, detail: replacedDetail)
+    }
+    let folderPath = (original as NSString).deletingLastPathComponent
+    let folder = open(folderPath, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+    guard folder >= 0 else { throw systemError(original, .writeFailed, "can't open its folder") }
+    defer { close(folder) }
+    let name = newTempName(for: original)
+    let temp = folderPath + "/" + name
 
     var placed: [(offset: Int, segment: Segment)] = []
     var offset = 0
@@ -111,18 +156,21 @@ func writeTemp(_ segments: [Segment], from original: String, to temp: String)
 
     var cloned = false
     if inPlace {
-        if clonefile(original, temp, UInt32(CLONE_NOFOLLOW)) == 0 {
+        if fclonefileat(source, folder, name, 0) == 0 {
             cloned = true
         } else if errno != ENOTSUP && errno != EXDEV {
             throw systemError(original, .writeFailed, "can't clone it to \(temp)")
         }
     }
-    let destination = openTemp(temp, cloned: cloned)
+    let destination = openTemp(name, in: folder, cloned: cloned)
     guard destination >= 0 else {
-        throw systemError(original, .writeFailed, "can't create the temp file \(temp)")
+        let error = systemError(original, .writeFailed, "can't create the temp file \(temp)")
+        if cloned { unlinkat(folder, name, 0) }
+        throw error
     }
     do throws(TagWriteError) {
         defer { close(destination) }
+        try requireOwnTemp(destination, name, in: folder, device: info.st_dev, original)
         if cloned {
             guard ftruncate(destination, off_t(total)) == 0 else {
                 throw systemError(original, .writeFailed, "can't size the temp file")
@@ -144,19 +192,53 @@ func writeTemp(_ segments: [Segment], from original: String, to temp: String)
         // The attributes go first, so the flush covers them too before the rename.
         try copyAttributes(from: source, info, to: destination, original)
         try flush(destination, original, .writeFailed)
+        var written = stat()
+        guard fstat(destination, &written) == 0 else {
+            throw systemError(original, .writeFailed, "can't stat the temp file")
+        }
+        return TempFile(path: temp, identity: FileIdentity(written))
     } catch {
-        unlink(temp)
+        unlinkat(folder, name, 0)
         throw error
     }
 }
 
-/// Opens the temp file for writing. A clone already exists, and someone else who can write the
-/// folder (a NAS share) could swap a symbolic link in after the clone, so the open doesn't follow
-/// one; otherwise the write would land wherever it points. A whole write creates the file, which
-/// refuses any existing name.
-func openTemp(_ temp: String, cloned: Bool) -> Int32 {
+let replacedDetail = "something else replaced the file while its tags were written"
+
+/// Opens the temp file `name` in `folder` for writing, without following a link. A clone
+/// already exists; a whole write creates the file, which refuses any existing name.
+func openTemp(_ name: String, in folder: Int32, cloned: Bool) -> Int32 {
     let create = cloned ? 0 : O_CREAT | O_EXCL
-    return open(temp, O_WRONLY | create | O_NOFOLLOW | O_CLOEXEC, 0o600)
+    return openat(folder, name, O_WRONLY | create | O_NOFOLLOW | O_CLOEXEC, 0o600)
+}
+
+/// Fails unless `descriptor` is the file `name` names in `folder`: a regular file of this user
+/// with one link, on the original's volume. Someone who can write the folder could otherwise
+/// have swapped a file or a hard link to one in between the clone and the open.
+private func requireOwnTemp(
+    _ descriptor: Int32, _ name: String, in folder: Int32, device: dev_t, _ original: String
+) throws(TagWriteError) {
+    var opened = stat()
+    var named = stat()
+    guard fstat(descriptor, &opened) == 0, fstatat(folder, name, &named, AT_SYMLINK_NOFOLLOW) == 0
+    else { throw systemError(original, .writeFailed, "can't stat the temp file") }
+    guard opened.st_mode & S_IFMT == S_IFREG, opened.st_nlink == 1,
+        opened.st_uid == geteuid(), opened.st_dev == device,
+        named.st_dev == opened.st_dev, named.st_ino == opened.st_ino
+    else { throw TagWriteError(path: original, kind: .changedDuringWrite, detail: tempSwapDetail) }
+}
+
+let tempSwapDetail = "something else replaced the temp file while the tags were written"
+
+/// Fails unless the temp file's name still holds the file the write made, with no other link.
+func requireUnchanged(_ temp: TempFile, _ original: String) throws(TagWriteError) {
+    var info = stat()
+    guard lstat(temp.path, &info) == 0 else {
+        throw systemError(original, .writeFailed, "can't stat the temp file")
+    }
+    guard info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1,
+        FileIdentity(info) == temp.identity
+    else { throw TagWriteError(path: original, kind: .changedDuringWrite, detail: tempSwapDetail) }
 }
 
 private func writeAll(

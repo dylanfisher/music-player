@@ -52,30 +52,93 @@ private func mp4(withInMoov extra: Data) throws -> URL {
     #expect(info[.type] as? FileAttributeType == .typeSymbolicLink)
 }
 
-@Test func aLinkPlantedAtTheTempNameIsRemovedAndItsTargetUnchanged() throws {
+@Test func aLinkPlantedAtATempNameIsRemovedAndItsTargetUnchanged() throws {
     let url = try Sample.mp3v24.copy()
     let target = scratchFolder().appendingPathComponent("elsewhere")
     let elsewhere = Data("not music".utf8)
     try elsewhere.write(to: target)
-    #expect(symlink(target.path, tempPath(for: url.path)) == 0)
+    let planted = url.deletingLastPathComponent()
+        .appendingPathComponent(".\(url.lastPathComponent).planted.tagwrite").path
+    #expect(symlink(target.path, planted) == 0)
+    #expect(try leftoverTemps(for: url.path) == [planted])
     expectChanged(scratchWriter().write(titleEdit, to: [url.path]), [url])
     #expect(try tags(url).title == "Edited")
     #expect(try Data(contentsOf: target) == elsewhere)
-    #expect(!FileManager.default.fileExists(atPath: tempPath(for: url.path)))
+    #expect(try leftoverTemps(for: url.path).isEmpty)
 }
 
 @Test func theClonedTempFileIsntOpenedThroughALink() throws {
     let folder = scratchFolder()
     let target = folder.appendingPathComponent("elsewhere")
     try Data("not music".utf8).write(to: target)
-    let temp = folder.appendingPathComponent(".track.flac.tagwrite").path
-    #expect(symlink(target.path, temp) == 0)
+    let name = ".track.flac.planted.tagwrite"
+    #expect(symlink(target.path, folder.appendingPathComponent(name).path) == 0)
+    let folderDescriptor = open(folder.path, O_RDONLY | O_DIRECTORY)
+    defer { close(folderDescriptor) }
     for cloned in [true, false] {
-        let descriptor = openTemp(temp, cloned: cloned)
+        let descriptor = openTemp(name, in: folderDescriptor, cloned: cloned)
         let failure = errno
         if descriptor >= 0 { close(descriptor) }
         #expect(descriptor < 0, "cloned: \(cloned)")
         #expect(failure == (cloned ? ELOOP : EEXIST), "cloned: \(cloned)")
     }
     #expect(try Data(contentsOf: target) == Data("not music".utf8))
+}
+
+/// A write whose temp file someone else changes just before the rename, as another user of a
+/// shared folder could: each is refused, the original stays as it was, and the other file too.
+@Test(arguments: ["a regular file", "a hard link to another file", "a second link"])
+func aTempFileSwappedBeforeTheRenameIsRefused(_ swap: String) throws {
+    let url = try Sample.flac.copy()
+    let original = try Data(contentsOf: url)
+    let other = scratchFolder().appendingPathComponent("other")
+    let otherBytes = Data("someone else's".utf8)
+    try otherBytes.write(to: other)
+    let link = scratchFolder().appendingPathComponent("link").path
+    var writer = scratchWriter()
+    writer.faults.beforeReplacing = { _, temp in
+        switch swap {
+        case "a regular file":
+            let copy = temp + ".copy"
+            try FileManager.default.copyItem(atPath: temp, toPath: copy)
+            guard rename(copy, temp) == 0 else { throw POSIXError(.EIO) }
+        case "a hard link to another file":
+            guard unlink(temp) == 0, Darwin.link(other.path, temp) == 0 else {
+                throw POSIXError(.EIO)
+            }
+        default:
+            guard Darwin.link(temp, link) == 0 else { throw POSIXError(.EIO) }
+        }
+    }
+    let report = writer.write(titleEdit, to: [url.path])
+    #expect(report.failures.map(\.kind) == [.changedDuringWrite], "\(swap)")
+    #expect(report.failures.first?.detail == tempSwapDetail, "\(swap)")
+    #expect(try Data(contentsOf: url) == original, "\(swap)")
+    #expect(try Data(contentsOf: other) == otherBytes, "\(swap)")
+}
+
+/// The original swapped after it's read and before the temp file is made from it: the temp
+/// file isn't made from the new one, or through a link.
+@Test(arguments: ["a regular file", "a symbolic link"])
+func anOriginalSwappedBeforeTheTempFileIsRefused(_ swap: String) throws {
+    let url = try Sample.mp4.copy()
+    let other = scratchFolder().appendingPathComponent("other.m4a")
+    try FileManager.default.copyItem(at: url, to: other)
+    let otherBytes = try Data(contentsOf: other)
+    var writer = scratchWriter()
+    writer.faults.beforeWritingTemp = { path in
+        let staged = path + ".staged"
+        if swap == "a regular file" {
+            try FileManager.default.copyItem(atPath: path, toPath: staged)
+        } else {
+            guard symlink(other.path, staged) == 0 else { throw POSIXError(.EIO) }
+        }
+        guard rename(staged, path) == 0 else { throw POSIXError(.EIO) }
+    }
+    let report = writer.write(titleEdit, to: [url.path])
+    let expected: TagWriteError.Kind = swap == "a regular file" ? .changedDuringWrite : .unreadable
+    #expect(report.failures.map(\.kind) == [expected], "\(swap)")
+    if swap == "a regular file" { #expect(report.failures.first?.detail == replacedDetail) }
+    #expect(try Data(contentsOf: other) == otherBytes, "\(swap)")
+    #expect(try leftoverTemps(for: url.path).isEmpty, "\(swap)")
 }

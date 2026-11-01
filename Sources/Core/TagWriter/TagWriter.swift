@@ -135,23 +135,29 @@ public struct TagWriter: Sendable {
         let (restore, oldBytes) = try restoreSegments(segments, path: path, size: before.size)
         let oldArt = try art == nil ? currentArt(current, url) : nil
 
-        let temp = tempPath(for: path)
-        try writeTemp(segments, from: path, to: temp)
+        if let hook = faults.beforeWritingTemp {
+            do {
+                try hook(path)
+            } catch {
+                throw TagWriteError(path: path, kind: .writeFailed, detail: "\(error)")
+            }
+        }
+        let temp = try writeTemp(segments, from: path, identity: before)
         var handle: TagUndoJournal.Handle?
         var record: TagUndoJournal.FileRecord
         do throws(TagWriteError) {
             try checkEdited(
-                temp, original: file, path: path, hashes: hashes, tags: target,
+                temp.path, original: file, path: path, hashes: hashes, tags: target,
                 audio: current.metadata.audio, art: art, oldArt: oldArt)
             record = TagUndoJournal.FileRecord(
-                path: path, edited: try FileIdentity(path: temp),
+                path: path, edited: try FileIdentity(path: temp.path),
                 originalSHA256: Data(hashes.full), restore: restore)
             handle = try journal.append(record, oldBytes: oldBytes, to: entry)
             try finish(path, temp: temp, before: before)
         } catch {
             // A crash leaves the temp file and the journal as they are.
             if error.detail == crashDetail { throw error }
-            unlink(temp)
+            unlink(temp.path)
             if let handle {
                 do throws(TagWriteError) {
                     try journal.remove(handle)
@@ -206,10 +212,9 @@ public struct TagWriter: Sendable {
             case .edited(let lower, let upper): return .original(lower..<upper)
             }
         }
-        let temp = tempPath(for: path)
-        try writeTemp(segments, from: path, to: temp)
+        let temp = try writeTemp(segments, from: path, identity: before)
         do throws(TagWriteError) {
-            let restored = try fileHashes(temp, payload: [])
+            let restored = try fileHashes(temp.path, payload: [])
             guard restored.full == Array(record.originalSHA256) else {
                 throw TagWriteError(
                     path: path, kind: .checkFailed,
@@ -217,18 +222,20 @@ public struct TagWriter: Sendable {
             }
             try finish(path, temp: temp, before: before)
         } catch {
-            if error.detail != crashDetail { unlink(temp) }
+            if error.detail != crashDetail { unlink(temp.path) }
             throw error
         }
         logger.notice("undid the tag edit of \(path)")
     }
 
-    /// The last steps: the injected faults, the check that nothing else wrote the file, then
-    /// the rename.
-    private func finish(_ path: String, temp: String, before: FileIdentity) throws(TagWriteError) {
+    /// The last steps: the injected faults, the checks that nothing else wrote the file or
+    /// swapped the temp file, then the rename.
+    private func finish(_ path: String, temp: TempFile, before: FileIdentity)
+        throws(TagWriteError)
+    {
         if let hook = faults.beforeReplacing {
             do {
-                try hook(path, temp)
+                try hook(path, temp.path)
             } catch {
                 throw TagWriteError(path: path, kind: .writeFailed, detail: "\(error)")
             }
@@ -238,10 +245,11 @@ public struct TagWriter: Sendable {
                 path: path, kind: .changedDuringWrite,
                 detail: "something else changed the file while its tags were written")
         }
+        try requireUnchanged(temp, path)
         if faults.crashBeforeRename {
             throw TagWriteError(path: path, kind: .writeFailed, detail: crashDetail)
         }
-        try replace(path, with: temp)
+        try replace(path, with: temp.path)
     }
 
     /// Reads the edited temp file back with the reader and checks it against what was meant.

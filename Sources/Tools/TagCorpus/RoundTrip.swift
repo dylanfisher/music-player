@@ -223,11 +223,10 @@ struct RoundTrip {
             if try !sameBytes(original, clone) {
                 failures.append("\(container) crash: the original changed")
             }
-            let temp = URL(fileURLWithPath: tempPath(for: clone.path))
-            if !FileManager.default.fileExists(atPath: temp.path) {
+            if try leftoverTemps(for: clone.path).isEmpty {
                 failures.append("\(container) crash: no temp file was left to show the crash")
             }
-            // The next write replaces the leftover temp file; undo puts the clone back.
+            // The next write removes the leftover temp file; undo puts the clone back.
             let recovered = writer.write(edit, to: [clone.path])
             if recovered.changed != [clone.path] {
                 failures.append("\(container) after a crash: \(recovered.failures)")
@@ -236,7 +235,7 @@ struct RoundTrip {
             if undo.changed != [clone.path] {
                 failures.append("\(container) undo after a crash: \(undo.failures)")
             }
-            if FileManager.default.fileExists(atPath: temp.path) {
+            if try !leftoverTemps(for: clone.path).isEmpty {
                 failures.append("\(container) after a crash: the temp file is still there")
             }
 
@@ -309,8 +308,7 @@ struct RoundTrip {
             print("full disk: \(report.failures[0].detail)", to: &standardError)
         }
         if try !sameBytes(original, copy) { failures.append("full disk: the file changed") }
-        let temp = URL(fileURLWithPath: tempPath(for: copy.path))
-        if FileManager.default.fileExists(atPath: temp.path) {
+        if try !leftoverTemps(for: copy.path).isEmpty {
             failures.append("full disk: a temp file was left")
         }
     }
