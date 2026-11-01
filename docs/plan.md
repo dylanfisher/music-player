@@ -1541,6 +1541,35 @@ Album pane (the known limit in phase 5's Result).
       order, each new tag read from every format, and each new column's sort.
 - [ ] Bench: the pane, re-sort, scan, and database size budgets still hold.
 
+Implementation plan (ADR [0031](decisions/0031-album-artist-and-metadata-columns.md); the tag
+mapping is in ADR [0006](decisions/0006-tag-reader.md)):
+
+1. **Metadata.** `TrackTags` and `TagField` gain the sixteen fields. Vorbis, ID3v2 (2.2 to 2.4,
+   with `TXXX` and `GRP1`), MP4 (with integer items and iTunes freeform items) and RIFF INFO map
+   Picard's keys onto them; `DESCRIPTION` becomes the description rather than the comment.
+   Tests read each field from every format; the four parser fuzz targets run 120 s each.
+2. **Library index.** `tracks` stores the fields and `group_artist_id`; `files` stores the
+   creation date the walk already fetches with each listing (`creationDateKey`, no new call
+   per file). `loved` is a schema part of its own, so adding it keeps the plays, ratings and
+   playlists. `TrackRow` carries every field; bit rate, file name and file type are SQL
+   expressions the rows select and the sort uses, so each is defined once.
+3. **The owner's columns first:** `#` (the row's position, not sortable), Album Art (an image
+   cell fed by `ArtworkLoader` off the main thread, a bounded request queue, sorting by whether
+   a track has art), Track of Total, Grouping, Catalog Number, Bit Rate, Size, beside the
+   existing ones. Default widths per column, checked with `--snapshot` at 1440x900 with the
+   sixteen on. Then every other column, each sortable and, where it makes sense, a smart-rule
+   field.
+4. **`library.groupByAlbumArtist`** in `AppSettings` (so the Settings window and ⌘K list it).
+   `TrackFilter` carries it; the Artist pane, its selection and the Artist and Album sorts read
+   `group_artist_id`. The Album pane shows the album artist beside titles that repeat.
+5. **Loved:** `track.toggleLoved` loves the selection, or unloves it when all of it is loved.
+6. **Bench:** the sort benchmarks skip `#`; the pane benchmark adds the grouped Artist pane;
+   the window memory benchmark scrolls with the Album Art column shown.
+7. **Tests:** MetadataTests (every field from every format, warnings), LibraryTests (the new
+   columns' sorts and values, created dates, grouping with compilations and same-titled albums,
+   loved surviving an index rebuild, the new rule fields), LibraryBrowserTests (row numbers,
+   album names, the setting's reload, the art queue), SettingsTests (the setting).
+
 ### 17. Playlist files
 
 - [ ] **Export** a manual playlist, or a smart playlist's current tracks, as M3U8 (UTF-8, `#EXTM3U`
