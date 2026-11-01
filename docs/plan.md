@@ -1721,7 +1721,10 @@ Schema fix, once the owner's schema was read:
 
 Result: shipped up to the owner's checkpoint, which is pending. Swinsian's database is copied
 with its WAL, checked unchanged by size, mtime and inode, and opened read-only from the copy; the
-schema is assumed, unverified (ADR 0033), and a missing table or column fails with each one named.
+schema was read from the owner's library on 2026-11-01 (ADR 0033), and a missing table or column
+fails with each one named. Smart rules are Swinsian's archived NSPredicate, walked from its plist
+without NSKeyedUnarchiver (which raises on malformed archives) under caps on bytes, objects, depth
+and reads; all 18 of the owner's rule shapes map. Half-star ratings round up.
 Library.xml is read with `PropertyListSerialization` under a 256 MiB cap. Matching is by path
 with one prefix replacement, through phase 17's NFC lookup. The preview sheet is recomputed
 inside the one transaction that writes plays, last played, Date Added, ratings where we have
