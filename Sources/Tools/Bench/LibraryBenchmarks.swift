@@ -336,7 +336,7 @@ private final class PeakFootprint: @unchecked Sendable {
 }
 
 /// This process's physical footprint, as Activity Monitor's Memory column shows it.
-private func footprintMB() throws -> Double {
+func footprintMB() throws -> Double {
     var info = task_vm_info_data_t()
     var count = mach_msg_type_number_t(
         MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)

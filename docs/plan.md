@@ -93,7 +93,8 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | List a smart playlist of six rules over every fixture track (p95); the old Mac figure is an estimate until its checkpoint | < 50 ms | < 150 ms |
 | Resident memory with the library loaded, after scrolling every row with art | < 250 MB | < 250 MB |
 | CPU while playing 24/192 FLAC | < 3 percent of a core | < 5 percent of a core |
-| Underruns in a 1-hour playback soak (`--soak 3600`; 20 s by default) | 0 frames | 0 frames |
+| Underruns in a 1-hour playback soak (`--soak 3600`; 20 s by default), with a full fixture scan every 5 minutes and a search every second | 0 frames | 0 frames |
+| Memory growth in that soak, from minute 5 (or a quarter of a shorter soak) to the end | < 10 MB | < 10 MB |
 | Gap between same-format tracks | 0 samples | 0 samples |
 | Track change that switches sample rate | < 500 ms | < 500 ms |
 | CPU when idle (not playing) | ~0%, no timers firing faster than settings allow | same |

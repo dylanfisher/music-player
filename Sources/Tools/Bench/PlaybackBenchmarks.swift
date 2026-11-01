@@ -3,11 +3,140 @@ import DisplayText
 import Fixtures
 import Foundation
 import HALOutput
+import Library
 import Playback
+import Settings
 
 /// How long the soak plays. `scripts/bench --soak <seconds>` sets it; the hour the budget is for
 /// is too long for every run.
 nonisolated(unsafe) var soakSeconds = 20.0
+
+/// How often the soak scans the fixture library, from its start.
+private let soakScanIntervalSeconds = 300.0
+
+/// When the soak's memory counts from: minute 5, or a quarter of a shorter soak, once the first
+/// scan's database and caches have settled.
+private var soakSettledSeconds: Double { min(300, soakSeconds / 4) }
+
+/// What a soak under load measured.
+private struct LoadedSoak {
+    var underrunFrames: Int
+    var scans: Int
+    var searches: Int
+    var settledMB: Double
+    var endMB: Double
+    var peakMB: Double
+}
+
+/// Plays on repeat for `soakSeconds` while a full scan into a new index runs every 5 minutes and
+/// a search every second, the load a first scan of the NAS puts beside playback. Each scan and
+/// the search have their own connections, as in the app. Run once, for both soak benchmarks.
+private let loadedSoak = Result { () throws -> LoadedSoak in
+    let library = try scannedLibrary.get()
+    let queries = try typedQueries(library.index)
+    let directory = try defaultPlaybackFixturesDirectory()
+    let queue =
+        [try hiResTrack(in: directory)]
+        + (try rampAlbum(sampleRateHz: 44_100, bitsPerSample: 16, in: directory)).tracks
+        + (try rampAlbum(sampleRateHz: 96_000, bitsPerSample: 24, in: directory)).tracks
+    return try withScratchDirectory("soak") { scratch in
+        try playing(queue, speed: 1, repeatMode: .all) { session in
+            let load = SoakLoad(
+                folder: library.folder, scratch: scratch, searchDatabase: library.databaseURL,
+                queries: queries)
+            let start = DispatchTime.now().uptimeNanoseconds
+            func elapsed() -> Double { Double(DispatchTime.now().uptimeNanoseconds - start) / 1e9 }
+            var settledMB: Double?
+            var peakMB = 0.0
+            while elapsed() < soakSeconds {
+                let current = try footprintMB()
+                peakMB = max(peakMB, current)
+                if settledMB == nil, elapsed() >= soakSettledSeconds { settledMB = current }
+                if let failure = load.failure { throw failure }
+                Thread.sleep(forTimeInterval: 1)
+            }
+            let (scans, searches) = try load.stop()
+            let endMB = try footprintMB()
+            return LoadedSoak(
+                underrunFrames: session.underrunFrames(), scans: scans, searches: searches,
+                settledMB: try settledMB ?? footprintMB(), endMB: endMB, peakMB: max(peakMB, endMB))
+        }
+    }
+}
+
+/// The soak's load: one thread scanning, one searching, until stopped.
+private final class SoakLoad: @unchecked Sendable {
+    // Guarded by `lock`.
+    private let lock = NSLock()
+    private var running = true
+    private var scans = 0
+    private var searches = 0
+    private var firstFailure: (any Error)?
+    private let done = DispatchGroup()
+    private let start = DispatchTime.now().uptimeNanoseconds
+
+    init(folder: WatchedFolder, scratch: URL, searchDatabase: URL, queries: [String]) {
+        loop(every: soakScanIntervalSeconds) { [self] in
+            let databaseURL = scratch.appendingPathComponent("scan.sqlite")
+            for suffix in ["", "-wal", "-shm"] {
+                let url = URL(fileURLWithPath: databaseURL.path + suffix)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    try FileManager.default.removeItem(at: url)
+                }
+            }
+            let summary = try LibraryScanner(databaseURL: databaseURL).scan(folder)
+            guard summary.read == fullLibraryFileCount, summary.issues.isEmpty else {
+                throw BenchError.expected("each soak scan to read every file: \(summary)")
+            }
+            lock.withLock { scans += 1 }
+        }
+        var index: LibraryIndex?
+        loop(every: 1) { [self] in
+            let connection = try index ?? LibraryIndex(at: searchDatabase)
+            index = connection
+            let text = lock.withLock { queries[searches % queries.count] }
+            _ = try connection.trackIDs(TrackFilter(search: text), sortedBy: .artist)
+            lock.withLock { searches += 1 }
+        }
+    }
+
+    var failure: (any Error)? { lock.withLock { firstFailure } }
+
+    private func elapsed() -> Double {
+        Double(DispatchTime.now().uptimeNanoseconds - start) / 1e9
+    }
+
+    /// Runs `body` on its own thread at 0, `interval`, 2 × `interval` and so on, until stopped.
+    private func loop(every interval: Double, _ body: @escaping () throws -> Void) {
+        done.enter()
+        nonisolated(unsafe) let body = body
+        Thread.detachNewThread { [self] in
+            var next = 0.0
+            while lock.withLock({ running && firstFailure == nil }) {
+                if elapsed() >= next {
+                    do {
+                        try body()
+                    } catch {
+                        lock.withLock { firstFailure = firstFailure ?? error }
+                    }
+                    next += interval
+                }
+                usleep(50_000)
+            }
+            done.leave()
+        }
+    }
+
+    /// Waits for a scan under way to finish, and returns how many scans and searches ran.
+    func stop() throws -> (scans: Int, searches: Int) {
+        lock.withLock { running = false }
+        done.wait()
+        return try lock.withLock {
+            if let firstFailure { throw firstFailure }
+            return (scans, searches)
+        }
+    }
+}
 
 /// How long the CPU benchmark plays, after a warm-up.
 private let cpuSeconds = 30.0
@@ -81,24 +210,33 @@ let playbackBenchmarks = [
             ])
     },
     Benchmark(
-        name: "playback: underruns in a soak",
+        name: "playback: underruns in a soak under load",
         budget: Budget(appleSilicon: 0, oldMac: 0, unit: .frames)
     ) {
-        let directory = try defaultPlaybackFixturesDirectory()
-        let queue =
-            [try hiResTrack(in: directory)]
-            + (try rampAlbum(sampleRateHz: 44_100, bitsPerSample: 16, in: directory)).tracks
-            + (try rampAlbum(sampleRateHz: 96_000, bitsPerSample: 24, in: directory)).tracks
-        return try playing(queue, speed: 1, repeatMode: .all) { session in
-            Thread.sleep(forTimeInterval: soakSeconds)
-            return Measured(
-                value: Double(session.underrunFrames()),
-                notes: [
-                    String(
-                        format: "%.0f s, 24/192 then 44.1 and 96 kHz albums on repeat; "
-                            + "./scripts/bench --soak 3600 for the hour", soakSeconds)
-                ])
-        }
+        let soak = try loadedSoak.get()
+        return Measured(
+            value: Double(soak.underrunFrames),
+            notes: [
+                String(
+                    format: "%.0f s, 24/192 then 44.1 and 96 kHz albums on repeat; "
+                        + "./scripts/bench --soak 3600 for the hour", soakSeconds),
+                "under load: \(soak.scans) full scans of the fixture library into a new index,"
+                    + String(format: " one every %.0f s,", soakScanIntervalSeconds)
+                    + " and \(soak.searches) searches, one a second",
+            ])
+    },
+    Benchmark(
+        name: "playback: memory growth in a soak under load, from minute 5 to the end",
+        budget: Budget(appleSilicon: 10, oldMac: 10, unit: .megabytes)
+    ) {
+        let soak = try loadedSoak.get()
+        return Measured(
+            value: soak.endMB - soak.settledMB,
+            notes: [
+                String(
+                    format: "footprint %.1f MB at %.0f s, %.1f MB at the end, %.1f MB at the peak",
+                    soak.settledMB, soakSettledSeconds, soak.endMB, soak.peakMB)
+            ])
     },
 ]
 
