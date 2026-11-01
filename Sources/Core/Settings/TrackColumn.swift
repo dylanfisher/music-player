@@ -1,7 +1,15 @@
-/// A column of the track table. Every column can be shown, moved and sorted by; Library holds what
-/// each sorts by and its title, which the smart playlist editor shares.
+/// A column of the track table. Every column can be shown and moved, and every one but the row
+/// number sorted by; Library holds what each sorts by and its title, which the smart playlist
+/// editor shares. The header's menu lists them in this order.
 public enum TrackColumn: String, Codable, CaseIterable, Sendable {
-    case title, artist, album, albumArtist, trackNumber, discNumber, year, genre, duration, codec,
-        sampleRate, bitDepth, dateAdded, path, playCount, skipCount, lastPlayed, rating,
+    case rowNumber, art, title, artist, album, albumArtist, composer, conductor, lyricist, grouping,
+        work, movementNumber, movementName, genre, year, originalDate, trackNumber, trackTotal,
+        trackOfTotal, discNumber, discTotal, discOfTotal, discSubtitle, compilation, duration, bpm,
+        key, codec, fileType, bitRate, sampleRate, bitDepth, channels, size, fileName, path,
+        dateAdded, dateCreated, dateModified, playCount, skipCount, lastPlayed, rating, loved,
+        publisher, catalogNumber, barcode, copyright, encoder, comment, description,
         playlistOrder
+
+    /// The row number is the row's place in the list as sorted, so sorting by it means nothing.
+    public var isSortable: Bool { self != .rowNumber }
 }

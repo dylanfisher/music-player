@@ -84,6 +84,7 @@ public struct SmartRule: Codable, Equatable, Sendable {
             if field == .rating, number > SmartField.maxRating {
                 return "a rating is 0 to \(SmartField.maxRating) stars, not \(number)"
             }
+            if field.isFlag, number > 1 { return "\(field.rawValue) is 0 or 1, not \(number)" }
             return nil
         case (.text, .number): return "\(field.rawValue) takes text, not a number"
         case (.number, .text), (.date, .text):
@@ -134,9 +135,12 @@ public enum SmartValue: Codable, Equatable, Sendable {
 
 public enum SmartField: String, Codable, CaseIterable, Sendable {
     case title, artist, album, albumArtist, genre, composer, comment, codec, path
+    case grouping, work, conductor, lyricist, movementName, originalDate, discSubtitle, key,
+        publisher, catalogNumber, barcode, copyright, encoder, description, fileName, fileType
     case year, trackNumber, discNumber, duration, sampleRate, bitDepth, playCount, skipCount,
         rating
-    case dateAdded, lastPlayed
+    case trackTotal, discTotal, movementNumber, bpm, bitRate, channels, size, loved, compilation
+    case dateAdded, lastPlayed, dateCreated, dateModified
 
     public enum Kind: Sendable {
         case text
@@ -151,30 +155,31 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
 
     public var kind: Kind {
         switch self {
-        case .title, .artist, .album, .albumArtist, .genre, .composer, .comment, .codec, .path:
+        case .title, .artist, .album, .albumArtist, .genre, .composer, .comment, .codec, .path,
+            .grouping, .work, .conductor, .lyricist, .movementName, .originalDate, .discSubtitle,
+            .key, .publisher, .catalogNumber, .barcode, .copyright, .encoder, .description,
+            .fileName, .fileType:
             .text
         case .year, .trackNumber, .discNumber, .duration, .sampleRate, .bitDepth, .playCount,
-            .skipCount, .rating:
+            .skipCount, .rating, .trackTotal, .discTotal, .movementNumber, .bpm, .bitRate,
+            .channels, .size, .loved, .compilation:
             .number
-        case .dateAdded, .lastPlayed: .date
+        case .dateAdded, .lastPlayed, .dateCreated, .dateModified: .date
         }
     }
 
-    /// The track table column the field compares, which every field but composer and comment
-    /// has: the names match.
-    public var column: TrackColumn? { TrackColumn(rawValue: rawValue) }
+    /// Yes or no, compared as 1 or 0.
+    var isFlag: Bool { self == .loved || self == .compilation }
 
-    /// The SQL the rule compares, over the tables `TrackColumn.expression` names plus `p` (plays)
-    /// and `r` (ratings). The names and titles are the folded sort columns, which a folded value
-    /// matches whatever its case and accents. Numbers compare as whole numbers, so a duration of
-    /// 200.4 seconds "is 200", as the table shows it.
+    /// The track table column the field compares: the names match.
+    public var column: TrackColumn { TrackColumn(rawValue: rawValue)! }
+
+    /// The SQL the rule compares, over the tables `TrackColumn.expression` names. The names and
+    /// titles are the folded sort columns, which a folded value matches whatever its case and
+    /// accents. Numbers compare as whole numbers, so a duration of 200.4 seconds "is 200", as
+    /// the table shows it; sizes compare in megabytes and bit rates in kilobits a second.
     var expression: String {
-        let expression =
-            switch self {
-            case .composer: "t.composer"
-            case .comment: "t.comment"
-            default: column!.expression
-            }
+        let expression = self == .size ? "f.size_bytes / 1000000.0" : column.expression
         return kind == .number ? "CAST(\(expression) AS INTEGER)" : expression
     }
 
@@ -268,11 +273,13 @@ let trackJoins = """
     LEFT JOIN files f ON f.id = t.file_id
     LEFT JOIN artists ar ON ar.id = t.artist_id
     LEFT JOIN artists aa ON aa.id = t.album_artist_id
+    LEFT JOIN artists ga ON ga.id = t.group_artist_id
     LEFT JOIN albums al ON al.id = t.album_id
     LEFT JOIN genres g ON g.id = t.genre_id
     LEFT JOIN paths pa ON pa.id = t.file_id
     LEFT JOIN plays p ON p.path_id = t.file_id
     LEFT JOIN ratings r ON r.path_id = t.file_id
+    LEFT JOIN \(lovedTable) lv ON lv.path_id = t.file_id
     """
 
 private let secondsPerDay = 86_400.0

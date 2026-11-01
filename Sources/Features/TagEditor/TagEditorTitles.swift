@@ -14,7 +14,7 @@ extension TagEditField {
         case .date: "Date"
         case .composer: SmartField.composer.title
         case .comment: SmartField.comment.title
-        case .trackNumber: "Track"
+        case .trackNumber: TrackColumn.trackNumber.title
         case .trackTotal, .discTotal: "of"
         case .discNumber: TrackColumn.discNumber.title
         case .compilation: "Part of a compilation"

@@ -130,16 +130,22 @@ public final class LibraryIndex {
                 ).map { row in (try row.text(0), try row.text(1)) })
             let stale = SchemaPart.allCases.filter { stored[$0.rawValue] != $0.sql }
             guard !stale.isEmpty else { return }
-            // Stats tables that don't match are discarded with everything else; an index that
-            // doesn't match is rebuilt around the stats.
+            // Stats tables that don't match are discarded with everything else, since every
+            // other part refers to their paths; any other part is rebuilt around the rest.
             let rebuilt = stale.contains(.stats) ? SchemaPart.allCases : stale
             for part in rebuilt where stored[part.rawValue] != nil {
                 logger.notice("the \(part.rawValue) tables don't match this build; rebuilding them")
             }
-            if rebuilt.contains(.stats), stored[SchemaPart.stats.rawValue] != nil {
-                try recordDiscardedStats()
+            let discarded = rebuilt.filter { stored[$0.rawValue] != nil }.compactMap(\.tables)
+                .reduce(into: Set<String>()) { $0.formUnion($1) }
+            if !discarded.isEmpty { try recordDiscardedStats(discarded) }
+            let kept = SchemaPart.allCases.filter { !rebuilt.contains($0) }.compactMap(\.tables)
+                .reduce(into: Set<String>()) { $0.formUnion($1) }
+            let rebuiltTables = rebuilt.compactMap(\.tables)
+                .reduce(into: Set<String>()) { $0.formUnion($1) }
+            try dropTables {
+                rebuilt.contains(.index) ? !kept.contains($0) : rebuiltTables.contains($0)
             }
-            try dropTables(keeping: rebuilt.contains(.stats) ? [] : statsTables)
             let identity = try database.prepare(
                 "INSERT OR REPLACE INTO \(schemaIdentityTable) (part, sql) VALUES (?, ?)")
             for part in rebuilt {
@@ -149,15 +155,15 @@ public final class LibraryIndex {
         }
     }
 
-    /// Counts the rows of the stats tables about to be dropped, and records them for the window
-    /// to show once, when there were any (ADR 0022).
-    private func recordDiscardedStats() throws {
+    /// Counts the rows of the stats `tables` about to be dropped, and records them for the
+    /// window to show once, when there were any (ADR 0022).
+    private func recordDiscardedStats(_ tables: Set<String>) throws {
         let existing = Set(
             try database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").map {
                 try $0.text(0)
             })
         var counts: [String] = []
-        for table in statsTables.intersection(existing).sorted() {
+        for table in tables.intersection(existing).sorted() {
             let rows = try database.prepare("SELECT count(*) FROM \(quotedIdentifier(table))").map {
                 try $0.int(0)
             }[0]
@@ -165,7 +171,7 @@ public final class LibraryIndex {
         }
         guard !counts.isEmpty else { return }
         let detail =
-            "this build stores plays, ratings and playlists in a new shape, so those of the"
+            "this build stores plays, ratings, loved tracks or playlists in a new shape, so those of the"
             + " earlier build were discarded (rows: \(counts.joined(separator: ", ")))"
         logger.error("\(detail)")
         try recordDiscard(detail)
@@ -199,16 +205,15 @@ public final class LibraryIndex {
         }
     }
 
-    /// Drops every table but the identity table and `keeping`. Virtual tables go first, because
-    /// dropping one also drops its shadow tables.
-    private func dropTables(keeping: Set<String>) throws {
+    /// Drops every table `doomed` names but the identity and discards tables. Virtual tables go
+    /// first, because dropping one also drops its shadow tables.
+    private func dropTables(_ doomed: (String) -> Bool) throws {
         let tables = try database.prepare(
             "SELECT name, sql LIKE 'CREATE VIRTUAL TABLE%' FROM sqlite_master"
                 + " WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
         ).map { row in (name: try row.text(0), isVirtual: try row.int(1) == 1) }
         let doomed = tables.filter {
-            $0.name != schemaIdentityTable && $0.name != schemaDiscardsTable
-                && !keeping.contains($0.name)
+            $0.name != schemaIdentityTable && $0.name != schemaDiscardsTable && doomed($0.name)
         }
         for table in doomed where table.isVirtual {
             try database.execute("DROP TABLE \(quotedIdentifier(table.name))")
@@ -291,17 +296,17 @@ public final class LibraryIndex {
 
     private func upsertFile(_ file: ScannedFile, failure: MetadataError?) throws -> Int64 {
         let values: [(any SQLiteValue)?] = [
-            file.sizeBytes, file.modifiedSeconds, failure?.kind.rawValue, failure?.offset,
-            failure?.detail,
+            file.sizeBytes, file.modifiedSeconds, file.createdSeconds, failure?.kind.rawValue,
+            failure?.offset, failure?.detail,
         ]
         if let known = file.known {
             try statement(
                 """
-                UPDATE files SET size_bytes = ?, modified_seconds = ?, failure_kind = ?,
-                    failure_offset = ?, failure_detail = ?
+                UPDATE files SET size_bytes = ?, modified_seconds = ?, created_seconds = ?,
+                    failure_kind = ?, failure_offset = ?, failure_detail = ?
                 WHERE id = ?
                 """
-            ).run(values[0], values[1], values[2], values[3], values[4], known.id)
+            ).run(values[0], values[1], values[2], values[3], values[4], values[5], known.id)
             return known.id
         }
         // An upsert, since another scan (the command line beside the app) may have added the
@@ -310,15 +315,18 @@ public final class LibraryIndex {
         let id = try pathID(file.path, seenAt: Date().timeIntervalSince1970)
         try statement(
             """
-            INSERT INTO files (id, path, size_bytes, modified_seconds, failure_kind,
-                failure_offset, failure_detail)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO files (id, path, name_offset, size_bytes, modified_seconds,
+                created_seconds, failure_kind, failure_offset, failure_detail)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET size_bytes = excluded.size_bytes,
                 modified_seconds = excluded.modified_seconds,
+                created_seconds = excluded.created_seconds,
                 failure_kind = excluded.failure_kind, failure_offset = excluded.failure_offset,
                 failure_detail = excluded.failure_detail
             """
-        ).run(id, file.path, values[0], values[1], values[2], values[3], values[4])
+        ).run(
+            id, file.path, nameOffset(file.path), values[0], values[1], values[2], values[3],
+            values[4], values[5])
         return id
     }
 
@@ -353,21 +361,33 @@ public final class LibraryIndex {
         let album = try albumID(
             tags.album,
             artist: tags.albumArtist != nil ? albumArtist : tags.compilation ? nil : artist)
+        let groupArtist =
+            tags.albumArtist != nil
+            ? albumArtist : tags.compilation ? try artistID(variousArtists) : artist
         try statement(
             """
-            INSERT INTO tracks (file_id, title, sort_title, artist_id, album_artist_id, album_id,
-                genre_id, date, track_number, track_total, disc_number, disc_total, compilation,
-                composer, comment, codec, sample_rate_hz, bits_per_sample, channels, length_frames,
-                art_offset, art_byte_count, art_mime_type, art_unsynchronised)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tracks (file_id, title, sort_title, artist_id, album_artist_id,
+                group_artist_id, album_id, genre_id, date, track_number, track_total,
+                disc_number, disc_total, compilation, composer, comment, grouping,
+                catalog_number, barcode, bpm, musical_key, conductor, lyricist, publisher,
+                copyright, encoder, description, disc_subtitle, work, movement_number,
+                movement_name, original_date, codec, sample_rate_hz, bits_per_sample, channels,
+                length_frames, art_offset, art_byte_count, art_mime_type, art_unsynchronised)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
         ).run(
-            id, tags.title, sortKey(displayTitle), artist, albumArtist, album,
-            try genreID(tags.genre), tags.date, tags.trackNumber, tags.trackTotal, tags.discNumber,
-            tags.discTotal, tags.compilation, tags.composer, tags.comment, audio.codec.rawValue,
-            audio.sampleRateHz, audio.bitsPerSample, audio.channels, audio.lengthFrames,
-            metadata.art?.offset, metadata.art?.byteCount, metadata.art?.mimeType,
-            metadata.art?.unsynchronised)
+            binding: [
+                id, tags.title, sortKey(displayTitle), artist, albumArtist, groupArtist, album,
+                try genreID(tags.genre), tags.date, tags.trackNumber, tags.trackTotal,
+                tags.discNumber, tags.discTotal, tags.compilation, tags.composer, tags.comment,
+                tags.grouping, tags.catalogNumber, tags.barcode, tags.bpm, tags.key,
+                tags.conductor, tags.lyricist, tags.publisher, tags.copyright, tags.encoder,
+                tags.description, tags.discSubtitle, tags.work, tags.movementNumber,
+                tags.movementName, tags.originalDate, audio.codec.rawValue, audio.sampleRateHz,
+                audio.bitsPerSample, audio.channels, audio.lengthFrames, metadata.art?.offset,
+                metadata.art?.byteCount, metadata.art?.mimeType, metadata.art?.unsynchronised,
+            ])
         try statement(
             """
             INSERT INTO track_search (rowid, title, artist, album, album_artist, genre, composer)
@@ -409,6 +429,8 @@ public final class LibraryIndex {
                     (SELECT artist_id FROM tracks WHERE artist_id IS NOT NULL)
                     AND id NOT IN
                     (SELECT album_artist_id FROM tracks WHERE album_artist_id IS NOT NULL)
+                    AND id NOT IN
+                    (SELECT group_artist_id FROM tracks WHERE group_artist_id IS NOT NULL)
                     AND id NOT IN (SELECT artist_id FROM albums WHERE artist_id IS NOT NULL);
                 DELETE FROM genres WHERE id NOT IN
                     (SELECT genre_id FROM tracks WHERE genre_id IS NOT NULL);
@@ -497,6 +519,7 @@ struct ScannedFile: Sendable {
     var path: String
     var sizeBytes: Int
     var modifiedSeconds: Double
+    var createdSeconds: Double? = nil
     var known: KnownFile?
     var outcome: Result<ParsedFile, MetadataError>
 }
@@ -531,6 +554,12 @@ func pathRange(under directory: String) -> Range<String> {
 
 func isPath(_ path: String, under directory: String) -> Bool {
     path.hasPrefix(stem(directory) + "/")
+}
+
+/// Where the file name starts in `path`, counting Unicode scalars from 1, as SQLite's `substr`
+/// counts characters.
+func nameOffset(_ path: String) -> Int {
+    path.unicodeScalars.count - (path as NSString).lastPathComponent.unicodeScalars.count + 1
 }
 
 /// What a track without a title tag is called: its file name without the extension.

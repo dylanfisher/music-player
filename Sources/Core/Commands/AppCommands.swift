@@ -45,6 +45,7 @@ extension CommandID {
     public static let removeArtwork = CommandID("tags.removeArtwork")
     public static let removeFromQueue = CommandID("queue.remove")
     public static let addToPlaylist = CommandID("playlist.addSelection")
+    public static let toggleLoved = CommandID("track.toggleLoved")
     /// Rate the selection 0 (no rating) to 5 stars, by index.
     public static let rate = (0...5).map { CommandID("track.rate\($0)") }
 
@@ -134,6 +135,7 @@ public enum AppCommands {
             Command(.removeArtwork, "Remove Artwork"),
             Command(.removeFromQueue, "Remove from Queue or Playlist", [.init(.delete, cmd)]),
             Command(.addToPlaylist, "Add to Playlist…"),
+            Command(.toggleLoved, "Love or Unlove"),
 
             Command(.newPlaylist, "New Playlist", [.init("n", cmd)]),
             Command(

@@ -8,7 +8,8 @@ import Testing
 @MainActor @Test func aReSortKeepsTheSameTracksSelected() async throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
-        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
     let index = try LibraryIndex(at: databaseURL)
     let actions = BrowserActions(
         play: { _, _ in }, playNext: { _ in }, move: { _, _ in }, sort: { _, _ in },
@@ -32,7 +33,8 @@ import Testing
 @MainActor @Test func theReportedLayoutAlwaysPassesSettingsChecks() throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
-        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
     let actions = BrowserActions(
         play: { _, _ in }, playNext: { _ in }, move: { _, _ in }, sort: { _, _ in },
         layoutChanged: { _ in },
@@ -49,7 +51,8 @@ import Testing
 @MainActor @Test func keysMoveTheSelectionFromTheCursor() async throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
-        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
     let index = try LibraryIndex(at: databaseURL)
     let actions = BrowserActions(
         play: { _, _ in }, playNext: { _ in }, move: { _, _ in }, sort: { _, _ in },
@@ -74,7 +77,8 @@ import Testing
 @MainActor @Test func trackNamesFollowTheTablesOrder() async throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
-        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: false)
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: false,
+        groupByAlbumArtist: false)
     await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
     let names = try await model.trackNames()
     #expect(names.map(\.id) == model.trackIDs)
@@ -84,7 +88,8 @@ import Testing
 @MainActor @Test func trackNamesReadAgainWhenTheListChangesMeanwhile() async throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
-        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: false)
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: false,
+        groupByAlbumArtist: false)
     await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
     async let sorted: Void = model.setSort(.artist, ascending: true)
     async let read = { @MainActor in (try await model.trackNames(), model.trackIDs) }()

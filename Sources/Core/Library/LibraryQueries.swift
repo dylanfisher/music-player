@@ -52,23 +52,32 @@ extension LibraryIndex {
             }
         }
         let direction = ascending ? "ASC" : "DESC"
+        var order = "\(column.expression) \(direction)"
         let tieBreak: String
-        if column == .lastPlayed {
+        if filter.groupByAlbumArtist, column == .artist || column == .album {
+            // Each album's tracks stay together, in disc and track order, whoever plays on them.
+            let artist = "ga.sort_name \(direction)"
+            let album = "al.sort_title \(direction)"
+            order =
+                (column == .artist ? "\(artist), \(album)" : "\(album), \(artist)")
+                + ", t.album_id \(direction)"
+            tieBreak = "t.disc_number, t.track_number, t.sort_title, t.file_id"
+        } else if column == .lastPlayed {
             // A time is almost unique, so the ID breaks ties without the artist and album
             // lookups the other columns need. In History every row has plays, so p.path_id is
             // t.file_id, and naming it lets plays_last_played supply the whole order.
             tieBreak = "\(filter.source == .history ? "p.path_id" : "t.file_id") \(direction)"
         } else {
             tieBreak =
-                "ar.sort_name, al.sort_title, t.disc_number, t.track_number, t.sort_title,"
-                + " t.file_id"
+                "\(filter.groupByAlbumArtist ? "ga" : "ar").sort_name, al.sort_title,"
+                + " t.disc_number, t.track_number, t.sort_title, t.file_id"
         }
         let sql = """
             SELECT \(columns) FROM tracks t
             \(trackJoins)
             \(entries)
             \(whereClause(conditions))
-            ORDER BY \(column.expression) \(direction), \(tieBreak)
+            ORDER BY \(order), \(tieBreak)
             """
         return try statement(sql).map(binding: entryValues + values, row: read)
     }
@@ -78,10 +87,12 @@ extension LibraryIndex {
         try pane("SELECT id, name FROM genres", "genre_id", "sort_name", filter, [.source])
     }
 
-    /// The artists of the tracks in `filter`'s source and genre.
+    /// The artists of the tracks in `filter`'s source and genre: their album artists when it
+    /// groups by album artist.
     public func artists(_ filter: TrackFilter = TrackFilter()) throws -> [BrowserEntry] {
         try pane(
-            "SELECT id, name FROM artists", "artist_id", "sort_name", filter, [.source, .genre])
+            "SELECT id, name FROM artists", artistColumn(filter), "sort_name", filter,
+            [.source, .genre])
     }
 
     /// The albums of the tracks in `filter`'s source, genre and artist.
@@ -208,7 +219,7 @@ extension LibraryIndex {
                 values.append(genre)
             case .artist:
                 guard let artist = filter.artist else { continue }
-                conditions.append("t.artist_id = ?")
+                conditions.append("t.\(artistColumn(filter)) = ?")
                 values.append(artist)
             case .album:
                 guard let album = filter.album else { continue }
@@ -259,6 +270,11 @@ extension LibraryIndex {
     }
 }
 
+/// The column of tracks the Artist pane lists and its selection matches.
+private func artistColumn(_ filter: TrackFilter) -> String {
+    filter.groupByAlbumArtist ? "group_artist_id" : "artist_id"
+}
+
 private func whereClause(_ conditions: [String]) -> String {
     conditions.isEmpty ? "" : "WHERE " + conditions.joined(separator: " AND ")
 }
@@ -272,7 +288,12 @@ private let rowSelect = """
         t.track_number, t.disc_number, t.codec, t.sample_rate_hz, t.bits_per_sample,
         t.length_frames, pa.added_seconds, t.art_offset, t.art_byte_count, t.art_mime_type,
         t.art_unsynchronised, al_ar.name, p.play_count, p.skip_count, p.last_played_seconds,
-        r.rating
+        r.rating, t.track_total, t.disc_total, t.compilation, t.composer, t.comment, t.channels,
+        f.size_bytes, \(bitRateSQL), \(fileNameSQL), \(fileTypeSQL), f.created_seconds,
+        f.modified_seconds, t.grouping, t.catalog_number, t.barcode, t.bpm, t.musical_key,
+        t.conductor, t.lyricist, t.publisher, t.copyright, t.encoder, t.description,
+        t.disc_subtitle, t.work, t.movement_number, t.movement_name, t.original_date,
+        \(lovedSQL)
     FROM tracks t
     \(trackJoins)
     LEFT JOIN artists al_ar ON al_ar.id = al.artist_id
@@ -286,7 +307,7 @@ private func trackRow(_ row: Row) throws -> TrackRow {
             offset: offset, byteCount: try row.int(17), mimeType: try row.text(18),
             unsynchronised: try row.int(19) == 1)
     }
-    return TrackRow(
+    var track = TrackRow(
         id: try row.int64(0), path: path,
         title: row.optionalText(2) ?? displayName(path), artist: row.optionalText(3),
         album: row.optionalText(4), albumID: row.optionalInt(5).map(Int64.init),
@@ -298,6 +319,36 @@ private func trackRow(_ row: Row) throws -> TrackRow {
         addedSeconds: try row.double(15), art: art, playCount: row.optionalInt(21) ?? 0,
         skipCount: row.optionalInt(22) ?? 0, lastPlayedSeconds: row.optionalDouble(23),
         rating: row.optionalInt(24) ?? 0)
+    track.trackTotal = row.optionalInt(25)
+    track.discTotal = row.optionalInt(26)
+    track.compilation = try row.int(27) == 1
+    track.composer = row.optionalText(28)
+    track.comment = row.optionalText(29)
+    track.channels = try row.int(30)
+    track.sizeBytes = try row.int(31)
+    track.bitRateKbps = row.optionalDouble(32)
+    track.fileName = try row.text(33)
+    track.fileType = try row.text(34)
+    track.createdSeconds = row.optionalDouble(35)
+    track.modifiedSeconds = try row.double(36)
+    track.grouping = row.optionalText(37)
+    track.catalogNumber = row.optionalText(38)
+    track.barcode = row.optionalText(39)
+    track.bpm = row.optionalInt(40)
+    track.key = row.optionalText(41)
+    track.conductor = row.optionalText(42)
+    track.lyricist = row.optionalText(43)
+    track.publisher = row.optionalText(44)
+    track.copyright = row.optionalText(45)
+    track.encoder = row.optionalText(46)
+    track.description = row.optionalText(47)
+    track.discSubtitle = row.optionalText(48)
+    track.work = row.optionalText(49)
+    track.movementNumber = row.optionalInt(50)
+    track.movementName = row.optionalText(51)
+    track.originalDate = row.optionalText(52)
+    track.loved = try row.int(53) == 1
+    return track
 }
 
 private func entry(_ row: Row) throws -> BrowserEntry {

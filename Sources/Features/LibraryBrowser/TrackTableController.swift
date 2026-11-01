@@ -1,4 +1,5 @@
 import AppKit
+import Artwork
 import Commands
 import Library
 import Log
@@ -21,6 +22,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// A row fetch failed; reported once until the next reload.
     private var reportedFetchFailure = false
     private var typeSelect: TypeSelect? = TypeSelect()
+    private let art = RowArt()
 
     init(model: BrowserModel, cache: RowCache, layout: TrackTableLayout, actions: BrowserActions) {
         self.model = model
@@ -28,6 +30,10 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         self.actions = actions
         super.init(play: actions.play, playNext: actions.playNext)
         configure(layout)
+        art.isWanted = { [weak self] key in
+            self?.visibleRows().contains { self?.artKey($0) == key } ?? false
+        }
+        art.loaded = { [weak self] key, image in self?.show(image, for: key) }
     }
 
     private func configure(_ layout: TrackTableLayout) {
@@ -46,14 +52,18 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         for column in order {
             let tableColumn = NSTableColumn(identifier: columnIdentifier(column))
             tableColumn.title = column.title
-            tableColumn.width = layout.columns.first { $0.column == column }?.width ?? 100
+            tableColumn.width =
+                layout.columns.first { $0.column == column }?.width
+                ?? column.defaultWidth
             tableColumn.minWidth = TrackTableLayout.widthRange.lowerBound
             tableColumn.maxWidth = TrackTableLayout.widthRange.upperBound
             tableColumn.isHidden = !shown.contains(column)
             tableColumn.resizingMask =
                 column == .title ? [.autoresizingMask, .userResizingMask] : .userResizingMask
-            tableColumn.sortDescriptorPrototype = NSSortDescriptor(
-                key: column.rawValue, ascending: true)
+            if column.isSortable {
+                tableColumn.sortDescriptorPrototype = NSSortDescriptor(
+                    key: column.rawValue, ascending: true)
+            }
             if column.isNumeric { tableColumn.headerCell.alignment = .right }
             table.addTableColumn(tableColumn)
         }
@@ -124,12 +134,47 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     {
         guard let tableColumn, let column = TrackColumn(rawValue: tableColumn.identifier.rawValue)
         else { return nil }
+        if column == .art {
+            let cell =
+                tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
+                as? NSTableCellView ?? makeImageCell(tableColumn.identifier)
+            cell.imageView?.image = trackRow(row).flatMap { track in
+                track.art.flatMap { art.image($0, path: track.path) }.map {
+                    NSImage(cgImage: $0, size: .zero)
+                }
+            }
+            rowsDrawn()
+            return cell
+        }
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
             as? NSTableCellView ?? makeTextCell(tableColumn.identifier, numeric: column.isNumeric)
         cell.textField?.stringValue = trackRow(row).map { column.text($0, position: row) } ?? ""
         rowsDrawn()
         return cell
+    }
+
+    // MARK: Album art
+
+    /// The rows on screen, whose art is worth loading.
+    private func visibleRows() -> Range<Int> {
+        let rows = table.rows(in: table.visibleRect)
+        return rows.location..<min(rows.location + rows.length, model.trackIDs.count)
+    }
+
+    private func artKey(_ row: Int) -> ArtworkKey? {
+        guard let track = trackRow(row), let embedded = track.art else { return nil }
+        return ArtworkKey(path: track.path, offset: embedded.offset)
+    }
+
+    /// Puts a loaded thumbnail in each row on screen that shows its art.
+    private func show(_ image: CGImage, for key: ArtworkKey) {
+        let column = table.column(withIdentifier: columnIdentifier(.art))
+        guard column >= 0 else { return }
+        for row in visibleRows() where artKey(row) == key {
+            let cell = table.view(atColumn: column, row: row, makeIfNecessary: false)
+            (cell as? NSTableCellView)?.imageView?.image = NSImage(cgImage: image, size: .zero)
+        }
     }
 
     private func trackRow(_ index: Int) -> TrackRow? {
@@ -280,4 +325,23 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
 private func columnIdentifier(_ column: TrackColumn) -> NSUserInterfaceItemIdentifier {
     NSUserInterfaceItemIdentifier(column.rawValue)
+}
+
+/// A cell of one image, scaled down to fit the row.
+@MainActor
+private func makeImageCell(_ identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
+    let cell = NSTableCellView()
+    cell.identifier = identifier
+    let image = NSImageView()
+    image.imageScaling = .scaleProportionallyDown
+    image.translatesAutoresizingMaskIntoConstraints = false
+    cell.addSubview(image)
+    cell.imageView = image
+    NSLayoutConstraint.activate([
+        image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 1),
+        image.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -1),
+        image.topAnchor.constraint(equalTo: cell.topAnchor, constant: 1),
+        image.bottomAnchor.constraint(equalTo: cell.bottomAnchor, constant: -1),
+    ])
+    return cell
 }

@@ -8,6 +8,8 @@ struct ILSTItems {
 
 private enum ItemKind {
     case text(TagField)
+    /// A big-endian integer of 1 to 8 bytes, set as `TagField` text.
+    case integer(TagField)
     case track, disc, compilation
     /// The ID3v1 genre index plus one.
     case genreIndex
@@ -39,7 +41,25 @@ private let itemKinds: [String: ItemKind] = [
     MP4ItemType.composer: .text(.composer), MP4ItemType.comment: .text(.comment),
     MP4ItemType.track: .track, MP4ItemType.disc: .disc, MP4ItemType.compilation: .compilation,
     "gnre": .genreIndex, MP4ItemType.freeform: .freeform, "covr": .cover,
+    // Fields the tag writer doesn't edit, by MusicBrainz Picard's mapping (ADR 0006).
+    "\u{A9}grp": .text(.grouping), "cprt": .text(.copyright), "\u{A9}too": .text(.encoder),
+    "desc": .text(.description), "\u{A9}wrk": .text(.work), "\u{A9}mvn": .text(.movementName),
+    "tmpo": .integer(.bpm), "\u{A9}mvi": .integer(.movement),
 ]
+
+/// The `mean` of the iTunes freeform items.
+private let iTunesMean = "com.apple.iTunes"
+
+/// iTunes freeform item names, compared uppercased, and the fields they set.
+private let freeformFields: [String: TagField] = [
+    SharedTagName.catalogNumber: .catalogNumber, SharedTagName.barcode: .barcode,
+    "INITIALKEY": .key, SharedTagName.conductor: .conductor, SharedTagName.lyricist: .lyricist,
+    SharedTagName.label: .publisher, SharedTagName.discSubtitle: .discSubtitle,
+    SharedTagName.originalDate: .originalDate,
+]
+
+/// `data` atom type codes for integers: "implicit" and big-endian signed.
+private let integerTypes: Set<UInt32> = [0, 21]
 
 /// The item types the reader maps onto `field`, so a writer replaces exactly those.
 package func mp4ItemTypes(for field: TagField) -> Set<String> {
@@ -51,7 +71,7 @@ package func mp4ItemTypes(for field: TagField) -> Set<String> {
             case .disc: field == .disc ? type : nil
             case .compilation: field == .compilation ? type : nil
             case .genreIndex: field == .genre ? type : nil
-            case .freeform, .cover: nil
+            case .freeform, .cover, .integer: nil
             }
         })
 }
@@ -144,6 +164,14 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
     case .text(let field):
         let text = try text(value, type, at: offset, &reader.warnings)
         items.tags.set(field, text, at: offset, warnings: &reader.warnings)
+    case .integer(let field):
+        guard integerTypes.contains(type), (1...8).contains(value.count) else {
+            throw .malformed(
+                at: offset,
+                "MP4 '\(item.type)' isn't an integer (type \(type), \(value.count) bytes)")
+        }
+        let number = value.array.reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+        items.tags.set(field, String(number), at: offset, warnings: &reader.warnings)
     case .track, .disc:
         // Two reserved bytes, the number, the total, and for trkn two more reserved bytes.
         let number = Int(try value.uint16BE(2))
@@ -164,9 +192,14 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
         }
         items.tags.set(.genre, id3v1Genres[index], at: offset, warnings: &reader.warnings)
     case .freeform:
-        guard mean == "com.apple.iTunes", name == "iTunSMPB" else { return }
-        let text = try text(value, type, at: offset, &reader.warnings)
-        items.gaplessLength = try gaplessLength(text, at: offset)
+        guard mean == iTunesMean, let name else { return }
+        if name == "iTunSMPB" {
+            let text = try text(value, type, at: offset, &reader.warnings)
+            items.gaplessLength = try gaplessLength(text, at: offset)
+        } else if let field = freeformFields[name.uppercased()] {
+            let text = try text(value, type, at: offset, &reader.warnings)
+            items.tags.set(field, text, at: offset, warnings: &reader.warnings)
+        }
     case .cover:
         break
     }

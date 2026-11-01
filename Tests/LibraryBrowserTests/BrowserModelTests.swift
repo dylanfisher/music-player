@@ -13,7 +13,8 @@ private func loadedModel(
 ) async throws -> (BrowserModel, LibraryIndex) {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
-        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
     await model.load(saved)
     return (model, try LibraryIndex(at: databaseURL))
 }
@@ -85,7 +86,7 @@ private func loadedModel(
 
 @MainActor @Test func sortingReordersByTheColumn() async throws {
     let (model, index) = try await loadedModel()
-    for column in TrackColumn.allCases {
+    for column in TrackColumn.allCases where column.isSortable {
         await model.setSort(column, ascending: false)
         #expect(model.trackIDs == (try index.trackIDs(sortedBy: column, ascending: false)))
     }
@@ -176,7 +177,8 @@ private func loadedModel(
     let databaseURL = directory.appendingPathComponent("library.sqlite")
     _ = try LibraryIndex(at: databaseURL)
     let model = BrowserModel(
-        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
     var failures: [String] = []
     model.failed = { failures.append($0) }
     await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
@@ -187,4 +189,25 @@ private func loadedModel(
     #expect(failures.count == 1)
     #expect(model.sortColumn == .artist)
     #expect(model.ascending)
+}
+
+@MainActor @Test func groupingByAlbumArtistReloadsTheArtistPaneAndKeepsAnArtistListedInBoth()
+    async throws
+{
+    let (model, index) = try await loadedModel()
+    #expect(model.artists == (try index.artists()))
+    let grouped = try index.artists(TrackFilter(groupByAlbumArtist: true))
+    let kept = try #require(model.artists.first { grouped.contains($0) })
+    await model.select(.artist, id: kept.id)
+    await model.setGroupByAlbumArtist(true)
+    #expect(model.filter.groupByAlbumArtist)
+    #expect(model.artists == grouped)
+    #expect(model.filter.artist == kept.id)
+    #expect(
+        model.trackIDs
+            == (try index.trackIDs(
+                TrackFilter(artist: kept.id, groupByAlbumArtist: true), sortedBy: .artist)))
+    // Showing the whole library, as the palette does, keeps the grouping.
+    await model.showOnly(.genre, id: try #require(model.genres.first).id)
+    #expect(model.filter.groupByAlbumArtist)
 }

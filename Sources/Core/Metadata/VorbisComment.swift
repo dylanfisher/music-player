@@ -23,7 +23,13 @@ private let vorbisFields: [String: TagField] = [
     VorbisKey.date: .date, VorbisKey.trackNumber: .track, VorbisKey.trackTotal: .trackTotal,
     "TOTALTRACKS": .trackTotal, VorbisKey.discNumber: .disc, VorbisKey.discTotal: .discTotal,
     "TOTALDISCS": .discTotal, VorbisKey.compilation: .compilation,
-    VorbisKey.composer: .composer, VorbisKey.comment: .comment, "DESCRIPTION": .comment,
+    VorbisKey.composer: .composer, VorbisKey.comment: .comment, "GROUPING": .grouping,
+    SharedTagName.catalogNumber: .catalogNumber, SharedTagName.barcode: .barcode, "BPM": .bpm,
+    "KEY": .key, SharedTagName.conductor: .conductor, SharedTagName.lyricist: .lyricist,
+    SharedTagName.label: .publisher, "PUBLISHER": .publisher, "COPYRIGHT": .copyright,
+    "ENCODEDBY": .encoder, "DESCRIPTION": .description,
+    SharedTagName.discSubtitle: .discSubtitle, SharedTagName.work: .work, "MOVEMENT": .movement,
+    "MOVEMENTNAME": .movementName, SharedTagName.originalDate: .originalDate,
 ]
 
 /// The keys, uppercased, that the reader maps onto `field`, so a writer replaces exactly those.

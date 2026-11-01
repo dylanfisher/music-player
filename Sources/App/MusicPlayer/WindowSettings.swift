@@ -14,6 +14,7 @@ struct WindowSettings {
     var trackTable: TrackTableLayout
     var browser: BrowserState
     var folders: [WatchedFolder]
+    var groupByAlbumArtist: Bool
 
     @MainActor init(_ settings: ConfigStore<AppSettings>, state: StateStore<AppState>) {
         frame = state[\.windowFrame]
@@ -28,5 +29,6 @@ struct WindowSettings {
             source: state[\.source], genre: state[\.selectedGenre],
             artist: state[\.selectedArtist], album: state[\.selectedAlbum])
         folders = settings[\.watchedFolders]
+        groupByAlbumArtist = settings[\.groupByAlbumArtist]
     }
 }

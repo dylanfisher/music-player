@@ -71,11 +71,12 @@ public enum AppMenus {
                     .command(.newSmartPlaylist), .command(.editSmartPlaylist),
                     .command(.renamePlaylist), .command(.deletePlaylist), .separator,
                     .command(.addFolder), .setting(settings.pausePollingDuringPlayback.key),
+                    .setting(settings.groupByAlbumArtist.key),
                     .separator, .command(.revealInFinder), .command(.copyPath),
                     .command(.addToPlaylist), .separator, .command(.editTags),
                     .command(.undoTagEdit), .command(.replaceArtwork), .command(.removeArtwork),
                     .submenu("Rating", CommandID.rate.map(MenuEntry.command), showsChords: true),
-                    .separator,
+                    .command(.toggleLoved), .separator,
                     .standard(StandardItem("Close Window", "performClose:", KeyChord("w", cmd))),
                 ]),
             MenuSection(

@@ -23,6 +23,8 @@ public final class BrowserModel {
     public private(set) var genres: [BrowserEntry] = []
     public private(set) var artists: [BrowserEntry] = []
     public private(set) var albums: [BrowserEntry] = []
+    /// What the Album pane shows for each of `albums`.
+    private(set) var albumTitles: [String] = []
     public private(set) var trackIDs: [Int64] = []
     public private(set) var sortColumn: TrackColumn
     public private(set) var ascending: Bool
@@ -56,11 +58,29 @@ public final class BrowserModel {
     /// Entries of the shown manual playlist with no track in the library, which it can't list.
     private(set) var missingTracks = 0
 
-    public init(reader: LibraryReader, sortColumn: TrackColumn, ascending: Bool) {
+    /// `groupByAlbumArtist` is `library.groupByAlbumArtist`.
+    public init(
+        reader: LibraryReader, sortColumn: TrackColumn, ascending: Bool, groupByAlbumArtist: Bool
+    ) {
         self.reader = reader
         self.sortColumn = sortColumn
         self.ascending = ascending
         pendingSort = (sortColumn, ascending)
+        filter.groupByAlbumArtist = groupByAlbumArtist
+        pending = filter
+    }
+
+    /// No source, panes or search, grouped as the setting says.
+    private var everything: TrackFilter {
+        TrackFilter(groupByAlbumArtist: pending.groupByAlbumArtist)
+    }
+
+    /// Follows a change of `library.groupByAlbumArtist`: the Artist pane lists the other kind
+    /// of artist, keeping its selection where the same artist is listed.
+    public func setGroupByAlbumArtist(_ on: Bool) async {
+        guard on != pending.groupByAlbumArtist else { return }
+        pending.groupByAlbumArtist = on
+        await reload(panesFrom: .artist, reason: .user)
     }
 
     /// The selections the window saves, by name.
@@ -86,7 +106,9 @@ public final class BrowserModel {
             failed("couldn't read the playlists: \(error)")
         }
         history = SourceHistory(start: saved.source)
-        pending = TrackFilter(source: saved.source, search: pending.search)
+        pending = TrackFilter(
+            source: saved.source, search: pending.search,
+            groupByAlbumArtist: pending.groupByAlbumArtist)
         await reload(panesFrom: .genre, saved: saved, reason: .loaded)
     }
 
@@ -207,6 +229,11 @@ public final class BrowserModel {
         await refresh()
     }
 
+    func toggleLoved(_ trackIDs: [Int64]) async throws {
+        try await reader.toggleLoved(trackIDs: trackIDs)
+        await refresh()
+    }
+
     public func recordPlay(_ path: String, at seconds: Double) async throws {
         try await reader.recordPlay(path, at: seconds)
         await refresh()
@@ -269,7 +296,7 @@ public final class BrowserModel {
         if let row = trackIDs.firstIndex(of: id) { return row }
         pendingVisit = .some(nil)
         changeSort(from: pending.source, to: nil)
-        pending = TrackFilter()
+        pending = everything
         await reload(panesFrom: .genre, reason: .user)
         return trackIDs.firstIndex(of: id)
     }
@@ -279,7 +306,7 @@ public final class BrowserModel {
     public func showOnly(_ pane: Pane, id: Int64) async {
         pendingVisit = .some(nil)
         changeSort(from: pending.source, to: nil)
-        pending = TrackFilter()
+        pending = everything
         switch pane {
         case .genre: pending.genre = id
         case .artist: pending.artist = id
@@ -290,7 +317,7 @@ public final class BrowserModel {
 
     /// Every genre, artist and album in the library, for the palette.
     public func allEntries() async throws -> [(Pane, BrowserEntry)] {
-        let all = TrackFilter()
+        let all = everything
         let genres = try await reader.genres(all).map { (Pane.genre, $0) }
         let artists = try await reader.artists(all).map { (Pane.artist, $0) }
         let albums = try await reader.albums(all).map { (Pane.album, $0) }
@@ -424,6 +451,7 @@ public final class BrowserModel {
             self.genres = genres
             self.artists = artists
             self.albums = albums
+            albumTitles = Library.albumTitles(albums)
             trackIDs = ids
             applied += 1
             changed(BrowserChange(reason: reason, panes: first != nil, previousIDs: previousIDs))

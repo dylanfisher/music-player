@@ -24,7 +24,8 @@ private func writableModel(
             atPath: source.path + suffix, toPath: databaseURL.path + suffix)
     }
     let model = BrowserModel(
-        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
     await model.load(saved)
     return (model, try LibraryIndex(at: databaseURL))
 }

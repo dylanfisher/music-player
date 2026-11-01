@@ -6,11 +6,13 @@ public let audioFileExtensions: Set<String> = [
     "flac", "m4a", "mp4", "mp3", "wav", "aif", "aiff", "aifc",
 ]
 
-/// An audio file the walk found, with its size and mtime from the directory listing.
+/// An audio file the walk found, with its size and dates from the directory listing.
 struct WalkedFile: Sendable {
     var path: String
     var sizeBytes: Int
     var modifiedSeconds: Double
+    /// Nil when the volume doesn't keep creation dates.
+    var createdSeconds: Double? = nil
 }
 
 /// What listing one directory found.
@@ -29,7 +31,7 @@ struct DirectoryListing {
 /// on SMB a directory costs a round trip per batch of entries rather than one per file.
 private let walkKeys: [URLResourceKey] = [
     .isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey,
-    .contentModificationDateKey,
+    .contentModificationDateKey, .creationDateKey,
 ]
 private let walkKeySet = Set(walkKeys)
 
@@ -93,8 +95,8 @@ func list(
             }
             result.files.append(
                 WalkedFile(
-                    path: path, sizeBytes: size,
-                    modifiedSeconds: modified.timeIntervalSince1970))
+                    path: path, sizeBytes: size, modifiedSeconds: modified.timeIntervalSince1970,
+                    createdSeconds: values.creationDate?.timeIntervalSince1970))
         }
     }
     return result

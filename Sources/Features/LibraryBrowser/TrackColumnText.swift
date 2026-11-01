@@ -7,41 +7,107 @@ extension TrackColumn {
     /// Numbers line up on the right.
     var isNumeric: Bool {
         switch self {
-        case .trackNumber, .discNumber, .year, .duration, .sampleRate, .bitDepth, .playCount,
-            .skipCount, .playlistOrder:
+        case .rowNumber, .trackNumber, .trackTotal, .trackOfTotal, .discNumber, .discTotal,
+            .discOfTotal, .year, .duration, .sampleRate, .bitDepth, .bitRate, .channels, .size,
+            .bpm, .movementNumber, .playCount, .skipCount, .playlistOrder:
             true
         default: false
         }
     }
 
+    /// The width a column gets when it's first shown from the header's menu, in points: enough
+    /// for a typical value, so the owner's sixteen columns fit beside the sidebar and the queue
+    /// on a 1440-point screen.
+    var defaultWidth: Double {
+        switch self {
+        case .art: 18
+        case .rowNumber: 30
+        case .trackNumber, .discNumber, .year, .channels, .bpm, .playCount, .skipCount, .loved,
+            .compilation:
+            34
+        case .duration, .trackTotal, .discTotal, .movementNumber, .bitDepth, .playlistOrder: 40
+        case .trackOfTotal, .discOfTotal: 46
+        case .size, .codec, .fileType: 48
+        case .sampleRate, .rating: 50
+        case .bitRate: 55
+        case .dateAdded, .dateCreated, .dateModified, .lastPlayed: 86
+        case .artist, .album, .albumArtist, .composer, .conductor, .lyricist, .publisher: 90
+        case .title, .fileName, .path, .comment, .description, .work, .movementName: 116
+        default: 64
+        }
+    }
+
     /// What the column shows for `row`, the table's row `position`. Empty where the tags and
-    /// stats say nothing.
+    /// stats say nothing, and for Album Art, which is an image.
     @MainActor func text(_ row: TrackRow, position: Int) -> String {
         switch self {
+        // The row's place in the list, which is the playlist's order when sorted by it.
+        case .rowNumber, .playlistOrder: String(position + 1)
+        case .art: ""
         case .title: row.title
         case .artist: row.artist ?? ""
         case .album: row.album ?? ""
         case .albumArtist: row.albumArtist ?? ""
-        case .trackNumber: row.trackNumber.map(String.init) ?? ""
-        case .discNumber: row.discNumber.map(String.init) ?? ""
-        case .year: row.year.map(String.init) ?? ""
+        case .composer: row.composer ?? ""
+        case .conductor: row.conductor ?? ""
+        case .lyricist: row.lyricist ?? ""
+        case .grouping: row.grouping ?? ""
+        case .work: row.work ?? ""
+        case .movementNumber: number(row.movementNumber)
+        case .movementName: row.movementName ?? ""
         case .genre: row.genre ?? ""
+        case .year: number(row.year)
+        case .originalDate: row.originalDate ?? ""
+        case .trackNumber: number(row.trackNumber)
+        case .trackTotal: number(row.trackTotal)
+        case .trackOfTotal: ofTotal(row.trackNumber, row.trackTotal)
+        case .discNumber: number(row.discNumber)
+        case .discTotal: number(row.discTotal)
+        case .discOfTotal: ofTotal(row.discNumber, row.discTotal)
+        case .discSubtitle: row.discSubtitle ?? ""
+        case .compilation: row.compilation ? "Yes" : ""
         case .duration: clock(row.durationSeconds)
+        case .bpm: number(row.bpm)
+        case .key: row.key ?? ""
         case .codec: row.codec.uppercased()
+        case .fileType: row.fileType
+        case .bitRate: row.bitRateKbps.map { "\(Int($0.rounded())) kbps" } ?? ""
         case .sampleRate: "\(kilohertz(Double(row.sampleRateHz))) kHz"
-        case .bitDepth: row.bitsPerSample.map(String.init) ?? ""
-        case .dateAdded: dateFormat.string(from: Date(timeIntervalSince1970: row.addedSeconds))
+        case .bitDepth: number(row.bitsPerSample)
+        case .channels: String(row.channels)
+        case .size:
+            ByteCountFormatter.string(fromByteCount: Int64(row.sizeBytes), countStyle: .file)
+        case .fileName: row.fileName
         case .path: row.path
+        case .dateAdded: date(row.addedSeconds)
+        case .dateCreated: row.createdSeconds.map(date) ?? ""
+        case .dateModified: date(row.modifiedSeconds)
         case .playCount: row.playCount > 0 ? String(row.playCount) : ""
         case .skipCount: row.skipCount > 0 ? String(row.skipCount) : ""
-        case .lastPlayed:
-            row.lastPlayedSeconds.map { dateFormat.string(from: Date(timeIntervalSince1970: $0)) }
-                ?? ""
+        case .lastPlayed: row.lastPlayedSeconds.map(date) ?? ""
         case .rating: stars(row.rating)
-        // The row's place in the list, which is the playlist's order when sorted by it.
-        case .playlistOrder: String(position + 1)
+        case .loved: row.loved ? "\u{2665}" : ""
+        case .publisher: row.publisher ?? ""
+        case .catalogNumber: row.catalogNumber ?? ""
+        case .barcode: row.barcode ?? ""
+        case .copyright: row.copyright ?? ""
+        case .encoder: row.encoder ?? ""
+        case .comment: row.comment ?? ""
+        case .description: row.description ?? ""
         }
     }
+}
+
+private func number(_ value: Int?) -> String { value.map(String.init) ?? "" }
+
+/// "3 of 12", "3" without a total, and nothing without a number.
+private func ofTotal(_ number: Int?, _ total: Int?) -> String {
+    guard let number else { return "" }
+    return total.map { "\(number) of \($0)" } ?? String(number)
+}
+
+@MainActor private func date(_ seconds: Double) -> String {
+    dateFormat.string(from: Date(timeIntervalSince1970: seconds))
 }
 
 /// Dates and times as the table shows them: short, in the user's locale.

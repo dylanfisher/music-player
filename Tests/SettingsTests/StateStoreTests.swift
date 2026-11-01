@@ -251,6 +251,10 @@ private func problems(_ json: String) -> [SettingProblem] {
         sortColumn: .title, sortAscending: true)
     #expect(wide.problem()?.contains("width") == true)
     #expect(twice.problem() == "columns[1]: title is listed twice")
+    let byRowNumber = TrackTableLayout(
+        columns: [ColumnLayout(column: .rowNumber, width: 40)], sortColumn: .rowNumber,
+        sortAscending: true)
+    #expect(byRowNumber.problem() == "sortColumn: rowNumber can't be sorted by")
 }
 
 @Test func windowLayoutRejectsUnknownKeysAtEveryLevel() throws {

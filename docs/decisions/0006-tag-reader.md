@@ -55,10 +55,49 @@ codec, rate, bit depth, channels, length in frames, and art as offset, length an
 
 Not read: DSF (phase 12), Ogg, APE, WavPack, RF64; ID3v1 and APE tags at the end of an MP3, an
 ID3v2 tag in front of FLAC, a second ID3v2 tag in a row; AIFF `NAME`/`AUTH`/`ANNO`; RIFF `bext`;
-MP4 freeform items other than `iTunSMPB`, ID3 `TXXX`; compressed or encrypted ID3 frames,
+MP4 freeform items and ID3 `TXXX` frames the table below doesn't name; compressed or encrypted ID3 frames,
 which are skipped with a warning; MPEG Layer I and II; fragmented MP4. LAME's
 encoder delay is counted in an MP3's length, AAC without `iTunSMPB` includes priming, and HE-AAC
 reports its core rate.
+
+### Fields added in phase 16
+
+Each format's key follows MusicBrainz Picard's tag mapping table, written from memory without
+the table to hand; the keys marked † are the ones to check against it. Vorbis keys, `TXXX`
+descriptions and freeform names compare uppercased. Freeform items are `----` with the `mean`
+`com.apple.iTunes`. ID3v2.2 reads the three-letter forms of the 2.3 frames (`TT1`, `TBP`,
+`TKE`, `TP3`, `TXT`, `TPB`, `TCR`, `TEN`, `TOR`, `TXX`). A field a file doesn't hold is empty.
+
+| Field | Vorbis | ID3v2.3 and 2.4 | MP4 | RIFF INFO |
+|---|---|---|---|---|
+| grouping | `GROUPING` | `GRP1`, else `TIT1` † | `©grp` | |
+| catalog number | `CATALOGNUMBER` | `TXXX:CATALOGNUMBER` | `----:CATALOGNUMBER` | |
+| barcode | `BARCODE` | `TXXX:BARCODE` | `----:BARCODE` | |
+| BPM | `BPM` | `TBPM` | `tmpo` (integer) | |
+| key | `KEY` | `TKEY` | `----:initialkey` | |
+| conductor | `CONDUCTOR` | `TPE3` | `----:CONDUCTOR` | |
+| lyricist | `LYRICIST` | `TEXT` | `----:LYRICIST` | |
+| publisher (label) | `LABEL`, `PUBLISHER` † | `TPUB` | `----:LABEL` | |
+| copyright | `COPYRIGHT` | `TCOP` | `cprt` | `ICOP` |
+| encoder (Picard's "encoded by") | `ENCODEDBY` † | `TENC` † | `©too` | |
+| description | `DESCRIPTION` † | not read † | `desc` † | |
+| disc subtitle | `DISCSUBTITLE` | `TSST`, `TXXX:DISCSUBTITLE` † | `----:DISCSUBTITLE` | |
+| work | `WORK` | `TXXX:WORK` † | `©wrk` | |
+| movement number | `MOVEMENT` | `MVIN` | `©mvi` (integer) | |
+| movement name | `MOVEMENTNAME` | `MVNM` | `©mvn` | |
+| original release date | `ORIGINALDATE` | `TDOR`, `TORY` (2.3's year) | `----:ORIGINALDATE` | |
+
+- **Grouping.** `GRP1` wins over `TIT1` wherever it is: iTunes 12.5 and Picard's iTunes option
+  write the grouping to `GRP1` and the work to `TIT1`. `TIT1` isn't read as the work, since
+  without `GRP1` it is the grouping.
+- **Description** was read as the comment where the comment was missing; it's a field of its
+  own now, so a Vorbis `DESCRIPTION` no longer shows as the comment, and editing the comment
+  no longer replaces it. Picard maps no ID3 or INFO key to it.
+- **Encoder** is who or what encoded the file as the tagger names it. `TSSE`, `ENCODERSETTINGS`
+  and INFO's `ISFT` (Picard's "encoder settings") aren't read, nor is INFO's `ITCH`.
+- **Numbers.** BPM reads whole or decimal text and rounds it; movement numbers read like track
+  numbers, and the movement total isn't kept. MP4's `tmpo` and `©mvi` are 1- to 8-byte
+  big-endian integers (data type 0 or 21); any other type skips the item with a warning.
 
 ## Alternatives considered
 

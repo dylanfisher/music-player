@@ -15,4 +15,25 @@ public struct TrackTags: Equatable, Sendable {
     public var compilation = false
     public var composer: String?
     public var comment: String?
+    public var grouping: String?
+    public var catalogNumber: String?
+    public var barcode: String?
+    /// Beats per minute, rounded to a whole number.
+    public var bpm: Int?
+    /// The musical key as written, such as "Am" or "8A".
+    public var key: String?
+    public var conductor: String?
+    public var lyricist: String?
+    /// The record label.
+    public var publisher: String?
+    public var copyright: String?
+    /// Who or what encoded the file, as the tagger stored it.
+    public var encoder: String?
+    public var description: String?
+    public var discSubtitle: String?
+    public var work: String?
+    public var movementNumber: Int?
+    public var movementName: String?
+    /// As written, like `date`.
+    public var originalDate: String?
 }

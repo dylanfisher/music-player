@@ -31,6 +31,7 @@ public struct TrackTableLayout: SettingValue {
 
     public func problem() -> String? {
         if columns.isEmpty { return "columns is empty; the table needs at least one" }
+        if !sortColumn.isSortable { return "sortColumn: \(sortColumn.rawValue) can't be sorted by" }
         var seen: Set<TrackColumn> = []
         for (index, layout) in columns.enumerated() {
             if !seen.insert(layout.column).inserted {

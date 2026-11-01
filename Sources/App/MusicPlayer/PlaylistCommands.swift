@@ -39,6 +39,9 @@ extension AppDelegate {
         dispatcher.handle(.addToPlaylist, enabled: canAdd) { [weak self] in
             self?.chooseManualPlaylist()
         }
+        dispatcher.handle(.toggleLoved, enabled: hasSelectedTracks) { [weak self] in
+            self?.browser?.toggleLovedSelection()
+        }
         for (stars, id) in CommandID.rate.enumerated() {
             dispatcher.handle(id, enabled: hasSelectedTracks) { [weak self] in
                 self?.browser?.rateSelection(stars)

@@ -188,7 +188,7 @@ let libraryBenchmarks = [
         let index = try scannedLibrary.get().index
         var runs: [() throws -> Void] = []
         for _ in 0..<3 {
-            for column in TrackColumn.allCases {
+            for column in TrackColumn.allCases where column.isSortable {
                 for ascending in [true, false] {
                     runs.append { _ = try index.trackIDs(sortedBy: column, ascending: ascending) }
                 }

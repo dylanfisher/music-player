@@ -5,10 +5,11 @@ package let riffFormID = "RIFF"
 package let wavAudioChunkID = "data"
 let wavFormType = "WAVE"
 
-/// `LIST/INFO` fields and what they set. INFO has no album artist, totals or compilation flag.
+/// `LIST/INFO` fields and what they set. INFO has no album artist, totals or compilation flag,
+/// and of the fields added since only a copyright.
 private let infoFields: [String: TagField] = [
     "INAM": .title, "IART": .artist, "IPRD": .album, "IGNR": .genre, "ICRD": .date,
-    "ITRK": .track, "IPRT": .track, "ICMT": .comment,
+    "ITRK": .track, "IPRT": .track, "ICMT": .comment, "ICOP": .copyright,
 ]
 
 private let formatTags: [UInt16: String] = [1: "integer PCM", 3: "floating-point PCM"]

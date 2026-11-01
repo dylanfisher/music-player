@@ -19,11 +19,11 @@ private func value(_ word: String) -> String {
     word == plainWord ? "\(word) plain" : "\(word) a\(hostile.first { $0.word == word }!.text)b"
 }
 
-/// A FLAC file with STREAMINFO and a Vorbis comment, which is all the scan reads. Built here
-/// because Fixtures' `flacFile` writes only `FixtureTags`, which has no composer, and
-/// MetadataTests' `flac(_:)` is in a test target this one can't import; Fixtures' byte helpers
-/// do the packing.
-private func flac(tags: [String: String]) -> Data {
+/// A FLAC file with STREAMINFO, a Vorbis comment and, given one, a front cover, which is all
+/// the scan reads. Built here because Fixtures' `flacFile` writes only `FixtureTags`, which has
+/// no composer, and MetadataTests' `flac(_:)` is in a test target this one can't import;
+/// Fixtures' byte helpers do the packing.
+func taggedFLAC(tags: [String: String], cover: Data? = nil) -> Data {
     var file = Data()
     file.append(ascii: flacMarker)
     file.append(0)
@@ -40,9 +40,22 @@ private func flac(tags: [String: String]) -> Data {
         comment.appendLittleEndian(UInt32("\(key)=\(value)".utf8.count))
         comment.append(ascii: "\(key)=\(value)")
     }
-    file.append(0x84)
+    file.append(cover == nil ? 0x84 : 0x04)
     file.appendUInt24(comment.count)
-    return file + comment + Data([0xFF, 0xF8, 0, 0])
+    file += comment
+    if let cover {
+        var picture = Data()
+        picture.appendBigEndian(UInt32(3))
+        picture.appendBigEndian(UInt32(9))
+        picture.append(ascii: "image/png")
+        picture.append(Data(count: 20))
+        picture.appendBigEndian(UInt32(cover.count))
+        picture += cover
+        file.append(0x86)
+        file.appendUInt24(picture.count)
+        file += picture
+    }
+    return file + Data([0xFF, 0xF8, 0, 0])
 }
 
 /// A library of one file per hostile text and one plain file. The hostile text is in every text
@@ -57,9 +70,12 @@ private func hostileLibrary() throws -> LibraryIndex {
         let tags = Dictionary(
             uniqueKeysWithValues: [
                 "TITLE", "ARTIST", "ALBUM", "ALBUMARTIST", "GENRE", "COMPOSER", "COMMENT",
+                "GROUPING", "CATALOGNUMBER", "BARCODE", "KEY", "CONDUCTOR", "LYRICIST", "LABEL",
+                "COPYRIGHT", "ENCODEDBY", "DESCRIPTION", "DISCSUBTITLE", "WORK", "MOVEMENTNAME",
+                "ORIGINALDATE",
             ].map { ($0, text) })
         let name = text.count > 200 ? word : text
-        try flac(tags: tags).write(to: root.appendingPathComponent("\(name).flac"))
+        try taggedFLAC(tags: tags).write(to: root.appendingPathComponent("\(name).flac"))
     }
     let databaseURL = directory.appendingPathComponent("library.sqlite")
     let summary = try LibraryScanner(databaseURL: databaseURL).scan(
@@ -105,6 +121,8 @@ private func expected(
             switch field {
             case .path: Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.path) })
             case .codec: Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.codec) })
+            case .fileName: Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.fileName) })
+            case .fileType: Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.fileType) })
             default: tagValues
             }
         for (word, text) in hostile {
@@ -165,7 +183,7 @@ private func expected(
         .appendingPathComponent("hostile-\(UUID().uuidString)")
     let root = directory.appendingPathComponent("Music")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    let good = flac(tags: ["TITLE": "good"])
+    let good = taggedFLAC(tags: ["TITLE": "good"])
     var oversized = good
     oversized[oversized.startIndex + 5...oversized.startIndex + 7] = Data([0xFF, 0xFF, 0xFF])
     let hostileFiles: [(String, Data)] = [
@@ -201,7 +219,7 @@ private func expected(
     let root = directory.appendingPathComponent("Music")
     let locked = root.appendingPathComponent("zz locked")
     try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
-    try flac(tags: ["TITLE": "kept"]).write(to: locked.appendingPathComponent("kept.flac"))
+    try taggedFLAC(tags: ["TITLE": "kept"]).write(to: locked.appendingPathComponent("kept.flac"))
     let links = ScanPipeline.maximumIssues + 50
     for number in 0..<links {
         #expect(symlink("/nowhere", root.appendingPathComponent("link \(number)").path) == 0)

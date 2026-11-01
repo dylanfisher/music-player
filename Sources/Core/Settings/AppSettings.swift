@@ -29,6 +29,11 @@ public struct AppSettings: SettingsSchema {
         range: networkScanReadersRange,
         "Files a scan of a network folder reads at once. Null tunes the number to the network"
             + " and NAS while each scan runs.")
+    public let groupByAlbumArtist = Setting(
+        "library.groupByAlbumArtist", title: "Group by Album Artist", default: true,
+        "List album artists in the Artist pane, with the track artist where a track has none and"
+            + " compilations without one under Various Artists, and sort by Artist or Album with"
+            + " each album's tracks together. Off lists every track artist.")
     public let appearance = Setting(
         "appearance", title: "Appearance", default: Appearance.auto,
         "Light or dark windows. Auto follows the system's setting as it changes.")

@@ -62,6 +62,11 @@ public final class Statement {
 
     /// Runs a statement that returns no rows.
     public func run(_ values: (any SQLiteValue)?...) throws(SQLiteError) {
+        try run(binding: values)
+    }
+
+    /// `run` with the values as a list, for a statement with too many to list as arguments.
+    public func run(binding values: [(any SQLiteValue)?]) throws(SQLiteError) {
         try start(values)
         defer { sqlite3_reset(statement) }
         while try step() {}

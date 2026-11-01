@@ -12,15 +12,19 @@ public struct TrackFilter: Equatable, Sendable {
     /// What was typed in the search field. Words match the starts of words in the title, artist,
     /// album, album artist, genre or composer.
     public var search: String
+    /// `library.groupByAlbumArtist`: the Artist pane and `artist` name the album artist, and
+    /// sorts by Artist or Album keep each album's tracks together.
+    public var groupByAlbumArtist: Bool
 
     public init(
         source: BrowserSource? = nil, genre: Int64? = nil, artist: Int64? = nil,
-        album: Int64? = nil, search: String = ""
+        album: Int64? = nil, search: String = "", groupByAlbumArtist: Bool = false
     ) {
         self.source = source
         self.genre = genre
         self.artist = artist
         self.album = album
         self.search = search
+        self.groupByAlbumArtist = groupByAlbumArtist
     }
 }

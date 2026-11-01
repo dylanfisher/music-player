@@ -186,6 +186,19 @@ extension LibraryIndex {
         }
     }
 
+    /// Loves the tracks `ids`, or unloves them when every one of them is loved already.
+    public func toggleLoved(trackIDs ids: [Int64]) throws {
+        try database.transaction {
+            let isLoved = try statement("SELECT 1 FROM \(lovedTable) WHERE path_id = ?")
+            let allLoved = try ids.allSatisfy { !(try isLoved.map($0, row: { _ in () })).isEmpty }
+            let write =
+                allLoved
+                ? try statement("DELETE FROM \(lovedTable) WHERE path_id = ?")
+                : try statement("INSERT OR IGNORE INTO \(lovedTable) (path_id) VALUES (?)")
+            for id in ids { try write.run(id) }
+        }
+    }
+
     // MARK: The play timeline
 
     /// Up to `limit` plays logged before the play `id`, or the latest for nil, newest first.

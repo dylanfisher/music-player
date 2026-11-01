@@ -87,6 +87,10 @@ public actor LibraryReader {
         try index.setRating(stars, trackIDs: trackIDs)
     }
 
+    public func toggleLoved(trackIDs: [Int64]) throws {
+        try index.toggleLoved(trackIDs: trackIDs)
+    }
+
     public func timeline(before id: Int64?, limit: Int) throws -> [PlayEntry] {
         try index.timeline(before: id, limit: limit)
     }

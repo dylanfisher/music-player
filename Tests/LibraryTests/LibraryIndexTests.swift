@@ -123,7 +123,7 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     let index = try library.index()
     let all = Set(try index.trackIDs(sortedBy: .path))
     #expect(all.count == library.readableCount)
-    for column in TrackColumn.allCases {
+    for column in TrackColumn.allCases where column.isSortable {
         for ascending in [true, false] {
             let ids = try index.trackIDs(sortedBy: column, ascending: ascending)
             #expect(ids.count == all.count && Set(ids) == all, "\(column)")

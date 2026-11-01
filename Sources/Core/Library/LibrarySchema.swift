@@ -10,11 +10,24 @@ enum SchemaPart: String, CaseIterable {
     /// The paths' permanent IDs, plays, ratings, history and playlists, which no scan can
     /// recreate. Keyed by path ID (ADR 0022), so a rebuilt index finds them again.
     case stats
+    /// Loved tracks, also keyed by path ID. A part of its own, so its shape can change without
+    /// discarding the other stats (ADR 0031).
+    case loved
 
     var sql: String {
         switch self {
         case .index: indexSchema
         case .stats: statsSchema
+        case .loved: lovedSchema
+        }
+    }
+
+    /// The tables the part creates; nil for the index, which is every table no other part names.
+    var tables: Set<String>? {
+        switch self {
+        case .index: nil
+        case .stats: statsTables
+        case .loved: [lovedTable]
         }
     }
 }
@@ -31,14 +44,20 @@ let statsTables: Set<String> = [
     "paths", "plays", "ratings", "history", "playlists", "playlist_entries",
 ]
 
+let lovedTable = "loved"
+
 private let indexSchema = """
     CREATE TABLE files (
         -- The path's ID in paths, which an index rebuild keeps.
         id INTEGER PRIMARY KEY REFERENCES paths (id),
         path TEXT NOT NULL UNIQUE,
+        -- Where the file name starts in path, in characters from 1, as substr counts them.
+        name_offset INTEGER NOT NULL,
         size_bytes INTEGER NOT NULL,
         -- Seconds since 1970, compared exactly with the walk's value to skip unchanged files.
         modified_seconds REAL NOT NULL,
+        -- Seconds since 1970, from the walk; NULL when the volume doesn't say.
+        created_seconds REAL,
         -- Set when the file couldn't be read; MetadataError.Kind's raw value.
         failure_kind TEXT,
         failure_offset INTEGER,
@@ -70,6 +89,9 @@ private let indexSchema = """
         sort_title TEXT NOT NULL,
         artist_id INTEGER REFERENCES artists (id),
         album_artist_id INTEGER REFERENCES artists (id),
+        -- The artist the Artist pane lists the track under when grouping by album artist: the
+        -- album artist, else Various Artists for a compilation, else the track artist.
+        group_artist_id INTEGER REFERENCES artists (id),
         album_id INTEGER REFERENCES albums (id),
         genre_id INTEGER REFERENCES genres (id),
         date TEXT,
@@ -80,6 +102,22 @@ private let indexSchema = """
         compilation INTEGER NOT NULL,
         composer TEXT,
         comment TEXT,
+        grouping TEXT,
+        catalog_number TEXT,
+        barcode TEXT,
+        bpm INTEGER,
+        musical_key TEXT,
+        conductor TEXT,
+        lyricist TEXT,
+        publisher TEXT,
+        copyright TEXT,
+        encoder TEXT,
+        description TEXT,
+        disc_subtitle TEXT,
+        work TEXT,
+        movement_number INTEGER,
+        movement_name TEXT,
+        original_date TEXT,
         codec TEXT NOT NULL,
         sample_rate_hz INTEGER NOT NULL,
         bits_per_sample INTEGER,
@@ -94,6 +132,8 @@ private let indexSchema = """
     CREATE INDEX tracks_artist_album ON tracks (artist_id, album_id);
     CREATE INDEX tracks_album ON tracks (album_id);
     CREATE INDEX tracks_album_artist ON tracks (album_artist_id);
+    CREATE INDEX tracks_genre_group_artist ON tracks (genre_id, group_artist_id);
+    CREATE INDEX tracks_group_artist_album ON tracks (group_artist_id, album_id);
     CREATE TABLE warnings (
         file_id INTEGER NOT NULL REFERENCES files (id) ON DELETE CASCADE,
         -- MetadataWarning.Kind's raw value.
@@ -154,4 +194,11 @@ private let statsSchema = """
         PRIMARY KEY (playlist_id, path_id)
     );
     CREATE INDEX playlist_entries_order ON playlist_entries (playlist_id, position);
+    """
+
+private let lovedSchema = """
+    -- A row for each loved path; none means not loved.
+    CREATE TABLE \(lovedTable) (
+        path_id INTEGER PRIMARY KEY REFERENCES paths (id)
+    );
     """

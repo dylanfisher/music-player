@@ -8,6 +8,25 @@ package enum TagField: String, CaseIterable, Sendable {
     case trackTotal, discTotal
     /// "1" or "0".
     case compilation
+    case grouping, catalogNumber, barcode, key, conductor, lyricist, publisher, copyright,
+        encoder, description, discSubtitle, work, movementName, originalDate
+    /// "128" or "127.9".
+    case bpm
+    /// "2" or "2/4"; the total isn't kept.
+    case movement
+}
+
+/// Names that Vorbis comment keys, ID3 `TXXX` descriptions and MP4 freeform `name` atoms spell
+/// alike in MusicBrainz Picard's tag mapping, compared uppercased (ADR 0006).
+enum SharedTagName {
+    static let catalogNumber = "CATALOGNUMBER"
+    static let barcode = "BARCODE"
+    static let conductor = "CONDUCTOR"
+    static let lyricist = "LYRICIST"
+    static let label = "LABEL"
+    static let discSubtitle = "DISCSUBTITLE"
+    static let work = "WORK"
+    static let originalDate = "ORIGINALDATE"
 }
 
 extension TrackTags {
@@ -39,6 +58,23 @@ extension TrackTags {
         case .date: date = date ?? text
         case .composer: composer = composer ?? text
         case .comment: comment = comment ?? text
+        case .grouping: grouping = grouping ?? text
+        case .catalogNumber: catalogNumber = catalogNumber ?? text
+        case .barcode: barcode = barcode ?? text
+        case .key: key = key ?? text
+        case .conductor: conductor = conductor ?? text
+        case .lyricist: lyricist = lyricist ?? text
+        case .publisher: publisher = publisher ?? text
+        case .copyright: copyright = copyright ?? text
+        case .encoder: encoder = encoder ?? text
+        case .description: description = description ?? text
+        case .discSubtitle: discSubtitle = discSubtitle ?? text
+        case .work: work = work ?? text
+        case .movementName: movementName = movementName ?? text
+        case .originalDate: originalDate = originalDate ?? text
+        case .bpm: bpm = bpm ?? beatsPerMinute(text, at: offset, &warnings)
+        case .movement:
+            movementNumber = movementNumber ?? numberPair(text, field, at: offset, &warnings).0
         case .track:
             let (number, total) = numberPair(text, field, at: offset, &warnings)
             trackNumber = trackNumber ?? number
@@ -66,15 +102,24 @@ extension TrackTags {
 
     /// Fields this lacks, taken from `other`.
     func filling(from other: TrackTags) -> TrackTags {
-        TrackTags(
-            title: title ?? other.title, artist: artist ?? other.artist,
-            album: album ?? other.album, albumArtist: albumArtist ?? other.albumArtist,
-            genre: genre ?? other.genre, date: date ?? other.date,
-            trackNumber: trackNumber ?? other.trackNumber,
-            trackTotal: trackTotal ?? other.trackTotal,
-            discNumber: discNumber ?? other.discNumber, discTotal: discTotal ?? other.discTotal,
-            compilation: compilation || other.compilation, composer: composer ?? other.composer,
-            comment: comment ?? other.comment)
+        var result = self
+        let texts: [WritableKeyPath<TrackTags, String?>] = [
+            \.title, \.artist, \.album, \.albumArtist, \.genre, \.date, \.composer, \.comment,
+            \.grouping, \.catalogNumber, \.barcode, \.key, \.conductor, \.lyricist, \.publisher,
+            \.copyright, \.encoder, \.description, \.discSubtitle, \.work, \.movementName,
+            \.originalDate,
+        ]
+        for field in texts {
+            result[keyPath: field] = self[keyPath: field] ?? other[keyPath: field]
+        }
+        let numbers: [WritableKeyPath<TrackTags, Int?>] = [
+            \.trackNumber, \.trackTotal, \.discNumber, \.discTotal, \.bpm, \.movementNumber,
+        ]
+        for field in numbers {
+            result[keyPath: field] = self[keyPath: field] ?? other[keyPath: field]
+        }
+        result.compilation = compilation || other.compilation
+        return result
     }
 }
 
@@ -105,4 +150,23 @@ private func wholeNumber(
                     + (value.map { "read as \($0)" } ?? "dropped")))
     }
     return value == 0 ? nil : value
+}
+
+/// A tempo, which taggers write whole or with decimals, rounded to a whole number. Text that
+/// isn't a positive number is dropped with a warning.
+private func beatsPerMinute(
+    _ text: String, at offset: Int, _ warnings: inout [MetadataWarning]
+) -> Int? {
+    let trimmed = text.trimmingCharacters(in: .whitespaces)
+    guard trimmed.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }),
+        let value = Double(trimmed), value.isFinite, value < Double(Int32.max)
+    else {
+        warnings.append(
+            MetadataWarning(
+                kind: .badNumber, offset: offset,
+                detail: "\(TagField.bpm.rawValue) \"\(text)\" isn't a number; dropped"))
+        return nil
+    }
+    let rounded = Int(value.rounded())
+    return rounded == 0 ? nil : rounded
 }

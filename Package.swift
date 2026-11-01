@@ -101,7 +101,10 @@ let package = Package(
         ),
         .target(
             name: "LibraryBrowser",
-            dependencies: ["Commands", "DisplayText", "KeyChord", "Library", "Log", "Settings"],
+            dependencies: [
+                "Artwork", "Commands", "DisplayText", "KeyChord", "Library", "Log", "Metadata",
+                "Settings",
+            ],
             path: "Sources/Features/LibraryBrowser",
             swiftSettings: strictSwift
         ),
@@ -261,7 +264,10 @@ let package = Package(
         ),
         .testTarget(
             name: "LibraryBrowserTests",
-            dependencies: ["Fixtures", "Library", "LibraryBrowser", "SQLite", "Settings"],
+            dependencies: [
+                "Artwork", "Fixtures", "Library", "LibraryBrowser", "Metadata", "SQLite",
+                "Settings",
+            ],
             swiftSettings: strictSwift
         ),
         .testTarget(

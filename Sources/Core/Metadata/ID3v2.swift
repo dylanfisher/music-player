@@ -18,6 +18,11 @@ private enum FrameKind {
     case picture
     /// 2.3's `TDAT` (DDMM) and `TIME` (HHMM), which refine `TYER` into a full date.
     case day, time
+    /// `TXXX`: a description naming the field, then its value.
+    case userText
+    /// iTunes's `GRP1`, which wins over `TIT1`: iTunes and Picard's iTunes option put the work in
+    /// `TIT1` once `GRP1` holds the grouping.
+    case iTunesGrouping
 }
 
 /// The 2.3 and 2.4 frames the reader and the tag writer both name.
@@ -49,6 +54,21 @@ private let frameKinds: [String: FrameKind] = [
     ID3FrameID.compilation: .text(.compilation), ID3FrameID.composer: .text(.composer),
     ID3FrameID.comment: .comment, "APIC": .picture,
     id3v23DayFrameID: .day, id3v23TimeFrameID: .time,
+    // Fields the tag writer doesn't edit, by MusicBrainz Picard's mapping (ADR 0006).
+    "TT1": .text(.grouping), "TBP": .text(.bpm), "TKE": .text(.key), "TP3": .text(.conductor),
+    "TXT": .text(.lyricist), "TPB": .text(.publisher), "TCR": .text(.copyright),
+    "TEN": .text(.encoder), "TOR": .text(.originalDate), "TXX": .userText,
+    "TIT1": .text(.grouping), "GRP1": .iTunesGrouping, "TBPM": .text(.bpm), "TKEY": .text(.key),
+    "TPE3": .text(.conductor), "TEXT": .text(.lyricist), "TPUB": .text(.publisher),
+    "TCOP": .text(.copyright), "TENC": .text(.encoder), "TSST": .text(.discSubtitle),
+    "MVIN": .text(.movement), "MVNM": .text(.movementName), "TDOR": .text(.originalDate),
+    "TORY": .text(.originalDate), "TXXX": .userText,
+]
+
+/// `TXXX` descriptions, compared uppercased, and the fields they set.
+private let userTextFields: [String: TagField] = [
+    SharedTagName.catalogNumber: .catalogNumber, SharedTagName.barcode: .barcode,
+    SharedTagName.work: .work, SharedTagName.discSubtitle: .discSubtitle,
 ]
 
 /// ID3v2.3 holds a date as `TYER`, `TDAT` and `TIME`.
@@ -65,7 +85,8 @@ package func id3FrameIDs(for field: TagField) -> Set<String> {
             case .genre: field == .genre ? id : nil
             case .comment: field == .comment ? id : nil
             case .day, .time: field == .date ? id : nil
-            case .picture: nil
+            case .iTunesGrouping: field == .grouping ? id : nil
+            case .picture, .userText: nil
             }
         })
 }
@@ -152,6 +173,7 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
     var pictures: [(type: UInt32, art: EmbeddedArt)] = []
     var day: (text: String, offset: Int)?
     var time: (text: String, offset: Int)?
+    var iTunes = TrackTags()
     let headerSize = version == 2 ? 6 : 10
     let idLength = version == 2 ? 3 : 4
     while area.range.upperBound - cursor >= headerSize {
@@ -244,11 +266,21 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
             case .time:
                 if time == nil { time = (try textFrame(bytes, &reader.warnings), offset) }
                 return
+            case .iTunesGrouping:
+                let text = try textFrame(bytes, &reader.warnings)
+                iTunes.set(.grouping, text, at: offset, warnings: &reader.warnings)
+                return
+            case .userText:
+                let (description, value) = try userTextFrame(bytes, &reader.warnings)
+                guard let userField = userTextFields[description.uppercased()] else { return }
+                field = userField
+                text = value
             case .picture: return
             }
             if let text { tags.set(field, text, at: offset, warnings: &reader.warnings) }
         }
     }
+    tags.grouping = iTunes.grouping ?? tags.grouping
     if let day, let year = tags.date {
         tags.date = fullDate(year: year, day: day, time: time, &reader.warnings)
     }
@@ -368,6 +400,20 @@ private func commentFrame(_ bytes: Bytes, _ warnings: inout [MetadataWarning])
     }
     guard description.text.isEmpty else { return nil }
     return try string(bytes, from: description.next, encoding, &warnings)!.text
+}
+
+/// An encoding byte, a description, then the value. 2.4's further values are left out, as in
+/// `textFrame`.
+private func userTextFrame(_ bytes: Bytes, _ warnings: inout [MetadataWarning])
+    throws(ParseFailure) -> (description: String, value: String)
+{
+    let encoding = try encoding(try bytes.uint8(0), at: bytes.fileOffset(0))
+    guard let description = try string(bytes, from: 1, encoding, &warnings, requireTerminator: true)
+    else {
+        throw .malformed(at: bytes.fileOffset(0), "ID3v2 TXXX without a description terminator")
+    }
+    let value = try string(bytes, from: description.next, encoding, &warnings)!.text
+    return (description.text, value)
 }
 
 /// "(17)" refers to the ID3v1 list (the first of several references counts), optionally followed

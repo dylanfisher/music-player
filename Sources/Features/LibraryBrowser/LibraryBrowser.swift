@@ -67,14 +67,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// time: a page is one primary-key lookup per row and takes well under a millisecond.
     public init(
         reader: LibraryReader, index: LibraryIndex, layout: TrackTableLayout, browserHeight: Int,
-        folders: [WatchedFolder]
+        folders: [WatchedFolder], groupByAlbumArtist: Bool
     ) {
         self.reader = reader
         self.index = index
         self.browserHeight = browserHeight
         self.folders = folders
         model = BrowserModel(
-            reader: reader, sortColumn: layout.sortColumn, ascending: layout.sortAscending)
+            reader: reader, sortColumn: layout.sortColumn, ascending: layout.sortAscending,
+            groupByAlbumArtist: groupByAlbumArtist)
         let model = self.model
         // The views report to this object, which exists only after its stored properties do.
         weak var owner: LibraryBrowser?
@@ -596,6 +597,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func rateSelection(_ stars: Int) {
         guard let ids = selectedTrackIDs(else: "couldn't rate the tracks") else { return }
         edit("couldn't rate the tracks") { try await self.model.rate(ids, stars: stars) }
+    }
+
+    /// Follows `library.groupByAlbumArtist`.
+    public func setGroupByAlbumArtist(_ on: Bool) async { await model.setGroupByAlbumArtist(on) }
+
+    /// Loves the selection, or unloves it when all of it is loved.
+    public func toggleLovedSelection() {
+        guard let ids = selectedTrackIDs(else: "couldn't love the tracks") else { return }
+        edit("couldn't love the tracks") { try await self.model.toggleLoved(ids) }
     }
 
     /// Counts a play of the track at `path`, at `seconds` since 1970.

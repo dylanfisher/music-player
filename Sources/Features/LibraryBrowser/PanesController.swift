@@ -151,7 +151,9 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
             }()
         let entries = self.entries(pane)
         cell.textField?.stringValue =
-            row == 0 ? pane.allTitle(entries.count) : entries[row - 1].name
+            row == 0
+            ? pane.allTitle(entries.count)
+            : pane == .album ? model.albumTitles[row - 1] : entries[row - 1].name
         cell.textField?.font =
             row == 0
             ? .boldSystemFont(ofSize: NSFont.smallSystemFontSize)

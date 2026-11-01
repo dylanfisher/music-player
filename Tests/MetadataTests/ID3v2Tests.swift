@@ -173,7 +173,7 @@ private func artBytes(_ file: Data) throws -> Data? {
     #expect(compressed.warnings.map(\.kind) == [.unreadableField])
     #expect(compressed.warnings.first?.offset == 10)
     let unneeded = id3Tag([
-        id3Frame("TXXX", id3Text("x"), flags: 0x0080), id3Frame("TIT2", id3Text("Kept")),
+        id3Frame("TSSE", id3Text("x"), flags: 0x0080), id3Frame("TIT2", id3Text("Kept")),
     ])
     #expect(try warnings(mp3(unneeded)).isEmpty)
 }

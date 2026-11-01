@@ -10,7 +10,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, folders: [])
+        browserHeight: 100, folders: [],
+        groupByAlbumArtist: false)
     let send = browser.watcherEvents
     let folders = (0..<200).map { "/Music/\($0)" }
     // From another thread, as the watcher sends them: each folder's progress, then its outcome.
@@ -44,7 +45,8 @@ import Testing
     try record.run("first")
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, folders: [])
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, folders: [],
+        groupByAlbumArtist: false)
     let state = BrowserState(source: nil, genre: nil, artist: nil, album: nil)
     await browser.load(state)
     #expect(browser.status.notices.map { $0.hasSuffix("first") } == [true])
@@ -61,7 +63,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, folders: [])
+        browserHeight: 100, folders: [],
+        groupByAlbumArtist: false)
     var beeps = 0
     browser.beep = { beeps += 1 }
     browser.reportCommand("couldn't rate the tracks", OnlyMissingFiles())

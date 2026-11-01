@@ -249,8 +249,8 @@ final class ScanPipeline: @unchecked Sendable {
             finish(
                 ScannedFile(
                     path: file.path, sizeBytes: file.sizeBytes,
-                    modifiedSeconds: file.modifiedSeconds, known: known[file.path],
-                    outcome: result),
+                    modifiedSeconds: file.modifiedSeconds, createdSeconds: file.createdSeconds,
+                    known: known[file.path], outcome: result),
                 seconds: Double(DispatchTime.now().uptimeNanoseconds - started) / 1e9)
         }
     }

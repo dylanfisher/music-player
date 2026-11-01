@@ -34,13 +34,13 @@ public struct AppState: SettingsSchema {
     public let trackTable = Setting(
         "browser.trackTable", title: "Track Table",
         default: TrackTableLayout(
-            // About 810 points with spacing, which fits beside the sidebar and the queue in the
+            // About 820 points with spacing, which fits beside the sidebar and the queue in the
             // default window, itself smaller than a 1440 by 900 screen. Format, rate and depth
             // are in the header's menu.
             columns: [
                 ColumnLayout(column: .title, width: 220), ColumnLayout(column: .artist, width: 150),
                 ColumnLayout(column: .album, width: 170),
-                ColumnLayout(column: .trackNumber, width: 34),
+                ColumnLayout(column: .trackNumber, width: 44),
                 ColumnLayout(column: .duration, width: 50), ColumnLayout(column: .year, width: 44),
                 ColumnLayout(column: .genre, width: 100),
             ], sortColumn: .artist, sortAscending: true),

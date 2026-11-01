@@ -33,6 +33,38 @@ public struct TrackRow: Equatable, Sendable {
     public var lastPlayedSeconds: Double? = nil
     /// Stars, 0 to `SmartField.maxRating`; 0 is unrated.
     public var rating = 0
+    public var loved = false
+    public var trackTotal: Int? = nil
+    public var discTotal: Int? = nil
+    public var compilation = false
+    public var composer: String? = nil
+    public var comment: String? = nil
+    public var channels = 0
+    public var sizeBytes = 0
+    /// Kilobits a second, as `TrackColumn.bitRate` sorts by; nil for a track of no length.
+    public var bitRateKbps: Double? = nil
+    public var fileName = ""
+    /// The extension, uppercased.
+    public var fileType = ""
+    /// Seconds since 1970; nil where the volume keeps no creation date.
+    public var createdSeconds: Double? = nil
+    public var modifiedSeconds = 0.0
+    public var grouping: String? = nil
+    public var catalogNumber: String? = nil
+    public var barcode: String? = nil
+    public var bpm: Int? = nil
+    public var key: String? = nil
+    public var conductor: String? = nil
+    public var lyricist: String? = nil
+    public var publisher: String? = nil
+    public var copyright: String? = nil
+    public var encoder: String? = nil
+    public var description: String? = nil
+    public var discSubtitle: String? = nil
+    public var work: String? = nil
+    public var movementNumber: Int? = nil
+    public var movementName: String? = nil
+    public var originalDate: String? = nil
 
     /// The year the date tag starts with, which is what the year column sorts by.
     public var year: Int? {

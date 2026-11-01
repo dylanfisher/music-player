@@ -76,7 +76,7 @@ let windowBenchmarks = [
         let samples = try onMainActor {
             let model = try await loadedModel(library.databaseURL)
             var samples: [Double] = []
-            for column in TrackColumn.allCases {
+            for column in TrackColumn.allCases where column.isSortable {
                 for ascending in [true, false] {
                     let start = DispatchTime.now().uptimeNanoseconds
                     await model.setSort(column, ascending: ascending)
@@ -93,7 +93,8 @@ let windowBenchmarks = [
 @MainActor
 private func loadedModel(_ databaseURL: URL) async throws -> BrowserModel {
     let model = BrowserModel(
-        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true)
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: true)
     await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
     return model
 }
