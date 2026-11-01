@@ -1274,6 +1274,41 @@ with the exact commands in the ADR.
   `./scripts/check`; mutation score of 90% or more on the listed files, with every survivor
   explained.
 
+Implementation plan (ADR 0027, written first):
+
+1. **ADR 0027.** A spike showed SwiftPM builds the coverage hooks: `swift build --sanitize=address
+   -Xswiftc -sanitize-coverage=edge,trace-pc-guard` into its own scratch path instruments every
+   Swift module and leaves C targets alone, so no `unsafeFlags` and nothing in the app build
+   changes. The ADR records the design: targets, seeds, the supervisor, minimising, and the
+   property and mutation runners.
+2. **Coverage hooks** (`Sources/Tools/FuzzCoverage`, C). The `trace_pc_guard` callbacks count
+   hits per edge; after each input the driver asks for new (edge, hit-count bucket) features. A
+   crash handler and ASan's death callback write the input being run to a file opened up front.
+3. **Fuzzer** (`Sources/Tools/Fuzz`). One target per parser: `mp4`, `id3v2` (MP3 files),
+   `flac`, `vorbis`, `wav`, `aiff`, `config`, `state`, `journal`, `rules`, and `tagwriter` (edit,
+   undo and byte compare on a temp file). A supervisor runs workers as child processes, restarts
+   one after a crash, minimises the crashing input and saves it under `.build/fuzz/<target>`.
+   Seeds: a generated fixture library under `~/Library/Caches/MusicPlayer/fuzz`, and the
+   tag-corpus clones `scripts/fuzz` makes again with `cp -c`; the reference is never read by the
+   tool. `scripts/fuzz <target> <seconds>`. Tests (`FuzzTests`): the coverage bookkeeping, the
+   mutators stay inside the size cap and repeat with the seed, minimising keeps the crash, and
+   the supervisor reports a planted crash.
+4. **Ten minutes per target**, in the background. Each crash becomes a minimised file under
+   `Tests/<Module>Tests/Crashes/` with a test, and a fix, in its own commit.
+5. **Properties** (`Fixtures.PropertyCases`, seeded with SplitMix64; `PROPERTY_CASES` sets the
+   count, 50 by default; a failure prints its seed): random queue edits against a reference
+   model (PlaybackTests); random file trees changed between rescans against a full scan of the
+   result (LibraryTests); random tag edits and undos against the original bytes (TagWriterTests).
+6. **`scripts/sanitize`**: the whole suite under ASan, TSan and UBSan, each in its own scratch
+   path, with 1,000 property cases; `--thread-runs <n>` repeats the TSan run. Tests that depend
+   on start order, found by 20 TSan runs, are fixed in their own commits.
+7. **`scripts/mutate`** (`scripts/mutate.swift`, Foundation only): lists mutants in the files and
+   line ranges named in `scripts/mutate-files.txt` (flip a comparison, swap `&&` and `||`, drop a
+   statement, a constant plus or minus one), applies each in turn in a git worktree under
+   `.build/`, runs that file's tests and lists the survivors. The worktree is removed on exit.
+   Each survivor gets a test or a reason in ADR 0027.
+8. `./scripts/check`, and `./scripts/bundle release` for the new targets.
+
 #### 14e. Performance
 
 - **Goal:** know where the time goes on every hot path, and give the tight budgets headroom.
@@ -1572,7 +1607,7 @@ Write the ADR first; it amends ADR 0022.
       nothing else, in the sync folder the user chose, which must be outside every watched folder.
       Music files stay as they are. Tests use a temporary folder, never the NAS.
 - [ ] **Track identity** ([ADR 0026](decisions/0026-sync-identity-is-the-relative-path.md)). A
-      synced track is its path relative to `sync.libraryRoot`, normalized to NFC; each machine maps
+      synced track is its path relative to the library root, normalized to NFC; each machine maps
       it to its own `paths` row. Every machine plays the same files on the NAS, so no audio is
       hashed. Machines pointed at separate copies don't share stats, and settings say so.
       - **Moves.** A scan matches `paths` rows with stats whose file has gone against the paths it
@@ -1584,9 +1619,16 @@ Write the ADR first; it amends ADR 0022.
       - **Sync** carries a match as a `move` event with both relative paths. A machine that already
         made the move, or has no row for the old path, ignores it; one with stats on both paths
         merges them by the rules below.
-- [ ] **Library root.** `sync.folder` and `sync.libraryRoot` in the config file, per machine. The
-      root is where relative paths start, so `/Volumes/music/library` and `/Volumes/music-1/library`
-      are the same library.
+- [ ] **Network folders by share** ([ADR 0027](decisions/0027-network-folders-by-share.md)). A
+      watched folder on a network volume is stored as its share's URL and the path inside it. The
+      app finds the share's current mount point at launch, before each scan, on wake and on a
+      network change, and rewrites the `paths` prefixes in one transaction when the mount point
+      moved (`/Volumes/music` to `/Volumes/music-1`). When the share isn't mounted, NetFS mounts it
+      in the background with a 15-second timeout, no UI and the Keychain's password; a Connect
+      button on the offline message is the only mount that may show a login dialog. This helps a
+      single machine too, so it can land before the rest of the phase.
+- [ ] **Library root.** `sync.folder` in the config file. The library root is the watched folder,
+      stored by share, so it's the same on every machine; relative paths start there.
 - [ ] **Logs.** One append-only file per machine (`<machine id>.log`, the ID minted on first run
       and kept in the state file), one event a line: play, skip, rating, loved, Date Added, and
       playlist create, rename, delete and entry changes. Events carry a hybrid logical clock, not
@@ -1602,7 +1644,8 @@ Write the ADR first; it amends ADR 0022.
 - [ ] Logs from other machines are hostile input: line and file size caps, strict decoding, rows
       in [ADR 0025](decisions/0025-threat-model.md).
 - [ ] Tests: two and three simulated machines in temporary folders, with interleaved and
-      conflicting edits, skewed clocks, the library mounted at a different path on each, a renamed
+      conflicting edits, skewed clocks, the library mounted at a different path on each, a share
+      remounted at `-1`, the same share reached by host name and by IP address, a renamed
       and a moved file, a move with a retag, two gone files of the same length (ambiguous, so
       reported), a move event arriving after the new path was played, a decomposed and a
       precomposed accented name, a truncated log, and the NAS going away and coming back.
@@ -1610,7 +1653,8 @@ Write the ADR first; it amends ADR 0022.
       move matching after every fixture file is renamed.
 - [ ] **Hardware checkpoint (owner):** with two Macs on the NAS, play and rate on each, rename a
       folder of a test album, and report whether both machines show the same plays, ratings and
-      playlists.
+      playlists. Then eject the share on one Mac and relaunch the app, and report whether it
+      mounted the share and kept the stats.
 
 ## Later
 
