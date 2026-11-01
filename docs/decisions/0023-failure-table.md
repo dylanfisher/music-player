@@ -33,8 +33,8 @@ cover what a test can't do quickly or hermetically.
 | Disk full: state file | the atomic write fails | config banner: "couldn't save" | the change is kept and saved with the next one, or at quit | `aFailedSaveIsKeptAndSavedWithTheNext`, `scripts/full-disk` |
 | Disk full: config file | the atomic write fails | config banner | retried after 1 s, doubling to 30 s | `aNewFileThatCouldntBeWrittenIsRetried`, `scripts/full-disk` |
 | Disk full: tag journal | the record or bytes write fails | the tag editor lists the file and the ones not written | free space, save again | `aJournalThatCantBeWrittenStopsTheBatchAfterThatFile`, `scripts/full-disk` |
-| Database locked by another process | `SQLITE_BUSY` after the 5 s busy timeout | at launch an alert, then quit; later, the status bar | close the other process; relaunch or wait for the next scan | `aLockedDatabaseFailsAfterTheTimeoutAndThenOpens` |
-| Database file SQLite can't read | `SQLITE_NOTADB` or `SQLITE_CORRUPT` while opening | status bar notice naming where the old file went | the next scan refills the index | `aLibraryFileThatIsntADatabaseIsMovedAsideAndReported` |
+| Database locked by another process | `SQLITE_BUSY` after the 5 s busy timeout | at launch an alert, then quit; later, the status bar | close the other process; relaunch or wait for the next scan | `aLockedDatabaseFailsAfterTheTimeoutAndThenOpens`, `aLockedDatabaseAtLaunchFailsAndIsntMovedAside` |
+| Database file SQLite can't read | `SQLITE_NOTADB` or `SQLITE_CORRUPT` while the window opens it at launch | an alert naming where the old file went, with Show in Finder, and a status bar notice | the next scan refills the index | `aLibraryFileThatIsntADatabaseIsMovedAsideAndReported`, `onlyTheNewestUnreadableFilesAreKeptEachUnderItsOwnName`, `twoLaunchOpensAtOnceMoveTheFileAsideOnce` |
 | Config file corrupt or half-written | parse and validation, with lines | config banner; defaults in effect; the file is never written over | edit the file; it's read on save | `aBrokenFileAppliesNothingAndIsNeverWrittenOver`, `everyTruncatedConfigIsReportedAndNeverWrittenOver` |
 | State file corrupt or half-written | decode | config banner: the file was reset | none needed; the next save writes it | `aStateFileThatDoesntMatchIsDiscardedAndReported` |
 | Device restore record unreadable | decode | log; the record is deleted | none needed | `aRecordThatDoesntReadIsDiscardedAndReported` |
@@ -66,10 +66,16 @@ cover what a test can't do quickly or hermetically.
   still waits for its next poll.
 - **A layout save that fails stays pending,** so the next save or the quit writes it, rather than
   losing the change once it's reported.
-- **A library file SQLite can't read is moved aside.** The alert used to quit the app at every
-  launch, with no way to recover inside it. It's renamed to `library.sqlite.unreadable-<time>`
-  (with its `-wal` and `-shm`), a new library is made, and a discard notice in the new file
-  names the old one, so plays, ratings and playlists can be recovered by hand.
+- **A library file SQLite can't read is moved aside, at launch only.** The alert used to quit
+  the app at every launch, with no way to recover inside it. The window's first open at launch
+  renames it, with its `-wal` and `-shm`, to `library.sqlite.unreadable-<time>-<id>`, makes a
+  new library, and shows an alert naming the old file with Show in Finder; a discard notice in
+  the new file names it too, so plays, ratings and playlists can be recovered by hand. Every
+  other open (the scanner, the watcher, the reader, the command line) throws instead, since a
+  connection opened before the move would go on writing the old file and split the library. A
+  lock file beside the library keeps two launches at once from both moving it. The 3 newest
+  moved files are kept and older ones deleted, so a file that keeps breaking can't fill the
+  disk.
 - **A discarded state file is reported** in the config banner, not only logged.
 - **Timeline commands that would act on no track beep and say so.** Reading every selected
   play's track to disable the menu items costs a query per menu check, so the commands stay

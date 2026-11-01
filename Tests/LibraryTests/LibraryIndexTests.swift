@@ -262,26 +262,77 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     }
 }
 
+/// The library files a folder holds that were moved aside, by name, without their logs and
+/// shared memory.
+private func movedAside(in folder: URL) throws -> [String] {
+    try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        .filter {
+            $0.hasPrefix("library.sqlite.unreadable-") && !$0.hasSuffix("-wal")
+                && !$0.hasSuffix("-shm")
+        }
+        .sorted()
+}
+
 @Test func aLibraryFileThatIsntADatabaseIsMovedAsideAndReported() throws {
     let library = try TestLibrary()
+    let folder = library.databaseURL.deletingLastPathComponent()
     let garbage = Data(repeating: 0x5A, count: 8192)
     try garbage.write(to: library.databaseURL)
     try Data("old log".utf8).write(to: URL(fileURLWithPath: library.databaseURL.path + "-wal"))
 
-    let index = try library.index()
+    // Only the launch open moves it; every other open, a scan's among them, throws.
+    #expect {
+        try library.scan()
+    } throws: { ($0 as? SQLiteError)?.isUnreadableFile == true }
+    #expect(try movedAside(in: folder).isEmpty)
+    #expect(try Data(contentsOf: library.databaseURL) == garbage)
+
+    let index = try LibraryIndex(at: library.databaseURL, movingAsideIfUnreadable: true)
     #expect(try index.trackCount() == 0)
+    let aside = try #require(index.movedAside)
+    #expect(try movedAside(in: folder) == [aside.lastPathComponent])
+    #expect(FileManager.default.fileExists(atPath: aside.path + "-wal"), "its log goes with it")
     let discards = try index.discards()
     #expect(discards.count == 1)
-    let folder = library.databaseURL.deletingLastPathComponent()
-    let aside = try FileManager.default.contentsOfDirectory(atPath: folder.path)
-        .filter { $0.hasPrefix("library.sqlite.unreadable-") }.sorted()
-    let moved = try #require(aside.first)
-    #expect(aside.contains(moved + "-wal"), "the file's log goes with it: \(aside)")
-    #expect(discards.first?.text.contains(folder.appendingPathComponent(moved).path) == true)
-    #expect(try Data(contentsOf: folder.appendingPathComponent(moved)) == garbage)
+    #expect(discards.first?.text.contains(aside.path) == true)
+    #expect(try Data(contentsOf: aside) == garbage)
     // The new library works and reads as a good one next time.
     #expect(try library.scan().read == library.manifest.files.count)
     #expect(try library.index().discards() == discards)
+    #expect(try library.index().movedAside == nil)
+}
+
+@Test func onlyTheNewestUnreadableFilesAreKeptEachUnderItsOwnName() throws {
+    let library = try TestLibrary()
+    let folder = library.databaseURL.deletingLastPathComponent()
+    var moved: [URL] = []
+    // More moves than are kept, faster than a clock second.
+    for _ in 0...LibraryIndex.keptUnreadableFiles {
+        try Data(repeating: 0x5A, count: 8192).write(to: library.databaseURL)
+        let index = try LibraryIndex(at: library.databaseURL, movingAsideIfUnreadable: true)
+        moved.append(try #require(index.movedAside))
+    }
+    #expect(Set(moved).count == moved.count)
+    #expect(
+        try movedAside(in: folder)
+            == moved.suffix(LibraryIndex.keptUnreadableFiles).map(\.lastPathComponent))
+}
+
+@Test func aLockedDatabaseAtLaunchFailsAndIsntMovedAside() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let other = try Database(at: library.databaseURL)
+    try other.execute("BEGIN EXCLUSIVE")
+    #expect {
+        try LibraryIndex(at: library.databaseURL, movingAsideIfUnreadable: true)
+    } throws: { error in
+        ((error as? SQLiteError)?.code ?? 0) & 0xFF == SQLITE_BUSY
+    }
+    #expect(try movedAside(in: library.databaseURL.deletingLastPathComponent()).isEmpty)
+    try other.execute("ROLLBACK")
+    #expect(
+        try LibraryIndex(at: library.databaseURL, movingAsideIfUnreadable: true).trackCount()
+            == library.readableCount)
 }
 
 @Test func aLockedDatabaseFailsAfterTheTimeoutAndThenOpens() throws {
@@ -303,4 +354,24 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
             == [library.readableCount])
     try other.execute("ROLLBACK")
     #expect(try library.scan().unchanged == library.manifest.files.count)
+}
+
+@Test func twoLaunchOpensAtOnceMoveTheFileAsideOnce() throws {
+    let library = try TestLibrary()
+    try Data(repeating: 0x5A, count: 8192).write(to: library.databaseURL)
+    let url = library.databaseURL
+    let results = LockedResults()
+    DispatchQueue.concurrentPerform(iterations: 4) { _ in
+        results.add(Result { try LibraryIndex(at: url, movingAsideIfUnreadable: true).movedAside })
+    }
+    let moved = try results.all.map { try $0.get() }
+    #expect(moved.compactMap { $0 }.count == 1)
+    #expect(try movedAside(in: url.deletingLastPathComponent()).count == 1)
+}
+
+private final class LockedResults: @unchecked Sendable {
+    private let lock = NSLock()
+    private var results: [Result<URL?, any Error>] = []
+    func add(_ result: Result<URL?, any Error>) { lock.withLock { results.append(result) } }
+    var all: [Result<URL?, any Error>] { lock.withLock { results } }
 }

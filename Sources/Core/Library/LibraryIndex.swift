@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Log
 import Metadata
@@ -21,42 +22,87 @@ public final class LibraryIndex {
     private var genreIDs: [String: Int64]?
     private var albumIDs: [AlbumKey: Int64]?
 
+    /// Where the file SQLite couldn't read was moved, when this open moved it.
+    public private(set) var movedAside: URL?
+    /// Unreadable files kept beside the library; older ones are deleted when another is moved.
+    static let keptUnreadableFiles = 3
+
     /// Opens or creates the database at `url`. A part whose stored SQL differs from this build's
     /// is rebuilt: the index tables are emptied (the next scan refills them), and the stats are
-    /// kept unless their own SQL changed. A file SQLite can't read at all is moved aside, with
-    /// a discard notice saying where, and a new library is made (ADR 0023).
-    public init(at url: URL) throws {
+    /// kept unless their own SQL changed.
+    ///
+    /// A file SQLite can't read at all throws, unless `movingAsideIfUnreadable`, which only the
+    /// window's first open at launch passes: then it's moved aside, with a discard notice
+    /// saying where, and a new library is made (ADR 0023). Any other open moving it could leave
+    /// a connection opened before on the old file, and the library split in two.
+    public init(at url: URL, movingAsideIfUnreadable: Bool = false) throws {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let movedAside: String?
-        (database, movedAside) = try Self.open(url)
+        let detail: String?
+        (database, movedAside, detail) = try Self.open(url, movingAside: movingAsideIfUnreadable)
         try prepareSchema()
-        if let movedAside { try recordDiscard(movedAside) }
+        if let detail { try recordDiscard(detail) }
     }
 
-    /// The database at `url`, and why the file there was moved aside if SQLite couldn't read it.
-    private static func open(_ url: URL) throws -> (Database, String?) {
+    /// The database at `url`, after reading its header and schema, which any damage there fails.
+    private static func readable(_ url: URL) throws(SQLiteError) -> Database {
+        let database = try Database(at: url)
+        try database.execute("SELECT count(*) FROM sqlite_master")
+        return database
+    }
+
+    /// The database at `url`, and where and why the file there was moved aside, if it was.
+    private static func open(_ url: URL, movingAside: Bool) throws -> (Database, URL?, String?) {
         do throws(SQLiteError) {
-            let database = try Database(at: url)
-            // Reads the header and the schema, which any damage there fails.
-            try database.execute("SELECT count(*) FROM sqlite_master")
-            return (database, nil)
-        } catch  where error.isUnreadableFile {
-            let stamp = ISO8601DateFormatter().string(from: Date())
-                .replacingOccurrences(of: ":", with: "-")
-            let aside = url.path + ".unreadable-" + stamp
-            // The log and shared memory belong to the old file, and would be read into the new.
-            for suffix in ["", "-wal", "-shm"]
-            where FileManager.default.fileExists(atPath: url.path + suffix) {
-                try FileManager.default.moveItem(atPath: url.path + suffix, toPath: aside + suffix)
+            return (try readable(url), nil, nil)
+        } catch  where movingAside && error.isUnreadableFile {
+            // Two launches at once: the second to take the lock finds the first's new file.
+            let lock = Darwin.open(url.path + ".lock", O_CREAT | O_RDWR, 0o644)
+            guard lock >= 0, flock(lock, LOCK_EX) == 0 else {
+                throw CocoaError(
+                    .fileWriteUnknown, userInfo: [NSFilePathErrorKey: url.path + ".lock"])
             }
-            let detail =
-                "the library file couldn't be read (\(error.message)), so it was moved to"
-                + " \(aside) and a new library was started; the next scan fills it, and the"
-                + " plays, ratings and playlists stay in the old file"
-            logger.error("\(detail)")
-            return (try Database(at: url), detail)
+            defer { Darwin.close(lock) }
+            do throws(SQLiteError) {
+                return (try readable(url), nil, nil)
+            } catch  where error.isUnreadableFile {
+                let aside = try moveAside(url)
+                let detail =
+                    "the library file couldn't be read (\(error.message)), so it was moved to"
+                    + " \(aside.path) and a new library was started; the next scan fills it,"
+                    + " and the plays, ratings and playlists stay in the old file"
+                logger.error("\(detail)")
+                return (try Database(at: url), aside, detail)
+            }
         }
+    }
+
+    /// Renames the file at `url`, with its log and shared memory, which would otherwise be read
+    /// into the new file, to a name no other move uses, and deletes all but the newest
+    /// `keptUnreadableFiles` moved before.
+    private static func moveAside(_ url: URL) throws -> URL {
+        let stamp = ISO8601DateFormatter.string(
+            from: Date(), timeZone: .current,
+            formatOptions: [.withInternetDateTime, .withFractionalSeconds]
+        ).replacingOccurrences(of: ":", with: "-")
+        let prefix = url.lastPathComponent + ".unreadable-"
+        let aside = url.deletingLastPathComponent().appendingPathComponent(
+            prefix + stamp + "-" + UUID().uuidString.prefix(8))
+        let suffixes = ["", "-wal", "-shm"]
+        for suffix in suffixes where FileManager.default.fileExists(atPath: url.path + suffix) {
+            try FileManager.default.moveItem(atPath: url.path + suffix, toPath: aside.path + suffix)
+        }
+        let folder = url.deletingLastPathComponent()
+        let moved = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+            .filter { $0.hasPrefix(prefix) && !suffixes.dropFirst().contains(where: $0.hasSuffix) }
+            .sorted()
+        for old in moved.dropLast(keptUnreadableFiles) {
+            for suffix in suffixes
+            where FileManager.default.fileExists(atPath: folder.path + "/" + old + suffix) {
+                try FileManager.default.removeItem(atPath: folder.path + "/" + old + suffix)
+            }
+        }
+        return aside
     }
 
     private func prepareSchema() throws {

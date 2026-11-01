@@ -130,8 +130,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.saver = saver
         let layout = WindowSettings(settings, state: state)
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
-        // Rows for the table come from a connection of the main thread's own.
-        let index = try LibraryIndex(at: databaseURL)
+        // Rows for the table come from a connection of the main thread's own. It opens first,
+        // so it alone may move an unreadable file aside, before any other connection opens.
+        let index = try LibraryIndex(at: databaseURL, movingAsideIfUnreadable: true)
         let browser = LibraryBrowser(
             reader: try LibraryReader(databaseURL: databaseURL), index: index,
             layout: layout.trackTable, browserHeight: layout.browserHeight,
@@ -185,6 +186,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.show()
         NSApp.activate(ignoringOtherApps: true)
         Task { await browser.load(layout.browser) }
+        if let aside = index.movedAside { showMovedAside(aside, in: window.window) }
+    }
+
+    /// Says the library file couldn't be read and where it went, with a way to find it.
+    private func showMovedAside(_ aside: URL, in window: NSWindow) {
+        let alert = NSAlert()
+        alert.messageText = "The library file couldn't be read"
+        alert.informativeText =
+            "It was moved to \(aside.path), and a new library was started. The next scan fills"
+            + " it. The plays, ratings and playlists stay in the old file."
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Show in Finder")
+        alert.beginSheetModal(for: window) { response in
+            guard response == .alertSecondButtonReturn else { return }
+            NSWorkspace.shared.activateFileViewerSelecting([aside])
+        }
     }
 
     /// The first rows are on screen. Everything that can wait for that starts now.
