@@ -155,7 +155,7 @@ extension PlayerLibrary {
             var playlist = PlayerPlaylist(name: name, kind: .manual)
             if flag(Cell(row, 2), item, columns[2]) {
                 playlist.kind = smartKind(
-                    Cell(row, 3, maximumBytes: SwinsianPredicate.maximumBytes),
+                    Cell(row, 3, maximumBytes: SwinsianArchive.maximumBytes),
                     limited: flag(Cell(row, 5), item, columns[5]))
             } else {
                 for entry in entries[id] ?? [] {
@@ -182,8 +182,8 @@ extension PlayerLibrary {
         if limited { return .unmapped(["it's limited to some of its tracks, which isn't read"]) }
         switch predicate {
         case .blob(let bytes): return SwinsianPredicate.kind(bytes)
-        case .long: return .unmapped([SwinsianPredicate.Archive.tooLarge.description])
-        default: return .unmapped([SwinsianPredicate.Archive.notAnArchive.description])
+        case .long: return .unmapped([SwinsianArchive.Problem.tooLarge.description])
+        default: return .unmapped([SwinsianArchive.Problem.notAnArchive.description])
         }
     }
 

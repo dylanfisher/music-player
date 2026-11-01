@@ -406,7 +406,7 @@ private let swinsian = FuzzTarget(
 private let swinsianPredicate = FuzzTarget(
     name: "swinsian-predicate", summary: "a Swinsian smart playlist's archived predicate",
     seedFormats: [],
-    tokens: ["NSSubpredicates", "NSPredicateOperator", "NSOperand", "NSArguments"],
+    tokens: ["CF$UID"],
     madeSeeds: { _, _ in try swinsianPredicateShapes.map(swinsianPredicateArchive) },
     prepare: { _ in
         { input in

@@ -1712,8 +1712,8 @@ Schema fix, once the owner's schema was read:
    up and counted in the preview, `lastplayed` 0 as never), `playlist` (`smartpredicate`,
    `folder`, `limited`) and `playlisttrack` by `tindex`; `smartrule` and `matchall` go.
 2. **`SwinsianPredicate`** in Core/Library: the archived `NSPredicate` under a byte, object and
-   depth cap, decoded by `NSKeyedUnarchiver` with secure coding and an allowed-class list, never
-   evaluated; its structure (AND, OR, NOT by De Morgan, the seven keys and four operators the
+   depth cap, read from its property list by `SwinsianArchive` (never `NSKeyedUnarchiver`,
+   whose exceptions end the app), never evaluated; its structure (AND, OR, NOT by De Morgan, the seven keys and four operators the
    owner's rules use) maps onto `SmartRules`.
 3. **Fixtures:** the real schema and the 18 rule shapes with generic genres, shared by the tests
    and the fuzzer; a `swinsian-predicate` fuzz target and an ADR 0025 row.

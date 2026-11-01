@@ -72,14 +72,19 @@ REAL affinity in an INTEGER column reads as an integer, and a half one as a real
 from a half star. Rows for one path keep the highest rating, which counts as rounded only when
 every row with that rating was.
 
-**Smart playlists.** `smartpredicate` is decoded by `NSKeyedUnarchiver` with
-`requiresSecureCoding` and only these classes allowed: `NSPredicate`, `NSCompoundPredicate`,
-`NSComparisonPredicate`, `NSExpression`, `NSArray`, `NSString`, `NSNumber` and `NSDate` (the
-unarchiver takes their private subclasses the archive names, such as `NSFunctionExpression`).
-Before it's decoded, the archive is read as a property list to check its keys, its object count
-and how deep its references go, since the unarchiver recurses and about 300 nested NOTs
-overflow the 512 KiB stack the import reads on. The predicate is never evaluated: its structure
-is walked, not its `predicateFormat` text parsed.
+**Smart playlists.** `smartpredicate` is never given to `NSKeyedUnarchiver`: for a malformed
+comparison or function expression, `NSPredicate` raises `NSInvalidUnarchiveOperationException`
+even under `.setErrorAndReturn`, and Swift can't catch it, so one bad archive would end the
+app. The fuzzer found five in 120 s. Instead the archive is read with
+`PropertyListSerialization` and its object table walked by `SwinsianArchive`, which reads only
+`NSCompoundPredicate` (type and subpredicates), `NSComparisonPredicate` (left, right, operator
+type, options, modifier), `NSKeyPathExpression` and `NSKeyPathSpecifierExpression` (the key
+path), `NSConstantValueExpression` (a string or number) and `NSFunctionExpression` (the
+`now()` minus N shape with its CASTs). Any other class or shape is an unsupported rule, listed.
+First the archive's keys are checked, then its size (64 KiB), its objects (2,048) and its
+references: every one in range, no cycle, 64 deep at most, which also bounds the reader's
+recursion. A string is 10,000 bytes at most. Nothing is evaluated, and the `predicateFormat`
+text isn't parsed; a reason quotes the rule as the reader rebuilds it, 200 characters at most.
 
 | Swinsian | Here |
 |---|---|
@@ -97,7 +102,9 @@ time that isn't whole days, all and any mixed in one playlist, `ANY` or `ALL`, a
 editor would refuse. A limited playlist is listed too, since its limit isn't read and it would
 otherwise come across with more tracks than it holds. The owner's 18 smart playlists all map.
 Swinsian's `bitRate > 1000` compares the `bitrate` column, in kilobits a second as ours, which
-is the average over the file.
+is the average over the file. Our file type is the extension. Swinsian's `"dsd"` is assumed to
+mean DSDIFF, whose files are `.dff`, so it maps to `dff`; `"dsf"` is `.dsf` in both. This is
+unverified until the owner's DSD playlist is checked after the import.
 
 A date before 1970 or more than a day in the future is a problem for that field and is left out.
 A rating past 5 or between half steps is a problem the same way.
@@ -163,7 +170,10 @@ are built in or hold other playlists, so they're skipped and counted.
   would be missing.
 - **Parsing the rules' `predicateFormat` text, or evaluating the predicate** against a track.
   Rejected: the text has no grammar of its own to rely on, and evaluating would run whatever
-  the archive asks for; the decoded structure says exactly what each part is.
+  the archive asks for; the archive's structure says exactly what each part is.
+- **Decoding with `NSKeyedUnarchiver` under secure coding**, with an allowed-class list.
+  Rejected: `NSPredicate` raises an Objective-C exception for a malformed archive, which ends
+  the app; catching it would need an Objective-C target in a Swift and C tree.
 - **Half stars rounded down, or kept as halves.** Rejected: rounding down makes 0.5 unrated,
   and halves would change the rating column, the editor and smart rules for one import.
 - **Guessing Swinsian's column names from what's there.** Rejected: a near match is a wrong

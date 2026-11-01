@@ -130,7 +130,7 @@ func blobSQL(_ bytes: [UInt8]) -> String {
             == .unmapped(["it's limited to some of its tracks, which isn't read"]))
     #expect(
         library.playlists[3].kind
-            == .unmapped([SwinsianPredicate.Archive.notAnArchive.description]))
+            == .unmapped([SwinsianArchive.Problem.notAnArchive.description]))
 }
 
 @Test func eachOfTheOwnersRuleShapesMaps() throws {
@@ -157,7 +157,7 @@ func blobSQL(_ bytes: [UInt8]) -> String {
                 match: .any,
                 rules: [
                     SmartRule(.fileType, .is, .text("dsf")),
-                    SmartRule(.fileType, .is, .text("dsd")),
+                    SmartRule(.fileType, .is, .text("dff")),
                 ])),
         all(SmartRule(.sampleRate, .greaterThan, .number(44100))),
         all(genre(.startsWith, "Genre F - ")),
@@ -193,10 +193,21 @@ func blobSQL(_ bytes: [UInt8]) -> String {
         (#"ANY genre CONTAINS[c] "Rock""#, "not a key compared with a value"),
     ]
     for (format, reason) in cases {
-        let predicate = NSPredicate(format: format)
         let kind = SwinsianPredicate.kind(try swinsianPredicateArchive(format))
-        #expect(kind == .unmapped(["“\(predicate.predicateFormat)”: \(reason)"]), "\(format)")
+        guard case .unmapped(let reasons) = kind, reasons.count == 1 else {
+            Issue.record("\(format): \(kind)")
+            continue
+        }
+        #expect(reasons[0].hasSuffix("”: \(reason)"), "\(format): \(reasons)")
     }
+    // A long rule is quoted in part.
+    let long = String(repeating: "x", count: 300)
+    #expect(
+        SwinsianPredicate.kind(try swinsianPredicateArchive(#"title CONTAINS[c] "\#(long)""#))
+            == .unmapped([
+                "“title CONTAINS[c] \"\(long.prefix(SwinsianPredicate.maximumQuotedCharacters - 19))…”: "
+                    + "the field “title” has no match here"
+            ]))
     #expect(
         SwinsianPredicate.kind(try swinsianPredicateArchive(#"NOT genre BEGINSWITH[c] "Rock""#))
             == .unmapped([
@@ -204,7 +215,7 @@ func blobSQL(_ bytes: [UInt8]) -> String {
             ]))
     #expect(
         SwinsianPredicate.kind(try swinsianPredicateArchive("TRUEPREDICATE"))
-            == .unmapped(["“TRUEPREDICATE” isn't a comparison or AND, OR or NOT"]))
+            == .unmapped(["“NSTruePredicate” is an unsupported rule"]))
     // All of an any can't be one list of rules; NOT (a AND b) is NOT a OR NOT b, which can.
     let mixed = #"genre CONTAINS[c] "a" AND (genre CONTAINS[c] "b" OR genre CONTAINS[c] "c")"#
     #expect(
@@ -226,22 +237,18 @@ func blobSQL(_ bytes: [UInt8]) -> String {
 
 @Test func aHostilePredicateArchiveIsRefusedBeforeItsDecoded() throws {
     func reason(_ archive: Archive) -> PlayerPlaylist.Kind { .unmapped([archive.description]) }
-    typealias Archive = SwinsianPredicate.Archive
+    typealias Archive = SwinsianArchive.Problem
     #expect(
-        SwinsianPredicate.kind([UInt8](repeating: 0, count: SwinsianPredicate.maximumBytes + 1))
+        SwinsianPredicate.kind([UInt8](repeating: 0, count: SwinsianArchive.maximumBytes + 1))
             == reason(.tooLarge))
     #expect(SwinsianPredicate.kind(Array("bplist00junk".utf8)) == reason(.notAnArchive))
-    // An archive of a class off the list: a URL.
+    // An archive of something other than a predicate: a URL.
     let url = [UInt8](
         try NSKeyedArchiver.archivedData(
             withRootObject: NSURL(fileURLWithPath: "/"), requiringSecureCoding: true))
-    guard case .unmapped(let refused) = SwinsianPredicate.kind(url) else {
-        Issue.record("a URL mapped")
-        return
-    }
-    #expect(refused.first?.hasPrefix("its rules couldn't be read: ") == true, "\(refused)")
+    #expect(SwinsianPredicate.kind(url) == .unmapped(["“NSURL” is an unsupported rule"]))
     var deep: NSPredicate = NSPredicate(format: #"genre CONTAINS[c] "a""#)
-    for _ in 0..<SwinsianPredicate.maximumDepth {
+    for _ in 0..<SwinsianArchive.maximumDepth {
         deep = NSCompoundPredicate(notPredicateWithSubpredicate: deep)
     }
     #expect(
@@ -269,10 +276,31 @@ func blobSQL(_ bytes: [UInt8]) -> String {
     #expect(SwinsianPredicate.kind(archive(cycle)) == reason(.cycle))
     #expect(
         SwinsianPredicate.kind(
-            archive("<string>x</string>", count: SwinsianPredicate.maximumObjects))
+            archive("<string>x</string>", count: SwinsianArchive.maximumObjects))
             == reason(.tooManyObjects))
     let dangling = "<dict><key>a</key><dict><key>CF$UID</key><integer>9</integer></dict></dict>"
     #expect(SwinsianPredicate.kind(archive(dangling)) == reason(.notAnArchive))
+    // No objects at all, which the fuzzer found.
+    let empty = String(decoding: archive(""), as: UTF8.self)
+        .replacingOccurrences(of: "<string>$null</string>", with: "")
+    #expect(SwinsianPredicate.kind(Array(empty.utf8)) == reason(.notAnArchive))
+}
+
+/// Archives the fuzzer found that made `NSKeyedUnarchiver` raise an exception and end the app
+/// (ADR 0025 row 46), each a listed reason now.
+@Test(arguments: [
+    "bad-left-expression", "bad-left-expression-nested", "bad-right-expression",
+    "bad-right-expression-nested", "bad-function-operator",
+])
+func fuzzedPredicateArchivesAreReasonsNotCrashes(_ name: String) throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("Crashes/predicate-\(name).bplist")
+    let kind = SwinsianPredicate.kind([UInt8](try Data(contentsOf: url)))
+    guard case .unmapped(let reasons) = kind else {
+        Issue.record("\(name) mapped: \(kind)")
+        return
+    }
+    #expect(!reasons.isEmpty)
 }
 
 @Test func aMissingTableOrColumnIsNamedAndNothingIsGuessed() throws {
@@ -486,7 +514,7 @@ private func readITunes(_ data: Data) throws -> PlayerLibrary {
                 1,
                 "(1, '\(String(repeating: "n", count: PlayerLibrary.maximumNameBytes + 1))', 0, NULL, NULL, NULL)",
                 "(2, 'Big', 1, \(blobSQL(rules)), NULL, NULL)",
-                "(3, 'Huge', 1, zeroblob(\(SwinsianPredicate.maximumBytes + 1)), NULL, NULL)"))
+                "(3, 'Huge', 1, zeroblob(\(SwinsianArchive.maximumBytes + 1)), NULL, NULL)"))
     let library = try PlayerLibrary(swinsianAt: url, now: now)
     #expect(library.tracks.isEmpty)
     #expect(
@@ -497,10 +525,9 @@ private func readITunes(_ data: Data) throws -> PlayerLibrary {
     #expect(
         library.playlists.map(\.kind) == [
             .unmapped([
-                "“\(predicate.predicateFormat.prefix(SwinsianPredicate.maximumQuotedCharacters))…”: "
-                    + SmartRule.textTooLong
+                "“genre CONTAINS[c] <text of \(long.utf8.count) bytes>”: \(SmartRule.textTooLong)"
             ]),
-            .unmapped([SwinsianPredicate.Archive.tooLarge.description]),
+            .unmapped([SwinsianArchive.Problem.tooLarge.description]),
         ])
 }
 
