@@ -59,6 +59,13 @@ if [ -d "$reference" ]; then
   rm -rf "$clones"
   mkdir -p "$(dirname "$clones")"
   cp -c -Rp "$reference" "$clones"
+  # A link in the clones could lead the tool back into the reference or anywhere else.
+  links=$(find "$clones" -type l)
+  if [ -n "$links" ]; then
+    echo "error: the tag corpus clones hold symbolic links, which the fuzzer won't follow:" >&2
+    printf '%s\n' "$links" >&2
+    exit 1
+  fi
   clone_flag=(--clones "$clones")
 else
   echo "no reference corpus at $reference; seeding from generated files only" >&2

@@ -34,7 +34,17 @@ done
 out="$repo/.build/mutate"
 mkdir -p "$out"
 worktrees=()
+pids=()
 cleanup() {
+  # Jobs still going, as on ^C: stop each, the builds and test runs under it, and any test
+  # helper using its scratch path, before their worktrees go.
+  for pid in "${pids[@]+"${pids[@]}"}"; do
+    pkill -TERM -P "$pid" 2> /dev/null || true
+    kill "$pid" 2> /dev/null || true
+  done
+  pkill -f "swift-(build|test|frontend).*$out/build-" 2> /dev/null || true
+  pkill -f "swiftpm-testing-helper.*--scratch-path $out/build-" 2> /dev/null || true
+  for pid in "${pids[@]+"${pids[@]}"}"; do wait "$pid" 2> /dev/null || true; done
   for tree in "${worktrees[@]+"${worktrees[@]}"}"; do
     git -C "$repo" worktree remove --force "$tree" 2> /dev/null || rm -rf "$tree"
   done
@@ -98,13 +108,13 @@ for job in $(seq 0 $((jobs - 1))); do
   git -C "$repo" worktree add -q --detach "$tree" HEAD
   worktrees+=("$tree")
 done
-pids=()
 for job in $(seq 0 $((jobs - 1))); do
   run_job "$job" &
   pids+=($!)
 done
 failed=0
 for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
+pids=()
 cat "$out"/results-*.tsv | sort -t$'\t' -k1,1 -k2,2n > "$out/results.tsv"
 [ "$failed" -eq 0 ] || { echo "error: a job failed" >&2; exit 1; }
 
