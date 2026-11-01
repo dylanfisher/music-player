@@ -19,9 +19,6 @@ final class SyncDirectory {
 
     deinit { close(descriptor) }
 
-    /// The name of the log of the machine `id`.
-    static func logName(_ id: String) -> String { id + logSuffix }
-
     /// The machine whose log `name` is, for a name of 32 lowercase hex digits and `.log`.
     static func machine(ofLog name: String) -> String? {
         guard name.hasSuffix(logSuffix) else { return nil }
@@ -67,6 +64,9 @@ final class SyncDirectory {
 }
 
 private let logSuffix = ".log"
+
+/// The name of the log of the machine `id` in the sync folder.
+package func syncLogName(_ id: String) -> String { id + logSuffix }
 
 /// A log in the sync folder, read and written through its descriptor.
 final class SyncLogFile {

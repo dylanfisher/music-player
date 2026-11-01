@@ -88,6 +88,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Scan 2,000 fixture files on a slow simulated NAS (about 60 ms per file with a long tail, 45 ms per listing, 24 at once), tuned readers, ending at 16 or more and within 80% of the best fixed level | < 10 s | < 20 s |
 | Rescan with no changes, fixture library, local SSD | < 1.5 s | < 15 s |
 | Rescan after renaming every fixture file, matching each move (phase 23); the old Mac figure is an estimate until its checkpoint | < 10 s | < 240 s |
+| Merge 1M play events from another machine's sync log over 43k tracks (phase 23); the old Mac figure is an estimate until its checkpoint | < 20 s | < 120 s |
 | Library database for the fixture library | < 60 MB | < 60 MB |
 | Memory a scan of the fixture library adds, at its peak | < 50 MB | < 50 MB |
 | Browser pane query: genres, artists, albums (p95) | < 2 ms | < 60 ms |

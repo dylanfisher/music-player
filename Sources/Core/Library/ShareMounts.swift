@@ -6,6 +6,12 @@ public struct MountedShare: Equatable, Sendable {
     /// The share as a URL, such as `smb://nas.local/music`.
     var url: String
     var mountPoint: String
+
+    /// For the bench, which mounts nothing.
+    package init(url: String, mountPoint: String) {
+        self.url = url
+        self.mountPoint = mountPoint
+    }
 }
 
 /// The network shares mounted now. `SystemShareMounts` reads them from the system; tests fake

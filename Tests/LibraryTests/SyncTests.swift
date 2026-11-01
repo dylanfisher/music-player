@@ -26,7 +26,7 @@ private final class SimulatedNAS {
     deinit { try? FileManager.default.removeItem(at: root) }
 
     /// The log of the machine `id`.
-    func log(_ id: String) -> String { syncFolder + "/" + SyncDirectory.logName(id) }
+    func log(_ id: String) -> String { syncFolder + "/" + syncLogName(id) }
 }
 
 /// One Mac: its own library database, the share mounted at `mount`, and a wall clock the

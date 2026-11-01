@@ -104,7 +104,7 @@ the config file but music files, through the tag writer.
   `O_NOFOLLOW` in the folder's descriptor and checked by `fstat` as a regular file. Each is read
   from where the last read stopped to its last complete line: a line without its `\n` is left
   for the next read. The logs are merged in clock order, so a playlist's creation comes before
-  its rename from another machine, and applied in transactions of 2,000 events, each storing
+  its rename from another machine, and applied in transactions of 20,000 events, each storing
   how far it read every log (`sync_logs`), so a crash repeats nothing. A log shorter than where
   reading stopped is read again from the start and reported; its sequence numbers keep events
   already applied from counting twice.

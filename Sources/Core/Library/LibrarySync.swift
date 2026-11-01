@@ -7,8 +7,10 @@ private let logger = moduleLogger()
 
 /// Syncing with the sync folder (ADR 0038): this machine's log goes out, the others' come in.
 extension LibraryIndex {
-    /// How many events one transaction applies, with how far it read each log.
-    static let syncBatch = 2000
+    /// How many events one transaction applies, with how far it read each log: enough that
+    /// commits and checkpoints don't dominate a long log, few enough that an edit in the window
+    /// waits a fraction of a second.
+    static let syncBatch = 20_000
 
     /// Pushes this machine's log to the folder at `path`, which is named `folder` in the
     /// config, then reads and applies every other machine's log there. Only the push runs when
@@ -43,7 +45,7 @@ extension LibraryIndex {
         }[0]
         // Nothing waiting means no call to the folder at all.
         guard last > seq || !same else { return 0 }
-        let file = try directory.openForAppending(SyncDirectory.logName(state.machine))
+        let file = try directory.openForAppending(syncLogName(state.machine))
         guard file.size >= bytes else {
             throw SyncFileError.notOurs(
                 file.name, "it's \(file.size) bytes, and \(bytes) were written to it")
@@ -96,7 +98,7 @@ extension LibraryIndex {
     private func merge(from directory: SyncDirectory, folder: String, into report: inout SyncReport)
         throws
     {
-        let me = SyncDirectory.logName(try machineID())
+        let me = syncLogName(try machineID())
         var names = try directory.logNames().filter { $0 != me }
         if names.count > SyncDirectory.maximumLogs {
             report.problems.append(

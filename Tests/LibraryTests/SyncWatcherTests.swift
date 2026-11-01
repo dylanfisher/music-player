@@ -49,7 +49,7 @@ private func eventually(
     defer { try? FileManager.default.removeItem(at: root) }
     let databaseURL = root.appendingPathComponent("library.sqlite")
     let index = try LibraryIndex(at: databaseURL)
-    let log = sync + "/" + SyncDirectory.logName(try index.machineID())
+    let log = sync + "/" + syncLogName(try index.machineID())
     let syncs = Syncs()
     let watcher = LibraryWatcher(
         databaseURL: databaseURL, networkReaders: 2,

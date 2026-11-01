@@ -70,6 +70,13 @@ package struct SyncRecord: Equatable, Sendable {
         self.clock = clock
         self.event = event
     }
+
+    /// The line of a play of `path` at `at`, event `seq` of its log made at `ms`, for the bench
+    /// to write a million without a million transactions.
+    package static func playLine(seq: Int64, ms: Int64, path: String, at: Double) -> String {
+        SyncRecord(seq: seq, clock: SyncClock(ms: ms, counter: 0), event: .play(path: path, at: at))
+            .line
+    }
 }
 
 extension SyncEvent {
@@ -302,7 +309,9 @@ enum SyncJSON: Equatable {
                 $0.isEmpty || $0 == "." || $0 == ".."
             })
         else { throw .bad(key, "isn't a relative path without empty, . or .. parts") }
-        return path.precomposedStringWithCanonicalMapping
+        // ASCII is already in NFC, and most paths are.
+        return path.utf8.allSatisfy { $0 < 0x80 }
+            ? path : path.precomposedStringWithCanonicalMapping
     }
 
     fileprivate func playlistID() throws(SyncLineProblem) -> String {
@@ -484,9 +493,9 @@ struct SyncJSONParser {
             let next = try byte()
             switch next {
             case UInt8(ascii: "\""):
-                guard let text = String(bytes: utf8, encoding: .utf8) else {
-                    throw .notJSON("a string isn't UTF-8")
-                }
+                // Decoding replaces each invalid sequence, so different bytes mean invalid ones.
+                let text = String(decoding: utf8, as: UTF8.self)
+                guard text.utf8.elementsEqual(utf8) else { throw .notJSON("a string isn't UTF-8") }
                 return text
             case UInt8(ascii: "\\"):
                 let escape = try byte()
