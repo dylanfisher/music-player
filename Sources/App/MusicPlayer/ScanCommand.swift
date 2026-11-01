@@ -1,3 +1,4 @@
+import DisplayText
 import Foundation
 import Library
 import Metadata
@@ -31,7 +32,7 @@ func scanCommand(folder: String, databasePath: String?, readers: Int?, hints: Re
         databaseURL = libraryFileURL(in: paths.dataDirectory)
     }
     if readers != nil, isLocal == nil {
-        FileHandle.standardError.write(Data("error: \(path) doesn't exist\n".utf8))
+        FileHandle.standardError.write(Data(terminalSafe("error: \(path) doesn't exist\n").utf8))
         exit(1)
     }
     if readers != nil, isLocal != false {
@@ -41,8 +42,9 @@ func scanCommand(folder: String, databasePath: String?, readers: Int?, hints: Re
         exit(1)
     }
     print(
-        "scanning \(path) (\(isLocal == false ? "network" : "local") volume) into \(databaseURL.path)"
-    )
+        terminalSafe(
+            "scanning \(path) (\(isLocal == false ? "network" : "local") volume) into"
+                + " \(databaseURL.path)"))
 
     let (stream, continuation) = ScanProgress.makeStream()
     let started = Date()
@@ -100,7 +102,7 @@ func scanCommand(folder: String, databasePath: String?, readers: Int?, hints: Re
             format: "  database: %.1f MB", Double(try Database.sizeBytes(at: databaseURL)) / 1e6),
         "  every warned or failed file: \(reportURL.path)",
     ]
-    print(lines.joined(separator: "\n"))
+    print(terminalSafe(lines.joined(separator: "\n")))
 }
 
 private func printProgress(_ progress: ScanProgress, since started: Date) {

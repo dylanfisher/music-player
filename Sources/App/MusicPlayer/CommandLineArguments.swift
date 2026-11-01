@@ -1,3 +1,4 @@
+import DisplayText
 import Foundation
 import Metadata
 
@@ -27,7 +28,7 @@ func value(after flag: Flag, in arguments: [String]) -> String? {
 
 /// Writes `error` to standard error as the command line shows a failure.
 func printError(_ error: Any) {
-    FileHandle.standardError.write(Data("error: \(error)\n".utf8))
+    FileHandle.standardError.write(Data(terminalSafe("error: \(error)\n").utf8))
 }
 
 /// Why `text` isn't one of the values `flag` takes, `choices`.

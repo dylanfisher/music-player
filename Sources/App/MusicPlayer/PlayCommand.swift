@@ -42,14 +42,14 @@ func playCommand(paths: [String], deviceName: String?) throws -> Never {
     let settings = try readConfig(appFiles)
     let recordURL = restoreRecordURL(in: appFiles.dataDirectory)
     if let recovered = try HALDeviceProvider.recoverAfterCrash(restoreRecordURL: recordURL) {
-        print(recovered)
+        print(terminalSafe(recovered))
     }
 
     // Printed first, because reading a network folder can block on a privacy prompt.
-    print("reading \(paths.joined(separator: ", "))")
+    print(terminalSafe("reading \(paths.joined(separator: ", "))"))
     fflush(stdout)
     let (files, warnings) = try queuedFiles(paths)
-    for warning in warnings { print("warning: \(warning)") }
+    for warning in warnings { print(terminalSafe("warning: \(warning)")) }
     guard !files.isEmpty else { throw PlayCommandError.nothingToPlay }
 
     let deviceUID = try deviceName.map(uid(ofDeviceNamed:)) ?? settings[\.outputDeviceUID]
@@ -235,7 +235,7 @@ private final class Player: @unchecked Sendable {
 
     /// Progress rewrites one line in place, so log lines clear it first.
     private func log(_ line: String) {
-        print(eraseLine + line)
+        print(eraseLine + terminalSafe(line))
         fflush(stdout)
     }
 }
