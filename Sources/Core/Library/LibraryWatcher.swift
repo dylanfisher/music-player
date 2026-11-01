@@ -153,9 +153,11 @@ public final class LibraryWatcher: @unchecked Sendable {
             for issue in summary.issues { logger.error("\(issue.description)") }
             events(.scanned(folder: job.folder.path, summary))
         case .failure(let error):
-            state?.failed(now: Date())
             logger.error("scanning \(job.folder.path) failed: \(error)")
-            events(.scanFailed(folder: job.folder.path, reason: "\(error)"))
+            // Its retries fail the same way until something changes, so only the first shows.
+            if state?.failed(now: Date()) == true {
+                events(.scanFailed(folder: job.folder.path, reason: "\(error)"))
+            }
         }
         advance()
     }

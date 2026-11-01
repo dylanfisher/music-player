@@ -29,7 +29,7 @@ cover what a test can't do quickly or hermetically.
 | NAS drops mid-playback | the decoder's read fails, or its audio ends well before its length | Now Playing names the track that failed, and where its audio ended; the next one plays | play again once it's back | `aFileCutShortWhilePlayingIsReportedAndSkipped`, `aQueueOfBrokenFilesEndsInsteadOfLooping` |
 | DAC unplugged while playing or before playing | the HAL's alive and device-list listeners | paused, "device lost"; then "device returned" | press Play | `losingTheDevicePausesAndItsReturnLetsPlaybackResume`, `playingWithTheDeviceUnpluggedReportsItLost` |
 | DAC gone during a rate switch: stop, format, start | the step fails while the device reads as gone | as unplugged, resuming at the new track's start | press Play | `theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost` |
-| Disk full: database | `SQLITE_FULL`; the transaction rolls back | status bar: the scan or edit failed, with SQLite's reason | free space; a local folder rescans a minute later, a network one at its poll | `aFullDatabaseFailsTheScanAndKeepsTheIndex`, `aTransactionSQLiteRolledBackItselfThrowsWhatCausedIt`, `scripts/full-disk` |
+| Disk full: database | `SQLITE_FULL`; the transaction rolls back | status bar: the scan or edit failed, with SQLite's reason | free space; a local folder rescans a minute later, then backs off to 15 minutes; a network one at its poll | `aFullDatabaseFailsTheScanAndKeepsTheIndex`, `aTransactionSQLiteRolledBackItselfThrowsWhatCausedIt`, `scripts/full-disk` |
 | Disk full: state file | the atomic write fails | config banner: "couldn't save" | the change is kept and saved with the next one, or at quit | `aFailedSaveIsKeptAndSavedWithTheNext`, `scripts/full-disk` |
 | Disk full: config file | the atomic write fails | config banner | retried after 1 s, doubling to 30 s | `aNewFileThatCouldntBeWrittenIsRetried`, `scripts/full-disk` |
 | Disk full: tag journal | the record or bytes write fails | the tag editor lists the file and the ones not written | free space, save again | `aJournalThatCantBeWrittenStopsTheBatchAfterThatFile`, `scripts/full-disk` |
@@ -62,8 +62,10 @@ cover what a test can't do quickly or hermetically.
   transaction is active". `Database.transaction` rolls back only a transaction still open.
 - **A failed scan of a local folder is retried.** FSEvents reports a change once, so a scan that
   failed (a full disk, a locked database) used to lose those directories' changes until the
-  next launch. The folder is now scanned whole a minute after a failed scan; a network folder
-  still waits for its next poll.
+  next launch. The folder is now scanned whole a minute after a failed scan, the wait doubling
+  with each failure in a row up to 15 minutes and starting over after a scan that finishes.
+  Retries wait while a track starts, as polls do. A network folder still waits for its next
+  poll. Only the first failure of a run shows in the status bar; its retries fail the same way.
 - **A layout save that fails stays pending,** so the next save or the quit writes it, rather than
   losing the change once it's reported.
 - **A library file SQLite can't read is moved aside, at launch only.** The alert used to quit

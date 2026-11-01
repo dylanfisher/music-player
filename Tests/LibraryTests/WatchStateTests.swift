@@ -106,25 +106,55 @@ private struct FakeEngine {
     #expect(state.start(now: start) == WatchJob(folder: nas, subtrees: ["/Volumes/Music/C"]))
 }
 
-@Test func aFailedLocalScanIsRetriedWholeAMinuteLater() {
-    var state = WatchState(folders: [local, nas], pausePollingDuringPlayback: false, now: start)
-    _ = state.start(now: start)
-    state.finished(now: start)
+@Test func aFailedLocalScanIsRetriedWholeWithABackoff() {
+    var state = WatchState(folders: [local], pausePollingDuringPlayback: false, now: start)
     _ = state.start(now: start)
     state.finished(now: start)
     let changed = local.path + "/Album"
     state.directoriesChanged([changed])
     #expect(state.start(now: minutes(1)) == WatchJob(folder: local, subtrees: [changed]))
-    state.failed(now: minutes(1))
+    let first = state.failed(now: minutes(1))
+    #expect(first, "the first failure is reported")
     #expect(state.start(now: minutes(1.5)) == nil, "a full disk doesn't make it spin")
-    let retry = minutes(1).addingTimeInterval(WatchState.failedScanRetrySeconds)
-    #expect(state.nextPoll(after: minutes(1.5)) == retry)
-    #expect(state.start(now: retry) == WatchJob(folder: local, subtrees: []))
-    state.finished(now: retry)
-    #expect(state.nextPoll(after: retry) == minutes(15), "only the NAS's poll is left")
+    #expect(state.nextPoll(after: minutes(1.5)) == minutes(2))
 
-    // A failed poll waits for its next poll, as one that finished does.
-    #expect(state.start(now: minutes(15)) == WatchJob(folder: nas, subtrees: []))
-    state.failed(now: minutes(15))
+    // Each failure in a row doubles the wait, up to the longest, and isn't reported again.
+    var now = minutes(2)
+    var waits: [Double] = []
+    for _ in 0..<6 {
+        #expect(state.start(now: now) == WatchJob(folder: local, subtrees: []))
+        let reported = state.failed(now: now)
+        #expect(!reported)
+        let next = state.nextPoll(after: now)!
+        waits.append(next.timeIntervalSince(now))
+        now = next
+    }
+    #expect(waits == [120, 240, 480, 900, 900, 900])
+
+    // Held back while a track starts, as polls are.
+    FakeEngine().report(.starting, to: &state)
+    #expect(state.start(now: now) == nil)
+    #expect(state.nextPoll(after: now.addingTimeInterval(-1)) == nil)
+    FakeEngine().report(.stopped, to: &state)
+
+    // A scan that finishes ends the run: the next failure is reported and waits a minute.
+    #expect(state.start(now: now) == WatchJob(folder: local, subtrees: []))
+    state.finished(now: now)
+    state.directoriesChanged([changed])
+    _ = state.start(now: now)
+    let again = state.failed(now: now)
+    #expect(again)
+    #expect(state.nextPoll(after: now) == now.addingTimeInterval(60))
+}
+
+@Test func aFailedPollWaitsForTheNextPollAndIsReportedOnce() {
+    var state = WatchState(folders: [nas], pausePollingDuringPlayback: false, now: start)
+    _ = state.start(now: start)
+    let first = state.failed(now: start)
+    #expect(first)
+    #expect(state.nextPoll(after: start) == minutes(15))
+    _ = state.start(now: minutes(15))
+    let second = state.failed(now: minutes(15))
+    #expect(!second)
     #expect(state.nextPoll(after: minutes(15)) == minutes(30))
 }

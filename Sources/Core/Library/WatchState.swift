@@ -15,10 +15,12 @@ struct WatchJob: Equatable, Sendable {
 /// folders are polled: at start, then `pollIntervalMinutes` after each scan ends, and never
 /// while playback holds polls back.
 struct WatchState {
-    /// How long after a failed scan of a local folder it's scanned again, whole. FSEvents
+    /// How long after a failed scan of a local folder it's first scanned again, whole. FSEvents
     /// reports a change once, so a failed scan would otherwise lose it until the next launch;
-    /// the wait keeps a full disk or a locked database from making it spin.
+    /// the wait keeps a full disk or a locked database from making it spin. Each failure in a
+    /// row doubles it, up to `longestRetrySeconds`.
     static let failedScanRetrySeconds = 60.0
+    static let longestRetrySeconds = 15.0 * 60
 
     let folders: [WatchedFolder]
     private(set) var running: WatchJob?
@@ -33,6 +35,8 @@ struct WatchState {
     private var pollDue: [String: Date] = [:]
     /// When each local folder whose scan failed is scanned again, by path.
     private var retryDue: [String: Date] = [:]
+    /// Scans of each folder that failed in a row, by path; absent after one that finished.
+    private var failuresInARow: [String: Int] = [:]
 
     init(folders: [WatchedFolder], pausePollingDuringPlayback: Bool, now: Date) {
         self.folders = folders
@@ -103,9 +107,11 @@ struct WatchState {
             changed[path] = nil
             retryDue[path] = nil
             job = WatchJob(folder: folder(path), subtrees: [])
-        } else if let (path, _) = retryDue.filter({ $0.value <= now }).min(by: {
-            $0.value < $1.value
-        }) {
+        } else if pollsAllowed,
+            let (path, _) = retryDue.filter({ $0.value <= now }).min(by: {
+                $0.value < $1.value
+            })
+        {
             retryDue[path] = nil
             changed[path] = nil
             job = WatchJob(folder: folder(path), subtrees: [])
@@ -125,6 +131,7 @@ struct WatchState {
     mutating func finished(now: Date) {
         guard let job = running else { preconditionFailure("no scan is running") }
         running = nil
+        failuresInARow[job.folder.path] = nil
         if job.folder.kind == .network {
             pollDue[job.folder.path] = now.addingTimeInterval(
                 TimeInterval(job.folder.pollIntervalMinutes * 60))
@@ -132,20 +139,31 @@ struct WatchState {
     }
 
     /// The running scan failed at `now`, as on a full disk. A polled folder waits for its next
-    /// poll; a local folder is scanned whole `failedScanRetrySeconds` later.
-    mutating func failed(now: Date) {
+    /// poll; a local folder is scanned whole `failedScanRetrySeconds` later, doubling with each
+    /// failure in a row. True for the first failure of a run of them, the one worth reporting.
+    mutating func failed(now: Date) -> Bool {
         guard let job = running else { preconditionFailure("no scan is running") }
-        guard job.folder.kind == .local else { return finished(now: now) }
-        running = nil
-        retryDue[job.folder.path] = now.addingTimeInterval(Self.failedScanRetrySeconds)
+        let path = job.folder.path
+        let failures = (failuresInARow[path] ?? 0) + 1
+        if job.folder.kind == .local {
+            running = nil
+            let wait = min(
+                Self.failedScanRetrySeconds * pow(2, Double(failures - 1)), Self.longestRetrySeconds
+            )
+            retryDue[path] = now.addingTimeInterval(wait)
+        } else {
+            finished(now: now)
+        }
+        failuresInARow[path] = failures
+        return failures == 1
     }
 
     /// When the next poll or retry falls due, for a one-shot timer. Nil when none is pending;
-    /// polls held back don't count, since `playbackChanged` wakes the watcher then. One already
+    /// polls and retries held back for playback don't count, since `playbackChanged` wakes the watcher then. One already
     /// due runs when the running scan finishes.
     func nextPoll(after now: Date) -> Date? {
-        let polls = pollsAllowed ? Array(pollDue.values) : []
-        return (polls + retryDue.values).filter { $0 > now }.min()
+        guard pollsAllowed else { return nil }
+        return (Array(pollDue.values) + retryDue.values).filter { $0 > now }.min()
     }
 
     private func localFolder(containing path: String) -> WatchedFolder? {
