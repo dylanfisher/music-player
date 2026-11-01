@@ -29,6 +29,7 @@ public struct SystemFileAccess: ScanFileAccess {
     }
 
     public func readMetadata(at path: String) throws(MetadataError) -> ParsedFile {
-        try Metadata.readMetadata(at: URL(fileURLWithPath: path), hints: hints)
+        // Without `isDirectory`, Foundation stats the path to find out, once more per file.
+        try Metadata.readMetadata(at: URL(fileURLWithPath: path, isDirectory: false), hints: hints)
     }
 }
