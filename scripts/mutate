@@ -72,10 +72,15 @@ run_job() {
   awk -v jobs="$jobs" -v job="$job" 'NR % jobs == job' "$plan" | while IFS=$'\t' read -r file id line summary target; do
     local outcome
     (cd "$tree" && "$tool" apply "$file" "$id")
-    if ! (cd "$tree" && swift build "${flags[@]}" --product "$target" >> "$out/job-$job.log" 2>&1); then
+    local built=1 product
+    for product in ${target//,/ }; do
+      (cd "$tree" && swift build "${flags[@]}" --product "$product" >> "$out/job-$job.log" 2>&1) \
+        || { built=0; break; }
+    done
+    if [ "$built" -eq 0 ]; then
       outcome=uncompilable
     elif (cd "$tree" && /usr/bin/timeout -k 5 180 swift test "${flags[@]}" --skip-build \
-      --filter "^$target\." >> "$out/job-$job.log" 2>&1); then
+      --filter "^(${target//,/|})\." >> "$out/job-$job.log" 2>&1); then
       outcome=survived
     else
       outcome=killed

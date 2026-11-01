@@ -1,9 +1,10 @@
-# What scripts/mutate mutates (ADR 0027), one entry per line: `<file> <lines> <test target>`.
-# <lines> is `all` or `<first>-<last>`; a file may have several entries. Each mutant runs only
-# that test target.
+# What scripts/mutate mutates (ADR 0027), one entry per line: `<file> <lines> <test targets>`.
+# <lines> is `all` or `<first>-<last>`; a file may have several entries. <test targets> are
+# comma-separated, and each mutant runs only those.
 
-# The playback engine and queue, and the play counting.
-Sources/Core/Playback/PlaybackEngine.swift all PlaybackTests
+# The playback engine and queue, and the play counting. HALOutputTests drive the engine with
+# the null device.
+Sources/Core/Playback/PlaybackEngine.swift all PlaybackTests,HALOutputTests
 Sources/Core/Playback/PlayQueue.swift all PlaybackTests
 Sources/Core/Playback/PlayCounter.swift all PlaybackTests
 Sources/Core/Playback/PlayTracker.swift all PlaybackTests
