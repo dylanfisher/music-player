@@ -26,8 +26,11 @@ package final class FileSource: ByteSource {
     package let size: Int
     let descriptor: Int32
 
+    /// Opened without blocking and without following a link, which the scanner never follows
+    /// either: a FIFO or a device among the files would otherwise block the open forever. Only
+    /// a regular file is then read, blocking as usual.
     package init(path: String, hints: ReadHints = .all) throws(ParseFailure) {
-        let descriptor = open(path, O_RDONLY | O_CLOEXEC)
+        let descriptor = open(path, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
         guard descriptor >= 0 else { throw unreadable(nil, FileFailure.open) }
         var info = stat()
         guard fstat(descriptor, &info) == 0 else {
@@ -38,6 +41,12 @@ package final class FileSource: ByteSource {
         guard info.st_mode & S_IFMT == S_IFREG else {
             close(descriptor)
             throw ParseFailure(kind: .unreadable, offset: nil, detail: FileFailure.notRegular)
+        }
+        let flags = fcntl(descriptor, F_GETFL)
+        guard flags >= 0, fcntl(descriptor, F_SETFL, flags & ~O_NONBLOCK) == 0 else {
+            let failure = unreadable(nil, FileFailure.open)
+            close(descriptor)
+            throw failure
         }
         // Tags are read in a few short reads spread over the file, so read-ahead would fetch
         // bytes the parser skips, and on a NAS that's transfer time, not a saved round trip.

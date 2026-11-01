@@ -263,3 +263,40 @@ private let hostileFiles: [(String, Data, Outcome)] = [
     #expect(error?.kind == .unsupported)
     #expect(error?.offset == art.offset)
 }
+
+/// A FIFO among the music would block an open for reading until something wrote to it.
+@Test func aFIFOOrALinkIsRefusedWithoutBlocking() throws {
+    let folder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("hostile-fifo-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let fifo = folder.appendingPathComponent("track.flac")
+    #expect(mkfifo(fifo.path, 0o600) == 0)
+    let real = folder.appendingPathComponent("real.flac")
+    try flac([(0, streamInfo())]).write(to: real)
+    let link = folder.appendingPathComponent("link.flac")
+    #expect(symlink(real.path, link.path) == 0)
+    for url in [fifo, link] {
+        let done = DispatchSemaphore(value: 0)
+        let outcome = ThrownError()
+        Thread.detachNewThread {
+            do throws(MetadataError) {
+                _ = try readMetadata(at: url)
+            } catch {
+                outcome.set(error)
+            }
+            done.signal()
+        }
+        try #require(done.wait(timeout: .now() + 5) == .success, "\(url.lastPathComponent) blocked")
+        #expect(outcome.error?.kind == .unreadable, "\(url.lastPathComponent)")
+    }
+    #expect(try readMetadata(at: real).metadata.audio.sampleRateHz == 44_100)
+}
+
+/// What the reading thread threw, read once it has signalled.
+private final class ThrownError: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: MetadataError?
+    var error: MetadataError? { lock.withLock { stored } }
+    func set(_ error: MetadataError) { lock.withLock { stored = error } }
+}
