@@ -16,7 +16,10 @@ extension AppDelegate {
 
     /// Once playback is ready, so a request that plays finds the engine.
     func startScripting() {
-        guard let dispatcher else { return }
+        guard let dispatcher else {
+            refuseWaitingLinks()
+            return
+        }
         let router = ScriptRouter(
             dispatcher: dispatcher,
             status: { [weak self] in
@@ -42,7 +45,11 @@ extension AppDelegate {
     }
 
     private func runLink(_ link: String) {
-        guard let router = scriptRouter, let dispatcher else {
+        guard dispatcher != nil else {
+            browser?.report("a \(urlScheme) link didn't run: the app has no commands")
+            return
+        }
+        guard let router = scriptRouter else {
             guard waitingLinks.count < Self.waitingLinksCap else {
                 logger.error(
                     "a \(urlScheme) link was dropped: \(Self.waitingLinksCap) already wait")
@@ -51,19 +58,20 @@ extension AppDelegate {
             waitingLinks.append(link)
             return
         }
-        let request: ScriptRequest
-        do {
-            request = try scriptRequest(
-                link: link, names: CommandNames(dispatcher.bindings.defaults.commands))
-        } catch {
-            browser?.report("\(error)")
-            return
-        }
         Task {
-            if case .failed(let reason) = await router.handle(request, from: .link) {
+            if case .failed(let reason) = await router.link(link) {
                 browser?.report("a \(urlScheme) link didn't run: \(reason)")
             }
         }
+    }
+
+    /// The app couldn't build its commands, so the links that waited for them fail, logged,
+    /// since there's no window to show them in.
+    private func refuseWaitingLinks() {
+        for _ in waitingLinks {
+            logger.error("a \(urlScheme) link didn't run: the app has no commands")
+        }
+        waitingLinks = []
     }
 
     private func playQuery(_ text: String) async throws -> String {

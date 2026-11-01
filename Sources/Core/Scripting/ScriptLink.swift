@@ -8,7 +8,7 @@ let linkArgumentKey = "q"
 /// a link, so it's hostile input: it runs only a command marked `runsFromLinks`, and anything
 /// it doesn't spell exactly as `<scheme>://<command>[/][?q=<argument>]` is refused rather than
 /// guessed at. The argument is percent-decoded once; `+` stays a plus.
-public func scriptRequest(link: String, names: CommandNames) throws -> ScriptRequest {
+func scriptRequest(link: String, names: CommandNames) throws -> ScriptRequest {
     func refuse(_ reason: String) -> ScriptLinkRefusal { ScriptLinkRefusal(reason: reason) }
     guard link.utf8.count <= ScriptLimits.urlBytes else {
         throw refuse("it's over \(ScriptLimits.urlBytes) bytes")
