@@ -1856,18 +1856,18 @@ fixes: 1.27 to 1.51% of 3%.
 
 ### 21. Scripting
 
-- [ ] **Command line:** a `music-player` tool in the bundle that runs registry commands in the
+- [x] **Command line:** a `music-player` tool in the bundle that runs registry commands in the
       running app (`music-player play`, `music-player next`, `music-player play "album:Kind of
       Blue"`, `music-player status --json`), and starts the app if it isn't running.
-- [ ] **URL scheme:** `music-player://` runs the same commands, for Shortcuts, Raycast and links.
-- [ ] Both reach the app over a local channel only (Apple events or a socket readable by the user
+- [x] **URL scheme:** `music-player://` runs the same commands, for Shortcuts, Raycast and links.
+- [x] Both reach the app over a local channel only (Apple events or a socket readable by the user
       alone; the ADR picks). A web page can open a URL, so the URL scheme runs playback and
       navigation commands only; commands that change the library, playlists or files need the
       app in front and a confirmation. Add the rows to
       [ADR 0025](decisions/0025-threat-model.md).
-- [ ] Commands, their arguments and their help text come from the registry; nothing is declared
+- [x] Commands, their arguments and their help text come from the registry; nothing is declared
       twice. `music-player help` lists them.
-- [ ] Tests: argument parsing, each command routed to the registry, refused commands, and status
+- [x] Tests: argument parsing, each command routed to the registry, refused commands, and status
       output.
 
 Implementation plan (ADR 0036):
@@ -1898,6 +1898,17 @@ Implementation plan (ADR 0036):
    socket, the next client served), ScriptingTests (parsing, help, URL refusals, every command
    routed, status JSON), CommandsTests (the link list), LibraryBrowserTests (play a search or
    an entry). ADR 0025 gets rows for the socket and the URL scheme.
+
+Result: shipped. A `music-player` tool in the bundle (`Contents/MacOS/music-player`, signed with
+the hardened runtime and covered by `check-signature`) and `music-player://` links both run
+registry commands in the app over a Unix-domain socket in a 0700 folder under the data folder,
+checked by peer uid before any byte is read, with 4 KiB length-prefixed JSON, 2 s deadlines and
+at most 16 pending replies (ADR 0036). Apple events were passed over for their entitlement,
+Automation prompts and no sender uid. The tool starts the app and waits one 20 s deadline; a
+retry after a lost reply can run a command twice. Links run 18 playback and navigation commands
+(`runsFromLinks`, one flag on the command), never Volume Up, at most 5 a second; every other
+command is refused from a link rather than confirmed. Commands, arguments and help come from the
+registry. ADR 0025 rows 47 to 50.
 
 ### 22. Per-device profiles
 
