@@ -69,6 +69,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Set from the read of another player's library until its preview sheet closes.
     private var isImporting = false
     private(set) var importSheet: PlayerImportSheet?
+    /// True from Resolve Lost Stats until its last sheet closes, so one is open at a time.
+    private var isResolvingLostStats = false
+    private(set) var lostStatsSheet: LostStatsSheet?
 
     /// `index` is a connection for the main thread, which fetches the table's rows a page at a
     /// time: a page is one primary-key lookup per row and takes well under a millisecond.
@@ -310,6 +313,46 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         sidebarController.openHealth()
         show(failure: "Checking the library's health…")
         runHealth()
+    }
+
+    /// Opens Lost Stats over `window`, one lost file at a time, to give each one's stats to a
+    /// track that matches it or dismiss it.
+    public func resolveLostStats(over window: NSWindow) {
+        guard !isResolvingLostStats else {
+            NSSound.beep()
+            return
+        }
+        isResolvingLostStats = true
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let lost = try await reader.lostFiles()
+                guard !lost.isEmpty else {
+                    isResolvingLostStats = false
+                    return show(failure: "No lost stats to resolve")
+                }
+                let session = LostStatsSession(
+                    lost: lost,
+                    paths: try await reader.paths(ids: Array(Set(lost.flatMap(\.candidates)))),
+                    move: { [reader] in try await reader.moveStats(from: $0, to: $1) },
+                    dismiss: { [reader] in try await reader.dismissLost($0) })
+                let sheet = LostStatsSheet(session: session)
+                sheet.changed = { [weak self] in
+                    self?.refreshNow()
+                    self?.runHealth()
+                }
+                sheet.failed = { [weak self] message in self?.report(message) }
+                sheet.closed = { [weak self] in
+                    self?.lostStatsSheet = nil
+                    self?.isResolvingLostStats = false
+                }
+                lostStatsSheet = sheet
+                sheet.begin(over: window)
+            } catch {
+                isResolvingLostStats = false
+                report("couldn't read the lost stats: \(error)")
+            }
+        }
     }
 
     private func runHealth() {

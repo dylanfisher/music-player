@@ -39,6 +39,7 @@ extension CommandID {
 
     public static let addFolder = CommandID("library.addFolder")
     public static let checkHealth = CommandID("library.checkHealth")
+    public static let resolveLostStats = CommandID("library.resolveLostStats")
     public static let revealInFinder = CommandID("track.revealInFinder")
     public static let copyPath = CommandID("track.copyPath")
     public static let editTags = CommandID("track.editTags")
@@ -139,6 +140,7 @@ public enum AppCommands {
 
             Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
             Command(.checkHealth, "Check Library Health"),
+            Command(.resolveLostStats, "Resolve Lost Stats…"),
             Command(
                 .revealInFinder, "Reveal in Finder",
                 [.init("r", [cmd, shift]), .init("r", [opt, cmd])]),

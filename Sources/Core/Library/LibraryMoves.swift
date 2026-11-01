@@ -26,7 +26,7 @@ extension LibraryIndex {
     }
 
     /// Every lost path, by path, with the tracks it could have moved to.
-    func lostFiles() throws -> [LostFile] {
+    public func lostFiles() throws -> [LostFile] {
         var lost: [LostFile] = []
         try statement(
             """
@@ -61,7 +61,7 @@ extension LibraryIndex {
 
     /// Gives the stats of the lost path `lost` to the track `track`, which has none of its own,
     /// as the user picked in Lost Stats.
-    func moveStats(from lost: Int64, to track: Int64) throws {
+    public func moveStats(from lost: Int64, to track: Int64) throws {
         try database.transaction {
             let isLost =
                 try statement("SELECT 1 FROM paths p WHERE p.id = ? AND \(lostCondition)")
@@ -76,7 +76,7 @@ extension LibraryIndex {
     }
 
     /// Takes the lost paths `ids` out of Lost Stats, until their files are read again.
-    func dismissLost(_ ids: [Int64]) throws {
+    public func dismissLost(_ ids: [Int64]) throws {
         try database.transaction {
             let dismiss = try statement("UPDATE paths SET lost_dismissed = 1 WHERE id = ?")
             for id in ids { try dismiss.run(id) }

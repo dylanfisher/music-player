@@ -20,6 +20,10 @@ extension AppDelegate {
         dispatcher.handle(.checkHealth, enabled: hasWindow) { [weak self] in
             self?.browser?.checkHealth()
         }
+        dispatcher.handle(.resolveLostStats, enabled: hasWindow) { [weak self] in
+            guard let window = self?.window?.window else { return }
+            self?.browser?.resolveLostStats(over: window)
+        }
     }
 
     /// Whether the main window is open, for the commands that need it.
