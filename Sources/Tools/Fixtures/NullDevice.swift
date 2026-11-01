@@ -9,9 +9,11 @@ import Playback
 /// use it so playback never sounds on the build Mac. It reports a stereo 32-bit integer format at
 /// any rate, like the owner's DAC, and can be unplugged and plugged back in. Tests can change its
 /// rate, hog mode and volume as another app would, and it reports its state as the HAL's
-/// listeners would.
+/// listeners would. Tests can also narrow the rates and formats it reports, and give two of
+/// them different names.
 public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
-    public let deviceName = "null device"
+    public let deviceName: String
+    public var deviceUID: String { deviceName }
     /// How many times faster than real time the IO proc runs.
     public let speed: Double
     public let ioFrames: Int
@@ -23,6 +25,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     private var nominalSampleRateHz = 44_100.0
     private var otherHogOwner: Int32?
     private var volumes: [VolumeControl] = []
+    private var formats = NullDevice.anyRate
     private var runs: [CapturedRun] = []
     private var restoredDefaults = 0
     private var openSessions = 0
@@ -46,8 +49,12 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
         public var samples: [Int32]
     }
 
-    public init(speed: Double = 1, ioFrames: Int = 512, keepsSamples: Bool = false) {
+    public init(
+        name: String = "null device", speed: Double = 1, ioFrames: Int = 512,
+        keepsSamples: Bool = false
+    ) {
         precondition(speed > 0, "speed must be positive")
+        deviceName = name
         self.speed = speed
         self.ioFrames = ioFrames
         self.keepsSamples = keepsSamples
@@ -81,6 +88,22 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
         reportState()
     }
 
+    /// The device reporting other rates and formats, as one does when its listeners fire.
+    func report(_ formats: DeviceFormats) {
+        lock.withLock { self.formats = formats }
+        reportState()
+    }
+
+    /// Stereo 32-bit integer at any rate up to 768 kHz.
+    static let anyRate = DeviceFormats(
+        sampleRatesHz: [8_000...768_000],
+        formats: [
+            PhysicalFormat(
+                AudioStreamRangedDescription(
+                    mFormat: format(sampleRateHz: 8_000),
+                    mSampleRateRange: AudioValueRange(mMinimum: 8_000, mMaximum: 768_000)))
+        ])
+
     private func reportState() {
         let (watcher, state) = lock.withLock { (stateWatcher, state) }
         watcher?(state)
@@ -96,7 +119,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
             DeviceSignal(
                 nominalSampleRateHz: nominalSampleRateHz,
                 physical: SignalFormat(Self.format(sampleRateHz: nominalSampleRateHz)),
-                isMixable: false, hogMode: hog, volumes: volumes))
+                isMixable: false, hogMode: hog, volumes: volumes, formats: formats))
     }
 
     static func format(sampleRateHz: Double) -> AudioStreamBasicDescription {

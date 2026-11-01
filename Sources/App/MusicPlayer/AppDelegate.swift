@@ -299,10 +299,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 logger.notice("\(recovered)")
             }
             let provider = try HALDeviceProvider(
-                deviceUID: settings[\.outputDeviceUID], hogMode: settings[\.hogMode],
-                restoreRecordURL: recordURL)
+                deviceUID: try HALDeviceProvider.resolve(settings[\.outputDeviceUID]),
+                hogMode: settings[\.hogMode], restoreRecordURL: recordURL)
             let output = try DeviceOutput(
-                provider: provider, digitalVolume: settings[\.digitalVolume])
+                DeviceChoice(
+                    provider: provider, digitalVolume: settings[\.digitalVolume], gain: 1,
+                    formats: nil))
             let engine = PlaybackEngine(output: output)
             digitalVolume = settings[\.digitalVolume]
             self.output = output

@@ -348,7 +348,8 @@ private func playing<T>(
     _ body: (Session) throws -> T
 ) throws -> T {
     let device = NullDevice(speed: speed, keepsSamples: keepsSamples)
-    let output = try DeviceOutput(provider: device, digitalVolume: false)
+    let output = try DeviceOutput(
+        DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil))
     let engine = PlaybackEngine(output: output)
     let session = Session(device: device)
     let started = DispatchSemaphore(value: 0)

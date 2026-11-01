@@ -51,12 +51,14 @@ public struct SignalFormat: Sendable, Equatable {
 /// An output device, and the gain the output applies before it.
 public struct DeviceSink: Sendable, Equatable {
     public var name: String
+    public var uid: String
     public var state: DeviceState
     /// The digital volume, as a linear amplitude: exactly 1 when off or at full.
     public var gain: Double
 
-    public init(name: String, state: DeviceState, gain: Double) {
+    public init(name: String, uid: String, state: DeviceState, gain: Double) {
         self.name = name
+        self.uid = uid
         self.state = state
         self.gain = gain
     }
@@ -79,16 +81,18 @@ public struct DeviceSignal: Sendable, Equatable {
     public var hogMode: HogMode
     /// Every volume control on the device's output that it has, as a linear scalar.
     public var volumes: [VolumeControl]
+    public var formats: DeviceFormats
 
     public init(
         nominalSampleRateHz: Double, physical: SignalFormat, isMixable: Bool, hogMode: HogMode,
-        volumes: [VolumeControl]
+        volumes: [VolumeControl], formats: DeviceFormats
     ) {
         self.nominalSampleRateHz = nominalSampleRateHz
         self.physical = physical
         self.isMixable = isMixable
         self.hogMode = hogMode
         self.volumes = volumes
+        self.formats = formats
     }
 }
 

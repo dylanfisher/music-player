@@ -3,7 +3,8 @@ import CoreAudio
 import Playback
 
 /// The device's signal properties, and the listeners that report a change to any of them: its
-/// rate, hog mode, stream list and volume controls, and its first output stream's format.
+/// rate, the rates it offers, hog mode, stream list and volume controls, and its first output
+/// stream's format and the formats it offers.
 func readSignal(of id: AudioObjectID) throws -> (signal: DeviceSignal, keys: Set<PropertyKey>) {
     let streams: [AudioStreamID] = try readArray(
         id, address(kAudioDevicePropertyStreams, scope: kAudioObjectPropertyScopeOutput))
@@ -12,6 +13,10 @@ func readSignal(of id: AudioObjectID) throws -> (signal: DeviceSignal, keys: Set
         stream, address(kAudioStreamPropertyPhysicalFormat))
     let owner: pid_t = try readScalar(id, address(kAudioDevicePropertyHogMode))
     let volumes = volumeControls(of: id, channels: physical.mChannelsPerFrame)
+    let rates: [AudioValueRange] = try readArray(
+        id, address(kAudioDevicePropertyAvailableNominalSampleRates))
+    let available: [AudioStreamRangedDescription] = try readArray(
+        stream, address(kAudioStreamPropertyAvailablePhysicalFormats))
     let signal = DeviceSignal(
         nominalSampleRateHz: try readScalar(id, address(kAudioDevicePropertyNominalSampleRate)),
         physical: SignalFormat(physical),
@@ -19,9 +24,13 @@ func readSignal(of id: AudioObjectID) throws -> (signal: DeviceSignal, keys: Set
         hogMode: owner == -1 ? .free : owner == getpid() ? .thisProcess : .otherProcess(pid: owner),
         volumes: try volumes.map { kind, key in
             VolumeControl(kind, scalar: try readScalar(id, key.address))
-        })
+        },
+        formats: DeviceFormats(
+            sampleRatesHz: rates.map { $0.mMinimum...$0.mMaximum },
+            formats: available.map(PhysicalFormat.init)))
     let keys = deviceSignalKeys(id).union(volumes.map(\.key)).union([
-        PropertyKey(stream, kAudioStreamPropertyPhysicalFormat)
+        PropertyKey(stream, kAudioStreamPropertyPhysicalFormat),
+        PropertyKey(stream, kAudioStreamPropertyAvailablePhysicalFormats),
     ])
     return (signal, keys)
 }
@@ -30,6 +39,7 @@ func readSignal(of id: AudioObjectID) throws -> (signal: DeviceSignal, keys: Set
 func deviceSignalKeys(_ id: AudioObjectID) -> Set<PropertyKey> {
     [
         PropertyKey(id, kAudioDevicePropertyNominalSampleRate),
+        PropertyKey(id, kAudioDevicePropertyAvailableNominalSampleRates),
         PropertyKey(id, kAudioDevicePropertyHogMode),
         PropertyKey(id, kAudioDevicePropertyStreams, scope: kAudioObjectPropertyScopeOutput),
     ]

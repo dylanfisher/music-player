@@ -63,6 +63,7 @@ public protocol PCMDevice: AnyObject {
 /// Finds and opens the one device an output plays to, and says when it comes and goes.
 public protocol PCMDeviceProvider: AnyObject, Sendable {
     var deviceName: String { get }
+    var deviceUID: String { get }
     /// Nil when the device isn't connected.
     func open() throws -> (any PCMDevice)?
     func isConnected() -> Bool

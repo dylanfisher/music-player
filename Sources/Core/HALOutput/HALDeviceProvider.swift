@@ -24,7 +24,7 @@ enum HALDeviceProviderError: Error, CustomStringConvertible {
 /// the way it was before playback. The snapshot is also written to `restoreRecordURL` until a
 /// session restores it, so `recoverAfterCrash` can restore it after a run that never got to.
 public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
-    private let deviceUID: String
+    public let deviceUID: String
     public let deviceName: String
     private let hogMode: Bool
     private let restoreRecordURL: URL
@@ -37,21 +37,22 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
     private var stateChanged: (@Sendable (DeviceState) -> Void)?
     private var signalListeners: PropertyListeners?
 
-    /// `deviceUID` nil means the system's default output now. It is resolved once, so when that
-    /// device goes away playback pauses instead of following macOS to another one.
-    public init(deviceUID: String?, hogMode: Bool, restoreRecordURL: URL) throws {
-        if let deviceUID {
-            self.deviceUID = deviceUID
-        } else {
-            let id = try AudioDevice.defaultOutputID()
-            guard id != kAudioObjectUnknown else { throw HALDeviceProviderError.noDefaultOutput }
-            self.deviceUID = try readString(id, address(kAudioDevicePropertyDeviceUID))
-        }
+    public init(deviceUID: String, hogMode: Bool, restoreRecordURL: URL) throws {
+        self.deviceUID = deviceUID
         let id = try deviceID(uid: self.deviceUID)
         deviceName =
             try id.map { try readString($0, address(kAudioObjectPropertyName)) } ?? self.deviceUID
         self.hogMode = hogMode
         self.restoreRecordURL = restoreRecordURL
+    }
+
+    /// `uid`, or for nil the UID of the system's default output now. Resolved once, so when that
+    /// device goes away playback pauses instead of following macOS to another one.
+    public static func resolve(_ uid: String?) throws -> String {
+        if let uid { return uid }
+        let id = try AudioDevice.defaultOutputID()
+        guard id != kAudioObjectUnknown else { throw HALDeviceProviderError.noDefaultOutput }
+        return try readString(id, address(kAudioDevicePropertyDeviceUID))
     }
 
     public func open() throws -> (any PCMDevice)? {

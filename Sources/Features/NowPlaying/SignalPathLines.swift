@@ -64,10 +64,25 @@ private func deviceRows(_ sink: DeviceSink) -> [SignalPathLines.Row] {
                 value:
                     "\(sink.name) at \(kilohertz(device.nominalSampleRateHz)) kHz: "
                     + "\(describe(device.physical)), \(mixing)"),
+            .init(label: "Takes", value: describe(device.formats)),
             .init(label: "Hog mode", value: hog),
             .init(label: "Volume", value: "\(volumes); \(gain)"),
         ]
     }
+}
+
+/// For example `44.1, 48, 88.2, 96 kHz; 2 ch 16-bit int, 2 ch 24-bit int`: the rates, then each
+/// layout once, whatever rates it comes at.
+private func describe(_ formats: DeviceFormats) -> String {
+    let rates = formats.sampleRatesHz.map(kilohertz).joined(separator: ", ")
+    var layouts: [String] = []
+    for format in formats.formats {
+        let layout =
+            "\(format.channels) ch \(sampleType(bits: format.bitsPerChannel, isFloat: format.isFloat))"
+        if !layouts.contains(layout) { layouts.append(layout) }
+    }
+    return "\(rates.isEmpty ? "no rates" : rates + " kHz"); "
+        + (layouts.isEmpty ? "no formats" : layouts.joined(separator: ", "))
 }
 
 private func describe(_ change: SignalChange) -> String {
@@ -97,7 +112,7 @@ private func describe(_ change: SignalChange) -> String {
 /// For example `FLAC 24-bit int, 96 kHz, 2 ch`, or `MP3 44.1 kHz, 2 ch` for a lossy codec.
 private func describe(_ format: SignalFormat) -> String {
     let codec =
-        format.formatID == "lpcm"
+        format.formatID == linearPCMFormatID
         ? "PCM"
         : format.formatID.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
             .uppercased()

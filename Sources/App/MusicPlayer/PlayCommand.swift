@@ -52,10 +52,13 @@ func playCommand(paths: [String], deviceName: String?) throws -> Never {
     for warning in warnings { print(terminalSafe("warning: \(warning)")) }
     guard !files.isEmpty else { throw PlayCommandError.nothingToPlay }
 
-    let deviceUID = try deviceName.map(uid(ofDeviceNamed:)) ?? settings[\.outputDeviceUID]
+    let deviceUID = try HALDeviceProvider.resolve(
+        try deviceName.map(uid(ofDeviceNamed:)) ?? settings[\.outputDeviceUID])
     let provider = try HALDeviceProvider(
         deviceUID: deviceUID, hogMode: settings[\.hogMode], restoreRecordURL: recordURL)
-    let output = try DeviceOutput(provider: provider, digitalVolume: settings[\.digitalVolume])
+    let output = try DeviceOutput(
+        DeviceChoice(
+            provider: provider, digitalVolume: settings[\.digitalVolume], gain: 1, formats: nil))
     let player = Player(engine: PlaybackEngine(output: output), output: output, files: files)
     print("\(files.count) tracks on \(provider.deviceName)")
     if try enterKeyMode() { print(keyHelp) }

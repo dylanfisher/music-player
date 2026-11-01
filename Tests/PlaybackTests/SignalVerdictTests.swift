@@ -21,7 +21,7 @@ private func device(
     .connected(
         DeviceSignal(
             nominalSampleRateHz: rate, physical: physical, isMixable: mixable, hogMode: hog,
-            volumes: volumes))
+            volumes: volumes, formats: DeviceFormats(sampleRatesHz: [], formats: [])))
 }
 
 private func verdict(
@@ -31,12 +31,13 @@ private func verdict(
     signalVerdict(
         SignalPath(
             track: TrackSignal(file: file, decoded: decoded),
-            sink: .device(DeviceSink(name: "DAC", state: state, gain: gain))))
+            sink: .device(DeviceSink(name: "DAC", uid: "DAC", state: state, gain: gain))))
 }
 
 @Test func nothingLoadedIsIdle() {
     let path = SignalPath(
-        track: nil, sink: .device(DeviceSink(name: "DAC", state: .notConnected, gain: 1)))
+        track: nil,
+        sink: .device(DeviceSink(name: "DAC", uid: "DAC", state: .notConnected, gain: 1)))
     #expect(signalVerdict(path) == .idle)
 }
 

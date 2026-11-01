@@ -1,4 +1,5 @@
 import CoreAudio
+import DisplayText
 import Foundation
 import HALRender
 import Log
@@ -14,6 +15,8 @@ enum DeviceOutputError: Error, CustomStringConvertible {
     /// The file's audio stopped well before the length its header gives, as a partial file's
     /// or one cut short while it played does.
     case endedEarly(atSeconds: Double, ofSeconds: Double)
+    /// No rate or format the device reported carries the track unchanged.
+    case deviceCannotTake(device: String, sampleRateHz: Double, channels: UInt32, DeviceFormats)
 
     var description: String {
         switch self {
@@ -22,6 +25,9 @@ enum DeviceOutputError: Error, CustomStringConvertible {
             String(format: "the audio ends at %.1f s of %.1f s; the file is cut short", at, length)
         case .noVolumeForFormat(let format):
             "the digital volume can't scale samples in this device format: \(format)"
+        case .deviceCannotTake(let device, let rate, let channels, let formats):
+            "\(device) can't take \(channels)-channel audio at \(kilohertz(rate)) kHz; it offers"
+                + " \(formats.sampleRatesHz.map(kilohertz).joined(separator: ", ")) kHz"
         }
     }
 }
@@ -34,22 +40,34 @@ enum DeviceOutputError: Error, CustomStringConvertible {
 /// next track with the same rate and channel count is decoded straight after the current one, so
 /// there is no gap and the device isn't touched. One that differs waits until the ring buffer has
 /// drained and the device has played its last buffer, then the device is reconfigured.
+///
+/// `use(_:)` moves playback to another device mid-track. When the device in use goes away and
+/// another is chosen, the first is watched, and output goes back to it once it returns, unless
+/// the other one is playing (ADR 0037).
 public final class DeviceOutput: Output, @unchecked Sendable {
     public let events: AsyncStream<OutputEvent>
     /// The signal path each time the audible track, the gain or the device's state changes,
     /// from the device's first reported state on. Ends on `close()`.
     public let signalPaths: AsyncStream<SignalPath>
-    public let hasVolume: Bool
+    /// The UID of each device output went back to on its own. Ends on `close()`.
+    let returns: AsyncStream<String>
     private let continuation: AsyncStream<OutputEvent>.Continuation
     private let signalContinuation: AsyncStream<SignalPath>.Continuation
-    private let provider: any PCMDeviceProvider
-    /// Guards `pending`, `published` and `isClosed`, and wakes the control thread.
+    private let returnContinuation: AsyncStream<String>.Continuation
+    /// Guards `pending`, `published`, `isClosed` and `volumeOn`, and wakes the control thread.
     private let condition = NSCondition()
     private var pending: [Command] = []
     private var published: OutputPosition?
     private var isClosed = false
+    private var volumeOn: Bool
 
     // Everything below belongs to the control thread.
+    private var choice: DeviceChoice
+    private var provider: any PCMDeviceProvider { choice.provider }
+    /// The device that went away while in use before another was chosen, to go back to.
+    private var returnTo: DeviceChoice?
+    /// What the device last reported, which a track has to fit before it plays.
+    private var knownFormats: DeviceFormats?
     private var device: (any PCMDevice)?
     private var stream: RenderStream?
     /// The tracks in the ring buffer, oldest first. The first is the one playing.
@@ -76,7 +94,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// How long a failed step waits for the device to read as gone before calling the failure
     /// the device's own: the HAL can report the removal a moment after the call fails.
     static let deviceSettleSeconds = 0.25
-    private var gain = 1.0
+    private var gain: Double
     /// Nil until the provider first reports it.
     private var deviceState: DeviceState?
     private var publishedSignal: SignalPath?
@@ -87,15 +105,15 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// Streams whose IO proc may still be called because stopping it failed. They are never freed.
     private var retired: [RenderStream] = []
 
-    /// `digitalVolume` turns on `setVolume`. Until it is used, samples still pass untouched.
-    public init(provider: any PCMDeviceProvider, digitalVolume: Bool) throws {
-        self.provider = provider
-        hasVolume = digitalVolume
+    public init(_ choice: DeviceChoice) throws {
+        self.choice = choice
+        volumeOn = choice.digitalVolume
+        gain = choice.gain
+        knownFormats = choice.formats
         (events, continuation) = AsyncStream.makeStream(of: OutputEvent.self)
         (signalPaths, signalContinuation) = AsyncStream.makeStream(of: SignalPath.self)
-        try provider.watch(
-            { [weak self] in self?.post(.devicesChanged) },
-            state: { [weak self] in self?.post(.deviceState($0)) })
+        (returns, returnContinuation) = AsyncStream.makeStream(of: String.self)
+        try watch(choice.provider)
         let thread = Thread { [self] in run() }
         thread.name = "DeviceOutput"
         thread.qualityOfService = .userInteractive
@@ -111,6 +129,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     public func stop() { post(.stop) }
     public func seek(toSeconds seconds: Double) { post(.seek(seconds)) }
     public func setVolume(_ gain: Double) { post(.volume(gain)) }
+    public var hasVolume: Bool { condition.withLock { volumeOn } }
+    /// Plays on `choice` from now on: the track playing carries on there from where it is. For the
+    /// device in use, it only applies the new settings.
+    public func use(_ choice: DeviceChoice) { post(.use(choice)) }
     public func position() -> OutputPosition? { condition.withLock { published } }
     var signalPathBuilds: Int { condition.withLock { signalBuilds } }
 
@@ -127,7 +149,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         case seek(Double)
         case volume(Double)
         case devicesChanged
-        case deviceState(DeviceState)
+        case deviceState(DeviceState, from: ObjectIdentifier)
+        case use(DeviceChoice)
         case close(DispatchSemaphore)
     }
 
@@ -162,9 +185,11 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                     unload()
                     closeDevice()
                     provider.stopWatching()
+                    returnTo?.provider.stopWatching()
                     publishPosition()
                     continuation.finish()
                     signalContinuation.finish()
+                    returnContinuation.finish()
                     done.signal()
                     return
                 }
@@ -199,23 +224,33 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             self.gain = gain
             signalDirty = true
             if let stream { HALRenderSetGain(stream.render, Float(gain)) }
-        case .devicesChanged: checkDevice()
-        case .deviceState(let state):
+        case .devicesChanged:
+            checkDevice()
+            checkReturn()
+        case .deviceState(let state, let from):
+            // One queued by a device that was in use before a switch.
+            guard from == ObjectIdentifier(provider) else { return }
             deviceState = state
+            if case .connected(let signal) = state { knownFormats = signal.formats }
             signalDirty = true
+        case .use(let choice): use(choice, remembering: true)
         case .close: preconditionFailure("close is handled by the run loop")
         }
     }
 
     // MARK: Loading and seeking
 
-    private func loadTrack(_ item: OutputItem, startSeconds: Double, playing: Bool) {
+    /// `announcing` false is for a track already playing, which a device switch reloads.
+    private func loadTrack(
+        _ item: OutputItem, startSeconds: Double, playing: Bool, announcing: Bool = true
+    ) {
         unload()
         self.playing = playing
         let started = uptime()
         let track: Track
         do {
             track = try Track(item)
+            try refuseUntakeable(track)
         } catch {
             cannotPlay(item, error)
             return
@@ -256,7 +291,18 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                     FormatChange(
                         from: from, to: stream.format.summary, switchSeconds: uptime() - started)))
         }
-        if let stream { emit(.trackStarted(item.id, stream.info(for: track))) }
+        if announcing, let stream { emit(.trackStarted(item.id, stream.info(for: track))) }
+    }
+
+    /// Throws for a track that no rate or format the device reported carries unchanged, before
+    /// the device is touched for it.
+    private func refuseUntakeable(_ track: Track) throws {
+        guard let knownFormats,
+            !knownFormats.takes(sampleRateHz: track.sampleRateHz, channels: track.channels)
+        else { return }
+        throw DeviceOutputError.deviceCannotTake(
+            device: provider.deviceName, sampleRateHz: track.sampleRateHz,
+            channels: track.channels, knownFormats)
     }
 
     /// Reports a track that can't play at all, and releases the device since nothing else is
@@ -292,8 +338,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         guard let device else { preconditionFailure("configure needs an open device") }
         let format = try device.configure(
             sampleRateHz: track.sampleRateHz, channels: track.channels)
-        let stream = try RenderStream(format: format, withGain: hasVolume)
-        if hasVolume { HALRenderSetGain(stream.render, Float(gain)) }
+        let stream = try RenderStream(format: format, withGain: choice.digitalVolume)
+        if choice.digitalVolume { HALRenderSetGain(stream.render, Float(gain)) }
         self.stream = stream
         return stream
     }
@@ -374,7 +420,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         next = nil
         if let item {
             do {
-                next = try Track(item)
+                let track = try Track(item)
+                try refuseUntakeable(track)
+                next = track
             } catch {
                 emit(.trackFailed(item.id, error))
             }
@@ -672,6 +720,73 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
     }
 
+    /// Goes back to the device that went away, now that it's here, unless this output is playing
+    /// on the one chosen since.
+    private func checkReturn() {
+        guard let returnTo, returnTo.provider.isConnected(), !(playing && !segments.isEmpty)
+        else { return }
+        let uid = returnTo.provider.deviceUID
+        logger.notice("\(returnTo.provider.deviceName) is back, so output returns to it")
+        returnTo.provider.deviceReturned()
+        use(returnTo, remembering: false)
+        returnContinuation.yield(uid)
+    }
+
+    /// Moves to `next`'s device and settings, reloading the track playing at the same place and
+    /// handing it the same next track. `remembering` sets the device in use as the one to return
+    /// to when it has gone away and the user chose another.
+    private func use(_ next: DeviceChoice, remembering: Bool) {
+        let previous = choice
+        let previousReturn = returnTo
+        let wasMissing = deviceMissing
+        let resume = segments.first.map { (item: $0.item, seconds: position() as Double) }
+        let following =
+            pendingSwitch?.item ?? (segments.count > 1 ? segments[1].item : nil) ?? self.next?.item
+        let wasPlaying = playing
+        unload()
+        closeDevice()
+
+        let uid = next.provider.deviceUID
+        if uid == returnTo?.provider.deviceUID {
+            returnTo = nil
+        } else if remembering, wasMissing, uid != previous.provider.deviceUID {
+            returnTo = previous
+        }
+        choice = next
+        let before = [previous.provider] + (previousReturn.map { [$0.provider] } ?? [])
+        let after = [next.provider] + (returnTo.map { [$0.provider] } ?? [])
+        for provider in before where !after.contains(where: { $0 === provider }) {
+            provider.stopWatching()
+        }
+        for provider in after where !before.contains(where: { $0 === provider }) {
+            do {
+                try watch(provider)
+            } catch {
+                emit(.failed(nil, error))
+            }
+        }
+        condition.withLock { volumeOn = next.digitalVolume }
+        gain = next.gain
+        knownFormats = next.formats
+        if next.provider !== previous.provider { deviceState = nil }
+        signalDirty = true
+        deviceMissing = false
+        failedResume = nil
+        if wasMissing, next.provider.isConnected() { emit(.deviceReturned) }
+        guard let resume else { return }
+        loadTrack(
+            resume.item, startSeconds: resume.seconds, playing: wasPlaying, announcing: false)
+        if let following { replaceNext(following) }
+    }
+
+    /// States from a provider no longer in use are dropped by the identity they carry.
+    private func watch(_ provider: any PCMDeviceProvider) throws {
+        let id = ObjectIdentifier(provider)
+        try provider.watch(
+            { [weak self] in self?.post(.devicesChanged) },
+            state: { [weak self] in self?.post(.deviceState($0, from: id)) })
+    }
+
     /// The device is gone: drop everything without restoring it, and report where to resume.
     private func lose(_ item: OutputItem.ID?, at seconds: Double) {
         if let device, !device.abandon(), let stream, !retired.contains(where: { $0 === stream }) {
@@ -717,7 +832,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             track: segments.first?.signal,
             sink: .device(
                 DeviceSink(
-                    name: provider.deviceName, state: deviceState, gain: hasVolume ? gain : 1)))
+                    name: provider.deviceName, uid: provider.deviceUID, state: deviceState,
+                    gain: choice.digitalVolume ? gain : 1)))
         guard path != publishedSignal else { return }
         publishedSignal = path
         signalContinuation.yield(path)

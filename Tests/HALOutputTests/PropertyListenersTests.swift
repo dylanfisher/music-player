@@ -52,7 +52,7 @@ private func keys(device: AudioObjectID, stream: AudioObjectID) -> Set<PropertyK
     #expect(fake.registered.isEmpty)
     #expect(listeners.active.isEmpty)
     #expect(fake.unmatchedRemoves == 0)
-    #expect(fake.adds == 8)
+    #expect(fake.adds == 10)
 }
 
 @Test func aListenerThatWontAddIsRetriedAndNeverRemoved() {

@@ -1,4 +1,5 @@
 import CoreAudio
+import Playback
 
 /// Picks the physical format that passes `channels` of samples at `sampleRateHz` through
 /// unchanged, or nil if the device has none.
@@ -12,13 +13,9 @@ func bitPerfectFormat(
     allowNonMixable: Bool
 ) -> AudioStreamBasicDescription? {
     let candidates = available.filter { ranged in
-        let format = ranged.mFormat
-        let nonMixable = format.mFormatFlags & kAudioFormatFlagIsNonMixable != 0
-        return format.mFormatID == kAudioFormatLinearPCM
-            && format.mFormatFlags & kAudioFormatFlagIsFloat == 0
-            && format.mChannelsPerFrame == channels && (allowNonMixable || !nonMixable)
-            && (ranged.mSampleRateRange.mMinimum...ranged.mSampleRateRange.mMaximum)
-                .contains(sampleRateHz)
+        let format = PhysicalFormat(ranged)
+        return format.carries(sampleRateHz: sampleRateHz, channels: channels)
+            && (allowNonMixable || format.isMixable)
     }
     func rank(_ ranged: AudioStreamRangedDescription) -> (Int, UInt32) {
         let nonMixable = ranged.mFormat.mFormatFlags & kAudioFormatFlagIsNonMixable != 0

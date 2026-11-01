@@ -59,7 +59,8 @@ final class Rig: @unchecked Sendable {
 
     init(speed: Double = 4, digitalVolume: Bool = false) async throws {
         device = NullDevice(speed: speed, keepsSamples: true)
-        output = try DeviceOutput(provider: device, digitalVolume: digitalVolume)
+        output = try DeviceOutput(
+            DeviceChoice(provider: device, digitalVolume: digitalVolume, gain: 1, formats: nil))
         engine = PlaybackEngine(output: output)
         updates = Collected(await engine.updates())
     }
@@ -93,7 +94,7 @@ func album(_ rate: Int, _ bits: Int) throws -> RampAlbum {
 }
 
 /// Where `album`'s frames start in `samples`, and how many of them follow in order from there.
-private func contiguousFrames(of album: RampAlbum, from first: Int = 0, in samples: [Int32])
+func contiguousFrames(of album: RampAlbum, from first: Int = 0, in samples: [Int32])
     -> (start: Int, count: Int)?
 {
     let (left, right) = album.frame(first)
@@ -396,7 +397,8 @@ private func samples(of album: RampAlbum, _ ranges: [Range<Int>]) -> [Int32] {
 @Test func aDeviceThatOpensIsNoLongerReportedAsReturning() async throws {
     let album = try album(44_100, 16)
     let device = NullDevice(speed: 8)
-    let output = try DeviceOutput(provider: device, digitalVolume: false)
+    let output = try DeviceOutput(
+        DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil))
     defer { output.close() }
     let events = Collected(output.events)
     func next() async throws -> OutputEvent { try await events.next() }

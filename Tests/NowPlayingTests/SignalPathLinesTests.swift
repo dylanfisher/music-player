@@ -11,15 +11,23 @@ private let int32 = SignalFormat(
 private func path(_ state: DeviceState, gain: Double = 1, playing: Bool = true) -> SignalPath {
     SignalPath(
         track: playing ? TrackSignal(file: flac, decoded: int32) : nil,
-        sink: .device(DeviceSink(name: "ADI-2 DAC", state: state, gain: gain)))
+        sink: .device(DeviceSink(name: "ADI-2 DAC", uid: "ADI-2", state: state, gain: gain)))
 }
 
 private func device(rate: Double = 44_100, volumes: [VolumeControl] = []) -> DeviceState {
     .connected(
         DeviceSignal(
             nominalSampleRateHz: rate, physical: int32, isMixable: false, hogMode: .thisProcess,
-            volumes: volumes))
+            volumes: volumes, formats: formats))
 }
+
+private let formats = DeviceFormats(
+    sampleRatesHz: [44_100...44_100, 48_000...48_000, 88_200...192_000],
+    formats: [16, 24, 24].map { bits in
+        PhysicalFormat(
+            formatID: "lpcm", sampleRateHz: 44_100...192_000, bitsPerChannel: bits, channels: 2,
+            isFloat: false, isMixable: true)
+    })
 
 @Test func aBitPerfectPathListsEachStage() {
     let lines = signalPathLines(path(device(volumes: [.init(.virtualMain, scalar: 1)])))
@@ -32,6 +40,8 @@ private func device(rate: Double = 44_100, volumes: [VolumeControl] = []) -> Dev
             .init(
                 label: "Device",
                 value: "ADI-2 DAC at 44.1 kHz: PCM 32-bit int, 44.1 kHz, 2 ch, non-mixable"),
+            .init(
+                label: "Takes", value: "44.1, 48, 88.2–192 kHz; 2 ch 16-bit int, 2 ch 24-bit int"),
             .init(label: "Hog mode", value: "held by this app"),
             .init(label: "Volume", value: "system unity; digital unity"),
         ])
@@ -53,7 +63,7 @@ private func device(rate: Double = 44_100, volumes: [VolumeControl] = []) -> Dev
         signalPathLines(nil) == .init(verdict: "No output device", isBitPerfect: false, rows: []))
     let idle = signalPathLines(path(device(), playing: false))
     #expect(idle.verdict == "Nothing playing")
-    #expect(idle.rows.map(\.label) == ["Device", "Hog mode", "Volume"])
+    #expect(idle.rows.map(\.label) == ["Device", "Takes", "Hog mode", "Volume"])
     let missing = signalPathLines(path(.notConnected))
     #expect(missing.verdict == "Not bit-perfect: the device isn't connected")
     #expect(missing.rows.last == .init(label: "Device", value: "ADI-2 DAC, not connected"))
