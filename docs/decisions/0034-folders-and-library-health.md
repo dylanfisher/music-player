@@ -48,9 +48,9 @@ add a group for sync events that don't match.
     since some sets number on across discs.
   - *Album Artists*: the index splits an album by album artist, so this groups by
     album title and folder and counts the album artists set. A track without one isn't another
-    value: it joins its track artist's album, which is usually the same, and No AA lists it.
+    value: it joins its track artist's album, which is usually the same, and No Album Artist lists it.
   - *Mixed Rates*: one album row and folder with more than one rate.
-  - *No Art*: no embedded picture (the app shows no folder art). *No Album*, *No AA* (no
+  - *No Art*: no embedded picture (the app shows no folder art). *No Album*, *No Album Artist* (no
     album artist): the tag is missing. Names are short so a five-digit count fits the default
     sidebar; each row's tooltip says what it finds.
 - **Where it runs.** The report is built on a connection of its own, in a detached task, so the

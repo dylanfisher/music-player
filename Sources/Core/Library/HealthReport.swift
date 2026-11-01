@@ -57,7 +57,7 @@ extension HealthCheck {
         case .mixedSampleRates: "Mixed Rates"
         case .noArt: "No Art"
         case .noAlbum: "No Album"
-        case .noAlbumArtist: "No AA"
+        case .noAlbumArtist: "No Album Artist"
         }
     }
 
@@ -161,7 +161,7 @@ extension LibraryIndex {
                     """))
         case .severalAlbumArtists:
             // The index splits an album by album artist, so one album is its title in a folder.
-            // A track without one is No AA's, and joins its track artist's album.
+            // A track without one is listed under No Album Artist, and joins its track artist's album.
             return HealthFindings(
                 trackIDs: try ids(
                     """

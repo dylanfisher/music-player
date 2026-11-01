@@ -121,7 +121,7 @@ private func waitFor(_ what: String, _ condition: () async throws -> Bool) async
     let cell = sidebar.outlineView(
         sidebar.outline, viewFor: nil, item: try #require(sidebar.outline.item(atRow: row)))
     let texts = (cell?.subviews ?? []).compactMap { ($0 as? NSTextField)?.stringValue }
-    #expect(texts == ["No AA", number(expected.count)])
+    #expect(texts == ["No Album Artist", number(expected.count)])
 }
 
 @MainActor @Test func deletingAPlaylistRunsTheReportAgain() async throws {
