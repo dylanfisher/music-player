@@ -1638,7 +1638,7 @@ drops a leading U+FEFF from a line; lines are now decoded by hand. ADR 0025 rows
 Bring plays, ratings, dates and playlists across from the player someone used before. The owner
 comes from Swinsian; most other Mac users come from iTunes or Music.
 
-- [ ] **Swinsian:** read its library database (`~/Library/Application Support/Swinsian/`),
+- [x] **Swinsian:** read its library database (`~/Library/Application Support/Swinsian/`),
       opened read-only from a copy, never the live file. Bring across play counts, last played,
       ratings, date added, and manual playlists. Smart playlists whose rules map onto ours come
       across as smart playlists; the rest are listed in the report. Loved (the heart) comes
@@ -1647,24 +1647,24 @@ comes from Swinsian; most other Mac users come from iTunes or Music.
       path in more than one row (the owner's library has 32 extra rows); the import merges them,
       adding plays and keeping the latest last played and the highest rating, and the preview
       counts them.
-- [ ] **iTunes and Music:** read an exported `Library.xml` (File ▸ Library ▸ Export Library)
+- [x] **iTunes and Music:** read an exported `Library.xml` (File ▸ Library ▸ Export Library)
       with `PropertyListSerialization`. The same fields, plus skip counts. Smart playlists are
       encoded in a private format, so they come across as manual playlists of their current
       tracks, which the report says.
-- [ ] Other players are added when their library format is documented; until then, M3U8
+- [x] Other players are added when their library format is documented; until then, M3U8
       (phase 17) carries their playlists.
-- [ ] **Matching:** tracks match by path. When the other library lived at another mount point,
+- [x] **Matching:** tracks match by path. When the other library lived at another mount point,
       the import asks for one path prefix to replace with another. Anything that doesn't match is
       counted and listed in the report.
-- [ ] **Merging:** a preview shows what will change before anything is written: counts per field,
+- [x] **Merging:** a preview shows what will change before anything is written: counts per field,
       unmatched tracks, and playlists that already exist by name. Play counts add to ours, last
       played and date added take the earlier or later value as each field needs, and ratings come
       across only where we have none. One confirmation writes it all in one transaction. Imported
       plays raise counts; they don't add rows to the timeline, since the other player kept no
       dates for each play. Record the merge rules in an ADR.
-- [ ] Both formats are hostile input: rows to [ADR 0025](decisions/0025-threat-model.md) and
+- [x] Both formats are hostile input: rows to [ADR 0025](decisions/0025-threat-model.md) and
       tests with corrupt and oversized files. Music files are never touched.
-- [ ] Tests run against generated Swinsian databases and `Library.xml` files, never a real
+- [x] Tests run against generated Swinsian databases and `Library.xml` files, never a real
       library.
 - [ ] **Hardware checkpoint (owner):** on the DAC Mac, import the Swinsian library and report
       the preview's counts, the unmatched list, and whether ratings and playlists look right.
@@ -1706,6 +1706,17 @@ Implementation plan:
 7. **Tests** (LibraryTests, SQLiteTests, LibraryBrowserTests): generated databases and XML in
    temp folders only; schema problems, corrupt and oversized files, duplicates, the prefix,
    NFC, every merge rule, a second import, rules that map and don't.
+
+Result: shipped up to the owner's checkpoint, which is pending. Swinsian's database is copied
+with its WAL, checked unchanged by size, mtime and inode, and opened read-only from the copy; the
+schema is assumed, unverified (ADR 0033), and a missing table or column fails with each one named.
+Library.xml is read with `PropertyListSerialization` under a 256 MiB cap. Matching is by path
+with one prefix replacement, through phase 17's NFC lookup. The preview sheet is recomputed
+inside the one transaction that writes plays, last played, Date Added, ratings where we have
+none, loved and new playlists; duplicate Swinsian rows for one path merge. A re-import adds only
+the plays a player gained since the last one (`imported_plays`, per player and track). Smart
+playlists with an unmapped rule, and playlists whose name exists, are skipped and listed. ADR
+0025 rows 41 to 45; the `swinsian` and `itunes-xml` fuzz targets found no crash in 120 s each.
 
 ### 19. Finder, folders and library health
 
