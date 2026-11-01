@@ -1669,6 +1669,37 @@ comes from Swinsian; most other Mac users come from iTunes or Music.
 - [ ] **Hardware checkpoint (owner):** on the DAC Mac, import the Swinsian library and report
       the preview's counts, the unmatched list, and whether ratings and playlists look right.
 
+Implementation plan:
+
+1. **ADR 0033 first**: the merge rules, how a second import of the same library adds nothing,
+   and the Swinsian schema the reader assumes, marked unverified.
+2. **`Database(readOnlyAt:)`** in SQLite: `SQLITE_OPEN_READONLY`, `query_only` and
+   `trusted_schema = OFF`, for a copy of another app's database.
+3. **Readers in Core/Library**, each giving one `PlayerLibrary` (tracks by path with plays,
+   skips, last played, date added, rating and loved; playlists as paths, rules, or what didn't
+   map; typed problems, 100 listed then a count). `SwinsianLibrary` copies the database and
+   its WAL to a temp folder through `FileSource` (`O_NOFOLLOW`, a regular file, a size cap),
+   checks the copy wasn't torn, opens it read-only, and checks every table and column it reads
+   against `sqlite_master` and `PRAGMA table_info`, failing with each one missing. Rows for one
+   path merge (plays added, latest last played, highest rating). Rules that fit `SmartRule`
+   map; the rest are listed. `ITunesLibrary` reads `Library.xml` with
+   `PropertyListSerialization` under a size cap; `Location` goes through phase 17's `file:`
+   decoding; smart playlists become manual ones of their tracks.
+4. **Plan and apply** in `LibraryIndex`: one optional prefix replacement, then phase 17's
+   `trackIDs(atPaths:)` (as written, then NFC). The plan counts each field's changes,
+   unmatched tracks, merged rows and playlists that exist by name. Apply recomputes the plan in
+   one transaction and writes it. A new schema part, `imports`, records each source's imported
+   counts per path, so a second import adds only what grew.
+5. **Browser and App:** `library.importSwinsian` and `library.importITunes` in the registry and
+   File menu; an open panel, then the preview as an `NSAlert` sheet (ADR 0012) with the prefix
+   fields, sized for 1440x900, whose updates carry a session token; one confirmation applies
+   it; the report goes to the status bar and Problems window like phase 17's.
+6. **Fuzz targets** `swinsian` and `itunes-xml`; ADR 0025 rows; the checkpoint's schema
+   command.
+7. **Tests** (LibraryTests, SQLiteTests, LibraryBrowserTests): generated databases and XML in
+   temp folders only; schema problems, corrupt and oversized files, duplicates, the prefix,
+   NFC, every merge rule, a second import, rules that map and don't.
+
 ### 19. Finder, folders and library health
 
 - [ ] **Reveal in Finder** (⇧⌘R) for the selected tracks, from the menu, the context menu and ⌘K.
