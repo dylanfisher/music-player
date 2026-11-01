@@ -59,16 +59,18 @@ public actor LibraryReader {
 
     public func deletePlaylist(_ id: Int64) throws { try index.deletePlaylist(id) }
 
-    public func addToPlaylist(_ id: Int64, paths: [String]) throws -> Int {
-        try index.addToPlaylist(id, paths: paths)
+    public func addToPlaylist(_ id: Int64, trackIDs: [Int64]) throws -> Int {
+        try index.addToPlaylist(id, trackIDs: trackIDs)
     }
 
-    public func movePlaylistEntries(_ id: Int64, paths: [String], before target: String?) throws {
-        try index.movePlaylistEntries(id, paths: paths, before: target)
+    public func movePlaylistEntries(_ id: Int64, trackIDs: [Int64], before target: Int64?)
+        throws
+    {
+        try index.movePlaylistEntries(id, trackIDs: trackIDs, before: target)
     }
 
-    public func removeFromPlaylist(_ id: Int64, paths: [String]) throws {
-        try index.removeFromPlaylist(id, paths: paths)
+    public func removeFromPlaylist(_ id: Int64, trackIDs: [Int64]) throws {
+        try index.removeFromPlaylist(id, trackIDs: trackIDs)
     }
 
     public func missingEntryCount(_ id: Int64) throws -> Int {
@@ -81,7 +83,24 @@ public actor LibraryReader {
 
     public func recordSkip(_ path: String) throws { try index.recordSkip(path) }
 
-    public func setRating(_ stars: Int, paths: [String]) throws {
-        try index.setRating(stars, paths: paths)
+    public func setRating(_ stars: Int, trackIDs: [Int64]) throws {
+        try index.setRating(stars, trackIDs: trackIDs)
     }
+
+    public func timeline(before id: Int64?, limit: Int) throws -> [PlayEntry] {
+        try index.timeline(before: id, limit: limit)
+    }
+
+    public func timeline(after id: Int64, limit: Int) throws -> [PlayEntry] {
+        try index.timeline(after: id, limit: limit)
+    }
+
+    /// `entries` with each one's track read again, for after a library change.
+    public func resolved(_ entries: [PlayEntry]) throws -> [PlayEntry] {
+        try index.resolved(entries)
+    }
+
+    public func loggedPlayCount() throws -> Int { try index.loggedPlayCount() }
+
+    public func takeDiscards() throws -> [String] { try index.takeDiscards() }
 }

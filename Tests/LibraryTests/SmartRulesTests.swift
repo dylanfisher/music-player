@@ -124,12 +124,13 @@ private func smartPaths(_ index: LibraryIndex, _ rules: SmartRules) throws -> Se
     let library = try TestLibrary()
     _ = try library.scan()
     let index = try library.index()
-    let paths = try index.rows(ids: try index.trackIDs(sortedBy: .path)).map(\.path)
+    let ids = try index.trackIDs(sortedBy: .path)
+    let paths = try index.rows(ids: ids).map(\.path)
     let now = Date().timeIntervalSince1970
     for (count, path) in paths.prefix(4).enumerated() {
         for _ in 0...count { try index.recordPlay(path, at: now - 86_400 * Double(count * 10)) }
     }
-    try index.setRating(4, paths: [paths[5]])
+    try index.setRating(4, trackIDs: [ids[5]])
 
     #expect(
         try smartPaths(

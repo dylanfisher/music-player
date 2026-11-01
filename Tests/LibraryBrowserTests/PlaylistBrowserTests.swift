@@ -33,7 +33,8 @@ private func writableModel(
     let (model, index) = try await writableModel()
     let rows = IndexSet([5, 2, 9])
     let picked = rows.map { model.trackIDs[$0] }
-    try await model.createPlaylist(named: "Mix", rules: nil, rows: rows)
+    try await model.createPlaylist(
+        named: "Mix", rules: nil, trackIDs: model.ids(ofRows: rows))
     let playlist = try #require(model.shownPlaylist)
     #expect(playlist.name == "Mix" && playlist.isManual)
     #expect(model.filter.source == .playlist(playlist.id))
@@ -46,7 +47,8 @@ private func writableModel(
 @MainActor @Test func rowsMoveAndLeaveWithinTheShownPlaylist() async throws {
     let (model, _) = try await writableModel()
     let picked = Array(model.trackIDs.prefix(4))
-    try await model.createPlaylist(named: "Mix", rules: nil, rows: IndexSet(0..<4))
+    try await model.createPlaylist(
+        named: "Mix", rules: nil, trackIDs: model.ids(ofRows: IndexSet(0..<4)))
     #expect(model.trackIDs == picked)
     try await model.move([picked[3], picked[0]], toRow: 1)
     #expect(model.trackIDs == [picked[0], picked[3], picked[1], picked[2]])
@@ -94,7 +96,7 @@ private func writableModel(
 
     await model.setSource(nil)
     let row = try #require(model.trackIDs.firstIndex(of: rated))
-    try await model.rate(rows: [row], stars: 4)
+    try await model.rate([model.trackIDs[row]], stars: 4)
     await model.setSource(.playlist(playlist.id))
     #expect(model.trackIDs == [rated])
 
@@ -105,7 +107,8 @@ private func writableModel(
 
 @MainActor @Test func deletingTheShownPlaylistShowsTheLibrary() async throws {
     let (model, index) = try await writableModel()
-    try await model.createPlaylist(named: "Gone", rules: nil, rows: [0])
+    try await model.createPlaylist(
+        named: "Gone", rules: nil, trackIDs: model.ids(ofRows: [0]))
     let id = try #require(model.shownPlaylist?.id)
     try await model.deletePlaylist(id)
     #expect(model.filter.source == nil)
@@ -123,7 +126,8 @@ private func writableModel(
 @MainActor @Test func leavingAManualPlaylistPutsBackTheSortItReplaced() async throws {
     let (model, _) = try await writableModel()
     await model.setSort(.title, ascending: false)
-    try await model.createPlaylist(named: "Mix", rules: nil, rows: [0, 1])
+    try await model.createPlaylist(
+        named: "Mix", rules: nil, trackIDs: model.ids(ofRows: [0, 1]))
     let mix = try #require(model.shownPlaylist?.id)
     #expect(model.sortColumn == .playlistOrder)
     await model.setSource(nil)
@@ -160,7 +164,8 @@ private func writableModel(
 
 @MainActor @Test func aDeletedPlaylistLeavesHistory() async throws {
     let (model, _) = try await writableModel()
-    try await model.createPlaylist(named: "Gone", rules: nil, rows: [0])
+    try await model.createPlaylist(
+        named: "Gone", rules: nil, trackIDs: model.ids(ofRows: [0]))
     let gone = try #require(model.shownPlaylist?.id)
     await model.setSource(.history)
     try await model.deletePlaylist(gone)
@@ -172,9 +177,11 @@ private func writableModel(
 
 @MainActor @Test func aManualPlaylistCountsTracksNotInTheLibrary() async throws {
     let (model, index) = try await writableModel()
-    try await model.createPlaylist(named: "Mix", rules: nil, rows: [0])
+    try await model.createPlaylist(
+        named: "Mix", rules: nil, trackIDs: model.ids(ofRows: [0]))
     let mix = try #require(model.shownPlaylist?.id)
-    _ = try index.addToPlaylist(mix, paths: ["/gone/a.flac"])
+    try index.recordSkip("/gone/a.flac")
+    _ = try index.addToPlaylist(mix, trackIDs: [try index.pathID("/gone/a.flac", seenAt: 0)])
     await model.refresh()
     #expect(model.missingTracks == 1)
     await model.setSource(nil)

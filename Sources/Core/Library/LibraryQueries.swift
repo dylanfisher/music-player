@@ -43,7 +43,8 @@ extension LibraryIndex {
         var entries = ""
         var entryValues: [(any SQLiteValue)?] = []
         if column == .playlistOrder {
-            entries = "LEFT JOIN playlist_entries pe ON pe.playlist_id = ? AND pe.path = f.path"
+            entries =
+                "LEFT JOIN playlist_entries pe ON pe.playlist_id = ? AND pe.path_id = t.file_id"
             if case .playlist(let id) = filter.source {
                 entryValues = [id]
             } else {
@@ -201,18 +202,27 @@ extension LibraryIndex {
             let range = pathRange(under: folder)
             return ("f.path >= ? AND f.path < ?", [range.lowerBound, range.upperBound])
         case .history:
-            return ("f.path IN (SELECT path FROM history)", [])
+            return (
+                "t.file_id IN (SELECT path_id FROM plays WHERE last_played_seconds IS NOT NULL)",
+                []
+            )
         case .playlist(let id):
             let playlist = try playlist(id)
             switch playlist.kind {
             case .manual:
-                return ("f.path IN (SELECT path FROM playlist_entries WHERE playlist_id = ?)", [id])
+                return (
+                    "t.file_id IN (SELECT path_id FROM playlist_entries WHERE playlist_id = ?)",
+                    [id]
+                )
             case .smart(let rules):
                 let (condition, values) = rules.condition(now: Date().timeIntervalSince1970)
                 return (condition, values)
             case .unreadable(let detail):
                 throw LibraryError.unreadableRules(playlist: playlist.name, detail: detail)
             }
+        case .timeline:
+            // The timeline pages through plays with `timeline(before:limit:)` instead.
+            throw LibraryError.playsNotTracks
         }
     }
 }
@@ -225,7 +235,7 @@ private func whereClause(_ conditions: [String]) -> String {
 private let rowSelect = """
     SELECT t.file_id, f.path, t.title, ar.name, al.title, t.album_id, aa.name, g.name, t.date,
         t.track_number, t.disc_number, t.codec, t.sample_rate_hz, t.bits_per_sample,
-        t.length_frames, f.added_seconds, t.art_offset, t.art_byte_count, t.art_mime_type,
+        t.length_frames, pa.added_seconds, t.art_offset, t.art_byte_count, t.art_mime_type,
         t.art_unsynchronised, al_ar.name, p.play_count, p.skip_count, p.last_played_seconds,
         r.rating
     FROM tracks t

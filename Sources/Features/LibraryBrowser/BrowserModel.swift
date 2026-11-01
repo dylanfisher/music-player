@@ -116,7 +116,7 @@ public final class BrowserModel {
         case .playlist(let id):
             playlists.first { $0.id == id }?.isManual == true ? (.playlistOrder, true) : nil
         case .history: (.lastPlayed, false)
-        case .folder, nil: nil
+        case .folder, .timeline, nil: nil
         }
     }
 
@@ -146,14 +146,13 @@ public final class BrowserModel {
         }
     }
 
-    /// Makes a playlist, manual unless `rules` are given, holding the tracks at `rows`, and
+    /// Makes a playlist, manual unless `rules` are given, holding the tracks `trackIDs`, and
     /// shows it.
-    public func createPlaylist(named name: String, rules: SmartRules?, rows: IndexSet = [])
+    public func createPlaylist(named name: String, rules: SmartRules?, trackIDs: [Int64] = [])
         async throws
     {
-        let paths = try await self.paths(ofRows: rows)
         let id = try await reader.createPlaylist(named: name, rules: rules)
-        if !paths.isEmpty { _ = try await reader.addToPlaylist(id, paths: paths) }
+        if !trackIDs.isEmpty { _ = try await reader.addToPlaylist(id, trackIDs: trackIDs) }
         try await reloadPlaylists()
         await setSource(.playlist(id))
     }
@@ -176,9 +175,7 @@ public final class BrowserModel {
 
     /// Adds the tracks with `ids` to a manual playlist and returns how many it didn't have.
     public func add(_ ids: [Int64], to playlist: Int64) async throws -> Int {
-        let paths = try await reader.paths(ids: ids)
-        let added = try await reader.addToPlaylist(
-            playlist, paths: ids.compactMap { paths[$0] })
+        let added = try await reader.addToPlaylist(playlist, trackIDs: ids)
         if shownPlaylist?.id == playlist { await refresh() }
         return added
     }
@@ -191,7 +188,7 @@ public final class BrowserModel {
     /// Takes the tracks at `rows` out of the manual playlist shown.
     public func removeFromShownPlaylist(rows: IndexSet) async throws {
         guard let playlist = shownPlaylist else { return }
-        try await reader.removeFromPlaylist(playlist.id, paths: try await paths(ofRows: rows))
+        try await reader.removeFromPlaylist(playlist.id, trackIDs: ids(ofRows: rows))
         await refresh()
     }
 
@@ -200,15 +197,13 @@ public final class BrowserModel {
     public func move(_ ids: [Int64], toRow row: Int) async throws {
         guard canReorder, let playlist = shownPlaylist else { return }
         let target = trackIDs.indices.contains(row) ? trackIDs[row] : nil
-        let paths = try await reader.paths(ids: ids + (target.map { [$0] } ?? []))
-        try await reader.movePlaylistEntries(
-            playlist.id, paths: ids.compactMap { paths[$0] }, before: target.flatMap { paths[$0] })
+        try await reader.movePlaylistEntries(playlist.id, trackIDs: ids, before: target)
         await refresh()
     }
 
-    /// Rates the tracks at `rows`; 0 stars clears their rating.
-    public func rate(rows: IndexSet, stars: Int) async throws {
-        try await reader.setRating(stars, paths: try await paths(ofRows: rows))
+    /// Rates the tracks `trackIDs`; 0 stars clears their rating.
+    public func rate(_ trackIDs: [Int64], stars: Int) async throws {
+        try await reader.setRating(stars, trackIDs: trackIDs)
         await refresh()
     }
 
@@ -220,10 +215,6 @@ public final class BrowserModel {
     public func recordSkip(_ path: String) async throws {
         try await reader.recordSkip(path)
         await refresh()
-    }
-
-    private func paths(ofRows rows: IndexSet) async throws -> [String] {
-        try await urls(ofRows: rows).map(\.path)
     }
 
     /// Shows the source before the current one; false when there is none.
@@ -395,20 +386,24 @@ public final class BrowserModel {
         var artists = self.artists
         var albums = self.albums
         do {
+            // The timeline lists plays, which its own model pages through.
+            let tracks = next.source != .timeline
             if first == .genre {
-                genres = try await reader.genres(next)
+                genres = tracks ? try await reader.genres(next) : []
                 next.genre = resolve(next.genre, saved?.genre, in: genres, "genre")
             }
             if let first, first <= .artist {
-                artists = try await reader.artists(next)
+                artists = tracks ? try await reader.artists(next) : []
                 next.artist = resolve(next.artist, saved?.artist, in: artists, "artist")
             }
             if first != nil {
-                albums = try await reader.albums(next)
+                albums = tracks ? try await reader.albums(next) : []
                 next.album = resolve(next.album, saved?.album, in: albums, "album")
             }
-            let ids = try await reader.trackIDs(
-                next, sortedBy: sort.column, ascending: sort.ascending)
+            let ids =
+                tracks
+                ? try await reader.trackIDs(next, sortedBy: sort.column, ascending: sort.ascending)
+                : []
             var missing = 0
             if case .playlist(let id) = next.source,
                 playlists.first(where: { $0.id == id })?.isManual == true

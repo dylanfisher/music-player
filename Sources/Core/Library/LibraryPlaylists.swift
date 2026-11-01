@@ -2,7 +2,7 @@ import Foundation
 import SQLite
 
 /// Playlists and the stats: the user's data, which no scan recreates. Every row names its track
-/// by path (ADR 0008), never by file ID, so an index rebuild leaves it attached.
+/// by its path's permanent ID (ADR 0022), which an index rebuild keeps.
 extension LibraryIndex {
     // MARK: Playlists
 
@@ -47,17 +47,17 @@ extension LibraryIndex {
         guard database.changes == 1 else { throw LibraryError.unknownPlaylist(id) }
     }
 
-    /// A manual playlist's paths in order, including any whose file has left the index.
-    public func playlistPaths(_ id: Int64) throws -> [String] {
+    /// A manual playlist's track IDs in order, including any whose file has left the index.
+    func playlistTrackIDs(_ id: Int64) throws -> [Int64] {
         try manual(id)
         return try statement(
-            "SELECT path FROM playlist_entries WHERE playlist_id = ? ORDER BY position"
-        ).map(id) { try $0.text(0) }
+            "SELECT path_id FROM playlist_entries WHERE playlist_id = ? ORDER BY position"
+        ).map(id) { try $0.int64(0) }
     }
 
-    /// Appends `paths` to a manual playlist, leaving out those it already has, and returns how
-    /// many were added.
-    public func addToPlaylist(_ id: Int64, paths: [String]) throws -> Int {
+    /// Appends the tracks `ids` to a manual playlist, leaving out those it already has, and
+    /// returns how many were added.
+    public func addToPlaylist(_ id: Int64, trackIDs ids: [Int64]) throws -> Int {
         try database.transaction {
             try manual(id)
             var position =
@@ -65,25 +65,27 @@ extension LibraryIndex {
                     "SELECT ifnull(max(position), -1) FROM playlist_entries WHERE playlist_id = ?"
                 ).map(id) { try $0.int(0) }[0]
             let insert = try statement(
-                "INSERT OR IGNORE INTO playlist_entries (playlist_id, path, position)"
+                "INSERT OR IGNORE INTO playlist_entries (playlist_id, path_id, position)"
                     + " VALUES (?, ?, ?)")
             var added = 0
-            for path in paths {
+            for track in ids {
                 position += 1
-                try insert.run(id, path, position)
+                try insert.run(id, track, position)
                 added += database.changes
             }
             return added
         }
     }
 
-    /// Moves `paths` of a manual playlist, in their current order, to just before `target`, or
-    /// to the end when `target` is nil. A target among the moved paths keeps them where they
-    /// are, before the next path that isn't moving.
-    public func movePlaylistEntries(_ id: Int64, paths: [String], before target: String?) throws {
+    /// Moves the tracks `ids` of a manual playlist, in their current order, to just before
+    /// `target`, or to the end when `target` is nil. A target among the moved tracks keeps them
+    /// where they are, before the next track that isn't moving.
+    public func movePlaylistEntries(_ id: Int64, trackIDs ids: [Int64], before target: Int64?)
+        throws
+    {
         try database.transaction {
-            let order = try playlistPaths(id)
-            let moving = Set(paths)
+            let order = try playlistTrackIDs(id)
+            let moving = Set(ids)
             let moved = order.filter { moving.contains($0) }
             var kept = order.filter { !moving.contains($0) }
             // A target among the moved rows means the first row after it that stays.
@@ -95,8 +97,8 @@ extension LibraryIndex {
             let at = anchor.flatMap { kept.firstIndex(of: $0) } ?? kept.count
             kept.insert(contentsOf: moved, at: at)
             let update = try statement(
-                "UPDATE playlist_entries SET position = ? WHERE playlist_id = ? AND path = ?")
-            for (position, path) in kept.enumerated() { try update.run(position, id, path) }
+                "UPDATE playlist_entries SET position = ? WHERE playlist_id = ? AND path_id = ?")
+            for (position, track) in kept.enumerated() { try update.run(position, id, track) }
         }
     }
 
@@ -106,18 +108,18 @@ extension LibraryIndex {
         try statement(
             """
             SELECT count(*) FROM playlist_entries e WHERE e.playlist_id = ? AND NOT EXISTS
-                (SELECT 1 FROM files f JOIN tracks t ON t.file_id = f.id WHERE f.path = e.path)
+                (SELECT 1 FROM tracks t WHERE t.file_id = e.path_id)
             """
         ).map(id) { try $0.int(0) }[0]
     }
 
-    /// Takes `paths` out of a manual playlist. The files and tracks stay.
-    public func removeFromPlaylist(_ id: Int64, paths: [String]) throws {
+    /// Takes the tracks `ids` out of a manual playlist. The files and tracks stay.
+    public func removeFromPlaylist(_ id: Int64, trackIDs ids: [Int64]) throws {
         try database.transaction {
             try manual(id)
             let delete = try statement(
-                "DELETE FROM playlist_entries WHERE playlist_id = ? AND path = ?")
-            for path in paths { try delete.run(id, path) }
+                "DELETE FROM playlist_entries WHERE playlist_id = ? AND path_id = ?")
+            for track in ids { try delete.run(id, track) }
         }
     }
 
@@ -136,46 +138,96 @@ extension LibraryIndex {
 
     // MARK: Stats
 
-    /// Counts a play of the track at `path`, at `seconds` since 1970, and logs it in the
-    /// history.
+    /// Counts a play of the file at `path`, at `seconds` since 1970, and logs it in the history.
+    /// A path the index never held gets an ID here, so a file played from elsewhere is counted.
     public func recordPlay(_ path: String, at seconds: Double) throws {
         try database.transaction {
+            let id = try pathID(path, seenAt: seconds)
             try statement(
                 """
-                INSERT INTO plays (path, play_count, skip_count, last_played_seconds)
+                INSERT INTO plays (path_id, play_count, skip_count, last_played_seconds)
                 VALUES (?, 1, 0, ?)
-                ON CONFLICT (path) DO UPDATE SET play_count = play_count + 1,
+                ON CONFLICT (path_id) DO UPDATE SET play_count = play_count + 1,
                     last_played_seconds = excluded.last_played_seconds
                 """
-            ).run(path, seconds)
-            try statement("INSERT INTO history (path, played_seconds) VALUES (?, ?)").run(
-                path, seconds)
+            ).run(id, seconds)
+            try statement("INSERT INTO history (path_id, played_at) VALUES (?, ?)").run(
+                id, Int(seconds.rounded(.down)))
         }
     }
 
     public func recordSkip(_ path: String) throws {
-        try statement(
-            """
-            INSERT INTO plays (path, play_count, skip_count) VALUES (?, 0, 1)
-            ON CONFLICT (path) DO UPDATE SET skip_count = skip_count + 1
-            """
-        ).run(path)
+        try database.transaction {
+            let id = try pathID(path, seenAt: Date().timeIntervalSince1970)
+            try statement(
+                """
+                INSERT INTO plays (path_id, play_count, skip_count) VALUES (?, 0, 1)
+                ON CONFLICT (path_id) DO UPDATE SET skip_count = skip_count + 1
+                """
+            ).run(id)
+        }
     }
 
-    /// Rates the tracks at `paths` in stars; 0 clears the rating.
-    public func setRating(_ stars: Int, paths: [String]) throws {
+    /// Rates the tracks `ids` in stars; 0 clears the rating.
+    public func setRating(_ stars: Int, trackIDs ids: [Int64]) throws {
         precondition(
             (0...SmartField.maxRating).contains(stars), "a rating of \(stars) stars")
         try database.transaction {
             let write =
                 stars == 0
-                ? try statement("DELETE FROM ratings WHERE path = ?")
-                : try statement("INSERT OR REPLACE INTO ratings (path, rating) VALUES (?, ?)")
-            for path in paths {
-                if stars == 0 { try write.run(path) } else { try write.run(path, stars) }
+                ? try statement("DELETE FROM ratings WHERE path_id = ?")
+                : try statement("INSERT OR REPLACE INTO ratings (path_id, rating) VALUES (?, ?)")
+            for id in ids {
+                if stars == 0 { try write.run(id) } else { try write.run(id, stars) }
             }
         }
     }
+
+    // MARK: The play timeline
+
+    /// Up to `limit` plays logged before the play `id`, or the latest for nil, newest first.
+    /// Paged by key, so a page costs the same at any depth and new plays don't shift it.
+    public func timeline(before id: Int64?, limit: Int) throws -> [PlayEntry] {
+        try resolved(
+            statement(timelineSelect + " WHERE h.id < ? ORDER BY h.id DESC LIMIT ?").map(
+                id ?? Int64.max, limit, row: playEntry))
+    }
+
+    /// Up to `limit` of the plays logged after the play `id`, the newest first.
+    public func timeline(after id: Int64, limit: Int) throws -> [PlayEntry] {
+        try resolved(
+            statement(timelineSelect + " WHERE h.id > ? ORDER BY h.id DESC LIMIT ?").map(
+                id, limit, row: playEntry))
+    }
+
+    /// `entries` with each one's track, where the index still has it.
+    func resolved(_ entries: [PlayEntry]) throws -> [PlayEntry] {
+        let tracks = Dictionary(
+            uniqueKeysWithValues: try rows(ids: Array(Set(entries.map(\.trackID)))).map {
+                ($0.id, $0)
+            })
+        return entries.map { entry in
+            var entry = entry
+            entry.track = tracks[entry.trackID]
+            return entry
+        }
+    }
+
+    /// How many plays the history holds: its last ID, since rows are never deleted.
+    public func loggedPlayCount() throws -> Int {
+        try statement("SELECT ifnull(max(id), 0) FROM history").map { try $0.int(0) }[0]
+    }
+}
+
+private let timelineSelect = """
+    SELECT h.id, h.path_id, pa.path, h.played_at FROM history h
+    JOIN paths pa ON pa.id = h.path_id
+    """
+
+private func playEntry(_ row: Row) throws -> PlayEntry {
+    PlayEntry(
+        id: try row.int64(0), trackID: try row.int64(1), path: try row.text(2),
+        playedSeconds: try row.int(3))
 }
 
 private func playlistRow(_ row: Row) throws -> Playlist {

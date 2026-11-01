@@ -5,13 +5,13 @@ import Testing
 @testable import Library
 @testable import SQLite
 
-/// A scanned test library, its index, and its track paths in path order.
-private func scanned() throws -> (TestLibrary, LibraryIndex, [String]) {
+/// A scanned test library, its index, and its track IDs and paths in path order.
+private func scanned() throws -> (TestLibrary, LibraryIndex, [Int64], [String]) {
     let library = try TestLibrary()
     _ = try library.scan()
     let index = try library.index()
-    let paths = try index.rows(ids: try index.trackIDs(sortedBy: .path)).map(\.path)
-    return (library, index, paths)
+    let ids = try index.trackIDs(sortedBy: .path)
+    return (library, index, ids, try index.rows(ids: ids).map(\.path))
 }
 
 private func shownPaths(_ index: LibraryIndex, _ source: BrowserSource, by column: TrackColumn)
@@ -22,34 +22,34 @@ private func shownPaths(_ index: LibraryIndex, _ source: BrowserSource, by colum
 }
 
 @Test func aManualPlaylistKeepsItsOrderAndEachTrackOnce() throws {
-    let (_, index, paths) = try scanned()
+    let (_, index, ids, paths) = try scanned()
     let id = try index.createPlaylist(named: "Mix")
-    #expect(try index.addToPlaylist(id, paths: [paths[3], paths[1], paths[3]]) == 2)
-    #expect(try index.addToPlaylist(id, paths: [paths[1], paths[0]]) == 1)
-    #expect(try index.playlistPaths(id) == [paths[3], paths[1], paths[0]])
+    #expect(try index.addToPlaylist(id, trackIDs: [ids[3], ids[1], ids[3]]) == 2)
+    #expect(try index.addToPlaylist(id, trackIDs: [ids[1], ids[0]]) == 1)
+    #expect(try index.playlistTrackIDs(id) == [ids[3], ids[1], ids[0]])
     #expect(
         try shownPaths(index, .playlist(id), by: .playlistOrder) == [paths[3], paths[1], paths[0]])
     #expect(try shownPaths(index, .playlist(id), by: .path) == [paths[0], paths[1], paths[3]])
 
-    try index.movePlaylistEntries(id, paths: [paths[0], paths[3]], before: paths[1])
-    #expect(try index.playlistPaths(id) == [paths[3], paths[0], paths[1]])
-    try index.movePlaylistEntries(id, paths: [paths[3]], before: nil)
-    #expect(try index.playlistPaths(id) == [paths[0], paths[1], paths[3]])
+    try index.movePlaylistEntries(id, trackIDs: [ids[0], ids[3]], before: ids[1])
+    #expect(try index.playlistTrackIDs(id) == [ids[3], ids[0], ids[1]])
+    try index.movePlaylistEntries(id, trackIDs: [ids[3]], before: nil)
+    #expect(try index.playlistTrackIDs(id) == [ids[0], ids[1], ids[3]])
 
-    try index.removeFromPlaylist(id, paths: [paths[1]])
-    #expect(try index.playlistPaths(id) == [paths[0], paths[3]])
+    try index.removeFromPlaylist(id, trackIDs: [ids[1]])
+    #expect(try index.playlistTrackIDs(id) == [ids[0], ids[3]])
     #expect(try index.trackCount() == paths.count)
 }
 
 @Test func playlistsAreListedByNameAndRenamedAndDeleted() throws {
-    let (_, index, paths) = try scanned()
+    let (_, index, ids, _) = try scanned()
     let b = try index.createPlaylist(named: "b")
     let a = try index.createPlaylist(
         named: "A", rules: SmartRules(match: .all, rules: [.init(.title, .contains, .text("x"))]))
     #expect(try index.playlists().map(\.id) == [a, b])
     try index.renamePlaylist(b, to: "0")
     #expect(try index.playlists().map(\.name) == ["0", "A"])
-    _ = try index.addToPlaylist(b, paths: [paths[0]])
+    _ = try index.addToPlaylist(b, trackIDs: [ids[0]])
     try index.deletePlaylist(b)
     #expect(try index.playlists().map(\.id) == [a])
     #expect(
@@ -62,12 +62,12 @@ private func shownPaths(_ index: LibraryIndex, _ source: BrowserSource, by colum
 }
 
 @Test func aSmartPlaylistTakesNoTracksByHandAndAManualOneNoRules() throws {
-    let (_, index, paths) = try scanned()
+    let (_, index, ids, _) = try scanned()
     let rules = SmartRules(match: .all, rules: [])
     let smart = try index.createPlaylist(named: "Smart", rules: rules)
     let manual = try index.createPlaylist(named: "Manual")
     #expect(throws: LibraryError.smartPlaylist("Smart")) {
-        try index.addToPlaylist(smart, paths: [paths[0]])
+        try index.addToPlaylist(smart, trackIDs: [ids[0]])
     }
     #expect(throws: LibraryError.unknownPlaylist(manual)) { try index.setRules(rules, of: manual) }
     #expect(throws: LibraryError.invalidRule("title can't be compared with greaterThan")) {
@@ -81,7 +81,7 @@ private func shownPaths(_ index: LibraryIndex, _ source: BrowserSource, by colum
 }
 
 @Test func unreadableRulesAreListedAndFailWhenShown() throws {
-    let (_, index, _) = try scanned()
+    let (_, index, _, _) = try scanned()
     let id = try index.createPlaylist(named: "Old", rules: SmartRules(match: .all, rules: []))
     try index.database.prepare("UPDATE playlists SET rules = ? WHERE id = ?").run(
         #"{"match": "all", "rules": [], "shuffle": true}"#, id)
@@ -98,12 +98,12 @@ private func shownPaths(_ index: LibraryIndex, _ source: BrowserSource, by colum
 }
 
 @Test func statsAndPlaylistsSurviveAnIndexRebuild() throws {
-    let (library, index, paths) = try scanned()
+    let (library, index, ids, paths) = try scanned()
     let id = try index.createPlaylist(named: "Mix")
-    _ = try index.addToPlaylist(id, paths: [paths[2], paths[0]])
+    _ = try index.addToPlaylist(id, trackIDs: [ids[2], ids[0]])
     try index.recordPlay(paths[2], at: 1000)
     try index.recordSkip(paths[0])
-    try index.setRating(3, paths: [paths[0]])
+    try index.setRating(3, trackIDs: [ids[0]])
     try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'index'")
 
     let rebuilt = try library.index()
@@ -119,7 +119,7 @@ private func shownPaths(_ index: LibraryIndex, _ source: BrowserSource, by colum
 }
 
 @Test func playsCountUpAndHistoryListsWhatWasPlayed() throws {
-    let (_, index, paths) = try scanned()
+    let (_, index, ids, paths) = try scanned()
     #expect(try shownPaths(index, .history, by: .lastPlayed).isEmpty)
     try index.recordPlay(paths[1], at: 100)
     try index.recordPlay(paths[0], at: 200)
@@ -132,35 +132,34 @@ private func shownPaths(_ index: LibraryIndex, _ source: BrowserSource, by colum
     #expect(played.map(\.lastPlayedSeconds) == [300, 200])
     #expect(try index.database.prepare("SELECT count(*) FROM history").map { try $0.int(0) } == [3])
 
-    try index.setRating(5, paths: [paths[0], paths[1]])
-    try index.setRating(0, paths: [paths[1]])
+    try index.setRating(5, trackIDs: [ids[0], ids[1]])
+    try index.setRating(0, trackIDs: [ids[1]])
     #expect(
         try index.rows(ids: try index.trackIDs(TrackFilter(source: .history), sortedBy: .rating))
             .map(\.rating) == [0, 5])
 }
 
 @Test func playlistOrderOutsideAPlaylistLeavesTheAlbumOrder() throws {
-    let (_, index, _) = try scanned()
+    let (_, index, _, _) = try scanned()
     #expect(
         try index.trackIDs(sortedBy: .playlistOrder)
             == (try index.trackIDs(sortedBy: .playlistOrder, ascending: false)))
 }
 
 @Test func rowsDroppedOnTheirOwnBlockStayPut() throws {
-    let (_, index, paths) = try scanned()
+    let (_, index, ids, _) = try scanned()
     let id = try index.createPlaylist(named: "Mix")
-    _ = try index.addToPlaylist(id, paths: Array(paths[0..<6]))
+    _ = try index.addToPlaylist(id, trackIDs: Array(ids[0..<6]))
     // Rows 3 to 5 dropped above row 4, which is one of them.
-    try index.movePlaylistEntries(id, paths: Array(paths[2..<5]), before: paths[3])
-    #expect(try index.playlistPaths(id) == Array(paths[0..<6]))
+    try index.movePlaylistEntries(id, trackIDs: Array(ids[2..<5]), before: ids[3])
+    #expect(try index.playlistTrackIDs(id) == Array(ids[0..<6]))
     // Dropped above the first of them, they gather before the next row that isn't moving.
-    try index.movePlaylistEntries(id, paths: [paths[2], paths[4]], before: paths[2])
-    #expect(
-        try index.playlistPaths(id) == [paths[0], paths[1], paths[2], paths[4], paths[3], paths[5]])
+    try index.movePlaylistEntries(id, trackIDs: [ids[2], ids[4]], before: ids[2])
+    #expect(try index.playlistTrackIDs(id) == [ids[0], ids[1], ids[2], ids[4], ids[3], ids[5]])
 }
 
 @Test func aDeletedPlaylistsIDIsNeverReused() throws {
-    let (_, index, _) = try scanned()
+    let (_, index, _, _) = try scanned()
     _ = try index.createPlaylist(named: "a")
     let last = try index.createPlaylist(named: "b")
     try index.deletePlaylist(last)
@@ -168,7 +167,7 @@ private func shownPaths(_ index: LibraryIndex, _ source: BrowserSource, by colum
 }
 
 @Test func aLimitOfNoTracksIsRefusedWhenWritten() throws {
-    let (_, index, _) = try scanned()
+    let (_, index, _, _) = try scanned()
     let rules = SmartRules(match: .all, rules: [], limit: SmartLimit(count: 0, order: .title))
     #expect(throws: LibraryError.invalidRule("a limit needs at least 1 track")) {
         try index.createPlaylist(named: "x", rules: rules)
@@ -176,9 +175,13 @@ private func shownPaths(_ index: LibraryIndex, _ source: BrowserSource, by colum
 }
 
 @Test func entriesWhoseFileLeftTheIndexAreCounted() throws {
-    let (_, index, paths) = try scanned()
+    let (library, index, ids, paths) = try scanned()
     let id = try index.createPlaylist(named: "Mix")
-    _ = try index.addToPlaylist(id, paths: [paths[0], "/gone/a.flac", "/gone/b.flac"])
+    _ = try index.addToPlaylist(id, trackIDs: Array(ids[0..<3]))
+    for path in paths[1..<3] { try FileManager.default.removeItem(atPath: path) }
+    _ = try library.scan()
     #expect(try index.missingEntryCount(id) == 2)
     #expect(try shownPaths(index, .playlist(id), by: .playlistOrder) == [paths[0]])
+    // The entries stay, so a file that comes back is listed again.
+    #expect(try index.playlistTrackIDs(id) == Array(ids[0..<3]))
 }

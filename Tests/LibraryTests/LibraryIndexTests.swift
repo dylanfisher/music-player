@@ -7,15 +7,17 @@ import Testing
 @testable import SQLite
 
 private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
-    try index.database.prepare("SELECT path FROM ratings").map { try $0.text(0) }
+    try index.database.prepare(
+        "SELECT pa.path FROM ratings r JOIN paths pa ON pa.id = r.path_id"
+    ).map { try $0.text(0) }
 }
 
 @Test func indexRebuildKeepsTheStats() throws {
     let library = try TestLibrary()
     _ = try library.scan()
     let index = try library.index()
-    try index.database.prepare("INSERT INTO ratings (path, rating) VALUES (?, ?)").run(
-        library.path(library.manifest.files[0]), 80)
+    let id = try #require(try index.track(path: library.path(library.manifest.files[0]))).id
+    try index.database.prepare("INSERT INTO ratings (path_id, rating) VALUES (?, ?)").run(id, 80)
     try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'index'")
 
     let rebuilt = try library.index()
@@ -26,12 +28,74 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     #expect(try rebuilt.trackCount() == library.readableCount)
 }
 
-@Test func statsThatDontMatchAreDiscarded() throws {
+@Test func statsThatDontMatchAreDiscardedAndReportedOnce() throws {
     let library = try TestLibrary()
     let index = try library.index()
-    try index.database.prepare("INSERT INTO ratings (path, rating) VALUES (?, ?)").run("/x", 1)
+    try index.recordPlay("/x.flac", at: 100)
+    try index.setRating(1, trackIDs: [try index.pathID("/x.flac", seenAt: 0)])
     try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'stats'")
-    #expect(try ratingPaths(try library.index()).isEmpty)
+
+    let rebuilt = try library.index()
+    #expect(try ratingPaths(rebuilt).isEmpty)
+    let discards = try rebuilt.takeDiscards()
+    #expect(discards.count == 1)
+    #expect(
+        discards.first?.hasSuffix(
+            "(rows: history 1, paths 1, plays 1, ratings 1)") == true, "\(discards)")
+    #expect(try rebuilt.takeDiscards().isEmpty)
+    // Empty stats lose nothing, so nothing is recorded.
+    try rebuilt.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'stats'")
+    #expect(try library.index().takeDiscards().isEmpty)
+}
+
+@Test func aRecordedDiscardSurvivesAnotherRebuild() throws {
+    let library = try TestLibrary()
+    let index = try library.index()
+    try index.recordSkip("/x.flac")
+    try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'stats'")
+    let rebuilt = try library.index()
+    try rebuilt.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'index'")
+    #expect(try library.index().takeDiscards().count == 1)
+}
+
+@Test func idsAndDateAddedSurviveAnIndexRebuild() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let before = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'index'")
+    let rebuilt = try library.index()
+    _ = try library.scan()
+    let after = try rebuilt.rows(ids: try rebuilt.trackIDs(sortedBy: .path))
+    #expect(after.map(\.path) == before.map(\.path))
+    #expect(after.map(\.id) == before.map(\.id))
+    #expect(after.map(\.addedSeconds) == before.map(\.addedSeconds))
+}
+
+@Test func aFileThatLeavesAndComesBackKeepsItsIDDateAddedAndStats() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let file = try #require(library.manifest.files.first { $0.malformation == nil })
+    let path = library.path(file)
+    let row = try #require(try index.track(path: path))
+    try index.recordPlay(path, at: 500)
+    try index.setRating(2, trackIDs: [row.id])
+    let aside = path + ".aside"
+    try FileManager.default.moveItem(atPath: path, toPath: aside)
+    #expect(try library.scan().removed == 1)
+    #expect(try index.track(path: path) == nil)
+    // A different path is a different ID, as before.
+    #expect(try index.pathID(aside, seenAt: 0) != row.id)
+
+    try FileManager.default.moveItem(atPath: aside, toPath: path)
+    _ = try library.scan()
+    let back = try #require(try index.track(path: path))
+    #expect(back.id == row.id)
+    #expect(back.addedSeconds == row.addedSeconds)
+    #expect(back.playCount == 1)
+    #expect(back.lastPlayedSeconds == 500)
+    #expect(back.rating == 2)
 }
 
 @Test func statsTablesListsWhatTheStatsSQLCreates() throws {

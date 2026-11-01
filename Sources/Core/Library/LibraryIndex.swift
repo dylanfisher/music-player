@@ -33,8 +33,21 @@ public final class LibraryIndex {
 
     private func prepareSchema() throws {
         try database.execute(
-            "CREATE TABLE IF NOT EXISTS \(schemaIdentityTable) (part TEXT PRIMARY KEY, sql TEXT NOT NULL)"
-        )
+            """
+            CREATE TABLE IF NOT EXISTS \(schemaIdentityTable) (part TEXT PRIMARY KEY, sql TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS \(schemaDiscardsTable) (
+                discarded_seconds REAL NOT NULL, detail TEXT NOT NULL)
+            """)
+        // A rebuild drops parents and children in any order, and dropping a table deletes its
+        // rows, which foreign keys would check against tables already dropped. The pragma does
+        // nothing inside a transaction, so it goes around it.
+        try database.execute("PRAGMA foreign_keys = OFF")
+        let rebuilt = Result { try rebuildStaleParts() }
+        try database.execute("PRAGMA foreign_keys = ON")
+        try rebuilt.get()
+    }
+
+    private func rebuildStaleParts() throws {
         try database.transaction {
             let stored = Dictionary(
                 uniqueKeysWithValues: try database.prepare(
@@ -48,9 +61,9 @@ public final class LibraryIndex {
             for part in rebuilt where stored[part.rawValue] != nil {
                 logger.notice("the \(part.rawValue) tables don't match this build; rebuilding them")
             }
-            // Dropping a table deletes its rows first, which foreign keys would refuse in the
-            // wrong order; they're checked at commit instead, when nothing refers to anything.
-            try database.execute("PRAGMA defer_foreign_keys = ON")
+            if rebuilt.contains(.stats), stored[SchemaPart.stats.rawValue] != nil {
+                try recordDiscardedStats()
+            }
             try dropTables(keeping: rebuilt.contains(.stats) ? [] : statsTables)
             let identity = try database.prepare(
                 "INSERT OR REPLACE INTO \(schemaIdentityTable) (part, sql) VALUES (?, ?)")
@@ -61,6 +74,45 @@ public final class LibraryIndex {
         }
     }
 
+    /// Counts the rows of the stats tables about to be dropped, and records them for the window
+    /// to show once, when there were any (ADR 0022).
+    private func recordDiscardedStats() throws {
+        let existing = Set(
+            try database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").map {
+                try $0.text(0)
+            })
+        var counts: [String] = []
+        for table in statsTables.intersection(existing).sorted() {
+            let rows = try database.prepare("SELECT count(*) FROM \"\(table)\"").map {
+                try $0.int(0)
+            }[0]
+            if rows > 0 { counts.append("\(table) \(rows)") }
+        }
+        guard !counts.isEmpty else { return }
+        let detail =
+            "this build stores plays, ratings and playlists in a new shape, so those of the"
+            + " earlier build were discarded (rows: \(counts.joined(separator: ", ")))"
+        logger.error("\(detail)")
+        try database.prepare(
+            "INSERT INTO \(schemaDiscardsTable) (discarded_seconds, detail) VALUES (?, ?)"
+        ).run(Date().timeIntervalSince1970, detail)
+    }
+
+    /// What stats rebuilds have discarded since the last call, oldest first, each as a line for
+    /// the owner. Taking them deletes them, so each shows once.
+    public func takeDiscards() throws -> [String] {
+        try database.transaction {
+            let lines = try database.prepare(
+                "SELECT discarded_seconds, detail FROM \(schemaDiscardsTable) ORDER BY rowid"
+            ).map { row in
+                let date = Date(timeIntervalSince1970: try row.double(0))
+                return "\(ISO8601DateFormatter().string(from: date)): \(try row.text(1))"
+            }
+            try database.execute("DELETE FROM \(schemaDiscardsTable)")
+            return lines
+        }
+    }
+
     /// Drops every table but the identity table and `keeping`. Virtual tables go first, because
     /// dropping one also drops its shadow tables.
     private func dropTables(keeping: Set<String>) throws {
@@ -68,7 +120,10 @@ public final class LibraryIndex {
             "SELECT name, sql LIKE 'CREATE VIRTUAL TABLE%' FROM sqlite_master"
                 + " WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
         ).map { row in (name: try row.text(0), isVirtual: try row.int(1) == 1) }
-        let doomed = tables.filter { $0.name != schemaIdentityTable && !keeping.contains($0.name) }
+        let doomed = tables.filter {
+            $0.name != schemaIdentityTable && $0.name != schemaDiscardsTable
+                && !keeping.contains($0.name)
+        }
         for table in doomed where table.isVirtual {
             try database.execute("DROP TABLE \"\(table.name)\"")
         }
@@ -164,23 +219,36 @@ public final class LibraryIndex {
             return known.id
         }
         // An upsert, since another scan (the command line beside the app) may have added the
-        // path since this one listed what the index knew.
+        // path since this one listed what the index knew. The ID is the path's for good, so a
+        // conflict on it is the same file.
+        let id = try pathID(file.path, seenAt: Date().timeIntervalSince1970)
         try statement(
             """
-            INSERT INTO files (path, size_bytes, modified_seconds, failure_kind, failure_offset,
-                failure_detail, added_seconds)
+            INSERT INTO files (id, path, size_bytes, modified_seconds, failure_kind,
+                failure_offset, failure_detail)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (path) DO UPDATE SET size_bytes = excluded.size_bytes,
+            ON CONFLICT (id) DO UPDATE SET size_bytes = excluded.size_bytes,
                 modified_seconds = excluded.modified_seconds,
                 failure_kind = excluded.failure_kind, failure_offset = excluded.failure_offset,
                 failure_detail = excluded.failure_detail
             """
-        ).run(
-            file.path, values[0], values[1], values[2], values[3], values[4],
-            Date().timeIntervalSince1970)
-        return try statement("SELECT id FROM files WHERE path = ?").map(file.path) {
-            try $0.int64(0)
-        }[0]
+        ).run(id, file.path, values[0], values[1], values[2], values[3], values[4])
+        return id
+    }
+
+    /// The permanent ID of `path`, adding it to `paths` as first seen at `seconds` when it's
+    /// new. Call inside a transaction, so no other connection adds it between the two steps.
+    func pathID(_ path: String, seenAt seconds: Double) throws -> Int64 {
+        if let id = try statement("SELECT id FROM paths WHERE path = ?").map(
+            path,
+            row: {
+                try $0.int64(0)
+            }
+        ).first {
+            return id
+        }
+        try statement("INSERT INTO paths (path, added_seconds) VALUES (?, ?)").run(path, seconds)
+        return database.lastInsertRowID
     }
 
     private func clearTrack(_ id: Int64) throws {

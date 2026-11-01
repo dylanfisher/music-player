@@ -13,6 +13,8 @@ public enum LibraryError: Error, Equatable, CustomStringConvertible {
     case invalidRule(String)
     /// A smart playlist whose stored rules this build can't read.
     case unreadableRules(playlist: String, detail: String)
+    /// A track query asked of the timeline, which lists plays.
+    case playsNotTracks
 
     public var description: String {
         switch self {
@@ -26,6 +28,7 @@ public enum LibraryError: Error, Equatable, CustomStringConvertible {
         case .invalidRule(let problem): "a smart playlist rule is invalid: \(problem)"
         case .unreadableRules(let name, let detail):
             "the rules of \"\(name)\" can't be read: \(detail)"
+        case .playsNotTracks: "the timeline lists plays, not tracks"
         }
     }
 }

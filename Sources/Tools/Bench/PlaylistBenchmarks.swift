@@ -20,7 +20,8 @@ let playlistBenchmarks = [
                     atPath: source.path + suffix, toPath: databaseURL.path + suffix)
             }
             let index = try LibraryIndex(at: databaseURL)
-            let paths = try index.rows(ids: try index.trackIDs(sortedBy: .path)).map(\.path)
+            let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+            let paths = rows.map(\.path)
             let now = Date().timeIntervalSince1970
             // A third of the library played, a fifth rated, as a library in use would be.
             for (offset, path) in paths.enumerated() where offset % 3 == 0 {
@@ -29,7 +30,8 @@ let playlistBenchmarks = [
             for stars in 1...5 {
                 try index.setRating(
                     stars,
-                    paths: paths.enumerated().filter { $0.offset % 25 == stars }.map(\.element))
+                    trackIDs: rows.enumerated().filter { $0.offset % 25 == stars }.map(\.element.id)
+                )
             }
             let rules = SmartRules(
                 match: .all,

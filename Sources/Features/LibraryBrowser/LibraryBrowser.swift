@@ -414,9 +414,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Makes a playlist, smart when `rules` are given, holding the selected tracks when
     /// `withSelection` is set, and shows it.
     public func createPlaylist(named name: String, rules: SmartRules?, withSelection: Bool) {
-        let rows = withSelection ? table.table.selectedRowIndexes : []
+        let ids = withSelection ? model.ids(ofRows: table.table.selectedRowIndexes) : []
         edit("couldn't make the playlist \"\(name)\"") {
-            try await self.model.createPlaylist(named: name, rules: rules, rows: rows)
+            try await self.model.createPlaylist(named: name, rules: rules, trackIDs: ids)
         }
     }
 
@@ -456,8 +456,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Rates the selected tracks; 0 stars clears their rating.
     public func rateSelection(_ stars: Int) {
-        let rows = table.table.selectedRowIndexes
-        edit("couldn't rate the tracks") { try await self.model.rate(rows: rows, stars: stars) }
+        let ids = model.ids(ofRows: table.table.selectedRowIndexes)
+        edit("couldn't rate the tracks") { try await self.model.rate(ids, stars: stars) }
     }
 
     /// Counts a play of the track at `path`, at `seconds` since 1970.

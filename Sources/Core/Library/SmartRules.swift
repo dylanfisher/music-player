@@ -259,8 +259,9 @@ let trackJoins = """
     LEFT JOIN artists aa ON aa.id = t.album_artist_id
     LEFT JOIN albums al ON al.id = t.album_id
     LEFT JOIN genres g ON g.id = t.genre_id
-    LEFT JOIN plays p ON p.path = f.path
-    LEFT JOIN ratings r ON r.path = f.path
+    LEFT JOIN paths pa ON pa.id = t.file_id
+    LEFT JOIN plays p ON p.path_id = t.file_id
+    LEFT JOIN ratings r ON r.path_id = t.file_id
     """
 
 private let secondsPerDay = 86_400.0

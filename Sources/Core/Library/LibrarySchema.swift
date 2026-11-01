@@ -7,8 +7,8 @@
 enum SchemaPart: String, CaseIterable {
     /// Everything a scan can rebuild from the files: dropped and recreated when its SQL changes.
     case index
-    /// Plays, ratings, history and playlists, which no scan can recreate. Keyed by path
-    /// (ADR 0008), so a rebuilt index finds them again.
+    /// The paths' permanent IDs, plays, ratings, history and playlists, which no scan can
+    /// recreate. Keyed by path ID (ADR 0022), so a rebuilt index finds them again.
     case stats
 
     var sql: String {
@@ -22,12 +22,19 @@ enum SchemaPart: String, CaseIterable {
 /// Holds the SQL each part was last built from. Its own shape never changes.
 let schemaIdentityTable = "schema_identity"
 
+/// What each stats rebuild discarded, until the window has shown it. Its own shape never
+/// changes either, and no rebuild drops it.
+let schemaDiscardsTable = "schema_discards"
+
 /// The tables `statsSchema` creates, which an index rebuild keeps.
-let statsTables: Set<String> = ["plays", "ratings", "history", "playlists", "playlist_entries"]
+let statsTables: Set<String> = [
+    "paths", "plays", "ratings", "history", "playlists", "playlist_entries",
+]
 
 private let indexSchema = """
     CREATE TABLE files (
-        id INTEGER PRIMARY KEY,
+        -- The path's ID in paths, which an index rebuild keeps.
+        id INTEGER PRIMARY KEY REFERENCES paths (id),
         path TEXT NOT NULL UNIQUE,
         size_bytes INTEGER NOT NULL,
         -- Seconds since 1970, compared exactly with the walk's value to skip unchanged files.
@@ -35,9 +42,7 @@ private let indexSchema = """
         -- Set when the file couldn't be read; MetadataError.Kind's raw value.
         failure_kind TEXT,
         failure_offset INTEGER,
-        failure_detail TEXT,
-        -- When the file was first indexed, in seconds since 1970: the "date added" column.
-        added_seconds REAL NOT NULL
+        failure_detail TEXT
     );
     CREATE TABLE artists (
         id INTEGER PRIMARY KEY,
@@ -105,22 +110,32 @@ private let indexSchema = """
     """
 
 private let statsSchema = """
+    -- Every path the library has seen. Rows are never deleted, so a file that leaves the index
+    -- and comes back keeps its ID, its Date Added and its stats (ADR 0022).
+    CREATE TABLE paths (
+        id INTEGER PRIMARY KEY,
+        path TEXT NOT NULL UNIQUE,
+        -- When the path was first seen, in seconds since 1970: the "date added" column.
+        added_seconds REAL NOT NULL
+    );
     CREATE TABLE plays (
-        path TEXT PRIMARY KEY,
+        path_id INTEGER PRIMARY KEY REFERENCES paths (id),
         play_count INTEGER NOT NULL,
         skip_count INTEGER NOT NULL,
         last_played_seconds REAL
     );
     CREATE TABLE ratings (
-        path TEXT PRIMARY KEY,
+        path_id INTEGER PRIMARY KEY REFERENCES paths (id),
         rating INTEGER NOT NULL
     );
+    -- Append-only, so id order is the order plays were recorded and played_at needs no index.
     CREATE TABLE history (
         id INTEGER PRIMARY KEY,
-        path TEXT NOT NULL,
-        played_seconds REAL NOT NULL
+        path_id INTEGER NOT NULL REFERENCES paths (id),
+        -- Whole seconds since 1970.
+        played_at INTEGER NOT NULL
     );
-    CREATE INDEX history_path ON history (path);
+    CREATE INDEX history_path ON history (path_id);
     -- AUTOINCREMENT, so a deleted playlist's ID is never reused: the state file and the
     -- palette's frecency name playlists by ID.
     CREATE TABLE playlists (
@@ -132,9 +147,9 @@ private let statsSchema = """
     -- Each track at most once per playlist, in position order.
     CREATE TABLE playlist_entries (
         playlist_id INTEGER NOT NULL REFERENCES playlists (id) ON DELETE CASCADE,
-        path TEXT NOT NULL,
+        path_id INTEGER NOT NULL REFERENCES paths (id),
         position INTEGER NOT NULL,
-        PRIMARY KEY (playlist_id, path)
+        PRIMARY KEY (playlist_id, path_id)
     );
     CREATE INDEX playlist_entries_order ON playlist_entries (playlist_id, position);
     """

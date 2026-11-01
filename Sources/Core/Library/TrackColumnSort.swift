@@ -2,8 +2,8 @@ import Settings
 
 extension TrackColumn {
     /// What `LibraryIndex`'s track query orders by first. Its tables are `t` (tracks), `f`
-    /// (files), `ar` (artist), `aa` (album artist), `al` (album), `g` (genre), `p` (plays), `r`
-    /// (ratings) and, for playlist order, `pe` (the shown playlist's entries).
+    /// (files), `pa` (paths), `ar` (artist), `aa` (album artist), `al` (album), `g` (genre), `p`
+    /// (plays), `r` (ratings) and, for playlist order, `pe` (the shown playlist's entries).
     var expression: String {
         switch self {
         case .title: "t.sort_title"
@@ -21,7 +21,7 @@ extension TrackColumn {
         case .codec: "t.codec"
         case .sampleRate: "t.sample_rate_hz"
         case .bitDepth: "t.bits_per_sample"
-        case .dateAdded: "f.added_seconds"
+        case .dateAdded: "pa.added_seconds"
         case .path: "f.path"
         case .playCount: "ifnull(p.play_count, 0)"
         case .skipCount: "ifnull(p.skip_count, 0)"
