@@ -1973,7 +1973,7 @@ Write the ADR first; it amends ADR 0022.
 - [ ] **Boundary first.** AGENTS.md gains one exception: the app may write its own log, and
       nothing else, in the sync folder the user chose, which must be outside every watched folder.
       Music files stay as they are. Tests use a temporary folder, never the NAS.
-- [ ] **Track identity** ([ADR 0026](decisions/0026-sync-identity-is-the-relative-path.md)). A
+- [x] **Track identity** ([ADR 0026](decisions/0026-sync-identity-is-the-relative-path.md)). A
       synced track is its path relative to the library root, normalized to NFC; each machine maps
       it to its own `paths` row. Every machine plays the same files on the NAS, so no audio is
       hashed. Machines pointed at separate copies don't share stats, and settings say so.
@@ -1986,7 +1986,7 @@ Write the ADR first; it amends ADR 0022.
       - **Sync** carries a match as a `move` event with both relative paths. A machine that already
         made the move, or has no row for the old path, ignores it; one with stats on both paths
         merges them by the rules below.
-- [ ] **Network folders by share** ([ADR 0028](decisions/0028-network-folders-by-share.md)). A
+- [x] **Network folders by share** ([ADR 0028](decisions/0028-network-folders-by-share.md)). A
       watched folder on a network volume is stored as its share's URL and the path inside it. The
       app finds the share's current mount point at launch, before each scan, on wake and on a
       network change, and rewrites the `paths` prefixes in one transaction when the mount point
@@ -2058,6 +2058,16 @@ the logs, merging, the clock and `move` events.
    remounted at `-1`, by host name and by IP, unmounted, the prefix rewrite and its
    conflicts, the watcher relocating), SettingsTests (`share` decoding and problems),
    LibraryBrowserTests (`LostStatsSession`), CommandsTests (the new command).
+
+Result, part 23a: shipped. Paths are keyed in NFC and carry codec, rate, frames and title from
+each read. After a complete walk a scan matches lost paths with stats to stat-less ones 1:1, on
+those facts and then on title, across folders in either scan order; the rest wait under Resolve
+Lost Stats… in the health report. A network folder is stored as its share URL and inner path.
+Mounts come from `getmntinfo(MNT_NOWAIT)`, read only on a trigger or before a scan, so a hung
+mount can't stall quit; one volume that won't read is skipped. A share with another host matches
+only for an IP literal with one candidate, or a `.local` or case difference; otherwise it stays
+offline (ADR 0028). Existing network folders must be re-added, and the stats schema change
+discards the index once. Rescan after renaming every file: 5.19 s, budget 10 s.
 
 ## Later
 
