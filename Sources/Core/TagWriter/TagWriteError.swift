@@ -17,8 +17,10 @@ public struct TagWriteError: Error, Equatable, CustomStringConvertible {
         case writeFailed
         /// The file changed after the edit, so undoing it would lose that change.
         case changedSinceEdit
-        /// The undo journal couldn't be read or saved.
+        /// The undo journal couldn't be read or saved. A batch stops here.
         case journal
+        /// The disk the file or the journal is on is full. A batch stops here.
+        case diskFull
     }
 
     public var path: String
@@ -32,4 +34,7 @@ public struct TagWriteError: Error, Equatable, CustomStringConvertible {
     }
 
     public var description: String { "\(path): \(detail)" }
+
+    /// Whether the rest of a batch would fail the same way, so it stops after this file.
+    public var stopsBatch: Bool { kind == .journal || kind == .diskFull }
 }

@@ -51,6 +51,10 @@ func fileHashes(_ path: String, payload: [Range<Int>]) throws(TagWriteError) -> 
 }
 
 /// A failed system call, with `errno`'s message.
+/// A full disk is reported as one whatever the step, so a batch stops on it.
 func systemError(_ path: String, _ kind: TagWriteError.Kind, _ what: String) -> TagWriteError {
-    TagWriteError(path: path, kind: kind, detail: "\(what): \(String(cString: strerror(errno)))")
+    let full = errno == ENOSPC || errno == EDQUOT
+    return TagWriteError(
+        path: path, kind: full ? .diskFull : kind,
+        detail: "\(what): \(String(cString: strerror(errno)))")
 }

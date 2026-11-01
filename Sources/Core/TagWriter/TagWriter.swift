@@ -13,39 +13,54 @@ private let logger = moduleLogger()
 public struct TagWriter: Sendable {
     public let journal: TagUndoJournal
     package var faults = WriteFaults()
-    /// The clock for journal entries.
-    let now: @Sendable () -> Date
-
     public init(journal: TagUndoJournal) {
         self.journal = journal
-        now = { Date() }
     }
 
     /// Writes `edit` into each of `paths`, as one undoable edit. A file the edit changes nothing
-    /// in isn't written. Each file's failure is reported and the rest carry on.
+    /// in isn't written. Each file's failure is reported and the rest carry on, except a full
+    /// disk or a journal that can't be written, which stop the batch after that file.
     public func write(_ edit: TagEdit, to paths: [String]) -> TagWriteReport {
         var report = TagWriteReport()
-        var entry: TagUndoJournal.Entry
+        let entry: TagUndoJournal.Entry
         do {
-            entry = try journal.newEntry(at: now().timeIntervalSince1970)
+            entry = try journal.newEntry()
         } catch {
             report.failures.append(error)
+            report.notWritten = paths
             return report
         }
-        for path in paths {
+        for (index, path) in paths.enumerated() {
             // A batch can run over an album of large files; each file's buffers go before the next.
-            autoreleasepool {
+            let stop = autoreleasepool { () -> Bool in
                 do throws(TagWriteError) {
-                    if try write(edit, to: path, entry: &entry) {
+                    switch try write(edit, to: path, entry: entry) {
+                    case .unchanged: report.unchanged.append(path)
+                    case .changed(let problem):
                         report.changed.append(path)
-                    } else {
-                        report.unchanged.append(path)
+                        if let problem { report.failures.append(problem) }
                     }
+                    return false
                 } catch {
                     logger.error("\(error.description)")
                     report.failures.append(error)
+                    return error.stopsBatch
                 }
             }
+            if stop {
+                report.notWritten = Array(paths[(index + 1)...])
+                if !report.notWritten.isEmpty {
+                    logger.error(
+                        "stopped the batch; \(report.notWritten.count) files weren't written")
+                }
+                break
+            }
+        }
+        do throws(TagWriteError) {
+            try journal.removeIfEmpty(entry)
+            try journal.prune()
+        } catch {
+            report.failures.append(error)
         }
         return report
     }
@@ -55,34 +70,38 @@ public struct TagWriter: Sendable {
     public func undoLast() -> TagWriteReport {
         var report = TagWriteReport()
         do throws(TagWriteError) {
-            let (latest, discarded) = try journal.latest()
+            let (entry, files, discarded) = try journal.latest()
             report.failures += discarded
-            guard var entry = latest else {
+            guard entry != nil else {
                 report.nothingToUndo = true
                 return report
             }
-            var kept: [TagUndoJournal.FileRecord] = []
-            for record in entry.files.reversed() {
+            for (handle, record) in files.reversed() {
                 do throws(TagWriteError) {
-                    try restore(record)
+                    try restore(record, oldBytes: try journal.oldBytes(handle))
                     report.changed.append(record.path)
+                    try journal.remove(handle)
                 } catch {
                     logger.error("\(error.description)")
                     report.failures.append(error)
-                    if error.kind != .changedSinceEdit { kept.insert(record, at: 0) }
+                    if error.kind == .changedSinceEdit { try journal.remove(handle) }
                 }
             }
-            entry.files = kept
-            try journal.save(entry)
         } catch {
             report.failures.append(error)
         }
         return report
     }
 
-    /// Writes one file. False when the edit changes nothing in it.
-    private func write(_ edit: TagEdit, to path: String, entry: inout TagUndoJournal.Entry)
-        throws(TagWriteError) -> Bool
+    private enum Outcome {
+        case unchanged
+        /// Written; `problem` is set when its undo record couldn't be brought up to date.
+        case changed(problem: TagWriteError?)
+    }
+
+    /// Writes one file.
+    private func write(_ edit: TagEdit, to path: String, entry: TagUndoJournal.Entry)
+        throws(TagWriteError) -> Outcome
     {
         let before = try FileIdentity(path: path)
         try requireWritable(path)
@@ -103,7 +122,7 @@ public struct TagWriter: Sendable {
         }
         let groups = TagGroup.changed(by: edit, from: current.metadata.tags, to: target)
         let art = edit.art == .remove && current.metadata.art == nil ? nil : edit.art
-        guard !groups.isEmpty || art != nil else { return false }
+        guard !groups.isEmpty || art != nil else { return .unchanged }
 
         let segments: [Segment]
         do throws(ParseFailure) {
@@ -113,31 +132,29 @@ public struct TagWriter: Sendable {
             throw TagWriteError(path: path, kind: kind(error.kind), detail: error.detail)
         }
         let hashes = try fileHashes(path, payload: file.payload)
-        let restore = try restoreSegments(segments, path: path, size: before.size)
+        let (restore, oldBytes) = try restoreSegments(segments, path: path, size: before.size)
         let oldArt = try art == nil ? currentArt(current, url) : nil
 
         let temp = tempPath(for: path)
         try writeTemp(segments, from: path, to: temp)
+        var handle: TagUndoJournal.Handle?
+        var record: TagUndoJournal.FileRecord
         do throws(TagWriteError) {
             try checkEdited(
                 temp, original: file, path: path, hashes: hashes, tags: target,
                 audio: current.metadata.audio, art: art, oldArt: oldArt)
-            let edited = try FileIdentity(path: temp)
-            entry.files.append(
-                TagUndoJournal.FileRecord(
-                    path: path, editedSize: edited.size,
-                    editedModifiedNanoseconds: edited.modifiedNanoseconds,
-                    originalSHA256: Data(hashes.full), restore: restore))
-            try journal.save(entry)
+            record = TagUndoJournal.FileRecord(
+                path: path, edited: try FileIdentity(path: temp),
+                originalSHA256: Data(hashes.full), restore: restore)
+            handle = try journal.append(record, oldBytes: oldBytes, to: entry)
             try finish(path, temp: temp, before: before)
         } catch {
             // A crash leaves the temp file and the journal as they are.
             if error.detail == crashDetail { throw error }
             unlink(temp)
-            if entry.files.last?.path == path {
-                entry.files.removeLast()
+            if let handle {
                 do throws(TagWriteError) {
-                    try journal.save(entry)
+                    try journal.remove(handle)
                 } catch let journalError {
                     logger.error("\(journalError.description)")
                 }
@@ -145,23 +162,52 @@ public struct TagWriter: Sendable {
             throw error
         }
         logger.notice("wrote tags to \(path)")
-        return true
+        // Undo compares against the file as it is now; a volume may round the mtime or change
+        // the inode on the rename.
+        do throws(TagWriteError) {
+            let final = try FileIdentity(path: path)
+            if final.inode != record.editedInode || final.size != record.editedSize
+                || final.modifiedNanoseconds != record.editedModifiedNanoseconds
+            {
+                record.setEdited(final)
+                try journal.update(record, at: handle!)
+            }
+            return .changed(problem: nil)
+        } catch {
+            logger.error("\(error.description)")
+            return .changed(
+                problem: TagWriteError(
+                    path: path, kind: .journal,
+                    detail: "written, but its undo record couldn't be updated: \(error.detail)"))
+        }
     }
 
     /// Puts back the original of one journaled file.
-    private func restore(_ record: TagUndoJournal.FileRecord) throws(TagWriteError) {
+    private func restore(_ record: TagUndoJournal.FileRecord, oldBytes: [UInt8])
+        throws(TagWriteError)
+    {
         let path = record.path
         let before = try FileIdentity(path: path)
         guard before.size == record.editedSize,
-            before.modifiedNanoseconds == record.editedModifiedNanoseconds
+            before.modifiedNanoseconds == record.editedModifiedNanoseconds,
+            before.inode == record.editedInode
         else {
             throw TagWriteError(
                 path: path, kind: .changedSinceEdit,
                 detail: "the file changed after the tag edit, so the edit isn't undone")
         }
         try requireWritable(path)
+        var cursor = 0
+        let segments = record.restore.map { segment -> Segment in
+            switch segment {
+            case .old(let length):
+                defer { cursor += length }
+                return .bytes(Array(oldBytes[cursor..<cursor + length]))
+            case .edited(let lower, let upper): return .original(lower..<upper)
+            }
+        }
         let temp = tempPath(for: path)
-        try writeTemp(record.restore.map(\.segment), from: path, to: temp)
+        try writeTemp(segments, from: path, to: temp)
         do throws(TagWriteError) {
             let restored = try fileHashes(temp, payload: [])
             guard restored.full == Array(record.originalSHA256) else {
@@ -262,7 +308,7 @@ public struct TagWriter: Sendable {
     /// The original's bytes that `segments` don't keep, and where the rest went, so the
     /// original can be put back together from the edited file.
     private func restoreSegments(_ segments: [Segment], path: String, size: Int)
-        throws(TagWriteError) -> [TagUndoJournal.RestoreSegment]
+        throws(TagWriteError) -> ([TagUndoJournal.RestoreSegment], [[UInt8]])
     {
         var kept: [(original: Range<Int>, edited: Int)] = []
         var offset = 0
@@ -272,6 +318,7 @@ public struct TagWriter: Sendable {
         }
         kept.sort { $0.original.lowerBound < $1.original.lowerBound }
         var result: [TagUndoJournal.RestoreSegment] = []
+        var bytes: [[UInt8]] = []
         var cursor = 0
         let source: FileSource
         do throws(ParseFailure) {
@@ -282,19 +329,23 @@ public struct TagWriter: Sendable {
         func oldBytes(_ range: Range<Int>) throws(TagWriteError) {
             guard !range.isEmpty else { return }
             do throws(ParseFailure) {
-                result.append(.bytes(Data(try source.read(range))))
+                bytes.append(try source.read(range))
+                result.append(.old(length: range.count))
             } catch {
                 throw TagWriteError(path: path, kind: .unreadable, detail: error.detail)
             }
         }
         for (range, edited) in kept {
-            precondition(range.lowerBound >= cursor, "kept ranges overlap")
+            guard range.lowerBound >= cursor else {
+                throw TagWriteError(
+                    path: path, kind: .checkFailed, detail: "the rewrite keeps a range twice")
+            }
             try oldBytes(cursor..<range.lowerBound)
             result.append(.edited(lowerBound: edited, upperBound: edited + range.count))
             cursor = range.upperBound
         }
         try oldBytes(cursor..<size)
-        return result
+        return (result, bytes)
     }
 }
 
@@ -305,6 +356,8 @@ public struct TagWriteReport: Equatable, Sendable {
     public var failures: [TagWriteError] = []
     /// Undo found no journaled edit.
     public var nothingToUndo = false
+    /// The files a batch didn't reach because it stopped (a full disk, a broken journal).
+    public var notWritten: [String] = []
 
     public init() {}
 }

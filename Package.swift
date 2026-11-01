@@ -172,7 +172,7 @@ let package = Package(
             name: "Bench",
             dependencies: [
                 "Commands", "DisplayText", "Fixtures", "HALOutput", "Library", "LibraryBrowser",
-                "Metadata", "Palette", "Playback", "SQLite", "Settings",
+                "Metadata", "Palette", "Playback", "SQLite", "Settings", "TagWriter",
             ],
             path: "Sources/Tools/Bench",
             swiftSettings: strictSwift

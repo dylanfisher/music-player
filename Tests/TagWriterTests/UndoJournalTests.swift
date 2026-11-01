@@ -1,25 +1,42 @@
+import Darwin
 import Foundation
 import Testing
 
 @testable import Metadata
 @testable import TagWriter
 
-@Test func anEntryWithAnUnknownKeyAnywhereIsDiscardedAndReported() throws {
+/// The newest edit's folder in `journal`.
+private func newestEntry(_ journal: TagUndoJournal) throws -> URL {
+    let names = try FileManager.default.contentsOfDirectory(atPath: journal.directory.path).sorted()
+    return journal.directory.appendingPathComponent(try #require(names.last))
+}
+
+@Test func aRecordWithAnUnknownKeyAnywhereIsDiscardedAndReported() throws {
     let url = try Sample.mp3v24.copy()
     let writer = scratchWriter()
     expectChanged(writer.write(TagEdit(values: [.title: "One"]), to: [url.path]), [url])
     expectChanged(writer.write(TagEdit(values: [.title: "Two"]), to: [url.path]), [url])
-    let newest = writer.journal.directory.appendingPathComponent("00000002.json")
+    let record = try newestEntry(writer.journal).appendingPathComponent("00000001.json")
     var json = try #require(
-        try JSONSerialization.jsonObject(with: Data(contentsOf: newest)) as? [String: Any])
-    var files = try #require(json["files"] as? [[String: Any]])
-    files[0]["extra"] = true
-    json["files"] = files
-    try JSONSerialization.data(withJSONObject: json).write(to: newest)
+        try JSONSerialization.jsonObject(with: Data(contentsOf: record)) as? [String: Any])
+    var segments = try #require(json["restore"] as? [[String: Any]])
+    segments[0]["extra"] = true
+    json["restore"] = segments
+    try JSONSerialization.data(withJSONObject: json).write(to: record)
 
     let report = writer.undoLast()
     #expect(report.failures.map(\.kind) == [.journal, .changedSinceEdit])
-    #expect(!FileManager.default.fileExists(atPath: newest.path))
+    #expect(!FileManager.default.fileExists(atPath: record.path))
+}
+
+@Test func aRecordWhoseBytesDontMatchIsDiscarded() throws {
+    let url = try Sample.flac.copy()
+    let writer = scratchWriter()
+    expectChanged(writer.write(TagEdit(values: [.title: "One"]), to: [url.path]), [url])
+    let bytes = try newestEntry(writer.journal).appendingPathComponent("00000001.bytes")
+    try Data([1, 2, 3]).write(to: bytes)
+    #expect(writer.undoLast().failures.map(\.kind) == [.journal])
+    #expect(writer.undoLast().nothingToUndo)
 }
 
 @Test func theJournalKeepsTheNewestEdits() throws {
@@ -30,8 +47,51 @@ import Testing
             writer.write(TagEdit(values: [.title: "Take \(index)"]), to: [url.path]), [url])
     }
     let names = try FileManager.default.contentsOfDirectory(atPath: writer.journal.directory.path)
-    #expect(names.sorted().first == "00000002.json")
+    #expect(names.sorted().first == "00000002")
     #expect(names.count == TagUndoJournal.capacity)
+}
+
+@Test func theJournalIsCappedByBytesButKeepsTheNewestEdit() throws {
+    let url = try Sample.mp4WithArt.copy()
+    let writer = TagWriter(
+        journal: TagUndoJournal(dataDirectory: scratchFolder(), capacityBytes: 1000))
+    for index in 0..<3 {
+        let edit = TagEdit(art: .replace(pngImage(side: 40 + index), mimeType: pngMIMEType))
+        expectChanged(writer.write(edit, to: [url.path]), [url])
+    }
+    let names = try FileManager.default.contentsOfDirectory(atPath: writer.journal.directory.path)
+    #expect(names == ["00000003"])
+    expectChanged(writer.undoLast(), [url])
+}
+
+@Test func aJournalThatCantBeWrittenStopsTheBatchAfterThatFile() throws {
+    let urls = try [Sample.mp4, .mp3v24, .flac].map { try $0.copy() }
+    var writer = scratchWriter()
+    let journal = writer.journal
+    writer.faults.beforeReplacing = { _, _ in
+        // Once the first file is journaled, its edit's folder becomes read-only.
+        let folder = try newestEntry(journal)
+        chmod(folder.path, 0o500)
+    }
+    let originals = try urls.dropFirst().map { try Data(contentsOf: $0) }
+    let report = writer.write(TagEdit(values: [.album: "Stopped"]), to: urls.map(\.path))
+    chmod(try newestEntry(journal).path, 0o700)
+    #expect(report.changed == [urls[0].path])
+    #expect(report.failures.map(\.kind) == [.journal])
+    #expect(report.failures.map(\.path) != [])
+    #expect(report.notWritten == [urls[2].path])
+    #expect(try urls.dropFirst().map { try Data(contentsOf: $0) } == originals)
+}
+
+@Test func undoComparesTheInodeToo() throws {
+    let url = try Sample.mp3v24.copy()
+    let writer = scratchWriter()
+    expectChanged(writer.write(TagEdit(values: [.title: "Edited"]), to: [url.path]), [url])
+    // The same bytes, size and mtime, in a new file: another app saved over it.
+    let copy = url.path + ".copy"
+    #expect(clonefile(url.path, copy, 0) == 0)
+    #expect(rename(copy, url.path) == 0)
+    #expect(writer.undoLast().failures.map(\.kind) == [.changedSinceEdit])
 }
 
 @Test func editValuesAreChecked() throws {

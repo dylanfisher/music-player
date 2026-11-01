@@ -3,3 +3,4 @@
 let benchmarks =
     settingsBenchmarks + fixtureBenchmarks + metadataBenchmarks + libraryBenchmarks
     + playlistBenchmarks + windowBenchmarks + paletteBenchmarks + playbackBenchmarks
+    + tagWriterBenchmarks

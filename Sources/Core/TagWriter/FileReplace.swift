@@ -5,7 +5,7 @@ import Log
 private let logger = moduleLogger()
 
 /// What says a file is the one that was read: if any of it changes, something else wrote it.
-struct FileIdentity: Equatable, Codable {
+struct FileIdentity: Equatable {
     var device: Int
     var inode: UInt64
     var size: Int
