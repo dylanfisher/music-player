@@ -57,3 +57,24 @@ private func store() throws -> StateStore<AppState> {
     #expect(saver.failure == nil)
     #expect(reported == 2)
 }
+
+@MainActor @Test func aFailedSaveIsKeptAndSavedWithTheNext() throws {
+    let settings = try store()
+    let folder = settings.fileURL.deletingLastPathComponent()
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let saver = LayoutSaver(settings)
+    // A folder that can't be written fails the save as a full disk does.
+    try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: folder.path)
+    saver.set(\.sidebarWidth, 300)
+    saver.flush()
+    #expect(saver.failure?.hasPrefix(AppState().sidebarWidth.key) == true)
+    #expect(settings[\.sidebarWidth] == AppState().sidebarWidth.defaultValue)
+
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder.path)
+    saver.set(\.queueWidth, 320)
+    saver.flush()
+    #expect(saver.failure == nil)
+    let reloaded = try StateStore(AppState(), fileURL: settings.fileURL)
+    #expect(reloaded[\.sidebarWidth] == 300)
+    #expect(reloaded[\.queueWidth] == 320)
+}

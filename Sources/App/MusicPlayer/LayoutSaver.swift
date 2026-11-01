@@ -34,7 +34,7 @@ final class LayoutSaver {
         }
     }
 
-    /// Writes everything pending now, as the app quits.
+    /// Writes everything pending now, as the app quits. A write that fails stays pending.
     func flush() {
         scheduled = false
         let writes = pending
@@ -47,6 +47,9 @@ final class LayoutSaver {
             } catch {
                 logger.error("couldn't save \(key): \(error)")
                 failures.append("\(key): \(error)")
+                // A write that failed, as on a full disk, is kept for the next flush, after the
+                // next change or at quit; a value the setting rejects never will save.
+                if !(error is SettingsError) { pending[key] = write }
             }
         }
         let next = failures.isEmpty ? nil : failures.joined(separator: "; ")
