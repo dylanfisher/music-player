@@ -66,7 +66,8 @@ decoded. Position comes from the same count.
     replacement follows with no gap. Boundaries already played are announced first, so the track
     playing now is never the one dropped.
   - The producer writes whole frames only, so every count stays on a frame edge.
-- **Ring buffer:** four seconds, refilled once half empty. That covers a NAS stall and the open of
+- **Ring buffer:** four seconds, refilled once half empty (eight since
+  [ADR 0029](0029-longer-decode-bursts-and-a-sleeping-control-thread.md)). That covers a NAS stall and the open of
   the next file, which happens on the same thread. The sizing is justified next to the constant in
   `DeviceOutput.swift`.
 

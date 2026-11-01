@@ -423,3 +423,9 @@ private func samples(of album: RampAlbum, _ ranges: [Range<Int>]) -> [Int32] {
         if case .trackStarted = event { break }
     }
 }
+
+@Test func theControlThreadSleepsWhileStoppedWithNothingToDecode() {
+    #expect(controlTickSeconds(running: true, fillDue: false) == 0.01)
+    #expect(controlTickSeconds(running: false, fillDue: true) == 0.05)
+    #expect(controlTickSeconds(running: false, fillDue: false) == nil)
+}

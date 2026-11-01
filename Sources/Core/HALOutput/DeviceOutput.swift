@@ -155,11 +155,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
     }
 
-    /// How often to refill and look for track boundaries. The ring buffer holds seconds, so this
-    /// only sets how late an event can be; with nothing loaded the thread sleeps until a command.
     private var tickSeconds: Double? {
-        guard stream != nil else { return nil }
-        return running ? 0.01 : 0.05
+        guard let stream else { return nil }
+        return controlTickSeconds(running: running, fillDue: feeding != nil && stream.isHalfEmpty)
     }
 
     private func perform(_ command: Command) {
@@ -689,6 +687,14 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
 private func uptime() -> Double { ProcessInfo.processInfo.systemUptime }
 
+/// How often the control thread refills and looks for track boundaries, or nil to sleep until a
+/// command. The ring buffer holds seconds, so this only sets how late an event can be. Stopped,
+/// nothing moves but decoding ahead, so once that's done the thread doesn't wake at all.
+func controlTickSeconds(running: Bool, fillDue: Bool) -> Double? {
+    if running { return 0.01 }
+    return fillDue ? 0.05 : nil
+}
+
 /// A file opened for decoding.
 private struct Track {
     let item: OutputItem
@@ -762,12 +768,14 @@ private struct Segment {
 /// The ring buffer and render state for one device format, and the decode chunk that feeds them.
 private final class RenderStream {
     static let chunkFrames = 32768
-    /// Four seconds of audio. The control thread refills it every 10 ms, so nearly all of it is
-    /// margin: for a NAS read that stalls, and for opening the next track on the same thread
-    /// while this drains. A seek doesn't wait for it to empty (`HALRenderDiscard`), so its
-    /// size costs memory, not responsiveness: 1.4 MB at 44.1 kHz stereo 32-bit, 6 MB at 192 kHz,
-    /// 24 MB at 768 kHz, each rounded up to a power of two.
-    static let bufferSeconds = 4.0
+    /// Eight seconds of audio, refilled once half empty. Half of it is margin: for a NAS read
+    /// that stalls, and for opening the next track on the same thread while this drains. The
+    /// other half sets how long each refill runs; one twice as long let the scheduler give
+    /// decoding a fast core for more of it, which cut playback CPU by a quarter (ADR 0029). A
+    /// seek doesn't wait for it to empty (`HALRenderDiscard`), so its size costs memory, not
+    /// responsiveness: 2.8 MB at 44.1 kHz stereo 32-bit, 12 MB at 192 kHz, 49 MB at 768 kHz, each
+    /// rounded up to a power of two.
+    static let bufferSeconds = 8.0
     /// Queued before the device starts, so a track change doesn't wait for the whole buffer.
     static let prefillSeconds = 0.5
 
