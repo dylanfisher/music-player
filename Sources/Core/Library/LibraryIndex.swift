@@ -23,12 +23,40 @@ public final class LibraryIndex {
 
     /// Opens or creates the database at `url`. A part whose stored SQL differs from this build's
     /// is rebuilt: the index tables are emptied (the next scan refills them), and the stats are
-    /// kept unless their own SQL changed.
+    /// kept unless their own SQL changed. A file SQLite can't read at all is moved aside, with
+    /// a discard notice saying where, and a new library is made (ADR 0023).
     public init(at url: URL) throws {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        database = try Database(at: url)
+        let movedAside: String?
+        (database, movedAside) = try Self.open(url)
         try prepareSchema()
+        if let movedAside { try recordDiscard(movedAside) }
+    }
+
+    /// The database at `url`, and why the file there was moved aside if SQLite couldn't read it.
+    private static func open(_ url: URL) throws -> (Database, String?) {
+        do throws(SQLiteError) {
+            let database = try Database(at: url)
+            // Reads the header and the schema, which any damage there fails.
+            try database.execute("SELECT count(*) FROM sqlite_master")
+            return (database, nil)
+        } catch  where error.isUnreadableFile {
+            let stamp = ISO8601DateFormatter().string(from: Date())
+                .replacingOccurrences(of: ":", with: "-")
+            let aside = url.path + ".unreadable-" + stamp
+            // The log and shared memory belong to the old file, and would be read into the new.
+            for suffix in ["", "-wal", "-shm"]
+            where FileManager.default.fileExists(atPath: url.path + suffix) {
+                try FileManager.default.moveItem(atPath: url.path + suffix, toPath: aside + suffix)
+            }
+            let detail =
+                "the library file couldn't be read (\(error.message)), so it was moved to"
+                + " \(aside) and a new library was started; the next scan fills it, and the"
+                + " plays, ratings and playlists stay in the old file"
+            logger.error("\(detail)")
+            return (try Database(at: url), detail)
+        }
     }
 
     private func prepareSchema() throws {
@@ -94,6 +122,11 @@ public final class LibraryIndex {
             "this build stores plays, ratings and playlists in a new shape, so those of the"
             + " earlier build were discarded (rows: \(counts.joined(separator: ", ")))"
         logger.error("\(detail)")
+        try recordDiscard(detail)
+    }
+
+    /// Keeps `detail` for the window to show once.
+    private func recordDiscard(_ detail: String) throws {
         try database.prepare(
             "INSERT INTO \(schemaDiscardsTable) (discarded_seconds, detail) VALUES (?, ?)"
         ).run(Date().timeIntervalSince1970, detail)

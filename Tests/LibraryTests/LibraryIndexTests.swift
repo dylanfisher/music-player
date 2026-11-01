@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import Settings
 import Testing
 
@@ -259,4 +260,47 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
         let index = try TestLibrary().index()
         _ = try index.pathID("/a.flac", seenAt: 0)
     }
+}
+
+@Test func aLibraryFileThatIsntADatabaseIsMovedAsideAndReported() throws {
+    let library = try TestLibrary()
+    let garbage = Data(repeating: 0x5A, count: 8192)
+    try garbage.write(to: library.databaseURL)
+    try Data("old log".utf8).write(to: URL(fileURLWithPath: library.databaseURL.path + "-wal"))
+
+    let index = try library.index()
+    #expect(try index.trackCount() == 0)
+    let discards = try index.discards()
+    #expect(discards.count == 1)
+    let folder = library.databaseURL.deletingLastPathComponent()
+    let aside = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        .filter { $0.hasPrefix("library.sqlite.unreadable-") }.sorted()
+    let moved = try #require(aside.first)
+    #expect(aside.contains(moved + "-wal"), "the file's log goes with it: \(aside)")
+    #expect(discards.first?.text.contains(folder.appendingPathComponent(moved).path) == true)
+    #expect(try Data(contentsOf: folder.appendingPathComponent(moved)) == garbage)
+    // The new library works and reads as a good one next time.
+    #expect(try library.scan().read == library.manifest.files.count)
+    #expect(try library.index().discards() == discards)
+}
+
+@Test func aLockedDatabaseFailsAfterTheTimeoutAndThenOpens() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let other = try Database(at: library.databaseURL)
+    try other.execute("BEGIN EXCLUSIVE")
+    let started = Date()
+    #expect {
+        try library.scan()
+    } throws: { error in
+        ((error as? SQLiteError)?.code ?? 0) & 0xFF == SQLITE_BUSY
+    }
+    #expect(Date().timeIntervalSince(started) >= Double(Database.busyTimeoutMs) / 1000 - 0.5)
+    // Readers go on beside the lock; opening the index takes a write lock, so it waits too.
+    let reader = try Database(at: library.databaseURL)
+    #expect(
+        try reader.prepare("SELECT count(*) FROM tracks").map { try $0.int(0) }
+            == [library.readableCount])
+    try other.execute("ROLLBACK")
+    #expect(try library.scan().unchanged == library.manifest.files.count)
 }

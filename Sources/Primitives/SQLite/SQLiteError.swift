@@ -27,3 +27,9 @@ extension SQLiteError {
     /// A row refers to one that doesn't exist, such as an artist another connection deleted.
     public var isForeignKeyViolation: Bool { code == (SQLITE_CONSTRAINT | (3 << 8)) }
 }
+
+extension SQLiteError {
+    /// SQLITE_NOTADB or SQLITE_CORRUPT: the file isn't a database SQLite can read, as opposed
+    /// to one it can't reach right now, such as a locked or full one.
+    public var isUnreadableFile: Bool { [SQLITE_NOTADB, SQLITE_CORRUPT].contains(code & 0xFF) }
+}
