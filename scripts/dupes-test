@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# Runs scripts/dupes.swift on two fixture trees under .build/dupes-test and checks what it
+# reports: one tree it must pass, and one with a planted duplicate of each kind, which it must
+# fail at the exact file:line of each.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+base=.build/dupes-test
+rm -rf "$base"
+problems=0
+
+# write <path> — the file's text comes from standard input.
+write() {
+  mkdir -p "$(dirname "$1")"
+  cat > "$1"
+}
+
+# expect <tree> <exit status> <line>... — runs the script on <tree>, then checks the status and
+# that each <line> is a whole line of its output.
+expect() {
+  local tree="$1" status="$2"; shift 2
+  local output actual
+  output=$(swift scripts/dupes.swift --root "$tree" 2>&1)
+  actual=$?
+  if [ "$actual" != "$status" ]; then
+    printf 'dupes-test: %s exited %s, expected %s:\n%s\n' "$tree" "$actual" "$status" "$output" >&2
+    problems=$((problems + 1))
+  fi
+  for line in "$@"; do
+    if ! printf '%s\n' "$output" | grep -qxF -- "$line"; then
+      printf 'dupes-test: %s is missing the line\n  %s\nin:\n%s\n' "$tree" "$line" "$output" >&2
+      problems=$((problems + 1))
+    fi
+  done
+}
+
+# A block of 9 significant lines; each copy renames its identifiers.
+block() {
+  cat <<EOF
+func $1(_ $2: [Int]) -> Int {
+    var $3 = 0
+    for value in $2 where value > 0 {
+        $3 += value * 2
+    }
+    if $3 > 100 {
+        $3 -= 100
+    }
+    let scaled = Double($3) / 3
+    guard scaled.isFinite else { return 0 }
+    return Int(scaled)
+}
+EOF
+}
+
+# A block of 21 lines, long enough that a second copy is advisory.
+long_block() {
+  cat <<EOF
+func $1(_ names: [String]) -> [String: Int] {
+    var counts: [String: Int] = [:]
+    for name in names {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { continue }
+        counts[trimmed, default: 0] += 1
+    }
+    var result: [String: Int] = [:]
+    for (key, count) in counts where count > 1 {
+        result[key.lowercased()] = count
+    }
+    if result.isEmpty {
+        print(names.count)
+    }
+    let total = result.values.reduce(0, +)
+    precondition(total >= 0)
+    while result.count > 10 {
+        result.removeValue(forKey: result.keys.sorted().first!)
+    }
+    return result
+}
+EOF
+}
+
+# Passes: short literals, programmer-error messages, comments, format strings, an oracle's
+# re-typed ID, allowlisted literals and blocks, and a second copy of a short block.
+clean="$base/clean"
+write "$clean/Sources/Core/A/One.swift" <<'EOF'
+// "commented.key" is in a comment, so it isn't a literal.
+/* Nor is "blocked.key", /* nested */ or "nested.key" after it. */
+let short = "abc"
+let shared = "allowed.key"
+let format = "\(short): \(shared)\n"
+let id = "moov"
+func a() { fatalError("built in code, not from a nib") }
+let raw = #"raw "lonely.key" inside \(not.code)"#
+EOF
+write "$clean/Sources/Core/B/Two.swift" <<'EOF'
+// "commented.key"
+/* "blocked.key" again, /* nested */ "nested.key" still a comment. */
+let short = "abc"
+let shared = "allowed.key"
+let format = "\(short): \(shared)\n"
+func b() { fatalError("built in code, not from a nib") }
+let lonely = "lonely.key"
+let multi = """
+    a "quoted" line, then "lonely.multi"
+    """
+EOF
+write "$clean/Sources/Tools/Oracle/Spec.swift" <<'EOF'
+let id = "moov"
+EOF
+block one input total | write "$clean/Sources/Core/A/Three.swift"
+block two values sum | write "$clean/Sources/Core/B/Four.swift"
+block three items count | write "$clean/Sources/Core/C/Five.swift"
+write "$clean/scripts/dupes-allow.txt" <<'EOF'
+# A comment line.
+oracle Sources/Tools/Oracle | re-types the spec on purpose
+literal "allowed.key" | reviewed
+block Sources/Core/A/Three.swift Sources/Core/B/Four.swift Sources/Core/C/Five.swift | reviewed
+EOF
+expect "$clean" 0 "6 files, nothing outside the allowlist (3 entries, 0 advisory)"
+
+# Fails: a planted literal, a third copy of a block, a second copy of a long block (advisory),
+# a literal inside an interpolation, a stale literal, a stale oracle and an entry with no reason.
+planted="$base/planted"
+write "$planted/Sources/Core/A/One.swift" <<'EOF'
+let name = "planted.key"
+EOF
+write "$planted/Sources/Features/B/Two.swift" <<'EOF'
+let label = "Count: \(count == 1 ? "planted.key" : "other")"
+EOF
+block one input total | write "$planted/Sources/Core/A/Three.swift"
+block two values sum | write "$planted/Sources/Core/B/Four.swift"
+block three items count | write "$planted/Sources/Core/C/Five.swift"
+long_block first | write "$planted/Sources/App/X/Long.swift"
+long_block second | write "$planted/Sources/Tools/Y/Long.swift"
+write "$planted/scripts/dupes-allow.txt" <<'EOF'
+literal "gone.key" | was fixed
+oracle Sources/Tools/Gone | was deleted
+literal "no.reason" |
+EOF
+expect "$planted" 1 \
+  'literal "planted.key" in 2 files:' \
+  "  Sources/Core/A/One.swift:1" \
+  "  Sources/Features/B/Two.swift:1" \
+  "block of 11 lines, 3 copies:" \
+  "  Sources/Core/A/Three.swift:1-11" \
+  "  Sources/Core/B/Four.swift:1-11" \
+  "  Sources/Core/C/Five.swift:1-11" \
+  "advisory: block of 20 lines, 2 copies:" \
+  "  Sources/App/X/Long.swift:1-20" \
+  "  Sources/Tools/Y/Long.swift:1-20" \
+  'scripts/dupes-allow.txt:1: matches nothing, delete it: literal "gone.key"' \
+  "scripts/dupes-allow.txt:2: matches nothing, delete it: oracle Sources/Tools/Gone/" \
+  "scripts/dupes-allow.txt:3: entry has no \` | <reason>\`"
+
+# A flag without its value fails loudly instead of checking the current folder.
+output=$(swift scripts/dupes.swift --root 2>&1)
+status=$?
+if [ "$status" != 2 ] || [ "$output" != "dupes: --root needs a directory" ]; then
+  printf 'dupes-test: --root without a value exited %s:\n%s\n' "$status" "$output" >&2
+  problems=$((problems + 1))
+fi
+
+if [ "$problems" -gt 0 ]; then
+  echo "dupes-test: $problems problems" >&2
+  exit 1
+fi
+echo "dupes passes the clean tree and fails each planted duplicate"

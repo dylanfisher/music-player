@@ -6,3 +6,50 @@
 # the writer, so a wrong ID in Metadata fails a test instead of agreeing with itself.
 oracle Sources/Tools/Fixtures | the fixture generator writes every tag format from its spec, independent of Metadata and TagWriter
 oracle Sources/Tools/TagCorpus | its independent readers and round-trip checks re-read tags apart from Metadata, as a test does
+
+# Code with the same shape and nothing to share.
+block Sources/Core/Library/SmartRules.swift Sources/Core/Settings/TrackTableLayout.swift Sources/Core/Settings/VisitLog.swift | each strict Codable type's memberwise init, CodingKeys and rejectUnknownKeys decoder; the fields differ, so only the shape repeats
+
+# The same spelling for different things.
+literal "COMM" | AIFF's common chunk and ID3's comment frame
+literal "data" | MP4's data atom and WAV's audio chunk
+literal "free" | MP4's padding atom and a hog-mode owner of nobody in --list-devices
+literal "Space" | an ID3v1 genre name and the space bar's name in a chord
+literal "history" | the plays table and the History source's key in the state file
+literal "the file is empty" | an audio file with no bytes and an empty config file, in their own errors
+literal "folder" | a folder count's noun in the status bar and the sidebar's SF Symbol for a watched folder
+literal "track" | a track count's noun in the status bar and the queue table's column identifier
+literal "album" | the browser pane named in a log line and the smart playlist order by album
+literal "artist" | the browser pane named in a log line and the smart playlist order by artist
+literal "Album" | the track column's title and the title of the saved album selection, which no window shows; Settings can't import Library
+literal "Artist" | the track column's title and the title of the saved artist selection, which no window shows; Settings can't import Library
+literal "Genre" | the track column's title and the title of the saved genre selection, which no window shows; Settings can't import Library
+literal "Rating" | the File menu's rating submenu and the rating column; Commands doesn't import Library, and the submenu isn't the column
+literal "Play" | the Play command resumes playback; the row and queue menus' Play plays the clicked rows, which is Play Selection
+literal "Reveal in Finder" | the command reveals the selected track; the General pane's button reveals the config file
+literal "gearshape" | three different things drawn with a gear: smart playlists, settings in the palette, the General pane's tab
+literal "list.bullet" | the sidebar's timeline and the queue button
+literal "music.note" | the sidebar's library and a track in the palette
+literal "DESC" | an SQL keyword, not a name; each ORDER BY says its own direction
+literal "MusicPlayer" | the executable Bench launches, named by Package.swift, and the app's data folder, named in Log
+
+# Standard AppKit copy, which every app spells the same and which isn't the app's to change.
+literal "Cancel" | the system's button title for dismissing a sheet or an alert
+literal "Save" | the system's button title for confirming a sheet
+
+# Tools drive the app from outside, as a test would, and can't import the App tier.
+literal "--home" | the app's flag, which Bench passes to the app it launches; FailureDrill's own --home flag is spelled the same on purpose
+literal "--measure-window" | the app's flag, which Bench passes to the app it launches
+literal "--scan" | the app's flag and FailureDrill's own --scan flag, two programs' command lines
+literal "track:\(…):\(…)" | Bench builds Go to Item's rows as the app does, to time them, and can't import the App tier where the key is made
+
+# Each executable's own messages: they share no module that should hold a line of stderr.
+literal "error: \(…)\n" | the app's, FailureDrill's and GenerateFixtures' fatal error line on standard error
+literal "error: \(…)" | the --play log's failure line and a failed benchmark's table cell
+literal "\(…) needs \(…)" | the app's and FailureDrill's message for a flag without its value
+literal "expected \(…)" | a setting's wrong-type reason and a benchmark's failed expectation
+literal "Bench" | names Bench gives its test playlist and the app it builds menus for
+
+# Second occurrences of behavior, below the third-occurrence rule.
+literal "couldn't read the library's row for \(…): \(…)" | Now Playing and the queue each log a failed row read; the two features can't share a module above Library, and a log line isn't a fact
+literal "unknown key" | the device record's strict-key check is the second copy of Settings' rejectUnknownKeys, which HALOutput doesn't import; a third copy moves it to a primitive
