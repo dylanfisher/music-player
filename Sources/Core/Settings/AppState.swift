@@ -65,6 +65,10 @@ public struct AppState: SettingsSchema {
     public let palettePlace = Setting<PalettePlace?>(
         "palette.place", title: "Palette Place", default: nil,
         "Where the palette was dragged. Null opens it centered near the top of the screen.")
+    public let deviceProfiles = Setting(
+        "output.profiles", title: "Device Profiles", default: DeviceProfiles(profiles: []),
+        "Each output device's hog mode, digital volume and volume, and the rates and formats it"
+            + " reported, most recently used first.")
     public let paletteVisits = Setting(
         "palette.visits", title: "Palette Visits", default: VisitLog(visits: []),
         "How often and how recently each palette item was chosen or played.")

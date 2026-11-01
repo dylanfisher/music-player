@@ -39,8 +39,8 @@ goes on without the owner, so this record decides them.
   launch; the command-line modes only read, and throw on any problem.
 - **Live changes.** Shortcuts rebuild the key bindings and the menus' chords; appearance sets
   `NSApp.appearance`; watched folders, network readers and pausing rescans restart the watcher.
-  The output settings (device, hog mode, digital volume) reopen the output, but only once
-  playback is stopped, so a change never cuts a track; the log says it's waiting.
+  The output settings (device, hog mode, digital volume) move the output at once, mid-track,
+  and belong to the device in use ([ADR 0037](0037-device-profiles.md)).
 - **`--home <folder>`** keeps the config file, library, state file and device record in one
   folder, for tests, Bench and every run on the build Mac. `--settings <file>` names a config
   file only. The library and device record moved from "beside the settings file" to the data

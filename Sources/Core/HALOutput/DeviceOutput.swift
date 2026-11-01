@@ -50,7 +50,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// from the device's first reported state on. Ends on `close()`.
     public let signalPaths: AsyncStream<SignalPath>
     /// The UID of each device output went back to on its own. Ends on `close()`.
-    let returns: AsyncStream<String>
+    public let returns: AsyncStream<String>
     private let continuation: AsyncStream<OutputEvent>.Continuation
     private let signalContinuation: AsyncStream<SignalPath>.Continuation
     private let returnContinuation: AsyncStream<String>.Continuation

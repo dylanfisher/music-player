@@ -94,7 +94,7 @@ let package = Package(
         ),
         .target(
             name: "Settings",
-            dependencies: ["KeyChord", "Log"],
+            dependencies: ["KeyChord", "Log", "Playback"],
             path: "Sources/Core/Settings",
             swiftSettings: strictSwift
         ),

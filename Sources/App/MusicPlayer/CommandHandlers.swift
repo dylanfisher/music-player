@@ -230,6 +230,7 @@ extension AppDelegate {
         guard let engine else { return }
         let decibels = min(0, volumeDecibels + step)
         volumeDecibels = decibels
+        saveVolume(decibels)
         Task {
             do {
                 try await engine.setVolume(pow(10, decibels / 20))

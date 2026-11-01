@@ -97,7 +97,9 @@ extension AppDelegate {
             Task { await browser.setGroupByAlbumArtist(on) }
         }
         let output = [schema.outputDeviceUID.key, schema.hogMode.key, schema.digitalVolume.key]
-        if !keys.isDisjoint(with: output) { reopenOutput() }
+        if !keys.isDisjoint(with: output) {
+            outputSettingsChanged(switched: keys.contains(schema.outputDeviceUID.key))
+        }
     }
 
     /// The Settings window, made on first use.

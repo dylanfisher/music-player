@@ -60,14 +60,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var activity = PlaybackActivity.stopped
     /// The engine's latest state, for the menus' check marks.
     private(set) var playback = PlaybackState()
-    /// Whether the output has a volume, from the setting read at launch.
+    /// Whether the device in use has a digital volume, from its profile.
     private(set) var digitalVolume = false
     /// The digital volume, in dB below full.
     var volumeDecibels = 0.0
-    /// The output settings changed while playing; the output reopens once playback stops.
-    var outputChanged = false
+    /// The UID of the device in use, whose profile the output settings and the volume change.
+    private(set) var outputUID: String?
+    /// Set while the config is being made to show the device in use, so those writes aren't
+    /// taken as edits.
+    private var showingInUse = false
     private var playbackUpdates: Task<Void, Never>?
     private var signalPathUpdates: Task<Void, Never>?
+    private var returnUpdates: Task<Void, Never>?
     /// Plays and skips, counted from the engine's updates.
     private lazy var playTracker = PlayTracker { [weak self] in self?.record($0) }
     /// The smart playlist editor while it's open.
@@ -298,15 +302,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             {
                 logger.notice("\(recovered)")
             }
-            let provider = try HALDeviceProvider(
-                deviceUID: try HALDeviceProvider.resolve(settings[\.outputDeviceUID]),
-                hogMode: settings[\.hogMode], restoreRecordURL: recordURL)
-            let output = try DeviceOutput(
-                DeviceChoice(
-                    provider: provider, digitalVolume: settings[\.digitalVolume], gain: 1,
-                    formats: nil))
+            let profile = try outputProfile(settings, switched: false)
+            try save(profile)
+            let output = try DeviceOutput(try deviceChoice(profile))
             let engine = PlaybackEngine(output: output)
-            digitalVolume = settings[\.digitalVolume]
+            showInUse(profile, settings)
             self.output = output
             self.engine = engine
             nowPlaying?.connect(engine)
@@ -315,7 +315,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The output's stream ends when it closes, so a reopened output replaces this.
             signalPathUpdates?.cancel()
             signalPathUpdates = Task { [weak self] in
-                for await path in output.signalPaths { self?.signalPath?.show(path) }
+                for await path in output.signalPaths {
+                    self?.signalPath?.show(path)
+                    self?.recordFormats(path)
+                }
+            }
+            returnUpdates = Task { [weak self] in
+                for await uid in output.returns { self?.outputReturned(to: uid) }
             }
             playbackUpdates = Task { [weak self] in
                 for await update in await engine.updates() {
@@ -371,27 +377,127 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Opens the output again with the output settings as they are now. While something plays
-    /// or is paused, that waits until playback stops, so a settings change never cuts a track.
-    func reopenOutput() {
-        guard let settings, output != nil else { return }
-        guard playback.status == .stopped else {
-            outputChanged = true
-            logger.notice("the output settings changed; they apply once playback stops")
-            return
+    /// Moves the output to the device and settings the config names now, mid-track if one is
+    /// playing. `switched` says whether the config's device changed (ADR 0037).
+    func outputSettingsChanged(switched: Bool) {
+        guard let settings, let output, !showingInUse else { return }
+        do {
+            let profile = try outputProfile(settings, switched: switched)
+            if let inUse = inUseProfile, inUse.uid == profile.uid, inUse.hogMode == profile.hogMode,
+                inUse.digitalVolume == profile.digitalVolume
+            {
+                return
+            }
+            try save(profile)
+            output.use(try deviceChoice(profile))
+            showInUse(profile, settings)
+        } catch {
+            fail("Couldn't switch the output device", error)
         }
-        outputChanged = false
-        playbackUpdates?.cancel()
-        output?.close()
-        output = nil
-        engine = nil
-        playback = PlaybackState()
-        startPlayback(settings)
+    }
+
+    /// The output went back on its own to a device that came back.
+    private func outputReturned(to uid: String) {
+        guard let settings, let state else { return }
+        let profile = state[\.deviceProfiles].profile(
+            for: uid, config: outputConfig(settings), switched: true)
+        do {
+            try save(profile)
+        } catch {
+            logger.error("couldn't save \(uid)'s profile: \(error)")
+        }
+        showInUse(profile, settings)
+    }
+
+    private var inUseProfile: DeviceProfile? {
+        state?[\.deviceProfiles].profiles.first { $0.uid == outputUID }
+    }
+
+    private func outputConfig(_ settings: ConfigStore<AppSettings>) -> OutputConfig {
+        OutputConfig(hogMode: settings[\.hogMode], digitalVolume: settings[\.digitalVolume])
+    }
+
+    private func outputProfile(_ settings: ConfigStore<AppSettings>, switched: Bool) throws
+        -> DeviceProfile
+    {
+        return profileState[\.deviceProfiles].profile(
+            for: try HALDeviceProvider.resolve(settings[\.outputDeviceUID]),
+            config: outputConfig(settings), switched: switched)
+    }
+
+    /// Written before the output uses it, so a crash never leaves the device with settings its
+    /// profile doesn't hold.
+    private func save(_ profile: DeviceProfile) throws {
+        try profileState.set(\.deviceProfiles, to: profileState[\.deviceProfiles].using(profile))
+    }
+
+    private var profileState: StateStore<AppState> {
+        guard let state else { preconditionFailure("the state file opens before playback starts") }
+        return state
+    }
+
+    private func deviceChoice(_ profile: DeviceProfile) throws -> DeviceChoice {
+        DeviceChoice(
+            provider: try HALDeviceProvider(
+                deviceUID: profile.uid, hogMode: profile.hogMode,
+                restoreRecordURL: restoreRecordURL(in: paths.dataDirectory)),
+            digitalVolume: profile.digitalVolume, gain: pow(10, profile.volumeDecibels / 20),
+            formats: profile.formats)
+    }
+
+    /// Makes `profile` the one in use, and the config's output settings show it, so the menus
+    /// and the settings window read what the device plays with.
+    private func showInUse(_ profile: DeviceProfile, _ settings: ConfigStore<AppSettings>) {
+        outputUID = profile.uid
+        digitalVolume = profile.digitalVolume
+        volumeDecibels = profile.volumeDecibels
+        showingInUse = true
+        defer { showingInUse = false }
+        do {
+            // Null, the system default, is left alone while it still names this device.
+            let named = settings[\.outputDeviceUID]
+            if named != profile.uid,
+                try named != nil || HALDeviceProvider.resolve(nil) != profile.uid
+            {
+                try settings.set(\.outputDeviceUID, to: profile.uid)
+            }
+            if settings[\.hogMode] != profile.hogMode {
+                try settings.set(\.hogMode, to: profile.hogMode)
+            }
+            if settings[\.digitalVolume] != profile.digitalVolume {
+                try settings.set(\.digitalVolume, to: profile.digitalVolume)
+            }
+        } catch {
+            logger.error("couldn't show \(profile.uid)'s settings in the config: \(error)")
+        }
+    }
+
+    /// Records the rates and formats the device in the path reported, when they changed.
+    private func recordFormats(_ path: SignalPath) {
+        guard case .device(let sink) = path.sink, case .connected(let signal) = sink.state,
+            let state,
+            let next = state[\.deviceProfiles].reporting(signal.formats, for: sink.uid)
+        else { return }
+        do {
+            try state.set(\.deviceProfiles, to: next)
+        } catch {
+            logger.error("couldn't record \(sink.uid)'s formats: \(error)")
+        }
+    }
+
+    /// Saves the digital volume in the profile of the device in use, before it's applied.
+    func saveVolume(_ decibels: Double) {
+        guard var profile = inUseProfile else { return }
+        profile.volumeDecibels = decibels
+        do {
+            try save(profile)
+        } catch {
+            logger.error("couldn't save the volume in \(profile.uid)'s profile: \(error)")
+        }
     }
 
     /// Tells the watcher, so network rescans stay off the NAS while a track starts.
     private func playbackChanged(_ state: PlaybackState) {
-        if outputChanged, state.status == .stopped { reopenOutput() }
         let now = watcherActivity(state)
         guard now != activity, let settings else { return }
         activity = now
