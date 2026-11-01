@@ -27,6 +27,11 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
 - **Import from Swinsian…** and **Import iTunes Library…** bring play counts, last played,
   date added, ratings, loved tracks and playlists across, matched by path, after a preview of
   what each would change. Running one again adds only the plays since.
+- **Watched folders** open in the sidebar into their subfolders, from the paths the library
+  holds. **Library Health** lists files that couldn't be read, playlist entries whose file left,
+  likely duplicates, albums with gaps, several album artists or mixed sample rates, and tracks
+  missing art, an album or an album artist; it runs after a scan and on Check Library Health.
+  ⇧⌘R reveals the selected tracks in Finder.
 
 ## Develop
 
