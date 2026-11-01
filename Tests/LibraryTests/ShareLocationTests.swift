@@ -38,6 +38,18 @@ private func share(_ url: String, at mountPoint: String) -> MountedShare {
         ShareLookup(stored, among: [byIP, otherNAS])
             == .ambiguous(["/Volumes/music-1", "/Volumes/music-2"]))
     #expect(ShareLookup(stored, among: [other]) == .unmounted)
+    // Another server with a share of the same name, while the NAS is off: never retargeted.
+    let elsewhere = share("smb://backup.local/music", at: "/Volumes/music-3")
+    #expect(ShareLookup(stored, among: [elsewhere]) == .ambiguous(["/Volumes/music-3"]))
+    // One host, named with or without .local or Bonjour's service label.
+    for host in ["nas", "NAS.LOCAL", "nas._smb._tcp.local"] {
+        #expect(
+            ShareLookup(stored, among: [share("smb://\(host)/music", at: "/V/m")])
+                == .mounted(at: "/V/m"), "\(host)")
+    }
+    // Configured by address, mounted by name.
+    let byAddress = try #require(ShareURL("smb://192.168.1.5/music"))
+    #expect(ShareLookup(byAddress, among: [byName]) == .mounted(at: "/Volumes/music"))
     #expect(ShareLookup(stored, among: [share("afp://nas.local/music", at: "/V/m")]) == .unmounted)
 }
 
@@ -193,4 +205,24 @@ private func index(under root: String, names: [String] = ["a.flac", "Caf\u{e9}/b
             WatchedFolder(path: "/V/music/library", kind: .network),
             WatchedFolder(path: "/V/video", kind: .network),
         ])
+}
+
+@Test func theMountTableNamesEachNetworkVolumesShare() {
+    #expect(
+        shareURL(fileSystem: "smbfs", mountedFrom: "//dylan@nas.local/music")
+            == "smb://dylan@nas.local/music")
+    #expect(shareURL(fileSystem: "smbfs", mountedFrom: "//nas/My Music") == "smb://nas/My%20Music")
+    #expect(
+        shareURL(fileSystem: "smbfs", mountedFrom: "//nas/My%20Music") == "smb://nas/My%20Music")
+    #expect(shareURL(fileSystem: "afpfs", mountedFrom: "//nas/music") == "afp://nas/music")
+    #expect(
+        shareURL(fileSystem: "nfs", mountedFrom: "nas:/export/music") == "nfs://nas/export/music")
+    #expect(shareURL(fileSystem: "apfs", mountedFrom: "/dev/disk3s1") == nil)
+    #expect(
+        ShareURL(shareURL(fileSystem: "smbfs", mountedFrom: "//nas/My Music")!)?.name == "My Music")
+}
+
+@Test func theSystemsMountTableReadsWithoutError() throws {
+    // This machine mounts no share in tests; the listing itself must not fail.
+    _ = try SystemShareMounts().mountedShares()
 }

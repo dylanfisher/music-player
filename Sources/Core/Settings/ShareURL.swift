@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// A network share as a volume's remount URL names it, such as `smb://nas.local/music`: the
@@ -25,14 +26,32 @@ public struct ShareURL: Equatable, Sendable {
         self.name = name
     }
 
-    /// Whether `other` is the same share on a host that may be spelled another way, such as
-    /// the NAS's IP address instead of its name.
+    /// Whether `other` has this share's scheme and name, on any host.
     public func hasSameName(as other: ShareURL) -> Bool {
         scheme == other.scheme && name.lowercased() == other.name.lowercased()
     }
 
-    /// Whether `other` is this share on this host.
+    /// Whether `other` is this share on this host, spelled with or without `.local` or a
+    /// Bonjour service label (`nas._smb._tcp.local`), as macOS names one host several ways.
     public func isSameShare(as other: ShareURL) -> Bool {
-        hasSameName(as: other) && host == other.host
+        hasSameName(as: other) && hostName == other.hostName
+    }
+
+    /// The host without the suffixes `isSameShare` ignores.
+    var hostName: String {
+        var name = Substring(host)
+        if name.hasSuffix(".local") { name = name.dropLast(".local".count) }
+        for service in ["._smb._tcp", "._afpovertcp._tcp", "._nfs._tcp"]
+        where name.hasSuffix(service) {
+            name = name.dropLast(service.count)
+        }
+        return String(name)
+    }
+
+    /// Whether the host is an IPv4 or IPv6 address rather than a name.
+    public var hostIsAddress: Bool {
+        var buffer = in6_addr()
+        let bare = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        return inet_pton(AF_INET, bare, &buffer) == 1 || inet_pton(AF_INET6, bare, &buffer) == 1
     }
 }
