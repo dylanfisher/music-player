@@ -48,8 +48,9 @@ extension LibraryIndex {
     }
 
     /// Gives the stats of the lost path `lost` to the track `track`, which has none of its own,
-    /// as the user picked in Lost Stats.
-    public func moveStats(from lost: Int64, to track: Int64) throws {
+    /// as the user picked in Lost Stats. False, changing nothing, when a scan or another pick
+    /// since the list was read made the path no longer lost or gave the track stats.
+    public func moveStats(from lost: Int64, to track: Int64) throws -> Bool {
         try database.transaction {
             let isLost =
                 try statement("SELECT 1 FROM paths p WHERE p.id = ? AND \(lostCondition)")
@@ -58,8 +59,9 @@ extension LibraryIndex {
                 try statement(
                     "SELECT 1 FROM tracks WHERE file_id = ? AND NOT \(hasStats("file_id"))"
                 ).map(track) { _ in true }.first ?? false
-            guard isLost, isFree else { throw LibraryError.statsNotMovable(from: lost, to: track) }
+            guard isLost, isFree else { return false }
             try move(lost, to: track)
+            return true
         }
     }
 

@@ -155,7 +155,7 @@ public actor LibraryReader {
 
     public func lostFiles() throws -> [LostFile] { try index.lostFiles() }
 
-    public func moveStats(from lost: Int64, to track: Int64) throws {
+    public func moveStats(from lost: Int64, to track: Int64) throws -> Bool {
         try index.moveStats(from: lost, to: track)
     }
 

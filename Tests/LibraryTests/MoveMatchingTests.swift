@@ -153,16 +153,16 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
     #expect(findings.lines == ["/M/1.flac: matching tracks: 1", "/M/2.flac: matching tracks: 1"])
 
     // The user picks the first; the track now has stats, so the second has no candidate left.
-    try index.moveStats(from: one, to: new)
+    #expect(try index.moveStats(from: one, to: new))
     let picked = try #require(try index.track(path: "/N/new.flac"))
     #expect(picked.id == one)
     #expect(picked.playCount == 1)
     #expect(
         try index.lostFiles() == [LostFile(id: two, path: "/M/2.flac", candidates: [], matching: 0)]
     )
-    #expect(throws: LibraryError.statsNotMovable(from: two, to: one)) {
-        try index.moveStats(from: two, to: one)
-    }
+    // A stale pick: the track has stats now. Nothing changes.
+    #expect(try index.moveStats(from: two, to: one) == false)
+    #expect(try index.track(path: "/N/new.flac")?.id == one)
 
     try index.dismissLost([two])
     #expect(try index.lostFiles().isEmpty)

@@ -15,9 +15,6 @@ enum LibraryError: Error, Equatable, CustomStringConvertible {
     case unreadableRules(playlist: String, detail: String)
     /// A track query asked of the timeline, which lists plays.
     case playsNotTracks
-    /// A Lost Stats pick whose lost path came back or was resolved, or whose track has gained
-    /// stats of its own, since the list was read.
-    case statsNotMovable(from: Int64, to: Int64)
     /// A share folder's new mount point inside its old one, or the old inside the new, whose
     /// paths a rewrite would mix up.
     case nestedRoots(String, String)
@@ -35,9 +32,6 @@ enum LibraryError: Error, Equatable, CustomStringConvertible {
         case .unreadableRules(let name, let detail):
             "the rules of \"\(name)\" can't be read: \(detail)"
         case .playsNotTracks: "the timeline lists plays, not tracks"
-        case .statsNotMovable(let lost, let track):
-            "the stats of lost path \(lost) can't go to track \(track): the path is no longer"
-                + " lost, or the track has stats of its own"
         case .nestedRoots(let old, let new):
             "a share folder moved from \(old) to \(new), one inside the other, so its paths"
                 + " weren't rewritten"
