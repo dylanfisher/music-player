@@ -74,7 +74,7 @@ run_job() {
     (cd "$tree" && "$tool" apply "$file" "$id")
     if ! (cd "$tree" && swift build "${flags[@]}" --product "$target" >> "$out/job-$job.log" 2>&1); then
       outcome=uncompilable
-    elif (cd "$tree" && /usr/bin/timeout -k 5 300 swift test "${flags[@]}" --skip-build \
+    elif (cd "$tree" && /usr/bin/timeout -k 5 180 swift test "${flags[@]}" --skip-build \
       --filter "^$target\." >> "$out/job-$job.log" 2>&1); then
       outcome=survived
     else
