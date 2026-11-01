@@ -1,4 +1,4 @@
-# 0018. Playlists live with the stats, keyed by path; a play counts after half or 4 minutes
+# 0018. Playlists live with the stats, keyed by path ID; a play counts after half or 4 minutes
 
 - **Date:** 2026-10-31
 - **Status:** accepted
@@ -17,8 +17,9 @@ The library is 43k tracks, and a smart playlist is listed again on every library
 ## Decision
 
 - **Playlists are stats.** `playlists` and `playlist_entries` are created by the stats SQL,
-  which an index rebuild keeps. Entries name tracks by path, like plays and ratings, so a
-  rebuild or rescan finds them again. A playlist's own ID is safe to keep and to key on (the
+  which an index rebuild keeps. Entries name tracks by their path's permanent ID, like plays and
+  ratings ([0022](0022-stable-track-identity-and-play-timeline.md)), so a rebuild or rescan
+  finds them again. A playlist's own ID is safe to keep and to key on (the
   saved sidebar source `playlist:<id>`, which the palette's key reuses), since only a change to
   the stats SQL drops it, and then the playlist is gone too. IDs are `AUTOINCREMENT`, so a
   deleted playlist's ID never comes back to name another. Keying by ID survives a rename, where
@@ -30,7 +31,7 @@ The library is 43k tracks, and a smart playlist is listed again on every library
   a comparison the field can't take, a value of the wrong kind, a limit of 0 all fail). Rules
   this build can't read leave the playlist listed with a warning sign; showing it fails with the
   reason, and saving new rules replaces them. Rules compile to one `IN (SELECT …)` with the
-  plays and ratings joined by path; text compares the folded sort columns with a folded value,
+  plays and ratings joined by path ID (0022); text compares the folded sort columns with a folded value,
   so case and accents don't matter where the index folds. A limit's order breaks ties by path,
   so a rebuild picks the same tracks. No "random" order, which would reshuffle on every live
   refresh.
@@ -75,5 +76,5 @@ The library is 43k tracks, and a smart playlist is listed again on every library
 ## Consequences
 
 Changing the stats SQL now drops playlists as well as plays (pre-release only). A file moved or
-renamed leaves its playlist entries and stats on the old path, as 0008 says. Composer, comment,
+renamed leaves its playlist entries and stats on the old path's ID, as 0008 and 0022 say. Composer, comment,
 codec and path aren't folded, so their text rules ignore case for ASCII only.

@@ -1013,27 +1013,33 @@ path" and amends ADR 0018. Write the ADR first, at the next free number.
 
 Implementation plan (ADR [0022](decisions/0022-stable-track-identity-and-play-timeline.md)):
 
-1. **Library schema.** `paths` joins the stats SQL; `files.id` refers to it and loses
-   `added_seconds`; `plays`, `ratings`, `playlist_entries` and `history` key on `path_id`. A
-   stats rebuild counts the old rows first and records them in `schema_discards`, which
-   `takeDiscards()` hands to the window once. The scanner's upsert looks the path up or inserts
-   it, in one helper `recordPlay` shares.
+1. **Library schema.** `paths` is a stats table; `files.id` refers to it and no longer holds
+   `added_seconds`; `plays`, `ratings`, `playlist_entries` and `history` key on `path_id`, and
+   `plays_last_played` indexes the History order. A stats rebuild counts the old rows and
+   records them in `schema_discards`; the window reads them with `discards()` and deletes them
+   with `forgetDiscards(_:)` once shown. The scanner's upsert and `recordPlay` share `pathID`,
+   which traps outside a transaction.
 2. **Queries.** `trackJoins`, `rowSelect`, Date Added, playlist order, the History, playlist and
-   smart rule sources, the missing-entry count, and the rating and playlist APIs move to IDs.
-   New: `timeline(before:limit:)` and `timeline(after:limit:)` returning `PlayEntry`, and
-   `playCount()`. `LibraryReader` passes them through.
-3. **BrowserSource.timeline** (Settings), saved as `timeline`. `BrowserModel` runs no track
-   queries for it and passes track IDs, not paths, to the library.
-4. **LibraryBrowser:** `TimelineModel` (pages by key, new plays on top, re-resolves loaded rows,
-   selection by history ID, a session token for stale results) and `TimelineController` (the
-   AppKit table). The browser swaps it in for the panes and track table, routes play, drag,
-   Go to Item and the selection commands to it, and turns ⌘⌫, search and sorts off there.
-5. **App:** the sidebar row, the Go to Item rows, the commands' enabled states, and the
-   discard notice. The timeline is checked with `--snapshot` from a home whose saved source
-   is `timeline`.
+   smart rule sources, the missing-entry count, and the rating and playlist APIs use IDs.
+   `timeline(before:limit:)` and `timeline(after:limit:)` return light `PlayEntry` rows,
+   `playedTracks(ids:)` reads what they show, and `loggedPlayCount()` counts them. `IN` lists
+   are read 500 IDs at a time. `LibraryReader` passes them through.
+3. **BrowserSource.timeline** (Settings) is saved as `timeline`. `BrowserModel` runs no pane or
+   track queries for it and passes track IDs, not paths, to the library.
+4. **LibraryBrowser:** `TimelineModel` pages by key, puts new plays on top, keeps selection by
+   history ID, drops stale results by session, and reads rows through a 20-page cache.
+   `TimelineController` and `TrackTableController` share `RowListController`. The browser swaps
+   the timeline in for the panes and track table, routes play, drag, Go to Item and the
+   selection commands to it, turns ⌘⌫, search and sorts off there, and reports the first rows
+   drawn from the timeline's own page.
+5. **App:** the sidebar row, the Go to Item rows (`goToItems`, `goToRow`), the sort commands'
+   `canSort`, and the discard notice. The timeline is checked with `--snapshot` from a home
+   whose saved source is `timeline`.
 6. **Bench:** 1M synthetic plays under `.build/bench-plays`, four benchmarks with the budgets
    above, and the smart playlist, sort, search and launch numbers before and after.
 7. **Tests:** LibraryTests (IDs and Date Added across a rebuild and a file leaving and coming
-   back, stats, ratings and entries following the ID, the discard record, timeline paging while
-   plays arrive, missing files), SettingsTests (`timeline` source), LibraryBrowserTests
-   (`TimelineModel`), MusicPlayerTests (Go to Item, ⌘⌫ off).
+   back, stats, ratings and entries following the ID, the discard record, Last Played ties,
+   `IN` lists past SQLite's limit, timeline paging while plays arrive, missing files, `pathID`
+   outside a transaction), SettingsTests (the `timeline` source), LibraryBrowserTests
+   (`TimelineModel`, its bounded cache, and the browser on the timeline), MusicPlayerTests (Go
+   to Item over repeated plays, ⌘⌫ off on the timeline).

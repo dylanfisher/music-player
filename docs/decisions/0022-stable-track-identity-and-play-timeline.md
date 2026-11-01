@@ -25,6 +25,10 @@ play listed, not only one row per track, and expects the log to reach a million 
 - **Rows are never deleted.** A file that leaves the index and comes back gets its old ID, its
   Date Added and its stats. A renamed or moved file is a new path and a new ID, as before; 0008's
   consequences for moves still hold.
+- **Paths are compared byte for byte.** A precomposed or decomposed spelling, or another case,
+  reached by some other route would get a second ID. That's accepted rather than normalized:
+  the scanner stores the path as it lists it, and the player plays and records `files.path`, so
+  both reach the same bytes.
 - **No cap on `paths`.** It grows by one row per distinct path the library has ever seen: a new
   file, a rename, a move or a remount at another path. A row is the path plus two numbers, stored
   again in the `UNIQUE` index, about 250 bytes for the owner's paths, so 43k files take about
@@ -50,27 +54,32 @@ play listed, not only one row per track, and expects the log to reach a million 
   the order plays were recorded, and nothing indexes `played_at`. A play is about 20 bytes in the
   table and 12 in the index.
 - **History (one row per track) reads `plays` where `last_played_seconds` is set**, so its cost
-  follows the tracks played, not the length of the log.
+  follows the tracks played, not the length of the log. With every fixture track played it is a
+  sort of the whole library, so it reads them in order from an index on `last_played_seconds`,
+  and a Last Played sort breaks ties on the ID alone rather than by artist and album.
 
 ### The one-time discard
 
 - The stats SQL changes, so a database from an earlier build has its stats rebuilt, as 0008
   says. That is now explicit: before dropping them, the rebuild counts the rows of the old stats
   tables, logs the counts, and records them in `schema_discards`, which sits beside
-  `schema_identity`, keeps one shape and survives every rebuild. The library window takes the
-  record when it loads, lists it in the status line and the problems list for that session, and
-  deletes it, so it shows once even when the command line scan did the rebuild. Nothing is
+  `schema_identity`, keeps one shape and survives every rebuild. The library window reads the
+  records when it loads, adds them to the status line and the problems list for that session,
+  and deletes them only once shown, so each shows once even when the command line scan did the
+  rebuild, and a crash before then shows it next time. Nothing is
   recorded when the old tables were empty.
 
 ### The play timeline
 
-- **Its own sidebar item, Timeline, under Music after History**, saved as the source
+- **Its own sidebar item, Timeline, in the Library group after History**, saved as the source
   `timeline`. A second mode of History would need a switch that History alone has; a sidebar
   item is a row like the others, which Back and Forward step through.
 - **Every play, newest first**, 200 at a time by key (`WHERE id < :last ORDER BY id DESC LIMIT
   200`), never `OFFSET`, so a page costs the same at any depth and new plays don't shift the
   pages already loaded. The next page loads as the table draws its last rows. A new play is added
-  above the loaded rows; a library change re-reads the tracks of the loaded rows only.
+  above the loaded rows. A loaded play is three numbers (history ID, path ID, time); what a row
+  shows is read with its page into a cache of 20 pages, so scrolling a million plays holds a few
+  thousand tracks. A library change empties the cache, so only rows drawn again are read.
 - **Columns:** Played (date and time), Title, Artist, Album and Time. They aren't sortable or
   configurable: the order is the log's, and the panes and search don't apply. The panes are
   hidden and the search field is off while it shows; the sort commands are off.
@@ -90,6 +99,8 @@ play listed, not only one row per track, and expects the log to reach a million 
   - *Rate, Add to Playlist, New Playlist from Selection, Edit Tags, Reveal in Finder and Copy
     Path* act on the distinct tracks of the selected rows, in row order, leaving out missing
     rows.
+  - Those commands are on while any row is selected, even only missing ones, rather than read
+    every selected play's track each time a menu is checked; they then act on nothing.
   - *Go to Item* lists the loaded rows, keyed `track:<row>:<history ID>`; choosing one selects
     that row if it still holds that play, as the track table's rows do (0016).
   - *Type-to-select* is off: there is no sort column to type into.
