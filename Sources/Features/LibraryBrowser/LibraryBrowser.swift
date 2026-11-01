@@ -47,7 +47,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private let reader: LibraryReader
     private let index: LibraryIndex
     private let table: TrackTableController
-    private let timelineModel: TimelineModel
+    let timelineModel: TimelineModel
     /// Shown in place of the panes and the track table while the timeline is the source.
     private let timeline: TimelineController
     private let panes: PanesController
@@ -302,6 +302,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Whether the sidebar shows the play timeline, which lists plays instead of tracks.
     public var showsTimeline: Bool { model.filter.source == .timeline }
+
+    /// Whether the sort commands apply: not on the timeline, whose order is the log's.
+    public var canSort: Bool { !showsTimeline }
 
     /// Swaps the timeline in for the panes and the track table, or back, as the source
     /// changes. The timeline loads afresh each time it shows.

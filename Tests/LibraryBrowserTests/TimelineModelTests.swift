@@ -242,3 +242,64 @@ private func waitUntil(_ condition: () -> Bool) async throws {
     try await waitUntil { emptyDrawn > 0 }
     #expect(emptyDrawn == 1)
 }
+
+@MainActor @Test func aLibraryChangeWhileTheTimelineShowsReadsItsRowsAgain() async throws {
+    let (browser, index, rows) = try timelineBrowser()
+    try index.recordPlay(rows[0].path, at: 1)
+    await browser.load(showingTimeline)
+    try await waitUntil { browser.timelineModel.isLoaded }
+    #expect(try browser.timelineModel.played(at: 0)?.track != nil)
+    try index.remove([rows[0].id])
+    browser.watcherEvents(.removed(count: 1))
+    try await waitUntil { (try? browser.timelineModel.played(at: 0)?.track) == nil }
+    #expect(try browser.timelineModel.played(at: 0)?.track == nil)
+}
+
+@MainActor @Test func aPlayWhileTheTimelineShowsGoesOnTop() async throws {
+    let (browser, index, rows) = try timelineBrowser()
+    try index.recordPlay(rows[0].path, at: 1)
+    await browser.load(showingTimeline)
+    try await waitUntil { browser.timelineModel.isLoaded }
+    browser.recordPlay(rows[1].path, at: 2)
+    try await waitUntil { browser.timelineModel.entries.count == 2 }
+    #expect(browser.timelineModel.entries.map(\.trackID) == [rows[1].id, rows[0].id])
+}
+
+@MainActor @Test func leavingTheTimelineClearsItAndShowingItAgainReloads() async throws {
+    let (browser, index, rows) = try timelineBrowser()
+    try index.recordPlay(rows[0].path, at: 1)
+    await browser.load(showingTimeline)
+    try await waitUntil { browser.timelineModel.isLoaded }
+    #expect(!browser.canSort)
+    browser.show(nil)
+    try await waitUntil { !browser.showsTimeline }
+    #expect(browser.timelineModel.entries.isEmpty)
+    #expect(browser.canSort)
+    // Played while another source showed, so only a reload finds it.
+    try index.recordPlay(rows[1].path, at: 2)
+    browser.show(.timeline)
+    try await waitUntil { browser.timelineModel.entries.count == 2 }
+    #expect(browser.timelineModel.entries.first?.trackID == rows[1].id)
+}
+
+@MainActor @Test func aTimelineSelectionActsOnEachTrackOnce() async throws {
+    let (browser, index, rows) = try timelineBrowser()
+    // Newest first: b, a, a.
+    for (seconds, row) in [rows[0], rows[0], rows[1]].enumerated() {
+        try index.recordPlay(row.path, at: Double(seconds))
+    }
+    await browser.load(showingTimeline)
+    try await waitUntil { browser.timelineModel.entries.count == 3 }
+    browser.selectAllTracks()
+    #expect(browser.hasSelectedTracks)
+    #expect(try await browser.selectedPaths() == [rows[1].path, rows[0].path])
+
+    browser.rateSelection(4)
+    try await waitUntil { (try? index.rows(ids: [rows[0].id]).first?.rating) == 4 }
+    #expect(try index.rows(ids: [rows[0].id, rows[1].id]).map(\.rating) == [4, 4])
+
+    let mix = try index.createPlaylist(named: "Mix")
+    browser.addSelection(to: mix)
+    try await waitUntil { (try? index.playlistTrackIDs(mix).count) == 2 }
+    #expect(try index.playlistTrackIDs(mix) == [rows[1].id, rows[0].id])
+}

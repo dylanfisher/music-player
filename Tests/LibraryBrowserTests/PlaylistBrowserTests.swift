@@ -188,3 +188,16 @@ private func writableModel(
     await model.setSource(nil)
     #expect(model.missingTracks == 0)
 }
+
+@MainActor @Test func theTimelineSourceRunsNoPaneOrTrackQueries() async throws {
+    let (model, _) = try await writableModel()
+    #expect(!model.trackIDs.isEmpty)
+    var failures: [String] = []
+    model.failed = { failures.append($0) }
+    await model.setSource(.timeline)
+    // A track query of the timeline throws, so any that ran would fail the change.
+    #expect(failures.isEmpty)
+    #expect(model.filter.source == .timeline)
+    #expect(model.trackIDs.isEmpty)
+    #expect(model.genres.isEmpty && model.artists.isEmpty && model.albums.isEmpty)
+}

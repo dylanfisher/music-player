@@ -71,12 +71,7 @@ extension AppDelegate {
                     // Preparing 43k titles for matching takes a while, so it runs off the main
                     // actor; the empty query's first rows show meanwhile.
                     let items = await Task.detached(priority: .userInitiated) {
-                        names.enumerated().map { row, name in
-                            PaletteItem(
-                                kind: .track, key: "track:\(row):\(name.id)", title: name.title,
-                                detail: [name.artist, name.album].compactMap { $0 }.joined(
-                                    separator: " — "))
-                        }
+                        goToItems(names)
                     }.value
                     palette.append(items, to: session)
                 } catch {
@@ -142,12 +137,7 @@ extension AppDelegate {
             else { return }
             browser.show(.playlist(id))
         case .track:
-            // "track:<row>:<id>": the row, if it still shows that track, or on the timeline
-            // that play.
-            let parts = item.key.split(separator: ":")
-            guard parts.count == 3, let row = Int(parts[1]), let id = Int64(parts[2]),
-                browser.rowID(at: row) == id
-            else { return }
+            guard let row = goToRow(item.key, rowID: browser.rowID(at:)) else { return }
             browser.showRow(row)
         case .setting:
             settingsWindowController()?.show(setting: String(item.key.dropFirst("setting:".count)))
@@ -186,6 +176,25 @@ enum LibraryKey {
     static func album(_ title: String, by artist: String?) -> String {
         "album:\(title)\u{1F}\(artist ?? "")"
     }
+}
+
+/// Go to Item's rows for the shown list's names in order, keyed `track:<row>:<id>` with each
+/// row's ID: a track's, or on the timeline a play's, so a track played twice is two rows.
+func goToItems(_ names: [TrackName]) -> [PaletteItem] {
+    names.enumerated().map { row, name in
+        PaletteItem(
+            kind: .track, key: "track:\(row):\(name.id)", title: name.title,
+            detail: [name.artist, name.album].compactMap { $0 }.joined(separator: " — "))
+    }
+}
+
+/// The row a Go to Item key names, if that row still holds the same ID.
+func goToRow(_ key: String, rowID: (Int) -> Int64?) -> Int? {
+    let parts = key.split(separator: ":")
+    guard parts.count == 3, let row = Int(parts[1]), let id = Int64(parts[2]),
+        rowID(row) == id
+    else { return nil }
+    return row
 }
 
 /// The palette rows for the playlists, by name.

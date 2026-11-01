@@ -77,8 +77,7 @@ extension AppDelegate {
             (.sortByTitle, .title), (.sortByArtist, .artist), (.sortByAlbum, .album),
             (.sortByDateAdded, .dateAdded),
         ]
-        // The timeline's order is the log's.
-        let canSort = { [weak self] in self?.browser?.showsTimeline == false }
+        let canSort = { [weak self] in self?.browser?.canSort == true }
         for (id, column) in sorts {
             dispatcher.handle(
                 id, enabled: canSort,
