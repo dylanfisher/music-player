@@ -82,7 +82,7 @@ extension HealthCheck {
 extension LibraryIndex {
     /// Runs every check in one read, so they all see the same library while a scan writes.
     public func healthReport() throws -> HealthReport {
-        try database.read {
+        try database.deferredTransaction {
             HealthReport(
                 Dictionary(
                     uniqueKeysWithValues: try HealthCheck.allCases.map { ($0, try run($0)) }))
@@ -197,7 +197,8 @@ extension LibraryIndex {
 
     /// Keeps `report`'s tracks on this connection, for the `.health` sources to list.
     public func showHealth(_ report: HealthReport) throws {
-        try database.transaction {
+        // Deferred, since an immediate transaction would wait for a scan's writes to the file.
+        try database.deferredTransaction {
             try statement("DELETE FROM \(healthTracksTable)").run()
             let insert = try statement(
                 "INSERT INTO \(healthTracksTable) (check_name, file_id) VALUES (?, ?)")

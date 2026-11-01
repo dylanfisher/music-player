@@ -24,8 +24,12 @@ public actor LibraryReader {
     /// Lists `report`'s tracks for the `.health` sources.
     public func showHealth(_ report: HealthReport) throws { try index.showHealth(report) }
 
-    public func folderTree(roots: [String]) throws -> FolderTree {
-        try index.folderTree(roots: roots)
+    /// Reads the folder tree on a connection of its own, since it takes tens of milliseconds
+    /// over a large library and runs after every refresh.
+    public nonisolated func folderTree(roots: [String]) async throws -> FolderTree {
+        let url = databaseURL
+        return try await Task.detached { try LibraryIndex(at: url).folderTree(roots: roots) }
+            .value
     }
 
     public func trackIDs(_ filter: TrackFilter, sortedBy column: TrackColumn, ascending: Bool)

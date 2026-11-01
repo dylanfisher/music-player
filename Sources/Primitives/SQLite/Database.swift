@@ -86,13 +86,17 @@ public final class Database {
         return try result.get()
     }
 
-    /// Runs `body`'s reads in one deferred transaction, so they all see the same snapshot while
-    /// other connections write. It takes no write lock.
-    public func read<T>(_ body: () throws -> T) throws -> T {
-        try execute("BEGIN")
+    /// Runs `body` in a deferred transaction, which takes no lock on the database file until
+    /// `body` writes it: its reads see one snapshot while other connections write, and writes
+    /// to temporary tables never wait for them. Committed when `body` returns, rolled back when
+    /// it throws.
+    public func deferredTransaction<T>(_ body: () throws -> T) throws -> T {
+        try execute("BEGIN DEFERRED")
         let result = Result(catching: body)
-        // Nothing was written, so ending it either way leaves nothing behind.
-        if isInTransaction { try execute("COMMIT") }
+        switch result {
+        case .success: try execute("COMMIT")
+        case .failure: if isInTransaction { try execute("ROLLBACK") }
+        }
         return try result.get()
     }
 

@@ -19,7 +19,8 @@ add a group for sync events that don't match.
   clicked row or the selection holding it. It only calls `activateFileViewerSelecting`.
 - **Folders.** Each watched folder's sidebar row opens into its subfolders: there's no separate
   mode, since the watched folders are already sidebar rows and a toggle would hide the
-  playlists. `FolderTree` is built on the window's reader from the paths of the index's tracks
+  playlists. `FolderTree` is built on a connection of its own (62 ms for the 43k fixture
+  library, read after every refresh) from the paths of the index's tracks
   (a folder holding only files that were never read has nothing to list, so it isn't shown).
   The tree is the folders and their children, a few thousand strings for 43k tracks; sidebar
   rows are made only when their parent opens, and kept by path so a rebuilt tree after a

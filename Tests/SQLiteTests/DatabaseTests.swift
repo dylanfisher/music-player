@@ -261,7 +261,7 @@ private final class LockedFailures: @unchecked Sendable {
             == [.integer, .real, .text, .blob, .null])
 }
 
-@Test func aReadSeesOneSnapshotWhileAnotherConnectionWrites() throws {
+@Test func aDeferredTransactionSeesOneSnapshotAndWaitsForNoWriter() throws {
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent("sqlite-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -270,7 +270,7 @@ private final class LockedFailures: @unchecked Sendable {
     let writer = try Database(at: url)
     try writer.execute("CREATE TABLE t (i INTEGER); INSERT INTO t VALUES (1)")
     let count = { try reader.prepare("SELECT count(*) FROM t").map { try $0.int(0) }[0] }
-    let counts = try reader.read {
+    let counts = try reader.deferredTransaction {
         let before = try count()
         try writer.execute("INSERT INTO t VALUES (2)")
         return [before, try count()]
@@ -278,7 +278,14 @@ private final class LockedFailures: @unchecked Sendable {
     #expect(counts == [1, 1])
     #expect(!reader.isInTransaction)
     #expect(try count() == 2)
+    // A temporary table is written while another connection holds the write lock.
+    try writer.execute("BEGIN IMMEDIATE")
+    try reader.execute("CREATE TEMP TABLE scratch (i INTEGER)")
+    try reader.deferredTransaction { try reader.execute("INSERT INTO scratch VALUES (1)") }
+    try writer.execute("COMMIT")
     // A failure ends the transaction and is thrown.
-    #expect(throws: SQLiteError.self) { try reader.read { try reader.execute("SELECT nope") } }
+    #expect(throws: SQLiteError.self) {
+        try reader.deferredTransaction { try reader.execute("SELECT nope") }
+    }
     #expect(!reader.isInTransaction)
 }
