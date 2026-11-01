@@ -1738,6 +1738,40 @@ playlists with an unmapped rule, and playlists whose name exists, are skipped an
 - [ ] Bench, with the budget added to [Performance budgets](#performance-budgets): building the
       report over the fixture library p95 < 1 s on Apple Silicon.
 
+Implementation plan (ADR 0034):
+
+1. **Reveal in Finder:** the registry's `track.revealInFinder` gains ⇧⌘R, keeping Searcher's
+   ⌥⌘R (ADR 0012). One `revealInFinder(_:)` in LibraryBrowser calls
+   `NSWorkspace.activateFileViewerSelecting`; the command and a new item in `RowListController`'s
+   context menu (the clicked row or the selection, so the track table and the timeline both get
+   it) use it.
+2. **Folder tree:** `FolderTree` in Library, built on the reader from the paths of the index's
+   tracks and the watched folders: the distinct folders, each with its subfolders, and no
+   AppKit. The sidebar's watched folders expand into it, a row made only when its parent
+   expands. A subfolder is a `.folder` source like a watched one, so the panes and sort work
+   as they do. It's rebuilt after each library refresh, and before the first sidebar show when
+   the saved source is a subfolder, whose ancestors expand to select it.
+3. **Health report:** `HealthCheck` (Settings, beside `BrowserSource`, which gains
+   `.health(HealthCheck)`, saved as `health:<check>`), and `LibraryIndex.healthReport()` in
+   Library: one `HealthFindings` (track IDs, and lines for what isn't a track, 100 then a
+   count) per check, each check one function in a switch so a later check joins by adding a
+   case. Title and artist duplicates are sorted by title, artist and length in SQL, then swept.
+   The report is built on a second `LibraryReader`, so it never holds up the window's queries,
+   and the window's reader keeps the shown IDs in a temp table that the `.health` source
+   condition reads, so panes, search and sort work on a check as on any source.
+4. **HealthModel** (LibraryBrowser, no AppKit): runs a build on request, when a scan ends and
+   when a check is shown with no report yet; each run takes a session number and a result from
+   an earlier one is dropped. The sidebar's Library Health row expands into one row per check
+   with its count; the track table lists the check's tracks, and the status bar counts the rest,
+   which the Problems window lists. `library.checkHealth` ("Check Library Health") in the
+   registry and the File menu.
+5. **Bench:** `library: build the health report (p95)`, budget 1 s (old Mac 3 s, an estimate),
+   added to the table above with it.
+6. **Tests:** LibraryTests (each check against crafted rows, the duplicate sweep's edges, the
+   folder tree, the `.health` source), SettingsTests (`health:` sources), LibraryBrowserTests
+   (HealthModel's stale runs, the sidebar's folder tree and health rows, the context menu's
+   Reveal), CommandsTests (⇧⌘R bound, no collision).
+
 ### 20. Signal path panel
 
 - [ ] A panel, hidden by default, that shows what happens to the samples between the file and the
