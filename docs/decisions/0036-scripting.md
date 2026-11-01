@@ -22,20 +22,24 @@ A URL can be opened by any web page, so it's hostile input.
   group or other bits; anything else is refused with its reason, never fixed up. The socket is
   0600. A stale socket (nothing answers on it) is removed; a live one means another instance
   answers there, and this one doesn't serve; anything other than this user's socket at the path
-  is left alone and reported.
+  is left alone and reported. A server that loses the bind to another removes only a socket
+  it bound itself, checked by inode, so it never deletes the winner's.
 - Every connection's peer uid (`getpeereid`) must be this user's, before a byte is read. The
   tool checks the server's uid the same way.
 - A message is a 4-byte big-endian length and then JSON. A request over 4 KiB is refused
   before it's read; a request must arrive whole within 2 s, its reply within 10 s on the
   tool's side, and a reply over 64 KiB is refused. One thread accepts and reads connections in
   turn, blocked in `poll` while none come, so the idle budget sees no wakeups; a slow client
-  holds the next for at most 2 s.
+  holds the next for at most 2 s. At most 16 replies wait to be sent at once; a connection
+  past that is closed unread and logged. `stop` may be called any number of times, also after
+  the thread ended on its own, and writes to the thread's pipe only while it runs.
 - Requests and replies decode strictly: unknown keys, and keys the kind doesn't take, are
   errors at every level.
 
 The server starts once playback is ready (after the first rows draw), so a request that plays
-finds the engine, and the tool waits up to 20 s for it after starting the app with
-`NSWorkspace.openApplication`, passing its own `--home` on. Anything refused on the socket is
+finds the engine. The tool starts the app with `NSWorkspace.openApplication`, passing its own
+`--home` on, and from then has one 20 s deadline: each try's timeout is what's left of it, and
+a connection the coming-up app closes unanswered counts as not ready yet. Anything refused on the socket is
 logged.
 
 **Commands, arguments and help come from the registry.** `Command` gains two properties, and
@@ -47,11 +51,15 @@ and it isn't `help` or `status`, its last part (`next`); any case. `status --jso
 **The URL scheme runs playback and navigation only.** A link runs a command marked
 `runsFromLinks` and refuses every other, with the reason in the status bar. The list, which
 `onlyPlaybackAndNavigationRunFromLinks` pins: Play/Pause, Play, Pause, Play Selection, Play
-Next, Next Track, Previous Track, Seek Forward, Seek Back, Volume Up, Volume Down, Stop,
-Shuffle, Repeat Off, Repeat All, Repeat One, Back, Forward and Show Current Track. A link is
+Next, Next Track, Previous Track, Seek Forward, Seek Back, Volume Down, Stop, Shuffle, Repeat
+Off, Repeat All, Repeat One, Back, Forward and Show Current Track. Volume Up isn't on it: a page
+could open it in a loop and drive the owner's DAC to full volume (the owner's call,
+2026-11-01). Links are also limited to 5 in any second, whatever they ask, refused ones
+included; past that each is refused with the reason in the status bar and the log
+(`LinkRate`). A link is
 exactly `music-player://<command>[/][?q=<argument>]`: at most 2048 bytes, the host only ASCII
 letters, digits and dots, no path, user, port, fragment or percent sign in it, one `q` key and
-nothing else, decoded once (`+` stays a plus), and no control character in the argument. Links
+nothing else (a bare `?` is refused), decoded once (`+` stays a plus), and no control character in the argument. Links
 that arrive before playback is ready wait, up to 16. `scripts/bundle` registers the scheme in
 `CFBundleURLTypes`, reading the word from `toolName` in Swift, which is also the tool's name.
 
@@ -103,8 +111,9 @@ are only ever added. There's no version field (pre-release, AGENTS.md).
 ## Consequences
 
 A command line that can run any command is as strong as the owner's account, which is the
-model ADR 0025 already takes for the owner's own processes. A web page can play, pause, skip
-and move around the window, and nothing else; browsers ask before opening an app's link. A
+model ADR 0025 already takes for the owner's own processes. A web page can play, pause, skip,
+turn the volume down and move around the window, at most 5 times a second, and nothing else;
+browsers ask before opening an app's link. A
 second app started with another `--home` answers on its own socket; one started with the same
 data folder is refused by the live-socket check and reports it in the status bar. A socket left
 by a crash is replaced at the next launch. A data folder whose path leaves no room for the
