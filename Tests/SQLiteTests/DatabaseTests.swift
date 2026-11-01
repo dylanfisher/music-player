@@ -172,3 +172,20 @@ private final class LockedFailures: @unchecked Sendable {
     try database.transaction { #expect(database.isInTransaction) }
     #expect(!database.isInTransaction)
 }
+
+@Test func aTransactionSQLiteRolledBackItselfThrowsWhatCausedIt() throws {
+    let database = try temporaryDatabase()
+    try database.execute("CREATE TABLE t (s TEXT)")
+    let pages = try database.prepare("PRAGMA page_count").map { try $0.int(0) }[0]
+    try database.execute("PRAGMA max_page_count = \(pages)")
+    #expect {
+        try database.transaction {
+            try database.prepare("INSERT INTO t VALUES (?)").run(
+                String(repeating: "x", count: 65_536))
+        }
+    } throws: { error in
+        ((error as? SQLiteError)?.code ?? 0) & 0xFF == SQLITE_FULL
+    }
+    #expect(!database.isInTransaction)
+    #expect(try database.prepare("SELECT count(*) FROM t").map { try $0.int(0) } == [0])
+}

@@ -67,7 +67,9 @@ public final class Database {
         let result = Result(catching: body)
         switch result {
         case .success: try execute("COMMIT")
-        case .failure: try execute("ROLLBACK")
+        // SQLite rolls some failures back itself, such as SQLITE_FULL, and a second rollback
+        // would fail and hide the error that caused it.
+        case .failure: if isInTransaction { try execute("ROLLBACK") }
         }
         return try result.get()
     }
