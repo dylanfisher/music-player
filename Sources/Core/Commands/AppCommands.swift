@@ -131,7 +131,9 @@ public enum AppCommands {
             Command(.focusNextArea, "Focus Next Area", [.init(.tab)]),
 
             Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
-            Command(.revealInFinder, "Reveal in Finder", [.init("r", [opt, cmd])]),
+            Command(
+                .revealInFinder, "Reveal in Finder",
+                [.init("r", [cmd, shift]), .init("r", [opt, cmd])]),
             Command(.copyPath, "Copy Path", [.init("c", [opt, cmd])]),
             Command(.editTags, "Edit Tags…", [.init("i", cmd)]),
             Command(.undoTagEdit, "Undo Tag Edit"),

@@ -11,6 +11,8 @@ class RowListController: NSViewController {
     /// Double-click or Return: the selected rows and the one clicked.
     let play: (IndexSet, Int) -> Void
     let playNext: (IndexSet) -> Void
+    /// The context menu's Reveal in Finder: its rows.
+    let reveal: (IndexSet) -> Void
     /// Called once, when the list first draws rows, for the launch measurement.
     var firstRowsDrawn: (() -> Void)?
     /// The row the keys move from, and the one an extending move keeps.
@@ -18,9 +20,13 @@ class RowListController: NSViewController {
     private var anchor: Int?
     private var movingByKey = false
 
-    init(play: @escaping (IndexSet, Int) -> Void, playNext: @escaping (IndexSet) -> Void) {
+    init(
+        play: @escaping (IndexSet, Int) -> Void, playNext: @escaping (IndexSet) -> Void,
+        reveal: @escaping (IndexSet) -> Void
+    ) {
         self.play = play
         self.playNext = playNext
+        self.reveal = reveal
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -36,7 +42,8 @@ class RowListController: NSViewController {
         view = scroll
     }
 
-    /// The style both lists share, double-click to play, and the Play and Play Next menu.
+    /// The style both lists share, double-click to play, and the Play, Play Next and Reveal in
+    /// Finder menu.
     func configureRows() {
         table.style = .fullWidth
         table.rowHeight = 18
@@ -51,6 +58,9 @@ class RowListController: NSViewController {
         menu.addItem(withTitle: "Play", action: #selector(playMenuRows), keyEquivalent: "")
         menu.addItem(
             withTitle: AppCommands.title(of: .playNext), action: #selector(playMenuRowsNext),
+            keyEquivalent: "")
+        menu.addItem(
+            withTitle: AppCommands.title(of: .revealInFinder), action: #selector(revealMenuRows),
             keyEquivalent: "")
         for item in menu.items { item.target = self }
         table.menu = menu
@@ -113,6 +123,12 @@ class RowListController: NSViewController {
         let rows = menuRows
         guard !rows.isEmpty else { return }
         playNext(rows)
+    }
+
+    @objc private func revealMenuRows() {
+        let rows = menuRows
+        guard !rows.isEmpty else { return }
+        reveal(rows)
     }
 
     /// Plays the selected rows from the first, or every row when none is selected.

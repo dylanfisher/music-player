@@ -28,7 +28,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         self.model = model
         self.cache = cache
         self.actions = actions
-        super.init(play: actions.play, playNext: actions.playNext)
+        super.init(play: actions.play, playNext: actions.playNext, reveal: actions.reveal)
         configure(layout)
         art.isWanted = { [weak self] key in
             self?.visibleRows().contains { self?.artKey($0) == key } ?? false

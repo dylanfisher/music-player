@@ -25,14 +25,14 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
 
     init(
         model: TimelineModel, play: @escaping (IndexSet, Int) -> Void,
-        playNext: @escaping (IndexSet) -> Void,
+        playNext: @escaping (IndexSet) -> Void, reveal: @escaping (IndexSet) -> Void,
         keyCommand: @escaping ([KeyChord]) -> CommandDispatcher.KeyOutcome,
         failed: @escaping (String) -> Void
     ) {
         self.model = model
         self.keyCommand = keyCommand
         self.failed = failed
-        super.init(play: play, playNext: playNext)
+        super.init(play: play, playNext: playNext, reveal: reveal)
         configure()
     }
 

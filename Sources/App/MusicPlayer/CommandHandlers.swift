@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import LibraryBrowser
 import Log
 import Playback
 import Settings
@@ -41,10 +42,7 @@ extension AppDelegate {
             }
         }
         dispatcher.handle(.revealInFinder, enabled: hasSelectedTracks) { [weak self] in
-            self?.withSelectedPaths { paths in
-                NSWorkspace.shared.activateFileViewerSelecting(
-                    paths.map(URL.init(fileURLWithPath:)))
-            }
+            self?.withSelectedPaths(revealInFinder)
         }
         dispatcher.handle(.copyPath, enabled: hasSelectedTracks) { [weak self] in
             self?.withSelectedPaths { paths in

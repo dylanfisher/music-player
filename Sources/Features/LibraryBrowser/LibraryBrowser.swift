@@ -87,6 +87,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         let actions = BrowserActions(
             play: { rows, clicked in owner?.playRows(rows, clicked: clicked) },
             playNext: { rows in owner?.queueNext(rows) },
+            reveal: { rows in owner?.reveal { model.ids(ofRows: rows) } },
             move: { ids, row in
                 owner?.edit("couldn't move the tracks") { try await model.move(ids, toRow: row) }
             },
@@ -120,6 +121,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                     owner?.reportCommand("couldn't queue the selection", error)
                 }
             },
+            reveal: { rows in owner?.reveal { try timelineModel.trackIDs(ofRows: rows) } },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound },
             failed: { message in owner?.show(failure: message) })
         panes = PanesController(
@@ -348,6 +350,29 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func reportCommand(_ failure: String, _ error: any Error) {
         if error is OnlyMissingFiles { beep() }
         report("\(failure): \(error)")
+    }
+
+    /// Shows files in Finder; tests record them instead.
+    var revealFiles: ([String]) -> Void = revealInFinder
+
+    /// Reveals the files of the tracks `ids` gives, for the context menu's rows.
+    private func reveal(_ read: () throws -> [Int64]) {
+        let failure = "couldn't reveal the tracks"
+        let ids: [Int64]
+        do {
+            ids = try read()
+        } catch {
+            reportCommand(failure, error)
+            return
+        }
+        Task {
+            do {
+                let paths = try await reader.paths(ids: ids)
+                revealFiles(ids.compactMap { paths[$0] })
+            } catch {
+                reportCommand(failure, error)
+            }
+        }
     }
 
     /// The system beep; tests count it instead.

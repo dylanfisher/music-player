@@ -12,7 +12,8 @@ import Testing
         groupByAlbumArtist: false)
     let index = try LibraryIndex(at: databaseURL)
     let actions = BrowserActions(
-        play: { _, _ in }, playNext: { _ in }, move: { _, _ in }, sort: { _, _ in },
+        play: { _, _ in }, playNext: { _ in }, reveal: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
         layoutChanged: { _ in },
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
@@ -36,7 +37,8 @@ import Testing
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
         groupByAlbumArtist: false)
     let actions = BrowserActions(
-        play: { _, _ in }, playNext: { _ in }, move: { _, _ in }, sort: { _, _ in },
+        play: { _, _ in }, playNext: { _ in }, reveal: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
         layoutChanged: { _ in },
         failed: { _ in }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
@@ -55,7 +57,8 @@ import Testing
         groupByAlbumArtist: false)
     let index = try LibraryIndex(at: databaseURL)
     let actions = BrowserActions(
-        play: { _, _ in }, playNext: { _ in }, move: { _, _ in }, sort: { _, _ in },
+        play: { _, _ in }, playNext: { _ in }, reveal: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
         layoutChanged: { _ in },
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
@@ -96,4 +99,27 @@ import Testing
     let (names, shown) = try await read
     await sorted
     #expect(names.map(\.id) == shown)
+}
+
+@MainActor @Test func theContextMenuRevealsTheSelectedRows() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
+    var revealed: [IndexSet] = []
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, reveal: { revealed.append($0) },
+        move: { _, _ in }, sort: { _, _ in }, layoutChanged: { _ in },
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { _ in [] }, layout: AppState().trackTable.defaultValue,
+        actions: actions)
+    _ = controller.view
+    model.changed = { controller.reload($0) }
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    controller.table.selectRowIndexes([1, 3], byExtendingSelection: false)
+    let item = try #require(
+        controller.table.menu?.items.first { $0.title == "Reveal in Finder" })
+    _ = (item.target as? NSObject)?.perform(item.action, with: item)
+    #expect(revealed == [[1, 3]])
 }

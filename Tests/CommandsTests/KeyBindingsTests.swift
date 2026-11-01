@@ -43,6 +43,16 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
     #expect(Set(all.map(\.id)).count == all.count)
 }
 
+@Test func shiftCommandRRevealsInFinder() throws {
+    let bindings = try KeyBindings(
+        AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
+    let chord = KeyChord("r", [cmd, .shift])
+    #expect(bindings.registry.command(for: chord) == .revealInFinder)
+    #expect(bindings.chord(of: .revealInFinder, at: .primary) == chord)
+    // Searcher's chord stays as the alternate (ADR 0012).
+    #expect(bindings.chord(of: .revealInFinder, at: .alternate) == KeyChord("r", [.option, cmd]))
+}
+
 @Test func theUsersChordBeatsADefault() throws {
     let bindings = try bindings([
         close.rawValue: ShortcutOverride(alternate: .chord(KeyChord("o", cmd)))
