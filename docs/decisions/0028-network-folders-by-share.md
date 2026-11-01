@@ -1,4 +1,4 @@
-# 0027. A network folder is stored by its share, not its mount path
+# 0028. A network folder is stored by its share, not its mount path
 
 - **Date:** 2026-11-01
 - **Status:** accepted

@@ -1619,7 +1619,7 @@ Write the ADR first; it amends ADR 0022.
       - **Sync** carries a match as a `move` event with both relative paths. A machine that already
         made the move, or has no row for the old path, ignores it; one with stats on both paths
         merges them by the rules below.
-- [ ] **Network folders by share** ([ADR 0027](decisions/0027-network-folders-by-share.md)). A
+- [ ] **Network folders by share** ([ADR 0028](decisions/0028-network-folders-by-share.md)). A
       watched folder on a network volume is stored as its share's URL and the path inside it. The
       app finds the share's current mount point at launch, before each scan, on wake and on a
       network change, and rewrites the `paths` prefixes in one transaction when the mount point
