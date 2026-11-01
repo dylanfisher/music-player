@@ -324,9 +324,7 @@ public final class BrowserModel {
     /// Nil when the library has no such track.
     public func reveal(_ id: Int64) async -> Int? {
         if let row = trackIDs.firstIndex(of: id) { return row }
-        pendingVisit = .some(nil)
-        changeSort(from: pending.source, to: nil)
-        pending = everything
+        showEverything()
         await reload(panesFrom: .genre, reason: .user)
         return trackIDs.firstIndex(of: id)
     }
@@ -334,15 +332,49 @@ public final class BrowserModel {
     /// Shows the whole library narrowed to one genre, artist or album, as the palette chooses
     /// one: the other panes are All and the search is cleared.
     public func showOnly(_ pane: Pane, id: Int64) async {
+        showEverything()
+        narrow(pane, to: id)
+        await reload(panesFrom: .genre, reason: .user)
+    }
+
+    /// Shows what `query` names in the whole library, and returns all of it to play from the
+    /// top. An entry's name matches ignoring case and accents; one the library has under two
+    /// artists is refused, naming them, since playing either would be a guess.
+    public func show(_ query: PlayQuery) async throws -> PlayRequest {
+        switch query {
+        case .search(let text):
+            showEverything()
+            pending.search = text
+        case .entry(let pane, let name):
+            let matches = try await allEntries().filter {
+                $0.0 == pane && TypeSelect.fold($0.1.name) == TypeSelect.fold(name)
+            }.map(\.1)
+            guard let entry = matches.first else { throw PlayQueryError.noEntry(pane, name) }
+            guard matches.count == 1 else {
+                throw PlayQueryError.several(pane, name, artists: matches.map(\.artist))
+            }
+            showEverything()
+            narrow(pane, to: entry.id)
+        }
+        await reload(panesFrom: .genre, reason: .user)
+        guard !trackIDs.isEmpty, let request = try await playRequest(selected: [], clicked: 0)
+        else { throw PlayQueryError.nothingMatches(query) }
+        return request
+    }
+
+    /// The whole library, once the next reload shows it: no source, panes or search.
+    private func showEverything() {
         pendingVisit = .some(nil)
         changeSort(from: pending.source, to: nil)
         pending = everything
+    }
+
+    private func narrow(_ pane: Pane, to id: Int64) {
         switch pane {
         case .genre: pending.genre = id
         case .artist: pending.artist = id
         case .album: pending.album = id
         }
-        await reload(panesFrom: .genre, reason: .user)
     }
 
     /// Every genre, artist and album in the library, for the palette.

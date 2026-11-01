@@ -5,12 +5,14 @@ import HALOutput
 import KeyChord
 import Library
 import LibraryBrowser
+import LocalSocket
 import Log
 import NowPlaying
 import Palette
 import Playback
 import PlaylistEditor
 import QueueView
+import Scripting
 import Settings
 import SettingsWindow
 import TagEditor
@@ -28,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Now Playing's art: the current track's and the one before, for going back.
     static let systemArtCacheImages = 2
 
-    private let paths: AppPaths
+    let paths: AppPaths
     private let measuring: Bool
     private let snapshotURL: URL?
     private let snapshotOf: SnapshotTarget
@@ -73,6 +75,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The tag editor, which writes music files only after the user saves an edit (ADR 0020).
     private(set) lazy var tagEditing = makeTagEditing()
     private(set) var dispatcher: CommandDispatcher?
+    /// Runs the tool's requests and links, once playback is ready.
+    var scriptRouter: ScriptRouter?
+    var scriptServer: LocalSocketServer?
+    /// Links that came before the router, run once it's there.
+    var waitingLinks: [String] = []
     private var menu: MainMenu?
     private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
 
@@ -212,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func interactive() {
         guard let settings else { return }
         startPlayback(settings)
+        startScripting()
         startWatching(settings[\.watchedFolders], settings)
         if let snapshotURL {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.snapshotDelaySeconds) {
@@ -265,6 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        scriptServer?.stop()
         saver?.flush()
         watcher?.stop()
         // Puts the device and the default outputs back the way they were.

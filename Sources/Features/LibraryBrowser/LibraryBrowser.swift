@@ -891,6 +891,18 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         try await model.allEntries()
     }
 
+    /// Shows what `query` names and plays all of it, for `music-player play`. Returns what
+    /// plays, as the tool prints it.
+    public func play(_ query: PlayQuery) async throws -> String {
+        if case .search(let text) = query { searchField.stringValue = text }
+        let request = try await model.show(query)
+        if case .entry = query { searchField.stringValue = "" }
+        showSource()
+        focusTracks()
+        play(request)
+        return "Playing \(tracks(request.urls.count))"
+    }
+
     /// Shows the library narrowed to one entry, as the palette chooses it.
     public func showOnly(_ pane: BrowserModel.Pane, id: Int64) async {
         searchField.stringValue = ""

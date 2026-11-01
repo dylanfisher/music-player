@@ -10,11 +10,16 @@ rm -rf "$root"
 mkdir -p "$root"
 trap 'rm -rf "$root"' EXIT
 
-# A bundle named $1, signed with codesign's remaining arguments.
+# A bundle named $1, signed with codesign's remaining arguments. With HELPER set, it also holds
+# a second executable signed with $HELPER's arguments first, as the music-player tool is.
 bundle() {
   local app="$root/$1.app"; shift
   mkdir -p "$app/Contents/MacOS"
   cp /bin/echo "$app/Contents/MacOS/MusicPlayer"
+  if [ -n "${HELPER:-}" ]; then
+    cp /bin/echo "$app/Contents/MacOS/helper"
+    codesign --force --sign - $HELPER "$app/Contents/MacOS/helper" 2>/dev/null
+  fi
   /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string MusicPlayer" \
     -c "Add :CFBundleIdentifier string sigtest.$(basename "$app" .app)" \
     "$app/Contents/Info.plist" >/dev/null
@@ -28,6 +33,10 @@ entitlements="$root/get-task-allow.plist"
 hardened=$(bundle hardened --options runtime)
 debuggable=$(bundle debuggable --options runtime --entitlements "$entitlements")
 plain=$(bundle plain)
+hardenedHelper=$(HELPER="--options runtime" bundle hardened-helper --options runtime)
+plainHelper=$(HELPER="--timestamp=none" bundle plain-helper --options runtime)
+debuggableHelper=$(HELPER="--options runtime --entitlements $entitlements" \
+  bundle debuggable-helper --options runtime)
 
 failed=0
 # expect <pass|fail> <what> <arguments...>
@@ -47,6 +56,9 @@ expect() {
 expect pass "a hardened bundle without entitlements" "$hardened"
 expect fail "signed with get-task-allow" "$debuggable"
 expect fail "signed without the hardened runtime" "$plain"
+expect pass "a hardened helper beside the app" "$hardenedHelper"
+expect fail "a helper without the hardened runtime" "$plainHelper"
+expect fail "a helper with get-task-allow" "$debuggableHelper"
 expect fail "an unknown flag" "$hardened" --verbose
 expect fail "no app" 
 expect fail "two apps" "$hardened" "$plain"

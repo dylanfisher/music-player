@@ -33,6 +33,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "LocalSocket",
+            path: "Sources/Primitives/LocalSocket",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SQLite",
             path: "Sources/Primitives/SQLite",
             swiftSettings: strictSwift,
@@ -100,6 +105,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Scripting",
+            dependencies: ["Commands", "DisplayText", "LocalSocket", "Playback", "Settings"],
+            path: "Sources/Core/Scripting",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "LibraryBrowser",
             dependencies: [
                 "Artwork", "Commands", "DisplayText", "KeyChord", "Library", "Log", "Metadata",
@@ -148,11 +159,19 @@ let package = Package(
             name: "MusicPlayer",
             dependencies: [
                 "Artwork", "Commands", "DisplayText", "HALOutput", "KeyChord", "Library",
-                "LibraryBrowser", "Log", "Metadata", "NowPlaying", "Playback", "PlaylistEditor",
-                "QueueView", "Palette", "SQLite", "Settings", "SettingsWindow", "TagEditor",
-                "TagWriter",
+                "LibraryBrowser", "LocalSocket", "Log", "Metadata", "NowPlaying", "Playback",
+                "PlaylistEditor",
+                "QueueView", "Palette", "Scripting", "SQLite", "Settings", "SettingsWindow",
+                "TagEditor", "TagWriter",
             ],
             path: "Sources/App/MusicPlayer",
+            swiftSettings: strictSwift
+        ),
+        // The `music-player` command line, which scripts/bundle puts beside the app.
+        .executableTarget(
+            name: "ScriptTool",
+            dependencies: ["Commands", "DisplayText", "LocalSocket", "Scripting", "Settings"],
+            path: "Sources/App/ScriptTool",
             swiftSettings: strictSwift
         ),
         .target(
@@ -272,6 +291,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .testTarget(
+            name: "LocalSocketTests",
+            dependencies: ["LocalSocket"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
             name: "LogTests",
             dependencies: ["Log"],
             swiftSettings: strictSwift
@@ -311,6 +335,11 @@ let package = Package(
         .testTarget(
             name: "QueueViewTests",
             dependencies: ["Library", "Playback", "QueueView"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "ScriptingTests",
+            dependencies: ["Commands", "LocalSocket", "Playback", "Scripting", "Settings"],
             swiftSettings: strictSwift
         ),
         .testTarget(

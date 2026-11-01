@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the MusicPlayer executable and wraps it in a signed .app, so it runs with its
-# Info.plist (bundle ID, minimum macOS, and later the usage strings). Prints the .app path.
+# Info.plist (bundle ID, minimum macOS, the link scheme, and later the usage strings), with the
+# music-player command line beside it in Contents/MacOS. Prints the .app path.
 #   ./scripts/bundle [debug|release]
 # Release builds are universal, because they get copied to other Macs, including the
 # Intel 2015 MacBook Pro. Debug builds are native only, for speed. A release build also leaves a
@@ -23,6 +24,7 @@ if [ "$config" = release ]; then
   flags+=(--arch arm64 --arch x86_64)
 fi
 swift build "${flags[@]}" --product MusicPlayer >&2
+swift build "${flags[@]}" --product ScriptTool >&2
 if [ "$config" = release ]; then swift build "${flags[@]}" --product Bench >&2; fi
 bin="$(swift build "${flags[@]}" --show-bin-path)"
 app="$bin/MusicPlayer.app"
@@ -31,6 +33,13 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
 cp "$bin/MusicPlayer" "$app/Contents/MacOS/"
 cp Support/Info.plist "$app/Contents/"
+
+# The tool's name and the link scheme are one word, declared once in Swift (ADR 0036).
+tool=$(sed -n 's/^public let toolName = "\(.*\)"$/\1/p' Sources/Core/Scripting/Scripting.swift)
+if [ -z "$tool" ]; then
+  echo "couldn't read toolName from Sources/Core/Scripting/Scripting.swift" >&2; exit 1
+fi
+cp "$bin/ScriptTool" "$app/Contents/MacOS/$tool"
 
 # The deployment target is declared once, in Package.swift.
 min_macos=$(swift package dump-package | python3 -I -c '
@@ -44,10 +53,16 @@ if [ -z "$bundle_id" ]; then
   echo "couldn't read bundleIdentifier from Sources/Core/Log/ModuleLogger.swift" >&2; exit 1
 fi
 /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $bundle_id" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" \
+  -c "Add :CFBundleURLTypes:0:CFBundleURLName string $bundle_id" \
+  -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" \
+  -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string $tool" "$app/Contents/Info.plist"
 
 # Ad-hoc signature with the hardened runtime; see ADR 0025, distribution included.
 # A debug bundle also gets get-task-allow so lldb can attach; a release one is checked for it.
+# The tool is signed first, the same way, because the app's signature seals it.
 if [ "$config" = release ]; then
+  codesign --force --options runtime --sign - "$app/Contents/MacOS/$tool" >&2
   codesign --force --options runtime --sign - "$app" >&2
   scripts/check-signature "$app" >&2
 else
@@ -55,7 +70,9 @@ else
   rm -f "$entitlements"
   /usr/libexec/PlistBuddy -c "Add :com.apple.security.get-task-allow bool true" \
     "$entitlements" >/dev/null
-  codesign --force --options runtime --entitlements "$entitlements" --sign - "$app" >&2
+  for code in "$app/Contents/MacOS/$tool" "$app"; do
+    codesign --force --options runtime --entitlements "$entitlements" --sign - "$code" >&2
+  done
 fi
 if [ "$config" = release ]; then echo "universal Bench: $bin/Bench" >&2; fi
 echo "$app"

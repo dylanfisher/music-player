@@ -92,6 +92,9 @@ public enum AppCommands {
     private static let ctrl: KeyChord.Modifiers = .control
     /// The view toggles show and hide what these state entries save, under the same titles.
     private static let state = AppState()
+    /// Play's argument: the search field's text, or a pane and an entry's name, as
+    /// `PlayQuery` reads it.
+    private static let playArgument = "a search, or album:, artist: or genre: and a name"
 
     /// The commands written here, without the ones generated from settings.
     static let fixedSet: [Command] =
@@ -127,9 +130,9 @@ public enum AppCommands {
             Command(.toggleQueue, state.queueVisible.title, [.init("u", [opt, cmd])]),
             Command(
                 .toggleSignalPath, state.signalPathVisible.title, [.init("s", [opt, cmd])]),
-            Command(.showCurrentTrack, "Show Current Track", [.init("l", cmd)]),
-            Command(.back, "Back", [.init("[", cmd)]),
-            Command(.forward, "Forward", [.init("]", cmd)]),
+            Command(.showCurrentTrack, "Show Current Track", [.init("l", cmd)], links: true),
+            Command(.back, "Back", [.init("[", cmd)], links: true),
+            Command(.forward, "Forward", [.init("]", cmd)], links: true),
             Command(.focusNextPane, "Focus Next Pane", [.init(.right)]),
             Command(.focusPreviousPane, "Focus Previous Pane", [.init(.left)]),
             Command(.focusNextArea, "Focus Next Area", [.init(.tab)]),
@@ -161,22 +164,24 @@ public enum AppCommands {
             Command(.importSwinsian, "Import from Swinsian…"),
             Command(.importITunes, "Import iTunes Library…"),
 
-            Command(.playPause, "Play/Pause", [.init(.space)]),
-            Command(.play, "Play"),
-            Command(.pause, "Pause"),
-            Command(.playSelection, "Play Selection", [.init(.return), .init(.down, cmd)]),
-            Command(.playNext, "Play Next", [.init(.return, opt)]),
-            Command(.nextTrack, "Next Track", [.init(.right, cmd)]),
-            Command(.previousTrack, "Previous Track", [.init(.left, cmd)]),
-            Command(.seekForward, "Seek Forward", [.init(.right, [opt, cmd])]),
-            Command(.seekBack, "Seek Back", [.init(.left, [opt, cmd])]),
-            Command(.volumeUp, "Volume Up", [.init(.up, [ctrl, cmd])]),
-            Command(.volumeDown, "Volume Down", [.init(.down, [ctrl, cmd])]),
-            Command(.stop, "Stop"),
-            Command(.shuffle, "Shuffle"),
-            Command(.repeatOff, "Repeat Off"),
-            Command(.repeatAll, "Repeat All"),
-            Command(.repeatOne, "Repeat One"),
+            Command(.playPause, "Play/Pause", [.init(.space)], links: true),
+            Command(.play, "Play", links: true, argument: playArgument),
+            Command(.pause, "Pause", links: true),
+            Command(
+                .playSelection, "Play Selection", [.init(.return), .init(.down, cmd)],
+                links: true),
+            Command(.playNext, "Play Next", [.init(.return, opt)], links: true),
+            Command(.nextTrack, "Next Track", [.init(.right, cmd)], links: true),
+            Command(.previousTrack, "Previous Track", [.init(.left, cmd)], links: true),
+            Command(.seekForward, "Seek Forward", [.init(.right, [opt, cmd])], links: true),
+            Command(.seekBack, "Seek Back", [.init(.left, [opt, cmd])], links: true),
+            Command(.volumeUp, "Volume Up", [.init(.up, [ctrl, cmd])], links: true),
+            Command(.volumeDown, "Volume Down", [.init(.down, [ctrl, cmd])], links: true),
+            Command(.stop, "Stop", links: true),
+            Command(.shuffle, "Shuffle", links: true),
+            Command(.repeatOff, "Repeat Off", links: true),
+            Command(.repeatAll, "Repeat All", links: true),
+            Command(.repeatOne, "Repeat One", links: true),
 
             Command(.openConfigFile, "Open Config File"),
             Command(.copyDefaultConfig, "Copy Default Config"),

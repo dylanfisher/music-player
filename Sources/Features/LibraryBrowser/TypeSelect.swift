@@ -42,7 +42,7 @@ struct TypeSelect {
         return nil
     }
 
-    private static func fold(_ text: String) -> String {
+    static func fold(_ text: String) -> String {
         text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
     }
 }

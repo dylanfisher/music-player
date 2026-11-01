@@ -170,11 +170,11 @@ enum LibraryKey {
     /// By ID, which survives a rebuilt index and a rename, since playlists live with the stats;
     /// spelled as the state file saves the playlist as a source.
     static func playlist(_ id: Int64) -> String { BrowserSource.playlist(id).text }
-    static func genre(_ name: String) -> String { "genre:\(name)" }
-    static func artist(_ name: String) -> String { "artist:\(name)" }
+    static func genre(_ name: String) -> String { BrowserModel.Pane.genre.keyPrefix + name }
+    static func artist(_ name: String) -> String { BrowserModel.Pane.artist.keyPrefix + name }
     /// The title and artist apart by a unit separator, a control character tags don't use.
     static func album(_ title: String, by artist: String?) -> String {
-        "album:\(title)\u{1F}\(artist ?? "")"
+        BrowserModel.Pane.album.keyPrefix + "\(title)\u{1F}\(artist ?? "")"
     }
 }
 

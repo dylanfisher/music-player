@@ -211,3 +211,54 @@ private func loadedModel(
     await model.showOnly(.genre, id: try #require(model.genres.first).id)
     #expect(model.filter.groupByAlbumArtist)
 }
+
+@Test func aPlayQueryIsAnEntryWhenItStartsWithAPanesPrefix() {
+    #expect(PlayQuery("album:Kind of Blue") == .entry(.album, "Kind of Blue"))
+    #expect(PlayQuery("Artist:Miles Davis") == .entry(.artist, "Miles Davis"))
+    #expect(PlayQuery("genre:") == .entry(.genre, ""))
+    #expect(PlayQuery("kind of blue") == .search("kind of blue"))
+    #expect(PlayQuery("albums: x") == .search("albums: x"))
+}
+
+@MainActor @Test func aPlayQueryShowsItsTracksInTheWholeLibraryAndPlaysThemAll() async throws {
+    let (model, index) = try await loadedModel()
+    await model.select(.genre, id: try #require(model.genres.first).id)
+    let album = try #require(
+        try index.albums().first { album in
+            try index.albums().filter { TypeSelect.fold($0.name) == TypeSelect.fold(album.name) }
+                .count == 1
+        })
+    let byAlbum = try await model.show(PlayQuery("album:" + album.name.uppercased()))
+    #expect(model.filter.album == album.id)
+    #expect(model.filter.genre == nil)
+    let albumTracks = try index.trackIDs(TrackFilter(album: album.id), sortedBy: .artist)
+    #expect(
+        byAlbum.urls
+            == (try index.paths(ids: albumTracks)).sorted { a, b in
+                albumTracks.firstIndex(of: a.key)! < albumTracks.firstIndex(of: b.key)!
+            }.map { URL(fileURLWithPath: $0.value) })
+    #expect(byAlbum.first == 0)
+
+    let word = try #require(album.name.split(separator: " ").first.map(String.init))
+    let bySearch = try await model.show(.search(word))
+    #expect(model.filter.search == word)
+    #expect(model.filter.album == nil)
+    #expect(
+        bySearch.urls.count
+            == (try index.trackIDs(TrackFilter(search: word), sortedBy: .artist)).count)
+}
+
+@MainActor @Test func aPlayQueryThatNamesNothingIsRefusedAndSaysSo() async throws {
+    let (model, _) = try await loadedModel()
+    await #expect(throws: PlayQueryError.noEntry(.album, "No Such Album")) {
+        try await model.show(PlayQuery("album:No Such Album"))
+    }
+    await #expect(throws: PlayQueryError.nothingMatches(.search("zzqqxx"))) {
+        try await model.show(.search("zzqqxx"))
+    }
+    #expect(
+        PlayQueryError.several(.album, "Hits", artists: ["A", nil, "C", "D", "E", "F", "G"])
+            .description
+            == "7 albums are named Hits, by A, no artist, C, D, E and 2 more; play a search of the"
+            + " name and the artist instead")
+}

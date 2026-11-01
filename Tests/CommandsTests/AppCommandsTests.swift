@@ -14,3 +14,15 @@ import Testing
     }
     #expect(items.map(\.title) == [AppCommands.title(of: .selectAll)])
 }
+
+/// Any web page can open a link, so this list is the whole of what one can do (ADR 0036).
+@Test func onlyPlaybackAndNavigationRunFromLinks() {
+    let linked = Set(AppCommands.all().filter(\.runsFromLinks).map(\.id))
+    #expect(
+        linked == [
+            .playPause, .play, .pause, .playSelection, .playNext, .nextTrack, .previousTrack,
+            .seekForward, .seekBack, .volumeUp, .volumeDown, .stop, .shuffle, .repeatOff,
+            .repeatAll, .repeatOne, .back, .forward, .showCurrentTrack,
+        ])
+    #expect(AppCommands.all().filter { $0.argument != nil }.map(\.id) == [.play])
+}

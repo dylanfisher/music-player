@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Checks a release app's signature (ADR 0025): it verifies, the hardened runtime is on, and it
-# claims no entitlement but those listed below, so never get-task-allow, which debug bundles
-# carry so lldb can attach. scripts/bundle runs it on every release bundle, and
+# Checks a release app's signature (ADR 0025): it verifies, and each executable in
+# Contents/MacOS, the app and the music-player tool, has the hardened runtime and claims no
+# entitlement but those listed below, so never get-task-allow, which debug bundles carry so
+# lldb can attach. scripts/bundle runs it on every release bundle, and
 # scripts/check-signature-test checks that it fails when it should.
 #   scripts/check-signature <MusicPlayer.app> [--launch]
 # --launch also runs the app with --home in a temp folder and --snapshot, and fails unless the
@@ -29,34 +30,44 @@ if [ ! -d "$app/Contents/MacOS" ]; then echo "error: $app isn't an app bundle" >
 
 codesign --verify --strict "$app"
 
-details=$(codesign -dv "$app" 2>&1)
-flags=$(printf '%s\n' "$details" | sed -n 's/^CodeDirectory .* flags=\([^ ]*\) .*/\1/p')
-case "$flags" in
-  *runtime*) ;;
-  *) echo "error: $app isn't signed with the hardened runtime (flags: ${flags:-none})" >&2; exit 1 ;;
-esac
+# check_code <path>: the hardened runtime is on, and no entitlement outside the list.
+check_code() {
+  local code="$1" details flags plist claimed unexpected key ok allowed
+  details=$(codesign -dv "$code" 2>&1)
+  flags=$(printf '%s\n' "$details" | sed -n 's/^CodeDirectory .* flags=\([^ ]*\) .*/\1/p')
+  case "$flags" in
+    *runtime*) ;;
+    *) echo "error: $code isn't signed with the hardened runtime (flags: ${flags:-none})" >&2; exit 1 ;;
+  esac
 
-# The top-level keys of the entitlements plist, if it has any.
-plist=$(mktemp "${TMPDIR:-/tmp}/entitlements.XXXXXX")
-codesign -d --entitlements :- "$app" >"$plist" 2>/dev/null
-claimed=""
-if [ -s "$plist" ]; then
-  claimed=$(plutil -p "$plist" | sed -n 's/^  "\([^"]*\)" =>.*/\1/p')
-fi
-rm -f "$plist"
-unexpected=""
-for key in $claimed; do
-  ok=false
-  for allowed in ${allowed_entitlements[@]+"${allowed_entitlements[@]}"}; do
-    [ "$key" = "$allowed" ] && ok=true
+  # The top-level keys of the entitlements plist, if it has any.
+  plist=$(mktemp "${TMPDIR:-/tmp}/entitlements.XXXXXX")
+  codesign -d --entitlements :- "$code" >"$plist" 2>/dev/null
+  claimed=""
+  if [ -s "$plist" ]; then
+    claimed=$(plutil -p "$plist" | sed -n 's/^  "\([^"]*\)" =>.*/\1/p')
+  fi
+  rm -f "$plist"
+  unexpected=""
+  for key in $claimed; do
+    ok=false
+    for allowed in ${allowed_entitlements[@]+"${allowed_entitlements[@]}"}; do
+      [ "$key" = "$allowed" ] && ok=true
+    done
+    $ok || unexpected="$unexpected $key"
   done
-  $ok || unexpected="$unexpected $key"
+  if [ -n "$unexpected" ]; then
+    echo "error: $code claims entitlements scripts/check-signature doesn't list:$unexpected" >&2
+    exit 1
+  fi
+  echo "signature: $(basename "$code") verified, flags $flags, entitlements: ${claimed:-none}"
+}
+
+# The main executable reports the app's own signature; any other is checked on its own.
+for code in "$app"/Contents/MacOS/*; do
+  codesign --verify --strict "$code"
+  check_code "$code"
 done
-if [ -n "$unexpected" ]; then
-  echo "error: $app claims entitlements scripts/check-signature doesn't list:$unexpected" >&2
-  exit 1
-fi
-echo "signature: verified, flags $flags, entitlements: ${claimed:-none}"
 
 if $launch; then
   home=$(mktemp -d "${TMPDIR:-/tmp}/check-signature.XXXXXX")
