@@ -72,15 +72,24 @@ public struct TagWriter: Sendable {
         do throws(TagWriteError) {
             let (entry, files, discarded) = try journal.latest()
             report.failures += discarded
-            guard entry != nil else {
+            guard let entry else {
                 report.nothingToUndo = true
                 return report
             }
+            var older: [String: (TagUndoJournal.Handle, TagUndoJournal.FileRecord)]?
             for (handle, record) in files.reversed() {
                 do throws(TagWriteError) {
-                    try restore(record, oldBytes: try journal.oldBytes(handle))
+                    let restored = try restore(record, oldBytes: try journal.oldBytes(handle))
                     report.changed.append(record.path)
                     try journal.remove(handle)
+                    // The restored file is a new one with the bytes an older edit of it left,
+                    // which that edit's record must now name to be undone next.
+                    if older == nil { older = try journal.olderRecords(before: entry) }
+                    if let (olderHandle, found) = older?[record.path], record.follows(found) {
+                        var olderRecord = found
+                        olderRecord.setEdited(restored)
+                        try journal.update(olderRecord, at: olderHandle)
+                    }
                 } catch {
                     logger.error("\(error.description)")
                     report.failures.append(error)
@@ -150,7 +159,7 @@ public struct TagWriter: Sendable {
                 temp.path, original: file, path: path, hashes: hashes, tags: target,
                 audio: current.metadata.audio, art: art, oldArt: oldArt)
             record = TagUndoJournal.FileRecord(
-                path: path, edited: try FileIdentity(path: temp.path),
+                path: path, edited: try FileIdentity(path: temp.path), original: before,
                 originalSHA256: Data(hashes.full), restore: restore)
             handle = try journal.append(record, oldBytes: oldBytes, to: entry)
             try finish(path, temp: temp, before: before)
@@ -172,9 +181,7 @@ public struct TagWriter: Sendable {
         // the inode on the rename.
         do throws(TagWriteError) {
             let final = try FileIdentity(path: path)
-            if final.inode != record.editedInode || final.size != record.editedSize
-                || final.modifiedNanoseconds != record.editedModifiedNanoseconds
-            {
+            if !record.isEdited(final) {
                 record.setEdited(final)
                 try journal.update(record, at: handle!)
             }
@@ -188,16 +195,13 @@ public struct TagWriter: Sendable {
         }
     }
 
-    /// Puts back the original of one journaled file.
+    /// Puts back the original of one journaled file, and returns the restored file's identity.
     private func restore(_ record: TagUndoJournal.FileRecord, oldBytes: [UInt8])
-        throws(TagWriteError)
+        throws(TagWriteError) -> FileIdentity
     {
         let path = record.path
         let before = try FileIdentity(path: path)
-        guard before.size == record.editedSize,
-            before.modifiedNanoseconds == record.editedModifiedNanoseconds,
-            before.inode == record.editedInode
-        else {
+        guard record.isEdited(before) else {
             throw TagWriteError(
                 path: path, kind: .changedSinceEdit,
                 detail: "the file changed after the tag edit, so the edit isn't undone")
@@ -226,6 +230,7 @@ public struct TagWriter: Sendable {
             throw error
         }
         logger.notice("undid the tag edit of \(path)")
+        return try FileIdentity(path: path)
     }
 
     /// The last steps: the injected faults, the checks that nothing else wrote the file or

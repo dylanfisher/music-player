@@ -85,7 +85,10 @@ every key the reader maps onto it (`TDRC` and `TYER`; `©gen` and `gnre`; `COMME
   `F_FULLFSYNC` per record) before the music file is renamed; after the rename the record takes
   the size, mtime and inode the volume reports, in case it rounded or renumbered them. Undo
   refuses a file whose size, mtime or inode no longer match, rebuilds the original through the
-  same temp-file write and must match the hash byte for byte. The last 50 edits are kept, and
+  same temp-file write and must match the hash byte for byte. A record also keeps the file's
+  size, mtime and inode from before its edit. When undo puts a file back and the file's record
+  in an older edit names that identity as what it left, that record takes the restored file's,
+  so a file's edits undo one after another; a file changed in between still refuses. The last 50 edits are kept, and
   fewer when they pass 512 MB, though never fewer than the newest. A record with any key or
   value its type doesn't have, or whose bytes file doesn't match it, is deleted and reported.
   A full disk, or a journal that can't be written, stops a batch after that file and reports

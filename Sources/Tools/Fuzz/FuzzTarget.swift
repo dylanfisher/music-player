@@ -201,6 +201,8 @@ private let journal = FuzzTarget(
         _ = try undo.append(
             .init(
                 path: "/nonexistent", editedSize: 0, editedModifiedNanoseconds: 0, editedInode: 0,
+                originalSize: 0,
+                originalModifiedNanoseconds: 0, originalInode: 0,
                 originalSHA256: Data(), restore: []),
             oldBytes: [], to: entry)
         guard let record = try journalRecords(in: data).first else {

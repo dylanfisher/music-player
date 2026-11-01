@@ -21,6 +21,8 @@ let tagWriterBenchmarks = [
                 let record = TagUndoJournal.FileRecord(
                     path: "/Music/Album/\(index).m4a", editedSize: 50_000_000,
                     editedModifiedNanoseconds: index, editedInode: UInt64(index),
+                    originalSize: 50_000_000, originalModifiedNanoseconds: index,
+                    originalInode: UInt64(index),
                     originalSHA256: Data(count: 32),
                     restore: [
                         .old(length: art.count),

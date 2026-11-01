@@ -51,18 +51,27 @@ public struct TagUndoJournal: Sendable {
         var editedSize: Int
         var editedModifiedNanoseconds: Int
         var editedInode: UInt64
+        /// The file as it was before the edit. When it's what an older edit of the file left,
+        /// undoing this edit hands that edit the restored file, so it can be undone next.
+        var originalSize: Int
+        var originalModifiedNanoseconds: Int
+        var originalInode: UInt64
         /// The original's SHA-256, which the restored file must match.
         var originalSHA256: Data
         var restore: [RestoreSegment]
 
         package init(
             path: String, editedSize: Int, editedModifiedNanoseconds: Int, editedInode: UInt64,
+            originalSize: Int, originalModifiedNanoseconds: Int, originalInode: UInt64,
             originalSHA256: Data, restore: [RestoreSegment]
         ) {
             self.path = path
             self.editedSize = editedSize
             self.editedModifiedNanoseconds = editedModifiedNanoseconds
             self.editedInode = editedInode
+            self.originalSize = originalSize
+            self.originalModifiedNanoseconds = originalModifiedNanoseconds
+            self.originalInode = originalInode
             self.originalSHA256 = originalSHA256
             self.restore = restore
         }
@@ -166,6 +175,26 @@ public struct TagUndoJournal: Sendable {
         return (nil, [], discarded)
     }
 
+    /// The newest record of each path among the edits older than `entry`. A record that doesn't
+    /// read is left out; `latest` reports and deletes it when undo reaches its edit.
+    func olderRecords(before entry: Entry) throws(TagWriteError) -> [String: (Handle, FileRecord)] {
+        var records: [String: (Handle, FileRecord)] = [:]
+        for sequence in try sequences(in: directory).reversed() where sequence < entry.sequence {
+            let older = Entry(
+                sequence: sequence, folder: directory.appendingPathComponent(name(sequence)))
+            for number in try sequences(in: older.folder).reversed() {
+                let handle = Handle(entry: older, number: number)
+                guard
+                    let record = try? decodeExactly(
+                        FileRecord.self, from: Data(contentsOf: handle.record)),
+                    records[record.path] == nil
+                else { continue }
+                records[record.path] = (handle, record)
+            }
+        }
+        return records
+    }
+
     /// The old bytes of one file, as `RestoreSegment.old` consumes them.
     func oldBytes(_ handle: Handle) throws(TagWriteError) -> [UInt8] {
         do {
@@ -241,13 +270,14 @@ public struct TagUndoJournal: Sendable {
 
 extension TagUndoJournal.FileRecord {
     init(
-        path: String, edited: FileIdentity, originalSHA256: Data,
+        path: String, edited: FileIdentity, original: FileIdentity, originalSHA256: Data,
         restore: [TagUndoJournal.RestoreSegment]
     ) {
         self.init(
             path: path, editedSize: edited.size,
-            editedModifiedNanoseconds: edited.modifiedNanoseconds,
-            editedInode: edited.inode, originalSHA256: originalSHA256, restore: restore)
+            editedModifiedNanoseconds: edited.modifiedNanoseconds, editedInode: edited.inode,
+            originalSize: original.size, originalModifiedNanoseconds: original.modifiedNanoseconds,
+            originalInode: original.inode, originalSHA256: originalSHA256, restore: restore)
     }
 
     /// Records `identity` as the edited file's.
@@ -255,6 +285,19 @@ extension TagUndoJournal.FileRecord {
         editedSize = identity.size
         editedModifiedNanoseconds = identity.modifiedNanoseconds
         editedInode = identity.inode
+    }
+
+    /// Whether `identity` is the file as this edit left it.
+    func isEdited(_ identity: FileIdentity) -> Bool {
+        identity.size == editedSize && identity.modifiedNanoseconds == editedModifiedNanoseconds
+            && identity.inode == editedInode
+    }
+
+    /// Whether the file this edit started from is the one `older` left.
+    func follows(_ older: Self) -> Bool {
+        originalSize == older.editedSize
+            && originalModifiedNanoseconds == older.editedModifiedNanoseconds
+            && originalInode == older.editedInode
     }
 
     var oldByteCount: Int {

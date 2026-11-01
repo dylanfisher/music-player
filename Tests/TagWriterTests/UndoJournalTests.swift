@@ -94,6 +94,33 @@ private func newestEntry(_ journal: TagUndoJournal) throws -> URL {
     #expect(writer.undoLast().failures.map(\.kind) == [.changedSinceEdit])
 }
 
+@Test func editsOfOneFileUndoOneAfterAnother() throws {
+    let url = try Sample.flac.copy()
+    let original = try Data(contentsOf: url)
+    let writer = scratchWriter()
+    expectChanged(writer.write(TagEdit(values: [.title: "One"]), to: [url.path]), [url])
+    let afterOne = try Data(contentsOf: url)
+    expectChanged(writer.write(TagEdit(values: [.title: "Two"]), to: [url.path]), [url])
+    expectChanged(writer.undoLast(), [url])
+    #expect(try Data(contentsOf: url) == afterOne)
+    expectChanged(writer.undoLast(), [url])
+    #expect(try Data(contentsOf: url) == original)
+    #expect(writer.undoLast().nothingToUndo)
+}
+
+@Test func anOlderEditOfAFileChangedInBetweenStillRefusesToUndo() throws {
+    let url = try Sample.flac.copy()
+    let writer = scratchWriter()
+    expectChanged(writer.write(TagEdit(values: [.title: "One"]), to: [url.path]), [url])
+    // Another app saves over the file between the two edits.
+    let copy = url.path + ".copy"
+    #expect(clonefile(url.path, copy, 0) == 0)
+    #expect(rename(copy, url.path) == 0)
+    expectChanged(writer.write(TagEdit(values: [.title: "Two"]), to: [url.path]), [url])
+    expectChanged(writer.undoLast(), [url])
+    #expect(writer.undoLast().failures.map(\.kind) == [.changedSinceEdit])
+}
+
 @Test func editValuesAreChecked() throws {
     var tags = TrackTags()
     tags.title = "Old"
