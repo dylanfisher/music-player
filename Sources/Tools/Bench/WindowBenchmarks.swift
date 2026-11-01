@@ -109,13 +109,14 @@ private let windowRunTimeoutSeconds = 300.0
 private let windowRuns = Result { () throws -> [WindowReport] in
     let app = try appExecutable()
     return try (0..<windowRunCount).map { _ in
-        try withIndexedHome { home in try measureWindow(app, home: home) }
+        try withIndexedHome(showingArt: true) { home in try measureWindow(app, home: home) }
     }
 }
 
 /// Runs `body` with a fresh home folder whose settings watch the fixture library and which holds
-/// a copy of its index, then deletes the folder.
-private func withIndexedHome<T>(_ body: (URL) throws -> T) throws -> T {
+/// a copy of its index, then deletes the folder. `showingArt` adds the Album Art column to the
+/// default track table, so scrolling loads a thumbnail for every row with art.
+private func withIndexedHome<T>(showingArt: Bool = false, _ body: (URL) throws -> T) throws -> T {
     let library = try scannedLibrary.get()
     return try withScratchDirectory("window") { directory in
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -129,6 +130,13 @@ private func withIndexedHome<T>(_ body: (URL) throws -> T) throws -> T {
         }
         try FileManager.default.copyItem(
             at: library.databaseURL, to: libraryFileURL(in: paths.dataDirectory))
+        if showingArt {
+            let state = try StateStore(AppState(), fileURL: paths.stateFile)
+            var layout = AppState().trackTable.defaultValue
+            layout.columns.insert(
+                ColumnLayout(column: .art, width: TrackColumn.art.defaultWidth), at: 0)
+            try state.set(\.trackTable, to: layout)
+        }
         return try body(directory)
     }
 }
