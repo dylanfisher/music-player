@@ -689,17 +689,17 @@ checkpoint: the MediaPlayer adapters' off-main path.
 
 This replaces the read-only boundary in AGENTS.md. Do it first in the phase, with an ADR.
 
-- [ ] **New boundary:** music files are written only through the tag-writer module, only for a
+- [x] **New boundary:** music files are written only through the tag-writer module, only for a
       tag edit the user confirmed, and never by tests against real libraries.
-- [ ] **Writers** for FLAC/Vorbis, MP4, ID3v2.3/2.4 (MP3, and the AIFF and WAV `ID3 ` chunk),
+- [x] **Writers** for FLAC/Vorbis, MP4, ID3v2.3/2.4 (MP3, and the AIFF and WAV `ID3 ` chunk),
       reusing the phase 2 parsers.
-- [ ] **Safety:** write to a temp file next to the original, then re-read it and check that the
+- [x] **Safety:** write to a temp file next to the original, then re-read it and check that the
       audio payload is byte-identical (hash before and after) and that the tags read back as
       written. Replace atomically. Keep an undo journal of the old tag blocks for the last N
       edits. Any check failing leaves the original untouched.
-- [ ] **UI:** an editor for one track or a batch, with mixed-value display for multiple
+- [x] **UI:** an editor for one track or a batch, with mixed-value display for multiple
       selection, and art replace and remove.
-- [ ] **Corpus round trips:** every file in the test corpus below survives every edit and its undo.
+- [x] **Corpus round trips:** every file in the test corpus below survives every edit and its undo.
 - [ ] **Hardware checkpoint (owner):** open the edited corpus clones in Swinsian and Finder, then
       edit tags on copies of a few NAS files, then on real ones. Confirm both apps read the
       results. Do this once the owner has pushed the phase. Each snippet is for Terminal (zsh)
@@ -881,6 +881,18 @@ Implementation plan:
    refusals; untouched blocks; attributes; every failure injection; the journal and undo),
    TagCorpusTests (the write guard), TagEditorTests (the model and `TagEditing`'s sessions,
    busy state and confirmation), LibraryTests (edited-folder rescans), MusicPlayerTests (flags).
+
+Result: shipped up to the owner's checkpoint, which is pending. Corpus round trip on fresh clones:
+159 files, 1,557 edits, 0 failures; the reference folder's 160 hashes matched before and after
+every run. Every failure injection (read-only file, full disk on a disk image mounted inside the
+cache folder, a crash before the rename, a file changed between read and write) left the original
+byte-identical. Bench on Apple Silicon: the undo journal for a 1000-file batch with 1 MB art
+13.5 s (budget 20 s). The review made the journal append-only per file, capped by bytes and
+flushed before each replace (it had been re-saved whole after every file), wrote ID3v2.3 dates as
+TYER/TDAT/TIME instead of TDRC, warned before an edit drops a field's other values, compared the
+inode on undo, refused hard links and dangling links, and threw instead of crashing on frames over
+256 MB. Known limits: ID3v2.2, unsynchronised tags and fragmented MP4 are refused; undo is a menu
+command, not ⌘Z; the SMB fallbacks are untested until the checkpoint.
 
 ### 12. DSD over DoP
 
