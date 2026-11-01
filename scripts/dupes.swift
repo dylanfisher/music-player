@@ -44,8 +44,8 @@ func fail(_ message: String) -> Never {
 struct Literal {
     var text: String
     var line: Int
-    // The innermost call the literal is an argument of, such as `fatalError`.
-    var call: String?
+    // A message for a programmer error at one place, never shown and never compared.
+    var isDiagnostic: Bool
 }
 
 struct LexedFile {
@@ -76,6 +76,11 @@ let newline = UInt8(ascii: "\n")
 let openParen = UInt8(ascii: "(")
 let closeParen = UInt8(ascii: ")")
 let apostrophe = UInt8(ascii: "'")
+let comma = UInt8(ascii: ",")
+let opening: Set<UInt8> = [openParen, UInt8(ascii: "["), UInt8(ascii: "{")]
+let closing: Set<UInt8> = [closeParen, UInt8(ascii: "]"), UInt8(ascii: "}")]
+let messageOnly: Set<String> = ["fatalError", "preconditionFailure", "assertionFailure"]
+let conditionThenMessage: Set<String> = ["precondition", "assert"]
 
 func isIdentifierByte(_ byte: UInt8) -> Bool {
     (byte >= 97 && byte <= 122) || (byte >= 65 && byte <= 90) || (byte >= 48 && byte <= 57)
@@ -88,8 +93,9 @@ final class Lexer {
     var position = 0
     var line = 0
     var file = LexedFile()
-    // The word before each open parenthesis, innermost last, and the last token if it was a word.
-    var calls: [String?] = []
+    // Each open bracket, innermost last: the word before a parenthesis, and the top-level commas
+    // seen inside it so far. The last token if it was a word.
+    var calls: [(word: String?, commas: Int)] = []
     var lastWord: String?
 
     init(bytes: [UInt8], isC: Bool) {
@@ -125,7 +131,14 @@ final class Lexer {
                 blockComment()
             } else if isC && byte == hash && file.lines[line].isEmpty {
                 // A preprocessor line: its include names aren't facts, and its macros aren't code.
-                while let next = peek(), next != newline { position += 1 }
+                // A backslash at a line's end continues it.
+                while let next = peek(), next != newline {
+                    if next == backslash && peek(1) == newline {
+                        advanceLine()
+                        position += 1
+                    }
+                    position += 1
+                }
             } else if isC && byte == apostrophe {
                 skipCharacterLiteral()
                 emit("S")
@@ -144,18 +157,17 @@ final class Lexer {
             } else if byte == 32 || byte == 9 || byte == 13 {
                 position += 1
             } else {
-                if byte == openParen {
-                    depth += 1
-                    calls.append(lastWord)
-                }
+                if byte == openParen { depth += 1 }
                 if byte == closeParen {
                     if depth == 0 && inInterpolation {
                         position += 1
                         return
                     }
                     depth -= 1
-                    _ = calls.popLast()
                 }
+                if opening.contains(byte) { calls.append((byte == openParen ? lastWord : nil, 0)) }
+                if closing.contains(byte) { _ = calls.popLast() }
+                if byte == comma, !calls.isEmpty { calls[calls.count - 1].commas += 1 }
                 emit(String(UnicodeScalar(byte)))
                 position += 1
             }
@@ -201,7 +213,7 @@ final class Lexer {
         let hashes = isC ? 0 : rawStringHashes()!
         position += hashes
         let startLine = line + 1
-        let call = calls.last ?? nil
+        let isDiagnostic = diagnosticMessage()
         let multiline = peek(0) == quote && peek(1) == quote && peek(2) == quote
         let delimiter = multiline ? 3 : 1
         position += delimiter
@@ -219,6 +231,8 @@ final class Lexer {
                     continue
                 }
                 text.append(contentsOf: bytes[position..<min(position + 2 + hashes, bytes.count)])
+                // A backslash at a line's end joins the next line to this one.
+                if peek(1 + hashes) == newline { advanceLine() }
                 position += 2 + hashes
                 continue
             }
@@ -229,8 +243,31 @@ final class Lexer {
             text.append(byte)
             position += 1
         }
-        file.literals.append(
-            Literal(text: String(decoding: text, as: UTF8.self), line: startLine, call: call))
+        var literal = String(decoding: text, as: UTF8.self)
+        if multiline { literal = withoutIndentation(literal) }
+        file.literals.append(Literal(text: literal, line: startLine, isDiagnostic: isDiagnostic))
+    }
+
+    // Whether a string starting here is the message of `fatalError` or `preconditionFailure`, or
+    // the message argument of `precondition` or `assert`, the one after the condition, labelled
+    // or not. A literal in the condition, or in `file:`, still counts.
+    func diagnosticMessage() -> Bool {
+        guard let call = calls.last, let word = call.word else { return false }
+        if messageOnly.contains(word) { return true }
+        return conditionThenMessage.contains(word) && call.commas == 1
+    }
+
+    // A multi-line string's text as Swift reads it: from the line after the opening delimiter to
+    // the line before the closing one, with the closing delimiter's indentation taken off each.
+    func withoutIndentation(_ text: String) -> String {
+        var lines = text.components(separatedBy: "\n")
+        guard lines.count >= 2 else { return text }
+        let indentation = lines.removeLast()
+        lines.removeFirst()
+        return lines.map {
+            $0.hasPrefix(indentation) ? String($0.dropFirst(indentation.count)) : $0
+        }
+        .joined(separator: "\n")
     }
 
     func closes(delimiter: Int, hashes: Int) -> Bool {
@@ -267,51 +304,71 @@ for path in paths {
 
 // MARK: - Allowlist
 
-// One entry per line, `<kind> <key> | <reason>`; `#` starts a comment line. The kinds:
-//   literal "<text as written>"  -- that literal may appear in several files
-//   block <file> <file>…         -- a repeated block whose copies are in exactly these files
-//   oracle <directory>           -- a Tools module that re-types format facts on purpose, as a
-//                                   test does, so its literals aren't compared with anything
+// One entry per line, `<kind> <key> | <scope> | <reason>`; `#` starts a comment line. The kinds:
+//   literal "<as written>" | files <file>…    -- that literal in exactly these files
+//   block <fingerprint> x<copies> | files <file>…   -- that block, that many times, in exactly
+//                                                     these files
+//   oracle <directory> | checks <directory>…  -- a Tools module that re-types the checked
+//                                                modules' format facts on purpose, as a test
+//                                                does, so a literal it shares with them is hidden
+// Each finding prints its key, everything before the reason.
 let allowFile = "scripts/dupes-allow.txt"
 guard let allowData = FileManager.default.contents(atPath: root + "/" + allowFile) else {
     fail("can't read \(allowFile)")
 }
 var problems: [String] = []
 var allowed: [String: Int] = [:]  // key -> line number
-var oracles: [String: Int] = [:]  // directory with a trailing slash -> line number
+var oracles: [String: (checks: [String], line: Int)] = [:]  // directories end in a slash
 for (offset, raw) in String(decoding: allowData, as: UTF8.self).components(separatedBy: "\n")
     .enumerated()
 {
     let line = raw.trimmingCharacters(in: .whitespaces)
     if line.isEmpty || line.hasPrefix("#") { continue }
     let number = offset + 1
-    // The separator is the last ` | `, so a literal may hold one.
-    guard let bar = line.range(of: " | ", options: .backwards),
+    let at = "\(allowFile):\(number):"
+    // The reason follows the last ` | `, the scope the one before, so a literal may hold one.
+    guard !line.hasSuffix("|"), let bar = line.range(of: " | ", options: .backwards),
         !line[bar.upperBound...].trimmingCharacters(in: .whitespaces).isEmpty
     else {
-        problems.append("\(allowFile):\(number): entry has no ` | <reason>`")
+        problems.append("\(at) entry has no ` | <reason>`")
         continue
     }
     let key = String(line[..<bar.lowerBound]).trimmingCharacters(in: .whitespaces)
-    if key.hasPrefix("oracle ") {
-        oracles[String(key.dropFirst("oracle ".count)) + "/"] = number
-    } else if key.hasPrefix("literal \"") && key.hasSuffix("\"") || key.hasPrefix("block ") {
-        if let first = allowed[key] {
-            problems.append("\(allowFile):\(number): repeats line \(first)")
-        }
+    guard let scopeBar = key.range(of: " | ", options: .backwards) else {
+        problems.append("\(at) entry has no ` | files …` or ` | checks …`")
+        continue
+    }
+    let head = String(key[..<scopeBar.lowerBound])
+    let scope = key[scopeBar.upperBound...].split(separator: " ").map(String.init)
+    if head.hasPrefix("oracle "), head.split(separator: " ").count == 2, scope.first == "checks",
+        scope.count > 1
+    {
+        let directory = String(head.dropFirst("oracle ".count)) + "/"
+        if let first = oracles[directory] { problems.append("\(at) repeats line \(first.line)") }
+        oracles[directory] = (scope.dropFirst().map { $0 + "/" }, number)
+    } else if head.hasPrefix("literal \"") && head.hasSuffix("\"") && head.count > 9
+        || head.range(of: #"^block [0-9a-f]{8} x[0-9]+$"#, options: .regularExpression) != nil,
+        scope.first == "files", scope.count > 1
+    {
+        if let first = allowed[key] { problems.append("\(at) repeats line \(first)") }
         allowed[key] = number
     } else {
         problems.append(
-            "\(allowFile):\(number): expected `literal \"…\"`, `block <files>` or `oracle <dir>`")
+            "\(at) expected `literal \"…\" | files …`, `block <fingerprint> x<copies> | files …`"
+                + " or `oracle <dir> | checks <dir>…`")
     }
 }
 
-func oracle(_ path: String) -> String? { oracles.keys.first { path.hasPrefix($0) } }
+// The oracle `path` is in, and the directories it checks.
+func oracle(_ path: String) -> (directory: String, checks: [String])? {
+    guard let entry = oracles.first(where: { path.hasPrefix($0.key) }) else { return nil }
+    return (entry.key, entry.value.checks)
+}
 
 // MARK: - Findings
 
 struct Finding {
-    // What an allowlist entry names: `literal "<text>"` or `block <file> <file>…`.
+    // What an allowlist entry names, before its reason.
     var key: String
     var report: String
     var fails: Bool
@@ -337,11 +394,6 @@ func ownCharacters(_ text: String) -> Int {
     return own.trimmingCharacters(in: .whitespacesAndNewlines).count
 }
 
-// A message for a programmer error at one place: never shown in the UI, never compared.
-let diagnostics: Set<String> = [
-    "fatalError", "precondition", "preconditionFailure", "assert", "assertionFailure",
-]
-
 // The literal as written, on one line.
 func spelling(_ text: String) -> String {
     "\"" + text.replacingOccurrences(of: "\n", with: "\\n") + "\""
@@ -351,23 +403,40 @@ var literalSites: [String: [(file: Int, line: Int)]] = [:]
 for (index, file) in lexed.enumerated() {
     for literal in file.literals
     where ownCharacters(literal.text) >= minimumLiteralCharacters
-        && !diagnostics.contains(literal.call ?? "")
+        && !literal.isDiagnostic
     {
         literalSites[literal.text, default: []].append((index, literal.line))
     }
 }
 for (text, allSites) in literalSites {
     guard Set(allSites.map(\.file)).count > 1 else { continue }
-    let sites = allSites.filter { oracle(paths[$0.file]) == nil }
-    for site in allSites { if let dir = oracle(paths[site.file]) { usedOracles.insert(dir) } }
+    // An oracle's copy is hidden only when a module it checks spells the literal too.
+    var hiders: Set<String> = []
+    let sites = allSites.filter { site in
+        guard let oracle = oracle(paths[site.file]),
+            allSites.contains(where: { other in
+                oracle.checks.contains { paths[other.file].hasPrefix($0) }
+            })
+        else { return true }
+        hiders.insert(oracle.directory)
+        return false
+    }
     let files = Set(sites.map(\.file))
-    guard files.count > 1 else { continue }
+    guard files.count > 1 else {
+        usedOracles.formUnion(hiders)
+        continue
+    }
     let shown = text.count > 120 ? String(text.prefix(117)) + "..." : text
     let lines = sites.map { "  \(paths[$0.file]):\($0.line)" }.joined(separator: "\n")
+    let key =
+        "literal \(spelling(text)) | files "
+        + Set(sites.map { paths[$0.file] }).sorted()
+        .joined(separator: " ")
     findings.append(
         Finding(
-            key: "literal \(spelling(text))",
-            report: "literal \(spelling(shown)) in \(files.count) files:\n\(lines)", fails: true))
+            key: key,
+            report: "literal \(spelling(shown)) in \(files.count) files:\n\(lines)\n  key: \(key)",
+            fails: true))
 }
 
 // Code blocks: windows of significant lines, keyed by their normalized tokens.
@@ -401,6 +470,13 @@ for (file, lines) in significant.enumerated() where lines.count >= blockLines {
         windowSites[slice.map(\.text).joined(separator: "\n"), default: []].append(
             Site(file: file, index: index))
     }
+}
+
+// FNV-1a of a block's first window, as 8 hex digits: the same on every run, unlike `Hasher`.
+func fingerprint(_ text: String) -> String {
+    var hash: UInt32 = 2_166_136_261
+    for byte in text.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
+    return String(format: "%08x", hash)
 }
 
 // Copies of one block in the same file can't overlap; keep the first of each run.
@@ -442,11 +518,14 @@ for rawSites in windowSites.values {
     let files = Set(spans.map { paths[$0.file] }).sorted()
     let locations = spans.map { "  \(paths[$0.file]):\($0.start)-\($0.end)" }
         .joined(separator: "\n")
+    let key =
+        "block \(fingerprint(window(sites[0])!)) x\(sites.count) | files "
+        + files.joined(separator: " ")
     findings.append(
         Finding(
-            key: "block " + files.joined(separator: " "),
+            key: key,
             report: "\(fails ? "" : "advisory: ")block of \(length) lines, \(sites.count) copies:\n"
-                + locations, fails: fails))
+                + locations + "\n  key: \(key)", fails: fails))
 }
 
 // MARK: - Report
@@ -463,8 +542,9 @@ for finding in findings {
 for (key, number) in allowed where !used.contains(key) {
     problems.append("\(allowFile):\(number): matches nothing, delete it: \(key)")
 }
-for (directory, number) in oracles where !usedOracles.contains(directory) {
-    problems.append("\(allowFile):\(number): matches nothing, delete it: oracle \(directory)")
+for (directory, entry) in oracles where !usedOracles.contains(directory) {
+    problems.append(
+        "\(allowFile):\(entry.line): hides nothing that needs it, delete it: oracle \(directory)")
 }
 
 reported.sort { ($0.fails ? 0 : 1, $0.report) < ($1.fails ? 0 : 1, $1.report) }

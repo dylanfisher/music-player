@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Runs scripts/dupes.swift on two fixture trees under .build/dupes-test and checks what it
-# reports: one tree it must pass, and one with a planted duplicate of each kind, which it must
-# fail at the exact file:line of each.
+# reports: one tree it must pass, and one with a planted duplicate of each kind and each kind of
+# bad allowlist entry, which it must fail at the exact file:line of each.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
 base=.build/dupes-test
 rm -rf "$base"
 problems=0
+output=""
 
 # write <path> — the file's text comes from standard input.
 write() {
@@ -19,7 +20,7 @@ write() {
 # that each <line> is a whole line of its output.
 expect() {
   local tree="$1" status="$2"; shift 2
-  local output actual
+  local actual
   output=$(swift scripts/dupes.swift --root "$tree" 2>&1)
   actual=$?
   if [ "$actual" != "$status" ]; then
@@ -29,6 +30,16 @@ expect() {
   for line in "$@"; do
     if ! printf '%s\n' "$output" | grep -qxF -- "$line"; then
       printf 'dupes-test: %s is missing the line\n  %s\nin:\n%s\n' "$tree" "$line" "$output" >&2
+      problems=$((problems + 1))
+    fi
+  done
+}
+
+# absent <text>... — checks no line of the last run's output contains <text>.
+absent() {
+  for text in "$@"; do
+    if printf '%s\n' "$output" | grep -qF -- "$text"; then
+      printf 'dupes-test: the output has %s, which should be skipped:\n%s\n' "$text" "$output" >&2
       problems=$((problems + 1))
     fi
   done
@@ -51,6 +62,8 @@ func $1(_ $2: [Int]) -> Int {
 }
 EOF
 }
+# The fingerprint the script gives that block, from its first 8 significant lines.
+fingerprint=e3ee8a12
 
 # A block of 21 lines, long enough that a second copy is advisory.
 long_block() {
@@ -90,6 +103,8 @@ let shared = "allowed.key"
 let format = "\(short): \(shared)\n"
 let id = "moov"
 func a() { fatalError("built in code, not from a nib") }
+func c(_ ok: Bool) { precondition(ok, "message.key") }
+func e(_ ok: Bool) { assert(ok, message: "labelled.key") }
 let raw = #"raw "lonely.key" inside \(not.code)"#
 EOF
 write "$clean/Sources/Core/B/Two.swift" <<'EOF'
@@ -99,6 +114,8 @@ let short = "abc"
 let shared = "allowed.key"
 let format = "\(short): \(shared)\n"
 func b() { fatalError("built in code, not from a nib") }
+func d(_ ok: Bool) { precondition(ok, "message.key") }
+func f(_ ok: Bool) { assert(ok, message: "labelled.key") }
 let lonely = "lonely.key"
 let multi = """
     a "quoted" line, then "lonely.multi"
@@ -110,47 +127,133 @@ EOF
 block one input total | write "$clean/Sources/Core/A/Three.swift"
 block two values sum | write "$clean/Sources/Core/B/Four.swift"
 block three items count | write "$clean/Sources/Core/C/Five.swift"
-write "$clean/scripts/dupes-allow.txt" <<'EOF'
+write "$clean/scripts/dupes-allow.txt" <<EOF
 # A comment line.
-oracle Sources/Tools/Oracle | re-types the spec on purpose
-literal "allowed.key" | reviewed
-block Sources/Core/A/Three.swift Sources/Core/B/Four.swift Sources/Core/C/Five.swift | reviewed
+oracle Sources/Tools/Oracle | checks Sources/Core/A | re-types the spec on purpose
+literal "allowed.key" | files Sources/Core/A/One.swift Sources/Core/B/Two.swift | reviewed
+block $fingerprint x3 | files Sources/Core/A/Three.swift Sources/Core/B/Four.swift Sources/Core/C/Five.swift | reviewed
 EOF
 expect "$clean" 0 "6 files, nothing outside the allowlist (3 entries, 0 advisory)"
 
-# Fails: a planted literal, a third copy of a block, a second copy of a long block (advisory),
-# a literal inside an interpolation, a stale literal, a stale oracle and an entry with no reason.
+# Fails: each kind of planted duplicate, and each kind of bad allowlist entry.
 planted="$base/planted"
 write "$planted/Sources/Core/A/One.swift" <<'EOF'
 let name = "planted.key"
+let joined = """
+    first \
+    second
+    """
+func c(_ names: [String]) { precondition(names.contains("condition.key"), "fine.key") }
+func g(_ name: String) { precondition(name != "direct.key", "fine.key", file: "file.key") }
+let sql = """
+    SELECT path
+    FROM tracks
+    """
+let quoted = "say \"hi\" now"
+let raw = ##"raw "# still" inside"##
+let reused = "allowed.key"
+let checked = "moov"
 EOF
 write "$planted/Sources/Features/B/Two.swift" <<'EOF'
 let label = "Count: \(count == 1 ? "planted.key" : "other")"
+func d(_ ok: Bool) { assert(["x", "condition.key"].contains(name), "fine.key") }
+func h(_ name: String) { assert(name != "direct.key", message: "fine.key", file: "file.key") }
+enum Query {
+    static let sql = """
+            SELECT path
+            FROM tracks
+            """
+}
+let quoted = "say \"hi\" now"
+let raw = ##"raw "# still" inside"##
+let reused = "allowed.key"
+EOF
+write "$planted/Sources/App/C/Three.swift" <<'EOF'
+let reused = "allowed.key"
+let unchecked = "unchecked.key"
+EOF
+write "$planted/Sources/Core/D/Render.c" <<'EOF'
+#include "Render.h"
+#define LONG_MACRO(x) \
+    "macro.key"
+static const char quote = '"';
+static const char *name = "c.key";
+EOF
+write "$planted/Sources/Core/D/Other.c" <<'EOF'
+#include "Render.h"
+static const char *name = "c.key";
+#define OTHER_MACRO "macro.key"
+EOF
+write "$planted/Sources/Tools/Oracle/Spec.swift" <<'EOF'
+let unchecked = "unchecked.key"
+EOF
+write "$planted/Sources/Tools/OracleExtra/Spec.swift" <<'EOF'
+let checked = "moov"
 EOF
 block one input total | write "$planted/Sources/Core/A/Three.swift"
 block two values sum | write "$planted/Sources/Core/B/Four.swift"
 block three items count | write "$planted/Sources/Core/C/Five.swift"
+block four names tally | write "$planted/Sources/Core/C/Six.swift"
 long_block first | write "$planted/Sources/App/X/Long.swift"
 long_block second | write "$planted/Sources/Tools/Y/Long.swift"
-write "$planted/scripts/dupes-allow.txt" <<'EOF'
-literal "gone.key" | was fixed
-oracle Sources/Tools/Gone | was deleted
-literal "no.reason" |
+write "$planted/scripts/dupes-allow.txt" <<EOF
+literal "allowed.key" | files Sources/Core/A/One.swift Sources/Features/B/Two.swift | a third file has it now
+block $fingerprint x3 | files Sources/Core/A/Three.swift Sources/Core/B/Four.swift Sources/Core/C/Five.swift | a fourth copy now
+block 00000000 x2 | files Sources/Core/A/One.swift Sources/Core/B/Two.swift | was fixed
+oracle Sources/Tools/Oracle | checks Sources/Core/Meta | checks a module that shares nothing with it
+oracle Sources/Tools/Gone | checks Sources/Core/A | was deleted
+literal "no.reason" | files Sources/Core/A/One.swift |
+literal "no.scope" | reviewed
+widget "x" | files Sources/Core/A/One.swift | not a kind
+literal "twice" | files Sources/Core/A/One.swift Sources/Core/B/Two.swift | first
+literal "twice" | files Sources/Core/A/One.swift Sources/Core/B/Two.swift | again
 EOF
 expect "$planted" 1 \
   'literal "planted.key" in 2 files:' \
   "  Sources/Core/A/One.swift:1" \
   "  Sources/Features/B/Two.swift:1" \
-  "block of 11 lines, 3 copies:" \
-  "  Sources/Core/A/Three.swift:1-11" \
-  "  Sources/Core/B/Four.swift:1-11" \
-  "  Sources/Core/C/Five.swift:1-11" \
+  'literal "condition.key" in 2 files:' \
+  "  Sources/Core/A/One.swift:6" \
+  "  Sources/Features/B/Two.swift:2" \
+  'literal "direct.key" in 2 files:' \
+  'literal "file.key" in 2 files:' \
+  "  Sources/Core/A/One.swift:7" \
+  "  Sources/Features/B/Two.swift:3" \
+  'literal "SELECT path\nFROM tracks" in 2 files:' \
+  "  Sources/Core/A/One.swift:8" \
+  "  Sources/Features/B/Two.swift:5" \
+  'literal "say \"hi\" now" in 2 files:' \
+  "  Sources/Core/A/One.swift:12" \
+  "  Sources/Features/B/Two.swift:10" \
+  'literal "raw "# still" inside" in 2 files:' \
+  "  Sources/Core/A/One.swift:13" \
+  "  Sources/Features/B/Two.swift:11" \
+  'literal "allowed.key" in 3 files:' \
+  "  Sources/App/C/Three.swift:1" \
+  'literal "moov" in 2 files:' \
+  "  Sources/Tools/OracleExtra/Spec.swift:1" \
+  'literal "unchecked.key" in 2 files:' \
+  "  Sources/Tools/Oracle/Spec.swift:1" \
+  'literal "c.key" in 2 files:' \
+  "  Sources/Core/D/Other.c:2" \
+  "  Sources/Core/D/Render.c:5" \
+  "block of 11 lines, 4 copies:" \
+  "  Sources/Core/C/Six.swift:1-11" \
+  "  key: block $fingerprint x4 | files Sources/Core/A/Three.swift Sources/Core/B/Four.swift Sources/Core/C/Five.swift Sources/Core/C/Six.swift" \
   "advisory: block of 20 lines, 2 copies:" \
   "  Sources/App/X/Long.swift:1-20" \
   "  Sources/Tools/Y/Long.swift:1-20" \
-  'scripts/dupes-allow.txt:1: matches nothing, delete it: literal "gone.key"' \
-  "scripts/dupes-allow.txt:2: matches nothing, delete it: oracle Sources/Tools/Gone/" \
-  "scripts/dupes-allow.txt:3: entry has no \` | <reason>\`"
+  'scripts/dupes-allow.txt:1: matches nothing, delete it: literal "allowed.key" | files Sources/Core/A/One.swift Sources/Features/B/Two.swift' \
+  "scripts/dupes-allow.txt:2: matches nothing, delete it: block $fingerprint x3 | files Sources/Core/A/Three.swift Sources/Core/B/Four.swift Sources/Core/C/Five.swift" \
+  "scripts/dupes-allow.txt:3: matches nothing, delete it: block 00000000 x2 | files Sources/Core/A/One.swift Sources/Core/B/Two.swift" \
+  "scripts/dupes-allow.txt:4: hides nothing that needs it, delete it: oracle Sources/Tools/Oracle/" \
+  "scripts/dupes-allow.txt:5: hides nothing that needs it, delete it: oracle Sources/Tools/Gone/" \
+  'scripts/dupes-allow.txt:6: entry has no ` | <reason>`' \
+  'scripts/dupes-allow.txt:7: entry has no ` | files …` or ` | checks …`' \
+  'scripts/dupes-allow.txt:8: expected `literal "…" | files …`, `block <fingerprint> x<copies> | files …` or `oracle <dir> | checks <dir>…`' \
+  "scripts/dupes-allow.txt:10: repeats line 9"
+# Messages after a condition, preprocessor lines and a joined line aren't literals to compare.
+absent '"fine.key"' '"macro.key"' '"Render.h"' 'first \'
 
 # A flag without its value fails loudly instead of checking the current folder.
 output=$(swift scripts/dupes.swift --root 2>&1)
@@ -164,4 +267,4 @@ if [ "$problems" -gt 0 ]; then
   echo "dupes-test: $problems problems" >&2
   exit 1
 fi
-echo "dupes passes the clean tree and fails each planted duplicate"
+echo "dupes passes the clean tree and fails each planted duplicate and bad entry"
