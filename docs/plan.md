@@ -1557,24 +1557,35 @@ Write the ADR first; it amends ADR 0022.
 - [ ] **Boundary first.** AGENTS.md gains one exception: the app may write its own log, and
       nothing else, in the sync folder the user chose, which must be outside every watched folder.
       Music files stay as they are. Tests use a temporary folder, never the NAS.
-- [ ] **Track identity.** A track's identity is the SHA-256 of its audio payload, the same hash
-      the tag writer checks (ADR 0020), plus its length in frames. It doesn't change when tags
-      are edited or the file is renamed or moved. Paths are only a locator:
+- [ ] **Track identity.** A track's identity is a SHA-256 over its codec, the byte length of its
+      audio, its length in frames, and 16 blocks of 64 KiB at evenly spaced offsets across the
+      audio (all of it when the audio is 1 MiB or less). It doesn't change when tags are edited
+      in any app or the file is renamed or moved. Paths are only a locator.
+      - **The audio range is its own fact, not the tag writer's payload.** The tag writer's range
+        proves an edit changed nothing outside its own tag, so for MP3 it runs to the end of the
+        file. Identity needs a range that other tag editors leave alone: FLAC frames, MP4 `mdat`
+        contents, and the AIFF `SSND` and WAV `data` bodies are the same in both, but MP3's starts
+        after the Xing/Info or VBRI frame and stops before trailing ID3v1, APEv2, Lyrics3 and
+        appended ID3v2 tags (Mp3tag writes ID3v1, foobar2000 and mp3gain write APEv2, and
+        "fix VBR header" tools rewrite the Xing frame). Both ranges come from the same parsers.
+        Tests edit each of those tags with fixtures and check that the identity holds.
+      - About 1 MB is read a file, so each machine hashes for itself during a scan: tens of GB for
+        a large hi-res library, not the terabytes a full hash would read. A rescan hashes only
+        files whose size or modification time changed. Hashes are never shared between machines.
+      - A collision needs two recordings with the same audio length to the byte and the same
+        bytes in every sampled block, which separate recordings don't have. The hash doesn't
+        catch corruption between the blocks; that isn't this phase's job.
       - Each log event carries the identity and the path relative to the library root,
-        normalized to NFC, as a hint for duplicates and for files not hashed yet.
+        normalized to NFC.
       - A machine applies an event to the local file with that identity. When two local files
-        share it (the same rip in two folders, or two silent tracks of one length), it uses the one
-        whose relative path matches, then the first by path. An event it can't match is kept and
-        retried after each scan, and listed in the health report (phase 19).
-      - Hashing reads every file once. A machine publishes what it hashed as (relative path, size,
-        modification time, identity), and a machine that sees the same three values takes the
-        identity without reading the file, so the library is read once per change, not once per
-        machine. Hashing runs in the background, never while playing from the same share, and
-        resumes where it stopped.
-      - A tag edit made by this app publishes the new size and modification time with the same
-        identity, from the hashes the tag writer already computed.
+        share it (the same rip in two folders, or two silent tracks of one length), it uses the
+        one whose relative path matches. When none matches, it doesn't guess: the event waits in
+        the library health report (phase 19), where the user picks the file, as do events that
+        match no file. Waiting events are retried after each scan.
       - Locally, `paths` gains the identity, so a file that moved or was renamed keeps its stats
         on this machine too, which fixes phase 15's known limit.
+      - FLAC's STREAMINFO MD5 isn't used: some encoders write zeros, and two kinds of identity
+        is worse than a re-encoded file starting its stats over.
 - [ ] **Library root.** `sync.folder` and `sync.libraryRoot` in the config file, per machine. The
       root is where relative paths start, so `/Volumes/music/library` and `/Volumes/music-1/library`
       are the same library.
@@ -1593,10 +1604,11 @@ Write the ADR first; it amends ADR 0022.
 - [ ] Logs from other machines are hostile input: line and file size caps, strict decoding, rows
       in [ADR 0025](decisions/0025-threat-model.md).
 - [ ] Tests: two and three simulated machines in temporary folders, with interleaved and
-      conflicting edits, skewed clocks, a renamed and a moved file, a tag edit, duplicate audio,
-      a truncated log, the NAS going away and coming back, and identities borrowed from another
-      machine's hashes.
-- [ ] Bench: merging 1M play events, and the cost of hashing the fixture library.
+      conflicting edits, skewed clocks, a renamed and a moved file, tag edits in every format
+      (including MP3's ID3v1, APEv2 and Xing frame), duplicate audio with and without a matching
+      path, a truncated log, and the NAS going away and coming back.
+- [ ] Bench: merging 1M play events, and the full scan and no-change rescan budgets still holding
+      with identity hashing.
 - [ ] **Hardware checkpoint (owner):** with two Macs on the NAS, play and rate on each, rename a
       folder of a test album, and report whether both machines show the same plays, ratings and
       playlists.
