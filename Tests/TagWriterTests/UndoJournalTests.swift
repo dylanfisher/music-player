@@ -121,6 +121,39 @@ private func newestEntry(_ journal: TagUndoJournal) throws -> URL {
     #expect(writer.undoLast().failures.map(\.kind) == [.changedSinceEdit])
 }
 
+@Test func aFileSavedOverAfterTheFirstUndoRefusesTheSecond() throws {
+    let url = try Sample.flac.copy()
+    let writer = scratchWriter()
+    expectChanged(writer.write(TagEdit(values: [.title: "One"]), to: [url.path]), [url])
+    expectChanged(writer.write(TagEdit(values: [.title: "Two"]), to: [url.path]), [url])
+    expectChanged(writer.undoLast(), [url])
+    // Another app saves the same bytes as a new file.
+    let copy = url.path + ".copy"
+    #expect(clonefile(url.path, copy, 0) == 0)
+    #expect(rename(copy, url.path) == 0)
+    let saved = try Data(contentsOf: url)
+    #expect(writer.undoLast().failures.map(\.kind) == [.changedSinceEdit])
+    #expect(try Data(contentsOf: url) == saved)
+}
+
+/// The file is put back even when the older edit's record can't be brought up to date; the
+/// report says it changed and nothing else, and that edit refuses later.
+@Test func anUndoWhoseOlderRecordCantBeUpdatedReportsOnlyTheChange() throws {
+    let url = try Sample.flac.copy()
+    let journal = TagUndoJournal(dataDirectory: scratchFolder())
+    let writer = TagWriter(journal: journal)
+    expectChanged(writer.write(TagEdit(values: [.title: "One"]), to: [url.path]), [url])
+    let older = try newestEntry(journal)
+    expectChanged(writer.write(TagEdit(values: [.title: "Two"]), to: [url.path]), [url])
+    #expect(chmod(older.path, 0o555) == 0)
+    defer { chmod(older.path, 0o755) }
+    let report = writer.undoLast()
+    #expect(report.changed == [url.path])
+    #expect(report.failures.isEmpty)
+    chmod(older.path, 0o755)
+    #expect(writer.undoLast().failures.map(\.kind) == [.changedSinceEdit])
+}
+
 @Test func editValuesAreChecked() throws {
     var tags = TrackTags()
     tags.title = "Old"

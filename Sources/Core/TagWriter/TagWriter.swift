@@ -78,9 +78,19 @@ public struct TagWriter: Sendable {
             }
             var older: [String: (TagUndoJournal.Handle, TagUndoJournal.FileRecord)]?
             for (handle, record) in files.reversed() {
+                let restored: FileIdentity
                 do throws(TagWriteError) {
-                    let restored = try restore(record, oldBytes: try journal.oldBytes(handle))
-                    report.changed.append(record.path)
+                    restored = try restore(record, oldBytes: try journal.oldBytes(handle))
+                } catch {
+                    logger.error("\(error.description)")
+                    report.failures.append(error)
+                    if error.kind == .changedSinceEdit { try journal.remove(handle) }
+                    continue
+                }
+                report.changed.append(record.path)
+                // The file is back, so what follows is the journal's own bookkeeping. If it
+                // fails, a later undo finds the stale record and refuses it as changed since.
+                do throws(TagWriteError) {
                     try journal.remove(handle)
                     // The restored file is a new one with the bytes an older edit of it left,
                     // which that edit's record must now name to be undone next.
@@ -91,9 +101,7 @@ public struct TagWriter: Sendable {
                         try journal.update(olderRecord, at: olderHandle)
                     }
                 } catch {
-                    logger.error("\(error.description)")
-                    report.failures.append(error)
-                    if error.kind == .changedSinceEdit { try journal.remove(handle) }
+                    logger.error("undid \(record.path), but: \(error.description)")
                 }
             }
         } catch {
