@@ -10,6 +10,9 @@ private let logger = moduleLogger()
 public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
     public let schema: Schema
     public let fileURL: URL
+    /// Why the file was discarded when it was read, for the window to show; nil when it decoded
+    /// or wasn't there.
+    public let discardReason: String?
     private let descriptors: [SettingDescriptor]
     private let byKey: [String: SettingDescriptor]
     private let lock = NSLock()
@@ -29,6 +32,7 @@ public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
             data = try Data(contentsOf: fileURL)
         } catch CocoaError.fileReadNoSuchFile {
             overrides = [:]
+            discardReason = nil
             logger.info("no state file at \(fileURL.path), using defaults")
             return
         } catch {
@@ -36,9 +40,11 @@ public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
         }
         do {
             overrides = try parse(data, path: fileURL.path, settings: byKey)
+            discardReason = nil
         } catch {
             logger.error("discarded \(fileURL.path), which doesn't match this build: \(error)")
             overrides = [:]
+            discardReason = "\(error)"
             return
         }
         logger.info("loaded \(self.overrides.count) saved values from \(fileURL.path)")

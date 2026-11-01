@@ -41,7 +41,8 @@ public final class ConfigBanner: NSViewController {
     /// Shows what's wrong, or hides the banner when nothing is. `stateFailure` is why the window
     /// layout couldn't be saved to the state file.
     public func show(
-        problems: [ConfigProblem], writeFailure: String?, path: String, stateFailure: String?
+        problems: [ConfigProblem], writeFailure: String?, path: String, stateFailure: String?,
+        stateDiscarded: String?
     ) {
         _ = view
         let name = (path as NSString).lastPathComponent
@@ -49,6 +50,7 @@ public final class ConfigBanner: NSViewController {
             (problems.map(\.description) + (writeFailure.map { ["couldn't save: \($0)"] } ?? []))
             .map { "\(name): \($0)" }
             + (stateFailure.map { ["couldn't save the window layout: \($0)"] } ?? [])
+            + (stateDiscarded.map { ["the saved window layout was reset: \($0)"] } ?? [])
         view.isHidden = lines.isEmpty
         guard let first = lines.first else { return }
         let more = lines.count > 1 ? " (\(lines.count - 1) more)" : ""

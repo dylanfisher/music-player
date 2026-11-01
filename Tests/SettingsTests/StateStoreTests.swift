@@ -287,7 +287,7 @@ private func problems(_ json: String) -> [SettingProblem] {
             .contains("z: unknown key"))
 }
 
-@Test func aStateFileThatDoesntMatchIsDiscarded() throws {
+@Test func aStateFileThatDoesntMatchIsDiscardedAndReported() throws {
     let url = temporaryFile()
     try FileManager.default.createDirectory(
         at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -297,6 +297,12 @@ private func problems(_ json: String) -> [SettingProblem] {
     }
     let state = try StateStore(AppState(), fileURL: url)
     #expect(state[\.sidebarWidth] == AppState().sidebarWidth.defaultValue)
+    #expect(state.discardReason?.contains("window.old") == true)
+    // Half-written, as a crash mid-write on a volume without atomic renames would leave it.
+    try Data(#"{"window.sidebarWidth": 2"#.utf8).write(to: url)
+    #expect(try StateStore(AppState(), fileURL: url).discardReason != nil)
+    try state.set(\.sidebarWidth, to: 300)
+    #expect(try StateStore(AppState(), fileURL: url).discardReason == nil)
 }
 
 @Test func paletteVisitsSurviveAReloadAndRejectUnknownKeys() throws {

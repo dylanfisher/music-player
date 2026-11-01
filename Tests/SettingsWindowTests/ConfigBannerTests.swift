@@ -9,15 +9,25 @@ import Testing
         problems: [
             ConfigProblem(line: 3, message: #"unknown setting "a.flg""#),
             ConfigProblem(line: 5, message: "isn't valid JSON"),
-        ], writeFailure: nil, path: "/x/config.json", stateFailure: nil)
+        ], writeFailure: nil, path: "/x/config.json", stateFailure: nil,
+        stateDiscarded: nil)
     #expect(!banner.view.isHidden)
     #expect(banner.text.hasPrefix(#"config.json: line 3: unknown setting "a.flg" (1 more)."#))
-    banner.show(problems: [], writeFailure: nil, path: "/x/config.json", stateFailure: nil)
+    banner.show(
+        problems: [], writeFailure: nil, path: "/x/config.json", stateFailure: nil,
+        stateDiscarded: nil)
     #expect(banner.view.isHidden)
     banner.show(
-        problems: [], writeFailure: "disk full", path: "/x/config.json", stateFailure: nil)
+        problems: [], writeFailure: "disk full", path: "/x/config.json", stateFailure: nil,
+        stateDiscarded: nil)
     #expect(banner.text == "config.json: couldn't save: disk full.")
-    banner.show(problems: [], writeFailure: nil, path: "/x/config.json", stateFailure: "disk full")
+    banner.show(
+        problems: [], writeFailure: nil, path: "/x/config.json", stateFailure: "disk full",
+        stateDiscarded: nil)
     #expect(!banner.view.isHidden)
     #expect(banner.text == "couldn't save the window layout: disk full.")
+    banner.show(
+        problems: [], writeFailure: nil, path: "/x/config.json", stateFailure: nil,
+        stateDiscarded: "not JSON")
+    #expect(banner.text == "the saved window layout was reset: not JSON.")
 }
