@@ -1336,6 +1336,22 @@ tests run 1,000 cases each in `scripts/sanitize` and 50 in `./scripts/check`.
   the 30-minute session; every budget passes; the old Mac re-check is listed as a pending
   checkpoint.
 
+Implementation plan:
+
+1. **Profile first.** Time Profiler traces of the release Bench and app under `.build/traces`,
+   summarised by self and inclusive samples per frame, by thread and by core type.
+2. **Metadata parse.** Fix what its trace shows, with the existing parser tests green and a test
+   for any helper rewritten.
+3. **Playback CPU.** The same for the decode thread, the control thread and the null device.
+   Samples stay bit-identical: the gapless, rate-switch and soak benches must still pass.
+4. **Idle.** The control thread stops waking while stopped with nothing to decode. Two window
+   benches launch the app on the indexed fixture library with `--home` and read its CPU time and
+   idle wakeups with `proc_pid_rusage`; they join the budget table, replacing the idle row.
+5. **Long runs.** The app idle for 10 minutes (`top -l`, `-stats pid,cpu,idlew`), and a
+   30-minute `./scripts/bench --soak 1800` for memory under playback, scans and searches.
+6. **Budgets.** `./scripts/bench` three times; any budget beaten by more than 3x is tightened.
+7. **Checkpoint** for the 2015 MacBook Pro, below.
+
 #### 14f. Architecture and docs
 
 - **Goal:** the docs describe the code, and the code exposes only what's used.
