@@ -54,6 +54,10 @@ public final class ConfigStore<Schema: SettingsSchema> {
     /// The wait before the last retry of a failed write, and whether one is scheduled.
     private(set) var retrySeconds: Double?
     private var retryScheduled = false
+    /// Runs a retry on the main queue after a wait; tests run them without waiting.
+    var runAfter: (Double, @escaping () -> Void) -> Void = { seconds, work in
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
     private var watch: DirectoryWatch?
 
     /// Reads `fileURL`. With `creating`, a missing file is written with every default. A file
@@ -341,15 +345,20 @@ public final class ConfigStore<Schema: SettingsSchema> {
         logger.error("couldn't write \(self.fileURL.path): \(error)")
         writeFailure = "\(error)"
         problemsChanged()
-        let wait =
-            retrySeconds.map { min($0 * 2, Self.longestRetrySeconds) } ?? Self.firstRetrySeconds
+        let wait = Self.nextRetry(after: retrySeconds)
         retrySeconds = wait
         retryScheduled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+        runAfter(wait) { [weak self] in
             guard let self else { return }
             retryScheduled = false
             retry(self)
         }
+    }
+
+    /// The wait before a retry, after one of `previous` seconds or none: doubling, up to
+    /// `longestRetrySeconds`.
+    static func nextRetry(after previous: Double?) -> Double {
+        previous.map { min($0 * 2, longestRetrySeconds) } ?? firstRetrySeconds
     }
 
     /// Writes a new file if there is none, for Open Config File. Throws when it can't.

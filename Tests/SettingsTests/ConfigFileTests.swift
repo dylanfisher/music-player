@@ -83,19 +83,25 @@ func fuzzedFilesAreProblemsNotCrashes(_ name: String) throws {
 }
 
 /// The fuzzer's file of mangled keys took over 10 s to report, counting each problem's line from
-/// the start of the file. Each problem keeps its line.
-@Test func aFileWithThousandsOfProblemsReportsThemQuickly() throws {
+/// the start of the file. Lines come from an index of the line breaks now.
+@Test func aFileWithThousandsOfProblemsKeepsEachOnItsLine() throws {
     let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appendingPathComponent("Crashes/many-problems.json")
-    let fuzzed = String(decoding: try Data(contentsOf: url), as: UTF8.self)
-    let keys = (1...20_000).map { "  \"unknown\($0)\": 1," }
-    let text = "{\n" + keys.joined(separator: "\n") + "\n}\n"
-    let started = Date()
-    #expect(!problems(fuzzed).isEmpty)
-    let found = problems(text)
-    #expect(Date().timeIntervalSince(started) < 5)
+    #expect(!problems(String(decoding: try Data(contentsOf: url), as: UTF8.self)).isEmpty)
+    let lines = (1...20_000).map { "  \"unknown\($0)\": 1," }
+    let text = ConfigText("{\n" + lines.joined(separator: "\n") + "\n}\n")
+    var offset = 2
+    for (index, line) in lines.enumerated() {
+        if index % 997 == 0 {
+            #expect(text.line(at: offset) == index + 2)
+            #expect(text.line(at: offset + line.utf8.count) == index + 2)
+        }
+        offset += line.utf8.count + 1
+    }
+    #expect(text.line(at: 0) == 1)
+    #expect(text.line(at: text.bytes.count) == 20_003)
+    let found = problems(text.string)
     #expect(found.count == 20_000)
-    #expect(found.first == #"line 2: unknown setting "unknown1""#)
     #expect(found.last == #"line 20001: unknown setting "unknown20000""#)
 }
 

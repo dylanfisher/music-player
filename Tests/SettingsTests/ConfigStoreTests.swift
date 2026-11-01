@@ -341,13 +341,15 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
     #expect(try read(url) == #"{"a.count": 4}"#)
 }
 
-@MainActor @Test func aFailedChangeIsRetriedOnceAndThenWritten() async throws {
+@MainActor @Test func aFailedChangeIsRetriedOnceAndThenWritten() throws {
     let url = configURL()
     let folder = url.deletingLastPathComponent()
     try write(#"{"a.count": 3}"#, to: url)
     let settings = store(url)
     var reported = 0
     settings.problemsChanged = { reported += 1 }
+    var scheduled: [() -> Void] = []
+    settings.runAfter = { _, work in scheduled.append(work) }
     // An atomic write needs to make a file in the folder.
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
     defer {
@@ -361,7 +363,9 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
     try settings.set(\.count, to: 8)
     #expect(reported == 1)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
-    await wait(seconds: 3) { settings.writeFailure == nil }
+    #expect(scheduled.count == 1)
+    scheduled.removeFirst()()
+    #expect(settings.writeFailure == nil)
     #expect(reported == 2)
     #expect(try read(url) == #"{"a.count": 8, "a.flag": true}"#)
 }
@@ -401,26 +405,39 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
     #expect(settings.problems.isEmpty)
 }
 
-@MainActor @Test func retriesWaitLongerEachTimeAndStartOverAfterASuccess() async throws {
+@MainActor @Test func retriesDoubleUpToTheLongestWait() {
+    #expect(ConfigStore<Schema>.nextRetry(after: nil) == 1)
+    #expect(ConfigStore<Schema>.nextRetry(after: 1) == 2)
+    #expect(ConfigStore<Schema>.nextRetry(after: 16) == 30)
+    #expect(ConfigStore<Schema>.nextRetry(after: 30) == 30)
+}
+
+@MainActor @Test func retriesWaitLongerEachTimeAndStartOverAfterASuccess() throws {
     let url = configURL()
     let folder = url.deletingLastPathComponent()
     try write(#"{"a.count": 3}"#, to: url)
     let settings = store(url)
+    var waits: [Double] = []
+    var scheduled: [() -> Void] = []
+    settings.runAfter = { seconds, work in
+        waits.append(seconds)
+        scheduled.append(work)
+    }
+    func runNext() { scheduled.removeFirst()() }
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
     defer {
         try? FileManager.default.setAttributes(
             [.posixPermissions: 0o755], ofItemAtPath: folder.path)
     }
     try settings.set(\.flag, to: true)
-    #expect(settings.retrySeconds == 1)
-    await wait(seconds: 3) { settings.retrySeconds == 2 }
-    #expect(settings.retrySeconds == 2)
+    runNext()
+    #expect(waits == [1, 2])
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
-    await wait(seconds: 4) { settings.writeFailure == nil }
-    #expect(settings.retrySeconds == nil)
+    runNext()
+    #expect(settings.writeFailure == nil && settings.retrySeconds == nil)
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
     try settings.set(\.count, to: 4)
-    #expect(settings.retrySeconds == 1)
+    #expect(waits == [1, 2, 1])
 }
 
 @MainActor @Test func anUnreadableFileThatsThenDeletedLeavesNoProblems() throws {
