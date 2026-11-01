@@ -830,3 +830,39 @@ private func published(
     output.setPosition(OutputPosition(item: 2, seconds: 1))
     #expect(await engine.position() == nil)
 }
+
+@Test func afterAQueueFinishesFromALaterTrackPlayStartsAtTheFirst() async {
+    let output = FakeOutput()
+    let engine = await playing(Array(urls.prefix(2)), output)
+    await engine.next()
+    await engine.handle(.trackStarted(3, info))
+    await engine.handle(.finished(3))
+    _ = output.takeCalls()
+    await engine.play()
+    #expect(output.takeCalls().first == .load(4, urls[0], startSeconds: 0, playing: true))
+}
+
+@Test func shufflingThatKeepsTheNextTrackFollowsItToItsNewPlace() async {
+    let output = FakeOutput()
+    let four = (0..<4).map { URL(fileURLWithPath: "/music/\($0).flac") }
+    // Shuffling around entry 1 puts entry 2, already next, straight after it.
+    let engine = PlaybackEngine(
+        output: output, shuffled: { $0 == [0, 2, 3] ? [2, 0, 3] : $0 })
+    await engine.setQueue(four, first: 1)
+    await engine.play()
+    await engine.handle(.trackStarted(1, info))
+    await engine.setShuffle(true)
+    #expect(await engine.state.order == [1, 2, 0, 3])
+    await engine.handle(.trackStarted(2, info))
+    #expect(await engine.state.currentIndex == 2)
+}
+
+@Test func aLateStartOfTheNextTrackAfterTheDeviceWasLostIsIgnored() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    await engine.handle(.deviceLost(1, positionSeconds: 30))
+    await engine.handle(.trackStarted(2, info))
+    #expect(await engine.state.currentIndex == 0)
+    #expect(await engine.position() == 30)
+}

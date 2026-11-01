@@ -422,3 +422,15 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
     try settings.set(\.count, to: 4)
     #expect(settings.retrySeconds == 1)
 }
+
+@MainActor @Test func anUnreadableFileThatsThenDeletedLeavesNoProblems() throws {
+    let url = configURL()
+    let settings = store(url, creating: false)
+    try write(#"{"a.count": 3}"#, to: url)
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: url.path)
+    settings.read(confirmed: true)
+    #expect(!settings.problems.isEmpty)
+    try FileManager.default.removeItem(at: url)
+    settings.read(confirmed: true)
+    #expect(settings.problems.isEmpty)
+}
