@@ -9,10 +9,9 @@ private let logger = moduleLogger()
 /// The track table. It asks the model for IDs and the row cache for rows, and reports what the
 /// user does; it decides nothing itself.
 @MainActor
-final class TrackTableController: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
+final class TrackTableController: RowListController, NSTableViewDataSource, NSTableViewDelegate,
     NSMenuDelegate
 {
-    let table = KeyTableView()
     private let model: BrowserModel
     private let cache: RowCache
     private let actions: BrowserActions
@@ -23,46 +22,22 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
     private var reportedFetchFailure = false
     /// The first time rows are drawn, for the launch measurement.
     var firstRowsDrawn: (() -> Void)?
-    /// The row the keys move from, and the one an extending move keeps.
-    private var cursor: Int?
-    private var anchor: Int?
-    private var movingByKey = false
     private var typeSelect: TypeSelect? = TypeSelect()
 
     init(model: BrowserModel, cache: RowCache, layout: TrackTableLayout, actions: BrowserActions) {
         self.model = model
         self.cache = cache
         self.actions = actions
-        super.init(nibName: nil, bundle: nil)
+        super.init(play: actions.play, playNext: actions.playNext)
         configure(layout)
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
-
-    override func loadView() {
-        let scroll = NSScrollView()
-        scroll.documentView = table
-        scroll.hasVerticalScroller = true
-        scroll.hasHorizontalScroller = true
-        scroll.autohidesScrollers = true
-        view = scroll
-    }
-
     private func configure(_ layout: TrackTableLayout) {
-        table.style = .fullWidth
-        table.rowHeight = 18
-        table.intercellSpacing = NSSize(width: 6, height: 0)
-        table.usesAlternatingRowBackgroundColors = true
-        table.allowsMultipleSelection = true
+        configureRows()
         table.allowsColumnReordering = true
         table.allowsColumnResizing = true
-        // Only the title column has the autoresizing mask, so it takes up a change of width.
-        table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         table.dataSource = self
         table.delegate = self
-        table.target = self
-        table.doubleAction = #selector(playClicked)
         table.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
         table.registerForDraggedTypes([trackIDsType])
         // Rows go only to the sidebar and to other rows, never to another app.
@@ -87,11 +62,6 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         let header = NSMenu()
         header.delegate = self
         table.headerView?.menu = header
-        let menu = NSMenu()
-        menu.addItem(withTitle: "Play", action: #selector(playSelection), keyEquivalent: "")
-        menu.addItem(withTitle: "Play Next", action: #selector(playNext), keyEquivalent: "")
-        for item in menu.items { item.target = self }
-        table.menu = menu
         showSort()
     }
 
@@ -113,9 +83,9 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         typeSelect?.reset()
         table.reloadData()
         let rows = model.rows(holding: selection)
-        select(ListSelection(rows: rows, cursor: rows.first, anchor: rows.first))
+        select(rows)
         if let anchor {
-            restore(anchor)
+            restore(anchor, row: model.rows(holding: [anchor.id]).first)
         } else if let first = rows.first {
             table.scrollRowToVisible(first)
         } else if !model.trackIDs.isEmpty {
@@ -129,30 +99,6 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
             NSSortDescriptor(key: model.sortColumn.rawValue, ascending: model.ascending)
         ]
         applyingSort = false
-    }
-
-    private var clip: NSClipView? { table.enclosingScrollView?.contentView }
-
-    /// The top of the area rows show in, below the header, in the table's coordinates.
-    private var visibleTop: CGFloat {
-        guard let clip else { return 0 }
-        return clip.bounds.minY + clip.contentInsets.top
-    }
-
-    /// The first visible row's track, among the `ids` the table shows, and how far it sits from
-    /// the top of the visible area.
-    private func scrollAnchor(in ids: [Int64]) -> (id: Int64, offset: CGFloat)? {
-        let top = visibleTop
-        let row = table.row(at: NSPoint(x: table.visibleRect.minX, y: top))
-        guard row >= 0, ids.indices.contains(row) else { return nil }
-        return (ids[row], table.rect(ofRow: row).minY - top)
-    }
-
-    private func restore(_ anchor: (id: Int64, offset: CGFloat)) {
-        guard let clip, let row = model.rows(holding: [anchor.id]).first else { return }
-        let y = table.rect(ofRow: row).minY - anchor.offset - clip.contentInsets.top
-        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: y))
-        table.enclosingScrollView?.reflectScrolledClipView(clip)
     }
 
     /// Scrolls through every row a screenful at a time, drawing each, and passes each row to
@@ -182,7 +128,7 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         else { return nil }
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
-            as? NSTableCellView ?? makeCell(tableColumn.identifier, numeric: column.isNumeric)
+            as? NSTableCellView ?? makeTextCell(tableColumn.identifier, numeric: column.isNumeric)
         cell.textField?.stringValue = trackRow(row).map { column.text($0, position: row) } ?? ""
         if let firstRowsDrawn {
             self.firstRowsDrawn = nil
@@ -204,26 +150,6 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
             }
             return nil
         }
-    }
-
-    private func makeCell(_ identifier: NSUserInterfaceItemIdentifier, numeric: Bool)
-        -> NSTableCellView
-    {
-        let cell = NSTableCellView()
-        cell.identifier = identifier
-        let text = NSTextField(labelWithString: "")
-        text.lineBreakMode = .byTruncatingTail
-        text.alignment = numeric ? .right : .left
-        text.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        text.translatesAutoresizingMaskIntoConstraints = false
-        cell.addSubview(text)
-        cell.textField = text
-        NSLayoutConstraint.activate([
-            text.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
-            text.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
-            text.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-        ])
-        return cell
     }
 
     // MARK: Dragging
@@ -310,45 +236,6 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         actions.layoutChanged(layout)
     }
 
-    // MARK: Playing
-
-    @objc private func playClicked() {
-        let clicked = table.clickedRow
-        guard clicked >= 0 else { return }
-        actions.play(table.selectedRowIndexes, clicked)
-    }
-
-    /// The context menu's rows: the clicked row's selection, or the clicked row alone when it
-    /// isn't selected, as Finder does.
-    private var menuRows: IndexSet {
-        let clicked = table.clickedRow
-        if clicked >= 0, !table.selectedRowIndexes.contains(clicked) { return [clicked] }
-        return table.selectedRowIndexes
-    }
-
-    @objc private func playSelection() {
-        let rows = menuRows
-        guard let first = rows.first else { return }
-        actions.play(rows, first)
-    }
-
-    @objc func playNext() {
-        let rows = menuRows
-        guard !rows.isEmpty else { return }
-        actions.playNext(rows)
-    }
-
-    /// Plays the selected rows from the first, or every row when none is selected.
-    func playSelected() {
-        guard model.trackIDs.count > 0 else { return }
-        actions.play(table.selectedRowIndexes, table.selectedRowIndexes.first ?? 0)
-    }
-
-    func playSelectedNext() {
-        guard !table.selectedRowIndexes.isEmpty else { return }
-        actions.playNext(table.selectedRowIndexes)
-    }
-
     // MARK: Keys
 
     private func takeKey(_ event: NSEvent) -> Bool {
@@ -358,49 +245,8 @@ final class TrackTableController: NSViewController, NSTableViewDataSource, NSTab
         }
     }
 
-    func move(_ move: RowMove, extending: Bool) {
-        let current = ListSelection(
-            rows: table.selectedRowIndexes, cursor: cursor, anchor: anchor)
-        select(
-            current.moved(
-                move, extending: extending, rowCount: table.numberOfRows, pageRows: pageRows))
-        if let cursor { table.scrollRowToVisible(cursor) }
-    }
-
-    /// Selects the row at the middle of the visible rows, as Go to Item asks.
-    func selectCentered(_ row: Int) {
-        guard row >= 0, row < table.numberOfRows else { return }
-        select(ListSelection(rows: [row], cursor: row, anchor: row))
-        guard let clip else { return }
-        let visible = clip.bounds.height - clip.contentInsets.top
-        let y = table.rect(ofRow: row).midY - visible / 2 - clip.contentInsets.top
-        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: max(-clip.contentInsets.top, y)))
-        table.enclosingScrollView?.reflectScrolledClipView(clip)
-    }
-
-    private func select(_ selection: ListSelection) {
-        movingByKey = true
-        table.selectRowIndexes(selection.rows, byExtendingSelection: false)
-        movingByKey = false
-        cursor = selection.cursor
-        anchor = selection.anchor
-    }
-
-    /// Whole rows on screen below the header.
-    private var pageRows: Int {
-        guard let clip else { return 1 }
-        let height = clip.bounds.height - clip.contentInsets.top
-        return max(1, Int(height / (table.rowHeight + table.intercellSpacing.height)))
-    }
-
     func tableViewSelectionDidChange(_ notification: Notification) {
-        guard !movingByKey else { return }
-        // A click: the clicked row is the cursor, and a Shift-click keeps the anchor.
-        let row = table.selectedRow >= 0 ? table.selectedRow : nil
-        let shift = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
-        cursor = row
-        if !shift || anchor == nil { anchor = row }
-        typeSelect?.reset()
+        if selectionDidChange() { typeSelect?.reset() }
     }
 
     /// Selects the first row whose sort column starts with `query`: the artist, album or genre
