@@ -71,7 +71,7 @@ struct ID3File {
     ) throws(ParseFailure) -> [Segment] {
         var tag = self.tag
         try tag.apply(groups, from: tags, art: art, artOffset: artOffset)
-        let bytes = tag.rewritten()
+        let bytes = try tag.rewritten()
         switch host {
         case .mp3:
             return [.bytes(bytes), .original(self.tag.byteCount..<size)]

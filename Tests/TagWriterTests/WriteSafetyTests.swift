@@ -176,3 +176,35 @@ private func attributes(_ path: String) throws -> [String] {
         "uid \(info.st_uid)", "created \(info.st_birthtimespec.tv_sec)",
     ] + xattrs
 }
+
+@Test func aFileWithAnotherHardLinkIsRefused() throws {
+    let url = try Sample.mp3v24.copy()
+    let original = try Data(contentsOf: url)
+    let other = url.path + " link"
+    #expect(link(url.path, other) == 0)
+    let report = scratchWriter().write(titleEdit, to: [url.path])
+    #expect(report.failures.map(\.kind) == [.unsupported])
+    #expect(try Data(contentsOf: url) == original)
+    #expect(try Data(contentsOf: URL(fileURLWithPath: other)) == original)
+}
+
+@Test func aFrameOverID3sLimitIsRefusedNotTrapped() {
+    #expect(throws: ParseFailure.self) {
+        try ID3Frame(id: "APIC", body: [UInt8](repeating: 0, count: 1 << 28), version: 4)
+    }
+    #expect(throws: ParseFailure.self) {
+        try ID3Frame(id: "APIC", body: [UInt8](repeating: 0, count: 1 << 28), version: 3)
+    }
+}
+
+/// 2.3 has no flag 0x08; 2.4 uses it for compression.
+@Test func commentFlagsAreReadPerVersion() throws {
+    var frame = try ID3Frame(
+        id: "COMM", body: [0] + Array("eng".utf8) + [0] + Array("Hi".utf8), version: 3)
+    frame.raw[9] = 0x08
+    #expect(frame.isUserComment(version: 3))
+    #expect(!frame.isUserComment(version: 4))
+    frame.raw[9] = 0x40
+    #expect(!frame.isUserComment(version: 3), "encrypted in 2.3")
+    #expect(!frame.isUserComment(version: 4), "grouped in 2.4")
+}

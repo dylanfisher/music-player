@@ -97,11 +97,11 @@ struct ID3Tag {
     var framesByteCount: Int { frames.reduce(0) { $0 + $1.raw.count } }
 
     /// The tag in `byteCount` bytes, with the frames' leftover space as padding; nil when the
-    /// frames don't fit.
-    func serialized(byteCount total: Int) -> [UInt8]? {
+    /// frames don't fit. Throws for a tag past ID3's 256 MB.
+    func serialized(byteCount total: Int) throws(ParseFailure) -> [UInt8]? {
         let body = total - Self.headerBytes
-        guard body >= framesByteCount, body < 1 << 28 else { return nil }
-        var bytes = Array(id3v2Identifier.utf8) + [version, 0, flags] + syncsafeBytes(body)
+        guard body >= framesByteCount else { return nil }
+        var bytes = Array(id3v2Identifier.utf8) + [version, 0, flags] + (try syncsafeBytes(body))
         bytes.reserveCapacity(total)
         for frame in frames { bytes += frame.raw }
         bytes += [UInt8](repeating: 0, count: total - bytes.count)
@@ -109,10 +109,13 @@ struct ID3Tag {
     }
 
     /// The tag in its own space if the frames fit there, otherwise with fresh padding.
-    func rewritten() -> [UInt8] {
-        if byteCount > 0, let bytes = serialized(byteCount: byteCount) { return bytes }
-        return serialized(
-            byteCount: Self.headerBytes + framesByteCount + Self.rewritePaddingBytes)!
+    func rewritten() throws(ParseFailure) -> [UInt8] {
+        if byteCount > 0, let bytes = try serialized(byteCount: byteCount) { return bytes }
+        let total = Self.headerBytes + framesByteCount + Self.rewritePaddingBytes
+        guard let bytes = try serialized(byteCount: total) else {
+            throw .malformed(at: start, "an ID3 tag sized for its frames doesn't hold them")
+        }
+        return bytes
     }
 
     /// Replaces every frame `isReplaced` picks with `new`, placed where the first of them was,
@@ -152,7 +155,7 @@ struct ID3Tag {
                 group.readerFields.contains { id3FrameIDs(for: $0).contains(frame.id) }
             })
         else { return [] }
-        if group == .comment, !frame.isUserComment { return [] }
+        if group == .comment, !frame.isUserComment(version: version) { return [] }
         return Set(group.fields)
     }
 }
@@ -169,19 +172,26 @@ struct ID3Frame: Equatable {
         self.raw = raw
     }
 
-    /// A frame with no flags set, its size written the way `version` reads it.
-    init(id: String, body: [UInt8], version: UInt8) {
+    /// A frame with no flags set, its size written the way `version` reads it. Throws for a body
+    /// past ID3's 256 MB.
+    init(id: String, body: [UInt8], version: UInt8) throws(ParseFailure) {
         self.id = id
-        let size = version == 4 ? syncsafeBytes(body.count) : bigEndianBytes(body.count, 4)
-        raw = Array(id.utf8) + size + [0, 0] + body
+        let size = try syncsafeBytes(body.count)
+        raw =
+            Array(id.utf8) + (version == 4 ? size : bigEndianBytes(body.count, 4)) + [0, 0] + body
     }
 
     var body: ArraySlice<UInt8> { raw[Self.headerBytes...] }
 
     /// A `COMM` frame whose description is empty, which the reader takes as the comment.
-    /// Compressed or encrypted frames can't be read, so they never count.
-    var isUserComment: Bool {
-        guard id3FrameIDs(for: .comment).contains(id), raw[9] & 0xCC == 0 else { return false }
+    /// Frames whose format flags change their body (2.3: compressed, encrypted, grouped; 2.4:
+    /// grouped, compressed, encrypted, unsynchronised, with a length) aren't looked into, so
+    /// they never count.
+    func isUserComment(version: UInt8) -> Bool {
+        let bodyFlags: UInt8 = version == 3 ? 0xE0 : 0x4F
+        guard id3FrameIDs(for: .comment).contains(id), raw[9] & bodyFlags == 0 else {
+            return false
+        }
         let body = Array(self.body)
         guard body.count >= 4 else { return false }
         let wide = body[0] == 1 || body[0] == 2
@@ -199,9 +209,12 @@ struct ID3Frame: Equatable {
     }
 }
 
-/// 28 bits, seven per byte.
-func syncsafeBytes(_ value: Int) -> [UInt8] {
-    precondition(value >= 0 && value < 1 << 28, "\(value) doesn't fit a syncsafe integer")
+/// 28 bits, seven per byte: ID3's sizes, up to 256 MB.
+func syncsafeBytes(_ value: Int) throws(ParseFailure) -> [UInt8] {
+    guard value >= 0, value < 1 << 28 else {
+        throw .unsupported(
+            at: nil, "\(value) bytes in one ID3 tag or frame; ID3 holds at most 256 MB")
+    }
     return [21, 14, 7, 0].map { UInt8(value >> $0 & 0x7F) }
 }
 

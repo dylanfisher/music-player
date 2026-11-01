@@ -58,6 +58,12 @@ func requireWritable(_ path: String) throws(TagWriteError) {
     guard info.st_flags & locked == 0 else {
         throw TagWriteError(path: path, kind: .notWritable, detail: "the file is locked")
     }
+    // A rename would leave the other names on the old file, so the edit would split them.
+    guard info.st_nlink <= 1 else {
+        throw TagWriteError(
+            path: path, kind: .unsupported,
+            detail: "the file has \(info.st_nlink) hard links, which replacing it would break")
+    }
     guard access(path, W_OK) == 0 else {
         throw systemError(path, .notWritable, "the file can't be written")
     }
@@ -131,11 +137,9 @@ func writeTemp(_ segments: [Segment], from original: String, to temp: String)
                 }
             }
         }
-        // F_FULLFSYNC reaches the disk itself; volumes without it (SMB) take fsync.
-        if fcntl(destination, F_FULLFSYNC) != 0, fsync(destination) != 0 {
-            throw systemError(original, .writeFailed, "can't flush the temp file")
-        }
+        // The attributes go first, so the flush covers them too before the rename.
         try copyAttributes(from: source, info, to: destination, original)
+        try flush(destination, original, .writeFailed)
     } catch {
         unlink(temp)
         throw error

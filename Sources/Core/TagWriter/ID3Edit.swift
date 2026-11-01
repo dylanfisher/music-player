@@ -32,12 +32,12 @@ extension ID3Tag {
     mutating func apply(
         _ groups: [TagGroup], from tags: TrackTags, art: ArtChange?, artOffset: Int?
     ) throws(ParseFailure) {
-        if let art { applyArt(art, artOffset: artOffset) }
+        if let art { try applyArt(art, artOffset: artOffset) }
         for group in groups {
             let ids = Set(group.readerFields.flatMap { id3FrameIDs(for: $0) })
             let replaced: (ID3Frame) -> Bool =
                 group == .comment
-                ? { $0.isUserComment } : { ids.contains($0.id) }
+                ? { [version] in $0.isUserComment(version: version) } : { ids.contains($0.id) }
             let language =
                 group == .comment
                 ? frames.first(where: replaced).map { Array($0.body.dropFirst().prefix(3)) }
@@ -65,7 +65,7 @@ extension ID3Tag {
         default:
             body = [textEncoding(text)] + encode(text, textEncoding(text))
         }
-        return [ID3Frame(id: frameID(group), body: body, version: version)]
+        return [try ID3Frame(id: frameID(group), body: body, version: version)]
     }
 
     /// "1997", "1997-05-12" or "1997-05-12T14:30" as 2.3's year, DDMM day and HHMM time.
@@ -74,8 +74,8 @@ extension ID3Tag {
         func digits(_ part: String) -> Bool { part.allSatisfy { $0.isASCII && $0.isNumber } }
         let characters = Array(text)
         func part(_ range: Range<Int>) -> String { String(characters[range]) }
-        func frame(_ id: String, _ value: String) -> ID3Frame {
-            ID3Frame(id: id, body: [0] + Array(value.utf8), version: version)
+        func frame(_ id: String, _ value: String) throws(ParseFailure) -> ID3Frame {
+            try ID3Frame(id: id, body: [0] + Array(value.utf8), version: version)
         }
         let shapes = [4, 10, 16]
         guard shapes.contains(characters.count), digits(part(0..<4)),
@@ -90,17 +90,17 @@ extension ID3Tag {
                 at: nil,
                 "ID3v2.3 holds a date as a year, a day and a time; \"\(text)\" doesn't fit")
         }
-        var result = [frame(id3v23YearFrameID, part(0..<4))]
+        var result = [try frame(id3v23YearFrameID, part(0..<4))]
         if characters.count >= 10 {
-            result.append(frame(id3v23DayFrameID, part(8..<10) + part(5..<7)))
+            result.append(try frame(id3v23DayFrameID, part(8..<10) + part(5..<7)))
         }
         if characters.count == 16 {
-            result.append(frame(id3v23TimeFrameID, part(11..<13) + part(14..<16)))
+            result.append(try frame(id3v23TimeFrameID, part(11..<13) + part(14..<16)))
         }
         return result
     }
 
-    private mutating func applyArt(_ art: ArtChange, artOffset: Int?) {
+    private mutating func applyArt(_ art: ArtChange, artOffset: Int?) throws(ParseFailure) {
         let isPicture = { (frame: ID3Frame) in id3PictureFrameIDs.contains(frame.id) }
         switch art {
         case .remove:
@@ -108,7 +108,7 @@ extension ID3Tag {
         case .replace(let image, let mimeType):
             var body: [UInt8] = [0] + Array(mimeType.utf8) + [0, frontCoverPictureType, 0]
             body += image
-            let new = ID3Frame(id: pictureFrameID, body: body, version: version)
+            let new = try ID3Frame(id: pictureFrameID, body: body, version: version)
             var cursor = start + Self.headerBytes
             var target: Int?
             for (index, frame) in frames.enumerated() {

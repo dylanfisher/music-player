@@ -8,7 +8,7 @@ import Testing
     let url = try mp3(
         withTag: id3Tag(
             [
-                ID3Frame(id: "TPE1", body: [0] + Array("One\u{0}Two".utf8), version: 4).raw,
+                try ID3Frame(id: "TPE1", body: [0] + Array("One\u{0}Two".utf8), version: 4).raw,
                 id3TextFrame("TIT2", "Single", version: 4),
             ], version: 4))
     #expect(try multiValuedFields(at: url) == [.artist])
