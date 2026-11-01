@@ -23,7 +23,8 @@ the config file but music files, through the tag writer.
   share `{"share": "smb://nas/music", "path": "sync"}`, found the way 0028 finds a watched
   folder. The config check refuses one inside or equal to a watched folder stored the same
   way; the watcher checks the located paths again before every sync, for a folder stored by
-  share against one stored by path.
+  share against one stored by path. Settings shows it with Choose… and Clear; a folder picked
+  on a share is stored by share.
 - The app writes one file there, `<machine id>.log`, and nothing else: no temporary file, no
   lock file, no rename. It never writes another machine's log. AGENTS.md says so.
 
@@ -99,7 +100,9 @@ the config file but music files, through the tag writer.
 
 - **When:** at the watcher's start, after each scan (network folders are polled), on wake, a
   network change and a mount (0028's triggers), and a push alone after each edit in the window.
-  Nothing polls for sync. A sync runs on the scan queue, so never beside a scan.
+  Nothing polls for sync. A sync runs on the scan queue, so never beside a scan, and waits, as
+  network scans do, while playback holds them back. A share that isn't mounted skips it; the
+  events wait in the outbox.
 - **Reading:** every `<32 hex digits>.log` but this machine's, up to 64, each opened with
   `O_NOFOLLOW` in the folder's descriptor and checked by `fstat` as a regular file. Each is read
   from where the last read stopped to its last complete line: a line without its `\n` is left
@@ -125,11 +128,11 @@ the config file but music files, through the tag writer.
   ignores it. One with a row for the old path and none for the new gives the old row the new
   path. One with both merges the new path's stats into the old row by the rules above, plays
   and skips added, history moved, and then makes the move: a move arriving after the new path
-  was played. Where both paths have a file in this index, the move is skipped and counted.
+  was played. Where both paths have a file in this index, the move is skipped and reported.
 - **A path this machine has no row for** but under one of its share folders gets a row, as a
   play of a file never scanned does (0022): the stats wait there for the scan to find the
-  file. A path under none of its share folders is skipped and counted: a Mac that doesn't
-  watch that folder doesn't keep its stats.
+  file. A path under none of its share folders is skipped, and the count reported: a Mac that
+  doesn't watch that folder doesn't keep its stats.
 - **The import** (0033) runs on one machine and writes events for what it changed: `counts`
   for the plays and skips it added, `rating`, `loved`, `added` and each playlist.
 - **Nothing from before this build is sent.** The log starts with this build, and a playlist

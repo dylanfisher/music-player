@@ -219,7 +219,8 @@ public final class LibraryWatcher: @unchecked Sendable {
     private func advance() {
         guard var current = state else { return }
         defer { state = current }
-        if control == nil {
+        // Not under a running sync either, which maps paths by the roots it started with.
+        if control == nil, !syncing {
             // Only on a trigger or before a scan, not on every FSEvents batch or playback change.
             var next = current
             if locateDue || next.start(now: Date()) != nil { relocateIfMoved(&current) }
