@@ -332,3 +332,35 @@ private func folder(with lines: [String], name: String = String(repeating: "c", 
     ).line
     #expect(problem(line)?.contains("lists over") == true)
 }
+
+private func record(_ seq: Int64, _ event: SyncEvent) -> String {
+    SyncRecord(seq: seq, clock: SyncClock(ms: clock.ms + seq, counter: 0), event: event).line
+}
+
+@Test func movesReadOutOfOrderAndLatePlaysFollowTheChain() throws {
+    let (sync, index) = try folder(with: [
+        record(1, .move(from: "music/library/b.flac", to: "music/library/c.flac")),
+        record(2, .move(from: "music/library/a.flac", to: "music/library/b.flac")),
+        record(3, .play(path: "music/library/a.flac", at: 1_700_000_100)),
+    ])
+    let root = sync.deletingLastPathComponent().path + "/music/library/"
+    try index.recordPlay(root + "a.flac", at: 1_700_000_000)
+    let report = try index.sync(folder: "sync", at: sync.path)
+    #expect(report.problems.isEmpty, "\(report.problems)")
+    let rows = try index.database.prepare(
+        "SELECT p.path, s.play_count FROM paths p JOIN plays s ON s.path_id = p.id"
+    ).map { (try $0.text(0), try $0.int(1)) }
+    #expect(rows.map(\.0) == [root + "c.flac"])
+    #expect(rows.map(\.1) == [2])
+}
+
+@Test func aMoveCantTakeTheRowOfAFileThisMacStillHas() throws {
+    let (sync, index) = try folder(with: [
+        record(1, .move(from: "music/library/a.flac", to: "music/library/b.flac"))
+    ])
+    let path = sync.deletingLastPathComponent().path + "/music/library/a.flac"
+    try index.store([Crafted(path: path).scanned])
+    let report = try index.sync(folder: "sync", at: sync.path)
+    #expect(report.problems.contains { $0.contains("waits for its own scan") })
+    #expect(try index.track(path: path) != nil)
+}

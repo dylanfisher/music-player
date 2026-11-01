@@ -370,7 +370,8 @@ private let syncPathListKey = "paths"
 private let syncLog = FuzzTarget(
     name: "sync-log",
     summary:
-        "another machine's sync log, read line by line; each event written back and read again",
+        "another machine's sync log, read line by line, each event written back and read again,"
+        + " then merged whole into a library",
     seedFormats: [],
     tokens: [
         #""seq":"#, #""event":"#, #""playlistEntries""#, #""paths":["#, "\\ud83c\\udfb5", "e301",
@@ -379,16 +380,49 @@ private let syncLog = FuzzTarget(
     madeSeeds: { _, _ in
         let id = String(repeating: "0f", count: 16)
         let lines = [
-            #"{"seq":1,"ms":1800000000000,"n":0,"event":"play","path":"music/a.flac","at":1700000000.5}"#,
-            #"{"seq":2,"ms":1800000000001,"n":3,"event":"move","from":"music/a.flac","to":"music/Cafe\u0301.flac"}"#,
+            #"{"seq":1,"ms":1800000000000,"n":0,"event":"play","path":"music/tracks/a.flac","at":1700000000.5}"#,
+            #"{"seq":2,"ms":1800000000001,"n":3,"event":"move","from":"music/tracks/a.flac","to":"music/tracks/Cafe\u0301.flac"}"#,
             #"{"seq":3,"ms":1800000000002,"n":0,"event":"playlistCreate","playlist":"\#(id)","name":"Mix","rules":null}"#,
-            #"{"seq":4,"ms":1800000000003,"n":0,"event":"playlistEntries","playlist":"\#(id)","paths":["music/a.flac","music/b"]}"#,
-            #"{"seq":5,"ms":1800000000004,"n":0,"event":"counts","path":"music/a.flac","plays":2,"skips":0,"lastPlayed":null}"#,
+            #"{"seq":4,"ms":1800000000003,"n":0,"event":"playlistEntries","playlist":"\#(id)","paths":["music/tracks/a.flac","music/tracks/b"]}"#,
+            #"{"seq":5,"ms":1800000000004,"n":0,"event":"counts","path":"music/tracks/a.flac","plays":2,"skips":0,"lastPlayed":null}"#,
         ]
         return [Array((lines.joined(separator: "\n") + "\n").utf8), Array(lines[0].utf8)]
     },
-    prepare: { _ in
-        { input in
+    prepare: { work in
+        // Then the whole input is merged as a log into a library, a new one every 500 inputs.
+        let sync = work.appendingPathComponent("logs")
+        let libraryFolder = work.appendingPathComponent("index")
+        try FileManager.default.createDirectory(at: sync, withIntermediateDirectories: true)
+        func freshLibrary() throws -> LibraryIndex {
+            if FileManager.default.fileExists(atPath: libraryFolder.path) {
+                try FileManager.default.removeItem(at: libraryFolder)
+            }
+            let index = try LibraryIndex(at: libraryFileURL(in: libraryFolder))
+            let share = "smb://fuzz/music"
+            _ = try index.locate(
+                [WatchedFolder(path: "tracks", share: share, kind: .network)],
+                among: [MountedShare(url: share, mountPoint: work.path + "/share")])
+            return index
+        }
+        var library = try freshLibrary()
+        var runs = 0
+        var log: URL?
+        return { input in
+            runs += 1
+            if runs % 500 == 0 { library = try! freshLibrary() }
+            // A new machine each time, so the log is read from its start.
+            if let log { try! FileManager.default.removeItem(at: log) }
+            let next = sync.appendingPathComponent(syncLogName(String(format: "%032x", runs)))
+            try! Data(input).write(to: next)
+            log = next
+            let report: SyncReport
+            do {
+                report = try library.sync(folder: sync.lastPathComponent, at: sync.path)
+            } catch {
+                preconditionFailure("a log stopped the whole sync: \(error)")
+            }
+            precondition(
+                report.problems.count <= SyncReport.maximumProblems + 2, "problems past the cap")
             var reader = SyncLogLines(from: 0, end: input.count, maximumLine: 1 << 16) {
                 Array(input[$0])
             }

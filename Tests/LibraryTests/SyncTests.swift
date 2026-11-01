@@ -274,7 +274,7 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(playlist.kind == .smart(SmartRules(match: .any, rules: [])))
 }
 
-@Test func aMoveReachesAMachineThatHadTheOldPath() throws {
+@Test func aMoveWaitsForTheScanOfAMachineThatStillHasTheOldFile() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair
     let old = try a.scanned("Album/x.flac")
@@ -285,16 +285,33 @@ private func syncAll(_ machines: [Machine]) throws {
     try a.index.remove([old])
     try a.scanned("Renamed/x.flac")
     #expect(try a.index.matchMoves().count == 1)
-    try syncAll([a, b])
-    // B's row for the old path now has the new one, with its stats, until B's scan reads it.
-    let path = try b.index.database.prepare("SELECT path FROM paths WHERE id = ?").map(
-        try #require(try b.track("Album/x.flac")).id
-    ) { try $0.text(0) }
-    #expect(path == [b.path("Renamed/x.flac").precomposedStringWithCanonicalMapping])
+    try a.sync()
+    let report = try b.sync()
+    #expect(report.problems.contains { $0.contains("waits for its own scan") })
+    #expect(try b.track("Album/x.flac")?.playCount == 1)
+    // B's scan finds the move itself, and A's move, read again, does nothing more.
     try b.index.remove([try #require(try b.track("Album/x.flac")).id])
     try b.scanned("Renamed/x.flac")
+    #expect(try b.index.matchMoves().count == 1)
     #expect(try b.track("Renamed/x.flac")?.playCount == 1)
     #expect(try b.index.lostFiles().isEmpty)
+}
+
+@Test func aMoveOfAPathThisMachineNeverScannedTakesTheRowAlong() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    let old = try a.scanned("Album/x.flac")
+    try a.index.recordPlay(a.path("Album/x.flac"), at: 1_700_000_000)
+    try syncAll([a, b])
+    try a.index.remove([old])
+    try a.scanned("Renamed/x.flac")
+    #expect(try a.index.matchMoves().count == 1)
+    // B never had the file, so its row for the old path, from A's play, takes the new one.
+    try a.sync()
+    try b.sync()
+    try b.scanned("Renamed/x.flac")
+    #expect(try b.track("Renamed/x.flac")?.playCount == 1)
+    #expect(try b.index.existingPathID(b.path("Album/x.flac")) == nil)
 }
 
 @Test func aMoveAfterTheNewPathWasPlayedMergesTheStats() throws {

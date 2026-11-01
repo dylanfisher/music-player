@@ -5,6 +5,9 @@ import SQLite
 private let logger = moduleLogger()
 
 let pathSQL = "SELECT path FROM paths WHERE id = ?"
+/// Moves noted at most, and how many of them one path's chain follows.
+let maximumMoves = 100_000
+let maximumMoveChain = 16
 let syncPlaylistIDSQL = "SELECT id FROM \(syncPlaylistsTable) WHERE playlist_id = ?"
 /// A playlist's sync ID; a NULL playlist marks one deleted.
 let insertSyncPlaylistSQL = "INSERT INTO \(syncPlaylistsTable) (id, playlist_id) VALUES (?, ?)"
@@ -121,6 +124,37 @@ extension LibraryIndex {
     ) throws {
         guard let path = try syncPath(ofPathID: id, roots) else { return }
         try logSync(event(path), field: field.map { ($0, id) })
+    }
+
+    // MARK: Moves
+
+    /// Notes that `from` moved to `to`, both sync paths, so an event for `from` read later
+    /// goes to `to`. A move back forgets the first. Past `maximumMoves` nothing more is noted.
+    func recordMove(from: String, to: String) throws {
+        try statement("DELETE FROM \(syncMovesTable) WHERE from_path = ?").run(to)
+        let count = try statement("SELECT count(*) AS moves FROM \(syncMovesTable)").map {
+            try $0.int(0)
+        }[0]
+        guard count < maximumMoves else {
+            logger.error("\(count) moves are noted, the most kept; \(from) to \(to) isn't")
+            return
+        }
+        try statement(
+            "INSERT OR REPLACE INTO \(syncMovesTable) (from_path, to_path) VALUES (?, ?)"
+        ).run(from, to)
+    }
+
+    /// Where the sync path `path` is now, after the moves noted; a chain is followed a few
+    /// steps at most, so a loop a log made can't hold a sync.
+    func resolvedSyncPath(_ path: String) throws -> String {
+        var current = path
+        let next = try statement("SELECT to_path FROM \(syncMovesTable) WHERE from_path = ?")
+        for _ in 0..<maximumMoveChain {
+            guard let to = try next.map(current, row: { try $0.text(0) }).first, to != path
+            else { break }
+            current = to
+        }
+        return current
     }
 
     // MARK: Playlists

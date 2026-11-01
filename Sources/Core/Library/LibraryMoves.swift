@@ -92,6 +92,7 @@ extension LibraryIndex {
     private func logMove(from: String, to: String, _ roots: SyncRoots) throws {
         guard let old = roots.syncPath(from), let new = roots.syncPath(to) else { return }
         try logSync(.move(from: old, to: new))
+        try recordMove(from: old, to: new)
     }
 
     /// Gives the path `old` the file of the path `new`, which has no stats, and deletes `new`:

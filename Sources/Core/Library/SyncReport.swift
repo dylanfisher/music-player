@@ -11,5 +11,5 @@ public struct SyncReport: Equatable, Sendable {
     public var problems: [String] = []
 
     /// How many problems one log lists before counting the rest.
-    static let maximumProblems = 100
+    package static let maximumProblems = 100
 }

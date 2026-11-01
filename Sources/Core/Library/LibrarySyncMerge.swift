@@ -120,7 +120,7 @@ extension LibraryIndex {
         throws -> Int64?
     {
         if let id = merge.pathIDs[syncPath] { return id }
-        guard let path = merge.roots.localPath(syncPath) else {
+        guard let path = merge.roots.localPath(try resolvedSyncPath(syncPath)) else {
             merge.outside += 1
             return nil
         }
@@ -193,32 +193,37 @@ extension LibraryIndex {
     /// this machine made the move itself or never had the path. With one and none for `to`,
     /// the row takes the new path. With both, the stats of `to` join `from`'s row, which then
     /// takes the new path, unless both have a file here.
-    private func mergeMove(from: String, to: String, _ merge: inout SyncMerge) throws -> String? {
+    private func mergeMove(from: String, to movedTo: String, _ merge: inout SyncMerge) throws
+        -> String?
+    {
+        // A move read before an earlier one of its new path goes on to where that one led.
+        let to = try resolvedSyncPath(movedTo)
         guard let fromPath = merge.roots.localPath(from), let toPath = merge.roots.localPath(to)
         else {
             merge.outside += 1
             return nil
         }
-        merge.pathIDs[from] = nil
-        merge.pathIDs[to] = nil
+        merge.pathIDs = [:]
         let oldNFC = fromPath.precomposedStringWithCanonicalMapping
         let newNFC = toPath.precomposedStringWithCanonicalMapping
         guard oldNFC != newNFC else { return "it moves \(clipped(from)) onto itself" }
-        guard let old = try existingPathID(oldNFC) else { return nil }
-        guard let new = try existingPathID(newNFC) else {
-            try statement("UPDATE paths SET path = ? WHERE id = ?").run(newNFC, old)
-            merge.changed = true
-            return nil
-        }
-        let hasFile = try statement("SELECT 1 FROM files WHERE id = ?")
-        if try !hasFile.map(old, row: { _ in () }).isEmpty,
-            try !hasFile.map(new, row: { _ in () }).isEmpty
+        let old = try existingPathID(oldNFC)
+        if let old,
+            try !statement("SELECT 1 FROM files WHERE id = ?").map(old, row: { _ in () })
+                .isEmpty
         {
-            return "this Mac has files at both \(clipped(from)) and \(clipped(to)), so neither took"
-                + " the other's stats"
+            // The file is still here as far as this index knows; its own scan matches the move.
+            return "this Mac still has \(clipped(from)), so the move to \(clipped(to)) waits for"
+                + " its own scan"
         }
-        try absorb(new, into: old)
-        try move(old, to: new)
+        try recordMove(from: from, to: to)
+        guard let old else { return nil }
+        if let new = try existingPathID(newNFC) {
+            try absorb(new, into: old)
+            try move(old, to: new)
+        } else {
+            try statement("UPDATE paths SET path = ? WHERE id = ?").run(newNFC, old)
+        }
         merge.changed = true
         return nil
     }

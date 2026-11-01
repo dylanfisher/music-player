@@ -63,8 +63,10 @@ let syncOutboxTable = "sync_outbox"
 let syncLogsTable = "sync_logs"
 let syncItemsTable = "sync_items"
 let syncPlaylistsTable = "sync_playlists"
+let syncMovesTable = "sync_moves"
 let syncTables: Set<String> = [
     syncStateTable, syncOutboxTable, syncLogsTable, syncItemsTable, syncPlaylistsTable,
+    syncMovesTable,
 ]
 
 private let indexSchema = """
@@ -306,6 +308,12 @@ private let syncSchema = """
     );
     -- Each synced playlist's ID in the logs; a deleted one keeps its row with no playlist, so
     -- a late create doesn't bring it back.
+    -- Each move made or read, by sync path, so an event for the old path read later goes to
+    -- the new one.
+    CREATE TABLE \(syncMovesTable) (
+        from_path TEXT PRIMARY KEY,
+        to_path TEXT NOT NULL
+    );
     CREATE TABLE \(syncPlaylistsTable) (
         id TEXT PRIMARY KEY,
         playlist_id INTEGER UNIQUE REFERENCES playlists (id) ON DELETE SET NULL

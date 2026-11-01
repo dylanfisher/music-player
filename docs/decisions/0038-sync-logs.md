@@ -141,10 +141,15 @@ the config file but music files, through the tag writer.
 - **Date Added** is the earliest any machine saw. A new path's `added` event comes from its
   first scan on each machine.
 - **Moves** (0026): a machine without a row for the old path, or that made the move itself,
-  ignores it. One with a row for the old path and none for the new gives the old row the new
-  path. One with both merges the new path's stats into the old row by the rules above, plays
-  and skips added, history moved, and then makes the move: a move arriving after the new path
-  was played. Where both paths have a file in this index, the move is skipped and reported.
+  ignores it. One whose index still has a file at the old path skips it and reports it: its
+  own scan will find the move, and a log can't take the row of a file that's there. Otherwise
+  a row for the old path takes the new one, and when the new path has a row too, its stats
+  merge into the old row first by the rules above, plays and skips added and history moved: a
+  move arriving after the new path was played.
+- **Moves are noted** (`sync_moves`, by sync path, 100,000 at most), both this machine's and
+  those read. An event for a moved path read later, such as a late play of the old one, goes
+  to where the moves lead, and so does a move onto a path that moved on before it was read;
+  a chain is followed 16 steps at most, and a move back forgets the first.
 - **A path this machine has no row for** but under one of its share folders gets a row, as a
   play of a file never scanned does (0022): the stats wait there for the scan to find the
   file. A path under none of its share folders is skipped, and the count reported: a Mac that
