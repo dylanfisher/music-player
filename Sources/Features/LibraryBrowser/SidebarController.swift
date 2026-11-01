@@ -5,9 +5,9 @@ import KeyChord
 import Library
 import Settings
 
-/// The source list: the library, History and the timeline, the playlists and the watched folders, with
-/// buttons to add and remove folders. Tracks dragged from the table onto a manual playlist are
-/// added to it.
+/// The source list: the library, History and the timeline, the playlists and the watched
+/// folders, with buttons to add and remove folders. Tracks dragged from the table onto a manual
+/// playlist are added to it.
 @MainActor
 final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate {
     let outline = KeyOutlineView()

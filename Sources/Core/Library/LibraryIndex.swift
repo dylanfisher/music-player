@@ -34,7 +34,8 @@ public final class LibraryIndex {
     private func prepareSchema() throws {
         try database.execute(
             """
-            CREATE TABLE IF NOT EXISTS \(schemaIdentityTable) (part TEXT PRIMARY KEY, sql TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS \(schemaIdentityTable) (
+                part TEXT PRIMARY KEY, sql TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS \(schemaDiscardsTable) (
                 discarded_seconds REAL NOT NULL, detail TEXT NOT NULL)
             """)
