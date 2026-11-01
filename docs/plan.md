@@ -37,10 +37,11 @@ Set by the owner on 2026-10-30 and 2026-10-31:
 2. Phases 6, 7, 8, 11 and then 15, each through its gate.
 3. Write the [hardening sub-plan](#14-hardening), committed as `docs: plan phase 14`, then run
    14a onward, each through its gate.
-4. Phase 9 last, if time is left, against a simulated renderer only. Nothing contacts the Denon
+4. Phases 16 to 22 in order, each through its gate. Added by the owner on 2026-11-01.
+5. Phase 9 last, if time is left, against a simulated renderer only. Nothing contacts the Denon
    or any real device: no SSDP on the LAN, no HTTP or receiver control to real addresses. Its Denon checkpoint stays
    pending.
-5. Skip 10, 12 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
+6. Skip 10, 12 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Phase gate
@@ -1379,3 +1380,152 @@ History under budget with a `plays` index on last played, bounded the timeline's
 itself drawn before the timeline's first page, and kept the one-time stats-discard notice until
 it's shown. Known limits: paths are byte-exact, so a Unicode or case variant reached another way
 gets a second ID; commands on timeline rows whose files are all missing do nothing.
+
+### 16. Album artist and more columns
+
+The Artist pane lists track artists, so a compilation or an album with guest artists spreads
+across many entries, and albums that share a title by different artists repeat by name in the
+Album pane (the known limit in phase 5's Result).
+
+- [ ] A setting `library.groupByAlbumArtist`, on by default: the Artist pane lists album
+      artists, using the track artist where a track has none, and compilations without an album
+      artist under one "Various Artists" entry. Off, the pane lists track artists as now. It's in
+      the Settings window and ⌘K like every other setting.
+- [ ] The Album pane tells albums with the same title apart: it shows the album artist beside
+      the title wherever two entries would otherwise read the same.
+- [ ] Sorting by Artist or Album with the setting on orders by album artist, then album, disc
+      and track, so an album's tracks stay together.
+- [ ] Columns for every field the index already reads that the table can't show yet: composer,
+      comment, track total, disc total, compilation, channels, file size and bit rate. Each is
+      sortable and available to smart rules where it makes sense.
+- [ ] Tests: the pane with the setting on and off, compilations, same-title albums, the sort
+      order, and each new column's sort.
+- [ ] Bench: the pane and re-sort budgets still hold with the setting on.
+
+### 17. Playlist files
+
+- [ ] **Export** a manual playlist, or a smart playlist's current tracks, as M3U8 (UTF-8, `#EXTM3U`
+      with `#EXTINF` length and "artist - title"), paths absolute or relative to the file's folder,
+      chosen in the save panel.
+- [ ] **Import** M3U and M3U8 (and PLS if it's cheap) as a new manual playlist. Paths may be
+      absolute, relative to the playlist file, or `file://` URLs. Entries the index doesn't hold
+      are counted and listed in a report after the import, never added silently or dropped
+      silently.
+- [ ] Playlist files are hostile input: a size cap, a line-length cap, no URL schemes but
+      `file`, and no reads of the paths they name beyond an index lookup. Add the rows to
+      [ADR 0025](decisions/0025-threat-model.md).
+- [ ] Commands in the registry (Import Playlist…, Export Playlist…) and dragging an `.m3u8` onto
+      the sidebar.
+- [ ] Tests: round trip, relative and absolute paths, non-ASCII names, CRLF, a BOM, missing
+      entries, and hostile files.
+
+### 18. Import from other players
+
+Bring plays, ratings, dates and playlists across from the player someone used before. The owner
+comes from Swinsian; most other Mac users come from iTunes or Music.
+
+- [ ] **Swinsian:** read its library database (`~/Library/Application Support/Swinsian/`),
+      opened read-only from a copy, never the live file. Bring across play counts, last played,
+      ratings, date added, and manual playlists. Smart playlists whose rules map onto ours come
+      across as smart playlists; the rest are listed in the report.
+- [ ] **iTunes and Music:** read an exported `Library.xml` (File ▸ Library ▸ Export Library)
+      with `PropertyListSerialization`. The same fields, plus skip counts. Smart playlists are
+      encoded in a private format, so they come across as manual playlists of their current
+      tracks, which the report says.
+- [ ] Other players are added when their library format is documented; until then, M3U8
+      (phase 17) carries their playlists.
+- [ ] **Matching:** tracks match by path. When the other library lived at another mount point,
+      the import asks for one path prefix to replace with another. Anything that doesn't match is
+      counted and listed in the report.
+- [ ] **Merging:** a preview shows what will change before anything is written: counts per field,
+      unmatched tracks, and playlists that already exist by name. Play counts add to ours, last
+      played and date added take the earlier or later value as each field needs, and ratings come
+      across only where we have none. One confirmation writes it all in one transaction. Imported
+      plays raise counts; they don't add rows to the timeline, since the other player kept no
+      dates for each play. Record the merge rules in an ADR.
+- [ ] Both formats are hostile input: rows to [ADR 0025](decisions/0025-threat-model.md) and
+      tests with corrupt and oversized files. Music files are never touched.
+- [ ] Tests run against generated Swinsian databases and `Library.xml` files, never a real
+      library.
+- [ ] **Hardware checkpoint (owner):** on the DAC Mac, import the Swinsian library and report
+      the preview's counts, the unmatched list, and whether ratings and playlists look right.
+
+### 19. Finder, folders and library health
+
+- [ ] **Reveal in Finder** (⇧⌘R) for the selected tracks, from the menu, the context menu and ⌘K.
+- [ ] **Folder browsing:** a sidebar mode that shows each watched folder as a tree of its
+      subfolders, built from the paths the index already holds. Selecting a folder lists the
+      tracks under it, and the panes narrow to them as they do for any source.
+- [ ] **Library health report**, as a sidebar source, each group listing its tracks so they can be
+      selected, played, revealed or fixed in the tag editor:
+      - files the scanner couldn't read, and its warnings;
+      - playlist entries whose file left the index;
+      - likely duplicates: the same album artist, album, disc and track number, or the same
+        title and artist within a second of the same length;
+      - albums with gaps in their track numbers, more than one album artist, or mixed sample
+        rates;
+      - tracks with no art, no album or no album artist.
+      It runs off the main thread on request and when a scan ends, never on a timer.
+- [ ] Tests: each group against crafted fixtures, and the folder tree.
+- [ ] Bench, with the budget added to [Performance budgets](#performance-budgets): building the
+      report over the fixture library p95 < 1 s on Apple Silicon.
+
+### 20. Signal path panel
+
+- [ ] A panel, hidden by default, that shows what happens to the samples between the file and the
+      DAC: the file (codec, rate, bit depth, channels), the decoder's output, the device (name,
+      nominal rate, physical format, bit depth), whether hog mode is held, and whether digital
+      volume is at unity. A line at the top says "Bit-perfect" or names each thing that changes
+      the samples.
+- [ ] It follows the device's property listeners, so another app changing the rate or taking the
+      device shows at once. Nothing polls.
+- [ ] A command and a menu item show and hide it; whether it's shown is saved in the state file.
+- [ ] When phase 9 lands, a renderer shows its own path (original bytes sent, and what it reports).
+- [ ] Tests: the verdict for each case (rate mismatch, volume below unity, hog mode lost, a
+      device change mid-track) against a fake device.
+- [ ] **Hardware checkpoint (owner):** on the DAC Mac with the ADI-2, play 16/44.1 and 24/192,
+      then change the rate in Audio MIDI Setup while playing, and report what the panel shows.
+
+### 21. Scripting
+
+- [ ] **Command line:** a `music-player` tool in the bundle that runs registry commands in the
+      running app (`music-player play`, `music-player next`, `music-player play "album:Kind of
+      Blue"`, `music-player status --json`), and starts the app if it isn't running.
+- [ ] **URL scheme:** `music-player://` runs the same commands, for Shortcuts, Raycast and links.
+- [ ] Both reach the app over a local channel only (Apple events or a socket readable by the user
+      alone; the ADR picks). A web page can open a URL, so the URL scheme runs playback and
+      navigation commands only; commands that change the library, playlists or files need the
+      app in front and a confirmation. Add the rows to
+      [ADR 0025](decisions/0025-threat-model.md).
+- [ ] Commands, their arguments and their help text come from the registry; nothing is declared
+      twice. `music-player help` lists them.
+- [ ] Tests: argument parsing, each command routed to the registry, refused commands, and status
+      output.
+
+### 22. Per-device profiles
+
+Each output device remembers its own settings, with nothing for the user to set up. A profile is
+keyed by the device's UID (a renderer's UDN once phase 9 lands) and kept in the state file.
+
+- [ ] The volume level, and whether digital volume and hog mode are on, are remembered per device.
+      A device seen for the first time starts from the `output.*` settings in the config file;
+      after that, changing one while that device is in use changes it for that device only.
+      The ADR says how an edit to those settings in the config file meets the profiles.
+- [ ] Each profile records the rates and formats the device reported, so a track the device can't
+      take is refused before playback starts, and the signal path panel can show them.
+- [ ] When the device last chosen reconnects (the DAC switched back on), output returns to it, as
+      long as nothing is playing elsewhere.
+- [ ] Tests: two fake devices with different settings, a first-seen device, switching between
+      them mid-queue, and a reconnect.
+- [ ] **Hardware checkpoint (owner):** on the DAC Mac, set different volumes on the ADI-2 and the
+      built-in output, switch between them, then power the ADI-2 off and on, and report what the
+      app does.
+
+## Later
+
+Not phases yet. Each becomes one when the owner asks.
+
+- **Mini player:** a small window with art, transport and seek.
+- **Library quality audit:** a background pass that finds upsampled "hi-res" files, lossy files
+  transcoded to FLAC, clipping, true peak and a dynamic range score, stored in the index and
+  usable in smart playlists. The same pass could draw a waveform for the seek bar.
