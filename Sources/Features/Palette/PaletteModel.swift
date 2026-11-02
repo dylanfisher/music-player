@@ -11,6 +11,8 @@ public final class PaletteModel {
     public private(set) var query = ""
     /// Whether the listing ranks each kind in turn, as `rankPalette` does with `byKind`.
     public private(set) var byKind = false
+    /// The only kinds the empty query lists, as `rankPalette` takes them; nil lists every kind.
+    private var emptyQueryKinds: Set<PaletteItem.Kind>?
     public private(set) var results: [RankedItem] = []
     public private(set) var frecency: Frecency
     /// Counts the listings `open` starts, so items read for one aren't added to the next.
@@ -32,10 +34,13 @@ public final class PaletteModel {
     /// Starts a listing of `items` with an empty query, as when the palette opens, and returns
     /// its session. The change is made before this returns, so an `append` made after builds on
     /// it. Call `rank` to rank it.
-    public func open(_ items: [PaletteItem], byKind: Bool) -> Int {
+    public func open(
+        _ items: [PaletteItem], byKind: Bool, emptyQueryKinds: Set<PaletteItem.Kind>? = nil
+    ) -> Int {
         session += 1
         self.items = items
         self.byKind = byKind
+        self.emptyQueryKinds = emptyQueryKinds
         query = ""
         return session
     }
@@ -62,10 +67,13 @@ public final class PaletteModel {
     func rank() async {
         generation += 1
         let mine = generation
-        let (items, query, session, byKind) = (items, query, session, byKind)
+        let (items, query, session) = (items, query, session)
+        let (byKind, kinds) = (byKind, emptyQueryKinds)
         let scores = frecency.scores(now: now())
         let results = await Task.detached(priority: .userInitiated) {
-            rankPalette(items, query: query, frecency: scores, limit: Self.limit, byKind: byKind)
+            rankPalette(
+                items, query: query, frecency: scores, limit: Self.limit, byKind: byKind,
+                emptyQueryKinds: kinds)
         }.value
         guard mine == generation else { return }
         let sameQuery = ranked.map { $0 == (session, query) } ?? false

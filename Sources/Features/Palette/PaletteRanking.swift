@@ -13,9 +13,11 @@ public struct RankedItem: Sendable {
 /// best `limit` are kept, so 43k rows cost one score each and no full sort. An empty query lists
 /// the most frecent first, then the rest in order. `byKind` lists every kind's best `limit` in
 /// turn instead, in the kinds' order, so ⌘P shows artists, then albums, then tracks.
+/// `emptyQueryKinds`, when given, are the only kinds an empty query lists, so ⌘K opens on its
+/// commands and finds the rest only once the user types.
 public func rankPalette(
     _ items: [PaletteItem], query: String, frecency: [String: Double], limit: Int,
-    byKind: Bool = false
+    byKind: Bool = false, emptyQueryKinds: Set<PaletteItem.Kind>? = nil
 ) -> [RankedItem] {
     let matcher = FuzzyMatcher(query)
     struct Entry {
@@ -49,7 +51,8 @@ public func rankPalette(
         if lists[list].count > limit { lists[list].removeLast() }
     }
     if matcher.isEmpty {
-        for (index, item) in items.enumerated() {
+        for (index, item) in items.enumerated()
+        where emptyQueryKinds?.contains(item.kind) ?? true {
             let bonus = Frecency.bonus(frecency[item.key] ?? 0)
             offer(Entry(index: index, score: bonus, kind: item.kind, bonus: bonus, length: 0))
         }

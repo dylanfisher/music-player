@@ -43,6 +43,9 @@ settings and the library. A few choices follow from that.
   list, a pane or the search hides it; the timeline's rows are plays, so it leaves the timeline.
   Both palettes share one frecency log, since their
   keys can't collide. The alternate chords ⇧⌘P and ⇧⌘K are gone, so each palette has one chord.
+- **⌘K's empty query lists only commands (amended 2026-11-02).** A frecent genre listed above
+  the commands before anything was typed, and the list changed as genres arrived. Settings,
+  outputs, playlists and genres show once the user types, ranked as before.
 - `--snapshot-of palette` opens ⌘K before the snapshot, so the panel can be checked on a Mac
   where screen recording isn't allowed.
 

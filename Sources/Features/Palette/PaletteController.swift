@@ -79,7 +79,8 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         shownAt = frame
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(field)
-        let session = model.open(items, byKind: mode == .goToItem)
+        let session = model.open(
+            items, byKind: mode == .goToItem, emptyQueryKinds: mode == .commands ? [.command] : nil)
         Task { await model.rank() }
         return session
     }

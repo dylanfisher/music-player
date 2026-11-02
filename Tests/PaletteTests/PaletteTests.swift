@@ -44,6 +44,18 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     #expect(ranked.map(\.item.title) == ["C", "A", "B"])
 }
 
+@Test func anEmptyQueryListsOnlyTheKindsGiven() {
+    let items = [item("Electronic", .genre), item("Play", .command), item("Mix", .playlist)]
+    let frecency: [String: Double] = ["genre:Electronic": 16]
+    let empty = rankPalette(
+        items, query: "", frecency: frecency, limit: 5, emptyQueryKinds: [.command])
+    #expect(empty.map(\.item.title) == ["Play"])
+    // Typing finds every kind.
+    let typed = rankPalette(
+        items, query: "l", frecency: frecency, limit: 5, emptyQueryKinds: [.command])
+    #expect(Set(typed.map(\.item.title)) == ["Electronic", "Play"])
+}
+
 @Test func frecencyWeighsRecentVisitsMore() {
     var frecency = Frecency(VisitLog(visits: []))
     frecency.record("artist:A", now: 0)
@@ -117,8 +129,9 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled],
         backing: .buffered, defer: false)
+    // Go to Item, since ⌘K's empty query lists only commands.
     let session = palette.show(
-        .commands, items: ["A", "B", "C"].map { item($0, .album) }, over: window, place: nil)
+        .goToItem, items: ["A", "B", "C"].map { item($0, .album) }, over: window, place: nil)
     // The ranking `show` started.
     while palette.shown.isEmpty { await Task.yield() }
     palette.table.selectRowIndexes([1], byExtendingSelection: false)
