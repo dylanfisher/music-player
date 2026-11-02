@@ -8,10 +8,9 @@ import Settings
 /// The app's name, as the window title and the app menu show it.
 let appName = ProcessInfo.processInfo.processName
 
-/// The main window: the config file's banner when it has a problem, the now-playing bar and
-/// search field across the top, the signal path when shown, then the sidebar, the
-/// browser and the queue side by side. It places the features' views and reports layout
-/// changes; it holds no logic of its own.
+/// The main window: the toolbar, the config file's banner when it has a problem, the signal
+/// path when shown, then the sidebar, the browser and the queue side by side. It places the
+/// features' views and reports layout changes; it holds no logic of its own.
 @MainActor
 final class MainWindow: NSObject, NSWindowDelegate {
     /// The window's size before it has a saved frame: inside a 1440 by 900 screen, the 2015
@@ -24,9 +23,8 @@ final class MainWindow: NSObject, NSWindowDelegate {
     private var restoring = true
 
     init(
-        settings: WindowSettings, banner: NSView, browser: LibraryBrowser,
-        nowPlaying: NowPlayingBar, signalPath: SignalPathPanel, queue: QueuePanel,
-        saver: LayoutSaver
+        settings: WindowSettings, banner: NSView, browser: LibraryBrowser, toolbar: MainToolbar,
+        signalPath: SignalPathPanel, queue: QueuePanel, saver: LayoutSaver
     ) {
         split = MainSplit(
             sidebar: browser.sidebar, content: browser.content, queue: queue,
@@ -42,14 +40,9 @@ final class MainWindow: NSObject, NSWindowDelegate {
         window.minSize = NSSize(width: 720, height: 420)
         window.delegate = self
         window.isReleasedWhenClosed = false
-
-        browser.searchField.translatesAutoresizingMaskIntoConstraints = false
-        browser.searchField.widthAnchor.constraint(equalToConstant: 220).isActive = true
-        let top = NSStackView(views: [nowPlaying.view, browser.searchField])
-        top.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 10)
-        top.distribution = .fill
-        top.setClippingResistancePriority(.required, for: .vertical)
-        (nowPlaying.view as? NSStackView)?.setHuggingPriority(.init(1), for: .horizontal)
+        // Under the title, where the toolbar grows to the now-playing status's height.
+        window.toolbarStyle = .expanded
+        toolbar.attach(to: window)
 
         split.sidebarWidthChanged = { saver.set(\.sidebarWidth, $0) }
         split.queueWidthChanged = { saver.set(\.queueWidth, $0) }
@@ -57,10 +50,10 @@ final class MainWindow: NSObject, NSWindowDelegate {
         let line = NSBox()
         line.boxType = .separator
         signalPath.view.isHidden = !settings.signalPathVisible
-        let stack = NSStackView(views: [banner, top, signalPath.view, line, split.view])
+        let stack = NSStackView(views: [banner, signalPath.view, line, split.view])
         stack.orientation = .vertical
         stack.spacing = 0
-        for view in [banner, top, signalPath.view, line, split.view] {
+        for view in [banner, signalPath.view, line, split.view] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }

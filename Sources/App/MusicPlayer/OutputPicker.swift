@@ -19,6 +19,7 @@ extension AppDelegate {
         outputMenu.choose = { [weak self] in self?.chooseOutput($0) }
         outputMenu.opened = { [weak self] in self?.searchOutputs() }
         menu.liveMenus[AppMenus.outputMenuTitle]?.delegate = outputMenu
+        toolbar?.outputMenu.delegate = outputMenu
         self.outputMenu = outputMenu
         readDevices()
         do {

@@ -55,7 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var saver: LayoutSaver?
     private(set) var window: MainWindow?
     private(set) var browser: LibraryBrowser?
-    private var nowPlaying: NowPlayingBar?
+    private(set) var nowPlaying: NowPlayingBar?
+    private(set) var toolbar: MainToolbar?
     private(set) var signalPath: SignalPathPanel?
     /// Media keys, headphone buttons, Now Playing in Control Center, and the Dock menu.
     private var mediaControls: MediaControls?
@@ -148,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.helpMenu = menu.helpMenu
             self.dispatcher = dispatcher
             self.menu = menu
-            try openWindow(settings)
+            try openWindow(settings, dispatcher)
             watchOutputs(menu)
             registerCommands(dispatcher)
             wireTrackMenu(menu)
@@ -170,7 +171,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         playback.currentIndex.map { playback.queue[$0].path }
     }
 
-    private func openWindow(_ settings: ConfigStore<AppSettings>) throws {
+    private func openWindow(_ settings: ConfigStore<AppSettings>, _ dispatcher: CommandDispatcher)
+        throws
+    {
         let state = try StateStore(AppState(), fileURL: paths.stateFile)
         self.state = state
         let saver = LayoutSaver(state)
@@ -188,19 +191,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
-        if let dispatcher { makeMediaControls(dispatcher, lookup: lookup) }
+        nowPlaying.style = settings[\.nowPlayingStyle]
+        makeMediaControls(dispatcher, lookup: lookup)
         let queue = QueuePanel(model: QueueModel(lookup: lookup))
         let signalPath = SignalPathPanel()
+        let toolbar = MainToolbar(
+            identifier: String(describing: MainWindow.self), transport: nowPlaying.transport,
+            status: nowPlaying.status,
+            search: browser.searchField, dispatcher: dispatcher, items: state[\.toolbarItems])
+        toolbar.itemsChanged = { saver.set(\.toolbarItems, $0) }
+        toolbar.volumeDecibels = { [weak self] in
+            guard let self, canSetVolume else { return nil }
+            return volumeDecibels
+        }
+        toolbar.setVolume = { [weak self] in self?.setVolume($0, saving: $1) }
         let window = MainWindow(
-            settings: layout, banner: banner.view, browser: browser, nowPlaying: nowPlaying,
+            settings: layout, banner: banner.view, browser: browser, toolbar: toolbar,
             signalPath: signalPath, queue: queue, saver: saver)
         self.browser = browser
         self.nowPlaying = nowPlaying
+        self.toolbar = toolbar
         self.signalPath = signalPath
         self.queue = queue
         self.window = window
 
-        nowPlaying.toggleQueue = { [weak window] in window?.toggleQueue() }
         browser.play = { [weak self] request in self?.play(request) }
         browser.playNext = { [weak self] urls in
             guard let engine = self?.engine else { return }

@@ -67,6 +67,9 @@ public struct AppSettings: SettingsSchema {
     public let artSize = Setting(
         "appearance.artSize", title: "Album Art", default: ArtSize.thumbnail,
         "A thumbnail per row, or album art as wide as the column.")
+    public let nowPlayingStyle = Setting(
+        "appearance.nowPlaying", title: "Now Playing Style", default: NowPlayingStyle.detailed,
+        "How the toolbar shows the playing track.")
 
     public func conflicts(_ values: [String: any SettingValue]) -> [SettingConflict] {
         guard let sync = values[syncFolder.key] as? SyncFolder,

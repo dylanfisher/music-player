@@ -52,8 +52,12 @@ literal "gearshape" | files Sources/Features/LibraryBrowser/SidebarController.sw
 literal "Genre" | files Sources/Core/Library/TrackColumnTitle.swift Sources/Core/Settings/AppState.swift | the track column's title and the title of the saved genre selection, which no window shows; Settings can't import Library
 literal "history" | files Sources/Core/Library/LibrarySchema.swift Sources/Core/Settings/BrowserSource.swift | the plays table and the History source's key in the state file
 literal "Light" | files Sources/Core/Settings/Appearance.swift Sources/Tools/Fixtures/LibraryPlan.swift | the light appearance's title and a word the fixture plan builds titles from
-literal "list.bullet" | files Sources/Features/LibraryBrowser/SidebarController.swift Sources/Features/NowPlaying/NowPlayingBar.swift | the sidebar's timeline and the queue button
-literal "music.note" | files Sources/Features/LibraryBrowser/SidebarController.swift Sources/Features/Palette/PaletteRow.swift | the sidebar's library and a track in the palette
+literal "list.bullet" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Features/LibraryBrowser/SidebarController.swift | the queue button and the sidebar's timeline
+literal "magnifyingglass" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Features/Palette/PaletteController.swift | the toolbar's search item in the customization sheet and the palette's search icon
+literal "music.note" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Features/LibraryBrowser/SidebarController.swift Sources/Features/Palette/PaletteRow.swift | the now-playing item in the toolbar's customization sheet, the sidebar's library and a track in the palette
+literal "repeat" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Core/Scripting/ScriptStatus.swift | the repeat button's symbol and the status key the music-player tool reads
+literal "Search" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Features/LibraryBrowser/LibraryBrowser.swift | the search item's label in the toolbar's customization sheet and the search field's placeholder
+literal "Volume" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Features/NowPlaying/SignalPathLines.swift | the volume slider's label in the toolbar and the signal path's volume row
 literal "MusicPlayer" | files Sources/Core/Log/ModuleLogger.swift Sources/Tools/Bench/WindowBenchmarks.swift | the executable Bench launches, named by Package.swift, and the app's data folder, named in Log
 literal "name" | files Sources/Core/Metadata/MP4.swift Sources/Core/UPnP/AVTransport.swift | MP4's name atom of a freeform item and the element a UPnP service description names an action in
 literal "none" | files Sources/App/MusicPlayer/ScanCommand.swift Sources/Tools/TagCorpus/Survey.swift | --scan's summary with no issues and the tag corpus survey's empty column

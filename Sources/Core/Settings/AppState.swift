@@ -39,6 +39,9 @@ public struct AppState: SettingsSchema {
         "window.signalPathVisible", title: "Show Signal Path", default: false,
         "Show what happens to the samples between the file and the device, under the"
             + " now-playing bar.")
+    public let toolbarItems = Setting(
+        "window.toolbarItems", title: "Toolbar Items", default: ToolbarItem.defaultItems,
+        "The items in the main window's toolbar, left to right.")
     public let askedForAccessibility = Setting(
         "receiver.askedForAccessibility", title: "Asked for Accessibility", default: false,
         "Whether the system's Accessibility prompt was shown for the volume keys.")

@@ -55,6 +55,8 @@ public enum AppMenus {
     public static let addToPlaylistMenuTitle = "Add to Playlist"
     public static let showInPlaylistMenuTitle = "Show in Playlist"
     private static let ratingMenuTitle = "Rating"
+    /// The Controls menu's submenu of repeat modes, and the toolbar's repeat button.
+    public static let repeatMenuTitle = "Repeat"
 
     /// The context menu of the track table and the timeline, grouped as Swinsian groups it.
     /// Its items act on the selection, which a right-click sets.
@@ -160,6 +162,9 @@ public enum AppMenus {
                             .setting(settings.alternatingRows.key),
                             .setting(settings.rowHeight.key), .setting(settings.artSize.key),
                         ], showsChords: true),
+                    .setting(settings.nowPlayingStyle.key),
+                    .standard(
+                        StandardItem("Customize Toolbar…", "runToolbarCustomizationPalette:")),
                 ]),
             MenuSection(
                 title: "Controls", role: .plain,
@@ -169,7 +174,7 @@ public enum AppMenus {
                     .command(.stop), .separator, .command(.nextTrack), .command(.previousTrack),
                     .command(.seekForward), .command(.seekBack), .separator, .command(.shuffle),
                     .submenu(
-                        "Repeat",
+                        repeatMenuTitle,
                         [.command(.repeatOff), .command(.repeatAll), .command(.repeatOne)],
                         showsChords: true),
                     .separator, .command(.volumeUp), .command(.volumeDown), .separator,

@@ -221,10 +221,7 @@ extension AppDelegate {
             .addToQueue,
             enabled: { [weak self] in self?.engine != nil && self?.hasSelectedTracks() == true },
             run: { [weak self] in self?.browser?.addSelectionToQueue() })
-        // The digital volume is the device's; a renderer has none the app sets (ADR 0041).
-        let hasVolume = { [weak self] in
-            self?.engine != nil && self?.digitalVolume == true && self?.rendererOutput == nil
-        }
+        let hasVolume = { [weak self] in self?.canSetVolume == true }
         dispatcher.handle(.volumeUp, enabled: hasVolume) { [weak self] in
             self?.changeVolume(by: volumeStepDecibels)
         }
@@ -274,11 +271,19 @@ extension AppDelegate {
         window.makeFirstResponder(areas[next])
     }
 
+    /// The digital volume is the device's; a renderer has none the app sets (ADR 0041).
+    var canSetVolume: Bool { engine != nil && digitalVolume && rendererOutput == nil }
+
     private func changeVolume(by step: Double) {
+        setVolume(min(0, volumeDecibels + step), saving: true)
+    }
+
+    /// Sets the digital volume to `decibels`, saved in the device's profile when `saving`; the
+    /// toolbar's slider saves only once a drag ends.
+    func setVolume(_ decibels: Double, saving: Bool) {
         guard let engine else { return }
-        let decibels = min(0, volumeDecibels + step)
         volumeDecibels = decibels
-        saveVolume(decibels)
+        if saving { saveVolume(decibels) }
         Task {
             do {
                 try await engine.setVolume(pow(10, decibels / 20))

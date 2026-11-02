@@ -7,11 +7,12 @@ enum SnapshotTarget: String, CaseIterable {
     case main, palette, playlist, tags, settings, shortcuts
 }
 
-/// `--snapshot <file>`: draws the window's content into a PNG, for checking the layout on a Mac
-/// where screen recording isn't allowed. The app draws its own views, so it needs no permission.
+/// `--snapshot <file>`: draws the window, toolbar included, into a PNG, for checking the
+/// layout on a Mac where screen recording isn't allowed. The app draws its own views, so it
+/// needs no permission.
 @MainActor
 func writeSnapshot(of window: NSWindow, to url: URL) throws {
-    guard let view = window.contentView,
+    guard let view = window.contentView?.superview ?? window.contentView,
         let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
     else { throw SnapshotError(path: url.path) }
     view.cacheDisplay(in: view.bounds, to: bitmap)

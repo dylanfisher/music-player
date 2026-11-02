@@ -9,7 +9,5 @@ PaletteController.control | NSControlTextEditingDelegate
 PaletteController.numberOfRows | NSTableViewDataSource
 QueuePanel.numberOfRows | NSTableViewDataSource
 RuleEditorSheet.controlTextDidChange | NSControlTextEditingDelegate
-SettingsWindowController.toolbarAllowedItemIdentifiers | NSToolbarDelegate
-SettingsWindowController.toolbarDefaultItemIdentifiers | NSToolbarDelegate
 SettingsWindowController.toolbarSelectableItemIdentifiers | NSToolbarDelegate
 TagEditorSheet.controlTextDidChange | NSControlTextEditingDelegate

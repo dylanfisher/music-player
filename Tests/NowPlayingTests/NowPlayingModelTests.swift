@@ -86,3 +86,18 @@ private func update(
     model.libraryChanged()
     #expect(model.title == "New")
 }
+
+@MainActor @Test func theCenteredLineNamesTheArtistAndAlbumItHas() {
+    let model = NowPlayingModel { path in
+        var track = row(path)
+        if path == urls[1].path { track.album = nil }
+        return track
+    }
+    #expect(model.byline == "Not Playing")
+    #expect(model.totalTime == "")
+    model.apply(update(.trackStarted(index: 0)))
+    #expect(model.byline == "Come Together by The Beatles from Abbey Road")
+    #expect(model.totalTime == "4:19")
+    model.apply(update(.trackStarted(index: 1), current: 1))
+    #expect(model.byline == "Come Together by The Beatles")
+}
