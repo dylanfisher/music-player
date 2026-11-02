@@ -180,7 +180,7 @@ public final class GeneralModel {
             guard folder["kind"] as? String == WatchedFolder.Kind.network.rawValue else {
                 return Folder(location: location, kind: "Local", rescans: "On change")
             }
-            let minutes = folder["pollIntervalMinutes"] as? Int
+            let minutes = folder[WatchedFolder.pollIntervalMinutesKey] as? Int
             return Folder(
                 location: location, kind: "Network",
                 rescans: minutes.map(Self.rescansText) ?? noValueText,
@@ -196,7 +196,7 @@ public final class GeneralModel {
             throw ConfigProblem(
                 line: nil, message: "\(key) has no folder \(position + 1) to set the rescans of")
         }
-        folders[position]["pollIntervalMinutes"] = minutes
+        folders[position][WatchedFolder.pollIntervalMinutesKey] = minutes
         try set(key, folders)
     }
 
