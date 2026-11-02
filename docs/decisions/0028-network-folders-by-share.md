@@ -28,7 +28,9 @@ and every local folder, is stored by path, as now. Mounting stays the user's job
   name, so the NAS reached by its address is found. A second server with a share of the same
   name is never used: with the NAS off and `smb://backup/music` mounted, retargeting would
   have the next scan remove the library and scramble its stats. That case, and two candidates,
-  leave the folder offline with the mount points in the log. No DNS lookup decides it: it's a
+  leave the folder offline with the mount points in the log. The share mounted twice on its
+  host (`/Volumes/music` and `/Volumes/music-1`, which macOS makes when it reconnects while the
+  old mount lingers) is one share, so the first mount point in order is used. No DNS lookup decides it: it's a
   network call that can hang.
 - **Listing the shares** reads the kernel's mount table with `getmntinfo(MNT_NOWAIT)`: the
   mount point and the source (`//user@nas/music` on `smbfs`, `nas:/export` on `nfs`), which

@@ -43,6 +43,10 @@ private func share(_ url: String, at mountPoint: String) -> MountedShare {
     #expect(ShareLookup(stored, among: [other, byIP]) == .mounted(at: "/Volumes/music-1"))
     // By host name and by IP at once: the host decides.
     #expect(ShareLookup(stored, among: [byIP, byName]) == .mounted(at: "/Volumes/music"))
+    // The share mounted twice on its host is one share, found at the first mount point.
+    let again = share("smb://dylan@nas._smb._tcp.local/music", at: "/Volumes/music-1")
+    #expect(ShareLookup(stored, among: [again, other, byName]) == .mounted(at: "/Volumes/music"))
+    #expect(ShareLookup(stored, among: [again, byIP, byName]) == .mounted(at: "/Volumes/music"))
     let otherNAS = share("smb://10.0.0.9/music", at: "/Volumes/music-2")
     #expect(
         ShareLookup(stored, among: [byIP, otherNAS])
