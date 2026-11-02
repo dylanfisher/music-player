@@ -414,6 +414,11 @@ public final class BrowserModel {
         return genres + artists + albums
     }
 
+    /// Every track's name in the library, whatever shows, for Go to Item.
+    public func allTrackNames() async throws -> [TrackName] {
+        try await reader.trackNames(everything, sortedBy: .artist, ascending: true)
+    }
+
     /// The track list changed during every read of its names.
     struct NamesKeptChanging: Error, CustomStringConvertible {
         var description: String { "the track list kept changing while it was read" }

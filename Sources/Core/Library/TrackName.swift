@@ -6,12 +6,4 @@ public struct TrackName: Equatable, Sendable {
     public var artist: String?
     public var album: String?
     public var genre: String?
-
-    public init(id: Int64, title: String, artist: String?, album: String?, genre: String?) {
-        self.id = id
-        self.title = title
-        self.artist = artist
-        self.album = album
-        self.genre = genre
-    }
 }

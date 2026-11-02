@@ -18,8 +18,7 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   by how well they match and how often and recently you chose or played them.
 - **Controls ▸ Output** picks the output device or a UPnP renderer on the network, by name;
   the Settings window's Output Device popup and ⌘K's "Output:" rows pick from the same list.
-- **⌘P** is Go to Item: the artists and albums, then the tracks of the current list, each kind
-  in turn.
+- **⌘P** is Go to Item: the artists, then the albums, then every track in the library.
 - **Playlists** (⌘N, or ⇧⌘N from the selection) take tracks dragged onto them in the sidebar,
   and reorder by dragging while sorted by Order. **Smart playlists** (⌥⌘N) pick tracks by rules
   and follow the library as it changes. Click a selected playlist's name, or press Return, to

@@ -37,6 +37,19 @@ func writableModel(
     #expect(try index.playlists().map(\.name) == ["Mix"])
 }
 
+@MainActor @Test func goToItemFindsATrackOutsideTheShownPlaylist() async throws {
+    let (model, index) = try await writableModel()
+    let outside = model.trackIDs[7]
+    try await model.createPlaylist(
+        named: "Mix", rules: nil, trackIDs: model.ids(ofRows: IndexSet([1, 2])))
+    #expect(model.filter.source != nil && !model.trackIDs.contains(outside))
+    let names = try await model.allTrackNames()
+    #expect(names.count == (try index.trackCount()))
+    #expect(names.contains { $0.id == outside })
+    let row = try #require(await model.reveal(outside))
+    #expect(model.filter.source == nil && model.trackIDs[row] == outside)
+}
+
 @MainActor @Test func rowsMoveAndLeaveWithinTheShownPlaylist() async throws {
     let (model, _) = try await writableModel()
     let picked = Array(model.trackIDs.prefix(4))

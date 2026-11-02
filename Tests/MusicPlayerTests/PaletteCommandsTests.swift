@@ -32,21 +32,17 @@ import Testing
     #expect(items.map { BrowserSource(text: $0.key) } == [.playlist(4), .playlist(9)])
 }
 
-@Test func goToItemOverTheTimelineListsEachPlayAndFindsItsRow() {
-    // One track played twice: two rows, each named by its play's history ID.
+@Test func goToItemKeysEachTrackByItsID() {
     let names = [
-        TrackName(id: 31, title: "Song", artist: "A", album: nil, genre: nil),
-        TrackName(id: 30, title: "Song", artist: "A", album: nil, genre: nil),
+        TrackName(id: 31, title: "Song", artist: "A", album: "B", genre: nil),
+        TrackName(id: 30, title: "Song", artist: nil, album: nil, genre: nil),
     ]
     let items = goToItems(names)
-    #expect(items.map(\.key) == ["track:0:31", "track:1:30"])
-    var shown: [Int64] = [31, 30]
-    let rowID = { (row: Int) in shown.indices.contains(row) ? shown[row] : nil }
-    #expect(goToRow(items[1].key, rowID: rowID) == 1)
-    // A new play above shifts the rows, so the old key no longer names that row.
-    shown.insert(32, at: 0)
-    #expect(goToRow(items[1].key, rowID: rowID) == nil)
-    #expect(goToRow("track:x:1", rowID: rowID) == nil)
+    #expect(items.map(\.key) == ["track:31", "track:30"])
+    #expect(items.map(\.detail) == ["A — B", ""])
+    #expect(items.map { goToTrackID($0.key) } == [31, 30])
+    #expect(goToTrackID("track:0:31") == nil)
+    #expect(goToTrackID("artist:31") == nil)
 }
 
 @Test func commandsListGenresAndGoToItemListsArtistsAndAlbums() {

@@ -68,7 +68,7 @@ extension AppDelegate {
         if mode == .goToItem {
             Task {
                 do {
-                    let names = try await browser.trackNames()
+                    let names = try await browser.allTrackNames()
                     // Preparing 43k titles for matching takes a while, so it runs off the main
                     // actor; the empty query's first rows show meanwhile.
                     let items = await Task.detached(priority: .userInitiated) {
@@ -140,8 +140,8 @@ extension AppDelegate {
             else { return }
             browser.show(.playlist(id))
         case .track:
-            guard let row = goToRow(item.key, rowID: browser.rowID(at:)) else { return }
-            browser.showRow(row)
+            guard let id = goToTrackID(item.key) else { return }
+            Task { await browser.reveal(trackID: id) }
         case .output:
             guard let choice = OutputChoice(text: item.key) else { return }
             chooseOutput(choice)
@@ -184,12 +184,11 @@ enum LibraryKey {
     }
 }
 
-/// Go to Item's rows for the shown list's names in order, keyed `track:<row>:<id>` with each
-/// row's ID: a track's, or on the timeline a play's, so a track played twice is two rows.
+/// Go to Item's rows for every track in the library, keyed `track:<id>`, whatever list shows.
 func goToItems(_ names: [TrackName]) -> [PaletteItem] {
-    names.enumerated().map { row, name in
+    names.map { name in
         PaletteItem(
-            kind: .track, key: "track:\(row):\(name.id)", title: name.title,
+            kind: .track, key: trackKeyPrefix + String(name.id), title: name.title,
             detail: [name.artist, name.album].compactMap { $0 }.joined(separator: " — "))
     }
 }
@@ -199,14 +198,13 @@ func listedPanes(_ mode: PaletteMode) -> Set<BrowserModel.Pane> {
     mode == .commands ? [.genre] : [.artist, .album]
 }
 
-/// The row a Go to Item key names, if that row still holds the same ID.
-func goToRow(_ key: String, rowID: (Int) -> Int64?) -> Int? {
-    let parts = key.split(separator: ":")
-    guard parts.count == 3, let row = Int(parts[1]), let id = Int64(parts[2]),
-        rowID(row) == id
-    else { return nil }
-    return row
+/// The track a Go to Item key names.
+func goToTrackID(_ key: String) -> Int64? {
+    guard key.hasPrefix(trackKeyPrefix) else { return nil }
+    return Int64(key.dropFirst(trackKeyPrefix.count))
 }
+
+private let trackKeyPrefix = "track:"
 
 /// The palette rows for the playlists, by name.
 func playlistItems(_ playlists: [Playlist]) -> [PaletteItem] {

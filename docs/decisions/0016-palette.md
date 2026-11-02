@@ -15,8 +15,8 @@ settings and the library. A few choices follow from that.
 - **Items are keyed by what they name**, not by row ID: `command:<id>`, `artist:<name>`,
   `genre:<name>`, and `album:<title>␟<artist>` (a unit separator between), since the index
   holds one album per title and artist. IDs change when the index is rebuilt; names survive, so
-  frecency does too. An album's row names its artist. Go to Item's rows are `track:<row>:<id>` and choosing one does nothing if the
-  row no longer shows that track.
+  frecency does too. An album's row names its artist. Go to Item's rows are `track:<id>`, and choosing one shows that
+  track, as Show Current Track does (amended below).
 - **Frecency counts palette choices and plays.** A track starting counts once for its artist, its
   album and its genre. Go to Item's rows are ranked by the match alone, as Searcher's are, so
   they aren't counted. The log (at most 1,000 keys, sorted, the least frecent dropped) and the
@@ -34,12 +34,14 @@ settings and the library. A few choices follow from that.
   the Settings window, which choosing one opens at its row.
 - **Two palettes by what they find (amended 2026-11-01).** The owner asked for ⌘K to hold what
   the app does and ⌘P what it plays. ⌘K lists commands, settings, outputs ([0045](0045-output-picker.md)), playlists and genres; ⌘P lists
-  artists, albums and the current list's tracks, every matching artist first, then albums, then
+  artists, albums and every track in the library, every matching artist first, then albums, then
   tracks, each kind ranked by the score and frecency rules above. Each kind keeps its own best
   50, so a query matching many artists still shows its albums and tracks, and a keystroke over
-  43k tracks still costs one score per row. The tracks stay the current list's rows, as
-  Searcher's Go to Item has them, so it also finds a row in a playlist or the timeline; in the
-  default view that list is the whole library. Both palettes share one frecency log, since their
+  43k tracks still costs one score per row. The tracks are the whole library's, not the
+  current list's as Searcher's are: with a playlist shown the owner still expects ⌘P to find any
+  track. Choosing one selects it where it shows, or shows the whole library first when the
+  list, a pane or the search hides it; the timeline's rows are plays, so it leaves the timeline.
+  Both palettes share one frecency log, since their
   keys can't collide. The alternate chords ⇧⌘P and ⇧⌘K are gone, so each palette has one chord.
 - `--snapshot-of palette` opens ⌘K before the snapshot, so the panel can be checked on a Mac
   where screen recording isn't allowed.

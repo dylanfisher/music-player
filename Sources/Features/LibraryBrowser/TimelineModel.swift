@@ -186,17 +186,6 @@ final class TimelineModel {
         return PlayRequest(urls: urls, first: start ?? 0)
     }
 
-    /// Every loaded play's names in row order, each with its history ID, for Go to Item.
-    func names() throws -> [TrackName] {
-        let played = try resolve(entries.map(\.trackID))
-        return entries.map { entry in
-            let file = played[entry.trackID]
-            return TrackName(
-                id: entry.id, title: file?.title ?? "", artist: file?.track?.artist,
-                album: file?.track?.album, genre: file?.track?.genre)
-        }
-    }
-
     private func present(_ rows: IndexSet) throws -> [(entry: PlayEntry, played: PlayedTrack)] {
         let picked = rows.filter { entries.indices.contains($0) }.map { entries[$0] }
         let played = try resolve(picked.map(\.trackID))

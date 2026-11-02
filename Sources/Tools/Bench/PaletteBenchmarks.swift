@@ -11,9 +11,9 @@ let paletteBenchmarks = [
         let names = try index.trackNames(sortedBy: .artist)
         var items: [PaletteItem] = []
         let prepareSeconds = seconds {
-            items = names.enumerated().map { row, name in
+            items = names.map { name in
                 PaletteItem(
-                    kind: .track, key: "track:\(row):\(name.id)", title: name.title,
+                    kind: .track, key: "track:\(name.id)", title: name.title,
                     detail: name.artist)
             }
         }

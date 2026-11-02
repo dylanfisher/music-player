@@ -108,8 +108,8 @@ play listed, not only one row per track, and expects the log to reach a million 
   - Those commands are on while any row is selected, even only missing ones, rather than read
     every selected play's track each time a menu is checked; with only missing ones they beep
     and say so in the status bar ([0023](0023-failure-table.md)).
-  - *Go to Item* lists the loaded rows, keyed `track:<row>:<history ID>`; choosing one selects
-    that row if it still holds that play, as the track table's rows do (0016).
+  - *Go to Item* lists the library's tracks, not the plays; choosing one leaves the timeline
+    for the library (amended in 0016).
   - *Type-to-select* is off: there is no sort column to type into.
 - The status line counts the plays: the last history ID, since rows are never deleted.
 

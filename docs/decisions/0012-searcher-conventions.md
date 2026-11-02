@@ -95,7 +95,7 @@ Kept from Searcher, the same job on the same key:
 | Action | Default |
 |---|---|
 | Command palette | ⌘K. Pressing it again or ⌘W closes it |
-| Go to Item: artists, albums and the current list | ⌘P |
+| Go to Item: artists, albums and tracks | ⌘P |
 | Next / previous row, extend the selection | ↓ / ↑, ⇧↓ / ⇧↑ |
 | Move 10 rows | ⌥↓ / ⌥↑, alternate ⌃⇧↓ / ⌃⇧↑ |
 | First / last row | Home / End, alternate ⌘⌥↑ / ⌘⌥↓ |
@@ -193,9 +193,9 @@ We take Searcher's model, without the configurable location. Each part was weigh
 - ↑, ↓, Page Up and Page Down move; Return runs; Esc closes and gives the keys back to whatever
   had them. The opening chords and ⌘W close it; the other palette's chords switch to it. An off
   command is listed greyed, and Return beeps on it.
-- **⌘K** lists commands, settings, playlists and genres. **⌘P** (Go to Item) lists the
-  artists and albums, then the rows of the current track list, prepared off the main actor as
-  0101 does, and selects the chosen row, centred ([0016](0016-palette.md) has the split).
+- **⌘K** lists commands, settings, outputs, playlists and genres. **⌘P** (Go to Item) lists
+  the artists and albums, then every track in the library, prepared off the main actor as 0101
+  does, and selects the chosen track, centred ([0016](0016-palette.md) has the split).
 - Matching follows 0079 and ranking 0085: word-start, component-start and initials bonuses, the
   prefix rule from three letters, a kind bonus, and frecency with zoxide's weights (4 within the
   hour, 2 the day, 1/2 the week, 1/4 before), counted from palette choices and plays. Ranking runs

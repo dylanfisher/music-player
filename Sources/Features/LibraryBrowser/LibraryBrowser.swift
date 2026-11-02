@@ -960,6 +960,14 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             report("couldn't find \(path) in the library: \(error)")
             return
         }
+        await reveal(trackID: id)
+    }
+
+    /// Selects track `id` in the table, centered, showing the whole library first if the
+    /// source, a pane or the search hides it. The timeline's rows are plays, not tracks, so it
+    /// leaves the timeline.
+    public func reveal(trackID id: Int64) async {
+        if showsTimeline { _ = await model.showAll() }
         guard let row = await model.reveal(id) else { return }
         if model.filter.search.isEmpty { searchField.stringValue = "" }
         showSource()
@@ -967,7 +975,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Selects `row` alone, centered, and gives the table the keys.
-    public func showRow(_ row: Int) {
+    func showRow(_ row: Int) {
         if showsTimeline { timeline.selectCentered(row) } else { table.selectCentered(row) }
         focusTracks()
     }
@@ -1007,20 +1015,17 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         focusTracks()
     }
 
-    /// What identifies `row`, to check a palette row still points at it: the track ID, or on
-    /// the timeline the play's history ID.
-    public func rowID(at row: Int) -> Int64? {
+    /// What identifies `row`: the track ID, or on the timeline the play's history ID.
+    func rowID(at row: Int) -> Int64? {
         if showsTimeline {
             return timelineModel.entries.indices.contains(row) ? timelineModel.entries[row].id : nil
         }
         return model.trackIDs.indices.contains(row) ? model.trackIDs[row] : nil
     }
 
-    /// The shown rows' names in order, each with its `rowID`, for Go to Item. On the timeline,
-    /// the loaded plays.
-    public func trackNames() async throws -> [TrackName] {
-        guard showsTimeline else { return try await model.trackNames() }
-        return try timelineModel.names()
+    /// Every track's name in the library, for Go to Item.
+    public func allTrackNames() async throws -> [TrackName] {
+        try await model.allTrackNames()
     }
 
     /// Esc clears the search and gives the keys back to the table; ↑ and ↓ move the table's

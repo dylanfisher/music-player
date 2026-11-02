@@ -162,7 +162,7 @@ private func play(_ count: Int, of rows: [TrackRow], from start: Int, _ index: L
     #expect(model.entries.count == 1)
 }
 
-@MainActor @Test func theBrowserListsTheTimelinesPlaysForGoToItem() async throws {
+@MainActor @Test func theBrowserListsTheTimelinesPlays() async throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent("timeline-browser-\(UUID().uuidString)")
@@ -186,11 +186,8 @@ private func play(_ count: Int, of rows: [TrackRow], from start: Int, _ index: L
     while browser.rowID(at: 1) == nil, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
-    let names = try await browser.trackNames()
     // One track played twice is two rows, each named by its play.
-    #expect(names.map(\.title) == [rows[0].title, rows[0].title])
-    #expect(names.map(\.id) == [browser.rowID(at: 0), browser.rowID(at: 1)])
-    #expect(Set(names.map(\.id)).count == 2)
+    #expect(browser.rowID(at: 0) != browser.rowID(at: 1))
     #expect(!browser.hasSelectedTracks)
     // The log is append-only, so ⌘⌫ has nothing to remove there.
     #expect(!browser.canRemoveFromPlaylist)

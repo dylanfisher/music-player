@@ -1,10 +1,10 @@
 import AppKit
 import Foundation
 import Library
-import LibraryBrowser
 import Settings
 import Testing
 
+@testable import LibraryBrowser
 @testable import MusicPlayer
 
 @Test func removingTakesOnlyFromTheListWithTheKeys() {
