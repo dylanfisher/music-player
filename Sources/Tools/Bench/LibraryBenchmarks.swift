@@ -173,7 +173,11 @@ let libraryBenchmarks = [
         let typed = try typedQueries(index)
         let samples = try millisecondSamples(
             typed.map { text in
-                { _ = try index.listedTracks(TrackFilter(search: text), sortedBy: .artist) }
+                {
+                    // The window reads the totals beside the rows.
+                    let filter = TrackFilter(search: text)
+                    _ = try index.trackTotals(ids: try index.trackIDs(filter, sortedBy: .artist))
+                }
             })
         return Measured(
             value: p95(samples),
@@ -191,7 +195,8 @@ let libraryBenchmarks = [
             for column in TrackColumn.allCases where column.isSortable {
                 for ascending in [true, false] {
                     runs.append {
-                        _ = try index.listedTracks(sortedBy: column, ascending: ascending)
+                        let ids = try index.trackIDs(sortedBy: column, ascending: ascending)
+                        _ = try index.trackTotals(ids: ids)
                     }
                 }
             }

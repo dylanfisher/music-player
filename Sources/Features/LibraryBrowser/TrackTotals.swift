@@ -1,20 +1,7 @@
 import Foundation
 import Library
 
-/// How many tracks, how many bytes and how long they play, as the status bar counts them.
-struct TrackTotals: Equatable, Sendable {
-    var count = 0
-    var sizeBytes = 0
-    var durationSeconds = 0.0
-
-    init(_ tracks: some Sequence<ListedTrack>) {
-        for track in tracks {
-            count += 1
-            sizeBytes += track.sizeBytes
-            durationSeconds += track.durationSeconds
-        }
-    }
-
+extension TrackTotals {
     /// "43,400 tracks, 1048.1 GiB, 185 days 17 hours 29 minutes 26 seconds", as Swinsian puts it,
     /// or "1 track selected, …" for a selection.
     func text(selected: Bool = false) -> String {

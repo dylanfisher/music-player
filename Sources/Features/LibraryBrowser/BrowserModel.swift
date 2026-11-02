@@ -26,10 +26,6 @@ public final class BrowserModel {
     /// What the Album pane shows for each of `albums`.
     private(set) var albumTitles: [String] = []
     public private(set) var trackIDs: [Int64] = []
-    /// The rows' sizes and lengths, in the order of `trackIDs`.
-    private var listed: [ListedTrack] = []
-    /// What every row adds up to, for the status bar.
-    private(set) var listTotals = TrackTotals([])
     public private(set) var sortColumn: TrackColumn
     public private(set) var ascending: Bool
     /// Every playlist, by name, as the sidebar lists them.
@@ -497,11 +493,6 @@ public final class BrowserModel {
         return urls.isEmpty ? nil : PlayRequest(urls: urls, first: start)
     }
 
-    /// What the rows at `rows` add up to, for the status bar.
-    func totals(ofRows rows: IndexSet) -> TrackTotals {
-        TrackTotals(rows.lazy.filter { self.listed.indices.contains($0) }.map { self.listed[$0] })
-    }
-
     /// The files of the rows at `rows`, in table order, for "Play Next".
     public func urls(ofRows rows: IndexSet) async throws -> [URL] {
         let ids = rows.filter { trackIDs.indices.contains($0) }.map { trackIDs[$0] }
@@ -548,10 +539,9 @@ public final class BrowserModel {
                 albums = tracks ? try await reader.albums(next) : []
                 next.album = resolve(next.album, saved?.album, in: albums, "album")
             }
-            let listed =
+            let ids =
                 tracks
-                ? try await reader.listedTracks(
-                    next, sortedBy: sort.column, ascending: sort.ascending)
+                ? try await reader.trackIDs(next, sortedBy: sort.column, ascending: sort.ascending)
                 : []
             var missing = 0
             if case .playlist(let id) = next.source,
@@ -574,9 +564,7 @@ public final class BrowserModel {
             self.artists = artists
             self.albums = albums
             albumTitles = Library.albumTitles(albums)
-            self.listed = listed
-            listTotals = TrackTotals(listed)
-            trackIDs = listed.map(\.id)
+            trackIDs = ids
             applied += 1
             changed(BrowserChange(reason: reason, panes: first != nil, previousIDs: previousIDs))
         } catch {

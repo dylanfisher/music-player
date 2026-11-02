@@ -45,6 +45,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         didSet { showStatus() }
     }
     public var statusTotalsChanged: (StatusTotals) -> Void = { _ in }
+    /// What the list's rows and the selected rows add up to, each read again after it changes.
+    private(set) var listTotals = TrackTotals()
+    private(set) var selectionTotals = TrackTotals()
+    /// The reads of the totals under way, by the totals each reads.
+    private var totalsReads:
+        [ReferenceWritableKeyPath<LibraryBrowser, TrackTotals>: Task<Void, Never>] = [:]
+    /// How many messages the bar has shown, so a read of the totals that ends after one leaves
+    /// the message showing.
+    private var messagesShown = 0
     public var browserHeightChanged: (Int) -> Void = { _ in }
     public var stateChanged: (BrowserState) -> Void = { _ in }
     /// Called after each refresh for a library change, so other views can read their rows again.
@@ -67,7 +76,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         set { table.firstRowsDrawn = newValue }
     }
 
-    private let reader: LibraryReader
+    let reader: LibraryReader
     private let index: LibraryIndex
     let table: TrackTableController
     let timelineModel: TimelineModel
@@ -127,7 +136,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             failed: { message in owner?.show(failure: message) },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         table = TrackTableController(model: model, cache: cache, layout: layout, actions: actions)
-        table.selectionChanged = { owner?.showStatus() }
+        table.selectionChanged = { owner?.readSelectionTotals() }
         let timelineModel = TimelineModel(reader: reader) { ids in try index.playedTracks(ids: ids)
         }
         self.timelineModel = timelineModel
@@ -513,6 +522,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         table.reload(change)
         showTimelineIfItIsTheSource()
         runHealthIfShownFirst()
+        readTotals(of: model.trackIDs, into: \.listTotals)
         showStatus()
         stateChanged(model.state)
     }
@@ -546,7 +556,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         status.healthLines = found?.lines ?? []
         status.healthOtherCount = found?.otherCount ?? 0
         statusLabel.stringValue = status.summary(
-            list: model.listTotals, selection: model.totals(ofRows: table.table.selectedRowIndexes),
+            list: listTotals, selection: selectionTotals,
             shown: statusTotals, missingCount: model.missingTracks,
             playCount: showsTimeline ? timelineModel.playCount : nil)
         statusLabel.toolTip = nil
@@ -556,6 +566,37 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         problemsButton.title = status.problemsTitle ?? ""
         problemsButton.toolTip = status.problemLines.joined(separator: "\n")
         problemsButton.isHidden = status.problemsTitle == nil
+    }
+
+    private func readSelectionTotals() {
+        readTotals(of: model.ids(ofRows: table.table.selectedRowIndexes), into: \.selectionTotals)
+    }
+
+    /// Adds up `ids` on the reader, after the rows show rather than before, then shows the
+    /// totals unless a message showed meanwhile. A newer read of the same totals replaces one
+    /// under way.
+    private func readTotals(
+        of ids: [Int64], into totals: ReferenceWritableKeyPath<LibraryBrowser, TrackTotals>
+    ) {
+        totalsReads[totals]?.cancel()
+        guard !ids.isEmpty else {
+            totalsReads[totals] = nil
+            self[keyPath: totals] = TrackTotals()
+            showStatus()
+            return
+        }
+        let shown = messagesShown
+        totalsReads[totals] = Task { [weak self, reader] in
+            do {
+                let read = try await reader.trackTotals(ids: ids)
+                guard !Task.isCancelled, let self else { return }
+                self[keyPath: totals] = read
+                if messagesShown == shown { showStatus() }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.report("couldn't add up the tracks' sizes and lengths: \(error)")
+            }
+        }
     }
 
     /// A bar that fills as the scans read, or moves on its own while one still lists folders.
@@ -604,6 +645,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     var problemsButtonTitle: String? { problemsButton.isHidden ? nil : problemsButton.title }
 
     private func show(failure message: String) {
+        messagesShown += 1
         statusLabel.stringValue = message
         statusLabel.toolTip = message
     }

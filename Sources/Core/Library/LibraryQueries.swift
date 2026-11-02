@@ -15,20 +15,45 @@ extension LibraryIndex {
         try orderedTracks("t.file_id", filter, column, ascending) { try $0.int64(0) }
     }
 
-    /// The tracks `trackIDs` gives, in the same order, with each file's size and length for the
-    /// status bar's totals.
-    public func listedTracks(
-        _ filter: TrackFilter = TrackFilter(), sortedBy column: TrackColumn,
-        ascending: Bool = true
-    ) throws -> [ListedTrack] {
-        try orderedTracks(
-            "t.file_id, f.size_bytes, t.length_frames, t.sample_rate_hz", filter, column, ascending
-        ) { row in
-            let rate = try row.int(3)
-            return ListedTrack(
-                id: try row.int64(0), sizeBytes: try row.int(1),
-                durationSeconds: rate > 0 ? Double(try row.int(2)) / Double(rate) : 0)
+    /// What the rows listing `ids` add up to, an ID listed twice counting twice. An ID with no
+    /// track is left out.
+    ///
+    /// Every track's size and length is read once and kept, until a connection changes the
+    /// index, so a list of the whole library adds up without a second pass over its rows.
+    public func trackTotals(ids: [Int64]) throws -> TrackTotals {
+        let stamp = try changeStamp()
+        if stamp != trackSizesStamp {
+            let select = try statement(
+                """
+                SELECT t.file_id, f.size_bytes, \(TrackColumn.duration.expression) FROM tracks t
+                JOIN files f ON f.id = t.file_id
+                """)
+            trackSizes = Dictionary(
+                uniqueKeysWithValues: try select.map { row in
+                    (
+                        try row.int64(0),
+                        TrackSize(bytes: try row.int(1), seconds: row.optionalDouble(2) ?? 0)
+                    )
+                })
+            trackSizesStamp = stamp
         }
+        var totals = TrackTotals()
+        for id in ids {
+            guard let size = trackSizes[id] else { continue }
+            totals.count += 1
+            totals.sizeBytes += size.bytes
+            totals.durationSeconds += size.seconds
+        }
+        return totals
+    }
+
+    /// Changes whenever a connection commits a change to the index: another connection through
+    /// `data_version`, this one through `total_changes()`.
+    private func changeStamp() throws -> [Int] {
+        [
+            try statement("PRAGMA data_version").map { try $0.int(0) }[0],
+            try statement("SELECT total_changes()").map { try $0.int(0) }[0],
+        ]
     }
 
     /// The names of the tracks `trackIDs` gives, in the same order, for Go to Item and

@@ -13,11 +13,13 @@ its leading edge.
 
 ## Decision
 
-**Where the numbers come from.** The query that lists the table's track IDs also reads each
-file's size and length frames, and the browser model keeps them beside the IDs in table order.
-The list's totals are added up once per reload; the selection's are added up from the rows
-selected each time the selection changes, which for a whole library selected is 43k additions.
-The sort and search benchmarks time this query, since it's the one the window runs.
+**Where the numbers come from.** The reader keeps every track's file size and length by ID,
+read in one query on first use and again once any connection has changed the index, which
+SQLite's `data_version` and `total_changes()` tell. The list's totals add up the listed IDs
+after each reload, and the selection's the selected IDs after each change of the selection,
+both on the reader and after the rows show, so the totals never hold up the table. A playlist
+that lists a track twice counts it twice. The sort and search benchmarks time the IDs and their
+totals together, since the window runs both.
 
 **How they read.** Sizes are in binary units to one decimal, up to GiB, as Swinsian's "1048.1
 GiB" shows; under 1 KiB they're bytes. Lengths are rounded to the second, in days, hours,
@@ -39,14 +41,18 @@ the window's width, and on an `NSVisualEffectView` with the title bar's material
 The glass is what shows and hides with View ▸ Show Status Bar.
 
 A failure shown in the bar stays until the next update of the bar, and a change of the
-selection is one now.
+selection is one now. Totals that arrive after a message showed are kept for the next update
+and leave the message in place.
 
 ## Alternatives considered
 
 - **Summing in SQL for each selection** — rejected: a selection is a set of rows, not a
   filter, and binding up to 43k IDs per click costs more than adding numbers already in memory.
-- **A second query for the sizes and lengths** — rejected: it would sort the whole list a
-  second time on every reload.
+- **Reading each file's size and length in the query that lists the IDs** — rejected: the
+  wider rows made every search and sort sort more, about 45% slower per search keystroke and
+  16% per sort, and the launch to the first rows 30% slower.
+- **A `count`/`sum` query with the list's filter** — rejected: it runs the filter and the
+  joins a second time, which cost more than the wider rows.
 - **`ByteCountFormatter`** — rejected: it writes decimal "GB", or "TB" past 1000, where the
   owner asked for Swinsian's GiB. The table's Size column keeps the system's formatter, so the
   bar and the column disagree for the same file, as "303.5 MiB" beside "318 MB"; the bar
@@ -56,5 +62,7 @@ selection is one now.
 
 ## Consequences
 
-The listing query returns three more columns per row, about 1 MB more for 43k tracks. A failure
-message in the bar is replaced as soon as the selection changes.
+The reader holds a map of every track's size and length, about 2 MB for 43k tracks, and reads
+it again, about 60 ms, after each change to the index, such as each batch a scan commits. The
+totals show a moment after the rows. A failure message in the bar is replaced once the
+selection changes.

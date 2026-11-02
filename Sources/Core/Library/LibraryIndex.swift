@@ -23,6 +23,10 @@ public final class LibraryIndex {
     private var artistIDs: [String: Int64]?
     private var genreIDs: [String: Int64]?
     private var albumIDs: [AlbumKey: Int64]?
+    /// Each track's file size and length by file ID, which `trackTotals(ids:)` adds up, and the
+    /// change stamp they were read at; nil before the first read.
+    var trackSizes: [Int64: TrackSize] = [:]
+    var trackSizesStamp: [Int]?
 
     /// Where the file SQLite couldn't read was moved, when this open moved it.
     public private(set) var movedAside: URL?

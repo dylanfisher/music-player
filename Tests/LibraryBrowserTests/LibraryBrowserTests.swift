@@ -222,15 +222,19 @@ import Testing
     var reported: [StatusTotals] = []
     browser.statusTotalsChanged = { reported.append($0) }
     await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
-    let list = browser.model.listTotals.text()
-    #expect(browser.model.listTotals.count == browser.model.trackIDs.count)
-    #expect(browser.model.listTotals.sizeBytes > 0)
+    // The totals are read off the main thread, after the rows show.
+    try await waitFor("the list's totals") {
+        browser.listTotals.count == browser.model.trackIDs.count
+    }
+    #expect(browser.listTotals.sizeBytes > 0)
+    let list = browser.listTotals.text()
     #expect(browser.statusText == list)
 
     browser.table.table.selectRowIndexes([0], byExtendingSelection: false)
-    let one = browser.model.totals(ofRows: [0]).text(selected: true)
+    let first = try await browser.reader.trackTotals(ids: [browser.model.trackIDs[0]])
+    let one = first.text(selected: true)
     #expect(one.hasPrefix("1 track selected, "))
-    #expect(browser.statusText == "\(list) (\(one))")
+    try await waitFor("the selection's totals") { browser.statusText == "\(list) (\(one))" }
     browser.showNextTotals()
     #expect(browser.statusText == list)
     browser.showNextTotals()

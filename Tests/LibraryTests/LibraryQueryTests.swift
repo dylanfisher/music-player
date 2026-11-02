@@ -101,17 +101,33 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
     #expect(displayName("/Music/A/01 Intro.flac") == "01 Intro")
 }
 
-@Test func listedTracksCarryEachFilesSizeAndLengthInTrackOrder() throws {
+@Test func trackTotalsAddEachListedRowsSizeAndLength() throws {
     let library = try TestLibrary()
     _ = try library.scan()
     let index = try library.index()
-    let listed = try index.listedTracks(sortedBy: .title, ascending: false)
-    #expect(listed.map(\.id) == (try index.trackIDs(sortedBy: .title, ascending: false)))
-    let rows = Dictionary(
-        uniqueKeysWithValues: try index.rows(ids: listed.map(\.id)).map { ($0.id, $0) })
-    #expect(listed.contains { $0.sizeBytes > 0 && $0.durationSeconds > 0 })
-    for track in listed {
-        #expect(track.sizeBytes == rows[track.id]?.sizeBytes)
-        #expect(track.durationSeconds == rows[track.id]?.durationSeconds)
-    }
+    let ids = try index.trackIDs(sortedBy: .title)
+    let rows = try index.rows(ids: ids)
+    #expect(rows.contains { $0.sizeBytes > 0 && $0.durationSeconds > 0 })
+    let totals = try index.trackTotals(ids: ids)
+    #expect(totals.count == ids.count)
+    #expect(totals.sizeBytes == rows.reduce(0) { $0 + $1.sizeBytes })
+    let seconds = rows.reduce(0) { $0 + $1.durationSeconds }
+    #expect(abs(totals.durationSeconds - seconds) < 0.001)
+    // A playlist can list a track twice, and a removed track's ID adds nothing.
+    let twice = try index.trackTotals(ids: [ids[0], ids[0], -1])
+    #expect(twice.count == 2 && twice.sizeBytes == 2 * rows[0].sizeBytes)
+    #expect(try index.trackTotals(ids: []) == TrackTotals())
+}
+
+@Test func trackTotalsFollowAChangeByAnyConnection() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let ids = try index.trackIDs(sortedBy: .title)
+    #expect(try index.trackTotals(ids: [ids[0]]).count == 1)
+    try index.removeFromLibrary(trackIDs: [ids[0]])
+    #expect(try index.trackTotals(ids: [ids[0]]).count == 0)
+    #expect(try index.trackTotals(ids: [ids[1]]).count == 1)
+    try library.index().removeFromLibrary(trackIDs: [ids[1]])
+    #expect(try index.trackTotals(ids: [ids[1]]).count == 0)
 }

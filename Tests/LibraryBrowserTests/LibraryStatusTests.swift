@@ -8,9 +8,7 @@ import Testing
 /// What `count` tracks of `sizeBytes` and `seconds` each add up to.
 private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> TrackTotals {
     TrackTotals(
-        (0..<count).map {
-            ListedTrack(id: Int64($0), sizeBytes: sizeBytes, durationSeconds: seconds)
-        })
+        count: count, sizeBytes: count * sizeBytes, durationSeconds: Double(count) * seconds)
 }
 
 @Test func statusShowsTracksScansAndProblemsApart() {

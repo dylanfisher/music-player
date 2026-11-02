@@ -30,11 +30,7 @@ public actor LibraryReader {
         try index.trackIDs(filter, sortedBy: column, ascending: ascending)
     }
 
-    public func listedTracks(
-        _ filter: TrackFilter, sortedBy column: TrackColumn, ascending: Bool
-    ) throws -> [ListedTrack] {
-        try index.listedTracks(filter, sortedBy: column, ascending: ascending)
-    }
+    public func trackTotals(ids: [Int64]) throws -> TrackTotals { try index.trackTotals(ids: ids) }
 
     public func trackNames(_ filter: TrackFilter, sortedBy column: TrackColumn, ascending: Bool)
         throws -> [TrackName]
