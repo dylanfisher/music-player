@@ -95,6 +95,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Memory a scan of the fixture library adds, at its peak | < 50 MB | < 50 MB |
 | Browser pane query: genres, artists, albums (p95) | < 2 ms | < 60 ms |
 | Palette results per keystroke, Go to Item over every fixture track (p95) | < 15 ms | < 80 ms |
+| Palette opening rows, Go to Item over every fixture track, ranked on the main actor before the panel shows (phase 24); the old Mac figure is an estimate until its checkpoint | < 4 ms | < 16 ms |
 | List a smart playlist of six rules over every fixture track (p95); the old Mac figure is an estimate until its checkpoint | < 50 ms | < 150 ms |
 | Resident memory with the library loaded, after scrolling every row with art | < 120 MB | < 250 MB |
 | CPU while playing 24/192 FLAC | < 3 percent of a core | < 5 percent of a core |

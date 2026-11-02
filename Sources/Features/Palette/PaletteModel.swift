@@ -80,8 +80,9 @@ public final class PaletteModel {
     }
 
     /// Ranks the items for the query before this returns, so the palette has its rows before
-    /// its first frame. Only for a listing that ranks in well under a frame, as ⌘K's commands
-    /// do with an empty query; a ranking still running is dropped.
+    /// its first frame. Only for a listing that ranks in well under a frame, as an empty query
+    /// does: it matches nothing, so even ⌘P's 43k kept rows take a few milliseconds. A ranking
+    /// still running is dropped.
     func rankNow() {
         generation += 1
         publish(

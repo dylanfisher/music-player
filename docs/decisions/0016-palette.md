@@ -33,6 +33,10 @@ settings and the library. A few choices follow from that.
   ⌘P builds them again. Rebuilding then rather than on the change keeps a long scan, which
   refreshes every 2 s, from preparing 43k titles each time. A build the library changed under
   is shown but not kept.
+  (Amended 2026-11-02.) Both palettes rank their opening rows on the main actor before the panel
+  shows, so its first frame has them. An empty query matches nothing, so this costs about 2 ms
+  for ⌘P's 43k kept rows on Apple Silicon; Bench holds it to one frame on the old Mac. Typing
+  still ranks off the main actor.
 - **Bench measures Go to Item**, the larger list, per keystroke over every fixture track, against
   the 30 ms budget. ⌘K lists a few thousand items and costs less.
 - **Playlists** join ⌘K in phase 7, when they exist. **Settings** that aren't commands join with
