@@ -57,7 +57,7 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     }
     #expect(reveal().map(\.isHidden) == [false, true])
     #expect(reveal()[1].keyEquivalent == "r")
-    #expect(reveal()[1].keyEquivalentModifierMask == [.command, .option])
+    #expect(reveal()[1].keyEquivalentModifierMask == [.command, .shift])
     dispatcher.setBindings(
         try KeyBindings(
             AppCommands.all(),

@@ -6,7 +6,7 @@ import Testing
 @testable import SettingsWindow
 
 private let cmd: KeyChord.Modifiers = .command
-private let optCmd: KeyChord.Modifiers = [.option, .command]
+private let shiftCmd: KeyChord.Modifiers = [.shift, .command]
 
 /// The model over the app's commands and menus, saving as the app does: the overrides change and
 /// the bindings are made again from them.
@@ -66,25 +66,25 @@ private final class Harness {
 @MainActor @Test func aClashNamesTheOtherCommandAndCancelKeepsBoth() throws {
     let harness = try Harness()
     let model = harness.model!
-    model.record(KeyChord("r", optCmd), for: .find, at: .alternate)
+    model.record(KeyChord("r", shiftCmd), for: .find, at: .alternate)
     let notice = try #require(model.notices[.find])
     #expect(
-        notice == .taken(chord: KeyChord("r", optCmd), position: .alternate, by: .revealInFinder))
-    #expect(model.text(of: notice) == "⌥⌘R is used by Reveal in Finder.")
+        notice == .taken(chord: KeyChord("r", shiftCmd), position: .alternate, by: .revealInFinder))
+    #expect(model.text(of: notice) == "⇧⌘R is used by Reveal in Finder.")
     #expect(harness.saves.isEmpty)
     model.cancel(for: .find)
     #expect(model.notices[.find] == nil)
-    #expect(model.chord(.revealInFinder, .alternate) == KeyChord("r", optCmd))
+    #expect(model.chord(.revealInFinder, .alternate) == KeyChord("r", shiftCmd))
 }
 
 @MainActor @Test func replaceTakesTheChordInOneSave() throws {
     let harness = try Harness()
     let model = harness.model!
-    model.record(KeyChord("r", optCmd), for: .find, at: .alternate)
+    model.record(KeyChord("r", shiftCmd), for: .find, at: .alternate)
     model.replace(for: .find)
     #expect(harness.saves.count == 1)
     #expect(model.notices[.find] == nil)
-    #expect(model.chord(.find, .alternate) == KeyChord("r", optCmd))
+    #expect(model.chord(.find, .alternate) == KeyChord("r", shiftCmd))
     #expect(model.chord(.revealInFinder, .alternate) == nil)
     #expect(model.hasOverride(.find))
     #expect(model.hasOverride(.revealInFinder))
@@ -131,7 +131,7 @@ private final class Harness {
     #expect(model.hasOverride(.revealInFinder))
     model.resetAll()
     #expect(!model.hasOverrides)
-    #expect(model.chord(.revealInFinder, .alternate) == KeyChord("r", optCmd))
+    #expect(model.chord(.revealInFinder, .alternate) == KeyChord("r", shiftCmd))
 }
 
 @MainActor @Test func aClashInStoredDataIsShownUnderTheLoser() throws {

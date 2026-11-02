@@ -40,7 +40,7 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   playlist entries whose file left, likely duplicates, albums with gaps, several album artists
   or mixed sample rates, tracks missing art, an album or an album artist, and Lost Stats: files
   with stats that left without a match, which **Resolve Lost Stats…** gives to a track or
-  dismisses. It runs after a scan and on Check Library Health. ⇧⌘R reveals the selected tracks
+  dismisses. It runs after a scan and on Check Library Health. ⌘R reveals the selected tracks
   in Finder.
 - **Sync Folder** (Settings): Macs that play the same library on a share share their plays,
   ratings, loved tracks, playlists and Date Added through a folder outside the music, where

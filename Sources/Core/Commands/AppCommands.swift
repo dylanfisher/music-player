@@ -190,7 +190,7 @@ public enum AppCommands {
             Command(.restoreRemoved, "Restore Removed Tracks…"),
             Command(
                 .revealInFinder, "Reveal in Finder",
-                [.init("r", [cmd, shift]), .init("r", [opt, cmd])]),
+                [.init("r", cmd), .init("r", [cmd, shift])]),
             Command(.copyPath, "Copy Path", [.init("c", [opt, cmd])]),
             Command(.removeTracks, "Remove…", [.init(.delete)]),
             Command(.editTags, "Get Info", [.init("i", cmd)]),

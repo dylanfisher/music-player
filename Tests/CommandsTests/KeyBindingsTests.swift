@@ -79,14 +79,14 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
             == .assigned([close: ShortcutOverride(alternate: .chord(space))]))
 }
 
-@Test func shiftCommandRRevealsInFinder() throws {
+@Test func commandRRevealsTheSelection() throws {
     let bindings = try KeyBindings(
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
-    let chord = KeyChord("r", [cmd, .shift])
+    let chord = KeyChord("r", cmd)
     #expect(bindings.registry.command(for: chord) == .revealInFinder)
     #expect(bindings.chord(of: .revealInFinder, at: .primary) == chord)
-    // Searcher's chord stays as the alternate (ADR 0012).
-    #expect(bindings.chord(of: .revealInFinder, at: .alternate) == KeyChord("r", [.option, cmd]))
+    // Music's and Swinsian's chord stays as the alternate (ADR 0048).
+    #expect(bindings.chord(of: .revealInFinder, at: .alternate) == KeyChord("r", [cmd, .shift]))
 }
 
 @Test func eachPaletteHasOneChord() throws {
