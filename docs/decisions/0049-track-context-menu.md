@@ -17,7 +17,8 @@ clicked row was in it, as Finder does, by closures that bypassed the registry.
   builds it with the bar's code: each item runs its command through the dispatcher, which also
   enables it, and shows the command's chord. Its groups are Play Next, Add to Playback Queue,
   Play Now · Show Album, Show Artist · Like, Dislike · Rating ▸ · Get Info, Reveal in Finder ·
-  New Playlist with Selected Tracks, Add to Playlist ▸, Show in Playlist ▸.
+  Remove… ([0050](0050-remove-from-library.md)) · New Playlist with Selected Tracks, Add to
+  Playlist ▸, Show in Playlist ▸.
 - **A right-click selects the row it's on when that row isn't selected, and gives its list the
   keys**, as Swinsian does. The commands act on the selection of the list with the keys, so the
   menu needs no rows of its own. A right-click below the last row opens no menu.

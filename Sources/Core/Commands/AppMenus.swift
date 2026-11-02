@@ -64,7 +64,8 @@ public enum AppMenus {
         .command(.toggleLoved), .command(.toggleDisliked), .separator,
         .submenu(ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
         .separator, .command(.editTags), .command(.revealInFinder), .separator,
-        .command(.newPlaylistFromSelection), .live(addToPlaylistMenuTitle),
+        .command(.removeTracks), .separator, .command(.newPlaylistFromSelection),
+        .live(addToPlaylistMenuTitle),
         .live(showInPlaylistMenuTitle),
     ]
 

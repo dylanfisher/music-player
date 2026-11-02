@@ -32,7 +32,8 @@ import Testing
         titles(AppMenus.trackMenu) == [
             "Play Next", "Add to Playback Queue", "Play Now", "-", "Show Album", "Show Artist",
             "-", "Like", "Dislike", "-", "Rating ▸ 6", "-", "Get Info", "Reveal in Finder", "-",
-            "New Playlist with Selected Tracks", "Add to Playlist ▸", "Show in Playlist ▸",
+            "Remove…", "-", "New Playlist with Selected Tracks", "Add to Playlist ▸",
+            "Show in Playlist ▸",
         ])
 }
 
