@@ -8,7 +8,7 @@ import Settings
 private let logger = moduleLogger()
 
 /// The output picker's wiring: the devices found, followed as they come and go, the renderers a
-/// search finds, and picking one through the config's output settings (ADR 0044).
+/// search finds, and picking one through the config's output settings (ADR 0045).
 extension AppDelegate {
     func watchOutputs(_ menu: MainMenu) {
         let outputMenu = OutputMenu()

@@ -1,5 +1,5 @@
 /// An output the user can pick: the system's default device, a Core Audio device by UID, or a
-/// UPnP renderer by UDN. `output.deviceUID` and `output.renderer` hold it (ADR 0044).
+/// UPnP renderer by UDN. `output.deviceUID` and `output.renderer` hold it (ADR 0045).
 public enum OutputChoice: Hashable, Sendable {
     case systemDefault
     case device(uid: String)

@@ -33,7 +33,7 @@ settings and the library. A few choices follow from that.
 - **Playlists** join ⌘K in phase 7, when they exist. **Settings** that aren't commands join with
   the Settings window, which choosing one opens at its row.
 - **Two palettes by what they find (amended 2026-11-01).** The owner asked for ⌘K to hold what
-  the app does and ⌘P what it plays. ⌘K lists commands, settings, outputs ([0044](0044-output-picker.md)), playlists and genres; ⌘P lists
+  the app does and ⌘P what it plays. ⌘K lists commands, settings, outputs ([0045](0045-output-picker.md)), playlists and genres; ⌘P lists
   artists, albums and the current list's tracks, every matching artist first, then albums, then
   tracks, each kind ranked by the score and frecency rules above. Each kind keeps its own best
   50, so a query matching many artists still shows its albums and tracks, and a keystroke over

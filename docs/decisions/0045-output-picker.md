@@ -1,4 +1,4 @@
-# 0044. The output is picked from the devices and renderers found
+# 0045. The output is picked from the devices and renderers found
 
 - **Date:** 2026-11-01
 - **Status:** accepted
