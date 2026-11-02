@@ -127,7 +127,18 @@ extension AppDelegate {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 },
                 copyDefaultConfig: { [weak dispatcher] in dispatcher?.run(.copyDefaultConfig) },
-                chooseSyncFolder: { [weak self] in self?.chooseSyncFolder() }))
+                chooseSyncFolder: { [weak self] in self?.chooseSyncFolder() },
+                addFolder: { [weak self] in
+                    guard let window = self?.settingsWindow?.window else { return }
+                    self?.addFolder(over: window)
+                },
+                removeFolder: { [weak self] position in
+                    guard let window = self?.settingsWindow?.window else { return }
+                    self?.confirmRemovingFolder(at: position, over: window)
+                },
+                rescanNow: { [weak dispatcher] in
+                    if dispatcher?.run(.rescanNow) != true { NSSound.beep() }
+                }))
         settingsWindow = controller
         return controller
     }

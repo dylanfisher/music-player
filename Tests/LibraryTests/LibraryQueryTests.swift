@@ -59,24 +59,6 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
     #expect(both == inGenre.intersection(searched))
 }
 
-@Test func aWatchedFolderNarrowsTracksAndPanes() throws {
-    let library = try TestLibrary()
-    _ = try library.scan()
-    let index = try library.index()
-    let file = try #require(library.manifest.files.first { $0.malformation == nil })
-    let folder = (library.path(file) as NSString).deletingLastPathComponent
-    let filter = TrackFilter(source: .folder(folder))
-    let paths = Array(try index.paths(ids: try index.trackIDs(filter, sortedBy: .path)).values)
-    #expect(!paths.isEmpty)
-    #expect(paths.allSatisfy { $0.hasPrefix(folder + "/") })
-    #expect(paths.count < library.readableCount)
-    let artists = Set(try index.artists(filter).map(\.name))
-    let expected = Set(
-        try index.rows(ids: try index.trackIDs(filter, sortedBy: .path)).compactMap(\.artist))
-    #expect(artists == expected)
-    #expect(try index.genres(filter).count <= (try index.genres()).count)
-}
-
 @Test func rowsComeBackInTheOrderAsked() throws {
     let library = try TestLibrary()
     let before = Date().timeIntervalSince1970

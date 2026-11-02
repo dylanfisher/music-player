@@ -73,7 +73,7 @@ func writableModel(
     #expect(model.trackIDs == [first, second])
 
     // Leaving History puts back the sort it replaced.
-    await model.setSource(.folder("/"))
+    await model.setSource(nil)
     #expect(model.sortColumn == .artist && model.ascending)
 }
 
@@ -129,7 +129,7 @@ func writableModel(
     // A sort chosen inside the playlist stays when leaving it.
     await model.setSource(.playlist(mix))
     await model.setSort(.year, ascending: true)
-    await model.setSource(.folder("/"))
+    await model.setSource(nil)
     #expect(model.sortColumn == .year)
 
     // Deleting the shown playlist leaves no playlist order behind.

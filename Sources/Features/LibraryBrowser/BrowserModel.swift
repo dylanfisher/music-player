@@ -138,7 +138,7 @@ public final class BrowserModel {
         case .playlist(let id):
             playlists.first { $0.id == id }?.isManual == true ? (.playlistOrder, true) : nil
         case .history: (.lastPlayed, false)
-        case .folder, .timeline, .health, nil: nil
+        case .timeline, .health, nil: nil
         }
     }
 

@@ -17,7 +17,10 @@ extension AppDelegate {
         registerPlaylistCommands(dispatcher)
         registerTagCommands(dispatcher)
         registerReceiverCommands(dispatcher)
-        dispatcher.handle(.addFolder, enabled: hasWindow) { [weak self] in self?.addFolder() }
+        dispatcher.handle(.addFolder, enabled: hasWindow) { [weak self] in
+            guard let window = self?.window?.window else { return }
+            self?.addFolder(over: window)
+        }
         dispatcher.handle(.checkHealth, enabled: hasWindow) { [weak self] in
             self?.browser?.checkHealth()
         }

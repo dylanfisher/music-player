@@ -103,8 +103,7 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     let path = try #require(try index.paths(ids: [id])[id])
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, folders: [],
-        groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
     let folder = FileManager.default.temporaryDirectory
         .appendingPathComponent("player-import-sheet-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

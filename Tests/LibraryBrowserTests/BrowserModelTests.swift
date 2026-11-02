@@ -127,17 +127,6 @@ private func loadedModel(
     #expect(gone.trackIDs.count == (try index.trackCount()))
 }
 
-@MainActor @Test func aWatchedFolderNarrowsEverything() async throws {
-    let (model, index) = try await loadedModel()
-    let row = try #require(try index.rows(ids: [model.trackIDs[0]]).first)
-    let folder = BrowserSource.folder((row.path as NSString).deletingLastPathComponent)
-    await model.setSource(folder)
-    #expect(model.filter.source == folder)
-    #expect(model.trackIDs == (try index.trackIDs(TrackFilter(source: folder), sortedBy: .artist)))
-    #expect(model.genres == (try index.genres(TrackFilter(source: folder))))
-    #expect(model.state.source == folder)
-}
-
 @MainActor @Test func aRefreshKeepsTheSelectedRowsByID() async throws {
     let (model, _) = try await loadedModel()
     let picked: Set<Int64> = [model.trackIDs[3], model.trackIDs[10]]

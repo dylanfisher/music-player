@@ -140,14 +140,6 @@ extension LibraryIndex {
         try statement(rowSelect + " WHERE f.path = ?").map(path, row: trackRow).first
     }
 
-    /// The tree of folders holding tracks under the watched folders `roots`.
-    public func folderTree(roots: [String]) throws -> FolderTree {
-        FolderTree(
-            paths: try statement(
-                "SELECT path FROM files WHERE id IN (SELECT file_id FROM tracks) ORDER BY path"
-            ).map { try $0.text(0) }, roots: roots)
-    }
-
     /// The path of each of `ids` that is still in the index.
     public func paths(ids: [Int64]) throws -> [Int64: String] {
         let select = try statement("SELECT path FROM files WHERE id = ?")
@@ -255,22 +247,6 @@ extension LibraryIndex {
         String, [(any SQLiteValue)?]
     ) {
         switch source {
-        case .folder(let folder):
-            // A watched folder is matched in the form the scan stores its paths in, and a
-            // subfolder from the folder tree as the index spells it, which on a share can mix
-            // forms (ADR 0034).
-            // Compared as bytes, since Swift's == calls two spellings of one name equal.
-            let canonical = pathRange(under: folder)
-            let exact = exactPathRange(under: folder)
-            let ranges =
-                Array(canonical.lowerBound.utf8) == Array(exact.lowerBound.utf8)
-                ? [canonical] : [canonical, exact]
-            return (
-                "("
-                    + Array(repeating: "(f.path >= ? AND f.path < ?)", count: ranges.count)
-                    .joined(separator: " OR ") + ")",
-                ranges.flatMap { [$0.lowerBound, $0.upperBound] }
-            )
         case .history:
             // On the joined plays the condition lets SQLite start from plays_last_played.
             if playsJoined { return ("p.last_played_seconds IS NOT NULL", []) }

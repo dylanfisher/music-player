@@ -12,7 +12,8 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   lists every setting at its default with what it takes. Edit it in any editor and the app picks
   the change up on save; a mistake shows in a banner across the window and nothing in the file
   applies until it's fixed. The Settings window (⌘,) edits the same file, with a General pane
-  for the settings and a Shortcuts pane for every command's two chords.
+  for the settings in sections, a Watched Folders pane and a Shortcuts pane for every command's
+  two chords.
 - **⌘K** opens the command palette: every command, setting, playlist, genre, artist and album,
   ranked by how well they match and how often and recently you chose or played them.
 - **⌘P** is Go to Item: the tracks of the current list, by title.
@@ -27,8 +28,8 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
 - **Import from Swinsian…** and **Import iTunes Library…** bring play counts, last played,
   date added, ratings, loved tracks and playlists across, matched by path, after a preview of
   what each would change. Running one again adds only the plays since.
-- **Watched folders** open in the sidebar into their subfolders, from the paths the library
-  holds. A folder on a network share is stored by the share, so the library follows it when
+- **Watched folders** are listed in Settings ▸ Watched Folders, which adds and removes them;
+  ⌘O adds one too. A folder on a network share is stored by the share, so the library follows it when
   macOS mounts it somewhere else, such as `/Volumes/music-1`. A network folder already in the
   library isn't rescanned at launch: it's checked every `pollIntervalMinutes` (60 by default,
   up to 1440), and **Rescan Now** checks every folder at once. A renamed or moved file keeps

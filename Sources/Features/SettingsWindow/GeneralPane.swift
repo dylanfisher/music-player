@@ -8,8 +8,8 @@ private let logger = moduleLogger()
 /// What a setting or a shortcut with no value shows.
 let noValueText = "None"
 
-/// Settings ▸ General: the config file's place and buttons, then a row per setting from the
-/// schema in a grid.
+/// Settings ▸ General: the config file's place and buttons, then the settings from the schema in
+/// sections, a grid of rows each.
 @MainActor
 final class GeneralPane: NSViewController, NSTextFieldDelegate {
     static let width = 640.0
@@ -57,23 +57,16 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
         header.alignment = .leading
         header.spacing = 6
 
+        // One grid for every section, so the labels of all of them line up.
         let grid = NSGridView(numberOfColumns: 2, rows: 0)
-        grid.rowSpacing = 14
+        grid.rowSpacing = 10
         grid.columnSpacing = 12
-        for row in model.rows {
-            let label = NSTextField(labelWithString: row.title + ":")
-            label.alignment = .right
-            let summary = NSTextField(wrappingLabelWithString: row.summary)
-            summary.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-            summary.textColor = .secondaryLabelColor
-            summary.preferredMaxLayoutWidth = 380
-            let control = makeControl(row)
-            controls[row.key] = control
-            let cell = NSStackView(views: [control, summary])
-            cell.orientation = .vertical
-            cell.alignment = .leading
-            cell.spacing = 3
-            grid.addRow(with: [label, cell])
+        for (index, (section, rows)) in model.sections.enumerated() {
+            let heading = NSTextField(labelWithString: section.title)
+            heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+            let headingRow = grid.addRow(with: [NSGridCell.emptyContentView, heading])
+            headingRow.topPadding = index == 0 ? 0 : 12
+            for row in rows { addRow(row, to: grid) }
         }
         grid.column(at: 0).xPlacement = .trailing
         grid.rowAlignment = .firstBaseline
@@ -88,6 +81,22 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
         stack.widthAnchor.constraint(equalToConstant: Self.width).isActive = true
         view = stack
         reload()
+    }
+
+    private func addRow(_ row: GeneralModel.Row, to grid: NSGridView) {
+        let label = NSTextField(labelWithString: row.title + ":")
+        label.alignment = .right
+        let summary = NSTextField(wrappingLabelWithString: row.summary)
+        summary.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        summary.textColor = .secondaryLabelColor
+        summary.preferredMaxLayoutWidth = 380
+        let control = makeControl(row)
+        controls[row.key] = control
+        let cell = NSStackView(views: [control, summary])
+        cell.orientation = .vertical
+        cell.alignment = .leading
+        cell.spacing = 3
+        grid.addRow(with: [label, cell])
     }
 
     private func button(_ title: String, _ action: Selector) -> NSButton {
@@ -136,7 +145,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
             clear.identifier = NSUserInterfaceItemIdentifier(row.key)
             syncFolderLabel = folder
             return NSStackView(views: [folder, choose, clear])
-        case .folders, .readOnly:
+        case .folders:
+            preconditionFailure("the Watched Folders pane lists \(row.key)")
+        case .readOnly:
             let list = NSTextField(wrappingLabelWithString: "")
             list.identifier = NSUserInterfaceItemIdentifier(row.key)
             list.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
@@ -164,10 +175,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
                 }
                 field.stringValue = model.text(row.key)
             case .folders:
-                let paths = model.folders(row.key)
-                (control as? NSTextField)?.stringValue =
-                    paths.isEmpty
-                    ? "None. Add folders with + in the sidebar." : paths.joined(separator: "\n")
+                preconditionFailure("the Watched Folders pane lists \(row.key)")
             case .syncFolder:
                 syncFolderLabel?.stringValue = model.syncFolder(row.key) ?? noValueText
             case .readOnly:

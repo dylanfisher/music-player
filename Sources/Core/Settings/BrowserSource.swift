@@ -1,8 +1,7 @@
-/// What the sidebar shows instead of the whole library: a folder, a playlist, History, the play
-/// timeline or a health check. Saved as one string: the folder's path, `playlist:<id>`,
-/// `history`, `timeline` or `health:<check>`.
+/// What the sidebar shows instead of the whole library: a playlist, History, the play timeline
+/// or a health check. Saved as one string: `playlist:<id>`, `history`, `timeline` or
+/// `health:<check>`.
 public enum BrowserSource: SettingValue, Hashable {
-    case folder(String)
     /// A playlist's ID, which an index rebuild keeps (ADR 0018).
     case playlist(Int64)
     /// Every track played, most recent first.
@@ -21,7 +20,6 @@ public enum BrowserSource: SettingValue, Hashable {
     /// by.
     public var text: String {
         switch self {
-        case .folder(let path): path
         case .playlist(let id): Self.playlistPrefix + String(id)
         case .history: Self.historyText
         case .timeline: Self.timelineText
@@ -31,9 +29,7 @@ public enum BrowserSource: SettingValue, Hashable {
 
     /// Reads `text`; nil for a string that isn't one of the sources.
     public init?(text: String) {
-        if text.hasPrefix("/") {
-            self = .folder(text)
-        } else if text == Self.historyText {
+        if text == Self.historyText {
             self = .history
         } else if text == Self.timelineText {
             self = .timeline
@@ -67,7 +63,7 @@ public enum BrowserSource: SettingValue, Hashable {
     }
 
     public static var typeName: String {
-        "a folder's path, \"\(playlistPrefix)<id>\", \"\(historyText)\", \"\(timelineText)\" or"
+        "\"\(playlistPrefix)<id>\", \"\(historyText)\", \"\(timelineText)\" or"
             + " \"\(healthPrefix)<check>\""
     }
     public static var kind: SettingKind { .windowState }

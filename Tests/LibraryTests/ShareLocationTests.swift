@@ -191,14 +191,6 @@ private func index(under root: String, names: [String] = ["a.flac", "Caf\u{e9}/b
             == WatchedFolder(path: "/Users/me/Music", kind: .local))
 }
 
-@Test func removingAShareFolderMatchesItWhereItIs() throws {
-    let index = try craftedIndex([])
-    _ = try index.locate([music], among: [share("smb://nas.local/music", at: "/V/music")])
-    let local = WatchedFolder(path: "/M", kind: .local)
-    #expect(try index.folders([local, music], without: "/V/music/library") == [local])
-    #expect(try index.folders([local, music], without: "/M") == [music])
-}
-
 @Test func aRefusedRewriteLeavesTheFolderWhereItWasAndFindsTheOthers() throws {
     let index = try craftedIndex([])
     let video = WatchedFolder(path: "", share: "smb://nas.local/video", kind: .network)

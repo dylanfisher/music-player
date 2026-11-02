@@ -1,9 +1,9 @@
 import Foundation
 import Settings
 
-/// The General pane's rows, generated from the settings schema, so a new setting appears with
-/// no UI code: a control for its kind, its title and its summary. Values go to and from the
-/// config file as JSON holds them.
+/// The Settings window's rows, generated from the settings schema, so a new setting appears with
+/// no UI code: a control for its kind, its title and its summary, in a section by its key.
+/// Values go to and from the config file as JSON holds them.
 @MainActor
 public final class GeneralModel {
     /// The control a row shows for its setting's kind.
@@ -13,7 +13,7 @@ public final class GeneralModel {
         /// A number field; `whole` takes integers only, `optional` means empty is null.
         case number(whole: Bool, optional: Bool)
         case text(optional: Bool)
-        /// Watched folders, which the sidebar adds and removes; listed here.
+        /// Watched folders, which the Watched Folders pane lists, adds and removes.
         case folders
         /// The sync folder, with buttons to choose one and to clear it.
         case syncFolder
@@ -28,7 +28,51 @@ public final class GeneralModel {
         var control: Control
     }
 
+    /// The General pane's groups of rows, by what the setting's key starts with.
+    enum Section: CaseIterable {
+        case playback, library, receiver, appearance
+        /// A key no section claims; a test keeps the app's settings out of it.
+        case other
+
+        var title: String {
+            switch self {
+            case .playback: "Playback"
+            case .library: "Library"
+            case .receiver: "Receiver"
+            case .appearance: AppSettings().appearance.title
+            case .other: "Other"
+            }
+        }
+
+        /// The key prefixes of the section's settings.
+        var prefixes: [String] {
+            switch self {
+            case .playback: ["output."]
+            case .library: ["library.", "sync."]
+            case .receiver: ["receiver."]
+            case .appearance: [AppSettings().appearance.key]
+            case .other: []
+            }
+        }
+
+        init(key: String) {
+            self =
+                Self.allCases.first { section in section.prefixes.contains { key.hasPrefix($0) } }
+                ?? .other
+        }
+    }
+
     public let rows: [Row]
+    /// The General pane's sections in order, each with its rows in schema order; the watched
+    /// folders have a pane of their own.
+    var sections: [(section: Section, rows: [Row])] {
+        Section.allCases.compactMap { section in
+            let shown = rows.filter { $0.control != .folders && Section(key: $0.key) == section }
+            return shown.isEmpty ? nil : (section, shown)
+        }
+    }
+    /// The watched folders' row, which the Watched Folders pane shows.
+    var foldersRow: Row? { rows.first { $0.control == .folders } }
     private let value: (String) -> Any?
     private let set: (String, Any) throws -> Void
 
@@ -77,10 +121,27 @@ public final class GeneralModel {
         }
     }
 
-    /// The watched folders' paths, and for a folder on a share, the share it's in; the
-    /// sidebar's tooltip shows where the share is mounted now (ADR 0028).
-    public func folders(_ key: String) -> [String] {
-        (value(key) as? [[String: Any]] ?? []).compactMap(folderText)
+    /// A watched folder as the Watched Folders pane lists it.
+    struct Folder: Equatable {
+        /// The path, and for a folder on a share, the share it's in (ADR 0028).
+        var location: String
+        var kind: String
+        /// How often it's rescanned.
+        var rescans: String
+    }
+
+    /// The watched folders, in the setting's order.
+    func folders(_ key: String) -> [Folder] {
+        (value(key) as? [[String: Any]] ?? []).compactMap { folder in
+            guard let location = folderText(folder) else { return nil }
+            guard folder["kind"] as? String == WatchedFolder.Kind.network.rawValue else {
+                return Folder(location: location, kind: "Local", rescans: "On change")
+            }
+            let minutes = folder["pollIntervalMinutes"] as? Int
+            return Folder(
+                location: location, kind: "Network",
+                rescans: minutes.map { "Every \($0) min" } ?? noValueText)
+        }
     }
 
     /// The sync folder as `folders` shows a folder; nil for none.

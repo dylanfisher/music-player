@@ -57,8 +57,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dockMenu: DockMenu?
     private(set) var queue: QueuePanel?
     private(set) var watcher: LibraryWatcher?
-    /// The window's own connection, which says where the watched folders' paths are.
-    private var windowIndex: LibraryIndex?
     private var shareChanges: ShareChangeObserver?
     private(set) var output: DeviceOutput?
     private(set) var engine: PlaybackEngine?
@@ -161,9 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let browser = LibraryBrowser(
             reader: try LibraryReader(databaseURL: databaseURL), index: index,
             layout: layout.trackTable, browserHeight: layout.browserHeight,
-            folders: try index.lastKnownFolders(layout.folders),
             groupByAlbumArtist: layout.groupByAlbumArtist)
-        windowIndex = index
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
@@ -203,8 +199,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue.libraryChanged()
         }
         browser.edited = { [weak self] in self?.watcher?.pushSync() }
-        browser.addFolder = { [weak self] in self?.addFolder() }
-        browser.removeFolder = { [weak self] path in self?.confirmRemoving(path) }
         browser.firstRowsDrawn = { [weak self] in self?.interactive() }
         let keyCommand = { [weak self] (chords: [KeyChord]) in
             self?.dispatcher?.key(chords) ?? .unbound
@@ -558,8 +552,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func addFolder() {
-        guard let settings, let window = window?.window else { return }
+    /// Asks for a folder to watch in a sheet over `window`.
+    func addFolder(over window: NSWindow) {
+        guard let settings else { return }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -618,10 +613,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func confirmRemoving(_ path: String) {
-        guard let settings, let window = window?.window else { return }
+    /// Asks in a sheet over `window` to stop watching the folder at `position` in the setting.
+    func confirmRemovingFolder(at position: Int, over window: NSWindow) {
+        guard let settings, settings[\.watchedFolders].indices.contains(position) else {
+            return NSSound.beep()
+        }
+        let folder = settings[\.watchedFolders][position]
+        let name = (folder.path as NSString).lastPathComponent
         let alert = NSAlert()
-        alert.messageText = "Stop watching \((path as NSString).lastPathComponent)?"
+        alert.messageText = "Stop watching \(name.isEmpty ? folder.share ?? folder.path : name)?"
         alert.informativeText =
             "Its tracks leave the library. The files themselves aren't touched, and play counts"
             + " and ratings are kept for when the folder is added again."
@@ -629,26 +629,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
+            // Found again by value: the file can change while the sheet is open.
+            var folders = settings[\.watchedFolders]
+            guard let position = folders.firstIndex(of: folder) else { return }
+            folders.remove(at: position)
             do {
-                guard let index = self?.windowIndex else { return }
-                try settings.set(
-                    \.watchedFolders,
-                    to: try index.folders(settings[\.watchedFolders], without: path))
+                try settings.set(\.watchedFolders, to: folders)
             } catch {
-                self?.fail("Couldn't remove \(path)", error)
+                self?.fail("Couldn't stop watching \(folder.path)", error)
             }
         }
     }
 
     func changedFolders(_ folders: [WatchedFolder], _ settings: ConfigStore<AppSettings>) {
         startWatching(folders, settings)
-        guard let browser, let windowIndex else { return }
-        do {
-            let shown = try windowIndex.lastKnownFolders(folders)
-            Task { await browser.setFolders(shown) }
-        } catch {
-            fail("Couldn't read where the watched folders are", error)
-        }
     }
 
     // MARK: Errors

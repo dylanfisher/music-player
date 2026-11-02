@@ -98,15 +98,14 @@ private func waitFor(_ what: String, _ condition: () async throws -> Bool) async
 }
 
 @MainActor @Test func aSavedCheckRunsTheReportAndListsItsTracks() async throws {
-    let (root, databaseURL) = try browserLibrary.get()
+    let databaseURL = try browserLibrary.get().databaseURL
     let index = try LibraryIndex(at: databaseURL)
     let expected = Set(
         try index.paths(ids: try index.healthReport()[.noAlbumArtist].trackIDs).values)
     try #require(!expected.isEmpty)
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100,
-        folders: [WatchedFolder(path: root, kind: .local)], groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
     let sidebar = try #require(browser.sidebar as? SidebarController)
     _ = sidebar.view
     await browser.load(
@@ -137,8 +136,7 @@ private func waitFor(_ what: String, _ condition: () async throws -> Bool) async
     _ = try index.removeFiles(outside: [kept])
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100,
-        folders: [WatchedFolder(path: kept, kind: .local)], groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
     _ = browser.sidebar.view
     await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
     browser.checkHealth()

@@ -11,8 +11,7 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, folders: [],
-        groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false)
     let send = browser.watcherEvents
     let folders = (0..<200).map { "/Music/\($0)" }
     // From another thread, as the watcher sends them: each folder's progress, then its outcome.
@@ -46,8 +45,7 @@ import Testing
     try record.run("first")
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, folders: [],
-        groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
     let state = BrowserState(source: nil, genre: nil, artist: nil, album: nil)
     await browser.load(state)
     #expect(browser.status.notices.map { $0.hasSuffix("first") } == [true])
@@ -64,8 +62,7 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, folders: [],
-        groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false)
     var beeps = 0
     browser.beep = { beeps += 1 }
     browser.reportCommand("couldn't rate the tracks", OnlyMissingFiles())
@@ -77,46 +74,22 @@ import Testing
     #expect(browser.statusText.hasSuffix("\(LibraryError.playsNotTracks)"))
 }
 
-@MainActor @Test func aSavedSubfolderOpensItsFoldersAndListsItsTracks() async throws {
-    let (root, databaseURL) = try browserLibrary.get()
-    let artist = root + "/Crimson Tides"
-    let album = artist + "/Glass Distance (1973)"
+@MainActor @Test func theSidebarListsTheLibraryAndPlaylistsButNoFolders() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, folders: [WatchedFolder(path: root, kind: .local)],
-        groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false)
     let sidebar = try #require(browser.sidebar as? SidebarController)
     _ = sidebar.view
-    await browser.load(BrowserState(source: .folder(album), genre: nil, artist: nil, album: nil))
-    #expect(sidebar.selectedSource == .folder(album))
-    // The library's three groups, the watched folder, the artist, then the album.
-    #expect(sidebar.outline.level(forRow: sidebar.outline.selectedRow) == 3)
-    browser.selectAllTracks()
-    let paths = try await browser.selectedPaths()
-    #expect(!paths.isEmpty)
-    #expect(paths.allSatisfy { $0.hasPrefix(album + "/") })
-}
-
-@MainActor @Test func aSavedFolderWithNoTracksLeftShowsTheLibrary() async throws {
-    let (root, databaseURL) = try browserLibrary.get()
-    let browser = LibraryBrowser(
-        reader: try LibraryReader(databaseURL: databaseURL),
-        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, folders: [WatchedFolder(path: root, kind: .local)],
-        groupByAlbumArtist: false)
-    let sidebar = try #require(browser.sidebar as? SidebarController)
-    _ = sidebar.view
-    var shown: [BrowserSource?] = []
-    browser.stateChanged = { shown.append($0.source) }
-    await browser.load(
-        BrowserState(source: .folder(root + "/Gone"), genre: nil, artist: nil, album: nil))
-    let deadline = Date().addingTimeInterval(10)
-    while shown.last != .some(nil), Date() < deadline {
-        try await Task.sleep(nanoseconds: 10_000_000)
+    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    let outline = sidebar.outline
+    // The library's group and the playlists'; the watched folders are in Settings.
+    #expect(outline.numberOfChildren(ofItem: nil) == 2)
+    func buttons(in view: NSView) -> [NSButton] {
+        (view as? NSButton).map { [$0] } ?? view.subviews.flatMap(buttons)
     }
-    #expect(shown.last == .some(nil))
-    #expect(sidebar.selectedSource == nil)
+    #expect(buttons(in: sidebar.view).isEmpty)
 }
 
 @MainActor @Test func hiddenPanesLeaveNoDividerAndComeBackAtTheirHeight() throws {
@@ -124,7 +97,7 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 150, folders: [], groupByAlbumArtist: false)
+        browserHeight: 150, groupByAlbumArtist: false)
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
         styleMask: [.titled, .resizable], backing: .buffered, defer: false)

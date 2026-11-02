@@ -2,16 +2,17 @@ import AppKit
 import Commands
 import Settings
 
-/// The Settings window: one window with a toolbar of panes, General and Shortcuts. Made on first
-/// use and kept.
+/// The Settings window: one window with a toolbar of panes, General, Watched Folders and
+/// Shortcuts. Made on first use and kept.
 @MainActor
 public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     public enum Pane: String, CaseIterable {
-        case general, shortcuts
+        case general, folders, shortcuts
 
         var title: String {
             switch self {
             case .general: "General"
+            case .folders: AppSettings().watchedFolders.title
             case .shortcuts: "Shortcuts"
             }
         }
@@ -19,6 +20,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         var symbol: String {
             switch self {
             case .general: "gearshape"
+            case .folders: "folder"
             case .shortcuts: "keyboard"
             }
         }
@@ -26,6 +28,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
 
     public let window: NSWindow
     private let general: GeneralPane
+    private let folders: FoldersPane
     private let shortcuts: ShortcutsPane
     private var centered = false
 
@@ -34,6 +37,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         actions: SettingsActions
     ) {
         self.general = GeneralPane(model: general, configPath: configPath, actions: actions)
+        folders = FoldersPane(model: general, actions: actions)
         self.shortcuts = ShortcutsPane(model: shortcuts)
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: GeneralPane.width, height: 400),
@@ -58,8 +62,10 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
-    /// Opens General at one setting's row, as the palette asks.
+    /// Opens General at one setting's row, or Watched Folders for that setting, as the palette
+    /// asks.
     public func show(setting key: String) {
+        guard key != folders.key else { return show(.folders) }
         show(.general)
         general.focus(key)
     }
@@ -67,12 +73,18 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     /// Shows the settings and shortcuts as they are now, after any change.
     public func reload(bindings: KeyBindings) {
         general.reload()
+        if folders.isViewLoaded { folders.reload() }
         shortcuts.model.update(bindings)
         if shortcuts.isViewLoaded { shortcuts.reload() }
     }
 
     private func select(_ pane: Pane) {
-        let controller: NSViewController = pane == .general ? general : shortcuts
+        let controller: NSViewController =
+            switch pane {
+            case .general: general
+            case .folders: folders
+            case .shortcuts: shortcuts
+            }
         window.contentViewController = controller
         window.title = pane.title
         window.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(pane.rawValue)

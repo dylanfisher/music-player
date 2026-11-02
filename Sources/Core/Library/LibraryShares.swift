@@ -36,9 +36,8 @@ extension LibraryIndex {
         }
     }
 
-    /// `folders` where their paths were last, without looking at what's mounted: for the window
-    /// at launch, before the watcher locates them.
-    public func lastKnownFolders(_ folders: [WatchedFolder]) throws -> [WatchedFolder] {
+    /// `folders` where their paths were last, without looking at what's mounted.
+    func lastKnownFolders(_ folders: [WatchedFolder]) throws -> [WatchedFolder] {
         try folders.map { folder in
             folder.share == nil ? folder : folder.located(at: try lastRoot(of: folder))
         }
@@ -177,15 +176,6 @@ public func folderToWatch(_ path: String, isLocal: Bool, among shares: [MountedS
     let inner = String(canonicalPath(path).dropFirst(stem(share.mountPoint).count + 1))
     return WatchedFolder(
         path: inner.precomposedStringWithCanonicalMapping, share: share.url, kind: .network)
-}
-
-extension LibraryIndex {
-    /// `folders` without the one the window lists at `path`.
-    public func folders(_ folders: [WatchedFolder], without path: String) throws
-        -> [WatchedFolder]
-    {
-        zip(folders, try lastKnownFolders(folders)).filter { $0.1.path != path }.map(\.0)
-    }
 }
 
 /// What stands in for the root of a share folder never found: its URL, which no scan finds as a

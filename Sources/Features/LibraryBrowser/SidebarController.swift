@@ -5,11 +5,9 @@ import KeyChord
 import Library
 import Settings
 
-/// The source list: the library, History, the timeline and the health checks, the playlists and
-/// the watched
-/// folders, each of which opens into the tree of its subfolders, with buttons to add and remove
-/// watched folders. Tracks dragged from the table onto a manual
-/// playlist are added to it; playlist files dropped anywhere on it are imported.
+/// The source list: the library, History, the timeline and the health checks, and the playlists.
+/// Tracks dragged from the table onto a manual playlist are added to it; playlist files dropped
+/// anywhere on it are imported. The watched folders are in Settings.
 @MainActor
 final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate {
     let outline = KeyOutlineView()
@@ -18,35 +16,21 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     private let health = SidebarNode(.health, title: "Library Health")
     private let groups: [SidebarNode]
     private let playlistGroup = SidebarNode(.group, title: "Playlists")
-    private let folderGroup = SidebarNode(.group, title: AppSettings().watchedFolders.title)
     private let selectSource: (BrowserSource?) -> Void
     /// Tracks, by ID, dropped on the manual playlist with this ID.
     var dropTracks: (Int64, [Int64]) -> Void = { _, _ in }
     /// Playlist files, by URL, dropped on the sidebar.
     var dropPlaylistFiles: ([URL]) -> Void = { _ in }
-    private let addFolder: () -> Void
-    private let removeFolder: (String) -> Void
     private let keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
-    private let removeButton = NSButton()
     private var applying = false
     private var typeSelect: TypeSelect?
-    private var folders: [WatchedFolder] = []
     private var playlists: [Playlist] = []
-    private var tree = FolderTree()
-    /// Counts trees shown, so a folder row reads its subfolders again from a newer one.
-    private var treeVersion = 0
-    /// Folder rows by path, each made when its parent first opens, and kept so a newer tree
-    /// finds the same rows and keeps them open.
-    private var folderNodes: [String: SidebarNode] = [:]
 
     init(
-        selectSource: @escaping (BrowserSource?) -> Void, addFolder: @escaping () -> Void,
-        removeFolder: @escaping (String) -> Void,
+        selectSource: @escaping (BrowserSource?) -> Void,
         keyCommand: @escaping ([KeyChord]) -> CommandDispatcher.KeyOutcome
     ) {
         self.selectSource = selectSource
-        self.addFolder = addFolder
-        self.removeFolder = removeFolder
         self.keyCommand = keyCommand
         let libraryGroup = SidebarNode(.group, title: "Library")
         libraryGroup.children = [
@@ -58,7 +42,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             node.toolTip = check.summary
             return node
         }
-        groups = [libraryGroup, playlistGroup, folderGroup]
+        groups = [libraryGroup, playlistGroup]
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -82,37 +66,14 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
-
-        let add = NSButton(
-            title: "+", target: self, action: #selector(addClicked))
-        add.toolTip = "Add a watched folder"
-        removeButton.title = "−"
-        removeButton.target = self
-        removeButton.action = #selector(removeClicked)
-        removeButton.toolTip = "Stop watching the selected folder"
-        for button in [add, removeButton] {
-            button.bezelStyle = .smallSquare
-            button.translatesAutoresizingMaskIntoConstraints = false
-            button.widthAnchor.constraint(equalToConstant: 24).isActive = true
-        }
-        let buttons = NSStackView(views: [add, removeButton])
-        buttons.spacing = 0
-        let stack = NSStackView(views: [scroll, buttons])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 0
-        stack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 0)
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         // The window's sidebar split item draws the material behind it.
-        view = stack
+        view = scroll
         outline.reloadData()
         for group in groups { outline.expandItem(group) }
     }
 
-    /// Lists `folders` and `playlists` and selects `source`, the library for nil.
-    func show(folders: [WatchedFolder], playlists: [Playlist], source: BrowserSource?) {
-        self.folders = folders
+    /// Lists `playlists` and selects `source`, the library for nil.
+    func show(playlists: [Playlist], source: BrowserSource?) {
         self.playlists = playlists
         applying = true
         defer { applying = false }
@@ -122,43 +83,17 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             if case .unreadable(let reason) = playlist.kind { node.toolTip = reason }
             return node
         }
-        folderGroup.children = folders.map { folder in
-            let node = folderNode(folder.path)
-            node.toolTip =
-                folder.path + (folder.kind == .network ? " (network, polled)" : " (local)")
-            return node
-        }
         outline.reloadData()
         for group in groups { outline.expandItem(group) }
-        // In row order, so each folder opens after the one holding it.
         for node in open { outline.expandItem(node) }
         let selected = source.flatMap(row(for:)) ?? outline.row(forItem: library)
         outline.selectRowIndexes([selected], byExtendingSelection: false)
-        // A subfolder opened from a saved source can sit below the visible rows.
         outline.scrollRowToVisible(selected)
-        updateRemoveButton()
-    }
-
-    /// Whether the sidebar has a row for `source`: false for a folder that is neither watched
-    /// nor in the tree, such as one whose tracks have all gone.
-    func lists(_ source: BrowserSource?) -> Bool {
-        guard case .folder(let path) = source else { return true }
-        return folders.contains { $0.path == path } || !tree.ancestors(of: path).isEmpty
     }
 
     /// Selects `source` without reporting it, for Back and Forward.
     func show(source: BrowserSource?) {
-        show(folders: folders, playlists: playlists, source: source)
-    }
-
-    /// Lists the subfolders of `tree` under the watched folders, keeping open the rows that are
-    /// open and the selection.
-    func show(tree: FolderTree) {
-        guard tree != self.tree else { return }
-        let source = selectedSource
-        self.tree = tree
-        treeVersion += 1
-        show(folders: folders, playlists: playlists, source: source)
+        show(playlists: playlists, source: source)
     }
 
     /// Shows what each health check found, as a count after its name.
@@ -178,17 +113,9 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     /// The row showing `source`, opening the rows above it; nil when there's none.
     private func row(for source: BrowserSource) -> Int? {
         var node = groups.lazy.flatMap(\.children).first { $0.source == source }
-        switch source {
-        case .folder(let path) where node == nil:
-            // Each opens before the next is asked for, which its opening makes.
-            for folder in tree.ancestors(of: path) {
-                if let node = folderNodes[folder] { outline.expandItem(node) }
-            }
-            node = folderNodes[path]
-        case .health:
+        if case .health = source {
             outline.expandItem(health)
             node = health.children.first { $0.source == source }
-        default: break
         }
         guard let node else { return nil }
         let row = outline.row(forItem: node)
@@ -203,25 +130,6 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             else { return nil }
             return node
         }
-    }
-
-    private func folderNode(_ path: String) -> SidebarNode {
-        if let node = folderNodes[path] { return node }
-        let node = SidebarNode(.folder(path), title: displayName(path))
-        node.toolTip = path
-        folderNodes[path] = node
-        return node
-    }
-
-    /// A row's children; a folder's are read from the tree when it first opens, and again
-    /// after a newer tree.
-    private func children(of node: SidebarNode) -> [SidebarNode] {
-        guard case .folder(let path) = node.kind else { return node.children }
-        if node.treeVersion != treeVersion {
-            node.children = tree.subfolders(of: path).map(folderNode)
-            node.treeVersion = treeVersion
-        }
-        return node.children
     }
 
     /// The outline moves through its own rows, skipping the group headings; every other key
@@ -243,40 +151,20 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     /// What the selected row shows; nil for the library.
     var selectedSource: BrowserSource? { selectedNode?.source }
 
-    /// The watched folder selected, which − stops watching; nil for a subfolder.
-    private var selectedWatchedFolder: String? {
-        guard case .folder(let path) = selectedNode?.kind,
-            folders.contains(where: { $0.path == path })
-        else { return nil }
-        return path
-    }
-
-    private func updateRemoveButton() {
-        removeButton.isEnabled = selectedWatchedFolder != nil
-    }
-
-    @objc private func addClicked() { addFolder() }
-
-    @objc private func removeClicked() {
-        guard let path = selectedWatchedFolder else { return }
-        removeFolder(path)
-    }
-
     // MARK: Data source and delegate
 
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
-        (item as? SidebarNode).map { children(of: $0).count } ?? groups.count
+        (item as? SidebarNode).map { $0.children.count } ?? groups.count
     }
 
     func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
-        (item as? SidebarNode).map { children(of: $0)[index] } ?? groups[index]
+        (item as? SidebarNode).map { $0.children[index] } ?? groups[index]
     }
 
     func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
         guard let node = item as? SidebarNode else { return false }
         switch node.kind {
         case .group, .health: return true
-        case .folder(let path): return !tree.subfolders(of: path).isEmpty
         case .library, .history, .timeline, .playlist, .check: return false
         }
     }
@@ -412,12 +300,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     }
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
-        updateRemoveButton()
         guard !applying else { return }
         switch selectedNode?.kind {
         case .library: selectSource(nil)
         case .group, .health, nil: break
-        case .folder, .history, .timeline, .playlist, .check: selectSource(selectedNode?.source)
+        case .history, .timeline, .playlist, .check: selectSource(selectedNode?.source)
         }
     }
 }
@@ -435,7 +322,6 @@ func playlistFileURLs(_ pasteboard: NSPasteboard) -> [URL] {
 private final class SidebarNode {
     enum Kind: Equatable {
         case group, library, history, timeline, health
-        case folder(String)
         case playlist(Playlist)
         case check(HealthCheck)
     }
@@ -446,13 +332,10 @@ private final class SidebarNode {
     /// A health check's count, shown at the row's end.
     var count: String?
     var children: [SidebarNode] = []
-    /// The folder tree `children` was read from, for a folder row.
-    var treeVersion = -1
 
     /// What selecting the row shows; nil for the library and the group headings.
     var source: BrowserSource? {
         switch kind {
-        case .folder(let path): .folder(path)
         case .playlist(let playlist): .playlist(playlist.id)
         case .history: .history
         case .timeline: .timeline
@@ -471,7 +354,6 @@ private final class SidebarNode {
         case .health: "stethoscope"
         // The checks' names need the room for their counts.
         case .check: nil
-        case .folder: "folder"
         case .playlist(let playlist):
             switch playlist.kind {
             case .manual: SymbolName.playlist
@@ -491,10 +373,4 @@ private final class SidebarNode {
 private final class CountCell: NSTableCellView {
     let count = NSTextField(labelWithString: "")
     var imageWidth: NSLayoutConstraint?
-}
-
-/// A folder's name as the sidebar shows it: its last component, or the path for "/".
-private func displayName(_ path: String) -> String {
-    let name = (path as NSString).lastPathComponent
-    return name.isEmpty || name == "/" ? path : name
 }

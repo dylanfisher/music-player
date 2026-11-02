@@ -29,6 +29,15 @@ private func model() -> (GeneralModel, () -> [String: Any]) {
     return (model, { values })
 }
 
+@MainActor
+private func actions(
+    addFolder: @escaping () -> Void = {}, removeFolder: @escaping (Int) -> Void = { _ in }
+) -> SettingsActions {
+    SettingsActions(
+        openConfigFile: {}, revealConfigFile: {}, copyDefaultConfig: {}, chooseSyncFolder: {},
+        addFolder: addFolder, removeFolder: removeFolder, rescanNow: {})
+}
+
 private var appearanceChoices: [SettingKind.Choice] {
     guard case .choice(let choices) = Appearance.kind else { preconditionFailure() }
     return choices
@@ -90,31 +99,76 @@ private var appearanceChoices: [SettingKind.Choice] {
     #expect(values()["a.count"] as? Int == 5)
 }
 
-@MainActor @Test func theWatchedFoldersAreListedByPath() {
-    let (model, _) = model()
-    #expect(model.folders("a.folders").isEmpty)
-    let listed = GeneralModel(
+/// A model whose watched folders are a local folder, a folder on a share and a whole share.
+@MainActor
+private func modelWithFolders() -> GeneralModel {
+    GeneralModel(
         settings: Schema().settings,
         value: {
             $0 == "a.folders"
                 ? [
-                    ["path": "/Music", "kind": "local"],
-                    ["path": "library", "share": "smb://nas/music", "kind": "network"],
-                    ["path": "", "share": "smb://nas/other", "kind": "network"],
+                    ["path": "/Music", "kind": "local", "pollIntervalMinutes": 60],
+                    [
+                        "path": "library", "share": "smb://nas/music", "kind": "network",
+                        "pollIntervalMinutes": 30,
+                    ],
+                    [
+                        "path": "", "share": "smb://nas/other", "kind": "network",
+                        "pollIntervalMinutes": 5,
+                    ],
                 ] : nil
         },
         set: { _, _ in })
+}
+
+@MainActor @Test func theWatchedFoldersAreListedWithTheirKindAndRescans() {
+    let (model, _) = model()
+    #expect(model.folders("a.folders").isEmpty)
     #expect(
-        listed.folders("a.folders") == ["/Music", "library on smb://nas/music", "smb://nas/other"])
+        modelWithFolders().folders("a.folders") == [
+            .init(location: "/Music", kind: "Local", rescans: "On change"),
+            .init(location: "library on smb://nas/music", kind: "Network", rescans: "Every 30 min"),
+            .init(location: "smb://nas/other", kind: "Network", rescans: "Every 5 min"),
+        ])
+}
+
+@MainActor @Test func theWatchedFoldersHaveAPaneOfTheirOwn() throws {
+    var removed: [Int] = []
+    var added = 0
+    let pane = FoldersPane(
+        model: modelWithFolders(),
+        actions: actions(addFolder: { added += 1 }, removeFolder: { removed.append($0) }))
+    _ = pane.view
+    #expect(pane.table.numberOfRows == 3)
+    #expect(!pane.removeButton.isEnabled)
+    pane.table.selectRowIndexes([1], byExtendingSelection: false)
+    #expect(pane.removeButton.isEnabled)
+    pane.removeButton.performClick(nil)
+    #expect(removed == [1])
+    func button(_ title: String, in view: NSView) -> NSButton? {
+        if let button = view as? NSButton, button.title == title { return button }
+        return view.subviews.lazy.compactMap { button(title, in: $0) }.first
+    }
+    try #require(button("Add…", in: pane.view)).performClick(nil)
+    #expect(added == 1)
+}
+
+@MainActor @Test func theAppSettingsSitInNamedSectionsWithoutTheWatchedFolders() {
+    let model = GeneralModel(
+        settings: AppSettings().settings, value: { _ in nil }, set: { _, _ in })
+    let sections = model.sections
+    #expect(sections.map(\.section) == [.playback, .library, .receiver, .appearance])
+    let listed = sections.flatMap(\.rows).map(\.key)
+    #expect(listed.count == AppSettings().settings.count - 1)
+    #expect(!listed.contains(AppSettings().watchedFolders.key))
+    #expect(model.foldersRow?.key == AppSettings().watchedFolders.key)
 }
 
 @MainActor @Test func aRefusedValueIsPutBackInItsField() throws {
     let (model, values) = model()
     let pane = GeneralPane(
         model: model, configPath: "/tmp/config.json",
-        actions: SettingsActions(
-            openConfigFile: {}, revealConfigFile: {}, copyDefaultConfig: {},
-            chooseSyncFolder: {}))
+        actions: actions())
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 700, height: 700), styleMask: [.titled],
         backing: .buffered, defer: false)

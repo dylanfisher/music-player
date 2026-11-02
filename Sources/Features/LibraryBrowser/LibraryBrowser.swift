@@ -36,8 +36,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var libraryRefreshed: () -> Void = {}
     /// Called after the user changed plays, ratings or playlists, which go in the sync log.
     public var edited: () -> Void = {}
-    public var addFolder: () -> Void = {}
-    public var removeFolder: (String) -> Void = { _ in }
     /// Runs the command a key press in one of the browser's lists is bound to.
     public var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
     /// Called once, when the table or the timeline first draws rows, or once loading finds none
@@ -61,12 +59,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private let problemsButton = NSButton()
     private(set) var status = LibraryStatus()
     private var browserHeight: Int
-    private var folders: [WatchedFolder]
     private var lastRefresh = Date.distantPast
     private var refreshPending = false
     private var problems: ProblemsWindow?
-    /// Counts folder tree reads, so only the newest is shown.
-    private var treeReads = 0
     let health: HealthModel
     /// Set from the read of another player's library until its preview sheet closes.
     private var isImporting = false
@@ -79,12 +74,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// time: a page is one primary-key lookup per row and takes well under a millisecond.
     public init(
         reader: LibraryReader, index: LibraryIndex, layout: TrackTableLayout, browserHeight: Int,
-        folders: [WatchedFolder], groupByAlbumArtist: Bool
+        groupByAlbumArtist: Bool
     ) {
         self.reader = reader
         self.index = index
         self.browserHeight = browserHeight
-        self.folders = folders
         model = BrowserModel(
             reader: reader, sortColumn: layout.sortColumn, ascending: layout.sortAscending,
             groupByAlbumArtist: groupByAlbumArtist)
@@ -143,8 +137,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                     owner?.showSource()
                 }
             },
-            addFolder: { owner?.addFolder() },
-            removeFolder: { path in owner?.removeFolder(path) },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         sidebar = sidebarController
         sidebarController.dropTracks = { playlist, ids in
@@ -247,8 +239,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         } catch {
             report("couldn't read or forget what a stats rebuild discarded: \(error)")
         }
-        // Before the sidebar shows the source, which may be a subfolder.
-        await loadFolderTree()
         showSource()
         await countIssues()
     }
@@ -257,33 +247,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// `visit`. For measuring memory once the whole library has been on screen.
     public func scrollThroughEveryRow(_ visit: (TrackRow) -> Void) {
         table.scrollThroughEveryRow(visit)
-    }
-
-    /// Lists a changed set of watched folders. If the shown folder went, the library is shown.
-    public func setFolders(_ folders: [WatchedFolder]) async {
-        self.folders = folders
-        var source = model.filter.source
-        if case .folder(let path) = source,
-            !FolderTree.isFolder(path, under: folders.map(\.path))
-        {
-            source = nil
-        }
-        sidebarController.show(folders: folders, playlists: model.playlists, source: source)
-        if source != model.filter.source { await model.setSource(source) }
-        await loadFolderTree()
-    }
-
-    /// Reads the subfolders of the watched folders from the index and lists them.
-    private func loadFolderTree() async {
-        treeReads += 1
-        let mine = treeReads
-        do {
-            let tree = try await reader.folderTree(roots: folders.map(\.path))
-            guard mine == treeReads else { return }
-            sidebarController.show(tree: tree)
-        } catch {
-            report("couldn't read the folders from the library: \(error)")
-        }
     }
 
     /// What the watcher reported. Refreshes as rows arrive, at most every
@@ -308,10 +271,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         case .removed:
             refreshNow()
             runHealth()
-        case .folders(let folders):
+        case .folders:
             // The rewrite gave the tracks under them new paths.
             refreshNow()
-            Task { await setFolders(folders) }
         case .synced(let report):
             if report.changed {
                 refreshNow()
@@ -409,7 +371,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         Task {
             await model.refresh()
             if showsTimeline { timelineModel.refresh() }
-            await loadFolderTree()
             libraryRefreshed()
             await countIssues()
         }
@@ -685,18 +646,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     public func forward() { Task { if await model.forward() { showSource() } } }
 
-    /// Selects the model's source in the sidebar, listing the playlists as they are now. A
-    /// folder the sidebar no longer lists, since its tracks left the index, gives way to the
-    /// library.
+    /// Selects the model's source in the sidebar, listing the playlists as they are now.
     private func showSource() {
-        sidebarController.show(
-            folders: folders, playlists: model.playlists, source: model.filter.source)
-        guard !sidebarController.lists(model.filter.source) else { return }
-        logger.notice("the folder shown has no tracks left; showing the library")
-        Task {
-            await model.setSource(nil)
-            showSource()
-        }
+        sidebarController.show(playlists: model.playlists, source: model.filter.source)
     }
 
     // MARK: Playlists and stats
