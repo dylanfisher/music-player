@@ -723,6 +723,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Rescans the folders at `positions` in the setting, as the Watched Folders table lists them.
+    func rescanFolders(at positions: [Int]) {
+        guard let settings, let watcher else { return NSSound.beep() }
+        let folders = settings[\.watchedFolders]
+        watcher.rescan(folders: positions.filter(folders.indices.contains).map { folders[$0] })
+    }
+
     func changedFolders(_ folders: [WatchedFolder], _ settings: ConfigStore<AppSettings>) {
         startWatching(folders, settings)
     }

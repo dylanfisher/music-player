@@ -186,7 +186,7 @@ public enum AppCommands {
             Command(.showWatchedFolders, "Watched Folders…"),
             Command(.checkHealth, "Check Library Health"),
             // Not from links: it ignores the playback pause, so a page could keep the NAS busy.
-            Command(.rescanNow, "Rescan Now"),
+            Command(.rescanNow, "Rescan All"),
             Command(.resolveLostStats, "Resolve Lost Stats…"),
             Command(.restoreRemoved, "Restore Removed Tracks…"),
             Command(

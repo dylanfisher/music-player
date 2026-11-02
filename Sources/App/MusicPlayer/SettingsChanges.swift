@@ -149,6 +149,7 @@ extension AppDelegate {
                 rescanNow: { [weak dispatcher] in
                     if dispatcher?.run(.rescanNow) != true { NSSound.beep() }
                 },
+                rescanFolders: { [weak self] in self?.rescanFolders(at: $0) },
                 outputs: { [weak self] in self?.outputOptionsNow() ?? [] },
                 searchOutputs: { [weak self] in self?.searchOutputs() },
                 chooseOutput: { [weak self] in self?.chooseOutput($0) }))

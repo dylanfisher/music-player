@@ -33,12 +33,14 @@ private func model() -> (GeneralModel, () -> [String: Any]) {
 @MainActor
 private func actions(
     addFolder: @escaping () -> Void = {}, removeFolder: @escaping (Int) -> Void = { _ in },
+    rescanNow: @escaping () -> Void = {}, rescanFolders: @escaping ([Int]) -> Void = { _ in },
     outputs: @escaping () -> [OutputOption] = { [] },
     chooseOutput: @escaping (OutputChoice) -> Void = { _ in }
 ) -> SettingsActions {
     SettingsActions(
         openConfigFile: {}, revealConfigFile: {}, copyDefaultConfig: {}, chooseSyncFolder: {},
-        addFolder: addFolder, removeFolder: removeFolder, rescanNow: {}, outputs: outputs,
+        addFolder: addFolder, removeFolder: removeFolder, rescanNow: rescanNow,
+        rescanFolders: rescanFolders, outputs: outputs,
         searchOutputs: {}, chooseOutput: chooseOutput)
 }
 
@@ -155,6 +157,33 @@ private func modelWithFolders() -> GeneralModel {
     }
     try #require(button("Add…", in: pane.view)).performClick(nil)
     #expect(added == 1)
+}
+
+@MainActor @Test func theSelectedFoldersAreRescannedFromAButtonOrTheContextMenu() throws {
+    var rescanned: [[Int]] = []
+    var all = 0
+    let pane = FoldersPane(
+        model: modelWithFolders(),
+        actions: actions(rescanNow: { all += 1 }, rescanFolders: { rescanned.append($0) }))
+    _ = pane.view
+    #expect(!pane.rescanButton.isEnabled)
+    pane.table.selectRowIndexes([0, 2], byExtendingSelection: false)
+    #expect(pane.rescanButton.isEnabled)
+    #expect(!pane.removeButton.isEnabled, "Remove takes one folder")
+    pane.rescanButton.performClick(nil)
+    #expect(rescanned == [[0, 2]])
+
+    let menu = try #require(pane.table.menu)
+    #expect(menu.items.map(\.title) == ["Rescan", "Rescan All"])
+    for item in menu.items {
+        #expect(pane.validateMenuItem(item))
+        let action = try #require(item.action)
+        NSApp.sendAction(action, to: item.target, from: item)
+    }
+    #expect(rescanned == [[0, 2], [0, 2]])
+    #expect(all == 1)
+    pane.table.deselectAll(nil)
+    #expect(!pane.validateMenuItem(menu.items[0]))
 }
 
 @MainActor @Test func theAppSettingsSitInNamedSectionsWithoutTheWatchedFolders() {

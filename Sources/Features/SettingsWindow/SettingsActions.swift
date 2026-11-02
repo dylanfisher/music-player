@@ -12,6 +12,8 @@ public struct SettingsActions {
     /// Asks to stop watching the folder at this position in the setting.
     public var removeFolder: (Int) -> Void
     public var rescanNow: () -> Void
+    /// Rescans the folders at these positions in the setting.
+    public var rescanFolders: ([Int]) -> Void
     /// The outputs to pick from, as `outputOptions` lists them.
     public var outputs: () -> [OutputOption]
     /// Starts a search for renderers, as the output picker opens; `reload` shows what it finds.
@@ -22,7 +24,8 @@ public struct SettingsActions {
         openConfigFile: @escaping () -> Void, revealConfigFile: @escaping () -> Void,
         copyDefaultConfig: @escaping () -> Void, chooseSyncFolder: @escaping () -> Void,
         addFolder: @escaping () -> Void, removeFolder: @escaping (Int) -> Void,
-        rescanNow: @escaping () -> Void, outputs: @escaping () -> [OutputOption],
+        rescanNow: @escaping () -> Void, rescanFolders: @escaping ([Int]) -> Void,
+        outputs: @escaping () -> [OutputOption],
         searchOutputs: @escaping () -> Void, chooseOutput: @escaping (OutputChoice) -> Void
     ) {
         self.openConfigFile = openConfigFile
@@ -32,6 +35,7 @@ public struct SettingsActions {
         self.addFolder = addFolder
         self.removeFolder = removeFolder
         self.rescanNow = rescanNow
+        self.rescanFolders = rescanFolders
         self.outputs = outputs
         self.searchOutputs = searchOutputs
         self.chooseOutput = chooseOutput

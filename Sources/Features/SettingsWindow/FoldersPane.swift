@@ -3,9 +3,12 @@ import Commands
 import Settings
 
 /// Settings ▸ Watched Folders: each folder with its kind and how often it's rescanned, buttons to
-/// add and remove one, and Rescan Now.
+/// add and remove one, and Rescan for the selected folders or Rescan All, from buttons or the
+/// table's context menu.
 @MainActor
-final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
+final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
+    NSMenuItemValidation
+{
     private enum Column: String, CaseIterable {
         case location, kind, rescans
 
@@ -31,6 +34,7 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     private let actions: SettingsActions
     let table = NSTableView()
     let removeButton = NSButton()
+    let rescanButton = NSButton()
     private(set) var folders: [GeneralModel.Folder] = []
 
     init(model: GeneralModel, actions: SettingsActions) {
@@ -62,9 +66,18 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         table.style = .fullWidth
         table.usesAlternatingRowBackgroundColors = true
         table.allowsEmptySelection = true
+        table.allowsMultipleSelection = true
         table.dataSource = self
         table.delegate = self
         table.setAccessibilityLabel(row.title)
+        let menu = NSMenu()
+        menu.addItem(
+            withTitle: Self.rescanTitle, action: #selector(rescanClicked), keyEquivalent: "")
+        menu.addItem(
+            withTitle: AppCommands.title(of: .rescanNow), action: #selector(rescanNow),
+            keyEquivalent: "")
+        for item in menu.items { item.target = self }
+        table.menu = menu
         let scroll = NSScrollView()
         scroll.documentView = table
         scroll.hasVerticalScroller = true
@@ -74,12 +87,15 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         removeButton.title = "Remove…"
         removeButton.target = self
         removeButton.action = #selector(removeFolder)
-        let rescan = NSButton(
+        rescanButton.title = Self.rescanTitle
+        rescanButton.target = self
+        rescanButton.action = #selector(rescanSelected)
+        let rescanAll = NSButton(
             title: AppCommands.title(of: .rescanNow), target: self, action: #selector(rescanNow))
-        for button in [add, removeButton, rescan] { button.bezelStyle = .rounded }
+        for button in [add, removeButton, rescanButton, rescanAll] { button.bezelStyle = .rounded }
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let buttons = NSStackView(views: [add, removeButton, spacer, rescan])
+        let buttons = NSStackView(views: [add, removeButton, spacer, rescanButton, rescanAll])
 
         let stack = NSStackView(views: [summary, scroll, buttons])
         stack.orientation = .vertical
@@ -103,11 +119,23 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     func reload() {
         folders = model.folders(row.key)
         table.reloadData()
-        updateRemoveButton()
+        updateButtons()
     }
 
-    private func updateRemoveButton() {
-        removeButton.isEnabled = folders.indices.contains(table.selectedRow)
+    private static let rescanTitle = "Rescan"
+
+    /// Remove takes one folder, since it asks about it by name; Rescan takes any number.
+    private func updateButtons() {
+        removeButton.isEnabled = table.selectedRowIndexes.count == 1
+        rescanButton.isEnabled = !table.selectedRowIndexes.isEmpty
+    }
+
+    /// The rows the context menu acts on: the clicked row, with the rest of the selection when
+    /// it's among them.
+    private var clickedRows: IndexSet {
+        let clicked = table.clickedRow
+        guard clicked >= 0 else { return table.selectedRowIndexes }
+        return table.selectedRowIndexes.contains(clicked) ? table.selectedRowIndexes : [clicked]
     }
 
     @objc private func addFolder() { actions.addFolder() }
@@ -118,6 +146,20 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     }
 
     @objc private func rescanNow() { actions.rescanNow() }
+
+    @objc private func rescanSelected() { rescan(table.selectedRowIndexes) }
+
+    @objc private func rescanClicked() { rescan(clickedRows) }
+
+    private func rescan(_ rows: IndexSet) {
+        let positions = rows.filter(folders.indices.contains)
+        guard !positions.isEmpty else { return }
+        actions.rescanFolders(positions)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        menuItem.action != #selector(rescanClicked) || !clickedRows.isEmpty
+    }
 
     func numberOfRows(in tableView: NSTableView) -> Int { folders.count }
 
@@ -140,5 +182,5 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         return label
     }
 
-    func tableViewSelectionDidChange(_ notification: Notification) { updateRemoveButton() }
+    func tableViewSelectionDidChange(_ notification: Notification) { updateButtons() }
 }
