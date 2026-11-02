@@ -33,8 +33,12 @@ func target(_ name: String) -> FuzzTarget {
 
 var arguments = Array(CommandLine.arguments.dropFirst())
 let mode = arguments.isEmpty ? nil : FuzzMode(rawValue: arguments.removeFirst())
-let output = value(FuzzFlag.output, in: &arguments).map { URL(fileURLWithPath: $0) }
-let clones = value(FuzzFlag.clones, in: &arguments).map { URL(fileURLWithPath: $0) }
+let output = value(FuzzFlag.output, in: &arguments).map {
+    URL(fileURLWithPath: $0, isDirectory: true)
+}
+let clones = value(FuzzFlag.clones, in: &arguments).map {
+    URL(fileURLWithPath: $0, isDirectory: true)
+}
 let seed = value(FuzzFlag.seed, in: &arguments).map { text in
     guard let seed = UInt64(text) else { fail("--seed needs a whole number, not \(text)") }
     return seed
@@ -73,7 +77,8 @@ do {
         let target = target(arguments[0])
         let run = try target.prepare(try fuzzCaches().appendingPathComponent(target.name))
         for path in arguments.dropFirst() {
-            let input = [UInt8](try Data(contentsOf: URL(fileURLWithPath: path)))
+            let input = [UInt8](
+                try Data(contentsOf: URL(fileURLWithPath: path, isDirectory: false)))
             let result = execute(input, run)
             print("\(path): \(result.accepted ? "accepted" : "refused")")
         }

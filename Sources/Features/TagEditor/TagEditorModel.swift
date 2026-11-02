@@ -144,7 +144,7 @@ func readEditableTracks(_ paths: [String]) -> (tracks: [EditableTrack], problems
     var tracks: [EditableTrack] = []
     var problems: [String] = []
     for path in paths {
-        let url = URL(fileURLWithPath: path)
+        let url = URL(fileURLWithPath: path, isDirectory: false)
         do {
             let parsed = try readMetadata(at: url)
             let art = try parsed.metadata.art.map { try readArt($0, at: url) }

@@ -27,7 +27,7 @@ struct AVTags: Equatable {
 /// the file name or where the audio starts, which an edit may move.
 func audioDescription(_ url: URL) throws -> [String] {
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/afinfo")
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/afinfo", isDirectory: false)
     process.arguments = [url.path]
     let pipe = Pipe()
     process.standardOutput = pipe
@@ -47,7 +47,7 @@ func audioDescription(_ url: URL) throws -> [String] {
 /// Whether two files are the same byte for byte, by `cmp`.
 func sameBytes(_ a: URL, _ b: URL) throws -> Bool {
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/cmp")
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/cmp", isDirectory: false)
     process.arguments = ["-s", a.path, b.path]
     try process.run()
     process.waitUntilExit()

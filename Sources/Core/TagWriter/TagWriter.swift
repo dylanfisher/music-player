@@ -122,7 +122,7 @@ public struct TagWriter: Sendable {
     {
         let before = try FileIdentity(path: path)
         try requireWritable(path)
-        let url = URL(fileURLWithPath: path)
+        let url = URL(fileURLWithPath: path, isDirectory: false)
         let current: ParsedFile
         let file: TagFile
         do throws(MetadataError) {
@@ -273,7 +273,7 @@ public struct TagWriter: Sendable {
         func failed(_ detail: String) -> TagWriteError {
             TagWriteError(path: path, kind: .checkFailed, detail: detail)
         }
-        let url = URL(fileURLWithPath: temp)
+        let url = URL(fileURLWithPath: temp, isDirectory: false)
         let edited: TagFile
         let reread: ParsedFile
         do throws(MetadataError) {

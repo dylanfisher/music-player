@@ -244,7 +244,8 @@ struct RoundTrip {
             let roots = self.roots
             changing.faults.beforeReplacing = { path, _ in
                 try requireCorpusWrite(path, roots: roots)
-                let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+                let handle = try FileHandle(
+                    forWritingTo: URL(fileURLWithPath: path, isDirectory: false))
                 try handle.seekToEnd()
                 try handle.write(contentsOf: Data([0]))
                 try handle.close()

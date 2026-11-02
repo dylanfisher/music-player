@@ -255,7 +255,8 @@ private func measureWindow(_ app: URL, home: URL) throws -> WindowReport {
 /// `MusicPlayer.app`, for a copy of the release bundle. The bare one comes first, since a bundle
 /// beside it can be left from an older build.
 private func appExecutable() throws -> URL {
-    let directory = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+    let directory = URL(fileURLWithPath: CommandLine.arguments[0], isDirectory: false)
+        .resolvingSymlinksInPath()
         .deletingLastPathComponent()
     let candidates = [
         directory.appendingPathComponent("MusicPlayer"),

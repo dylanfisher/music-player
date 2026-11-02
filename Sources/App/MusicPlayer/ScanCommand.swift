@@ -16,13 +16,16 @@ let eraseLine = "\r\u{1B}[K"
 /// they can be compared on a NAS.
 @MainActor
 func scanCommand(folder: String, databasePath: String?, readers: Int?, hints: ReadHints) throws {
-    let path = URL(fileURLWithPath: folder).standardizedFileURL.path
+    let path = URL(fileURLWithPath: folder, isDirectory: true).standardizedFileURL.path
     // Unknown only when the folder is missing.
-    let isLocal = (try? URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeIsLocalKey]))?
+    let isLocal =
+        (try? URL(fileURLWithPath: path, isDirectory: true).resourceValues(forKeys: [
+            .volumeIsLocalKey
+        ]))?
         .volumeIsLocal
     let databaseURL: URL
     if let databasePath {
-        databaseURL = URL(fileURLWithPath: databasePath)
+        databaseURL = URL(fileURLWithPath: databasePath, isDirectory: false)
     } else {
         // The app removes files outside its watched folders at launch, so a scan into its own
         // index of anything else would be undone.

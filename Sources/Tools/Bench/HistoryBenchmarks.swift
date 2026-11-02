@@ -132,7 +132,8 @@ private let playedLibrary = Result { () throws -> PlayedLibrary in
 
 /// The `.build` folder the Bench binary was built into.
 private func buildDirectory() throws -> URL {
-    var url = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+    var url = URL(fileURLWithPath: CommandLine.arguments[0], isDirectory: false)
+        .resolvingSymlinksInPath()
     while url.pathComponents.count > 1 {
         url.deleteLastPathComponent()
         if url.lastPathComponent == ".build" { return url }

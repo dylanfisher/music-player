@@ -8,7 +8,7 @@ let tagWriterBenchmarks = [
         name: "tag journal: write a 1000-file batch with 1 MB art each",
         budget: Budget(appleSilicon: 20, oldMac: 60, unit: .seconds)
     ) {
-        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
             .appendingPathComponent(".build/bench-tag-journal")
         if FileManager.default.fileExists(atPath: root.path) {
             try FileManager.default.removeItem(at: root)

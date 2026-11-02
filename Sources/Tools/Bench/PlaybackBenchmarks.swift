@@ -104,7 +104,7 @@ private final class SoakLoad: @unchecked Sendable {
         loop(every: soakScanIntervalSeconds) { [self] in
             let databaseURL = scratch.appendingPathComponent("scan.sqlite")
             for suffix in ["", Database.walSuffix, Database.shmSuffix] {
-                let url = URL(fileURLWithPath: databaseURL.path + suffix)
+                let url = URL(fileURLWithPath: databaseURL.path + suffix, isDirectory: false)
                 if FileManager.default.fileExists(atPath: url.path) {
                     try FileManager.default.removeItem(at: url)
                 }

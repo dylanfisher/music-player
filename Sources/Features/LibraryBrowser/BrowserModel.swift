@@ -438,7 +438,7 @@ public final class BrowserModel {
         for id in ids {
             guard let path = paths[id] else { continue }
             if id == firstID { start = urls.count }
-            urls.append(URL(fileURLWithPath: path))
+            urls.append(URL(fileURLWithPath: path, isDirectory: false))
         }
         return urls.isEmpty ? nil : PlayRequest(urls: urls, first: start)
     }
@@ -447,7 +447,7 @@ public final class BrowserModel {
     public func urls(ofRows rows: IndexSet) async throws -> [URL] {
         let ids = rows.filter { trackIDs.indices.contains($0) }.map { trackIDs[$0] }
         let paths = try await reader.paths(ids: ids)
-        return ids.compactMap { paths[$0].map(URL.init(fileURLWithPath:)) }
+        return ids.compactMap { paths[$0].map { URL(fileURLWithPath: $0, isDirectory: false) } }
     }
 
     /// The rows now holding `ids`, for keeping a selection across a reload.

@@ -39,7 +39,7 @@ public final class ArtworkLoader: @unchecked Sendable {
         if let image = cached(key) { return image }
         let bytes: Data
         do {
-            bytes = try readArt(art, at: URL(fileURLWithPath: path))
+            bytes = try readArt(art, at: URL(fileURLWithPath: path, isDirectory: false))
         } catch {
             throw ArtworkError.unreadable(path: path, reason: "\(error)")
         }

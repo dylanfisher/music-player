@@ -163,7 +163,7 @@ final class TimelineModel {
     /// The files of the plays at `rows`, in row order, a track as often as its rows, leaving
     /// out missing files: what Play Next queues.
     func urls(ofRows rows: IndexSet) throws -> [URL] {
-        try present(rows).map { URL(fileURLWithPath: $0.played.path) }
+        try present(rows).map { URL(fileURLWithPath: $0.played.path, isDirectory: false) }
     }
 
     /// The queue a double-click on `clicked` plays, by the track table's rule, leaving out
@@ -177,7 +177,7 @@ final class TimelineModel {
         for (position, row) in rows.enumerated() {
             guard let file = played[entries[row].trackID], file.track != nil else { continue }
             if start == nil, position >= first { start = urls.count }
-            urls.append(URL(fileURLWithPath: file.path))
+            urls.append(URL(fileURLWithPath: file.path, isDirectory: false))
         }
         guard !urls.isEmpty else {
             if rows.isEmpty { return nil }

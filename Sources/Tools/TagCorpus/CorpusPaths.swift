@@ -44,7 +44,7 @@ func requireCorpusWrite(_ path: String, roots: [URL]) throws {
 /// `path` with ".." and symbolic links resolved. Throws for a path that is a dangling link or
 /// whose folder doesn't resolve.
 func resolvedPath(_ path: String) throws -> String {
-    let standard = URL(fileURLWithPath: path).standardizedFileURL.path
+    let standard = URL(fileURLWithPath: path, isDirectory: false).standardizedFileURL.path
     if let real = realpath(standard, nil) {
         defer { free(real) }
         return String(cString: real)

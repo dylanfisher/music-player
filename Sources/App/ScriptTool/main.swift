@@ -33,7 +33,9 @@ guard case .request(let request) = invocation.action else {
 
 let paths: AppPaths
 do {
-    paths = try invocation.home.map { AppPaths(home: URL(fileURLWithPath: $0)) } ?? .standard()
+    paths =
+        try invocation.home.map { AppPaths(home: URL(fileURLWithPath: $0, isDirectory: true)) }
+        ?? .standard()
 } catch {
     fail("couldn't find the app's data folder: \(error)")
 }

@@ -24,14 +24,15 @@ do {
         exit(0)
     }
     guard arguments.first == roundTripFlag else {
-        let folder = URL(fileURLWithPath: arguments.first ?? referenceCorpusPath)
+        let folder = URL(fileURLWithPath: arguments.first ?? referenceCorpusPath, isDirectory: true)
         exit(try survey(folder) == 0 ? 0 : 1)
     }
     let fullDisk = arguments.firstIndex(of: fullDiskFlag).map {
-        URL(fileURLWithPath: arguments[$0 + 1])
+        URL(fileURLWithPath: arguments[$0 + 1], isDirectory: true)
     }
     var run = try RoundTrip(
-        reference: URL(fileURLWithPath: referenceCorpusPath), clones: try cloneFolder(),
+        reference: URL(fileURLWithPath: referenceCorpusPath, isDirectory: true),
+        clones: try cloneFolder(),
         fullDisk: fullDisk)
     let started = Date()
     try run.run()

@@ -69,9 +69,11 @@ let ioHints = value(after: .scanIOHints).map { text in
 /// The app's files: in `--home`'s folder or the standard places, with `--settings`'s config file.
 func appPaths() throws -> AppPaths {
     var paths =
-        try value(after: .home).map { AppPaths(home: URL(fileURLWithPath: $0)) }
+        try value(after: .home).map { AppPaths(home: URL(fileURLWithPath: $0, isDirectory: true)) }
         ?? AppPaths.standard()
-    if let file = value(after: .settings) { paths.configFile = URL(fileURLWithPath: file) }
+    if let file = value(after: .settings) {
+        paths.configFile = URL(fileURLWithPath: file, isDirectory: false)
+    }
     return paths
 }
 
@@ -109,7 +111,7 @@ do {
 let app = NSApplication.shared
 let delegate = AppDelegate(
     paths: launchPaths, measuring: given(.measureWindow), reportingLaunch: given(.reportLaunch),
-    snapshotURL: value(after: .snapshot).map(URL.init(fileURLWithPath:)),
+    snapshotURL: value(after: .snapshot).map { URL(fileURLWithPath: $0, isDirectory: false) },
     snapshotOf: snapshotTarget)
 app.delegate = delegate
 app.setActivationPolicy(.regular)

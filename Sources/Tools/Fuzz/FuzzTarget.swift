@@ -241,7 +241,7 @@ private func journalRecords(in data: URL) throws -> [URL] {
 private func bytesFile(of record: URL) -> URL {
     URL(
         fileURLWithPath: record.path.dropLast(TagUndoJournal.recordSuffix.count)
-            + TagUndoJournal.bytesSuffix)
+            + TagUndoJournal.bytesSuffix, isDirectory: false)
 }
 
 private let rules = FuzzTarget(

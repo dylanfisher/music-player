@@ -34,7 +34,8 @@ func queuedFiles(_ paths: [String]) throws -> (files: [QueuedFile], warnings: [S
     var files: [QueuedFile] = []
     var warnings: [String] = []
     for path in paths {
-        let url = URL(fileURLWithPath: path).standardizedFileURL
+        // The argument may be either; one stat below tells which, so none is needed here.
+        let url = URL(fileURLWithPath: path, isDirectory: false).standardizedFileURL
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
             throw PlayCommandError.missing(path)
@@ -43,7 +44,7 @@ func queuedFiles(_ paths: [String]) throws -> (files: [QueuedFile], warnings: [S
             files.append(QueuedFile(url, metadata(of: url, &warnings)))
             continue
         }
-        let found = try audioFiles(in: url)
+        let found = try audioFiles(in: URL(fileURLWithPath: url.path, isDirectory: true))
         if found.isEmpty { warnings.append("\(path) has no audio files") }
         let byFolder = Dictionary(grouping: found) { $0.deletingLastPathComponent().path }
         for folder in byFolder.keys.sorted(by: {

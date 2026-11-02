@@ -19,7 +19,9 @@ public struct SystemFileAccess: ScanFileAccess {
     }
 
     public func volumeIsLocal(_ path: String) throws -> Bool? {
-        try URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal
+        try URL(fileURLWithPath: path, isDirectory: true).resourceValues(forKeys: [
+            .volumeIsLocalKey
+        ]).volumeIsLocal
     }
 
     public func contentsOfDirectory(_ directory: String, keys: [URLResourceKey]) throws -> [URL] {

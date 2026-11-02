@@ -27,7 +27,7 @@ if let text = value(after: "--count") {
 
 do {
     let root =
-        try value(after: "--output").map { URL(fileURLWithPath: $0) }
+        try value(after: "--output").map { URL(fileURLWithPath: $0, isDirectory: true) }
         ?? defaultFixturesDirectory()
     let start = Date()
     let outcome = try generateFixtures(

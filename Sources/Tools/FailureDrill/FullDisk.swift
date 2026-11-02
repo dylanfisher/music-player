@@ -147,7 +147,9 @@ private func tagJournal(on mount: URL, music: MusicFolders) throws -> [String] {
     var failures: [String] = []
     let files = try audioFiles(in: music.tags)
     guard files.count >= 3 else { throw DrillError("the full-disk edit needs three files") }
-    let originals = try files.map { try Data(contentsOf: URL(fileURLWithPath: $0)) }
+    let originals = try files.map {
+        try Data(contentsOf: URL(fileURLWithPath: $0, isDirectory: false))
+    }
     var writer = TagWriter(journal: TagUndoJournal(dataDirectory: journalHome))
     let filler = mount.appendingPathComponent("filler")
     writer.faults.beforeReplacing = { _, _ in try fillVolume(with: filler) }
@@ -163,13 +165,15 @@ private func tagJournal(on mount: URL, music: MusicFolders) throws -> [String] {
     if report.notWritten != Array(files[2...]) {
         failures.append("reported as not written: \(report.notWritten)")
     }
-    let now = try files.map { try Data(contentsOf: URL(fileURLWithPath: $0)) }
+    let now = try files.map { try Data(contentsOf: URL(fileURLWithPath: $0, isDirectory: false)) }
     if now[1...] != originals[1...] { failures.append("a file after the first changed") }
     let temps = try files.flatMap(leftoverTemps(for:))
     if !temps.isEmpty { failures.append("temp files were left: \(temps)") }
     try FileManager.default.removeItem(at: filler)
     let undone = writer.undoLast()
-    let restored = try files.map { try Data(contentsOf: URL(fileURLWithPath: $0)) }
+    let restored = try files.map {
+        try Data(contentsOf: URL(fileURLWithPath: $0, isDirectory: false))
+    }
     if !undone.failures.isEmpty || restored != originals {
         failures.append("with room again the undo failed: \(undone)")
     }
