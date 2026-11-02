@@ -374,7 +374,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     // MARK: Removing tracks
 
     /// Asks over `window` whether to remove the selected tracks from the library, or to move
-    /// their files to the Trash as well (ADR 0048).
+    /// their files to the Trash as well (ADR 0050).
     public func removeSelection(over window: NSWindow) {
         guard let ids = selectedTrackIDs(else: "couldn't remove the tracks"), !ids.isEmpty
         else { return }

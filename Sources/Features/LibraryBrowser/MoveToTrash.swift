@@ -8,7 +8,7 @@ struct TrashOutcome: Sendable {
 }
 
 /// Moves the files at `urls`, which the user confirmed in Remove…, to the Trash. The one call
-/// besides `TagWriter` that moves a music file (ADR 0048); nothing else calls it.
+/// besides `TagWriter` that moves a music file (ADR 0050); nothing else calls it.
 @MainActor
 func moveToTrash(_ urls: [URL]) async -> TrashOutcome {
     await withCheckedContinuation { continuation in

@@ -1,4 +1,4 @@
-# 0048. Remove tracks from the library, or move their files to the Trash
+# 0050. Remove tracks from the library, or move their files to the Trash
 
 - **Date:** 2026-11-02
 - **Status:** accepted

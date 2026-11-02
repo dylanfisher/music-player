@@ -2,7 +2,7 @@ import Foundation
 
 extension LibraryIndex {
     /// Takes the tracks `ids` out of the library and keeps their paths out of every later scan
-    /// until they're restored. The paths keep their stats (ADR 0048).
+    /// until they're restored. The paths keep their stats (ADR 0050).
     func removeFromLibrary(trackIDs ids: [Int64]) throws {
         try database.transaction {
             let exclude = try statement(

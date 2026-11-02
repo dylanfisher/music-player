@@ -1,6 +1,6 @@
 import AppKit
 
-/// What Remove… does with the tracks the user confirmed (ADR 0048).
+/// What Remove… does with the tracks the user confirmed (ADR 0050).
 enum RemovalChoice: Equatable {
     /// Out of the library, and out of later scans until restored.
     case library

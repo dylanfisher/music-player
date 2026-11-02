@@ -26,7 +26,7 @@ enum SchemaPart: String, CaseIterable {
     /// Which watched folders' last whole scan finished (ADR 0040). Rebuilt with the index,
     /// whose files it vouches for.
     case scans
-    /// The paths the user removed from the library, which scans skip (ADR 0048). Keyed by path
+    /// The paths the user removed from the library, which scans skip (ADR 0050). Keyed by path
     /// ID, and a part of its own for the same reason as `loved`.
     case removed
 

@@ -50,7 +50,7 @@ extension CommandID {
     public static let restoreRemoved = CommandID("library.restoreRemoved")
     public static let revealInFinder = CommandID("track.revealInFinder")
     public static let copyPath = CommandID("track.copyPath")
-    /// Removes the selection from the library, or moves its files to the Trash (ADR 0048).
+    /// Removes the selection from the library, or moves its files to the Trash (ADR 0050).
     public static let removeTracks = CommandID("track.remove")
     public static let editTags = CommandID("track.editTags")
     public static let undoTagEdit = CommandID("track.undoTagEdit")

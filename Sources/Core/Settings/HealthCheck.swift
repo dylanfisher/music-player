@@ -21,6 +21,6 @@ public enum HealthCheck: String, CaseIterable, Sendable {
     case noAlbumArtist
     /// Paths with stats whose file left and that no scan matched with a new path (ADR 0026).
     case lostStats
-    /// Paths the user removed from the library, which scans skip until restored (ADR 0048).
+    /// Paths the user removed from the library, which scans skip until restored (ADR 0050).
     case removed
 }
