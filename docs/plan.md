@@ -229,7 +229,7 @@ untyped covers, and wide AAC layouts. Deferred: DSF to phase 12.
       cancelled. Progress is reported, never blocking the UI.
 - [x] **Watched folders,** configurable in settings: a list of roots, each with an include/exclude
       pattern list. FSEvents doesn't report changes on SMB volumes, so local roots use FSEvents and
-      network roots use a polling rescan at a configurable interval (default 15 minutes, never
+      network roots use a polling rescan at a configurable interval (default 60 minutes, never
       while playback is starting). Optionally pause polling during playback.
 - [x] Benchmarks: full scan, no-change rescan, and the query latencies the UI will need.
 - [x] **Hardware checkpoint (owner):** scan the real NAS library on the DAC Mac. Report the time,

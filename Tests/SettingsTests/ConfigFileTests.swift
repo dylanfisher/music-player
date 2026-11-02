@@ -278,7 +278,8 @@ func fuzzedFilesAreProblemsNotCrashes(_ name: String) throws {
     let stored = folder(#""path": "library", "share": "smb://nas/music", "kind": "network""#)
     #expect(
         try parsed(stored).values["folders"] as? [WatchedFolder] == [
-            WatchedFolder(path: "library", share: "smb://nas/music", kind: .network)
+            WatchedFolder(
+                path: "library", share: "smb://nas/music", kind: .network, pollIntervalMinutes: 15)
         ])
     let refused = [
         (#""path": "library", "share": "smb://nas", "kind": "network""#, "isn't a URL"),

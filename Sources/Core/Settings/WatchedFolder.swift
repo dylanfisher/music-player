@@ -16,7 +16,7 @@ public struct WatchedFolder: SettingValue {
         "/cores", "/dev", "/etc", "/opt", "/private", "/sbin", "/tmp", "/usr", "/var",
     ]
 
-    public static let defaultPollIntervalMinutes = 15
+    public static let defaultPollIntervalMinutes = 60
     static let pollIntervalRangeMinutes = 1...1440
 
     /// The root, as an absolute path; for a folder on a share, its path inside the share, with

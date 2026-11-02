@@ -337,3 +337,13 @@ private func problems(_ json: String) -> [SettingProblem] {
     _ = try StateStore(AppState(), fileURL: url)
     #expect(leftoverAtomicWrites(beside: url).isEmpty)
 }
+
+@Test func aNetworkFolderPollsHourlyUnlessSetAsRarelyAsDaily() {
+    let folder = WatchedFolder(path: "/Volumes/Music", kind: .network)
+    #expect(folder.pollIntervalMinutes == 60)
+    var daily = folder
+    daily.pollIntervalMinutes = 1440
+    #expect(daily.problem() == nil)
+    daily.pollIntervalMinutes = 1441
+    #expect(daily.problem() == "pollIntervalMinutes 1441 is outside 1...1440")
+}
