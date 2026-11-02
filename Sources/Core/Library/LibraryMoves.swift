@@ -83,7 +83,7 @@ extension LibraryIndex {
     /// count of no plays leaves. Call inside a transaction.
     func deletePath(_ id: Int64) throws {
         try statement("DELETE FROM \(importedPlaysTable) WHERE path_id = ?").run(id)
-        try statement(restoreRemovedSQL).run(id)
+        try statement(deleteRemovedSQL).run(id)
         // The ID can be handed out again, which mustn't inherit a cleared rating's clock.
         for field in [SyncField.rating, .loved] { try deleteStamp(field, id) }
         try statement("DELETE FROM paths WHERE id = ?").run(id)

@@ -48,7 +48,7 @@ extension LibraryIndex {
             let path = try statement(
                 "SELECT p.path FROM \(removedTable) r JOIN paths p ON p.id = r.path_id"
                     + " WHERE r.path_id = ?")
-            let restore = try statement(restoreRemovedSQL)
+            let restore = try statement(deleteRemovedSQL)
             return try ids.flatMap { id in
                 let found = try path.map(id) { try $0.text(0) }
                 try restore.run(id)
@@ -58,8 +58,8 @@ extension LibraryIndex {
     }
 }
 
-/// Lets scans add a removed path again.
-let restoreRemovedSQL = "DELETE FROM \(removedTable) WHERE path_id = ?"
+/// Drops a path from the removed table, so scans add it again.
+let deleteRemovedSQL = "DELETE FROM \(removedTable) WHERE path_id = ?"
 
 /// A path the user removed from the library.
 public struct RemovedPath: Equatable, Sendable {
