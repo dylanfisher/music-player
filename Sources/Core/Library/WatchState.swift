@@ -6,7 +6,7 @@ struct WatchJob: Equatable, Sendable {
     var folder: WatchedFolder
     /// Empty for the whole folder.
     var subtrees: [String]
-    /// Rescan Now asked for it, so it runs while playing even if `pausePollingDuringPlayback`
+    /// Rescan or Rescan All asked for it, so it runs while playing even if `pausePollingDuringPlayback`
     /// says not to. It still waits while a track starts, which takes seconds.
     var ignoresPlaybackPause = false
 }
@@ -40,7 +40,7 @@ struct WatchState {
     private var retryDue: [String: Date] = [:]
     /// Scans of each folder that failed in a row, by path; absent after one that finished.
     private var failuresInARow: [String: Int] = [:]
-    /// Network folders Rescan Now asked for, by path, in Settings order.
+    /// Network folders Rescan or Rescan All asked for, by path, in Settings order.
     private var requested: [String] = []
     /// The network folders not polled at start, by path, in Settings order.
     private(set) var leftToTheIndex: [String] = []
@@ -121,11 +121,14 @@ struct WatchState {
         changed[folder.path] = nil
     }
 
-    /// Rescan Now: every folder is scanned whole, network ones too while playing with
+    /// Rescan All: every folder is scanned whole, as `rescan(wholeFolders:)` scans some.
+    mutating func rescanEverything() { rescan(wholeFolders: folders.map(\.path)) }
+
+    /// Rescan: the folders at `paths` are scanned whole, network ones too while playing with
     /// `pausePollingDuringPlayback` on. A running whole scan of a folder counts for it, and
     /// stops waiting for playback.
-    mutating func rescanEverything() {
-        for folder in folders {
+    mutating func rescan(wholeFolders paths: [String]) {
+        for folder in folders where paths.contains(folder.path) {
             if running?.folder.path == folder.path, running?.subtrees.isEmpty == true {
                 running?.ignoresPlaybackPause = true
             } else if folder.kind == .local {

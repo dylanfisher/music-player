@@ -138,12 +138,30 @@ public final class LibraryWatcher: @unchecked Sendable {
         }
     }
 
-    /// Rescan Now: scans every watched folder whole, now, whatever the poll timer says and even
+    /// Rescan All: scans every watched folder whole, now, whatever the poll timer says and even
     /// while playing with `library.pausePollingDuringPlayback` on, since the owner asked for it.
     /// It still waits while a track starts.
     public func rescanNow() {
         queue.async { [self] in
             state?.rescanEverything()
+            advance()
+        }
+    }
+
+    /// Rescan: scans `chosen`, as Settings has them, whole, the way `rescanNow` scans them all.
+    /// One no longer in Settings is skipped, since the watcher restarts without it.
+    public func rescan(folders chosen: [WatchedFolder]) {
+        queue.async { [self] in
+            guard let current = state else { return }
+            // The state holds each folder where it was found, in Settings order.
+            let paths = chosen.compactMap { folder -> String? in
+                guard let position = configured.firstIndex(of: folder) else {
+                    logger.notice("not rescanning \(folder.path): it's no longer watched")
+                    return nil
+                }
+                return current.folders[position].path
+            }
+            state?.rescan(wholeFolders: paths)
             advance()
         }
     }

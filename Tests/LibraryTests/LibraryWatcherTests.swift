@@ -393,6 +393,28 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     #expect(try await eventually(within: 20) { received.scanned.count == 1 })
 }
 
+@Test func rescanWalksTheChosenFolderAsSettingsHasIt() async throws {
+    let library = try TestLibrary()
+    let network = WatchedFolder(path: library.root, kind: .network)
+    _ = try library.scan(network)
+    let file = try #require(library.manifest.files.first { $0.malformation == nil })
+    let folder = (library.path(file) as NSString).deletingLastPathComponent
+    try FileManager.default.copyItem(atPath: library.path(file), toPath: folder + "/copied in.flac")
+    let received = LockedEvents()
+    let watcher = watcher(library, through: ListingRecorder(), events: received.append)
+    watcher.start(
+        folders: [network], rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
+    defer { watcher.stop() }
+    watcher.playbackChanged(.playing, pausePollingDuringPlayback: true)
+    #expect(try await eventually(within: 20) { received.kept == [library.root] })
+
+    watcher.rescan(folders: [WatchedFolder(path: "/Volumes/gone", kind: .network), network])
+    let index = try library.index()
+    #expect(
+        try await eventually(within: 20) { try index.trackCount() == library.readableCount + 1 })
+    #expect(try await eventually(within: 20) { received.scanned.count == 1 })
+}
+
 @Test func aFirstScanCutShortIsScannedAgainAtLaunch() async throws {
     let library = try TestLibrary()
     let network = WatchedFolder(path: library.root, kind: .network)

@@ -244,6 +244,20 @@ private struct FakeEngine {
     #expect(state.nextPoll(after: minutes(2)) == minutes(17))
 }
 
+@Test func rescanScansOnlyTheChosenFoldersWhilePollsArePaused() {
+    var state = WatchState(
+        folders: [local, nas], indexed: [nas.path], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: true, now: start)
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
+    state.finished(now: start)
+    FakeEngine(pausePollingDuringPlayback: true).report(.playing, to: &state)
+    state.rescan(wholeFolders: [nas.path])
+    let forced = WatchJob(folder: nas, subtrees: [], ignoresPlaybackPause: true)
+    #expect(state.start(now: minutes(1)) == forced)
+    state.finished(now: minutes(2))
+    #expect(state.start(now: minutes(2)) == nil, "the local folder wasn't chosen")
+}
+
 @Test func rescanNowLetsAPollPausedForPlaybackGoOn() {
     var state = WatchState(
         folders: [nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
