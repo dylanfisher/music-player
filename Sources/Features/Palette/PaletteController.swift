@@ -17,8 +17,18 @@ public enum PaletteMode: Equatable, Sendable {
 public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableViewDataSource,
     NSTableViewDelegate, NSWindowDelegate
 {
-    public static let width = 640.0
-    static let rowsHeight = 360.0
+    // The size, row height, field font and corner radius are simple-spotlight's
+    // (`~/projects/simple-spotlight`), so the owner's two launchers look alike (ADR 0047).
+    public static let width = 680.0
+    static let fieldHeight = 56.0
+    static let cornerRadius = 16.0
+    /// The space above and below the rows.
+    static let listInset = 6.0
+    static let separatorHeight = 1.0
+    /// The rows the panel has room for at their least height, simple-spotlight's default count.
+    static let visibleRows = 8
+    static let rowsHeight = 2 * listInset + Double(visibleRows) * PaletteRow.minimumHeight
+    static let height = fieldHeight + separatorHeight + rowsHeight
 
     public private(set) var model: PaletteModel
     public private(set) var mode: PaletteMode?
@@ -49,7 +59,7 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
     public init(model: PaletteModel) {
         self.model = model
         panel = PalettePanel(
-            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: Self.rowsHeight + 60),
+            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: Self.height),
             styleMask: [.borderless], backing: .buffered, defer: true)
         super.init()
         build()
@@ -197,7 +207,7 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
     public func control(
         _ control: NSControl, textView: NSTextView, doCommandBy selector: Selector
     ) -> Bool {
-        let page = max(1, Int(Self.rowsHeight / 32) - 1)
+        let page = Self.visibleRows - 1
         switch selector {
         case #selector(NSResponder.moveDown(_:)): moveSelection(by: 1)
         case #selector(NSResponder.moveUp(_:)): moveSelection(by: -1)
@@ -270,10 +280,12 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
-        field.font = .systemFont(ofSize: 22)
+        field.font = .systemFont(ofSize: 24, weight: .light)
         field.delegate = self
         let top = NSStackView(views: [glass, field])
-        top.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 10, right: 16)
+        top.edgeInsets = NSEdgeInsets(top: 0, left: 16, bottom: 0, right: 16)
+        let separator = NSBox()
+        separator.boxType = .separator
 
         let column = NSTableColumn(identifier: PaletteRow.identifier)
         column.resizingMask = .autoresizingMask
@@ -294,14 +306,19 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         scroll.contentView.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
+        scroll.automaticallyAdjustsContentInsets = false
+        scroll.contentInsets = NSEdgeInsets(
+            top: Self.listInset, left: 0, bottom: Self.listInset, right: 0)
 
-        let stack = NSStackView(views: [top, scroll])
+        let stack = NSStackView(views: [top, separator, scroll])
         stack.orientation = .vertical
         stack.spacing = 0
-        for view in [top, scroll] {
+        for view in [top, separator, scroll] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
+        top.heightAnchor.constraint(equalToConstant: Self.fieldHeight).isActive = true
+        separator.heightAnchor.constraint(equalToConstant: Self.separatorHeight).isActive = true
         scroll.heightAnchor.constraint(equalToConstant: Self.rowsHeight).isActive = true
         for view in [backdrop, stack] {
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -379,7 +396,7 @@ final class PaletteClip: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.cornerRadius = 20
+        layer?.cornerRadius = PaletteController.cornerRadius
         layer?.masksToBounds = true
         layer?.borderWidth = 1
         updateEdge()

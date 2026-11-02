@@ -230,3 +230,26 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     palette.window.appearance = NSAppearance(named: .aqua)
     #expect(try alpha() == 0.6)
 }
+
+// simple-spotlight's panel, read from its `SearchPanel` and `ResultRow`: 680 wide, a 56-point
+// field in 24-point light type, eight 48-point rows inset 6 under a 1-point line, radius 16.
+@MainActor @Test func thePanelHasSimpleSpotlightsSize() async throws {
+    let palette = PaletteController(
+        model: PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 }))
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    palette.show(
+        .goToItem, items: (0..<20).map { item("Artist \($0)") }, over: window, place: nil)
+    while palette.shown.isEmpty { await Task.yield() }
+    palette.window.layoutIfNeeded()
+    #expect(palette.window.frame.size == NSSize(width: 680, height: 56 + 1 + 6 + 8 * 48 + 6))
+    #expect(palette.field.font == .systemFont(ofSize: 24, weight: .light))
+    #expect(palette.window.contentView?.layer?.cornerRadius == 16)
+    #expect(palette.table.rect(ofRow: 0).height == 48)
+    let scroll = try #require(palette.table.enclosingScrollView)
+    // The visible rect includes the insets above and below the rows.
+    let rows = scroll.documentVisibleRect.insetBy(dx: 0, dy: 6)
+    #expect(palette.table.rows(in: rows) == NSRange(location: 0, length: 8))
+    palette.close()
+}
