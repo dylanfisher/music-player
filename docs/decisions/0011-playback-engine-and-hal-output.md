@@ -3,7 +3,8 @@
 - **Date:** 2026-10-30
 - **Status:** accepted
 - **Amended by:** [0023](0023-failure-table.md): the failure table, and the failures phase 14a
-  changed how this reports.
+  changed how this reports. [0046](0046-failed-tracks-stop-playback.md): which failures stop
+  playback.
 
 ## Context
 
@@ -36,7 +37,8 @@ the library knows), and builds the DIDL-Lite metadata (title, artist, album, dur
 **`PlaybackEngine` is an actor.** It holds the queue (play order, shuffle, repeat off/one/all)
 and tells the output the next item whenever the current one starts or the order changes.
 `updates()` gives each subscriber its own `AsyncStream` of the state plus the event that changed
-it. A failed track is skipped; once every track in the queue has failed in a row, the queue ends.
+it. A failed track is skipped; after three failed in a row, or every track in the queue, playback
+stops ([0046](0046-failed-tracks-stop-playback.md)).
 
 **`DeviceOutput` (HALOutput) runs everything but the IO proc on one control thread.** It decodes
 into the ring buffer and records where each track starts as a count of bytes written. The IO proc

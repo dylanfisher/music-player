@@ -24,9 +24,12 @@ public actor PlaybackEngine {
     private var currentFailed = false
     /// Where to pick up after the device was lost, since the output dropped everything.
     private var resumeSeconds: Double?
-    /// Tracks that failed since one last started; once it reaches the queue's length, nothing in
-    /// it plays and the engine stops instead of trying them all again.
+    /// Tracks that failed since one last started. Once it reaches `failureLimit`, or the queue's
+    /// length, the engine stops instead of trying more.
     private var failuresInARow = 0
+    /// Failed tracks in a row that stop playback. A run of failures usually has one cause, such
+    /// as a share that went offline, which every track after them would hit too.
+    static let failureLimit = 3
     /// The position `play()` starts from when nothing is loaded.
     private var cursor = 0
     /// "Previous" within this many seconds of a track's start goes back a track; later, it
@@ -413,7 +416,13 @@ public actor PlaybackEngine {
             state.currentIndex = queue.order.isEmpty ? nil : queue.entry(at: 0)
             state.status = .stopped
             state.durationSeconds = nil
-            publish(.finished)
+            if failuresInARow >= Self.failureLimit {
+                let error = PlaybackError.failedInARow(failuresInARow)
+                logger.error("\(error)")
+                publish(.failed(reason: "\(error)"))
+            } else {
+                publish(.finished)
+            }
         case .underrun(let frames):
             publish(.underrun(frames: frames))
         case .deviceLost(let id, let seconds):
@@ -461,10 +470,11 @@ public actor PlaybackEngine {
         }
     }
 
-    /// Points `next` past a track that failed. Gives up once every track in the queue has failed
-    /// in a row, so a queue of unplayable files ends instead of looping.
+    /// Points `next` past a track that failed. Gives up after `failureLimit` failures in a row,
+    /// or once every track in the queue has failed, so a queue of unplayable files ends instead
+    /// of looping.
     private func skip(after position: Int) {
-        guard failuresInARow < queue.order.count,
+        guard failuresInARow < min(Self.failureLimit, queue.order.count),
             let following = queue.position(after: position, natural: false)
         else {
             nextItem = nil

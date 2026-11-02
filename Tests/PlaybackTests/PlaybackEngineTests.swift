@@ -743,6 +743,36 @@ private func published(
     #expect(output.takeCalls().first == .load(3, urls[0], startSeconds: 0, playing: true))
 }
 
+@Test func playbackStopsAfterAFewFailedTracksInARowAndSaysSoOnce() async {
+    let five = (0..<5).map { URL(fileURLWithPath: "/music/\($0).flac") }
+    let output = FakeOutput()
+    let engine = await playing(five, output)
+    let updates = await engine.updates()
+    var id = 1
+    for _ in 0..<PlaybackEngine.failureLimit {
+        await engine.handle(.trackFailed(id, Broken()))
+        await engine.handle(.finished(id))
+        id += 3  // the skip, then the load and its next
+    }
+    #expect(await engine.state.status == .stopped)
+    // The first track's, and one for each failure but the last.
+    let loads = output.takeCalls().filter { if case .load = $0 { true } else { false } }
+    #expect(loads.count == PlaybackEngine.failureLimit)
+    // Ends the events below should playback still be going.
+    await engine.stop()
+
+    var events: [PlaybackEvent] = []
+    for await update in updates {
+        guard let event = update.event else { continue }
+        events.append(event)
+        if case .failed = event { break }
+        if event == .stopped { break }
+    }
+    #expect(events.filter { if case .trackFailed = $0 { true } else { false } }.count == 3)
+    #expect(events.last == .failed(reason: "3 tracks in a row couldn't play"))
+    #expect(!events.contains(.finished))
+}
+
 @Test func whenEveryTrackHasFailedTheNextIsCleared() async {
     let output = FakeOutput()
     let engine = await playing(Array(urls.prefix(2)), output)
