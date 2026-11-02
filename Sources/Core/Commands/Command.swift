@@ -15,10 +15,13 @@ public struct Command: Sendable, Equatable {
     /// What the command line and a link may pass it, as help shows it; nil when it takes
     /// nothing.
     public let argument: String?
+    /// Whether it can run from a menu or the palette. One that needs its argument can't, and
+    /// is in neither: every item there runs when chosen.
+    public let runsFromMenus: Bool
 
     init(
         _ id: CommandID, _ title: String, _ chords: [KeyChord] = [], links: Bool = false,
-        argument: String? = nil
+        argument: String? = nil, menus: Bool = true
     ) {
         precondition(chords.count <= 2, "\(id) has more than a primary and an alternate")
         precondition(Set(chords).count == chords.count, "\(id) lists one chord twice")
@@ -27,6 +30,7 @@ public struct Command: Sendable, Equatable {
         self.chords = chords
         runsFromLinks = links
         self.argument = argument
+        runsFromMenus = menus
     }
 
     /// The default chord at `position`.

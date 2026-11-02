@@ -22,9 +22,10 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     }
 }
 
-@MainActor @Test func everyRegisteredCommandHasAMenuItem() throws {
+@MainActor @Test func everyCommandThatRunsFromMenusHasAMenuItem() throws {
     let (menu, _) = try menu()
-    let missing = Set(AppCommands.all().map(\.id)).subtracting(menu.listedCommands)
+    let missing = Set(AppCommands.all().filter(\.runsFromMenus).map(\.id))
+        .subtracting(menu.listedCommands)
     #expect(missing.isEmpty, "no menu item for \(missing.sorted())")
 }
 

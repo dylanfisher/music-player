@@ -166,6 +166,7 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
 
 @Test func everyCommandIsInTheMenus() {
     let listed = AppMenus.commandsByMenu(appName: "App").flatMap(\.commands)
-    #expect(Set(listed) == Set(AppCommands.all().map(\.id)))
+    #expect(Set(listed) == Set(AppCommands.all().filter(\.runsFromMenus).map(\.id)))
+    #expect(AppCommands.all().filter { !$0.runsFromMenus }.map(\.id) == [.receiverSetVolume])
     #expect(listed.count == Set(listed).count)
 }

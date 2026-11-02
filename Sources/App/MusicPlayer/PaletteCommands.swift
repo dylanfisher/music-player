@@ -106,7 +106,9 @@ extension AppDelegate {
         }
         return settingItems
             + bindings.registry.commands.compactMap { command in
-                guard RowMove.commands[command.id] == nil, command.id != .showPalette else {
+                guard RowMove.commands[command.id] == nil, command.id != .showPalette,
+                    command.runsFromMenus
+                else {
                     return nil
                 }
                 var title = command.title

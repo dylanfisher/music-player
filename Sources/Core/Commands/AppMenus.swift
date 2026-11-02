@@ -144,7 +144,7 @@ public enum AppMenus {
                         [
                             .setting(settings.receiverEnabled.key), .separator,
                             .command(.receiverVolumeUp), .command(.receiverVolumeDown),
-                            .command(.receiverSetVolume), .command(.receiverMute), .separator,
+                            .command(.receiverMute), .separator,
                         ] + ReceiverSoundMode.allCases.map { .command(.receiverSoundMode($0)) }
                             + [
                                 .separator,

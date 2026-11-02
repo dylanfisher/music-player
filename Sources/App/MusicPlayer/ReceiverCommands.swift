@@ -66,7 +66,7 @@ extension AppDelegate {
             handle(
                 .receiverInput(input), isOn: { $0.input == input }, sends: { _ in .input(input) })
         }
-        // It needs a level, which only the command line passes (`receiverVolumeArgument`).
+        // It needs a level, which only the command line passes, so it's in no menu.
         dispatcher.handle(.receiverSetVolume, enabled: { false }, run: {})
     }
 

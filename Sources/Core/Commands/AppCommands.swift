@@ -214,7 +214,9 @@ public enum AppCommands {
             // Only Volume Down from links, as for the app's own volume (ADR 0039).
             Command(.receiverVolumeUp, "Receiver Volume Up"),
             Command(.receiverVolumeDown, "Receiver Volume Down", links: true),
-            Command(.receiverSetVolume, "Set Receiver Volume", argument: receiverVolumeArgument),
+            Command(
+                .receiverSetVolume, "Set Receiver Volume", argument: receiverVolumeArgument,
+                menus: false),
             Command(.receiverMute, "Mute Receiver"),
             Command(.receiverPowerOn, "Turn Receiver On"),
             Command(.receiverStandby, "Put Receiver in Standby"),

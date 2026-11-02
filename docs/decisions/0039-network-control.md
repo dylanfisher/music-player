@@ -146,7 +146,9 @@ setting's toggle, an Input submenu inside it. Their IDs' last parts (`raiseVolum
 `lowerVolume`, `modePureDirect`, `inputCd`) differ from every other command's, so the command
 line's short names for the app's own volume commands still work. Check marks show what the
 receiver reported: power, mute, sound mode and input. Set Receiver Volume takes a level in dB,
-−80 to +18 in half steps, and runs only from the command line, so its menu item is always off.
+−80 to +18 in half steps, and runs only from the command line. Every menu item runs when
+chosen, so a command that needs its argument (`runsFromMenus` false) is in no menu and not in
+the palette.
 Only Receiver Volume Down runs from `music-player://` links, as the app's own Volume Down does:
 a page could raise the volume, wake the receiver or switch its input, none of which it should.
 
