@@ -199,7 +199,9 @@ private final class LoopbackResponder: @unchecked Sendable {
     defer { responder.stop() }
     let transport = UDPSearchTransport(destination: IPAddress("127.0.0.1")!, port: responder.port)
     let request = SSDPSearch.request(searchTarget: renderer, waitSeconds: 1)
-    let datagrams = try await transport.search(request, from: [loopback], seconds: 0.5)
+    // 127.0.0.2 isn't on this Mac, so it can't send; the search goes on from the next one.
+    let datagrams = try await transport.search(
+        request, from: [loopbackSubnet, loopback], seconds: 0.5)
     #expect(responder.requests == [request])
     // The stand-in is this Mac, so it's judged as a device on a made-up 127/8 subnet.
     let result = SSDPSearch.gather(
@@ -218,4 +220,15 @@ private final class Heard: @unchecked Sendable {
     func add(_ datagram: [UInt8]) { lock.withLock { datagrams.append(datagram) } }
 
     var all: [[UInt8]] { lock.withLock { datagrams } }
+}
+
+@Test func aSearchFailsOnlyWhenNoInterfaceCanSend() async throws {
+    let transport = UDPSearchTransport(destination: IPAddress("127.0.0.1")!, port: 9)
+    let request = SSDPSearch.request(searchTarget: renderer, waitSeconds: 1)
+    await #expect(throws: LocalNetworkError.self) {
+        try await transport.search(request, from: [loopbackSubnet], seconds: 0.1)
+    }
+    await #expect(throws: LocalNetworkError.self) {
+        try await transport.search(request, from: [], seconds: 0.1)
+    }
 }

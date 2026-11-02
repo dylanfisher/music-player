@@ -57,12 +57,19 @@ private func exchange(
     to.sin_family = sa_family_t(AF_INET)
     to.sin_port = port.bigEndian
     to.sin_addr = target
+    // An interface that can't send, one going down mid-search say, is skipped; the search
+    // fails only when none could.
+    var lastFailure: LocalNetworkError?
+    var sentAny = false
     for var source in sources {
         guard
             setsockopt(
                 fd, IPPROTO_IP, IP_MULTICAST_IF, &source, socklen_t(MemoryLayout<in_addr>.size))
                 == 0
-        else { throw .system("setsockopt IP_MULTICAST_IF", errno: errno) }
+        else {
+            lastFailure = .system("setsockopt IP_MULTICAST_IF", errno: errno)
+            continue
+        }
         let sent = request.withUnsafeBytes { bytes in
             withUnsafePointer(to: &to) {
                 $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
@@ -72,8 +79,13 @@ private func exchange(
                 }
             }
         }
-        guard sent == request.count else { throw .system("sendto", errno: errno) }
+        guard sent == request.count else {
+            lastFailure = .system("sendto", errno: errno)
+            continue
+        }
+        sentAny = true
     }
+    if !sentAny { throw lastFailure ?? .malformed("no IPv4 interface to search from") }
     var found: [SSDPDatagram] = []
     // One byte past the cap, so a datagram over it shows as over it.
     var buffer = [UInt8](repeating: 0, count: SSDPSearch.replyCap + 1)

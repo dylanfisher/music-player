@@ -62,8 +62,8 @@ public struct NetworkInterface: Hashable, Sendable, CustomStringConvertible {
     public var description: String { "\(name) \(address)/\(prefixLength)" }
 }
 
-/// The addresses of the interfaces that are up now, without loopback and point-to-point links
-/// such as a VPN's, which aren't a local subnet.
+/// The addresses of the interfaces that are up, running and can multicast now, without
+/// loopback and point-to-point links such as a VPN's, which aren't a local subnet.
 public func currentInterfaces() throws(LocalNetworkError) -> [NetworkInterface] {
     var first: UnsafeMutablePointer<ifaddrs>?
     guard getifaddrs(&first) == 0 else { throw .system("getifaddrs", errno: errno) }
@@ -73,7 +73,8 @@ public func currentInterfaces() throws(LocalNetworkError) -> [NetworkInterface] 
     while let entry = next?.pointee {
         next = entry.ifa_next
         let flags = Int32(entry.ifa_flags)
-        guard flags & IFF_UP != 0, flags & (IFF_LOOPBACK | IFF_POINTOPOINT) == 0,
+        let needed = IFF_UP | IFF_RUNNING | IFF_MULTICAST
+        guard flags & needed == needed, flags & (IFF_LOOPBACK | IFF_POINTOPOINT) == 0,
             let socketAddress = entry.ifa_addr, let mask = entry.ifa_netmask,
             let address = IPAddress(socketAddress), let netmask = IPAddress(mask)
         else { continue }

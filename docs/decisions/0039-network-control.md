@@ -34,14 +34,15 @@ because a primitive imports no other, and the server, the client and SSDP all ne
 check and the head parser. `UPnP` (core) reads descriptions and SOAP and turns SSDP replies
 into `Renderer`s. `Receiver` (core) speaks Denon's line protocol.
 
-**Local subnet.** For each interface that's up, not loopback and not point-to-point (a VPN
+**Local subnet.** For each interface that's up, running and able to multicast, not loopback and not point-to-point (a VPN
 isn't a LAN), its address and netmask or IPv6 prefix, from `getifaddrs`. An address is local
 to the interface with the longest prefix holding it, then the first listed, so a Mac on one LAN
 by Wi-Fi and Ethernet answers by one interface. A link-local IPv6 address matches only the
 interface its zone names. The list is passed in, and tests make interfaces up.
 
 **SSDP.** An M-SEARCH for `MediaRenderer:1` goes to 239.255.255.250:1900 out of each IPv4
-interface, with a TTL of 1 so it stays on the subnet; IPv6 SSDP isn't searched. The transport
+interface, with a TTL of 1 so it stays on the subnet; an interface that can't send is skipped,
+and the search fails only when none could. IPv6 SSDP isn't searched. The transport
 is injected; the real one takes its destination as an argument, and tests aim it at a UDP
 stand-in on 127.0.0.1. Replies from off the local subnets, over 64 KiB, malformed or without
 one `LOCATION`, `ST` and `USN` are reported and ignored, at most 20 listed and the rest
