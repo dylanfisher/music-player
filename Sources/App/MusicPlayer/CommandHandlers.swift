@@ -21,6 +21,9 @@ extension AppDelegate {
             guard let window = self?.window?.window else { return }
             self?.addFolder(over: window)
         }
+        dispatcher.handle(.showWatchedFolders) { [weak self] in
+            self?.settingsWindowController()?.show(.folders)
+        }
         dispatcher.handle(.checkHealth, enabled: hasWindow) { [weak self] in
             self?.browser?.checkHealth()
         }

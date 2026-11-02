@@ -40,6 +40,7 @@ extension CommandID {
     public static let focusNextArea = CommandID("focus.nextArea")
 
     public static let addFolder = CommandID("library.addFolder")
+    public static let showWatchedFolders = CommandID("library.showWatchedFolders")
     public static let checkHealth = CommandID("library.checkHealth")
     public static let rescanNow = CommandID("library.rescanNow")
     public static let resolveLostStats = CommandID("library.resolveLostStats")
@@ -167,6 +168,7 @@ public enum AppCommands {
             Command(.focusNextArea, "Focus Next Area", [.init(.tab)]),
 
             Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
+            Command(.showWatchedFolders, "Watched Folders…"),
             Command(.checkHealth, "Check Library Health"),
             // Not from links: it ignores the playback pause, so a page could keep the NAS busy.
             Command(.rescanNow, "Rescan Now"),
