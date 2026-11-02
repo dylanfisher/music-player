@@ -131,6 +131,7 @@ final class PaletteRow: NSTableCellView {
         switch kind {
         case .command: "command"
         case .setting: "gearshape"
+        case .output: "hifispeaker"
         case .playlist: SymbolName.playlist
         case .genre: "guitars"
         case .artist: "music.mic"

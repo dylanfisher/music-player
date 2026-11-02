@@ -11,7 +11,7 @@ let noValueText = "None"
 /// Settings ▸ General: the config file's place and buttons, then the settings from the schema in
 /// sections, a grid of rows each.
 @MainActor
-final class GeneralPane: NSViewController, NSTextFieldDelegate {
+final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     static let width = 640.0
     /// How long Copy Default Config's button says "Copied".
     static let copiedSeconds = 1.5
@@ -145,8 +145,18 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
             clear.identifier = NSUserInterfaceItemIdentifier(row.key)
             syncFolderLabel = folder
             return NSStackView(views: [folder, choose, clear])
+        case .output:
+            let popUp = NSPopUpButton(frame: .zero, pullsDown: false)
+            popUp.identifier = NSUserInterfaceItemIdentifier(row.key)
+            popUp.target = self
+            popUp.action = #selector(choseOutput(_:))
+            popUp.menu?.delegate = self
+            popUp.setAccessibilityLabel(row.title)
+            return popUp
         case .folders:
             preconditionFailure("the Watched Folders pane lists \(row.key)")
+        case .renderer:
+            preconditionFailure("the output device's row lists \(row.key)")
         case .readOnly:
             let list = NSTextField(wrappingLabelWithString: "")
             list.identifier = NSUserInterfaceItemIdentifier(row.key)
@@ -174,8 +184,12 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
                     continue
                 }
                 field.stringValue = model.text(row.key)
+            case .output:
+                (control as? NSPopUpButton).map(showOutputs)
             case .folders:
                 preconditionFailure("the Watched Folders pane lists \(row.key)")
+            case .renderer:
+                preconditionFailure("the output device's row lists \(row.key)")
             case .syncFolder:
                 syncFolderLabel?.stringValue = model.syncFolder(row.key) ?? noValueText
             case .readOnly:
@@ -184,6 +198,22 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
             }
         }
     }
+
+    /// Lists the outputs found, by name, with the one the config names picked. Items are added
+    /// to the menu directly, since two devices can share a name.
+    private func showOutputs(_ popUp: NSPopUpButton) {
+        let picked = model.output
+        let options = actions.outputs()
+        popUp.removeAllItems()
+        for option in options {
+            let item = NSMenuItem(title: option.title, action: nil, keyEquivalent: "")
+            item.representedObject = option.choice.text
+            popUp.menu?.addItem(item)
+        }
+        popUp.selectItem(at: options.firstIndex { $0.choice == picked } ?? -1)
+    }
+
+    func menuWillOpen(_ menu: NSMenu) { actions.searchOutputs() }
 
     /// Scrolls to a setting's row and gives its control the keys, for the palette.
     func focus(_ key: String) {
@@ -226,6 +256,13 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate {
             let raw = popUp.selectedItem?.representedObject as? String
         else { return }
         attempt { try model.setChoice(key, raw) }
+    }
+
+    @objc private func choseOutput(_ popUp: NSPopUpButton) {
+        guard let text = popUp.selectedItem?.representedObject as? String,
+            let choice = OutputChoice(text: text)
+        else { return }
+        actions.chooseOutput(choice)
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {

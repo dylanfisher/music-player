@@ -53,3 +53,14 @@ import Testing
     #expect(listedPanes(.commands) == [.genre])
     #expect(listedPanes(.goToItem) == [.artist, .album])
 }
+
+@Test func eachOutputIsAPaletteRowThatReadsBackAsItsChoice() {
+    let options = outputOptions(
+        devices: [FoundOutput(id: "DAC", name: "ADI-2 DAC")],
+        renderers: [FoundOutput(id: "uuid:denon", name: "Denon")], current: .device(uid: "DAC"))
+    let items = outputItems(options, current: .device(uid: "DAC"))
+    #expect(items.map(\.title) == ["Output: System Default", "Output: ADI-2 DAC", "Output: Denon"])
+    #expect(items.map(\.detail) == ["Output", "In use", "Output"])
+    #expect(items.map(\.kind) == [.output, .output, .output])
+    #expect(items.map { OutputChoice(text: $0.key) } == options.map(\.choice))
+}

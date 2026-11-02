@@ -1,3 +1,5 @@
+import Settings
+
 /// What the Settings window asks the app to do with the config file and the library.
 public struct SettingsActions {
     public var openConfigFile: () -> Void
@@ -10,12 +12,18 @@ public struct SettingsActions {
     /// Asks to stop watching the folder at this position in the setting.
     public var removeFolder: (Int) -> Void
     public var rescanNow: () -> Void
+    /// The outputs to pick from, as `outputOptions` lists them.
+    public var outputs: () -> [OutputOption]
+    /// Starts a search for renderers, as the output picker opens; `reload` shows what it finds.
+    public var searchOutputs: () -> Void
+    public var chooseOutput: (OutputChoice) -> Void
 
     public init(
         openConfigFile: @escaping () -> Void, revealConfigFile: @escaping () -> Void,
         copyDefaultConfig: @escaping () -> Void, chooseSyncFolder: @escaping () -> Void,
         addFolder: @escaping () -> Void, removeFolder: @escaping (Int) -> Void,
-        rescanNow: @escaping () -> Void
+        rescanNow: @escaping () -> Void, outputs: @escaping () -> [OutputOption],
+        searchOutputs: @escaping () -> Void, chooseOutput: @escaping (OutputChoice) -> Void
     ) {
         self.openConfigFile = openConfigFile
         self.revealConfigFile = revealConfigFile
@@ -24,5 +32,8 @@ public struct SettingsActions {
         self.addFolder = addFolder
         self.removeFolder = removeFolder
         self.rescanNow = rescanNow
+        self.outputs = outputs
+        self.searchOutputs = searchOutputs
+        self.chooseOutput = chooseOutput
     }
 }

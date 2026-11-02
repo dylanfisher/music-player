@@ -31,11 +31,14 @@ private func model() -> (GeneralModel, () -> [String: Any]) {
 
 @MainActor
 private func actions(
-    addFolder: @escaping () -> Void = {}, removeFolder: @escaping (Int) -> Void = { _ in }
+    addFolder: @escaping () -> Void = {}, removeFolder: @escaping (Int) -> Void = { _ in },
+    outputs: @escaping () -> [OutputOption] = { [] },
+    chooseOutput: @escaping (OutputChoice) -> Void = { _ in }
 ) -> SettingsActions {
     SettingsActions(
         openConfigFile: {}, revealConfigFile: {}, copyDefaultConfig: {}, chooseSyncFolder: {},
-        addFolder: addFolder, removeFolder: removeFolder, rescanNow: {})
+        addFolder: addFolder, removeFolder: removeFolder, rescanNow: {}, outputs: outputs,
+        searchOutputs: {}, chooseOutput: chooseOutput)
 }
 
 private var appearanceChoices: [SettingKind.Choice] {
@@ -159,8 +162,10 @@ private func modelWithFolders() -> GeneralModel {
     let sections = model.sections
     #expect(sections.map(\.section) == [.playback, .library, .receiver, .appearance])
     let listed = sections.flatMap(\.rows).map(\.key)
-    #expect(listed.count == AppSettings().settings.count - 1)
+    #expect(listed.count == AppSettings().settings.count - 2)
     #expect(!listed.contains(AppSettings().watchedFolders.key))
+    // The output device's row picks the renderer too.
+    #expect(!listed.contains(AppSettings().outputRenderer.key))
     #expect(model.foldersRow?.key == AppSettings().watchedFolders.key)
 }
 
@@ -188,6 +193,44 @@ private func modelWithFolders() -> GeneralModel {
         Notification(name: NSControl.textDidEndEditingNotification, object: field))
     #expect(field.stringValue == "5")
     #expect(values()["a.count"] as? Int == 5)
+}
+
+@MainActor @Test func theOutputDeviceIsPickedFromTheOutputsFound() throws {
+    let schema = AppSettings()
+    var stored: [String: Any] = [schema.outputDeviceUID.key: "USB-9"]
+    var options = outputOptions(
+        devices: [FoundOutput(id: "Speakers", name: "Speakers")],
+        renderers: [FoundOutput(id: "uuid:denon", name: "Denon")], current: .device(uid: "USB-9"))
+    var chosen: [OutputChoice] = []
+    let model = GeneralModel(
+        settings: schema.settings, value: { stored[$0] }, set: { key, json in stored[key] = json })
+    #expect(model.rows.first { $0.key == schema.outputDeviceUID.key }?.control == .output)
+    let pane = GeneralPane(
+        model: model, configPath: "/tmp/config.json",
+        actions: actions(outputs: { options }, chooseOutput: { chosen.append($0) }))
+    func find(_ view: NSView) -> NSPopUpButton? {
+        if let popUp = view as? NSPopUpButton,
+            popUp.identifier?.rawValue == schema.outputDeviceUID.key
+        {
+            return popUp
+        }
+        return view.subviews.lazy.compactMap(find).first
+    }
+    let popUp = try #require(find(pane.view))
+    #expect(popUp.itemTitles == ["System Default", "Speakers", "USB-9 (not connected)", "Denon"])
+    #expect(popUp.titleOfSelectedItem == "USB-9 (not connected)")
+    popUp.selectItem(at: 3)
+    _ = popUp.target?.perform(popUp.action, with: popUp)
+    #expect(chosen == [.renderer(udn: "uuid:denon")])
+    // A device that comes and a renderer that's chosen show on reload.
+    stored[schema.outputRenderer.key] = "uuid:denon"
+    options.insert(OutputOption(choice: .device(uid: "Speakers"), title: "Speakers"), at: 1)
+    pane.reload()
+    #expect(
+        popUp.itemTitles == [
+            "System Default", "Speakers", "Speakers", "USB-9 (not connected)", "Denon",
+        ])
+    #expect(popUp.titleOfSelectedItem == "Denon")
 }
 
 @MainActor @Test func theSyncFolderShowsWhereItIsAndClears() throws {

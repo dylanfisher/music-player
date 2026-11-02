@@ -14,8 +14,10 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   applies until it's fixed. The Settings window (⌘,) edits the same file, with a General pane
   for the settings in sections, a Watched Folders pane and a Shortcuts pane for every command's
   two chords.
-- **⌘K** opens the command palette: every command, setting, playlist and genre, ranked by how
-  well they match and how often and recently you chose or played them.
+- **⌘K** opens the command palette: every command, setting, output, playlist and genre, ranked
+  by how well they match and how often and recently you chose or played them.
+- **Controls ▸ Output** picks the output device or a UPnP renderer on the network, by name;
+  the Settings window's Output Device popup and ⌘K's "Output:" rows pick from the same list.
 - **⌘P** is Go to Item: the artists and albums, then the tracks of the current list, each kind
   in turn.
 - **Playlists** (⌘N, or ⇧⌘N from the selection) take tracks dragged onto them in the sidebar,

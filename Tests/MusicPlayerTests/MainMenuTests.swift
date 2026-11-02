@@ -82,3 +82,28 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     #expect(
         AppDelegate.instancesRespond(to: NSSelectorFromString(AppMenus.showSettingsAction)))
 }
+
+@MainActor @Test func theOutputMenuListsTheOutputsFoundWithTheOneInUseChecked() throws {
+    let (menu, _) = try menu()
+    let submenu = try #require(menu.liveMenus[AppMenus.outputMenuTitle])
+    let controls = try #require(menu.bar.items.first { $0.title == "Controls" }?.submenu)
+    #expect(controls.items.contains { $0.submenu === submenu })
+    var options = outputOptions(
+        devices: [FoundOutput(id: "Speakers", name: "Speakers")], renderers: [],
+        current: .device(uid: "Speakers"))
+    var chosen: [OutputChoice] = []
+    let output = OutputMenu()
+    output.options = { (options, .device(uid: "Speakers")) }
+    output.choose = { chosen.append($0) }
+    submenu.delegate = output
+    output.menuNeedsUpdate(submenu)
+    #expect(submenu.items.map(\.title) == ["System Default", "Speakers"])
+    #expect(submenu.items.map(\.state) == [.off, .on])
+    submenu.performActionForItem(at: 0)
+    #expect(chosen == [.systemDefault])
+    // A device plugged in while the menu is open shows at once.
+    options.append(OutputOption(choice: .device(uid: "DAC"), title: "DAC"))
+    output.menuWillOpen(submenu)
+    output.refresh()
+    #expect(submenu.items.map(\.title) == ["System Default", "Speakers", "DAC"])
+}

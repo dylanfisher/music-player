@@ -101,6 +101,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Links that came before the router, run once it's there.
     var waitingLinks: [String] = []
     private var menu: MainMenu?
+    /// The output picker's devices and renderers, as last found, and what keeps them current.
+    var foundDevices: [FoundOutput] = []
+    var foundRenderers: [FoundOutput] = []
+    var outputSearch: Task<Void, Never>?
+    var deviceListWatch: DeviceListWatch?
+    var outputMenu: OutputMenu?
     private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
@@ -138,6 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.dispatcher = dispatcher
             self.menu = menu
             try openWindow(settings)
+            watchOutputs(menu)
             registerCommands(dispatcher)
             if let state, let saver { makePalette(dispatcher, state: state, saver: saver) }
             registerSettingCommands(dispatcher)

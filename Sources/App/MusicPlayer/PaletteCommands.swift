@@ -49,7 +49,9 @@ extension AppDelegate {
         let panes = listedPanes(mode)
         let session = palette.show(
             mode,
-            items: mode == .commands ? commandItems() + playlistItems(browser.playlists) : [],
+            items: mode == .commands
+                ? commandItems() + outputItems(outputOptionsNow(), current: currentOutput)
+                    + playlistItems(browser.playlists) : [],
             over: window, place: state[\.palettePlace])
         Task {
             do {
@@ -140,6 +142,9 @@ extension AppDelegate {
         case .track:
             guard let row = goToRow(item.key, rowID: browser.rowID(at:)) else { return }
             browser.showRow(row)
+        case .output:
+            guard let choice = OutputChoice(text: item.key) else { return }
+            chooseOutput(choice)
         case .setting:
             settingsWindowController()?.show(setting: String(item.key.dropFirst("setting:".count)))
         }

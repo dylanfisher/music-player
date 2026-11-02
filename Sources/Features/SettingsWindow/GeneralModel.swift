@@ -17,6 +17,10 @@ public final class GeneralModel {
         case folders
         /// The sync folder, with buttons to choose one and to clear it.
         case syncFolder
+        /// The output device, picked from the devices and renderers found.
+        case output
+        /// The network renderer, which the output device's row lists and picks too.
+        case renderer
         /// A kind with no control of its own: the value as the config file has it, edited there.
         case readOnly
     }
@@ -67,7 +71,9 @@ public final class GeneralModel {
     /// folders have a pane of their own.
     var sections: [(section: Section, rows: [Row])] {
         Section.allCases.compactMap { section in
-            let shown = rows.filter { $0.control != .folders && Section(key: $0.key) == section }
+            let shown = rows.filter {
+                ![.folders, .renderer].contains($0.control) && Section(key: $0.key) == section
+            }
             return shown.isEmpty ? nil : (section, shown)
         }
     }
@@ -87,8 +93,11 @@ public final class GeneralModel {
     }
 
     private static func row(_ setting: SettingDescriptor) -> Row {
+        let schema = AppSettings()
         let control: Control =
             switch setting.kind {
+            case _ where setting.key == schema.outputDeviceUID.key: .output
+            case _ where setting.key == schema.outputRenderer.key: .renderer
             case .bool: .checkbox
             case .choice(let choices): .popUp(choices)
             case .integer: .number(whole: true, optional: false)
@@ -108,6 +117,14 @@ public final class GeneralModel {
     public func isOn(_ key: String) -> Bool { value(key) as? Bool == true }
 
     public func choice(_ key: String) -> String? { value(key) as? String }
+
+    /// The output the config names, as the output device's row shows it picked.
+    var output: OutputChoice {
+        let schema = AppSettings()
+        return OutputChoice(
+            deviceUID: choice(schema.outputDeviceUID.key),
+            renderer: choice(schema.outputRenderer.key))
+    }
 
     /// A number, text or read-only row's value as it shows it; empty for null.
     public func text(_ key: String) -> String {
@@ -175,7 +192,7 @@ public final class GeneralModel {
             try set(key, number)
         case .text(let optional):
             try set(key, trimmed.isEmpty && optional ? NSNull() : trimmed)
-        case .checkbox, .popUp, .folders, .syncFolder, .readOnly:
+        case .checkbox, .popUp, .folders, .syncFolder, .output, .renderer, .readOnly:
             preconditionFailure("\(key) isn't a text row")
         }
     }

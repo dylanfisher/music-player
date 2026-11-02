@@ -13,6 +13,8 @@ final class MainMenu: NSObject, NSMenuItemValidation {
     /// For `NSApp.windowsMenu` and `NSApp.helpMenu`, which the app sets.
     private(set) var windowsMenu: NSMenu?
     private(set) var helpMenu: NSMenu?
+    /// The submenus the app fills as they open, by title.
+    private(set) var liveMenus: [String: NSMenu] = [:]
     private let dispatcher: CommandDispatcher
     /// Each command's shown item and its hidden alternate, and whether its menu shows chords.
     private var items: [(id: CommandID, shown: NSMenuItem, hidden: NSMenuItem, chords: Bool)] =
@@ -77,6 +79,10 @@ final class MainMenu: NSObject, NSMenuItemValidation {
                         addCommand(command.command.id, to: menu, chords: chords)
                     }
                 }
+            case .live(let title):
+                let submenu = NSMenu(title: title)
+                liveMenus[title] = submenu
+                menu.addItem(withTitle: title, action: nil, keyEquivalent: "").submenu = submenu
             case .separator:
                 menu.addItem(.separator())
             }

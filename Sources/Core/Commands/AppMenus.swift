@@ -28,6 +28,8 @@ public indirect enum MenuEntry: Sendable {
     case submenu(String, [MenuEntry], showsChords: Bool)
     /// The commands made from the setting with this key: one item, or a submenu of choices.
     case setting(String)
+    /// A submenu with this title that the app fills each time it opens, from what it found.
+    case live(String)
     case separator
 }
 
@@ -46,6 +48,8 @@ public struct MenuSection: Sendable {
 public enum AppMenus {
     /// The action the Settings… item sends, which the app's delegate answers.
     static let showSettingsAction = "showSettings:"
+    /// The Controls menu's submenu of the outputs found.
+    public static let outputMenuTitle = "Output"
 
     public static func sections(appName: String) -> [MenuSection] {
         let cmd: KeyChord.Modifiers = .command
@@ -140,8 +144,8 @@ public enum AppMenus {
                         [.command(.repeatOff), .command(.repeatAll), .command(.repeatOne)],
                         showsChords: true),
                     .separator, .command(.volumeUp), .command(.volumeDown), .separator,
-                    .setting(settings.hogMode.key), .setting(settings.digitalVolume.key),
-                    .separator,
+                    .live(outputMenuTitle), .setting(settings.hogMode.key),
+                    .setting(settings.digitalVolume.key), .separator,
                     .submenu(
                         "Receiver",
                         [
@@ -185,7 +189,7 @@ public enum AppMenus {
                         rules.reserved[chord] = item.title
                     }
                 case .submenu(_, let entries, _): visit(entries)
-                case .command, .setting, .separator: continue
+                case .command, .setting, .live, .separator: continue
                 }
             }
         }
@@ -206,7 +210,7 @@ public enum AppMenus {
                 case .standard(let item): item.runs.map { [$0] } ?? []
                 case .submenu(_, let entries, _): ids(entries)
                 case .setting(let key): generated.filter { $0.key == key }.map(\.command.id)
-                case .separator: []
+                case .live, .separator: []
                 }
             }
         }

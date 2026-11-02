@@ -140,7 +140,10 @@ extension AppDelegate {
                 },
                 rescanNow: { [weak dispatcher] in
                     if dispatcher?.run(.rescanNow) != true { NSSound.beep() }
-                }))
+                },
+                outputs: { [weak self] in self?.outputOptionsNow() ?? [] },
+                searchOutputs: { [weak self] in self?.searchOutputs() },
+                chooseOutput: { [weak self] in self?.chooseOutput($0) }))
         settingsWindow = controller
         return controller
     }
