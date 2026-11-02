@@ -99,7 +99,8 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     output.menuNeedsUpdate(submenu)
     #expect(submenu.items.map(\.title) == ["System Default", "Speakers"])
     #expect(submenu.items.map(\.state) == [.off, .on])
-    submenu.performActionForItem(at: 0)
+    let first = submenu.items[0]
+    _ = (first.target as? NSObject)?.perform(first.action, with: first)
     #expect(chosen == [.systemDefault])
     // A device plugged in while the menu is open shows at once.
     options.append(OutputOption(choice: .device(uid: "DAC"), title: "DAC"))
