@@ -30,7 +30,7 @@ extension AppDelegate {
             guard let palette else { return }
             saver.set(\.paletteVisits, palette.model.frecency.log)
         }
-        palette.choose = { [weak self] item in self?.choose(item) }
+        palette.choose = { [weak self] in self?.choose($0, filters: $1) }
         self.palette = palette
         dispatcher.handle(.showPalette, enabled: hasWindow) { [weak self] in
             self?.showPalette(.commands)
@@ -164,7 +164,9 @@ extension AppDelegate {
             }
     }
 
-    private func choose(_ item: PaletteItem) {
+    /// An artist or an album shows its first track in the whole library unless `filters`, when
+    /// the panes narrow to it, as a genre always does.
+    private func choose(_ item: PaletteItem, filters: Bool) {
         guard let browser, let dispatcher else { return }
         switch item.kind {
         case .command:
@@ -172,7 +174,11 @@ extension AppDelegate {
             if !dispatcher.run(id) { NSSound.beep() }
         case .genre, .artist, .album:
             guard let (pane, id) = paletteEntries[item.key] else { return }
-            Task { await browser.showOnly(pane, id: id) }
+            if filters || item.kind == .genre {
+                Task { await browser.showOnly(pane, id: id) }
+            } else {
+                Task { await browser.showFirstTrack(of: pane, id: id) }
+            }
         case .playlist:
             guard case .playlist(let id) = BrowserSource(text: item.key),
                 browser.playlists.contains(where: { $0.id == id })

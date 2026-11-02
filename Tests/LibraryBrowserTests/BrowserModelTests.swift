@@ -246,6 +246,18 @@ private func loadedModel(
     #expect(model.filter.groupByAlbumArtist)
 }
 
+@MainActor @Test func goingToAnEntryClearsTheFilterAndFindsItsFirstTrack() async throws {
+    let (model, index) = try await loadedModel()
+    let album = try #require(model.albums.last)
+    await model.select(.genre, id: try #require(model.genres.first).id)
+    await model.setSearch("zzz")
+    let row = try #require(try await model.showFirstTrack(of: .album, id: album.id))
+    #expect(model.filter == TrackFilter())
+    #expect(model.trackIDs.count == (try index.trackCount()))
+    let albumTracks = try index.trackIDs(TrackFilter(album: album.id), sortedBy: .artist)
+    #expect(model.trackIDs[row] == albumTracks.first)
+}
+
 @Test func aPlayQueryIsAnEntryWhenItStartsWithAPanesPrefix() {
     #expect(PlayQuery("album:Kind of Blue") == .entry(.album, "Kind of Blue"))
     #expect(PlayQuery("Artist:Miles Davis") == .entry(.artist, "Miles Davis"))

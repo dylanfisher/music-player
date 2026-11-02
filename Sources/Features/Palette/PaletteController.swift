@@ -24,8 +24,9 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
     public private(set) var mode: PaletteMode?
     /// The chords that close the palette in `mode`: its own command's, as the user has them.
     public var closingChords: (PaletteMode) -> [KeyChord] = { _ in [] }
-    /// Runs the chosen item. The palette has closed by then.
-    public var choose: (PaletteItem) -> Void = { _ in }
+    /// Runs the chosen item; `filters` when it was chosen with ⌘↩ or ⌘-click, to filter the
+    /// browser to it rather than go to it. The palette has closed by then.
+    public var choose: (_ item: PaletteItem, _ filters: Bool) -> Void = { _, _ in }
     /// Opens the other palette, for its chords while this one shows.
     public var open: (PaletteMode) -> Void = { _ in }
     /// Called after a choice is counted, so the app saves the frecency.
@@ -147,10 +148,14 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
     // MARK: Keys
 
     /// The panel's own key equivalents, before the menu bar: its command's chords and ⌘W close
-    /// it, and the other palette's chords switch to it.
+    /// it, the other palette's chords switch to it, and ⌘↩ chooses the selected row to filter.
     func takeKeyEquivalent(_ event: NSEvent) -> Bool {
         guard let mode else { return false }
         let chords = KeyChord.candidates(for: event)
+        if chords.contains(Self.filterChord) {
+            runSelected(filters: true)
+            return true
+        }
         let close = closingChords(mode) + [KeyChord("w", .command)]
         if chords.contains(where: close.contains) {
             self.close()
@@ -196,7 +201,10 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         table.scrollRowToVisible(row)
     }
 
-    func runSelected() {
+    /// Chooses the selected row to filter the browser to it.
+    static let filterChord = KeyChord(.return, .command)
+
+    func runSelected(filters: Bool = false) {
         let row = table.selectedRow
         guard shown.indices.contains(row) else { return }
         let item = shown[row].item
@@ -208,13 +216,13 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         if item.kind != .track { model.record(item.key) }
         close()
         visited()
-        choose(item)
+        choose(item, filters)
     }
 
     @objc private func clicked() {
         guard table.clickedRow >= 0 else { return }
         table.selectRowIndexes([table.clickedRow], byExtendingSelection: false)
-        runSelected()
+        runSelected(filters: NSApp.currentEvent?.modifierFlags.contains(.command) == true)
     }
 
     // MARK: Views

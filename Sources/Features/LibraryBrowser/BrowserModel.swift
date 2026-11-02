@@ -361,8 +361,22 @@ public final class BrowserModel {
     /// one: the other panes are All and the search is cleared.
     public func showOnly(_ pane: Pane, id: Int64) async {
         showEverything()
-        narrow(pane, to: id)
+        narrow(&pending, pane, to: id)
         await reload(panesFrom: .genre, reason: .user)
+    }
+
+    /// Shows the whole library, as `showAll` does, and returns the row of the first track it
+    /// lists of the genre, artist or album `id`, as the palette goes to one; nil when it lists
+    /// none.
+    func showFirstTrack(of pane: Pane, id: Int64) async throws -> Int? {
+        if pending != everything {
+            showEverything()
+            await reload(panesFrom: .genre, reason: .user)
+        }
+        var entry = everything
+        narrow(&entry, pane, to: id)
+        let ids = Set(try await reader.trackIDs(entry, sortedBy: sortColumn, ascending: ascending))
+        return trackIDs.firstIndex(where: ids.contains)
     }
 
     /// Shows what `query` names in the whole library, and returns all of it to play from the
@@ -382,7 +396,7 @@ public final class BrowserModel {
                 throw PlayQueryError.several(pane, name, artists: matches.map(\.artist))
             }
             showEverything()
-            narrow(pane, to: entry.id)
+            narrow(&pending, pane, to: entry.id)
         }
         await reload(panesFrom: .genre, reason: .user)
         guard !trackIDs.isEmpty, let request = try await playRequest(selected: [], clicked: 0)
@@ -397,11 +411,11 @@ public final class BrowserModel {
         pending = everything
     }
 
-    private func narrow(_ pane: Pane, to id: Int64) {
+    private func narrow(_ filter: inout TrackFilter, _ pane: Pane, to id: Int64) {
         switch pane {
-        case .genre: pending.genre = id
-        case .artist: pending.artist = id
-        case .album: pending.album = id
+        case .genre: filter.genre = id
+        case .artist: filter.artist = id
+        case .album: filter.album = id
         }
     }
 

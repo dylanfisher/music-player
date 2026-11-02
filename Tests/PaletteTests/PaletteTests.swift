@@ -159,6 +159,31 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     palette.close()
 }
 
+@MainActor @Test func commandReturnChoosesTheRowToFilterAndReturnToGoToIt() async throws {
+    let palette = PaletteController(
+        model: PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 }))
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    var chosen: [(String, Bool)] = []
+    palette.choose = { chosen.append(($0.title, $1)) }
+    func open() async {
+        palette.show(.goToItem, items: [item("Abba")], over: window, place: nil)
+        while palette.shown.isEmpty { await Task.yield() }
+    }
+    await open()
+    let commandReturn = try #require(
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+            windowNumber: palette.window.windowNumber, context: nil, characters: "\r",
+            charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+    #expect(palette.takeKeyEquivalent(commandReturn))
+    await open()
+    palette.runSelected()
+    #expect(chosen.map(\.0) == ["Abba", "Abba"])
+    #expect(chosen.map(\.1) == [true, false])
+}
+
 @MainActor @Test func theEdgeFollowsTheAppearanceAsItChanges() throws {
     let palette = PaletteController(
         model: PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 }))

@@ -1024,6 +1024,22 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         focusTracks()
     }
 
+    /// Shows the whole library with the first track of one genre, artist or album selected,
+    /// centered, as the palette goes to one.
+    public func showFirstTrack(of pane: BrowserModel.Pane, id: Int64) async {
+        let row: Int?
+        do {
+            row = try await model.showFirstTrack(of: pane, id: id)
+        } catch {
+            report("couldn't find the \(pane.title.lowercased())'s first track: \(error)")
+            return
+        }
+        searchField.stringValue = ""
+        showSource()
+        guard let row else { return }
+        showRow(row)
+    }
+
     /// What identifies `row`: the track ID, or on the timeline the play's history ID.
     func rowID(at row: Int) -> Int64? {
         if showsTimeline {
