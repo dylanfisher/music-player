@@ -61,6 +61,12 @@ private let audio: [String: URL] = {
     let shortFLAC = folder.appendingPathComponent("short.flac", isDirectory: false)
     try! runAfconvert(["-f", "flac", "-d", "flac", short.path, shortFLAC.path])
     files["shortFLAC"] = shortFLAC
+    // Five seconds: long enough for a stall well before the last seconds.
+    let medium = folder.appendingPathComponent("medium.wav", isDirectory: false)
+    try! writeWAV(at: medium, sampleRateHz: 44_100, bitsPerSample: 16, frames: 220_500) {
+        _, _ in 0
+    }
+    files["medium"] = medium
     return files
 }()
 
@@ -324,6 +330,22 @@ private func output(
     // length and its margin, then sends the next track itself.
     #expect(ProcessInfo.processInfo.systemUptime - started >= 2.5)
     #expect(fake.commands.filter { $0 == "SetAVTransportURI" }.count == 2)
+}
+
+@Test func aRendererThatStallsMidTrackIsWaitedForNotCutShort() async throws {
+    let fake = try await FakeRenderer.denon(trackSeconds: 5)
+    fake.ignoresNext()
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    output.load(item(1, "medium"), startSeconds: 0, playing: true)
+    output.setNext(item(2))
+    await log.wait(for: ["started 1"])
+    await eventually("the renderer to be seen playing") { fake.playedSeconds > 0.2 }
+    // Re-buffering for three seconds puts it past the clock's first idea of the end.
+    fake.stall(forSeconds: 3)
+    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 15)
+    // The next track came only once the first had played out and stopped.
+    #expect(fake.setTransportURIs.map(\.stateBefore) == [.stopped, .stopped])
 }
 
 @Test func aRendererStuckAtTheEndIsMovedOnByTheApp() async throws {

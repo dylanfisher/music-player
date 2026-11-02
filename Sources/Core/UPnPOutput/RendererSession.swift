@@ -37,6 +37,9 @@ actor RendererSession {
     /// How long past a track's end, by the app's clock, it waits for the renderer to move on
     /// before it sends the next track itself.
     static let leadMarginSeconds = 2.0
+    /// How far behind the app's clock a renderer may report before the clock waits for it:
+    /// positions come in whole seconds, and a poll is up to a second old.
+    static let behindToleranceSeconds = 1.5
 
     private final class Loaded {
         let item: OutputItem
@@ -57,6 +60,8 @@ actor RendererSession {
         /// When the track is over by the app's own clock, from its length in the file, with a
         /// margin; nil while it isn't playing. Past it, the app moves on by itself.
         var deadline: Double?
+        /// Polls in a row that found the renderer behind the app's clock.
+        var behindPolls = 0
         /// The track's length as the renderer last gave it, which decides whether a stop came
         /// at the end; the file's own length until it says.
         var durationSeconds: Double
@@ -392,10 +397,12 @@ actor RendererSession {
             setPosition(current, target, advancing: rendererPlaying)
         } else if rendererPlaying, let seconds = position.seconds {
             // The renderer's own position starts the app's clock for the track, once; after
-            // that it only corrects what's shown.
-            setPosition(
-                current, seconds, advancing: true,
-                resetsDeadline: firstSeen || current.deadline == nil)
+            // that it only corrects what's shown, and holds the end back for a renderer that
+            // fell behind, as one re-buffering does.
+            let resets = firstSeen || current.deadline == nil
+            let deadline = current.deadline
+            setPosition(current, seconds, advancing: true, resetsDeadline: resets)
+            if !resets, let deadline { holdBack(current, deadline, polledSeconds: seconds) }
         }
         // Paused, the position can change only by the app's own seek, which set it; some
         // renderers report the position from before that seek until they play again.
@@ -409,6 +416,30 @@ actor RendererSession {
         current.playing = rendererPlaying
         if !rendererPlaying { setPosition(current, position.seconds ?? elapsed, advancing: false) }
         emit(.transportChanged(current.item.id, playing: rendererPlaying))
+    }
+
+    /// Moves the track's end later when the renderer is behind the app's clock by more than
+    /// `behindToleranceSeconds` two polls running, short of the track's last seconds: it
+    /// stalled, and the clock would otherwise cut those seconds off. A poll never moves the end
+    /// earlier.
+    private func holdBack(_ current: Loaded, _ deadline: Double, polledSeconds: Double) {
+        let time = now()
+        let clockSeconds =
+            current.track.durationSeconds - (deadline - Self.leadMarginSeconds - time)
+        // In the last seconds a renderer that's behind is stuck at the end, not re-buffering,
+        // and waiting on it would never end the track.
+        guard clockSeconds - polledSeconds > Self.behindToleranceSeconds,
+            polledSeconds < current.track.durationSeconds - Self.endSlackSeconds
+        else {
+            current.behindPolls = 0
+            current.deadline = deadline
+            return
+        }
+        current.behindPolls += 1
+        let later =
+            time + max(0, current.track.durationSeconds - polledSeconds) + Self.leadMarginSeconds
+        current.deadline =
+            current.behindPolls >= Self.disagreeingPolls ? max(deadline, later) : deadline
     }
 
     /// The track should have ended and the renderer hasn't moved on: the app sends the next

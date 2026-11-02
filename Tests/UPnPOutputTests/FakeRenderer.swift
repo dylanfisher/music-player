@@ -121,6 +121,15 @@ final class FakeRenderer: @unchecked Sendable {
     /// Paused, it reports where it was paused until it plays again, whatever a seek did.
     func reportsStalePositionWhilePaused() { lock.withLock { stalePausedPosition = true } }
 
+    /// Holds its position for `stallSeconds` while still saying it plays, as a renderer
+    /// re-buffering mid-track does.
+    func stall(forSeconds stallSeconds: Double) {
+        lock.withLock {
+            seconds = position
+            since = now + stallSeconds
+        }
+    }
+
     /// Pauses it as its own remote would.
     func pauseOnItsOwn() {
         lock.withLock {
@@ -186,7 +195,8 @@ final class FakeRenderer: @unchecked Sendable {
     }
 
     private var now: Double { ProcessInfo.processInfo.systemUptime }
-    private var position: Double { seconds + (since.map { now - $0 } ?? 0) }
+    /// A `since` in the future is a stall: the position holds until then.
+    private var position: Double { seconds + (since.map { max(0, now - $0) } ?? 0) }
 
     /// Moves time on: a track that has played out goes on to the next one it was given, or
     /// stops. Call under the lock.
