@@ -379,6 +379,7 @@ final class PalettePanel: NSPanel {
     override var canBecomeKey: Bool { true }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // Before the menu bar, which would otherwise take a filter key with ⌘, ⌃ or ⌥.
         if controller?.takeKeyEquivalent(event) == true || controller?.takeFilterKey(event) == true
         {
             return true
@@ -387,6 +388,7 @@ final class PalettePanel: NSPanel {
     }
 
     override func sendEvent(_ event: NSEvent) {
+        // Before the field, for a filter key that isn't a key equivalent, as → isn't.
         if event.type == .keyDown, controller?.takeFilterKey(event) == true { return }
         super.sendEvent(event)
     }
