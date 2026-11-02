@@ -109,3 +109,16 @@ private func nextTurn() async {
     #expect(shuffling)
     #expect(button.state == .on)
 }
+
+@MainActor @Test func aVolumeChangeOutsideADragIsSaved() throws {
+    let made = toolbar([.volume], try dispatcher())
+    var set: [(Double, Bool)] = []
+    made.setVolume = { set.append(($0, $1)) }
+    let item = try #require(made.toolbar.items.first as? VolumeItem)
+    let slider = try #require(item.view as? NSSlider)
+    slider.doubleValue = -12
+    // As the arrow keys change it, with no mouse event under way.
+    slider.sendAction(slider.action, to: slider.target)
+    #expect(set.count == 1)
+    #expect(set.first?.0 == -12 && set.first?.1 == true)
+}

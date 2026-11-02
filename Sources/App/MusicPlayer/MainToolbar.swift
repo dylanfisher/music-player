@@ -17,7 +17,8 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     let outputMenu = NSMenu(title: AppMenus.outputMenuTitle)
     /// The digital volume in dB, or nil when the output has none the app sets.
     var volumeDecibels: () -> Double? = { nil }
-    /// Sets the digital volume in dB; `done` is true once a drag ends, when it's saved.
+    /// Sets the digital volume in dB; `done` is false while a drag goes on, and true for every
+    /// other change, which is saved.
     var setVolume: (_ decibels: Double, _ done: Bool) -> Void = { _, _ in }
     /// Called with the toolbar's items after the user adds, removes or moves one.
     var itemsChanged: ([ToolbarItem]) -> Void = { _ in }
@@ -282,7 +283,8 @@ final class VolumeItem: NSToolbarItem {
     }
 
     @objc private func moved() {
-        let done = NSApp.currentEvent?.type == .leftMouseUp
+        // Arrow keys and accessibility set the slider without a drag, and each is a final value.
+        let done = NSApp.currentEvent?.type != .leftMouseDragged
         owner?.setVolume(slider.doubleValue, done)
     }
 
