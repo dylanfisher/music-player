@@ -663,12 +663,12 @@ description XML, its `GetProtocolInfo` reply, and the status lines it sends on p
 
 #### 9a. Network control
 
-- [ ] **HTTP server** primitive on Network.framework: serves files with `Range` support, bound to
+- [x] **HTTP server** primitive on Network.framework: serves files with `Range` support, bound to
       the LAN, and only to paths the library knows about. Nothing calls it until 9b.
-- [ ] **SSDP discovery** of MediaRenderers, and fetching each renderer's description and
+- [x] **SSDP discovery** of MediaRenderers, and fetching each renderer's description and
       `GetProtocolInfo` to learn what formats it accepts.
-- [ ] Info.plist gets `NSLocalNetworkUsageDescription` and Bonjour entries.
-- [ ] **Receiver control** over Denon's AVR control protocol: plain-text commands ending in a
+- [x] Info.plist gets `NSLocalNetworkUsageDescription` (no Bonjour entries: SSDP isn't Bonjour).
+- [x] **Receiver control** over Denon's AVR control protocol: plain-text commands ending in a
       carriage return, on TCP port 23. It works on any input, not only while the Denon plays the
       UPnP stream. The receiver's address comes from SSDP discovery.
       - Commands in the registry: receiver volume up, down and set (`MV`), mute (`MU`), sound mode
@@ -680,7 +680,7 @@ description XML, its `GetProtocolInfo` reply, and the status lines it sends on p
         dropped, the UI says the receiver is unreachable; it doesn't retry silently.
       - Off by default: nothing on the network starts until the owner turns receiver control on.
       - Tests run against a simulated receiver on loopback.
-- [ ] **Security requirements** ([ADR 0025](decisions/0025-threat-model.md), rows 28–30), each
+- [x] **Security requirements** ([ADR 0025](decisions/0025-threat-model.md), rows 28–30), each
       with a test against a loopback stand-in:
       - "Local subnet" means, per interface that's up, its IPv4 address and netmask or its IPv6
         prefix; an IPv6 link-local address counts only with the zone it arrived on. On a Mac
@@ -751,6 +751,19 @@ Implementation plan (ADR 0039):
    pushed lines, an oversize line, a line with no CR, refused and dropped connections,
    throttling), CommandsTests (the receiver commands and links). Network tests looped 20 times
    under a timeout.
+
+Result: shipped up to the owner's checkpoint, checked only against loopback stand-ins; nothing
+contacted the receiver. `receiver.enabled` is off by default. LocalNetwork holds the interface
+list and subnet rules, SSDP over an injected transport (per interface, TTL 1, an interface that
+fails is skipped), a capped HTTP client and the token file server 9b will use; UPnP reads
+descriptions and SOAP replies as UTF-8 XML with no DOCTYPE. The receiver is found by SSDP (an
+"AVR" model, a `LOCATION` only on the replying device), else at `receiver.address`, a literal IP
+on a local subnet, and found again on the next command after it moves. Controls › Receiver has
+power, volume, mute, Pure Direct, Direct and Stereo, and inputs; the menu follows the
+receiver's pushed lines, cleared on a drop; a silent connection is unreachable after 1 s, with a
+hint that another app may hold it. Lines are capped at 135 bytes (the X1000 spec), commands 50
+ms apart. Inputs, power and `MV` levels are confirmed by the owner's scripts; the rest is † in
+ADR 0039. Fuzz targets: receiver line, description, SOAP reply, chunked body.
 
 #### 9b. UPnP output
 
