@@ -27,7 +27,12 @@ settings and the library. A few choices follow from that.
   5,000 random texts.
 - **Preparing Go to Item's rows runs off the main actor** as the palette opens: about 120 ms for
   43k titles on Apple Silicon. The empty query lists the first rows at once; typing ranks what
-  has been prepared.
+  has been prepared. (Amended 2026-11-02.) That happens on the first ⌘P only: its rows are kept
+  and the next open lists them at once. The browser's refresh after a library change (a scan
+  that read or removed files, an import, a tag edit, a removal, a sync) drops them, and the next
+  ⌘P builds them again. Rebuilding then rather than on the change keeps a long scan, which
+  refreshes every 2 s, from preparing 43k titles each time. A build the library changed under
+  is shown but not kept.
 - **Bench measures Go to Item**, the larger list, per keystroke over every fixture track, against
   the 30 ms budget. ⌘K lists a few thousand items and costs less.
 - **Playlists** join ⌘K in phase 7, when they exist. **Settings** that aren't commands join with

@@ -46,6 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var settingsWindow: SettingsWindowController?
     /// What each ⌘K entry item opens, by its key.
     var paletteEntries: [String: (BrowserModel.Pane, Int64)] = [:]
+    /// ⌘P's artists and albums, with the entry each key shows, and its tracks.
+    var goToEntries:
+        LibraryListing<(items: [PaletteItem], shown: [String: (BrowserModel.Pane, Int64)])>?
+    var goToTracks: LibraryListing<[PaletteItem]>?
     /// Looks a track up by path, for counting plays toward frecency.
     private(set) var trackLookup: ((String) throws -> TrackRow?)?
     private(set) var saver: LayoutSaver?
@@ -211,7 +215,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             saver.set(\.selectedArtist, state.artist)
             saver.set(\.selectedAlbum, state.album)
         }
+        makeGoToListings(browser)
         browser.libraryRefreshed = { [weak self] in
+            self?.goToEntries?.libraryChanged()
+            self?.goToTracks?.libraryChanged()
             self?.mediaControls?.libraryChanged()
             nowPlaying.libraryChanged()
             queue.libraryChanged()

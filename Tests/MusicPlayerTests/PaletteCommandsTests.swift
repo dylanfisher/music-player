@@ -60,3 +60,38 @@ import Testing
     #expect(items.map(\.kind) == [.output, .output, .output])
     #expect(items.map { OutputChoice(text: $0.key) } == options.map(\.choice))
 }
+
+@MainActor @Test func goToItemsListingIsKeptUntilTheLibraryChanges() async throws {
+    var builds = 0
+    let listing = LibraryListing<Int> {
+        builds += 1
+        return builds
+    }
+    #expect(listing.value == nil)
+    #expect(try await listing.current() == 1)
+    #expect(try await listing.current() == 1)
+    #expect(listing.value == 1)
+    #expect(builds == 1)
+    listing.libraryChanged()
+    #expect(listing.value == nil)
+    #expect(try await listing.current() == 2)
+    #expect(builds == 2)
+}
+
+@MainActor @Test func aListingTheLibraryChangedUnderIsNotKept() async throws {
+    struct Unreadable: Error {}
+    var builds = 0
+    var listing: LibraryListing<Int>?
+    listing = LibraryListing {
+        builds += 1
+        if builds == 1 { listing?.libraryChanged() }
+        if builds == 2 { throw Unreadable() }
+        return builds
+    }
+    #expect(try await listing?.current() == 1)
+    #expect(listing?.value == nil)
+    await #expect(throws: Unreadable.self) { try await listing?.current() }
+    // A failed build is tried again.
+    #expect(try await listing?.current() == 3)
+    #expect(listing?.value == 3)
+}
