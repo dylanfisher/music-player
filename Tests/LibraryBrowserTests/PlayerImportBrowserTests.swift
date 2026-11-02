@@ -185,7 +185,7 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     #expect(saved == [expected])
     #expect(
         browser.status.playlistFileReport.contains {
-            $0.hasSuffix("prefs.plist: column layout: currentlyPlaying: no such column here")
+            $0.line.hasSuffix("prefs.plist: column layout: currentlyPlaying: no such column here")
         })
 }
 
