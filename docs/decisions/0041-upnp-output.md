@@ -60,12 +60,18 @@ what it takes, and the queue moves on.
 |---|---|---|---|
 | FLAC | `audio/flac`, `audio/x-flac` | `audio/flac` | `audio/flac` |
 | WAV | `audio/wav`, `audio/x-wav`, `audio/wave` | `audio/wav` | `audio/wav` |
-| MP4 (ALAC, AAC) | `audio/mp4`, `audio/x-m4a`, `audio/m4a` | `audio/m4a`† | `audio/mp4` |
+| MP4 (AAC) | `audio/mp4`, `audio/x-m4a`, `audio/m4a` | `audio/m4a`† | `audio/mp4` |
+| MP4 (ALAC) | `audio/mp4`, `audio/x-m4a` | reported | `audio/mp4` |
 | AIFF | `audio/aiff`, `audio/x-aiff` | reported | `audio/aiff` |
 | MP3 | `audio/mpeg`, `audio/mp3` | `audio/mpeg` | `audio/mpeg` |
 
-- **ALAC** goes to the Denon as `audio/m4a`, the one MP4 type it lists; HEOS's spec sheet says
-  it plays ALAC. † until the checkpoint plays one.
+- **ALAC** is reported on the Denon. Offered as `audio/m4a`, the one MP4 type it lists, the
+  Denon said it "could not be decoded" at the owner's checkpoint. Nothing on the app's side
+  was wrong: the `Content-Type` the server sends is the MIME type of the `protocolInfo` the
+  DIDL-Lite names, `audio/m4a`; the server answers any `Range`, first bytes, last bytes or a
+  suffix, so a `moov` atom at either end of the file can be read; and the bytes are the
+  file's. So the Denon takes `audio/m4a` for AAC only, and `audio/m4a` is offered for AAC
+  alone. † AAC until the checkpoint plays one.
 - **AIFF** is reported on the Denon. `audio/L16` would mean stripping the header and sending
   raw big-endian samples, which is no longer the file's bytes, and only at 44.1 or 48 kHz.
 - **Hi-res** FLAC and WAV, 24/96 and 24/192, are offered as they are, since no sink entry limits
@@ -82,12 +88,24 @@ text. Tab, LF and CR go as character references, so they read back unchanged. Th
 `didl-lite` fuzz target checks every tag reads back as written, through the DIDL-Lite and the
 SOAP request around it.
 
-**Gapless.** The renderer's AVTransport description is fetched once per session; when it lists
-`SetNextAVTransportURI`, the next track goes over while one plays, and a `TrackURI` that
-changes to it is the track change, with no gap. Otherwise, or once the renderer refuses the
-action or stops instead of playing what it was given, each track is set and played after the
-last has stopped: the gap, from the stop being seen to Play being answered, is logged, and the
-signal path panel says which way the renderer plays and why.
+**Gapless, and the app leads.** The renderer's AVTransport description is fetched once per
+session; when it lists `SetNextAVTransportURI`, each next track goes over once while one
+plays, and again only when the queue's next track really changes. A `TrackURI` that changes
+to it confirms the track change, with no gap. Otherwise, or once the renderer refuses the
+action, each track is set and played after the last has stopped, and the gap is logged.
+
+The app keeps time itself. From the moment the renderer plays a track, its end is set by the
+track's length in the file, moved only by the app's own seek, pause and play, never by a
+polled position. Two seconds past it, if the renderer hasn't moved on, the app sends the next
+track with `SetAVTransportURI` and Play, or stops. A renderer that stops at the end holding a
+next track it was given isn't answered with a second `SetAVTransportURI` over what it
+buffered; the clock decides. At the owner's checkpoint the Denon stuttered over each track's
+last seconds, said the file "could not be decoded" and then played the next: the app had
+dropped a track's token as soon as a poll showed the renderer on the next track, and a next
+track's token when the queue replaced it, while a renderer buffering ahead still reads both.
+
+Tokens now outlive the app's use of them by a minute: a track left behind and a next track
+replaced still serve, and only stopping the server ends them at once.
 
 A next track the renderer was given and then told to drop, as when the queue changes in a
 track's last second, may still be what it plays: the current track then counts as ended, and
@@ -101,7 +119,9 @@ renderer, which 9a's server refuses by design, plus a callback URL and renewals;
 every exchange one the app starts, under the client's caps and deadline. The cost is up to a
 second before a track end is seen without gapless, and two connections a second.
 
-**What the polls decide.** Playing or paused: the position, and a seek, Play or Pause that
+**What the polls confirm.** Playing: the position shown, not the track's end. Paused, the
+position is the app's own, since some renderers report where they paused until they play
+again, whatever a seek since did. Playing or paused: a seek, Play or Pause that
 waited for the renderer to start (some refuse one given before they play). A renderer that
 plays or pauses other than the engine said, for two polls running, from its own remote or a
 refused command, is followed: `transportChanged` tells the engine, which shows it. A refused
@@ -109,7 +129,7 @@ Play or Pause tells the engine at once, and a refused seek sends `seekFailed` wi
 playback stayed, which the engine publishes in place of the seek it showed. A seek lands at
 least a second short of the end, where a renderer would stop. Stopped after playing, within
 3 s of the renderer's duration (it resets its position when it stops, so the last poll is what
-counts): the track ended. Stopped earlier: stopped on the renderer, its remote or another app,
+counts), with no next track handed over: the track ended. Stopped earlier: stopped on the renderer, its remote or another app,
 reported and the engine stops. Stopped five polls running without ever playing: it won't
 decode the track, reported, and the queue moves on. `ERROR_OCCURRED`: the same. A `TrackURI`
 that's neither the current nor the next track: another app took the renderer, reported, and
@@ -130,8 +150,8 @@ first load, and stops when nothing is loaded: after Stop, the last track, a loss
 takes connections only from the renderer's own address, the `LOCATION` host, not the whole
 subnet: a renderer fetches the streams it plays itself, and nothing in the captures or in
 AVTransport has another host fetch for it. Its keys are the engine's item IDs, and only the
-current and next items resolve, which is narrower than "a track the index holds": a token the
-server issued for an item since replaced is 404.
+current and next items resolve, and those let go of in the last minute, which is narrower than
+"a track the index holds".
 
 The tokens travel in plain HTTP on the LAN, as UPnP has no other way. Anyone on the network
 who sees the traffic sees the URLs and the audio of the current and next tracks, while the
@@ -145,6 +165,18 @@ port 23 and follows from its `MV` lines: one value, one control. RenderingContro
 HEOS maps it onto that same master volume in coarser steps, and a `SetVolume` from the app's
 digital-volume level would jump the receiver to a level the app never read. A Sonos keeps the
 volume its own app sets. The signal path panel says which.
+
+Playing to the Denon starts receiver control even with `receiver.enabled` off, since its
+volume is set nowhere else; the Receiver commands were greyed at the checkpoint because they're
+on only while receiver control runs. While it plays to the Denon, the Mac's volume up, down and
+mute keys send Receiver Volume Up, Down and Mute (`receiver.volumeKeys`, on by default). They
+come from a session event tap on `NSSystemDefined` events, which macOS gives only to an app
+with Accessibility permission; without it there's no tap and the keys stay the Mac's, and the
+system is asked once a launch to prompt. The tap exists only while the keys are taken, its
+callback returns at once and hands each press to the main queue. No way without the
+permission was found: MediaPlayer's remote commands have no volume, the keys never reach the
+app as events, and watching the default output's volume would move the Mac's own volume and
+miss presses at full or silent.
 
 **The signal path panel** says the file's bytes go unchanged over HTTP as the offered type, the
 renderer decodes them, and bit-perfect can't be checked from the Mac (`SignalVerdict
@@ -167,7 +199,8 @@ renderer decodes them, and bit-perfect can't be checked from the Mac (`SignalVer
 ## Consequences
 
 Nothing reaches the network for playback until `output.renderer` is set. To be checked at the
-receiver (the 9b checkpoint): what the display shows for 16/44.1, 24/96 and 24/192 FLAC,
-whether HEOS plays the next track gaplessly, seek while playing and paused, an ALAC file as
-`audio/m4a`, and an AIFF being reported. The app's own volume is off while a renderer plays;
-Receiver Volume Up and Down are the Denon's.
+receiver (the 9b checkpoint): FLAC at 44.1/16, 48/16, 96/24 and 192/24, MP3, and switching
+`output.renderer` on and off worked. Still to check: track ends with the app leading, an AAC
+file as `audio/m4a`, ALAC and AIFF being reported, seek while paused, and the volume keys.
+The app's own volume is off while a renderer plays; Receiver Volume Up and Down are the
+Denon's.
