@@ -576,8 +576,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// track table.
     public var focusAreas: [NSView] {
         if showsTimeline { return [sidebarController.outline, timeline.table] }
-        return [sidebarController.outline]
-            + BrowserModel.Pane.allCases.compactMap { panes.tables[$0] } + [table.table]
+        let shownPanes = isBrowserVisible ? BrowserModel.Pane.allCases : []
+        return [sidebarController.outline] + shownPanes.compactMap { panes.tables[$0] }
+            + [table.table]
     }
 
     /// Moves the selection of the list with the keys; false when none of them has the keys.
@@ -593,8 +594,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Focuses the next pane to the right (or left), from the genre pane to the track table.
     public func focusPane(forward: Bool) {
-        // The timeline has no panes.
-        guard !showsTimeline else {
+        // The timeline has no panes, and hidden ones take no keys.
+        guard !showsTimeline, isBrowserVisible else {
             focusTracks()
             return
         }
@@ -922,6 +923,18 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         runHealth()
     }
 
+    public var isBrowserVisible: Bool { !panes.view.isHidden }
+
+    /// Hides or shows the genre, artist and album panes; they come back at their saved height.
+    /// Their selections still narrow the table while hidden.
+    public func toggleBrowser() {
+        let paneHadKeys = if case .pane = focusedList { true } else { false }
+        panes.view.isHidden.toggle()
+        split.adjustSubviews()
+        if isBrowserVisible { split.setPosition(CGFloat(browserHeight), ofDividerAt: 0) }
+        if paneHadKeys { focusTracks() }
+    }
+
     public var isStatusBarVisible: Bool { !statusBar.isHidden }
 
     public func toggleStatusBar() { statusBar.isHidden.toggle() }
@@ -1010,7 +1023,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     // MARK: Split view
 
     public func splitViewDidResizeSubviews(_ notification: Notification) {
-        guard let window = split.window, window.isVisible, !split.subviews.isEmpty else { return }
+        guard let window = split.window, window.isVisible, isBrowserVisible else { return }
         let height = Int(split.subviews[0].frame.height.rounded())
         guard height != browserHeight else { return }
         browserHeight = height
@@ -1023,6 +1036,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     ) -> CGFloat {
         // The table keeps room for a few rows.
         min(proposedMaximumPosition, splitView.bounds.height - 120)
+    }
+
+    /// A hidden pane's divider would still draw as a line over the table.
+    public func splitView(_ splitView: NSSplitView, shouldHideDividerAt dividerIndex: Int) -> Bool {
+        !isBrowserVisible
     }
 }
 

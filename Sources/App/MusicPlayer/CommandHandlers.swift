@@ -113,6 +113,14 @@ extension AppDelegate {
                 self?.saver?.set(\.statusBarVisible, browser.isStatusBarVisible)
             })
         dispatcher.handle(
+            .toggleBrowser, enabled: hasWindow,
+            isOn: { [weak self] in self?.browser?.isBrowserVisible == true },
+            run: { [weak self] in
+                guard let browser = self?.browser else { return }
+                browser.toggleBrowser()
+                self?.saver?.set(\.browserVisible, browser.isBrowserVisible)
+            })
+        dispatcher.handle(
             .toggleQueue, enabled: hasWindow,
             isOn: { [weak self] in self?.window?.isQueueVisible == true },
             run: { [weak self] in self?.window?.toggleQueue() })

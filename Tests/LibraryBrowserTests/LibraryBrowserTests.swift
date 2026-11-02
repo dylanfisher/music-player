@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Settings
 import Testing
@@ -116,4 +117,35 @@ import Testing
     }
     #expect(shown.last == .some(nil))
     #expect(sidebar.selectedSource == nil)
+}
+
+@MainActor @Test func hiddenPanesLeaveNoDividerAndComeBackAtTheirHeight() throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 150, folders: [], groupByAlbumArtist: false)
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+        styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.contentView = browser.content.view
+    window.layoutIfNeeded()
+    browser.restoreSplit()
+    let split = try #require(browser.content.view.subviews.first as? NSSplitView)
+    let panes = split.arrangedSubviews[0]
+    #expect(abs(panes.frame.height - 150) <= 1)
+
+    browser.toggleBrowser()
+    for height in [500.0, 700.0] {
+        window.setFrame(NSRect(x: 0, y: 0, width: 900, height: height), display: false)
+        window.layoutIfNeeded()
+        #expect(!browser.isBrowserVisible)
+        #expect(browser.splitView(split, shouldHideDividerAt: 0))
+        #expect(!browser.focusAreas.contains { $0.isDescendant(of: panes) })
+    }
+    browser.toggleBrowser()
+    window.layoutIfNeeded()
+    #expect(browser.isBrowserVisible)
+    #expect(!browser.splitView(split, shouldHideDividerAt: 0))
+    #expect(abs(panes.frame.height - 150) <= 1)
 }

@@ -8,6 +8,7 @@ struct WindowSettings {
     var sidebarWidth: Int
     var browserHeight: Int
     var sidebarVisible: Bool
+    var browserVisible: Bool
     var statusBarVisible: Bool
     var queueVisible: Bool
     var signalPathVisible: Bool
@@ -22,6 +23,7 @@ struct WindowSettings {
         sidebarWidth = state[\.sidebarWidth]
         browserHeight = state[\.browserHeight]
         sidebarVisible = state[\.sidebarVisible]
+        browserVisible = state[\.browserVisible]
         statusBarVisible = state[\.statusBarVisible]
         queueVisible = state[\.queueVisible]
         signalPathVisible = state[\.signalPathVisible]

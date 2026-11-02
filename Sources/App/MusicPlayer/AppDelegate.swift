@@ -212,6 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         browser.keyCommand = keyCommand
         queue.keyCommand = keyCommand
         if !layout.statusBarVisible { browser.toggleStatusBar() }
+        if !layout.browserVisible { browser.toggleBrowser() }
 
         window.show()
         NSApp.activate(ignoringOtherApps: true)

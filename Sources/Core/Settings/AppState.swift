@@ -19,6 +19,9 @@ public struct AppState: SettingsSchema {
         range: browserHeightRange,
         "Height of the genre, artist and album panes above the track table, in points. 0 hides"
             + " them.")
+    public let browserVisible = Setting(
+        "window.browserVisible", title: "Show Browser", default: true,
+        "Show the genre, artist and album panes above the track table.")
     public let sidebarVisible = Setting(
         "window.sidebarVisible", title: "Show Sidebar", default: true,
         "Show the sidebar beside the browser.")
