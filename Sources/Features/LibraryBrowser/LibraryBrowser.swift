@@ -1021,6 +1021,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Follows `library.groupByAlbumArtist`.
     public func setGroupByAlbumArtist(_ on: Bool) async { await model.setGroupByAlbumArtist(on) }
 
+    /// Follows the track table's `appearance.` settings.
+    public func setTableAppearance(_ appearance: TableAppearance) { table.apply(appearance) }
+
     /// Likes or dislikes the selection, or clears that when all of it has it already.
     public func toggleSelection(_ opinion: TrackOpinion) {
         let failure = opinion == .liked ? "couldn't like the tracks" : "couldn't dislike the tracks"

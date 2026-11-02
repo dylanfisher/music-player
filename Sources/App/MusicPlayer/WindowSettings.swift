@@ -16,6 +16,7 @@ struct WindowSettings {
     var trackTable: TrackTableLayout
     var browser: BrowserState
     var groupByAlbumArtist: Bool
+    var tableAppearance: TableAppearance
 
     @MainActor init(_ settings: ConfigStore<AppSettings>, state: StateStore<AppState>) {
         frame = state[\.windowFrame]
@@ -32,5 +33,21 @@ struct WindowSettings {
             source: state[\.source], genre: state[\.selectedGenre],
             artist: state[\.selectedArtist], album: state[\.selectedAlbum])
         groupByAlbumArtist = settings[\.groupByAlbumArtist]
+        tableAppearance = TableAppearance(settings)
+    }
+}
+
+extension TableAppearance {
+    /// The settings' keys, whose change redraws the table.
+    static let keys = [
+        AppSettings().columnLines.key, AppSettings().rowLines.key,
+        AppSettings().alternatingRows.key, AppSettings().rowHeight.key, AppSettings().artSize.key,
+    ]
+
+    @MainActor init(_ settings: ConfigStore<AppSettings>) {
+        self.init(
+            columnLines: settings[\.columnLines], rowLines: settings[\.rowLines],
+            alternatingRows: settings[\.alternatingRows], rowHeight: settings[\.rowHeight],
+            artSize: settings[\.artSize])
     }
 }

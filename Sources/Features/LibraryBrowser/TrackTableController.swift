@@ -83,6 +83,16 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         showSort()
     }
 
+    /// Draws the lines and rows as the appearance settings say.
+    func apply(_ appearance: TableAppearance) {
+        var lines: NSTableView.GridLineStyle = []
+        if appearance.columnLines { lines.insert(.solidVerticalGridLineMask) }
+        if appearance.rowLines { lines.insert(.solidHorizontalGridLineMask) }
+        table.gridStyleMask = lines
+        table.usesAlternatingRowBackgroundColors = appearance.alternatingRows
+        table.rowHeight = appearance.rowHeight.points
+    }
+
     // MARK: Model to view
 
     /// Reloads after the model changed, keeping the selected tracks selected, and the first

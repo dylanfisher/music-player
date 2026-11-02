@@ -184,6 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reader: try LibraryReader(databaseURL: databaseURL), index: index,
             layout: layout.trackTable, browserHeight: layout.browserHeight,
             groupByAlbumArtist: layout.groupByAlbumArtist)
+        browser.setTableAppearance(layout.tableAppearance)
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)

@@ -7,6 +7,9 @@ import Commands
 /// and forwards `tableViewSelectionDidChange` to `selectionDidChange`.
 @MainActor
 class RowListController: NSViewController {
+    /// The rows' height in points until the track table's Row Height setting changes it.
+    nonisolated static let rowHeight: CGFloat = 18
+
     let table = KeyTableView()
     /// Double-click or Return: the selected rows and the one clicked.
     let play: (IndexSet, Int) -> Void
@@ -39,7 +42,7 @@ class RowListController: NSViewController {
     /// The style both lists share, and double-click to play.
     func configureRows() {
         table.style = .fullWidth
-        table.rowHeight = 18
+        table.rowHeight = Self.rowHeight
         table.intercellSpacing = NSSize(width: 6, height: 0)
         table.usesAlternatingRowBackgroundColors = true
         table.allowsMultipleSelection = true

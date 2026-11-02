@@ -183,3 +183,49 @@ import Testing
     controller.playingPath = nil
     #expect(marked().isEmpty)
 }
+
+@MainActor @Test func theTableDrawsItsLinesAndRowsAsTheAppearanceSays() throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
+        layoutChanged: { _ in },
+        failed: { _ in }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { _ in [] }, layout: AppState().trackTable.defaultValue,
+        actions: actions)
+    _ = controller.view
+    let settings = AppSettings()
+    let defaults = TableAppearance(
+        columnLines: settings.columnLines.defaultValue, rowLines: settings.rowLines.defaultValue,
+        alternatingRows: settings.alternatingRows.defaultValue,
+        rowHeight: settings.rowHeight.defaultValue, artSize: settings.artSize.defaultValue)
+    let before = (
+        controller.table.gridStyleMask, controller.table.usesAlternatingRowBackgroundColors,
+        controller.table.rowHeight
+    )
+    controller.apply(defaults)
+    #expect(controller.table.gridStyleMask == before.0)
+    #expect(controller.table.usesAlternatingRowBackgroundColors == before.1)
+    #expect(controller.table.rowHeight == before.2)
+
+    controller.apply(
+        TableAppearance(
+            columnLines: true, rowLines: true, alternatingRows: false, rowHeight: .compact,
+            artSize: .thumbnail))
+    #expect(
+        controller.table.gridStyleMask == [
+            .solidVerticalGridLineMask, .solidHorizontalGridLineMask,
+        ])
+    #expect(!controller.table.usesAlternatingRowBackgroundColors)
+    #expect(controller.table.rowHeight == 17)
+    controller.apply(
+        TableAppearance(
+            columnLines: true, rowLines: false, alternatingRows: true, rowHeight: .large,
+            artSize: .thumbnail))
+    #expect(controller.table.gridStyleMask == .solidVerticalGridLineMask)
+    #expect(controller.table.rowHeight > RowListController.rowHeight)
+}
