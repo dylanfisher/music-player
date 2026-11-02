@@ -94,7 +94,9 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         let session = model.open(
             items, byKind: mode == .goToItem, emptyQueryKinds: mode == .commands ? [.command] : nil)
         // Listed before the panel shows, so its first frame has the rows rather than the last
-        // listing's or none.
+        // listing's or none. Laid out first, since a row's height depends on the table's width,
+        // which the table has only after its first layout.
+        panel.contentView?.layoutSubtreeIfNeeded()
         model.rankNow()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(field)
