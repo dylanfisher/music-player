@@ -85,7 +85,11 @@ private final class EventLog: @unchecked Sendable {
                 events.append("failed \(id ?? -1)")
                 errors[id ?? -1] = "\(error)"
             case .deviceLost(let id, _): events.append("lost \(id ?? -1)")
-            case .formatChanged, .underrun, .deviceReturned: events.append("\(event)")
+            case .deviceReturned: events.append("returned")
+            case .seekFailed(let id, let seconds): events.append("seekFailed \(id) at \(seconds)")
+            case .transportChanged(let id, let playing):
+                events.append("\(playing ? "playing" : "paused") \(id)")
+            case .formatChanged, .underrun: events.append("\(event)")
             }
         }
     }
@@ -115,12 +119,13 @@ private func eventually(_ what: String, _ check: () -> Bool) async {
     Issue.record("timed out waiting for \(what)")
 }
 
-private func output(_ fake: FakeRenderer, timeout: Double = 1) async throws -> (
-    RendererOutput, EventLog
-) {
+private func output(
+    _ fake: FakeRenderer, timeout: Double = 1,
+    rediscover: RendererOutput.Rediscover? = nil
+) async throws -> (RendererOutput, EventLog) {
     let output = try RendererOutput(
         renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: 0.2,
-        timeoutSeconds: timeout)
+        timeoutSeconds: timeout, rediscover: rediscover)
     return (output, EventLog(output))
 }
 
@@ -274,8 +279,21 @@ private func output(_ fake: FakeRenderer, timeout: Double = 1) async throws -> (
     output.setNext(item(2))
     await log.wait(for: ["started 1", "ended 1", "started 2"])
     #expect(!fake.actions.contains("SetNextAVTransportURI"))
-    #expect(fake.actions.filter { $0 == "SetAVTransportURI" }.count == 2)
-    #expect(fake.transportState == .playing || fake.actions.last == "GetPositionInfo")
+    // The second track went with set-URI and Play, only once the first had stopped.
+    #expect(fake.commands == ["SetAVTransportURI", "Play", "SetAVTransportURI", "Play"])
+    let sets = fake.setTransportURIs
+    #expect(sets.count == 2)
+    #expect(sets.map(\.stateBefore) == [.stopped, .stopped])
+    #expect(sets.first?.uri != sets.last?.uri)
+    #expect(fake.currentURI == sets.last?.uri)
+    var gapless: RendererGapless?
+    for await path in output.signalPaths {
+        if case .renderer(let sink) = path.sink, sink.contentType != nil {
+            gapless = sink.gapless
+            if case .afterStop = sink.gapless { break }
+        }
+    }
+    #expect(gapless == .afterStop("its AVTransport has no SetNextAVTransportURI"))
 }
 
 @Test func aRendererThatIgnoresTheNextTrackGetsItAfterItStops() async throws {
@@ -369,7 +387,7 @@ private func output(_ fake: FakeRenderer, timeout: Double = 1) async throws -> (
     defer { output.close() }
     output.load(item(1), startSeconds: 0, playing: true)
     await log.wait(for: ["started 1"])
-    await eventually("the renderer to be seen playing") { fake.playedSeconds > 0.2 }
+    await eventually("the renderer to be seen playing") { fake.playedSeconds > 0.6 }
     fake.stopOnItsOwn()
     await log.wait(for: ["started 1", "failed 1"])
     #expect(log.error(1) == "playback was stopped on Denon AVR-X1800H")
@@ -436,6 +454,175 @@ private func output(_ fake: FakeRenderer, timeout: Double = 1) async throws -> (
     #expect(sink.volumeIsReceivers)
     #expect(sink.gapless == .nextURI)
     #expect(!output.hasVolume)
+}
+
+@Test func aNextTrackChangedInTheLastSecondIsPlayedInsteadOfTheOneTheRendererKept() async throws {
+    let fake = try await FakeRenderer.denon(trackSeconds: 1)
+    fake.keepsFirstNext()
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    output.setNext(item(2))
+    await eventually("the next track handed over") { fake.nextTrackURI != "" }
+    let kept = fake.nextTrackURI
+    // In the track's last second the queue changes; the renderer keeps what it had.
+    await eventually("the last second") { fake.playedSeconds > 0.4 }
+    output.setNext(item(3, "wav"))
+    await log.wait(for: ["started 1", "ended 1", "started 3"])
+    #expect(!log.all.contains("failed 1"))
+    #expect(fake.setTransportURIs.count == 2)
+    #expect(fake.setTransportURIs.last?.uri != kept)
+    #expect(fake.currentURI == fake.setTransportURIs.last?.uri)
+}
+
+@Test func aURITheRendererReencodesIsStillTheTrack() async throws {
+    let fake = try await FakeRenderer.denon(trackSeconds: 0.6)
+    fake.reencodesURIs()
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    output.setNext(item(2))
+    await log.wait(for: ["started 1", "ended 1", "started 2"])
+    #expect(!log.all.contains { $0.hasPrefix("failed") })
+    #expect(sameURI("http://127.0.0.1:80/abc", "HTTP://127.0.0.1/%61bc"))
+    #expect(!sameURI("http://127.0.0.1/abc", "http://127.0.0.2/abc"))
+}
+
+@Test func aRefusedSeekTellsTheEngineWherePlaybackStayed() async throws {
+    let fake = try await FakeRenderer.denon()
+    fake.refuse("Seek", code: 711)
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    await eventually("the renderer to be seen playing") { fake.playedSeconds > 0.3 }
+    await eventually("a poll") { output.position()?.seconds ?? 0 > 0 }
+    output.seek(toSeconds: 8)
+    await eventually("the refusal") { log.all.contains { $0.hasPrefix("seekFailed 1") } }
+    #expect((output.position()?.seconds ?? 99) < 5)
+}
+
+@Test func aSeekPastTheEndLandsJustShortOfIt() async throws {
+    let fake = try await FakeRenderer.denon()
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    await eventually("the renderer to be seen playing") {
+        fake.actions.contains("GetTransportInfo")
+    }
+    output.pause()
+    await eventually("a pause") { fake.transportState == .paused }
+    output.seek(toSeconds: 500)
+    await eventually("a seek") { fake.actions.contains("Seek") }
+    // The file is ten seconds long; a seek to its very end would stop it.
+    #expect(abs(fake.playedSeconds - 9) < 0.01)
+    #expect(fake.transportState == .paused)
+}
+
+@Test func aPauseGivenWhileTheRendererStartsIsSentOnceItPlays() async throws {
+    let fake = try await FakeRenderer.denon()
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    // Before any poll has seen it playing.
+    output.pause()
+    await log.wait(for: ["started 1"])
+    await eventually("the queued pause") { fake.transportState == .paused }
+    #expect(fake.commands == ["SetAVTransportURI", "Play", "Pause"])
+    #expect(!log.all.contains { $0.hasPrefix("playing") || $0.hasPrefix("paused") })
+}
+
+@Test func aPauseOnTheRenderersOwnRemoteReachesTheEngine() async throws {
+    let fake = try await FakeRenderer.denon()
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    await eventually("the renderer to be seen playing") { fake.playedSeconds > 0.3 }
+    fake.pauseOnItsOwn()
+    await log.wait(for: ["started 1", "paused 1"])
+    // Nothing sends it back to playing: the engine follows the renderer.
+    #expect(fake.commands.filter { $0 == "Play" }.count == 1)
+}
+
+@Test func aRendererThatAnswersAgainIsReportedBackAndPollingStops() async throws {
+    let fake = try await FakeRenderer.denon()
+    let (output, log) = try await output(fake, timeout: 0.3)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    fake.stall("GetTransportInfo")
+    await log.wait(for: ["started 1", "lost 1"], seconds: 10)
+    #expect(output.isPolling)
+    fake.answersAgain()
+    await log.wait(for: ["started 1", "lost 1", "returned"], seconds: 10)
+    await eventually("polling to stop") { !output.isPolling }
+    let polls = fake.actions.count
+    try await Task.sleep(nanoseconds: 1_000_000_000)
+    #expect(fake.actions.count == polls)
+}
+
+@Test func nothingPollsOnceStopped() async throws {
+    let fake = try await FakeRenderer.denon()
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    #expect(!output.isPolling)
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    #expect(output.isPolling)
+    output.stop()
+    await eventually("polling to stop") { !output.isPolling }
+}
+
+@Test func aRendererThatMovedIsFoundAgainByItsUDN() async throws {
+    let first = try await FakeRenderer.denon()
+    let moved = try await FakeRenderer.denon()
+    let movedRenderer = try await discovered(moved)
+    let (output, log) = try await output(first, timeout: 0.3) { [movedRenderer] in
+        [movedRenderer]
+    }
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    first.vanish()
+    await log.wait(for: ["started 1", "lost 1"], seconds: 10)
+    // The engine loads again when the owner presses Play; the search finds it moved.
+    output.load(item(2), startSeconds: 4, playing: true)
+    await log.wait(for: ["started 1", "lost 1", "started 2"])
+    #expect(moved.commands.prefix(2) == ["SetAVTransportURI", "Play"])
+    #expect(moved.fetched.map(\.status) == [206], "\(moved.fetched.map(\.status)) \(moved.actions)")
+}
+
+@Test func aFailedNetworkSearchStillListsAndSaysWhy() {
+    struct Down: Error, CustomStringConvertible { var description: String { "no interfaces" } }
+    #expect(
+        RendererChoice.listing(.failure(Down()))
+            == "The network search for UPnP renderers failed: no interfaces")
+    #expect(
+        RendererChoice.listing(.success([])) == "No UPnP renderers answered on the local network.")
+}
+
+@Test func anAIFFTheDenonCantTakeReachesTheNowPlayingMessage() async throws {
+    let fake = try await FakeRenderer.denon()
+    // The engine reads the events itself, so no log shares them.
+    let output = try RendererOutput(
+        renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: 0.2,
+        timeoutSeconds: 1)
+    defer { output.close() }
+    let engine = PlaybackEngine(output: output)
+    let updates = await engine.updates()
+    await engine.setQueue([audio["aiff"]!])
+    await engine.play()
+    var reason: String?
+    for await update in updates {
+        if case .trackFailed(_, let why) = update.event { reason = why }
+        if update.event == .finished { break }
+    }
+    // NowPlayingModel shows a trackFailed as "Couldn't play <file>: <reason>".
+    #expect(
+        reason?.hasPrefix("Denon AVR-X1800H doesn't take AIFF (PCM) files") == true,
+        "\(String(describing: reason))")
 }
 
 /// The head and body `GET path` gets from the server at `port`.

@@ -13,9 +13,18 @@ public enum RendererChoice {
         return renderer
     }
 
-    /// One line per renderer for `--list-devices`: its name, model, address and UDN, then what
-    /// it takes, or why it can't be played to.
-    public static func report(_ renderers: [Renderer]) -> String {
+    /// `--list-devices`'s renderers, or why the search for them failed: the devices are
+    /// listed already, so a failed search is a note, not a failure.
+    public static func listing(_ search: Result<[Renderer], any Error>) -> String {
+        switch search {
+        case .success(let renderers): report(renderers)
+        case .failure(let error): "The network search for UPnP renderers failed: \(error)"
+        }
+    }
+
+    /// One line per renderer: its name, model, address and UDN, then what it takes, or why it
+    /// can't be played to.
+    static func report(_ renderers: [Renderer]) -> String {
         guard !renderers.isEmpty else { return "No UPnP renderers answered on the local network." }
         return
             (["UPnP renderers, by the UDN output.renderer takes:"]

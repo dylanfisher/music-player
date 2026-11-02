@@ -945,3 +945,33 @@ private func eventually(_ what: String, _ check: @escaping @Sendable () async ->
     }
     #expect(await engine.state.status == .playing)
 }
+
+@Test func aFailedSeekIsCorrectedToWherePlaybackIs() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    let seen = await published(engine) {
+        await engine.seek(toSeconds: 90)
+        await engine.handle(.seekFailed(1, positionSeconds: 12))
+        // About an item since replaced: ignored.
+        await engine.handle(.seekFailed(7, positionSeconds: 3))
+    }
+    #expect(seen.map(\.event) == [.seeked(seconds: 90), .seeked(seconds: 12)])
+}
+
+@Test func theEngineFollowsAnOutputThatPausedOrPlayedOnItsOwn() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+    let seen = await published(engine) {
+        await engine.handle(.transportChanged(1, playing: false))
+        await engine.handle(.transportChanged(1, playing: false))
+        await engine.handle(.transportChanged(1, playing: true))
+        await engine.handle(.transportChanged(2, playing: false))
+    }
+    #expect(seen.map(\.event) == [.paused, .resumed])
+    #expect(await engine.state.status == .playing)
+    // Nothing is sent back to the output: it already plays as the engine now says.
+    #expect(!output.takeCalls().contains { $0 == .play || $0 == .pause })
+}

@@ -20,6 +20,11 @@ public enum OutputEvent: Sendable {
     case deviceReturned
     /// The device failed, so the output stopped after putting back what it could.
     case failed(OutputItem.ID?, any Error)
+    /// A seek didn't happen; playback is still `positionSeconds` into the item.
+    case seekFailed(OutputItem.ID, positionSeconds: Double)
+    /// The output plays or pauses other than it was last asked, as a renderer does when its own
+    /// remote pauses it or it refuses a Play or Pause.
+    case transportChanged(OutputItem.ID, playing: Bool)
 }
 
 /// What an output knows about a track once it starts.

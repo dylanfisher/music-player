@@ -63,6 +63,29 @@ final class RendererShared: @unchecked Sendable {
         server?.stop()
     }
 
+    private var wantsTicks = false
+    private var tickerRunning = false
+
+    /// Says whether the session wants polls; true when a ticker has to be started for it.
+    func wantTicks(_ wanted: Bool) -> Bool {
+        lock.withLock {
+            wantsTicks = wanted && !closed
+            guard wantsTicks, !tickerRunning else { return false }
+            tickerRunning = true
+            return true
+        }
+    }
+
+    /// Whether the ticker goes on; once nothing wants polls it stops, and says so here.
+    func tickerContinues() -> Bool {
+        lock.withLock {
+            if !wantsTicks { tickerRunning = false }
+            return tickerRunning
+        }
+    }
+
+    var isTicking: Bool { lock.withLock { tickerRunning } }
+
     /// True once for each poll the ticker asks for, so a slow renderer can't pile them up.
     func claimPoll() -> Bool {
         lock.withLock {
@@ -76,7 +99,10 @@ final class RendererShared: @unchecked Sendable {
     /// Marks the output closed; true the first time only.
     func close() -> Bool {
         lock.withLock {
-            defer { closed = true }
+            defer {
+                closed = true
+                wantsTicks = false
+            }
             return !closed
         }
     }

@@ -25,6 +25,9 @@ public final class RendererOutput: Output, @unchecked Sendable {
     /// Longest an action may take; a slow renderer is still answering well under this.
     static let actionTimeoutSeconds = LocalHTTPClient.timeoutSeconds
 
+    /// Searches the local network again, for a renderer lost and perhaps moved.
+    public typealias Rediscover = @Sendable () async throws -> [Renderer]
+
     private let shared = RendererShared()
     private let work: AsyncStream<RendererWork>.Continuation
     private let eventContinuation: AsyncStream<OutputEvent>.Continuation
@@ -32,20 +35,23 @@ public final class RendererOutput: Output, @unchecked Sendable {
     private let control: AVTransportControl
     private let now: @Sendable () -> Double
     private let worker: Task<Void, Never>
-    private let ticker: Task<Void, Never>
+    private let ticker = TickerTask()
 
-    /// Throws when the renderer has no AVTransport the app can reach.
-    public convenience init(_ renderer: Renderer) throws(RendererOutputError) {
+    /// Throws when the renderer has no AVTransport the app can reach. `rediscover` searches
+    /// again when the renderer is lost, since it may come back at a new address.
+    public convenience init(_ renderer: Renderer, rediscover: @escaping Rediscover)
+        throws(RendererOutputError)
+    {
         try self.init(
-            renderer: renderer, serverInterface: renderer.location.interface,
-            pollSeconds: Self.pollSeconds, timeoutSeconds: Self.actionTimeoutSeconds)
+            renderer: renderer, serverInterface: nil, pollSeconds: Self.pollSeconds,
+            timeoutSeconds: Self.actionTimeoutSeconds, rediscover: rediscover)
     }
 
-    /// `serverInterface` is where the HTTP server listens: tests pass loopback, since their
-    /// made-up interfaces can't be bound.
+    /// `serverInterface` is where the HTTP server listens, nil for the renderer's own: tests
+    /// pass loopback, since their made-up interfaces can't be bound.
     init(
-        renderer: Renderer, serverInterface: NetworkInterface, pollSeconds: Double,
-        timeoutSeconds: Double,
+        renderer: Renderer, serverInterface: NetworkInterface?, pollSeconds: Double,
+        timeoutSeconds: Double, rediscover: Rediscover? = nil,
         now: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime }
     ) throws(RendererOutputError) {
         guard let transport = renderer.transport else {
@@ -61,27 +67,39 @@ public final class RendererOutput: Output, @unchecked Sendable {
             of: SignalPath.self, bufferingPolicy: .bufferingNewest(16))
         let (stream, work) = AsyncStream.makeStream(of: RendererWork.self)
         self.work = work
+        let shared = shared
+        let ticker = ticker
+        // Runs only while the session wants polls, and ends when it stops wanting them.
+        let startTicker: @Sendable () -> Void = {
+            ticker.set(
+                Task {
+                    while !Task.isCancelled {
+                        do {
+                            try await Task.sleep(nanoseconds: UInt64(pollSeconds * 1e9))
+                        } catch {
+                            return
+                        }
+                        guard shared.tickerContinues() else { return }
+                        if shared.claimPoll() { work.yield(.poll) }
+                    }
+                })
+        }
         let session = RendererSession(
-            renderer: renderer, control: control, serverInterface: serverInterface,
-            shared: shared, emit: { [eventContinuation] in eventContinuation.yield($0) },
-            publish: { [pathContinuation] in pathContinuation.yield($0) }, now: now)
+            renderer: renderer, control: control, timeoutSeconds: timeoutSeconds,
+            serverInterface: serverInterface, shared: shared,
+            emit: { [eventContinuation] in eventContinuation.yield($0) },
+            publish: { [pathContinuation] in pathContinuation.yield($0) }, now: now,
+            startTicker: startTicker, rediscover: rediscover)
         let paths = pathContinuation
         worker = Task {
             paths.yield(await session.signalPath())
             for await item in stream { await session.run(item) }
         }
-        let shared = shared
-        ticker = Task {
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(nanoseconds: UInt64(pollSeconds * 1e9))
-                } catch {
-                    return
-                }
-                if shared.claimPoll() { work.yield(.poll) }
-            }
-        }
     }
+
+    /// Whether polls are running, which they do only while something is loaded or a lost
+    /// renderer is watched for.
+    var isPolling: Bool { shared.isTicking }
 
     public func load(_ item: OutputItem, startSeconds: Double, playing: Bool) {
         work.yield(.load(item, startSeconds: startSeconds, playing: playing))
@@ -123,4 +141,13 @@ public final class RendererOutput: Output, @unchecked Sendable {
             }
         }
     }
+}
+
+/// The ticker's task, so `close()` can cancel whichever one runs.
+private final class TickerTask: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: Task<Void, Never>?
+
+    func set(_ task: Task<Void, Never>) { lock.withLock { self.task = task } }
+    func cancel() { lock.withLock { task?.cancel() } }
 }

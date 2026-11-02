@@ -85,7 +85,7 @@ func appPaths() throws -> AppPaths {
 if given(.listDevices) {
     runAndExit {
         print(deviceReport(try AudioDevice.outputDevices()))
-        print(try rendererListing())
+        print(rendererListing())
     }
 }
 if let folder = value(after: .captureRenderers) {

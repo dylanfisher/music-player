@@ -428,6 +428,19 @@ public actor PlaybackEngine {
             guard state.device == .lost else { return }
             state.device = .returned
             publish(.deviceReturned)
+        case .seekFailed(let id, let seconds):
+            guard id == currentItem?.id else { return }
+            logger.error("a seek failed; playback stays at \(seconds) s")
+            publish(.seeked(seconds: seconds))
+        case .transportChanged(let id, let playing):
+            guard id == currentItem?.id, resumeSeconds == nil else { return }
+            if playing, state.status == .paused {
+                state.status = .playing
+                publish(.resumed)
+            } else if !playing, state.status == .playing {
+                state.status = .paused
+                publish(.paused)
+            }
         case .failed(let id, let error):
             guard id == nil || id == currentItem?.id || id == nextItem?.id else { return }
             if let currentItem { cursor = currentItem.position }

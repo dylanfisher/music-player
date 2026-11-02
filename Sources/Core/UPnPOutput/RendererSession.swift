@@ -24,9 +24,16 @@ actor RendererSession {
     static let lostAfterPolls = 3
     /// Polls in a row that find it stopped, after Play, before it counts as refusing the track.
     static let notStartingPolls = 5
+    /// Polls in a row that find it playing or paused other than the engine said before the
+    /// engine is told: one alone may be a reply from before the last Play or Pause.
+    static let disagreeingPolls = 2
     /// How close to its end a track that stopped must have been to count as played out: the
     /// renderer resets its position when it stops, so the last one polled is all there is.
     static let endSlackSeconds = 3.0
+    /// How far before its end a seek lands at most, so a seek to the end doesn't stop it.
+    static let seekEndMarginSeconds = 1.0
+    /// Ticks between tries of a lost renderer, while waiting for it to answer again.
+    static let probeEveryTicks = 5
 
     private final class Loaded {
         let item: OutputItem
@@ -36,7 +43,12 @@ actor RendererSession {
         var playing: Bool
         /// The renderer has said it's playing or paused this track, so a stop means it ended.
         var started = false
+        /// Play went out and the renderer hasn't yet said it's playing; a Pause given now waits.
+        var awaitingPlay = false
+        /// A Play or Pause given while `awaitingPlay`, sent once the renderer has started.
+        var queuedTransport = false
         var stoppedPolls = 0
+        var disagreeingPolls = 0
         /// Where to seek once the renderer has the track playing or paused.
         var pendingSeek: Double?
         /// The track's length as the renderer last gave it, which decides whether a stop came
@@ -60,31 +72,46 @@ actor RendererSession {
         var sent: Bool
     }
 
-    private let renderer: Renderer
-    private let control: AVTransportControl
-    private let serverInterface: NetworkInterface
+    private var renderer: Renderer
+    private var control: AVTransportControl
+    private let timeoutSeconds: Double
+    /// Where the server listens; nil for the interface the renderer was found on.
+    private let serverInterfaceOverride: NetworkInterface?
     private let shared: RendererShared
     private let emit: @Sendable (OutputEvent) -> Void
     private let publish: @Sendable (SignalPath) -> Void
     private let now: @Sendable () -> Double
+    private let startTicker: @Sendable () -> Void
+    private let rediscover: RendererOutput.Rediscover?
     private var server: HTTPServer<OutputItem.ID>?
     private var current: Loaded?
     private var next: Next?
+    /// Next tracks the renderer was given and then told otherwise, which it may still play if
+    /// the change came too late, as in the last second of a track.
+    private var replacedNextURIs: [String] = []
     private var gapless = RendererGapless.unknown
     private var failedPolls = 0
+    /// Set from a loss until the renderer answers again, or something else is loaded.
+    private var lost = false
+    private var ticksSinceProbe = 0
 
     init(
-        renderer: Renderer, control: AVTransportControl, serverInterface: NetworkInterface,
-        shared: RendererShared, emit: @escaping @Sendable (OutputEvent) -> Void,
-        publish: @escaping @Sendable (SignalPath) -> Void, now: @escaping @Sendable () -> Double
+        renderer: Renderer, control: AVTransportControl, timeoutSeconds: Double,
+        serverInterface: NetworkInterface?, shared: RendererShared,
+        emit: @escaping @Sendable (OutputEvent) -> Void,
+        publish: @escaping @Sendable (SignalPath) -> Void, now: @escaping @Sendable () -> Double,
+        startTicker: @escaping @Sendable () -> Void, rediscover: RendererOutput.Rediscover?
     ) {
         self.renderer = renderer
         self.control = control
-        self.serverInterface = serverInterface
+        self.timeoutSeconds = timeoutSeconds
+        serverInterfaceOverride = serverInterface
         self.shared = shared
         self.emit = emit
         self.publish = publish
         self.now = now
+        self.startTicker = startTicker
+        self.rediscover = rediscover
     }
 
     func run(_ work: RendererWork) async {
@@ -100,6 +127,9 @@ actor RendererSession {
             shared.pollDone()
             await poll()
         }
+        // Polls run while a track is loaded or a lost renderer is watched for, and the
+        // ticker stops otherwise.
+        if shared.wantTicks(current != nil || lost) { startTicker() }
     }
 
     /// The path as it stands, for the panel.
@@ -117,6 +147,8 @@ actor RendererSession {
 
     private func load(_ item: OutputItem, startSeconds: Double, playing: Bool) async {
         drop()
+        if lost { await findAgain() }
+        lost = false
         let prepared: (RendererTrack, String)
         do throws(RendererOutputError) {
             prepared = try await prepare(item)
@@ -137,7 +169,8 @@ actor RendererSession {
             return
         }
         let loaded = Loaded(item, track, uri: uri, playing: playing)
-        if startSeconds > 0 { loaded.pendingSeek = startSeconds }
+        loaded.awaitingPlay = playing
+        if startSeconds > 0 { loaded.pendingSeek = seekTarget(startSeconds, in: loaded) }
         current = loaded
         setPosition(loaded, startSeconds, advancing: false)
         emit(
@@ -148,8 +181,11 @@ actor RendererSession {
 
     private func setNext(_ item: OutputItem?) async {
         guard current != nil else { return }
+        if let old = next {
+            shared.unserve(old.item.id)
+            if old.sent { replacedNextURIs.append(old.uri) }
+        }
         let wasSent = next?.sent == true
-        if let old = next { shared.unserve(old.item.id) }
         next = nil
         guard let item else {
             if wasSent { await send(AVTransport.setNextURI("", metadata: "")) }
@@ -184,32 +220,63 @@ actor RendererSession {
 
     private func play() async {
         guard let current, !current.playing else { return }
-        guard await send(AVTransport.play) else { return }
+        if current.awaitingPlay {
+            // The Play already sent stands; a Pause queued since is taken back.
+            current.playing = true
+            current.queuedTransport = false
+            return
+        }
+        guard await send(AVTransport.play) else {
+            // Refused: the engine hears it's still paused, rather than a log line alone.
+            if self.current === current { emit(.transportChanged(current.item.id, playing: false)) }
+            return
+        }
         current.playing = true
+        current.awaitingPlay = !current.started
         setPosition(current, elapsed, advancing: current.started)
     }
 
     private func pause() async {
         guard let current, current.playing else { return }
         let seconds = elapsed
-        guard await send(AVTransport.pause) else { return }
+        if current.awaitingPlay {
+            // A renderer still starting may refuse a Pause, so it waits until it plays.
+            current.playing = false
+            current.queuedTransport = true
+            return setPosition(current, seconds, advancing: false)
+        }
+        guard await send(AVTransport.pause) else {
+            if self.current === current { emit(.transportChanged(current.item.id, playing: true)) }
+            return
+        }
         current.playing = false
         setPosition(current, seconds, advancing: false)
     }
 
     private func seek(_ seconds: Double) async {
         guard let current else { return }
-        let target = min(max(0, seconds), current.track.durationSeconds)
+        let target = seekTarget(seconds, in: current)
         if current.started {
-            guard await send(AVTransport.seek(toSeconds: target)) else { return }
+            guard await send(AVTransport.seek(toSeconds: target)) else {
+                if self.current === current {
+                    emit(.seekFailed(current.item.id, positionSeconds: elapsed))
+                }
+                return
+            }
         } else {
             current.pendingSeek = target
         }
         setPosition(current, target, advancing: current.playing && current.started)
     }
 
+    /// `seconds` within the track, short of its very end.
+    private func seekTarget(_ seconds: Double, in loaded: Loaded) -> Double {
+        min(max(0, seconds), max(0, loaded.track.durationSeconds - Self.seekEndMarginSeconds))
+    }
+
     /// A renderer that doesn't answer a Stop isn't reported lost: nothing is playing to lose.
     private func stop() async {
+        lost = false
         guard current != nil else { return }
         do throws(SOAPProblem) {
             try await control.send(AVTransport.stop)
@@ -239,7 +306,7 @@ actor RendererSession {
     // MARK: Polling
 
     private func poll() async {
-        guard let current else { return }
+        guard let current else { return await probe() }
         let transport: TransportInfo
         let position: PositionInfo
         do throws(SOAPProblem) {
@@ -256,30 +323,22 @@ actor RendererSession {
         failedPolls = 0
         // Commands may have run while the poll waited; only a reply about the same track counts.
         guard self.current === current else { return }
-        if !position.trackURI.isEmpty, position.trackURI != current.uri {
-            guard let next, next.sent, position.trackURI == next.uri else {
-                emit(
-                    .failed(
-                        current.item.id,
-                        RendererOutputError.playingSomethingElse(renderer: renderer.name)))
-                return release()
+        if !position.trackURI.isEmpty, !sameURI(position.trackURI, current.uri) {
+            if let next, next.sent, sameURI(position.trackURI, next.uri) {
+                return advance(from: current, to: next, gapless: true)
             }
-            return advance(from: current, to: next, gapless: true)
+            if replacedNextURIs.contains(where: { sameURI($0, position.trackURI) }) {
+                return await resync(current)
+            }
+            emit(
+                .failed(
+                    current.item.id,
+                    RendererOutputError.playingSomethingElse(renderer: renderer.name)))
+            return release()
         }
         switch transport.state {
         case .playing, .paused:
-            current.started = true
-            current.stoppedPolls = 0
-            if let duration = position.durationSeconds, duration > 0 {
-                current.durationSeconds = duration
-            }
-            if let target = current.pendingSeek {
-                current.pendingSeek = nil
-                guard await send(AVTransport.seek(toSeconds: target)) else { return }
-                setPosition(current, target, advancing: transport.state == .playing)
-            } else if let seconds = position.seconds {
-                setPosition(current, seconds, advancing: transport.state == .playing)
-            }
+            await playingOrPaused(current, playing: transport.state == .playing, position)
             if !transport.isOK {
                 logger.notice("\(self.renderer.name) reports an error while playing")
             }
@@ -288,6 +347,62 @@ actor RendererSession {
         case .transitioning, .other:
             break
         }
+    }
+
+    /// The renderer has the track: what waited for that goes out, and a renderer that plays
+    /// or pauses other than the engine said, from its own remote or a refused command, is
+    /// followed, and the engine told.
+    private func playingOrPaused(_ current: Loaded, playing: Bool, _ position: PositionInfo)
+        async
+    {
+        current.started = true
+        current.awaitingPlay = false
+        current.stoppedPolls = 0
+        if let duration = position.durationSeconds, duration > 0 {
+            current.durationSeconds = duration
+        }
+        var rendererPlaying = playing
+        if current.queuedTransport {
+            current.queuedTransport = false
+            if playing != current.playing {
+                let action = current.playing ? AVTransport.play : AVTransport.pause
+                if await send(action) { rendererPlaying = current.playing }
+                guard self.current === current else { return }
+            }
+        }
+        if let target = current.pendingSeek {
+            current.pendingSeek = nil
+            guard await send(AVTransport.seek(toSeconds: target)) else {
+                guard self.current === current else { return }
+                emit(.seekFailed(current.item.id, positionSeconds: position.seconds ?? 0))
+                return setPosition(current, position.seconds ?? 0, advancing: rendererPlaying)
+            }
+            setPosition(current, target, advancing: rendererPlaying)
+        } else if let seconds = position.seconds {
+            setPosition(current, seconds, advancing: rendererPlaying)
+        }
+        guard rendererPlaying != current.playing else {
+            current.disagreeingPolls = 0
+            return
+        }
+        current.disagreeingPolls += 1
+        guard current.disagreeingPolls >= Self.disagreeingPolls else { return }
+        current.disagreeingPolls = 0
+        current.playing = rendererPlaying
+        emit(.transportChanged(current.item.id, playing: rendererPlaying))
+    }
+
+    /// The renderer is on a next track it was told to drop: the change came too late. The
+    /// current track counts as ended, and what the engine has next replaces it.
+    private func resync(_ current: Loaded) async {
+        logger.notice("\(self.renderer.name) went on to a next track it was told to drop")
+        guard next != nil else {
+            await send(AVTransport.stop)
+            emit(.trackEnded(current.item.id))
+            emit(.finished(current.item.id))
+            return release()
+        }
+        await ended(current)
     }
 
     /// The renderer has stopped: the track played out, or never started, or someone stopped it.
@@ -355,8 +470,10 @@ actor RendererSession {
         shared.unserve(current.item.id)
         let loaded = Loaded(next.item, next.track, uri: next.uri, playing: true)
         loaded.started = gapless
+        loaded.awaitingPlay = !gapless
         self.current = loaded
         self.next = nil
+        replacedNextURIs = []
         setPosition(loaded, 0, advancing: gapless)
         emit(
             .trackStarted(
@@ -365,7 +482,7 @@ actor RendererSession {
         publish(signalPath())
     }
 
-    // MARK: Losing and releasing
+    // MARK: Losing, finding again and releasing
 
     /// An action on `item` failed: the renderer is gone if it didn't answer, otherwise it
     /// refused the track.
@@ -373,12 +490,14 @@ actor RendererSession {
     {
         if case .unreachable = error {
             emit(.deviceLost(item.id, positionSeconds: seconds))
-        } else {
-            emit(
-                .trackFailed(
-                    item.id, RendererOutputError.refused(renderer: renderer.name, "\(error)")))
-            if finishing { emit(.finished(item.id)) }
+            release()
+            lost = true
+            return
         }
+        emit(
+            .trackFailed(
+                item.id, RendererOutputError.refused(renderer: renderer.name, "\(error)")))
+        if finishing { emit(.finished(item.id)) }
         release()
     }
 
@@ -386,12 +505,50 @@ actor RendererSession {
         logger.error("\(self.renderer.name) is gone: \(error)")
         emit(.deviceLost(current.item.id, positionSeconds: elapsed))
         release()
+        lost = true
+    }
+
+    /// Asks a lost renderer where it is every few ticks; the first answer says it's back.
+    private func probe() async {
+        guard lost else { return }
+        ticksSinceProbe += 1
+        guard ticksSinceProbe >= Self.probeEveryTicks else { return }
+        ticksSinceProbe = 0
+        do throws(SOAPProblem) {
+            _ = try await control.transportInfo()
+        } catch {
+            return
+        }
+        guard lost, current == nil else { return }
+        lost = false
+        logger.notice("\(self.renderer.name) answers again")
+        emit(.deviceReturned)
+    }
+
+    /// Searches for the renderer by its UDN after a loss, since a renderer that left and came
+    /// back may have a new address from DHCP; one found elsewhere is played to there.
+    private func findAgain() async {
+        guard let rediscover else { return }
+        let found: Renderer
+        do {
+            found = try RendererChoice.renderer(renderer.udn, in: try await rediscover())
+        } catch {
+            return logger.notice("\(self.renderer.name) wasn't found again: \(error)")
+        }
+        guard found.location != renderer.location, let transport = found.transport else { return }
+        logger.notice("\(found.name) is at \(found.address) now")
+        renderer = found
+        control = AVTransportControl(transport, timeoutSeconds: timeoutSeconds)
+        gapless = .unknown
+        server = nil
+        shared.stopServer()
     }
 
     /// Forgets what's loaded but keeps the server, for a load that replaces it.
     private func drop() {
         current = nil
         next = nil
+        replacedNextURIs = []
         failedPolls = 0
         shared.unserveAll()
         shared.setPosition(nil)
@@ -424,8 +581,8 @@ actor RendererSession {
         let started: HTTPServer<OutputItem.ID>
         do throws(LocalNetworkError) {
             started = try await HTTPServer<OutputItem.ID>.start(
-                on: serverInterface, acceptingOnly: renderer.address,
-                resolve: { shared.file($0) },
+                on: serverInterfaceOverride ?? renderer.location.interface,
+                acceptingOnly: renderer.address, resolve: { shared.file($0) },
                 problem: { logger.notice("serving \(name): \($0)") })
         } catch {
             throw .server(error)
@@ -461,4 +618,22 @@ actor RendererSession {
             loaded.item.id, seconds: seconds, at: now(), advancing: advancing,
             durationSeconds: loaded.track.durationSeconds)
     }
+}
+
+/// Whether two URIs name the same stream once a renderer's rewriting is undone: the scheme and
+/// host in any case, port 80 when none is given (the app serves only http), percent-encoding
+/// decoded.
+func sameURI(_ a: String, _ b: String) -> Bool {
+    guard a != b else { return true }
+    guard let left = URLComponents(string: a), let right = URLComponents(string: b) else {
+        return false
+    }
+    func key(_ parts: URLComponents) -> [String?] {
+        [
+            parts.scheme?.lowercased(), parts.host?.lowercased(),
+            String(parts.port ?? 80),
+            parts.path, parts.query,
+        ]
+    }
+    return key(left) == key(right)
 }

@@ -33,7 +33,8 @@ extension AppDelegate {
         guard let engine else { return }
         let output: RendererOutput
         do {
-            output = try RendererOutput(try found.get())
+            output = try RendererOutput(
+                try found.get(), rediscover: { try await searchRenderers() })
         } catch {
             logger.error("no renderer: \(error)")
             browser?.report("Couldn't play to the network renderer: \(error)")
@@ -76,9 +77,9 @@ func searchRenderers() async throws -> [Renderer] {
 }
 
 /// `--list-devices`'s second part: the renderers a search finds, which `output.renderer`
-/// takes by UDN.
+/// takes by UDN, or why the search failed.
 @MainActor
-func rendererListing() throws -> String {
+func rendererListing() -> String {
     print(
         "searching the local network for UPnP renderers, about \(Int(RendererDiscovery.searchSeconds)) s"
     )
@@ -88,16 +89,16 @@ func rendererListing() throws -> String {
     // Detached, because the caller runs on the main actor, which the semaphore blocks.
     Task.detached {
         do {
-            box.result = .success(RendererChoice.report(try await searchRenderers()))
+            box.result = .success(try await searchRenderers())
         } catch {
             box.result = .failure(error)
         }
         done.signal()
     }
     done.wait()
-    return try box.result.get()
+    return RendererChoice.listing(box.result)
 }
 
 private final class ListingBox: @unchecked Sendable {
-    var result: Result<String, any Error> = .success("")
+    var result: Result<[Renderer], any Error> = .success([])
 }

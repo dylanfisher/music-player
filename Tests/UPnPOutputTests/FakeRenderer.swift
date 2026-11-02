@@ -40,6 +40,8 @@ final class FakeRenderer: @unchecked Sendable {
     private var stalling: Set<String> = []
     private var startsPlaying = true
     private var advancesToNext = true
+    private var keepsNext = false
+    private var reencodes = false
 
     // What it holds.
     private var uri = ""
@@ -51,6 +53,8 @@ final class FakeRenderer: @unchecked Sendable {
     private var metadata: [String] = []
     private var fetches: [Fetch] = []
     private var vanished = false
+    /// Each URI SetAVTransportURI gave it, with the state it was in when it came.
+    private var setURIs: [(uri: String, stateBefore: State)] = []
 
     init(
         description: String, scpd: String, protocolInfo: String, trackSeconds: Double = 60
@@ -92,6 +96,22 @@ final class FakeRenderer: @unchecked Sendable {
 
     func refuse(_ action: String, code: Int) { lock.withLock { refusing[action] = code } }
     func stall(_ action: String) { lock.withLock { _ = stalling.insert(action) } }
+    func answersAgain() { lock.withLock { stalling = [] } }
+    /// Keeps the first next track it's given, as a renderer that has already started
+    /// buffering it does.
+    func keepsFirstNext() { lock.withLock { keepsNext = true } }
+    /// Reports its URI with the token's first character percent-encoded and the scheme in
+    /// capitals, as a renderer that rewrites what it was given might.
+    func reencodesURIs() { lock.withLock { reencodes = true } }
+
+    /// Pauses it as its own remote would.
+    func pauseOnItsOwn() {
+        lock.withLock {
+            seconds = position
+            since = nil
+            state = .paused
+        }
+    }
     func neverStarts() { lock.withLock { startsPlaying = false } }
     func ignoresNext() { lock.withLock { advancesToNext = false } }
     func setTrackSeconds(_ value: Double) { lock.withLock { trackSecondsValue = value } }
@@ -132,6 +152,20 @@ final class FakeRenderer: @unchecked Sendable {
             tick()
             return position
         }
+    }
+
+    /// Each SetAVTransportURI's URI and the state the renderer was in when it came.
+    var setTransportURIs: [(uri: String, stateBefore: State)] { lock.withLock { setURIs } }
+
+    /// `uri` as GetPositionInfo reports it. Call under the lock.
+    private func reported(_ uri: String) -> String {
+        guard reencodes, uri.hasPrefix("http"), let slash = uri.lastIndex(of: "/") else {
+            return uri
+        }
+        let token = uri[uri.index(after: slash)...]
+        guard let first = token.first?.asciiValue else { return uri }
+        return "HTTP" + uri[uri.index(uri.startIndex, offsetBy: 4)..<slash] + "/"
+            + String(format: "%%%02X", first) + token.dropFirst()
     }
 
     private var now: Double { ProcessInfo.processInfo.systemUptime }
@@ -199,6 +233,7 @@ final class FakeRenderer: @unchecked Sendable {
             var fetch: String?
             switch action {
             case "SetAVTransportURI":
+                setURIs.append((argument("CurrentURI", body), state))
                 uri = argument("CurrentURI", body)
                 metadata.append(argument("CurrentURIMetaData", body))
                 state = .stopped
@@ -206,7 +241,7 @@ final class FakeRenderer: @unchecked Sendable {
                 since = nil
                 fetch = uri
             case "SetNextAVTransportURI":
-                nextURI = argument("NextURI", body)
+                if !keepsNext || nextURI.isEmpty { nextURI = argument("NextURI", body) }
             case "Play":
                 if startsPlaying, !uri.isEmpty, state != .playing {
                     state = .playing
@@ -246,7 +281,7 @@ final class FakeRenderer: @unchecked Sendable {
                         action,
                         "<Track>1</Track><TrackDuration>\(upnpTime(trackSecondsValue)).\(Int(trackSecondsValue * 1000) % 1000)"
                             + "</TrackDuration><TrackMetaData></TrackMetaData>"
-                            + "<TrackURI>\(xmlEscaped(uri))</TrackURI>"
+                            + "<TrackURI>\(xmlEscaped(reported(uri)))</TrackURI>"
                             + "<RelTime>\(upnpTime(state == .stopped ? 0 : position))</RelTime>"
                             + "<AbsTime>NOT_IMPLEMENTED</AbsTime>"))
             default:
