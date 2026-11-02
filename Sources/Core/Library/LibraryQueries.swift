@@ -21,14 +21,16 @@ extension LibraryIndex {
         _ filter: TrackFilter = TrackFilter(), sortedBy column: TrackColumn,
         ascending: Bool = true
     ) throws -> [TrackName] {
-        try orderedTracks(
-            "t.file_id, f.path, t.title, ar.name, al.title, g.name", filter, column, ascending
+        let sortArtist = filter.groupByAlbumArtist ? "ga" : "ar"
+        return try orderedTracks(
+            "t.file_id, f.path, t.title, ar.name, al.title, g.name, \(sortArtist).name", filter,
+            column, ascending
         ) { row in
             let path = try row.text(1)
             return TrackName(
                 id: try row.int64(0), title: row.optionalText(2) ?? displayName(path),
-                artist: row.optionalText(3), album: row.optionalText(4),
-                genre: row.optionalText(5))
+                artist: row.optionalText(3), sortArtist: row.optionalText(6),
+                album: row.optionalText(4), genre: row.optionalText(5))
         }
     }
 

@@ -1,9 +1,9 @@
 import AppKit
 import DisplayText
-import Library
 import Settings
 import Testing
 
+@testable import Library
 @testable import LibraryBrowser
 
 @MainActor @Test func aReSortKeepsTheSameTracksSelected() async throws {
@@ -86,6 +86,23 @@ import Testing
     await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
     let names = try await model.trackNames()
     #expect(names.map(\.id) == model.trackIDs)
+}
+
+/// Grouped by album artist, a compilation track sorts under Various Artists, so typing its track
+/// artist's name lands on that artist's own album instead.
+@Test func typeSelectMatchesTheArtistTheTableSortsBy() {
+    let names = [
+        TrackName(
+            id: 1, title: "On Hits", artist: "Vladislav Delay", sortArtist: "Various Artists",
+            album: "Hits", genre: nil),
+        TrackName(
+            id: 2, title: "On Anima", artist: "Vladislav Delay", sortArtist: "Vladislav Delay",
+            album: "Anima", genre: nil),
+    ]
+    let texts = names.map { typeSelectText($0, sortedBy: .artist) }
+    #expect(TypeSelect.firstIndex(startingWith: "vladislav", in: texts) == 1)
+    #expect(TypeSelect.firstIndex(startingWith: "various", in: texts) == 0)
+    #expect(typeSelectText(names[1], sortedBy: .album) == "Anima")
 }
 
 /// A sort that lands while the names are read makes them stale; they're read again.

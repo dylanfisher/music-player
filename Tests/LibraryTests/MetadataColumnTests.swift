@@ -305,3 +305,15 @@ private let grouped = TrackFilter(groupByAlbumArtist: true)
     // Ungrouped, Artist is the track artist, which splits the albums.
     #expect(try names(index, .artist) == ["band2", "band1", "solo", "comp1", "comp2"])
 }
+
+@Test func trackNamesCarryTheArtistTheSortUses() throws {
+    let (index, _) = try groupedLibrary()
+    func sortArtists(_ filter: TrackFilter) throws -> [String?] {
+        try index.trackNames(filter, sortedBy: .artist).map(\.sortArtist)
+    }
+    #expect(
+        try sortArtists(grouped) == ["Band", "Band", "Solo", variousArtists, variousArtists])
+    #expect(
+        try sortArtists(TrackFilter())
+            == ["Band", "Singer and Guest", "Solo", "Xavier", "Yvonne"])
+}

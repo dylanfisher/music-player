@@ -311,8 +311,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         if selectionDidChange() { typeSelect?.reset() }
     }
 
-    /// Selects the first row whose sort column starts with `query`: the artist, album or genre
-    /// when the table sorts by one, else the title.
+    /// Selects the first row whose sort column starts with `query`.
     private func typeToSelect(_ query: String) {
         let column = model.sortColumn
         Task {
@@ -324,14 +323,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
                 return
             }
             guard query == typeSelect?.query else { return }
-            let texts = names.lazy.map { name in
-                switch column {
-                case .artist: name.artist ?? ""
-                case .album: name.album ?? ""
-                case .genre: name.genre ?? ""
-                default: name.title
-                }
-            }
+            let texts = names.lazy.map { typeSelectText($0, sortedBy: column) }
             guard let row = TypeSelect.firstIndex(startingWith: query, in: texts) else {
                 NSSound.beep()
                 return
@@ -343,6 +335,18 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     private func move(to row: Int) {
         select(ListSelection(rows: [row], cursor: row, anchor: row))
         table.scrollRowToVisible(row)
+    }
+}
+
+/// The text type-to-select matches in a row of a table sorted by `column`: the artist it sorts
+/// by, so a compilation grouped under Various Artists isn't found by a track artist's name, or
+/// the album or genre when the table sorts by one, else the title.
+func typeSelectText(_ name: TrackName, sortedBy column: TrackColumn) -> String {
+    switch column {
+    case .artist: name.sortArtist ?? ""
+    case .album: name.album ?? ""
+    case .genre: name.genre ?? ""
+    default: name.title
     }
 }
 
