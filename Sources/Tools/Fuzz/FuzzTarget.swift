@@ -34,8 +34,8 @@ struct FuzzTarget: Sendable {
         parser(.wav, "RIFF chunks, INFO lists and ID3 chunks"),
         parser(.aiff, "AIFF and AIFF-C chunks and ID3 chunks"),
         vorbis, config, state, journal, rules, playlistFile, syncLog, swinsian, swinsianPredicate,
-        iTunesXML, tagWriter, receiverLine, deviceDescription, soapReply, avTransportReply,
-        serviceDescription, httpRequest, didlLite, chunkedBody,
+        swinsianColumns, iTunesXML, tagWriter, receiverLine, deviceDescription, soapReply,
+        avTransportReply, serviceDescription, httpRequest, didlLite, chunkedBody,
     ]
 
     static func named(_ name: String) -> FuzzTarget? { all.first { $0.name == name } }
@@ -521,6 +521,40 @@ private let swinsianPredicate = FuzzTarget(
                 return false
             case .manual, .smartAsManual: preconditionFailure("an archive made a manual playlist")
             }
+        }
+    })
+
+private let swinsianColumns = FuzzTarget(
+    name: "swinsian-columns", summary: "Swinsian's preferences, for its track table's columns",
+    seedFormats: [], tokens: ["CF$UID", "bplist00"],
+    // Swinsian names the first two columns as we do; we have no column for the third.
+    madeSeeds: { _, _ in
+        let columns = [
+            (TrackColumn.title.rawValue, 397.0), (TrackColumn.artist.rawValue, 362),
+            ("currentlyPlaying", 64),
+        ]
+        return [
+            [UInt8](
+                try swinsianPreferences(
+                    columns: columns, sort: (TrackColumn.artist.rawValue, true)))
+        ]
+    },
+    prepare: { work in
+        let url = work.appendingPathComponent(inputFileName)
+        return { input in
+            write(input, to: url)
+            let columns: SwinsianColumns
+            do {
+                columns = try SwinsianColumns(preferencesAt: url)
+            } catch {
+                return false
+            }
+            let layout = columns.layout(
+                over: TrackTableLayout(
+                    columns: [ColumnLayout(column: .title, width: 100)], sortColumn: .artist,
+                    sortAscending: true))
+            precondition(layout.problem() == nil, "an invalid layout: \(layout)")
+            return true
         }
     })
 

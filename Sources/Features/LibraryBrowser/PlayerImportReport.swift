@@ -116,3 +116,23 @@ extension ImportPlan {
         return rows
     }
 }
+
+/// The words for the column layout an import from Swinsian brings across (ADR 0055).
+extension SwinsianColumns {
+    /// "6 columns, sorted by Artist; 1 skipped".
+    var previewLine: String {
+        var line = count(columns.count, "column")
+        if let sortColumn {
+            line += ", sorted by \(sortColumn.title)" + (sortAscending ? "" : ", descending")
+        }
+        if !skipped.isEmpty { line += "; \(number(skipped.count)) skipped" }
+        return line
+    }
+
+    /// What was skipped, under the preferences file's path. Each ID came from that file, so
+    /// it's escaped.
+    var detailLines: [String] {
+        let source = terminalSafe(source)
+        return skipped.map { "\(source): column layout: \(terminalSafe($0))" }
+    }
+}

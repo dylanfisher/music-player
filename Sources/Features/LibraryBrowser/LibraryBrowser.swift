@@ -116,6 +116,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     var lastImport: ImportPlan?
     /// A Locate… waiting for the scan of the folder it had watched, and the miss it was for.
     private var pendingLocate: (folder: String, miss: String)?
+    /// The file an import from Swinsian reads its column layout from; tests replace it.
+    var swinsianPreferences = SwinsianColumns.preferencesURL
     /// True from Resolve Lost Stats until its last sheet closes, so one is open at a time.
     private var isResolvingLostStats = false
     private(set) var lostStatsSheet: LostStatsSheet?
@@ -1147,13 +1149,18 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         Task { [weak self] in
             guard let self else { return }
             do {
-                let library = try await Task.detached { try PlayerLibrary.read(player, at: url) }
-                    .value
+                let preferences = swinsianPreferences
+                let (library, columns) = try await Task.detached {
+                    let columns: Result<SwinsianColumns, any Error>? =
+                        player == .swinsian
+                        ? Result { try SwinsianColumns(preferencesAt: preferences) } : nil
+                    return (try PlayerLibrary.read(player, at: url), columns)
+                }.value
                 let session = PlayerImportSession(
                     shown: try await model.importPlan(library, prefix: nil)
                 ) { [model] prefix in try await model.importPlan(library, prefix: prefix) }
-                let sheet = PlayerImportSheet(session: session, player: player)
-                sheet.confirmed = { [weak self] plan in self?.apply(plan) }
+                let sheet = PlayerImportSheet(session: session, player: player, columns: columns)
+                sheet.confirmed = { [weak self] plan, columns in self?.apply(plan, columns) }
                 sheet.closed = { [weak self] in
                     self?.importSheet = nil
                     self?.isImporting = false
@@ -1168,13 +1175,25 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
-    private func apply(_ plan: ImportPlan) {
+    /// Writes `plan`, then shows Swinsian's `columns` when they were chosen and saves them as the
+    /// table's layout.
+    private func apply(_ plan: ImportPlan, _ columns: SwinsianColumns?) {
         Task {
             do {
                 let written = try await model.applyImport(plan.library, prefix: plan.prefix)
                 lastImport = written
                 showSource()
-                finishPlaylistFile(written.summary, written.problems)
+                var summary = written.summary
+                var rows = written.problems
+                if let columns {
+                    let layout = columns.layout(over: table.layout)
+                    table.showColumns(layout)
+                    await model.setSort(layout.sortColumn, ascending: layout.sortAscending)
+                    tableLayoutChanged(table.layout)
+                    summary += " · column layout"
+                    rows += columns.detailLines.map { Problem($0) }
+                }
+                finishPlaylistFile(summary, rows)
                 playlistEntriesChanged()
                 edited()
             } catch {

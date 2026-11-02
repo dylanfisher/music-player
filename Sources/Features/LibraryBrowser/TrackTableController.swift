@@ -20,6 +20,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// Set while the table's sort descriptors are being set from the model, so that doesn't
     /// count as the user sorting.
     private var applyingSort = false
+    /// Set while `showColumns` moves and resizes columns.
+    private var applyingColumns = false
     /// A row fetch failed; reported once until the next reload.
     private var reportedFetchFailure = false
     private var typeSelect: TypeSelect? = TypeSelect()
@@ -375,12 +377,33 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         actions.sort(column, first.ascending)
     }
 
-    func tableViewColumnDidMove(_ notification: Notification) { actions.layoutChanged(layout) }
+    func tableViewColumnDidMove(_ notification: Notification) {
+        if !applyingColumns { actions.layoutChanged(layout) }
+    }
 
     func tableViewColumnDidResize(_ notification: Notification) {
-        actions.layoutChanged(layout)
+        if !applyingColumns { actions.layoutChanged(layout) }
         let resized = notification.userInfo?["NSTableColumn"] as? NSTableColumn
         if artSize == .fullWidth, resized?.identifier == columnIdentifier(.art) { refitArt() }
+    }
+
+    /// Shows `layout`'s columns in its order and widths, and hides the others. The sort is the
+    /// model's to change. Each move and resize would report the layout; the caller reports it
+    /// once instead.
+    func showColumns(_ layout: TrackTableLayout) {
+        applyingColumns = true
+        defer { applyingColumns = false }
+        let shown = Set(layout.columns.map { columnIdentifier($0.column) })
+        for tableColumn in table.tableColumns {
+            tableColumn.isHidden = !shown.contains(tableColumn.identifier)
+        }
+        for (place, entry) in layout.columns.enumerated() {
+            let identifier = columnIdentifier(entry.column)
+            guard let index = table.tableColumns.firstIndex(where: { $0.identifier == identifier })
+            else { continue }
+            table.tableColumns[index].width = entry.width
+            if index != place { table.moveColumn(index, toColumn: place) }
+        }
     }
 
     /// The visible columns as they stand, and the model's sort.

@@ -1,4 +1,5 @@
 import Foundation
+import Library
 
 /// The tables of a Swinsian library database, as read from the owner's on 2026-11-01
 /// (ADR 0033), for generated databases. Podcasts and the queue are left out.
@@ -45,4 +46,27 @@ public func swinsianPredicateArchive(_ format: String) throws -> [UInt8] {
     [UInt8](
         try NSKeyedArchiver.archivedData(
             withRootObject: NSPredicate(format: format), requiringSecureCoding: true))
+}
+
+/// Swinsian's preferences file with only its track table's keys, in the shape the owner's had
+/// on 2026-11-02 (ADR 0055): the visible columns, left to right, by ID with their widths, and
+/// the sort, an `NSKeyedArchiver` archive of the dictionaries `NSTableView` saves. The keys are
+/// the reader's; its tests check them against the owner's file.
+public func swinsianPreferences(columns: [(id: String, width: Double)], sort: (String, Bool)?)
+    throws -> Data
+{
+    var root: [String: Any] = [
+        SwinsianColumns.columnsKey: columns.map {
+            [SwinsianColumns.columnIDKey: $0.id, SwinsianColumns.columnWidthKey: $0.width]
+        }
+    ]
+    if let (id, ascending) = sort {
+        let archiver = NSKeyedArchiver(requiringSecureCoding: true)
+        archiver.encode(
+            [[SwinsianColumns.sortIDKey: id, SwinsianColumns.sortAscendingKey: ascending]]
+                as NSArray, forKey: "Array")
+        archiver.finishEncoding()
+        root[SwinsianColumns.sortKey] = archiver.encodedData
+    }
+    return try PropertyListSerialization.data(fromPropertyList: root, format: .binary, options: 0)
 }

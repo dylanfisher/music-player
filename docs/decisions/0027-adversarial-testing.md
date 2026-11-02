@@ -43,7 +43,8 @@ not throw and must keep its problems under the cap), `swinsian` (a database thro
 must have absolute NUL-free paths, one per path in NFC, with ratings in stars, and playlists
 must name only tracks read. `swinsian-predicate` reads a smart playlist's archived rules
 on their own; rules that map must be valid, and ones that don't must say why, 11 reasons at
-most. `tag-writer` writes each input
+most. `swinsian-columns` reads Swinsian's preferences for its column layout, which must make
+a valid table layout ([0055](0055-swinsian-column-layout.md)). `tag-writer` writes each input
 to a file, applies an edit and undoes it, and the bytes must match. Phase 9a's network
 input: `receiver-line` (a receiver's status lines, split at each CR; volumes must be in range
 and sound mode names printable and at most 25 characters), `device-description` (names,

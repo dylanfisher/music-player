@@ -122,6 +122,10 @@ enum PlayerImportError: Error, Equatable, CustomStringConvertible {
     case unreadable(String)
     /// Not the shape of the file the player writes.
     case notALibrary(String)
+    /// Not the shape of Swinsian's preferences file (ADR 0055).
+    case notPreferences(String)
+    /// Swinsian's preferences list no column this table has.
+    case noColumns
 
     var description: String {
         switch self {
@@ -129,11 +133,13 @@ enum PlayerImportError: Error, Equatable, CustomStringConvertible {
             "the database doesn't have what a Swinsian library was assumed to: missing "
                 + missing.joined(separator: ", ")
         case .tooLarge(let bytes, let maximum):
-            "it's \(bytes) bytes; libraries over \(maximum) bytes aren't read"
+            "it's \(bytes) bytes; files over \(maximum) bytes aren't read"
         case .changedWhileCopying(let path):
             "\(path) changed while it was copied; quit Swinsian and import again"
         case .unreadable(let detail): "couldn't be read: \(detail)"
         case .notALibrary(let detail): "it isn't a library this app reads: \(detail)"
+        case .notPreferences(let detail): "it isn't Swinsian's preferences: \(detail)"
+        case .noColumns: "none of its columns has a match here"
         }
     }
 }

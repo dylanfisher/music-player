@@ -103,7 +103,11 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     #expect(try index.rows(ids: [ids[0]])[0].playCount == 7)
 }
 
-@MainActor @Test func importLibraryReadsPreviewsAndWritesOnImport() async throws {
+/// A browser on a writable library, a Swinsian library giving its first track 4 plays, and
+/// Swinsian preferences with `columns`, sorted by year descending, in a temporary folder.
+@MainActor private func swinsianImport(columns: [(id: String, width: Double)]) throws -> (
+    browser: LibraryBrowser, index: LibraryIndex, id: Int64, library: URL
+) {
     let databaseURL = try writableBrowserDatabase()
     let index = try LibraryIndex(at: databaseURL)
     let id = try #require(try index.trackIDs(sortedBy: .path).first)
@@ -118,23 +122,71 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     try Database(at: url).execute(
         swinsianSchemaSQL + "INSERT INTO track (track_id, path, playcount) VALUES"
             + " (1, '\(path.replacingOccurrences(of: "'", with: "''"))', 4);")
+    browser.swinsianPreferences = folder.appendingPathComponent("prefs.plist", isDirectory: false)
+    try swinsianPreferences(columns: columns, sort: ("year", false))
+        .write(to: browser.swinsianPreferences)
+    return (browser, index, id, url)
+}
+
+/// Opens the import of `library`, runs `choose` on its sheet, clicks Import and waits for the
+/// report.
+@MainActor private func confirmImport(
+    _ browser: LibraryBrowser, _ library: URL, _ choose: (PlayerImportSheet) -> Void = { _ in }
+) async throws {
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled],
         backing: .buffered, defer: false)
-    browser.importLibrary(.swinsian, from: url, over: window)
+    browser.importLibrary(.swinsian, from: library, over: window)
     let deadline = Date().addingTimeInterval(10)
     while browser.importSheet == nil, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
     let sheet = try #require(browser.importSheet, "no sheet; status: \(browser.statusText)")
-    #expect(try index.rows(ids: [id])[0].playCount == 0)
+    choose(sheet)
     window.endSheet(sheet.alert.window, returnCode: .alertFirstButtonReturn)
     while !browser.statusText.hasPrefix("Imported from"), Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
+}
+
+@MainActor @Test func importLibraryReadsPreviewsAndWritesOnImport() async throws {
+    let (browser, index, id, library) = try swinsianImport(columns: [("title", 300)])
+    var saved: [TrackTableLayout] = []
+    browser.tableLayoutChanged = { saved.append($0) }
+    try await confirmImport(browser, library) { _ in
+        #expect((try? index.rows(ids: [id])[0].playCount) == 0)
+    }
     #expect(browser.statusText == "Imported from Swinsian: +4 plays on 1 track · 0 playlists")
     #expect(try index.rows(ids: [id])[0].playCount == 4)
     #expect(browser.importSheet == nil)
+    // Import column layout was left off.
+    #expect(saved.isEmpty && browser.table.layout == AppState().trackTable.defaultValue)
+}
+
+@MainActor @Test func importColumnLayoutShowsAndSavesSwinsiansColumns() async throws {
+    let (browser, _, _, library) = try swinsianImport(columns: [
+        ("artwork", 160), ("currentlyPlaying", 64), ("year", 56), ("title", 390),
+    ])
+    var saved: [TrackTableLayout] = []
+    browser.tableLayoutChanged = { saved.append($0) }
+    try await confirmImport(browser, library) { sheet in
+        #expect(sheet.columnsBox.isEnabled)
+        sheet.columnsBox.performClick(nil)
+    }
+    #expect(
+        browser.statusText
+            == "Imported from Swinsian: +4 plays on 1 track · 0 playlists · column layout")
+    let expected = TrackTableLayout(
+        columns: [
+            ColumnLayout(column: .art, width: 160), ColumnLayout(column: .year, width: 56),
+            ColumnLayout(column: .title, width: 390),
+        ], sortColumn: .year, sortAscending: false)
+    #expect(browser.table.layout == expected)
+    #expect(saved == [expected])
+    #expect(
+        browser.status.playlistFileReport.contains {
+            $0.hasSuffix("prefs.plist: column layout: currentlyPlaying: no such column here")
+        })
 }
 
 @MainActor @Test func theSheetFitsA1440x900ScreenWithEverythingFilled() throws {
@@ -145,8 +197,14 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     plan.existingPlaylists = ["Mix"]
     plan.library.tracksWithoutFiles = 3
     plan.mergedRows = 32
+    let columns = try SwinsianColumns(
+        preferences: try swinsianPreferences(
+            columns: [("artwork", 160), ("currentlyPlaying", 64), ("title", 390)],
+            sort: ("artist", true)),
+        source: "/Users/someone/Library/Preferences/com.swinsian.Swinsian.plist")
     let sheet = PlayerImportSheet(
-        session: PlayerImportSession(shown: plan) { _ in plan }, player: .iTunes)
+        session: PlayerImportSession(shown: plan) { _ in plan }, player: .swinsian,
+        columns: .success(columns))
     sheet.fromField.stringValue = "/Volumes/Old Music Drive/iTunes/iTunes Media/Music"
     sheet.toField.stringValue = "/Volumes/music/library"
     sheet.alert.layout()

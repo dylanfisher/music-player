@@ -48,6 +48,8 @@ literal "Library" | files Sources/Features/LibraryBrowser/SidebarController.swif
 literal "Other" | files Sources/Core/Metadata/ID3v1Genres.swift Sources/Features/SettingsWindow/GeneralModel.swift | ID3v1's genre 12 and the Settings section for a key no other section claims
 literal "Receiver" | files Sources/Core/Commands/AppMenus.swift Sources/Features/SettingsWindow/GeneralModel.swift | the receiver's menu and its Settings section, each naming the receiver where it's shown
 literal "free" | files Sources/Core/HALOutput/DeviceReport.swift Sources/Core/Metadata/MP4.swift | MP4's padding atom and a hog-mode owner of nobody in --list-devices
+literal "favourite" | files Sources/Core/Library/SwinsianColumns.swift Sources/Tools/Fuzz/FuzzTarget.swift | Swinsian's ID for its loved column in its preferences, and a token the fuzzer puts into Swinsian databases it reads
+literal "length" | files Sources/Core/Library/PlaylistFile.swift Sources/Core/Library/SwinsianColumns.swift | a PLS entry's Length key and Swinsian's ID for its time column, two formats
 literal "gearshape" | files Sources/Features/LibraryBrowser/SidebarController.swift Sources/Features/Palette/PaletteRow.swift Sources/Features/SettingsWindow/SettingsWindowController.swift | three different things drawn with a gear: smart playlists, settings in the palette, the General pane's tab
 literal "Genre" | files Sources/Core/Library/TrackColumnTitle.swift Sources/Core/Settings/AppState.swift | the track column's title and the title of the saved genre selection, which no window shows; Settings can't import Library
 literal "history" | files Sources/Core/Library/LibrarySchema.swift Sources/Core/Settings/BrowserSource.swift | the plays table and the History source's key in the state file

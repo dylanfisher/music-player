@@ -1,17 +1,22 @@
 import AppKit
+import DisplayText
 import Library
 
 /// The import preview: an `NSAlert` sheet (ADR 0012) with the counts, a path prefix to replace,
 /// and the details, which fits a 1440x900 screen. Nothing is written until Import.
 @MainActor
 final class PlayerImportSheet: NSObject {
-    /// Called with the plan shown when the user clicks Import; the sheet has closed.
-    var confirmed: (ImportPlan) -> Void = { _ in }
+    /// Called with the plan shown when the user clicks Import, and with Swinsian's columns when
+    /// Import column layout is on; the sheet has closed.
+    var confirmed: (ImportPlan, SwinsianColumns?) -> Void = { _, _ in }
     /// Called when the sheet closes either way.
     var closed: () -> Void = {}
 
     let alert = NSAlert()
     private let session: PlayerImportSession
+    /// Swinsian's track table, or why it couldn't be read; nil for a player without one.
+    private let columns: Result<SwinsianColumns, any Error>?
+    let columnsBox = NSButton(checkboxWithTitle: "Import column layout", target: nil, action: nil)
     private let countsLabel = NSTextField(wrappingLabelWithString: "")
     let fromField = NSTextField()
     let toField = NSTextField()
@@ -23,8 +28,12 @@ final class PlayerImportSheet: NSObject {
     static let width = 640.0
     static let detailsHeight = 240.0
 
-    init(session: PlayerImportSession, player: PlayerLibrary.Player) {
+    init(
+        session: PlayerImportSession, player: PlayerLibrary.Player,
+        columns: Result<SwinsianColumns, any Error>?
+    ) {
         self.session = session
+        self.columns = columns
         super.init()
         alert.messageText = "Import from \(player.title)"
         alert.informativeText =
@@ -42,7 +51,9 @@ final class PlayerImportSheet: NSObject {
     func begin(over window: NSWindow) {
         alert.beginSheetModal(for: window) { [weak self] response in
             guard let self else { return }
-            if response == .alertFirstButtonReturn, let plan = session.shown { confirmed(plan) }
+            if response == .alertFirstButtonReturn, let plan = session.shown {
+                confirmed(plan, columnsChosen)
+            }
             closed()
         }
     }
@@ -65,11 +76,11 @@ final class PlayerImportSheet: NSObject {
         scroll.documentView = details
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
-        for view in [
+        var views = [
             countsLabel, NSTextField(labelWithString: "Replace the path prefix:"), fields, scroll,
-        ] {
-            stack.addArrangedSubview(view)
-        }
+        ]
+        if let columns { views.append(columnsRow(columns)) }
+        for view in views { stack.addArrangedSubview(view) }
         stack.orientation = .vertical
         stack.alignment = .leading
         NSLayoutConstraint.activate([
@@ -83,15 +94,44 @@ final class PlayerImportSheet: NSObject {
         alert.accessoryView = stack
     }
 
+    /// Swinsian's columns when they were read.
+    private var readColumns: SwinsianColumns? {
+        if case .success(let columns) = columns { columns } else { nil }
+    }
+
+    /// The columns to apply: read, and Import column layout on.
+    private var columnsChosen: SwinsianColumns? {
+        columnsBox.state == .on ? readColumns : nil
+    }
+
+    /// Import column layout, off at first, with what it would bring across, or why it can't.
+    private func columnsRow(_ columns: Result<SwinsianColumns, any Error>) -> NSView {
+        columnsBox.target = self
+        columnsBox.action = #selector(columnsToggled)
+        let note: String
+        switch columns {
+        case .success(let columns): note = columns.previewLine
+        case .failure(let error):
+            columnsBox.isEnabled = false
+            note = terminalSafe("Swinsian's preferences: \(error)")
+        }
+        let label = NSTextField(labelWithString: note)
+        label.textColor = .secondaryLabelColor
+        return NSStackView(views: [columnsBox, label])
+    }
+
+    @objc private func columnsToggled() { show(session.shown) }
+
     /// Shows `plan`'s counts and details, or none, and sizes the sheet to them, so the wrapped
     /// counts can't be cut off.
     private func show(_ plan: ImportPlan?) {
         if let plan {
             countsLabel.stringValue = plan.previewLines.joined(separator: "\n")
-            let lines = plan.detailLines
+            let lines = plan.detailLines + (readColumns?.detailLines ?? [])
             details.string = lines.isEmpty ? "Every track matched." : lines.joined(separator: "\n")
         }
-        alert.buttons.first?.isEnabled = plan?.changesSomething ?? false
+        alert.buttons.first?.isEnabled =
+            plan.map { $0.changesSomething || columnsChosen != nil } ?? false
         stack.layoutSubtreeIfNeeded()
         stack.setFrameSize(stack.fittingSize)
         alert.layout()
