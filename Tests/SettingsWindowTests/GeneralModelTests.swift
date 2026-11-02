@@ -204,3 +204,11 @@ private func modelWithFolders() -> GeneralModel {
     #expect(stored is NSNull)
     #expect(model.syncFolder("sync.folder") == nil)
 }
+@Test func everySettingSaysWhatItDoesInOneShortSentence() {
+    for setting in AppSettings().settings {
+        let words = setting.summary.split(separator: " ")
+        #expect(words.count <= 12, "\(setting.key): \(setting.summary)")
+        #expect(setting.summary.hasSuffix("."), "\(setting.key)")
+        #expect(!setting.summary.dropLast().contains(". "), "\(setting.key): one sentence")
+    }
+}

@@ -218,7 +218,7 @@ private func problems(_ json: String) -> [SettingProblem] {
 @Test func digitalVolumeIsOffAndSaysItCostsBitPerfectOutput() {
     let setting = AppSettings().digitalVolume
     #expect(setting.defaultValue == false)
-    #expect(setting.summary.contains("no longer bit-perfect"))
+    #expect(setting.summary.contains("ends bit-perfect output"))
 }
 
 @Test func windowLayoutSurvivesAReloadAndRejectsBadValues() throws {
