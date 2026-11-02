@@ -66,6 +66,25 @@ extension LibraryIndex {
         }
     }
 
+    /// Makes a playlist called `name` like the playlist `id`: a manual one's entries in their
+    /// order, entries whose file left the index among them, or a smart one's rules. Throws for
+    /// rules this build can't read, which a copy couldn't show either. Returns the copy's ID.
+    func duplicatePlaylist(_ id: Int64, named name: String) throws -> Int64 {
+        try database.transaction {
+            let playlist = try playlist(id)
+            switch playlist.kind {
+            case .manual:
+                let copy = try createPlaylist(named: name)
+                _ = try appendEntries(copy, try playlistTrackIDs(id))
+                return copy
+            case .smart(let rules):
+                return try createPlaylist(named: name, rules: rules)
+            case .unreadable(let detail):
+                throw LibraryError.unreadableRules(playlist: playlist.name, detail: detail)
+            }
+        }
+    }
+
     /// Replaces a smart playlist's rules, readable or not. Throws for a manual playlist, which
     /// has no rules to replace.
     public func setRules(_ rules: SmartRules, of id: Int64) throws {

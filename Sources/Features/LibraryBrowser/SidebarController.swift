@@ -7,9 +7,13 @@ import Settings
 
 /// The source list: the library, History, the timeline and the health checks, and the playlists.
 /// Tracks dragged from the table onto a manual playlist are added to it; playlist files dropped
-/// anywhere on it are imported. The watched folders are in Settings.
+/// anywhere on it are imported. A playlist's name is edited in its row, after a click on the
+/// selected row's name or Return, and its context menu renames, copies or deletes it. The
+/// watched folders are in Settings.
 @MainActor
-final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate {
+final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate,
+    NSTextFieldDelegate, NSMenuDelegate
+{
     let outline = KeyOutlineView()
     private let library = SidebarNode(.library, title: "Music")
     /// Opens into one row per health check; not a source itself.
@@ -21,10 +25,24 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     var dropTracks: (Int64, [Int64]) -> Void = { _, _ in }
     /// Playlist files, by URL, dropped on the sidebar.
     var dropPlaylistFiles: ([URL]) -> Void = { _ in }
+    /// A new name, already trimmed and different, for the playlist with this ID.
+    var renamePlaylist: (Int64, String) -> Void = { _, _ in }
+    /// The context menu's Duplicate, Delete… and Edit Smart Playlist…, for the row clicked.
+    var duplicatePlaylist: (Playlist) -> Void = { _ in }
+    var deletePlaylist: (Playlist) -> Void = { _ in }
+    var editRules: (Playlist) -> Void = { _ in }
     private let keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
     private var applying = false
     private var typeSelect: TypeSelect?
     private var playlists: [Playlist] = []
+    /// The playlist whose name is being edited in its row, and whether Esc ended the edit.
+    private var renaming: Playlist?
+    private var renameCancelled = false
+    /// The row selected before the latest click, so a click on it can start a rename; nil
+    /// when that click selected it.
+    private var selectedBeforeClick: Int?
+    /// Counts clicks, so a rename waiting out a double-click knows another came.
+    private var clicks = 0
 
     init(
         selectSource: @escaping (BrowserSource?) -> Void,
@@ -60,6 +78,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.dataSource = self
         outline.delegate = self
         outline.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
+        outline.target = self
+        outline.action = #selector(rowClicked)
+        let menu = NSMenu()
+        menu.delegate = self
+        outline.menu = menu
         outline.registerForDraggedTypes([trackIDsType, .fileURL])
         let scroll = NSScrollView()
         scroll.documentView = outline
@@ -135,6 +158,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     /// The outline moves through its own rows, skipping the group headings; every other key
     /// goes through the registry.
     private func takeKey(_ event: NSEvent) -> Bool {
+        // Return edits a playlist's name, as in Finder, rather than playing the selection.
+        if KeyChord(event: event) == KeyChord(.return), case .playlist = selectedNode?.kind {
+            beginRename(row: outline.selectedRow)
+            return true
+        }
         let own: [KeyChord.Key] = [.up, .down, .home, .end, .pageUp, .pageDown]
         if let chord = KeyChord(event: event), own.contains(chord.key),
             chord.modifiers.isSubset(of: .shift)
@@ -300,12 +328,155 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     }
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
+        selectedBeforeClick =
+            NSApp.currentEvent?.type == .leftMouseDown ? nil : outline.selectedRow
         guard !applying else { return }
         switch selectedNode?.kind {
         case .library: selectSource(nil)
         case .group, .health, nil: break
         case .history, .timeline, .playlist, .check: selectSource(selectedNode?.source)
         }
+    }
+}
+
+// MARK: Renaming in place, and the context menu
+
+extension SidebarController {
+    /// Starts editing the name of the playlist at `row` in its row, all of it selected.
+    func beginRename(row: Int) {
+        guard case .playlist(let playlist) = (outline.item(atRow: row) as? SidebarNode)?.kind,
+            let field =
+                (outline.view(atColumn: 0, row: row, makeIfNecessary: true)
+                as? NSTableCellView)?.textField
+        else { return }
+        renaming = playlist
+        renameCancelled = false
+        field.isEditable = true
+        field.delegate = self
+        outline.editColumn(0, row: row, with: nil, select: true)
+    }
+
+    /// Whether a playlist's name is being edited, for tests.
+    var isRenaming: Bool { renaming != nil }
+
+    /// A click on the name of a playlist that was already selected renames it, once the time
+    /// for a double-click has passed with no second click, as Finder does.
+    @objc fileprivate func rowClicked() {
+        clicks += 1
+        let row = outline.clickedRow
+        let wasSelected = row >= 0 && row == selectedBeforeClick
+        selectedBeforeClick = outline.selectedRow
+        guard wasSelected, renaming == nil, NSApp.currentEvent?.clickCount == 1,
+            let event = NSApp.currentEvent, isOnName(event, row: row)
+        else { return }
+        let click = clicks
+        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval) {
+            [weak self] in
+            guard let self, clicks == click, outline.selectedRow == row else { return }
+            beginRename(row: row)
+        }
+    }
+
+    /// Whether `event` is over the name's text in `row`, not the space after it.
+    private func isOnName(_ event: NSEvent, row: Int) -> Bool {
+        guard
+            let field =
+                (outline.view(atColumn: 0, row: row, makeIfNecessary: false)
+                as? NSTableCellView)?.textField
+        else { return false }
+        let point = field.convert(event.locationInWindow, from: nil)
+        let width = field.attributedStringValue.size().width + 4
+        return point.x >= 0 && point.x <= min(width, field.bounds.width)
+            && field.bounds.minY...field.bounds.maxY ~= point.y
+    }
+
+    /// Esc puts the name back; Return ends the edit as the field does by default.
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector)
+        -> Bool
+    {
+        guard selector == #selector(NSResponder.cancelOperation(_:)), renaming != nil else {
+            return false
+        }
+        renameCancelled = true
+        outline.window?.makeFirstResponder(outline)
+        return true
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField, let playlist = renaming else {
+            return
+        }
+        renaming = nil
+        field.isEditable = false
+        let typed = field.stringValue
+        // The row shows the old name until the rename lists the playlists again.
+        field.stringValue = playlist.name
+        if !renameCancelled, let name = PlaylistName.edited(typed, from: playlist.name) {
+            renamePlaylist(playlist.id, name)
+        }
+        // The keys stay in the sidebar, as they were before the edit.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, outline.window?.firstResponder === outline.window else { return }
+            outline.window?.makeFirstResponder(outline)
+        }
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        fill(menu, row: outline.clickedRow)
+    }
+
+    /// The context menu of the playlist at `row`, which needn't be the selected one; empty, so
+    /// none opens, for any other row.
+    func fill(_ menu: NSMenu, row: Int) {
+        menu.removeAllItems()
+        guard case .playlist(let playlist) = (outline.item(atRow: row) as? SidebarNode)?.kind
+        else { return }
+        var items = [
+            NSMenuItem(title: "Rename", action: #selector(renameClicked), keyEquivalent: "")
+        ]
+        // A copy of rules this build can't read couldn't be shown either.
+        let readable = if case .unreadable = playlist.kind { false } else { true }
+        if readable {
+            items.append(
+                NSMenuItem(
+                    title: "Duplicate", action: #selector(duplicateClicked), keyEquivalent: ""))
+        }
+        items.append(
+            NSMenuItem(title: "Delete…", action: #selector(deleteClicked), keyEquivalent: ""))
+        if !playlist.isManual {
+            items.append(.separator())
+            items.append(
+                NSMenuItem(
+                    title: AppCommands.title(of: .editSmartPlaylist),
+                    action: #selector(editRulesClicked), keyEquivalent: ""))
+        }
+        for item in items {
+            item.target = self
+            item.representedObject = playlist
+            menu.addItem(item)
+        }
+    }
+
+    /// The playlist whose row the menu opened on.
+    private func menuPlaylist(_ item: NSMenuItem) -> Playlist? {
+        item.representedObject as? Playlist
+    }
+
+    @objc fileprivate func renameClicked(_ item: NSMenuItem) {
+        guard let id = menuPlaylist(item)?.id, let row = row(for: .playlist(id)) else { return }
+        beginRename(row: row)
+    }
+
+    @objc fileprivate func duplicateClicked(_ item: NSMenuItem) {
+        menuPlaylist(item).map(duplicatePlaylist)
+    }
+
+    @objc fileprivate func deleteClicked(_ item: NSMenuItem) {
+        menuPlaylist(item).map(deletePlaylist)
+    }
+
+    @objc fileprivate func editRulesClicked(_ item: NSMenuItem) {
+        menuPlaylist(item).map(editRules)
     }
 }
 

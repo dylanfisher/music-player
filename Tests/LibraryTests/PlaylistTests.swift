@@ -97,6 +97,32 @@ private func shownPaths(_ index: LibraryIndex, _ source: BrowserSource, by colum
     #expect(try index.playlist(id).kind == .smart(SmartRules(match: .any, rules: [])))
 }
 
+@Test func aDuplicateCopiesTheEntriesInOrderOrTheRules() throws {
+    let (_, index, ids, _) = try scanned()
+    let manual = try index.createPlaylist(named: "Mix")
+    _ = try index.addToPlaylist(manual, trackIDs: [ids[2], ids[0], ids[1]])
+    let copy = try index.duplicatePlaylist(manual, named: "Mix copy")
+    #expect(try index.playlist(copy).name == "Mix copy")
+    #expect(try index.playlistTrackIDs(copy) == [ids[2], ids[0], ids[1]])
+    // The copy is a playlist of its own.
+    try index.removeFromPlaylist(copy, trackIDs: [ids[0]])
+    #expect(try index.playlistTrackIDs(manual) == [ids[2], ids[0], ids[1]])
+
+    let rules = SmartRules(match: .any, rules: [.init(.title, .contains, .text("x"))])
+    let smart = try index.createPlaylist(named: "Smart", rules: rules)
+    let smartCopy = try index.duplicatePlaylist(smart, named: "Smart copy")
+    #expect(try index.playlist(smartCopy).kind == .smart(rules))
+
+    try index.database.prepare("UPDATE playlists SET rules = ? WHERE id = ?").run(
+        #"{"match": "all", "rules": [], "shuffle": true}"#, smart)
+    let count = try index.playlists().count
+    #expect(throws: LibraryError.self) { try index.duplicatePlaylist(smart, named: "x") }
+    #expect(try index.playlists().count == count)
+    #expect(throws: LibraryError.unknownPlaylist(-1)) {
+        try index.duplicatePlaylist(-1, named: "x")
+    }
+}
+
 @Test func statsAndPlaylistsSurviveAnIndexRebuild() throws {
     let (library, index, ids, paths) = try scanned()
     let id = try index.createPlaylist(named: "Mix")

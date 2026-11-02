@@ -34,6 +34,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var stateChanged: (BrowserState) -> Void = { _ in }
     /// Called after each refresh for a library change, so other views can read their rows again.
     public var libraryRefreshed: () -> Void = {}
+    /// The sidebar's context menu: ask before deleting this playlist, and open its rules.
+    public var confirmDeletePlaylist: (Playlist) -> Void = { _ in }
+    public var editRules: (Playlist) -> Void = { _ in }
     /// Called after the user changed plays, ratings or playlists, which go in the sync log.
     public var edited: () -> Void = {}
     /// Runs the command a key press in one of the browser's lists is bound to.
@@ -147,6 +150,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             }
         }
         sidebarController.dropPlaylistFiles = { urls in owner?.importPlaylists(from: urls) }
+        sidebarController.renamePlaylist = { id, name in owner?.renamePlaylist(id, to: name) }
+        sidebarController.duplicatePlaylist = { playlist in owner?.duplicatePlaylist(playlist) }
+        sidebarController.deletePlaylist = { playlist in owner?.confirmDeletePlaylist(playlist) }
+        sidebarController.editRules = { playlist in owner?.editRules(playlist) }
         content = NSViewController()
         health = HealthModel(
             build: { try await reader.healthReport() }, show: { try await reader.showHealth($0) })
@@ -718,6 +725,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     public func renamePlaylist(_ id: Int64, to name: String) {
         edit("couldn't rename the playlist") { try await self.model.renamePlaylist(id, to: name) }
+    }
+
+    /// Copies a playlist and shows the copy.
+    public func duplicatePlaylist(_ playlist: Playlist) {
+        edit("couldn't duplicate the playlist", entriesChange: true) {
+            try await self.model.duplicatePlaylist(playlist)
+        }
     }
 
     public func deletePlaylist(_ id: Int64) {

@@ -31,8 +31,11 @@ extension AppDelegate {
             self?.renameShownPlaylist()
         }
         dispatcher.handle(.deletePlaylist, enabled: shown) { [weak self] in
-            self?.confirmDeletingShownPlaylist()
+            guard let playlist = self?.browser?.shownPlaylist else { return }
+            self?.confirmDeleting(playlist)
         }
+        browser?.confirmDeletePlaylist = { [weak self] playlist in self?.confirmDeleting(playlist) }
+        browser?.editRules = { [weak self] playlist in self?.editRules(of: playlist) }
         dispatcher.handle(.importPlaylist, enabled: hasWindow) { [weak self] in
             self?.chooseFilesToImport()
         }
@@ -42,13 +45,17 @@ extension AppDelegate {
         dispatcher.handle(.importITunes, enabled: hasWindow) { [weak self] in
             self?.chooseLibraryToImport(.iTunes)
         }
-        let exportable = { [weak self] in
+        let readable = { [weak self] in
             guard let playlist = self?.browser?.shownPlaylist else { return false }
             if case .unreadable = playlist.kind { return false }
             return true
         }
-        dispatcher.handle(.exportPlaylist, enabled: exportable) { [weak self] in
+        dispatcher.handle(.exportPlaylist, enabled: readable) { [weak self] in
             self?.chooseExportFile()
+        }
+        dispatcher.handle(.duplicatePlaylist, enabled: readable) { [weak self] in
+            guard let playlist = self?.browser?.shownPlaylist else { return }
+            self?.browser?.duplicatePlaylist(playlist)
         }
         let canAdd = { [weak self] in
             self?.hasSelectedTracks() == true
@@ -82,8 +89,8 @@ extension AppDelegate {
         }
     }
 
-    private func confirmDeletingShownPlaylist() {
-        guard let playlist = browser?.shownPlaylist, let window = window?.window else { return }
+    private func confirmDeleting(_ playlist: Playlist) {
+        guard let window = window?.window else { return }
         let alert = NSAlert()
         alert.messageText = "Delete the playlist “\(playlist.name)”?"
         alert.informativeText =

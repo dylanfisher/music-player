@@ -66,6 +66,10 @@ public actor LibraryReader {
         try index.renamePlaylist(id, to: name)
     }
 
+    public func duplicatePlaylist(_ id: Int64, named name: String) throws -> Int64 {
+        try index.duplicatePlaylist(id, named: name)
+    }
+
     public func setRules(_ rules: SmartRules, of id: Int64) throws {
         try index.setRules(rules, of: id)
     }

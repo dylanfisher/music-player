@@ -233,6 +233,15 @@ public final class BrowserModel {
         try await reloadPlaylists()
     }
 
+    /// Copies `playlist` under the name `PlaylistName.copy` gives, and shows the copy.
+    func duplicatePlaylist(_ playlist: Playlist) async throws {
+        let copy = try await reader.duplicatePlaylist(
+            playlist.id,
+            named: PlaylistName.copy(of: playlist.name, taken: playlists.map(\.name)))
+        try await reloadPlaylists()
+        await setSource(.playlist(copy))
+    }
+
     public func deletePlaylist(_ id: Int64) async throws {
         try await reader.deletePlaylist(id)
         try await reloadPlaylists()

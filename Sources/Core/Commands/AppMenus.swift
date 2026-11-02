@@ -74,7 +74,8 @@ public enum AppMenus {
                 entries: [
                     .command(.newPlaylist), .command(.newPlaylistFromSelection),
                     .command(.newSmartPlaylist), .command(.editSmartPlaylist),
-                    .command(.renamePlaylist), .command(.deletePlaylist), .separator,
+                    .command(.renamePlaylist), .command(.duplicatePlaylist),
+                    .command(.deletePlaylist), .separator,
                     .command(.importPlaylist), .command(.exportPlaylist),
                     .command(.importSwinsian), .command(.importITunes), .separator,
                     .command(.addFolder), .command(.showWatchedFolders), .command(.checkHealth),

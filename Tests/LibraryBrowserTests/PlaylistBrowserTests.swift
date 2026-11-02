@@ -194,3 +194,17 @@ func writableModel(
     #expect(model.trackIDs.isEmpty)
     #expect(model.genres.isEmpty && model.artists.isEmpty && model.albums.isEmpty)
 }
+
+@MainActor @Test func aDuplicateIsShownUnderAFreeNameWithTheSameTracksInOrder() async throws {
+    let (model, _) = try await writableModel()
+    try await model.createPlaylist(
+        named: "Mix", rules: nil, trackIDs: model.ids(ofRows: IndexSet([4, 1, 7])))
+    let original = try #require(model.shownPlaylist)
+    let tracks = model.trackIDs
+    try await model.duplicatePlaylist(original)
+    let copy = try #require(model.shownPlaylist)
+    #expect(copy.name == "Mix copy" && copy.isManual && copy.id != original.id)
+    #expect(model.trackIDs == tracks)
+    try await model.duplicatePlaylist(original)
+    #expect(model.shownPlaylist?.name == "Mix copy 2")
+}
