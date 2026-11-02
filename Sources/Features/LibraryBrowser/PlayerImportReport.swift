@@ -9,7 +9,9 @@ extension ImportPlan {
     var previewLines: [String] {
         var lines = [
             "\(tracks(library.tracks.count)) read: \(number(matched)) in this library,"
-                + " \(number(unmatched.count)) not",
+                + " \(number(unmatched.count + unreadFormat.count)) not"
+                + (unreadFormat.isEmpty
+                    ? "" : ", \(number(unreadFormat.count)) of them in a format not read yet"),
             "Play counts: +\(number(playsAdded)) on \(tracks(tracksGainingPlays))",
         ]
         if library.player == .iTunes {
@@ -72,7 +74,8 @@ extension ImportPlan {
         if ratings > 0 { parts.append(count(ratings, "rating")) }
         if loved > 0 { parts.append("\(number(loved)) loved") }
         parts.append(count(playlists.count, "playlist"))
-        if !unmatched.isEmpty { parts.append("\(number(unmatched.count)) unmatched") }
+        let missed = unmatched.count + unreadFormat.count
+        if missed > 0 { parts.append("\(number(missed)) unmatched") }
         return parts.joined(separator: " · ")
     }
 
@@ -90,6 +93,7 @@ extension ImportPlan {
             }
         }
         list(unmatched, "not in the library")
+        list(unreadFormat, "not in the library, a format this app doesn't read yet")
         list(existingPlaylists, "not made, a playlist has the name")
         list(
             unmappedPlaylists.map { "\($0.name) (\($0.reasons.joined(separator: "; ")))" },

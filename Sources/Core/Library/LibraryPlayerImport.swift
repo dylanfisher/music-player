@@ -15,7 +15,12 @@ extension LibraryIndex {
         var order: [Int64] = []
         for ((track, path), id) in zip(zip(library.tracks, paths), ids) {
             guard let id else {
-                plan.unmatched.append(path)
+                // The scanner skips other extensions, so the index can't hold them anywhere.
+                if audioFileExtensions.contains((path as NSString).pathExtension.lowercased()) {
+                    plan.unmatched.append(path)
+                } else {
+                    plan.unreadFormat.append(path)
+                }
                 continue
             }
             trackByPath[track.path] = id

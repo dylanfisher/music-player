@@ -40,6 +40,7 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
 @Test func theImportReportEscapesNamesAndCapsEachList() throws {
     var plan = emptyPlan()
     plan.unmatched = (1...150).map { "/gone/\($0).flac" }
+    plan.unreadFormat = ["/dsd/1.dsf"]
     plan.existingPlaylists = ["Mix\nfake row"]
     plan.library.playlists = [
         PlayerPlaylist(name: "Odd", kind: .unmapped(["the field “kind” has no match here"]))
@@ -53,6 +54,12 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     let source = "/s/Library.sqlite"
     #expect(lines.filter { $0.hasPrefix("\(source): not in the library: ") }.count == 100)
     #expect(lines.contains("\(source): 50 more not in the library"))
+    #expect(
+        lines.contains(
+            "\(source): not in the library, a format this app doesn't read yet: /dsd/1.dsf"))
+    #expect(
+        plan.previewLines[0]
+            == "0 tracks read: 0 in this library, 151 not, 1 of them in a format not read yet")
     #expect(lines.contains("\(source): not made, a playlist has the name: Mix\\u{A}fake row"))
     #expect(
         lines.contains(

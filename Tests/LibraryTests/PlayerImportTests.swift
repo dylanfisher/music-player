@@ -134,6 +134,16 @@ private func track(
     #expect(plan.matched == 2 && plan.unmatched.isEmpty)
 }
 
+@Test func aMissInAFormatTheScannerSkipsIsListedApart() throws {
+    let (library, index, _) = try scanned()
+    // The owner's Swinsian import missed a DSF file in a watched folder: the scanner never
+    // reads one, so no prefix or folder could match it.
+    let dsf = library.root + "/dsd/01-When It's Sleepy Time Down South.dsf"
+    let gone = library.root + "/gone.flac"
+    let plan = try index.importPlan(player([track(dsf), track(gone)]), prefix: nil)
+    #expect(plan.unmatched == [gone] && plan.unreadFormat == [dsf])
+}
+
 @Test func playlistsComeAcrossInOrderAndExistingNamesAreSkipped() throws {
     let (_, index, rows) = try scanned()
     _ = try index.createPlaylist(named: "Old")
