@@ -1,4 +1,3 @@
-import Fixtures
 import Foundation
 import Metadata
 import Testing
@@ -289,4 +288,75 @@ private func watcher(
     #expect(try await eventually(within: 20) { received.scanned.count == 1 })
     #expect(received.kept.isEmpty)
     #expect(access.directories.contains(library.root))
+}
+
+/// The file system, as a network volume, where reading holds after the first `readsBeforeGate`
+/// files until `open`, so a test can act while a scan is surely under way.
+private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
+    private let system = SystemFileAccess()
+    private let condition = NSCondition()
+    private let readsBeforeGate: Int
+    // Guarded by `condition`.
+    private var reads = 0
+    private var isOpen = false
+
+    init(readsBeforeGate: Int) { self.readsBeforeGate = readsBeforeGate }
+
+    /// Whether a reader is waiting at the gate.
+    var isHeld: Bool { condition.withLock { reads > readsBeforeGate && !isOpen } }
+
+    func open() {
+        condition.withLock {
+            isOpen = true
+            condition.broadcast()
+        }
+    }
+
+    func volumeIsLocal(_ path: String) throws -> Bool? { false }
+
+    func contentsOfDirectory(_ directory: String, keys: [URLResourceKey]) throws -> [URL] {
+        try system.contentsOfDirectory(directory, keys: keys)
+    }
+
+    func readMetadata(at path: String) throws(MetadataError) -> ParsedFile {
+        condition.withLock {
+            reads += 1
+            while reads > readsBeforeGate && !isOpen { condition.wait() }
+        }
+        return try system.readMetadata(at: path)
+    }
+}
+
+@Test func aRunningPollPausesForPlaybackAndFinishesWithoutStartingOver() async throws {
+    let library = try TestLibrary()
+    let access = GatedAccess(readsBeforeGate: 20)
+    let received = LockedEvents()
+    let watcher = LibraryWatcher(
+        scanner: LibraryScanner(
+            databaseURL: library.databaseURL, networkReaders: 4, access: access, batchSize: 1),
+        mounts: FakeMounts(), events: received.append)
+    watcher.start(
+        folders: [WatchedFolder(path: library.root, kind: .network)],
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
+    defer { watcher.stop() }
+    #expect(try await eventually(within: 20) { access.isHeld })
+
+    watcher.playbackChanged(.playing, pausePollingDuringPlayback: true)
+    // The watcher's queue applies the pause before the gate opens.
+    try await Task.sleep(nanoseconds: 500_000_000)
+    access.open()
+    // The files being read when it paused are stored; then nothing more.
+    try await Task.sleep(nanoseconds: 500_000_000)
+    let index = try library.index()
+    let paused = try index.trackCount()
+    try await Task.sleep(nanoseconds: 1_500_000_000)
+    #expect(try index.trackCount() == paused)
+    #expect(paused < library.readableCount)
+    #expect(received.scanned.isEmpty)
+
+    watcher.playbackChanged(.stopped, pausePollingDuringPlayback: true)
+    #expect(try await eventually(within: 30) { received.scanned.count == 1 })
+    #expect(try index.trackCount() == library.readableCount)
+    // One pass read each file once: it went on from where it paused.
+    #expect(received.scanned.first?.1.read == library.manifest.files.count)
 }
