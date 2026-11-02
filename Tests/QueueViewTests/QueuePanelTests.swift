@@ -13,10 +13,12 @@ import Testing
         chords.append($0)
         return .ran
     }
-    func key(_ characters: String, code: UInt16) throws -> NSEvent {
+    func key(
+        _ characters: String, code: UInt16, _ flags: NSEvent.ModifierFlags = []
+    ) throws -> NSEvent {
         try #require(
             NSEvent.keyEvent(
-                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
                 windowNumber: 0, context: nil, characters: characters,
                 charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
     }
@@ -24,4 +26,7 @@ import Testing
     #expect(chords.isEmpty)
     panel.list.keyDown(with: try key(" ", code: 49))
     #expect(chords.map(\.first) == [KeyChord(.space)])
+    // ⌘⌫ is Remove from Queue or Playlist's, which the user can rebind.
+    panel.list.keyDown(with: try key("\u{7F}", code: 51, .command))
+    #expect(chords.map(\.first) == [KeyChord(.space), KeyChord(.delete, .command)])
 }

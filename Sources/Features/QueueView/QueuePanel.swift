@@ -207,9 +207,9 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
     }
 }
 
-/// Takes Delete and forward delete, which a plain NSTableView ignores, before the registry:
-/// Delete is Remove…'s chord in the track table, and here it removes from the queue. Other key
-/// presses go to the registry first, as in the browser's lists.
+/// Takes Delete and forward delete without ⌘, ⌃ or ⌥, which a plain NSTableView ignores, before
+/// the registry: Delete is Remove…'s chord in the track table, and here it removes from the
+/// queue. Other key presses, ⌘⌫ among them, go to the registry first, as in the browser's lists.
 private final class QueueTable: NSTableView {
     var deleteSelection: () -> Void = {}
     var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
@@ -218,7 +218,9 @@ private final class QueueTable: NSTableView {
         let delete = event.charactersIgnoringModifiers?.unicodeScalars.first.map {
             Int($0.value) == NSDeleteCharacter || Int($0.value) == NSDeleteFunctionKey
         }
-        if delete == true { return deleteSelection() }
+        if delete == true, event.modifierFlags.isDisjoint(with: [.command, .control, .option]) {
+            return deleteSelection()
+        }
         let chords = KeyChord.candidates(for: event)
         switch keyCommand(chords) {
         case .ran: return
