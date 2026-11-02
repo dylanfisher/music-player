@@ -12,18 +12,14 @@ let appName = ProcessInfo.processInfo.processName
 /// browser and the queue side by side. It places the features' views and reports layout
 /// changes; it holds no logic of its own.
 @MainActor
-final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
+final class MainWindow: NSObject, NSWindowDelegate {
     /// The window's size before it has a saved frame: inside a 1440 by 900 screen, the 2015
     /// MacBook Pro's, with room for the default columns beside the sidebar and the queue.
     static let defaultSize = NSSize(width: 1280, height: 760)
     let window: NSWindow
-    private let split = NSSplitView()
-    private let browser: LibraryBrowser
-    private let queue: QueuePanel
+    private let split: MainSplit
     private let signalPath: SignalPathPanel
     private let saver: LayoutSaver
-    private var queueWidth: Int
-    private var sidebarWidth: Int
     private var restoring = true
 
     init(
@@ -31,12 +27,11 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
         nowPlaying: NowPlayingBar, signalPath: SignalPathPanel, queue: QueuePanel,
         saver: LayoutSaver
     ) {
-        self.browser = browser
-        self.queue = queue
+        split = MainSplit(
+            sidebar: browser.sidebar, content: browser.content, queue: queue,
+            sidebarWidth: settings.sidebarWidth, queueWidth: settings.queueWidth)
         self.signalPath = signalPath
         self.saver = saver
-        queueWidth = settings.queueWidth
-        sidebarWidth = settings.sidebarWidth
         window = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
@@ -55,25 +50,16 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
         top.setClippingResistancePriority(.required, for: .vertical)
         (nowPlaying.view as? NSStackView)?.setHuggingPriority(.init(1), for: .horizontal)
 
-        split.isVertical = true
-        split.dividerStyle = .thin
-        split.delegate = self
-        split.addArrangedSubview(browser.sidebar.view)
-        split.addArrangedSubview(browser.content.view)
-        split.addArrangedSubview(queue.view)
-        split.setHoldingPriority(.defaultLow, forSubviewAt: 1)
-        split.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 0)
-        split.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 2)
-        queue.view.isHidden = !settings.queueVisible
-        browser.sidebar.view.isHidden = !settings.sidebarVisible
+        split.sidebarWidthChanged = { saver.set(\.sidebarWidth, $0) }
+        split.queueWidthChanged = { saver.set(\.queueWidth, $0) }
 
         let line = NSBox()
         line.boxType = .separator
         signalPath.view.isHidden = !settings.signalPathVisible
-        let stack = NSStackView(views: [banner, top, signalPath.view, line, split])
+        let stack = NSStackView(views: [banner, top, signalPath.view, line, split.view])
         stack.orientation = .vertical
         stack.spacing = 0
-        for view in [banner, top, signalPath.view, line, split] {
+        for view in [banner, top, signalPath.view, line, split.view] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
@@ -87,8 +73,7 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
             window.center()
         }
         window.layoutIfNeeded()
-        split.setPosition(CGFloat(settings.sidebarWidth), ofDividerAt: 0)
-        placeQueueDivider()
+        split.restore(sidebarVisible: settings.sidebarVisible, queueVisible: settings.queueVisible)
         browser.restoreSplit()
         restoring = false
     }
@@ -97,15 +82,12 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
-    var isSidebarVisible: Bool { !browser.sidebar.view.isHidden }
-    var isQueueVisible: Bool { !queue.view.isHidden }
+    var isSidebarVisible: Bool { split.isSidebarVisible }
+    var isQueueVisible: Bool { split.isQueueVisible }
     var isSignalPathVisible: Bool { !signalPath.view.isHidden }
 
     func toggleSidebar() {
-        browser.sidebar.view.isHidden.toggle()
-        split.adjustSubviews()
-        if isSidebarVisible { split.setPosition(CGFloat(sidebarWidth), ofDividerAt: 0) }
-        placeQueueDivider()
+        split.toggleSidebar()
         saver.set(\.sidebarVisible, isSidebarVisible)
     }
 
@@ -114,20 +96,13 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
     }
 
     func toggleQueue() {
-        queue.view.isHidden.toggle()
-        split.adjustSubviews()
-        placeQueueDivider()
-        saver.set(\.queueVisible, !queue.view.isHidden)
+        split.toggleQueue()
+        saver.set(\.queueVisible, isQueueVisible)
     }
 
     func toggleSignalPath() {
         signalPath.view.isHidden.toggle()
         saver.set(\.signalPathVisible, isSignalPathVisible)
-    }
-
-    private func placeQueueDivider() {
-        guard !queue.view.isHidden else { return }
-        split.setPosition(split.bounds.width - CGFloat(queueWidth), ofDividerAt: 1)
     }
 
     // MARK: Saving the layout
@@ -144,52 +119,6 @@ final class MainWindow: NSObject, NSWindowDelegate, NSSplitViewDelegate {
             WindowFrame(
                 x: frame.minX, y: frame.minY, width: frame.width, height: frame.height))
     }
-
-    func splitViewDidResizeSubviews(_ notification: Notification) {
-        guard !restoring, window.isVisible else { return }
-        let sidebar = Int(browser.sidebar.view.frame.width.rounded())
-        if isSidebarVisible, sidebarRange.contains(sidebar), sidebar != sidebarWidth {
-            sidebarWidth = sidebar
-            saver.set(\.sidebarWidth, sidebar)
-        }
-        if !queue.view.isHidden {
-            let width = Int(queue.view.frame.width.rounded())
-            if queueRange.contains(width), width != queueWidth {
-                queueWidth = width
-                saver.set(\.queueWidth, width)
-            }
-        }
-    }
-
-    func splitView(
-        _ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat,
-        ofSubviewAt dividerIndex: Int
-    ) -> CGFloat {
-        max(
-            proposedMinimumPosition,
-            dividerLimits(dividerIndex, width: splitView.bounds.width).lowerBound)
-    }
-
-    func splitView(
-        _ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat,
-        ofSubviewAt dividerIndex: Int
-    ) -> CGFloat {
-        min(
-            proposedMaximumPosition,
-            dividerLimits(dividerIndex, width: splitView.bounds.width).upperBound)
-    }
-}
-
-private let sidebarRange = AppState.sidebarWidthRange
-private let queueRange = AppState.queueWidthRange
-
-/// Where the dividers may go in a split view `width` points wide, so the sidebar (divider 0) and
-/// the queue (divider 1) stay within the widths Settings accepts.
-func dividerLimits(_ divider: Int, width: CGFloat) -> ClosedRange<CGFloat> {
-    if divider == 0 {
-        return CGFloat(sidebarRange.lowerBound)...CGFloat(sidebarRange.upperBound)
-    }
-    return (width - CGFloat(queueRange.upperBound))...(width - CGFloat(queueRange.lowerBound))
 }
 
 /// The saved frame, unless no screen in `screens` (their visible frames) shows any of it, as when

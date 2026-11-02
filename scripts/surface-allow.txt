@@ -2,6 +2,7 @@
 # AppKit calls these: each fulfills an optional requirement of an AppKit delegate protocol on a
 # public type, which the compiler requires to be public.
 LibraryBrowser.control | NSControlTextEditingDelegate
+LibraryBrowser.splitViewDidResizeSubviews | NSSplitViewDelegate
 PaletteController.windowDidResignKey | NSWindowDelegate
 PaletteController.controlTextDidChange | NSControlTextEditingDelegate
 PaletteController.control | NSControlTextEditingDelegate

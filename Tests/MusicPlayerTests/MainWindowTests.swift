@@ -30,9 +30,47 @@ private let tableExtraPoints = 6.0 + 15.0
     #expect(restoredFrame(nil, screens: [screen]) == nil)
 }
 
-@Test func dividersKeepTheSidebarAndQueueInRange() {
-    #expect(dividerLimits(0, width: 1000) == 100...600)
-    // The queue's divider sits between 1000 points and 150 from the right edge.
-    #expect(dividerLimits(1, width: 1200) == 200...1050)
-    #expect(dividerLimits(1, width: 800) == -200...650)
+/// A split of empty views in a window of the default size, as the main window lays it out.
+@MainActor
+private func split(queueVisible: Bool) -> (MainSplit, NSWindow, content: NSView) {
+    let views = (0..<3).map { _ in
+        let controller = NSViewController()
+        controller.view = NSView()
+        return controller
+    }
+    let split = MainSplit(
+        sidebar: views[0], content: views[1], queue: views[2], sidebarWidth: 180,
+        queueWidth: 220)
+    let window = NSWindow(
+        contentRect: NSRect(origin: .zero, size: MainWindow.defaultSize),
+        styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.contentView = split.view
+    window.layoutIfNeeded()
+    split.restore(sidebarVisible: true, queueVisible: queueVisible)
+    return (split, window, views[1].view)
+}
+
+@MainActor @Test func aHiddenQueueLeavesNoDividerAndStaysHiddenAsTheWindowResizes() {
+    let (split, window, content) = split(queueVisible: true)
+    split.toggleQueue()
+    for width in [1000.0, 1400.0] {
+        window.setFrame(NSRect(x: 0, y: 0, width: width, height: 760), display: false)
+        window.layoutIfNeeded()
+        let splitView = split.controller.splitView
+        #expect(!split.isQueueVisible)
+        // The browser reaches the window's edge: no divider is left to drag.
+        split.view.layoutSubtreeIfNeeded()
+        #expect(abs(content.convert(content.bounds, to: nil).maxX - width) < 0.5)
+        #expect(split.controller.splitView(splitView, shouldHideDividerAt: 1))
+    }
+}
+
+@MainActor @Test func theQueueComesBackAtItsWidth() {
+    let (split, window, _) = split(queueVisible: false)
+    #expect(!split.isQueueVisible)
+    split.toggleQueue()
+    window.layoutIfNeeded()
+    let queue = split.controller.splitViewItems[2].viewController.view
+    #expect(split.isQueueVisible)
+    #expect(abs(queue.frame.width - 220) <= 1)
 }

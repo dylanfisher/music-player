@@ -104,17 +104,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         stack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 0)
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        let effect = NSVisualEffectView()
-        effect.material = .sidebar
-        effect.addSubview(stack)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: effect.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
-        ])
-        view = effect
+        // The window's sidebar split item draws the material behind it.
+        view = stack
         outline.reloadData()
         for group in groups { outline.expandItem(group) }
     }
