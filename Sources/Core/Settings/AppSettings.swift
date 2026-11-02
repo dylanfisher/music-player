@@ -42,6 +42,15 @@ public struct AppSettings: SettingsSchema {
         "List album artists in the Artist pane, with the track artist where a track has none and"
             + " compilations without one under Various Artists, and sort by Artist or Album with"
             + " each album's tracks together. Off lists every track artist.")
+    public let receiverEnabled = Setting(
+        "receiver.enabled", title: "Receiver Control", default: false,
+        "Find a Denon receiver on the local network and control its volume, mute, sound mode,"
+            + " input and power. The receiver's IP Control setting must be Always On to reach it"
+            + " in standby. Off, the app sends nothing onto the network.")
+    public let receiverAddress = Setting<ReceiverAddress?>(
+        "receiver.address", title: "Receiver Address", default: nil,
+        "The receiver's IP address, used when the search finds no receiver, and only while it's"
+            + " on the local network of an interface that's up. Null relies on the search alone.")
     public let appearance = Setting(
         "appearance", title: "Appearance", default: Appearance.auto,
         "Light or dark windows. Auto follows the system's setting as it changes.")

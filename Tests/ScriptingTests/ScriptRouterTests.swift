@@ -22,7 +22,11 @@ private final class Recorder {
                 arguments.append(text)
                 if text == "fail" { throw Failure() }
                 return "Playing \(text)"
-            }
+            },
+            .receiverSetVolume: { [unowned self] text in
+                arguments.append(text)
+                return nil
+            },
         ], now: { [unowned self] in clock })
 
     struct Failure: Error, CustomStringConvertible {

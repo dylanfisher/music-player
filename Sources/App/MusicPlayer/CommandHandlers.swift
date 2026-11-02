@@ -16,6 +16,7 @@ extension AppDelegate {
         registerPlaybackCommands(dispatcher)
         registerPlaylistCommands(dispatcher)
         registerTagCommands(dispatcher)
+        registerReceiverCommands(dispatcher)
         dispatcher.handle(.addFolder, enabled: hasWindow) { [weak self] in self?.addFolder() }
         dispatcher.handle(.checkHealth, enabled: hasWindow) { [weak self] in
             self?.browser?.checkHealth()

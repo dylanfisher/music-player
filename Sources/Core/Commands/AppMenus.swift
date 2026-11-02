@@ -1,4 +1,5 @@
 import KeyChord
+import Receiver
 import Settings
 
 /// A standard AppKit item: its action goes up the responder chain by selector name, and its
@@ -137,6 +138,22 @@ public enum AppMenus {
                         showsChords: true),
                     .separator, .command(.volumeUp), .command(.volumeDown), .separator,
                     .setting(settings.hogMode.key), .setting(settings.digitalVolume.key),
+                    .separator,
+                    .submenu(
+                        "Receiver",
+                        [
+                            .setting(settings.receiverEnabled.key), .separator,
+                            .command(.receiverVolumeUp), .command(.receiverVolumeDown),
+                            .command(.receiverSetVolume), .command(.receiverMute), .separator,
+                        ] + ReceiverSoundMode.allCases.map { .command(.receiverSoundMode($0)) }
+                            + [
+                                .separator,
+                                .submenu(
+                                    "Input",
+                                    ReceiverInput.allCases.map { .command(.receiverInput($0)) },
+                                    showsChords: true),
+                                .separator, .command(.receiverPowerOn), .command(.receiverStandby),
+                            ], showsChords: true),
                 ]),
             MenuSection(
                 title: "Window", role: .window,

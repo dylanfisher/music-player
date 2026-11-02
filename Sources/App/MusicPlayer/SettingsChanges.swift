@@ -74,7 +74,7 @@ extension AppDelegate {
     }
 
     /// What follows each changed key: the shortcuts, the appearance, the watched folders and
-    /// how they're scanned, the Artist pane's grouping, and the output.
+    /// how they're scanned, the Artist pane's grouping, receiver control, and the output.
     func settingsChanged(_ keys: Set<String>) {
         guard let settings else { return }
         let schema = settings.schema
@@ -95,6 +95,9 @@ extension AppDelegate {
         if keys.contains(schema.groupByAlbumArtist.key), let browser {
             let on = settings[\.groupByAlbumArtist]
             Task { await browser.setGroupByAlbumArtist(on) }
+        }
+        if !keys.isDisjoint(with: [schema.receiverEnabled.key, schema.receiverAddress.key]) {
+            applyReceiverSetting()
         }
         let output = [schema.outputDeviceUID.key, schema.hogMode.key, schema.digitalVolume.key]
         if !keys.isDisjoint(with: output) {

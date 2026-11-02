@@ -26,7 +26,10 @@ extension AppDelegate {
                 await self?.scriptStatus()
                     ?? ScriptStatus(PlaybackState(), positionSeconds: nil, track: nil)
             },
-            arguments: [.play: { [weak self] text in try await self?.playQuery(text) }])
+            arguments: [
+                .play: { [weak self] text in try await self?.playQuery(text) },
+                .receiverSetVolume: { [weak self] text in try self?.setReceiverVolume(text) },
+            ])
         scriptRouter = router
         do {
             scriptServer = try startScriptServer(

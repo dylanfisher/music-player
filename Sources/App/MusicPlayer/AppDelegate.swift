@@ -12,6 +12,7 @@ import Palette
 import Playback
 import PlaylistEditor
 import QueueView
+import Receiver
 import Scripting
 import Settings
 import SettingsWindow
@@ -87,6 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var dispatcher: CommandDispatcher?
     /// Runs the tool's requests and links, once playback is ready.
     var scriptRouter: ScriptRouter?
+    /// Receiver control, while `receiver.enabled` is on.
+    var receiver: ReceiverControl?
     var scriptServer: LocalSocketServer?
     /// Links that came before the router, run once it's there.
     var waitingLinks: [String] = []
@@ -238,6 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let settings else { return }
         startPlayback(settings)
         startScripting()
+        applyReceiverSetting()
         startWatching(settings[\.watchedFolders], settings)
         shareChanges = ShareChangeObserver { [weak self] in self?.watcher?.sharesMayHaveMoved() }
         if let snapshotURL {
@@ -293,6 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         scriptServer?.stop()
+        receiver?.stop()
         saver?.flush()
         watcher?.stop()
         // Puts the device and the default outputs back the way they were.

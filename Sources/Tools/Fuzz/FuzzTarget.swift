@@ -34,7 +34,7 @@ struct FuzzTarget: Sendable {
         parser(.wav, "RIFF chunks, INFO lists and ID3 chunks"),
         parser(.aiff, "AIFF and AIFF-C chunks and ID3 chunks"),
         vorbis, config, state, journal, rules, playlistFile, syncLog, swinsian, swinsianPredicate,
-        iTunesXML, tagWriter,
+        iTunesXML, tagWriter, receiverLine, deviceDescription, soapReply,
     ]
 
     static func named(_ name: String) -> FuzzTarget? { all.first { $0.name == name } }

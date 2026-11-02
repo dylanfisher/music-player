@@ -1,3 +1,4 @@
+import Receiver
 import Testing
 
 @testable import Commands
@@ -22,7 +23,17 @@ import Testing
         linked == [
             .playPause, .play, .pause, .playSelection, .playNext, .nextTrack, .previousTrack,
             .seekForward, .seekBack, .volumeDown, .stop, .shuffle, .repeatOff,
-            .repeatAll, .repeatOne, .back, .forward, .showCurrentTrack,
+            .repeatAll, .repeatOne, .back, .forward, .showCurrentTrack, .receiverVolumeDown,
         ])
-    #expect(AppCommands.all().filter { $0.argument != nil }.map(\.id) == [.play])
+    #expect(
+        AppCommands.all().filter { $0.argument != nil }.map(\.id) == [.play, .receiverSetVolume])
+}
+
+@Test func everyReceiverInputAndSoundModeIsACommand() {
+    let ids = Set(AppCommands.all().map(\.id))
+    #expect(ids.contains(CommandID("receiver.inputCableSatellite")))
+    #expect(ids.contains(CommandID("receiver.modePureDirect")))
+    #expect(ReceiverInput.allCases.allSatisfy { ids.contains(.receiverInput($0)) })
+    #expect(ReceiverSoundMode.allCases.allSatisfy { ids.contains(.receiverSoundMode($0)) })
+    #expect(AppCommands.title(of: .receiverInput(.bluRay)) == "Switch Receiver to Blu-ray")
 }

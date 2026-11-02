@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds the MusicPlayer executable and wraps it in a signed .app, so it runs with its
-# Info.plist (bundle ID, minimum macOS, the link scheme, and later the usage strings), with the
-# music-player command line beside it in Contents/MacOS. Prints the .app path.
+# Info.plist (Support/Info.plist's keys and usage string, plus the bundle ID, minimum macOS and
+# link scheme added here), with the music-player command line beside it in Contents/MacOS.
+# Prints the .app path.
 #   ./scripts/bundle [debug|release]
 # Release builds are universal, because they get copied to other Macs, including the
 # Intel 2015 MacBook Pro. Debug builds are native only, for speed. A release build also leaves a

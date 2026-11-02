@@ -12,3 +12,5 @@ SettingsWindowController.toolbarAllowedItemIdentifiers | NSToolbarDelegate
 SettingsWindowController.toolbarDefaultItemIdentifiers | NSToolbarDelegate
 SettingsWindowController.toolbarSelectableItemIdentifiers | NSToolbarDelegate
 TagEditorSheet.controlTextDidChange | NSControlTextEditingDelegate
+# Phase 9b's UPnP output is the HTTP server's caller; phase 9a built and tested the server first.
+HTTPServedFile.init | 9b's UPnP output makes one per track it serves

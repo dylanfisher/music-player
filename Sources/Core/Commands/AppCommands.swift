@@ -1,5 +1,6 @@
 import DisplayText
 import KeyChord
+import Receiver
 import Settings
 
 extension CommandID {
@@ -80,6 +81,28 @@ extension CommandID {
     public static let repeatAll = CommandID("playback.repeatAll")
     public static let repeatOne = CommandID("playback.repeatOne")
 
+    // Their last parts differ from the app's own, as the command line names commands by them.
+    public static let receiverVolumeUp = CommandID("receiver.raiseVolume")
+    public static let receiverVolumeDown = CommandID("receiver.lowerVolume")
+    public static let receiverSetVolume = CommandID("receiver.setVolume")
+    public static let receiverMute = CommandID("receiver.mute")
+    public static let receiverPowerOn = CommandID("receiver.powerOn")
+    public static let receiverStandby = CommandID("receiver.standby")
+
+    /// `receiver.modePureDirect`.
+    public static func receiverSoundMode(_ mode: ReceiverSoundMode) -> CommandID {
+        CommandID("receiver.mode" + capitalized("\(mode)"))
+    }
+
+    /// `receiver.inputBluRay`.
+    public static func receiverInput(_ input: ReceiverInput) -> CommandID {
+        CommandID("receiver.input" + capitalized("\(input)"))
+    }
+
+    private static func capitalized(_ name: String) -> String {
+        name.prefix(1).uppercased() + name.dropFirst()
+    }
+
     public static let openConfigFile = CommandID("app.openConfigFile")
     public static let copyDefaultConfig = CommandID("app.copyDefaultConfig")
 }
@@ -96,6 +119,8 @@ public enum AppCommands {
     /// Play's argument: the search field's text, or a pane and an entry's name, as
     /// `PlayQuery` reads it.
     private static let playArgument = "a search, or album:, artist: or genre: and a name"
+    /// Set Receiver Volume's argument, as `ReceiverVolume(decibels:)` reads it.
+    private static let receiverVolumeArgument = "a level in dB from -80 to +18, in half steps"
 
     /// The commands written here, without the ones generated from settings.
     static let fixedSet: [Command] =
@@ -186,11 +211,25 @@ public enum AppCommands {
             Command(.repeatAll, "Repeat All", links: true),
             Command(.repeatOne, "Repeat One", links: true),
 
+            // Only Volume Down from links, as for the app's own volume (ADR 0039).
+            Command(.receiverVolumeUp, "Receiver Volume Up"),
+            Command(.receiverVolumeDown, "Receiver Volume Down", links: true),
+            Command(.receiverSetVolume, "Set Receiver Volume", argument: receiverVolumeArgument),
+            Command(.receiverMute, "Mute Receiver"),
+            Command(.receiverPowerOn, "Turn Receiver On"),
+            Command(.receiverStandby, "Put Receiver in Standby"),
+
             Command(.openConfigFile, "Open Config File"),
             Command(.copyDefaultConfig, "Copy Default Config"),
         ]
         + CommandID.rate.enumerated().map { count, id in
             Command(id, count == 0 ? "Clear Rating" : "Rate \(stars(count))")
+        }
+        + ReceiverSoundMode.allCases.map {
+            Command(.receiverSoundMode($0), "Receiver \($0.title)")
+        }
+        + ReceiverInput.allCases.map {
+            Command(.receiverInput($0), "Switch Receiver to \($0.title)")
         }
 
     /// Every command: those above, then those generated from `settings`.

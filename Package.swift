@@ -38,6 +38,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "LocalNetwork",
+            path: "Sources/Primitives/LocalNetwork",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SQLite",
             path: "Sources/Primitives/SQLite",
             swiftSettings: strictSwift,
@@ -93,14 +98,26 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "UPnP",
+            dependencies: ["DisplayText", "LocalNetwork"],
+            path: "Sources/Core/UPnP",
+            swiftSettings: strictSwift
+        ),
+        .target(
+            name: "Receiver",
+            dependencies: ["LocalNetwork", "Log", "UPnP"],
+            path: "Sources/Core/Receiver",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Settings",
-            dependencies: ["KeyChord", "Log", "Playback"],
+            dependencies: ["KeyChord", "LocalNetwork", "Log", "Playback"],
             path: "Sources/Core/Settings",
             swiftSettings: strictSwift
         ),
         .target(
             name: "Commands",
-            dependencies: ["DisplayText", "KeyChord", "Log", "Settings"],
+            dependencies: ["DisplayText", "KeyChord", "Log", "Receiver", "Settings"],
             path: "Sources/Core/Commands",
             swiftSettings: strictSwift
         ),
@@ -159,10 +176,9 @@ let package = Package(
             name: "MusicPlayer",
             dependencies: [
                 "Artwork", "Commands", "DisplayText", "HALOutput", "KeyChord", "Library",
-                "LibraryBrowser", "LocalSocket", "Log", "Metadata", "NowPlaying", "Playback",
-                "PlaylistEditor",
-                "QueueView", "Palette", "Scripting", "SQLite", "Settings", "SettingsWindow",
-                "TagEditor", "TagWriter",
+                "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
+                "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Scripting",
+                "SQLite", "Settings", "SettingsWindow", "TagEditor", "TagWriter", "UPnP",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
@@ -206,8 +222,8 @@ let package = Package(
         .executableTarget(
             name: "Fuzz",
             dependencies: [
-                "Fixtures", "FuzzCoverage", "Library", "Log", "Metadata", "SQLite", "Settings",
-                "TagWriter",
+                "Fixtures", "FuzzCoverage", "Library", "Log", "Metadata", "Receiver", "SQLite",
+                "Settings", "TagWriter", "UPnP",
             ],
             path: "Sources/Tools/Fuzz",
             swiftSettings: strictSwift
@@ -233,7 +249,7 @@ let package = Package(
         ),
         .testTarget(
             name: "CommandsTests",
-            dependencies: ["Commands", "KeyChord", "Settings"],
+            dependencies: ["Commands", "KeyChord", "Receiver", "Settings"],
             swiftSettings: strictSwift
         ),
         .testTarget(
@@ -296,6 +312,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .testTarget(
+            name: "LocalNetworkTests",
+            dependencies: ["Fixtures", "LocalNetwork"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
             name: "LogTests",
             dependencies: ["Log"],
             swiftSettings: strictSwift
@@ -343,6 +364,11 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .testTarget(
+            name: "UPnPTests",
+            dependencies: ["Fixtures", "LocalNetwork", "UPnP"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
             name: "SettingsTests",
             dependencies: ["Settings"],
             exclude: ["Crashes"],
@@ -371,6 +397,11 @@ let package = Package(
         .testTarget(
             name: "SQLiteTests",
             dependencies: ["SQLite"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "ReceiverTests",
+            dependencies: ["Fixtures", "LocalNetwork", "Receiver", "UPnP"],
             swiftSettings: strictSwift
         ),
         .testTarget(

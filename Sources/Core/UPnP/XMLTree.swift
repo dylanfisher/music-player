@@ -1,0 +1,131 @@
+import Foundation
+
+/// An XML element as a description or a SOAP reply has it: the local name without its
+/// namespace, its own text, and its children.
+struct XMLTree: Equatable {
+    var name: String
+    var text = ""
+    var children: [XMLTree] = []
+
+    /// The first child named `name`.
+    func child(_ name: String) -> XMLTree? { children.first { $0.name == name } }
+
+    /// The text of the first child named `name`, trimmed.
+    func value(_ name: String) -> String? {
+        child(name).map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    /// Most bytes a document may have.
+    static let byteCap = 1024 * 1024
+    /// Deepest nesting, most elements and most text in one element a document may have.
+    static let depthCap = 32
+    static let elementCap = 10_000
+    static let textCap = 256 * 1024
+
+    /// Parses `bytes` with `XMLParser`, external entities off and any DTD refused before the
+    /// parser sees it, so neither an external entity nor an entity expansion runs.
+    static func parse(_ bytes: [UInt8]) throws(XMLProblem) -> XMLTree {
+        guard bytes.count <= byteCap else { throw .tooLarge(bytes: bytes.count) }
+        let upper = bytes.map { $0 >= 0x61 && $0 <= 0x7A ? $0 - 0x20 : $0 }
+        guard upper.firstRange(of: Array("<!DOCTYPE".utf8)) == nil,
+            upper.firstRange(of: Array("<!ENTITY".utf8)) == nil
+        else { throw .declaresEntities }
+        let reader = TreeReader()
+        let parser = XMLParser(data: Data(bytes))
+        parser.shouldResolveExternalEntities = false
+        parser.shouldProcessNamespaces = true
+        parser.delegate = reader
+        let parsed = parser.parse()
+        if let problem = reader.problem { throw problem }
+        guard parsed, let root = reader.root else {
+            throw .malformed(parser.parserError.map { "\($0.localizedDescription)" } ?? "no root")
+        }
+        return root
+    }
+
+}
+
+/// Why a document wasn't read.
+enum XMLProblem: Error, Equatable, CustomStringConvertible {
+    case tooLarge(bytes: Int)
+    /// A DTD or an entity declaration, which no UPnP document has.
+    case declaresEntities
+    case tooDeep
+    case tooManyElements
+    case tooMuchText
+    case malformed(String)
+
+    var description: String {
+        switch self {
+        case .tooLarge(let bytes): "\(bytes) bytes is over the \(XMLTree.byteCap)-byte cap"
+        case .declaresEntities: "it declares a DTD or entities"
+        case .tooDeep: "it nests deeper than \(XMLTree.depthCap)"
+        case .tooManyElements: "it has over \(XMLTree.elementCap) elements"
+        case .tooMuchText: "an element has over \(XMLTree.textCap) bytes of text"
+        case .malformed(let why): "it isn't well-formed XML: \(why)"
+        }
+    }
+}
+
+/// Builds the tree as the parser reports it, and stops it at the first cap.
+private final class TreeReader: NSObject, XMLParserDelegate {
+    var root: XMLTree?
+    var problem: XMLProblem?
+    private var open: [XMLTree] = []
+    private var count = 0
+
+    private func stop(_ parser: XMLParser, _ reason: XMLProblem) {
+        problem = problem ?? reason
+        parser.abortParsing()
+    }
+
+    func parser(
+        _ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
+        qualifiedName: String?, attributes: [String: String] = [:]
+    ) {
+        count += 1
+        guard count <= XMLTree.elementCap else { return stop(parser, .tooManyElements) }
+        guard open.count < XMLTree.depthCap else { return stop(parser, .tooDeep) }
+        open.append(XMLTree(name: name))
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        guard !open.isEmpty else { return }
+        guard open[open.count - 1].text.utf8.count + string.utf8.count <= XMLTree.textCap else {
+            return stop(parser, .tooMuchText)
+        }
+        open[open.count - 1].text += string
+    }
+
+    func parser(
+        _ parser: XMLParser, didEndElement name: String, namespaceURI: String?,
+        qualifiedName: String?
+    ) {
+        guard let done = open.popLast() else { return }
+        if open.isEmpty {
+            root = done
+        } else {
+            open[open.count - 1].children.append(done)
+        }
+    }
+
+    func parser(
+        _ parser: XMLParser, foundExternalEntityDeclarationWithName name: String,
+        publicID: String?, systemID: String?
+    ) {
+        stop(parser, .declaresEntities)
+    }
+
+    func parser(
+        _ parser: XMLParser, foundInternalEntityDeclarationWithName name: String, value: String?
+    ) {
+        stop(parser, .declaresEntities)
+    }
+
+    func parser(
+        _ parser: XMLParser, resolveExternalEntityName name: String, systemID: String?
+    ) -> Data? {
+        stop(parser, .declaresEntities)
+        return nil
+    }
+}
