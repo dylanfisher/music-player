@@ -102,6 +102,7 @@ run format    swift format lint --strict --recursive --parallel Package.swift So
 # Strict concurrency and warnings-as-errors are set in Package.swift, so a clean build is the typecheck.
 run typecheck swift build --build-tests
 run arch      swift scripts/arch.swift
+run arch-test ./scripts/arch-test
 # Each fact once and no third copy of a block (ADR 0024); the test plants one of each.
 run dupes     swift scripts/dupes.swift
 run dupes-test ./scripts/dupes-test

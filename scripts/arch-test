@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Runs the URL rule of scripts/arch.swift on two fixture trees under .build/arch-test: one it must
+# pass, and one with each way of calling fileURLWithPath without isDirectory: that it must fail at
+# the exact file:line.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+base=.build/arch-test
+rm -rf "$base"
+mkdir -p "$base/good" "$base/bad"
+problems=0
+
+cat > "$base/good/Good.swift" <<'SWIFT'
+let a = URL(fileURLWithPath: "/a", isDirectory: true)
+let b = URL(
+    fileURLWithPath: String("/b".dropLast(0)) + "x", isDirectory: false)
+SWIFT
+
+cat > "$base/bad/Bad.swift" <<'SWIFT'
+let a = URL(fileURLWithPath: "/a")
+let b = ["/b"].map(URL.init(fileURLWithPath:))
+let c = URL(
+    fileURLWithPath: "/c")
+SWIFT
+
+if ! out=$(swift scripts/arch.swift --urls-only "$base/good" 2>&1); then
+  printf 'arch-test: the good tree failed:\n%s\n' "$out" >&2
+  problems=$((problems + 1))
+fi
+out=$(swift scripts/arch.swift --urls-only "$base/bad" 2>&1)
+status=$?
+[ "$status" = 1 ] || { printf 'arch-test: the bad tree exited %s, expected 1\n' "$status" >&2; problems=$((problems + 1)); }
+for line in 1 2 4; do
+  printf '%s\n' "$out" | grep -q "Bad.swift:$line: " ||
+    { printf 'arch-test: no finding at Bad.swift:%s in:\n%s\n' "$line" "$out" >&2; problems=$((problems + 1)); }
+done
+
+[ "$problems" = 0 ] && echo "arch rule catches each planted call"
+exit "$problems"

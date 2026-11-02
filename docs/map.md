@@ -72,6 +72,10 @@ on any other ([ADR 0030](decisions/0030-public-surface-check.md)).
 compiler already rejects any import a target hasn't declared, so checking the declared
 dependencies covers every import. Its tier map has to match the table above.
 
+It also fails a `fileURLWithPath:` call without `isDirectory:`, which makes Foundation stat the
+path. Track paths take `false`, folders `true`. Nothing on the main actor touches the file system
+for a track path; that work goes through a detached task or the index.
+
 ## Naming
 
 - One thing per file; the filename is the thing's name.
