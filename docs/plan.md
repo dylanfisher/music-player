@@ -1356,9 +1356,15 @@ Implementation plan:
 6. **Budgets.** `./scripts/bench` three times; any budget beaten by more than 3x is tightened.
 7. **Checkpoint** for the 2015 MacBook Pro, below.
 
-- [ ] **Hardware checkpoint (owner):** on the 2015 MacBook Pro, after pushing, run every budget
+- [x] **Hardware checkpoint (owner):** on the 2015 MacBook Pro, after pushing, run every budget
       on the old Mac and send back the file it writes:
       `cd ~/projects/music-player && git pull --ff-only && ./scripts/bench 2>&1 | tee ~/Desktop/bench-14e-old-mac.txt`
+
+      Done on 2026-11-01 from a universal release build copied to the 2015 MacBook Pro (its
+      Xcode 14 can't build Swift 6): every old-Mac budget passes. Launch 1.01 s, search keystroke
+      18 ms, sort 73 ms, full scan 7.2 s, no-change rescan 1.7 s, scroll memory 79 MB, playback
+      2.3% with no gaps or underruns, idle 0.02% and 0.18 wakeups a second once the bench waited
+      for the launch rescan (a fixed 20 s settle had measured 4%).
 
 Result: shipped up to the owner's checkpoint, which is pending. Playback CPU 2.00, 2.10 and
 1.99% of 3% (70% at worst; the gate's own runs 2.04 to 2.13%), from an 8 s ring whose longer
