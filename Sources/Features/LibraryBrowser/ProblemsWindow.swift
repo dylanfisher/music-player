@@ -19,6 +19,8 @@ final class ProblemsWindow {
         window.title = "Library Problems"
         window.contentView = scroll
         window.isReleasedWhenClosed = false
+        // A panel hides with the app by default; the list stays up while the owner checks Finder.
+        window.hidesOnDeactivate = false
         window.center()
     }
 
