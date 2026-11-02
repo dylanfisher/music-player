@@ -44,19 +44,6 @@ private func row(of playlist: Playlist, in sidebar: SidebarController) throws ->
         })
 }
 
-/// Waits up to 10 seconds for `condition`, then records what it saw.
-@MainActor
-private func waitFor(_ what: String, _ condition: () async throws -> Bool) async throws {
-    let deadline = Date().addingTimeInterval(10)
-    while try await !condition() {
-        guard Date() < deadline else {
-            Issue.record("timed out waiting for \(what)")
-            return
-        }
-        try await Task.sleep(nanoseconds: 10_000_000)
-    }
-}
-
 @Test func aCopyIsNamedAsFinderNamesOneAndARenameMustChangeTheName() {
     #expect(PlaylistName.copy(of: "Mix", taken: ["Mix"]) == "Mix copy")
     #expect(PlaylistName.copy(of: "Mix", taken: ["Mix", "mix COPY", "Mix copy 2"]) == "Mix copy 3")

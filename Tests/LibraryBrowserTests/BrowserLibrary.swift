@@ -1,5 +1,6 @@
 import Foundation
 import Settings
+import Testing
 
 @testable import Fixtures
 @testable import Library
@@ -32,4 +33,17 @@ func writableBrowserDatabase() throws -> URL {
             atPath: source.path + suffix, toPath: databaseURL.path + suffix)
     }
     return databaseURL
+}
+
+/// Waits up to 10 seconds for `condition`, then records what it saw.
+@MainActor
+func waitFor(_ what: String, _ condition: () async throws -> Bool) async throws {
+    let deadline = Date().addingTimeInterval(10)
+    while try await !condition() {
+        guard Date() < deadline else {
+            Issue.record("timed out waiting for \(what)")
+            return
+        }
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
 }
