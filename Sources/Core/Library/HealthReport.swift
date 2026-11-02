@@ -59,6 +59,7 @@ extension HealthCheck {
         case .noAlbum: "No Album"
         case .noAlbumArtist: "No Album Artist"
         case .lostStats: "Lost Stats"
+        case .removed: "Removed"
         }
     }
 
@@ -78,6 +79,7 @@ extension HealthCheck {
         case .noAlbumArtist: "Tracks with no album artist"
         case .lostStats:
             "Plays, ratings and playlist entries of files that left, and the tracks they may have moved to"
+        case .removed: "Tracks removed from the library, which scans skip until they're restored"
         }
     }
 }
@@ -196,6 +198,8 @@ extension LibraryIndex {
                 trackIDs: try ids("SELECT file_id FROM tracks WHERE album_artist_id IS NULL"))
         case .lostStats:
             return try lostStatsFindings()
+        case .removed:
+            return HealthFindings(others: try removedPaths().map { terminalSafe($0.path) })
         }
     }
 

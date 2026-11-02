@@ -26,6 +26,9 @@ enum SchemaPart: String, CaseIterable {
     /// Which watched folders' last whole scan finished (ADR 0040). Rebuilt with the index,
     /// whose files it vouches for.
     case scans
+    /// The paths the user removed from the library, which scans skip (ADR 0048). Keyed by path
+    /// ID, and a part of its own for the same reason as `loved`.
+    case removed
 
     var sql: String {
         switch self {
@@ -36,6 +39,7 @@ enum SchemaPart: String, CaseIterable {
         case .imports: importsSchema
         case .sync: syncSchema
         case .scans: scansSchema
+        case .removed: removedSchema
         }
     }
 
@@ -49,6 +53,7 @@ enum SchemaPart: String, CaseIterable {
         case .imports: [importedPlaysTable]
         case .sync: syncTables
         case .scans: [scannedFoldersTable]
+        case .removed: [removedTable]
         }
     }
 }
@@ -68,6 +73,7 @@ let statsTables: Set<String> = [
 let lovedTable = "loved"
 let dislikedTable = "disliked"
 let scannedFoldersTable = "scanned_folders"
+let removedTable = "removed"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let syncStateTable = "sync_state"
@@ -260,6 +266,13 @@ private let scansSchema = """
     -- A whole scan deletes its folder's row as it starts, so one cut short leaves none.
     CREATE TABLE \(scannedFoldersTable) (
         root TEXT PRIMARY KEY
+    );
+    """
+
+private let removedSchema = """
+    -- A row for each path removed from the library; its file isn't indexed until it's restored.
+    CREATE TABLE \(removedTable) (
+        path_id INTEGER PRIMARY KEY REFERENCES paths (id)
     );
     """
 

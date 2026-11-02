@@ -74,7 +74,7 @@ extension LibraryIndex {
     /// Takes the lost paths `ids` out of Lost Stats, until their files are read again.
     public func dismissLost(_ ids: [Int64]) throws {
         try database.transaction {
-            let dismiss = try statement("UPDATE paths SET lost_dismissed = 1 WHERE id = ?")
+            let dismiss = try statement(dismissLostSQL)
             for id in ids { try dismiss.run(id) }
         }
     }
@@ -83,6 +83,7 @@ extension LibraryIndex {
     /// count of no plays leaves. Call inside a transaction.
     func deletePath(_ id: Int64) throws {
         try statement("DELETE FROM \(importedPlaysTable) WHERE path_id = ?").run(id)
+        try statement(restoreRemovedSQL).run(id)
         // The ID can be handed out again, which mustn't inherit a cleared rating's clock.
         for field in [SyncField.rating, .loved] { try deleteStamp(field, id) }
         try statement("DELETE FROM paths WHERE id = ?").run(id)
@@ -135,13 +136,18 @@ extension LibraryIndex {
     }
 }
 
+/// Takes a lost path out of Lost Stats until its file is read again.
+let dismissLostSQL = "UPDATE paths SET lost_dismissed = 1 WHERE id = ?"
+
 /// How many of a lost path's matching tracks Resolve Lost Stats offers.
 let lostCandidatesListed = 50
 
-/// A path with stats that a file once had, which has left the index and wasn't dismissed.
+/// A path with stats that a file once had, which has left the index and wasn't dismissed or
+/// removed from the library.
 private let lostCondition = """
     p.codec IS NOT NULL AND p.lost_dismissed = 0
         AND NOT EXISTS (SELECT 1 FROM files WHERE id = p.id) AND \(hasStats("p.id"))
+        AND NOT EXISTS (SELECT 1 FROM \(removedTable) WHERE path_id = p.id)
     """
 
 /// Whether the path `id` has what a move keeps: plays, logged plays, a rating, an opinion or a

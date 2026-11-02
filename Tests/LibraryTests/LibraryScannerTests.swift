@@ -184,7 +184,7 @@ private struct FailingReads: ScanFileAccess {
     let index = try library.index()
     let pipeline = ScanPipeline(
         [library.root], root: library.root, filter: FolderFilter(include: [], exclude: []),
-        known: [:], index: index, controller: nil, readers: 2, access: FailingReads(),
+        known: [:], removed: [], index: index, controller: nil, readers: 2, access: FailingReads(),
         control: ScanControl(), counter: ProgressCounter(nil),
         batchSize: LibraryScanner.defaultBatchSize, rootIsThere: { false })
     let outcome = try pipeline.run()
@@ -420,7 +420,8 @@ private struct FailingReads: ScanFileAccess {
     try index.database.execute("PRAGMA max_page_count = \(pages)")
     let pipeline = ScanPipeline(
         [library.root], root: library.root, filter: FolderFilter(include: [], exclude: []),
-        known: try index.knownFiles(under: library.root), index: index, controller: nil,
+        known: try index.knownFiles(under: library.root), removed: [], index: index,
+        controller: nil,
         readers: 2, access: SystemFileAccess(), control: ScanControl(),
         counter: ProgressCounter(nil), batchSize: LibraryScanner.defaultBatchSize,
         rootIsThere: { true })

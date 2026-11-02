@@ -99,7 +99,8 @@ public struct LibraryScanner: Sendable {
         }
         let pipeline = ScanPipeline(
             starts.filter { startIsIncluded($0, root: root, filter: filter) }, root: root,
-            filter: filter, known: known, index: index, controller: controller,
+            filter: filter, known: known, removed: try index.removedPathSet(), index: index,
+            controller: controller,
             readers: readers,
             access: access, control: control, counter: ProgressCounter(progress),
             batchSize: batchSize,

@@ -53,6 +53,8 @@ final class ScanPipeline: @unchecked Sendable {
     private let root: String
     private let filter: FolderFilter
     private let known: [String: KnownFile]
+    /// The paths removed from the library, in NFC, which the walk passes over.
+    private let removed: Set<String>
     private let access: any ScanFileAccess
     private let control: ScanControl
     private let counter: ProgressCounter
@@ -113,7 +115,8 @@ final class ScanPipeline: @unchecked Sendable {
     /// with `readers`, and `controller`, if any, changes that as it measures.
     init(
         _ starts: [String], root: String, filter: FolderFilter, known: [String: KnownFile],
-        index: LibraryIndex, controller: ReadConcurrency?, readers: Int, access: any ScanFileAccess,
+        removed: Set<String>, index: LibraryIndex, controller: ReadConcurrency?, readers: Int,
+        access: any ScanFileAccess,
         control: ScanControl,
         counter: ProgressCounter, batchSize: Int, rootIsThere: @escaping @Sendable () -> Bool
     ) {
@@ -122,6 +125,7 @@ final class ScanPipeline: @unchecked Sendable {
         self.root = root
         self.filter = filter
         self.known = known
+        self.removed = removed
         self.index = index
         self.access = access
         self.control = control
@@ -194,6 +198,11 @@ final class ScanPipeline: @unchecked Sendable {
             directories += listed.directories.reversed()
             found += listed.files.count
             for file in listed.files {
+                if !removed.isEmpty,
+                    removed.contains(file.path.precomposedStringWithCanonicalMapping)
+                {
+                    continue
+                }
                 outcome.seen.insert(file.path)
                 if isChanged(file) {
                     queued.append(file)
