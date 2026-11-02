@@ -74,3 +74,18 @@ private func request(_ offset: Int) -> ArtRequest {
         #expect(TrackTableLayout.widthRange.contains(column.defaultWidth), "\(column)")
     }
 }
+
+@Test func fullWidthArtSpansItsAlbumsFirstRowsOnly() {
+    // Rows 0 to 5 are album 1, 6 has no album, 7 and 8 are album 2.
+    let albums: [Int64?] = [1, 1, 1, 1, 1, 1, nil, 2, 2]
+    let starts = albums.indices.map { row in
+        ArtRun.start(of: row, rowsTall: 3) { albums[$0] }
+    }
+    #expect(starts == [0, 0, 0, nil, nil, nil, 6, 7, 7])
+    var looked: Set<Int> = []
+    _ = ArtRun.start(of: 5, rowsTall: 3) { row in
+        looked.insert(row)
+        return albums[row]
+    }
+    #expect(looked == [2, 3, 4, 5])
+}

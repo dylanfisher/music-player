@@ -23,7 +23,10 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// A row fetch failed; reported once until the next reload.
     private var reportedFetchFailure = false
     private var typeSelect: TypeSelect? = TypeSelect()
-    private let art = RowArt()
+    /// How the Album Art column draws, and the loader for that size, replaced when either
+    /// changes.
+    private var artSize = ArtSize.thumbnail
+    private var art: RowArt
     /// The file of the track playing, whose row is marked wherever the table shows it.
     var playingPath: String? {
         didSet {
@@ -38,12 +41,23 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         self.model = model
         self.cache = cache
         self.actions = actions
+        art = RowArt(artSize, rowHeight: Self.rowHeight)
         super.init(play: actions.play, playNext: actions.playNext)
         configure(layout)
-        art.isWanted = { [weak self] key in
-            self?.visibleRows().contains { self?.artKey($0) == key } ?? false
+        follow(art)
+    }
+
+    /// Points `art` at the rows on screen. A replaced loader wants nothing more and shows
+    /// nothing it was still loading.
+    private func follow(_ art: RowArt) {
+        art.isWanted = { [weak self, weak art] key in
+            guard let self, art === self.art else { return false }
+            return visibleRows().contains { self.artKey($0) == key }
         }
-        art.loaded = { [weak self] key, image in self?.show(image, for: key) }
+        art.loaded = { [weak self, weak art] key, image in
+            guard let self, art === self.art else { return }
+            show(image, for: key)
+        }
     }
 
     private func configure(_ layout: TrackTableLayout) {
@@ -83,14 +97,21 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         showSort()
     }
 
-    /// Draws the lines and rows as the appearance settings say.
+    /// Draws the lines, rows and art as the appearance settings say.
     func apply(_ appearance: TableAppearance) {
         var lines: NSTableView.GridLineStyle = []
         if appearance.columnLines { lines.insert(.solidVerticalGridLineMask) }
         if appearance.rowLines { lines.insert(.solidHorizontalGridLineMask) }
         table.gridStyleMask = lines
         table.usesAlternatingRowBackgroundColors = appearance.alternatingRows
-        table.rowHeight = appearance.rowHeight.points
+        let rowHeight = appearance.rowHeight.points
+        guard appearance.artSize != artSize || rowHeight != table.rowHeight else { return }
+        table.rowHeight = rowHeight
+        artSize = appearance.artSize
+        art = RowArt(artSize, rowHeight: rowHeight)
+        follow(art)
+        // The art column's cells change kind, and their images size.
+        table.reloadData()
     }
 
     // MARK: Model to view
@@ -168,16 +189,21 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         guard let tableColumn, let column = TrackColumn(rawValue: tableColumn.identifier.rawValue)
         else { return nil }
         if column == .art {
-            let cell =
-                tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
-                as? NSTableCellView ?? makeImageCell(tableColumn.identifier)
-            cell.imageView?.image = trackRow(row).flatMap { track in
-                track.art.flatMap { art.image($0, path: track.path) }.map {
-                    NSImage(cgImage: $0, size: .zero)
-                }
-            }
             rowsDrawn()
-            return cell
+            switch artSize {
+            case .thumbnail:
+                let cell =
+                    tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
+                    as? NSTableCellView ?? makeImageCell(tableColumn.identifier)
+                cell.imageView?.image = image(ofArtIn: row)
+                return cell
+            case .fullWidth:
+                let cell =
+                    tableView.makeView(withIdentifier: fullWidthArtIdentifier, owner: nil)
+                    as? AlbumArtCell ?? makeFullWidthCell()
+                fill(cell, row: row)
+                return cell
+            }
         }
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
@@ -195,18 +221,69 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         return rows.location..<min(rows.location + rows.length, model.trackIDs.count)
     }
 
+    /// The row whose art `row` shows: its own, or at full width its album's first row's; nil
+    /// for a row below its album's art.
+    func artRow(_ row: Int) -> Int? {
+        switch artSize {
+        case .thumbnail: return row
+        case .fullWidth:
+            guard let column = table.tableColumn(withIdentifier: columnIdentifier(.art)) else {
+                return nil
+            }
+            let side = AlbumArtCell.side(width: column.width)
+            let pitch = table.rowHeight + table.intercellSpacing.height
+            let rowsTall = Int(((AlbumArtCell.inset + side) / pitch).rounded(.up))
+            return ArtRun.start(of: row, rowsTall: max(1, rowsTall)) { trackRow($0)?.albumID }
+        }
+    }
+
     private func artKey(_ row: Int) -> ArtworkKey? {
-        guard let track = trackRow(row), let embedded = track.art else { return nil }
+        guard let shown = artRow(row), let track = trackRow(shown), let embedded = track.art
+        else { return nil }
         return ArtworkKey(path: track.path, offset: embedded.offset)
     }
 
-    /// Puts a loaded thumbnail in each row on screen that shows its art.
+    /// The cached image of `row`'s own art, or nil after asking for it to be loaded.
+    private func image(ofArtIn row: Int) -> NSImage? {
+        trackRow(row).flatMap { track in
+            track.art.flatMap { art.image($0, path: track.path) }.map {
+                NSImage(cgImage: $0, size: .zero)
+            }
+        }
+    }
+
+    /// Sets a full-width cell to its part of its album's art.
+    private func fill(_ cell: AlbumArtCell, row: Int) {
+        cell.rowPitch = table.rowHeight + table.intercellSpacing.height
+        guard let start = artRow(row) else {
+            cell.art = nil
+            return
+        }
+        cell.rowsDown = row - start
+        cell.art = image(ofArtIn: start)
+    }
+
+    /// Puts a loaded image in each row on screen that shows its art.
     private func show(_ image: CGImage, for key: ArtworkKey) {
         let column = table.column(withIdentifier: columnIdentifier(.art))
         guard column >= 0 else { return }
         for row in visibleRows() where artKey(row) == key {
-            let cell = table.view(atColumn: column, row: row, makeIfNecessary: false)
-            (cell as? NSTableCellView)?.imageView?.image = NSImage(cgImage: image, size: .zero)
+            let image = NSImage(cgImage: image, size: .zero)
+            switch table.view(atColumn: column, row: row, makeIfNecessary: false) {
+            case let cell as AlbumArtCell: cell.art = image
+            case let cell as NSTableCellView: cell.imageView?.image = image
+            default: break
+            }
+        }
+    }
+
+    /// Fits each full-width cell to the art column's new width, which moves where an album's
+    /// art ends.
+    private func refitArt() {
+        let column = table.column(withIdentifier: columnIdentifier(.art))
+        guard column >= 0 else { return }
+        table.enumerateAvailableRowViews { rowView, row in
+            (rowView.view(atColumn: column) as? AlbumArtCell).map { fill($0, row: row) }
         }
     }
 
@@ -261,7 +338,11 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     func tableViewColumnDidMove(_ notification: Notification) { actions.layoutChanged(layout) }
 
-    func tableViewColumnDidResize(_ notification: Notification) { actions.layoutChanged(layout) }
+    func tableViewColumnDidResize(_ notification: Notification) {
+        actions.layoutChanged(layout)
+        let resized = notification.userInfo?["NSTableColumn"] as? NSTableColumn
+        if artSize == .fullWidth, resized?.identifier == columnIdentifier(.art) { refitArt() }
+    }
 
     /// The visible columns as they stand, and the model's sort.
     var layout: TrackTableLayout {
@@ -362,6 +443,18 @@ func typeSelectText(_ name: TrackName, sortedBy column: TrackColumn) -> String {
 
 private func columnIdentifier(_ column: TrackColumn) -> NSUserInterfaceItemIdentifier {
     NSUserInterfaceItemIdentifier(column.rawValue)
+}
+
+/// The full-width art cells' identifier, apart from the thumbnails' so neither is reused as the
+/// other.
+private let fullWidthArtIdentifier = NSUserInterfaceItemIdentifier(
+    TrackColumn.art.rawValue + "." + ArtSize.fullWidth.rawValue)
+
+@MainActor
+private func makeFullWidthCell() -> AlbumArtCell {
+    let cell = AlbumArtCell()
+    cell.identifier = fullWidthArtIdentifier
+    return cell
 }
 
 /// A cell of one image, scaled down to fit the row.

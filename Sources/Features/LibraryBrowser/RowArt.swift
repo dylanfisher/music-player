@@ -2,6 +2,7 @@ import Artwork
 import CoreGraphics
 import Log
 import Metadata
+import Settings
 
 private let logger = moduleLogger()
 
@@ -32,27 +33,42 @@ struct ArtRequests {
     }
 }
 
-/// Loads the Album Art column's thumbnails one at a time off the main thread, through an
-/// `ArtworkLoader` whose thumbnails are the rows' size, and hands each to `loaded` on the main
-/// thread. Art that fails to load is logged once and not asked for again.
+/// Loads the Album Art column's images one at a time off the main thread, through an
+/// `ArtworkLoader` whose images are the size the column draws, and hands each to `loaded` on the
+/// main thread. Art that fails to load is logged once and not asked for again.
 @MainActor
 final class RowArt {
-    /// Retina pixels for the table's 18-point rows.
-    static let pixels = 36
-    /// Thumbnails kept: several screens of rows, at about 5 KB each.
-    static let cachedImages = 300
+    /// Thumbnails kept: several screens of rows, at about 5 KB each at the regular row height.
+    static let cachedThumbnails = 300
+    /// Retina pixels for full-width art: sharp in a column up to 256 points wide.
+    static let fullWidthPixels = 512
+    /// Full-width images kept, at about 1 MB each: one per album on a few screens.
+    static let cachedFullWidth = 40
     /// Failed art remembered, so a broken file isn't read on every redraw, and the most of them
     /// logged.
     static let rememberedFailures = 1000
     static let loggedFailures = 100
 
-    let loader = ArtworkLoader(maxPixelSize: pixels, capacity: cachedImages)
+    let loader: ArtworkLoader
     private var requests = ArtRequests()
     private var loading = false
     private var failed: Set<ArtworkKey> = []
     /// Whether a row on screen still shows the art `key` names.
     var isWanted: (ArtworkKey) -> Bool = { _ in false }
     var loaded: (ArtworkKey, CGImage) -> Void = { _, _ in }
+
+    /// Thumbnails at retina pixels for `rowHeight`-point rows, or full-width art.
+    init(_ size: ArtSize, rowHeight: CGFloat) {
+        loader =
+            switch size {
+            case .thumbnail:
+                ArtworkLoader(
+                    maxPixelSize: Int((rowHeight * 2).rounded(.up)),
+                    capacity: Self.cachedThumbnails)
+            case .fullWidth:
+                ArtworkLoader(maxPixelSize: Self.fullWidthPixels, capacity: Self.cachedFullWidth)
+            }
+    }
 
     /// The cached thumbnail, or nil after asking for it to be loaded.
     func image(_ art: EmbeddedArt, path: String) -> CGImage? {

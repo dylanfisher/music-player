@@ -229,3 +229,52 @@ import Testing
     #expect(controller.table.gridStyleMask == .solidVerticalGridLineMask)
     #expect(controller.table.rowHeight > RowListController.rowHeight)
 }
+
+@MainActor @Test func fullWidthArtDrawsEachAlbumOnceFromItsFirstRow() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .album, ascending: true,
+        groupByAlbumArtist: false)
+    let index = try LibraryIndex(at: databaseURL)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
+        layoutChanged: { _ in },
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    // Art 3 rows tall, which with its inset above reaches into a fourth row.
+    let width = 2 * AlbumArtCell.inset + 3 * RowListController.rowHeight
+    let controller = TrackTableController(
+        model: model, cache: RowCache { try index.rows(ids: $0) },
+        layout: TrackTableLayout(
+            columns: [
+                ColumnLayout(column: .art, width: width), ColumnLayout(column: .title, width: 200),
+            ],
+            sortColumn: .album, sortAscending: true),
+        actions: actions)
+    controller.view.frame = NSRect(x: 0, y: 0, width: 400, height: 2000)
+    model.changed = { controller.reload($0) }
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    let rows = try index.rows(ids: model.trackIDs)
+    let art = controller.table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
+    #expect(controller.table.view(atColumn: art, row: 0, makeIfNecessary: true) is NSTableCellView)
+    #expect(controller.artRow(5) == 5)
+
+    controller.apply(
+        TableAppearance(
+            columnLines: false, rowLines: false, alternatingRows: true, rowHeight: .regular,
+            artSize: .fullWidth))
+    var runStart = 0
+    var spanned = false
+    for row in 0..<min(rows.count, 60) {
+        if row > 0, rows[row].albumID == nil || rows[row].albumID != rows[row - 1].albumID {
+            runStart = row
+        }
+        let expected = row - runStart < 4 ? runStart : nil
+        #expect(controller.artRow(row) == expected, "row \(row)")
+        if expected != nil, expected != row { spanned = true }
+        let cell = controller.table.view(atColumn: art, row: row, makeIfNecessary: true)
+        #expect(cell is AlbumArtCell, "row \(row)")
+        if let expected { #expect((cell as? AlbumArtCell)?.rowsDown == row - expected) }
+    }
+    #expect(spanned)
+}
