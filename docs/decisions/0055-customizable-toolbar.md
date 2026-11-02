@@ -1,4 +1,4 @@
-# 0053. The header is a toolbar the user customizes
+# 0055. The header is a toolbar the user customizes
 
 - **Date:** 2026-11-02
 - **Status:** accepted

@@ -2,7 +2,7 @@ import AppKit
 import Commands
 import Settings
 
-/// The main window's toolbar, which the user customizes with the standard sheet (ADR 0053).
+/// The main window's toolbar, which the user customizes with the standard sheet (ADR 0055).
 /// The transport, the now-playing status and the search field are the features' views; the
 /// other items run commands through the dispatcher, which also says whether they're on.
 @MainActor
