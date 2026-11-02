@@ -308,8 +308,8 @@ let package = Package(
         .testTarget(
             name: "LibraryBrowserTests",
             dependencies: [
-                "Artwork", "DisplayText", "Fixtures", "Library", "LibraryBrowser", "Metadata",
-                "SQLite", "Settings",
+                "Artwork", "DisplayText", "Fixtures", "KeyChord", "Library", "LibraryBrowser",
+                "Metadata", "SQLite", "Settings",
             ],
             swiftSettings: strictSwift
         ),

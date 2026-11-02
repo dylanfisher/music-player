@@ -3,6 +3,7 @@
 - **Date:** 2026-11-02
 - **Status:** accepted
 - **Amends:** [0016](0016-palette.md)
+- **Amended by:** [0048](0048-left-and-right-skip-tracks.md): → in the app is Next Track's.
 
 ## Context
 

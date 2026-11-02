@@ -1,3 +1,4 @@
+import KeyChord
 import Receiver
 import Testing
 
@@ -57,4 +58,14 @@ import Testing
     #expect(ReceiverInput.allCases.allSatisfy { ids.contains(.receiverInput($0)) })
     #expect(ReceiverSoundMode.allCases.allSatisfy { ids.contains(.receiverSoundMode($0)) })
     #expect(AppCommands.title(of: .receiverInput(.bluRay)) == "Switch Receiver to Blu-ray")
+}
+
+/// ← and → skip tracks from a list; the panes take them before the registry to move between
+/// panes, so Focus Next and Previous Pane have no chord of their own.
+@Test func leftAndRightSkipTracks() throws {
+    let registry = try CommandRegistry(AppCommands.all())
+    #expect(registry.command(for: KeyChord(.right)) == .nextTrack)
+    #expect(registry.command(for: KeyChord(.left)) == .previousTrack)
+    #expect(registry.command(.focusNextPane)?.chords == [])
+    #expect(registry.command(.focusPreviousPane)?.chords == [])
 }

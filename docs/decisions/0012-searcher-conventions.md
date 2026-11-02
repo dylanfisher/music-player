@@ -3,7 +3,8 @@
 - **Date:** 2026-10-30
 - **Status:** accepted
 - **Amended by:** [0015](0015-config-file.md): what this left open in phase 6, including which
-  Edit items have commands.
+  Edit items have commands. [0048](0048-left-and-right-skip-tracks.md): ← and → skip tracks,
+  and only the panes move between panes with them.
 - **Amends:** [0003](0003-settings-schema.md) (where the file lives, what it holds, export and
   import)
 

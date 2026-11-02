@@ -147,7 +147,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             failed: { message in owner?.show(failure: message) })
         panes = PanesController(
             model: model, select: { pane, id in Task { await model.select(pane, id: id) } },
-            keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
+            keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound },
+            focusPane: { forward in owner?.focusPane(forward: forward) })
         sidebarController = SidebarController(
             // The sidebar shows the model's source after, which stays put when it fails.
             selectSource: { source in

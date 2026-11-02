@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import KeyChord
 import Settings
 import Testing
 
@@ -167,4 +168,47 @@ import Testing
     #expect(!browser.scanIndicatorAnimates)
     browser.toggleStatusBar()
     #expect(browser.scanIndicatorAnimates)
+}
+
+@MainActor @Test func leftAndRightMoveBetweenThePanesAndGoToTheRegistryElsewhere() throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 150, groupByAlbumArtist: false)
+    var sent: [KeyChord] = []
+    browser.keyCommand = { chords in
+        sent += chords
+        return .ran
+    }
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 600), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = NSStackView(views: [browser.sidebar.view, browser.content.view])
+    // The sidebar, the genre, artist and album panes, then the track table.
+    let areas = browser.focusAreas
+    #expect(areas.count == 5)
+    func press(_ key: KeyChord.Key, in view: NSView) throws {
+        #expect(window.makeFirstResponder(view))
+        let characters = String(
+            UnicodeScalar(key == .right ? NSRightArrowFunctionKey : NSLeftArrowFunctionKey)!)
+        view.keyDown(
+            with: try #require(
+                NSEvent.keyEvent(
+                    with: .keyDown, location: .zero, modifierFlags: .function, timestamp: 0,
+                    windowNumber: window.windowNumber, context: nil, characters: characters,
+                    charactersIgnoringModifiers: characters, isARepeat: false,
+                    keyCode: key == .right ? 124 : 123)))
+    }
+
+    try press(.right, in: areas[1])
+    #expect(window.firstResponder === areas[2])
+    try press(.left, in: areas[1])
+    #expect(window.firstResponder === areas[4])
+    #expect(sent.isEmpty)
+
+    // The track table and the sidebar leave them to the registry, which skips tracks.
+    try press(.right, in: areas[4])
+    try press(.left, in: areas[0])
+    #expect(sent == [KeyChord(.right), KeyChord(.left)])
 }

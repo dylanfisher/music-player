@@ -177,8 +177,9 @@ public enum AppCommands {
             Command(.showAllTracks, "Show All Tracks"),
             Command(.back, "Back", [.init("[", cmd)], links: true),
             Command(.forward, "Forward", [.init("]", cmd)], links: true),
-            Command(.focusNextPane, "Focus Next Pane", [.init(.right)]),
-            Command(.focusPreviousPane, "Focus Previous Pane", [.init(.left)]),
+            // The panes take ← and → for these themselves; everywhere else they skip tracks.
+            Command(.focusNextPane, "Focus Next Pane"),
+            Command(.focusPreviousPane, "Focus Previous Pane"),
             Command(.focusNextArea, "Focus Next Area", [.init(.tab)]),
 
             Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
@@ -227,8 +228,9 @@ public enum AppCommands {
                 links: true),
             Command(.playNext, "Play Next", [.init(.return, opt)], links: true),
             Command(.addToQueue, "Add to Playback Queue"),
-            Command(.nextTrack, "Next Track", [.init(.right, cmd)], links: true),
-            Command(.previousTrack, "Previous Track", [.init(.left, cmd)], links: true),
+            Command(.nextTrack, "Next Track", [.init(.right, cmd), .init(.right)], links: true),
+            Command(
+                .previousTrack, "Previous Track", [.init(.left, cmd), .init(.left)], links: true),
             Command(.seekForward, "Seek Forward", [.init(.right, [opt, cmd])], links: true),
             Command(.seekBack, "Seek Back", [.init(.left, [opt, cmd])], links: true),
             // Not from links: a page could raise it to full in a loop (ADR 0036).

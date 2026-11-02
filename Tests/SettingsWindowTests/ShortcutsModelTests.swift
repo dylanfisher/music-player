@@ -49,7 +49,7 @@ private final class Harness {
     let harness = try Harness()
     let model = harness.model!
     #expect(model.chord(.filterToItem, .primary) == KeyChord(.right))
-    #expect(model.chord(.focusNextPane, .primary) == KeyChord(.right))
+    #expect(model.chord(.nextTrack, .alternate) == KeyChord(.right))
     model.record(KeyChord(.down), for: .filterToItem, at: .alternate)
     #expect(model.notices[.filterToItem] == nil)
     #expect(model.chord(.filterToItem, .alternate) == KeyChord(.down))

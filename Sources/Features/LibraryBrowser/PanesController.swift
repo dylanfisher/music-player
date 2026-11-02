@@ -11,17 +11,21 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
     private(set) var tables: [BrowserModel.Pane: KeyTableView] = [:]
     private let select: (BrowserModel.Pane, Int64?) -> Void
     private let keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
+    /// Moves the keys to the next pane, or with false the previous one.
+    private let focusPane: (Bool) -> Void
     /// Set while selections are set from the model, so they don't count as clicks.
     private var applying = false
     private var typeSelect: TypeSelect? = TypeSelect()
 
     init(
         model: BrowserModel, select: @escaping (BrowserModel.Pane, Int64?) -> Void,
-        keyCommand: @escaping ([KeyChord]) -> CommandDispatcher.KeyOutcome
+        keyCommand: @escaping ([KeyChord]) -> CommandDispatcher.KeyOutcome,
+        focusPane: @escaping (Bool) -> Void
     ) {
         self.model = model
         self.select = select
         self.keyCommand = keyCommand
+        self.focusPane = focusPane
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -71,8 +75,18 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
         }
     }
 
+    /// ← and → move between the panes, as in Swinsian, ahead of the registry, where they skip
+    /// tracks: a pane has no track of its own to skip.
     private func takeKey(_ event: NSEvent, in pane: BrowserModel.Pane) -> Bool {
-        routeKey(event, typeSelect: &typeSelect, keyCommand: keyCommand) { [weak self] query in
+        if let chord = KeyChord(event: event), chord.modifiers.isEmpty,
+            chord.key == .left || chord.key == .right
+        {
+            typeSelect?.reset()
+            focusPane(chord.key == .right)
+            return true
+        }
+        return routeKey(event, typeSelect: &typeSelect, keyCommand: keyCommand) {
+            [weak self] query in
             guard let self else { return }
             // Row 0 is All.
             guard
