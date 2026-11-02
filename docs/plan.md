@@ -701,7 +701,8 @@ description XML, its `GetProtocolInfo` reply, and the status lines it sends on p
         reply came from, with redirects refused; descriptions and replies capped at 1 MiB, parsed
         by `XMLParser` with external entities off, timed out after 5 s. A renderer's name is
         escaped like any other display text.
-      - The receiver's address comes only from SSDP on the local subnet. Its status lines are at
+      - The receiver's address comes only from SSDP on the local subnet, or, when SSDP finds
+        none, from `receiver.address`, a literal address on a local subnet. Its status lines are at
         most 135 bytes, the cap in Denon's protocol spec, and at most 135 bytes are buffered
         without a carriage return before the connection is dropped and reported; unknown lines
         are ignored and values range-checked before the model takes them; commands come from the
@@ -734,7 +735,8 @@ Implementation plan (ADR 0039):
    cap, 50 ms between commands and 1 s after power on, a refused or dropped connection reported
    and never retried on its own). `ReceiverControl` finds the one Denon among the discovered
    renderers and connects only to that address.
-4. **Settings and Commands:** `receiver.enabled`, false by default. Registry commands for volume
+4. **Settings and Commands:** `receiver.enabled`, false by default, and `receiver.address`,
+   a literal address used only when SSDP finds no receiver and only on a local subnet. Registry commands for volume
    up, down and set, mute, Pure Direct, Direct and Stereo, each input, power on and standby, in
    a Receiver submenu of Controls with the setting's toggle. Only Receiver Volume Down runs from
    links.

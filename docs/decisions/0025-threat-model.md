@@ -58,9 +58,9 @@ and `scripts/bundle`. It found no secret anywhere in the tree.
 | 25 | the library | another process of the owner | `library.sqlite` and its lock file, opened at launch | a file SQLite can't read is moved aside and reported; rows that don't decode are errors, never defaults | `aLibraryFileThatIsntADatabaseIsMovedAsideAndReported` |
 | 26 | the app's code | anything that injects into a process | the bundle's signature | a release bundle is ad-hoc signed with the hardened runtime and no entitlements, so no library injection through `DYLD_` variables, no unsigned executable memory, and no debugger attaching without root. A debug bundle adds `get-task-allow` so lldb can attach; the release check fails on it | `scripts/check-signature`, run by `scripts/bundle release`; `scripts/check-signature-test` |
 | 27 | the app working | — | the hardened runtime itself | the hardened app launches, opens its window and draws it with `--home` in a temp folder; it loads only system frameworks, so library validation has nothing to refuse. It would refuse a third-party AudioToolbox codec plugin, which is accepted: the app decodes with the system's codecs only | `scripts/check-signature --launch` |
-| 28 | the owner's files | LAN device | phase 9's HTTP server | requirements for phase 9, below | phase 9's tests |
-| 29 | the app | LAN device | SSDP replies and device descriptions | requirements for phase 9, below | phase 9's tests |
-| 30 | the receiver; the app | LAN device | the Denon control connection on TCP 23 | requirements for phase 9, below | phase 9's tests |
+| 28 | the owner's files | LAN device | phase 9's HTTP server | requirements for phase 9, below; one interface's address, its subnet only, 128-bit tokens resolved at request time, `O_NOFOLLOW` regular files, `GET`/`HEAD` with the bound `Host`, 8 KiB heads, one range, 8 connections, 30 s idle ([0039](0039-network-control.md)) | `HTTPServerTests` in LocalNetworkTests |
+| 29 | the app | LAN device | SSDP replies, device descriptions and SOAP replies | requirements for phase 9, below; subnet-checked replies and IP-literal `http` locations, no redirects, 1 MiB and 5 s, any DTD refused before `XMLParser`, names escaped ([0039](0039-network-control.md)) | `SubnetTests`, `SSDPTests`, `HTTPClientTests`, UPnPTests; `scripts/fuzz device-description`, `scripts/fuzz soap-reply` |
+| 30 | the receiver; the app | LAN device | the Denon control connection on TCP 23 | requirements for phase 9, below; off by default, the address only from discovery or, when it finds none, a configured literal address on a local subnet, 135-byte lines, values range-checked, commands from typed values only, no silent reconnect ([0039](0039-network-control.md)) | ReceiverTests, `aReceiverAddressIsALiteralAndNeverAName`; `scripts/fuzz receiver-line` |
 | 31 | the scan's memory and time | hostile file | millions of tiny structures (empty comments, zero-size frames), each a loop turn and often a warning | a file's walks stop at 100,000 steps (`ByteReader.maximumSteps`) as malformed; a file keeps 100 warnings, then one counting the rest | `aFileOfTinyStructuresStopsAtTheBudget`, `warningsPastTheCapAreCountedInOne` |
 | 32 | the status bar; the scan report | hostile file; NAS user | a folder of a million links or unreadable entries | a scan lists 100 walk problems (`ScanPipeline.maximumIssues`), then one counting the rest; every unreadable path, listed or not, still keeps the scan from removing anything under it | `aWalkListsAtMostItsCapOfProblemsAndStillProtectsEveryUnreadableFolder` |
 | 33 | the scan | hostile file; NAS user | a FIFO or a device among the music, or a link swapped in for a file after the walk | `FileSource` opens with `O_NONBLOCK` and `O_NOFOLLOW`, requires a regular file, then clears `O_NONBLOCK`; links are never read, as the walk never follows them | `aFIFOOrALinkIsRefusedWithoutBlocking` |
@@ -119,12 +119,13 @@ against a loopback stand-in:
   redirects refused. Device descriptions and SOAP replies are capped at 1 MiB, parsed with
   `XMLParser` with external entities off, and time out after 5 s. A renderer's name is display
   text, escaped as row 9.
-- **Receiver control.** The address comes only from SSDP on the local subnet. Status lines are
-  hostile input: at most 135 bytes each, the cap in Denon's protocol spec, and at most 135
-  bytes buffered without a carriage return, past which the connection is dropped and reported; unknown lines ignored; values
-  range-checked before the model takes them. Commands are built from the registry, never from
-  received text. The protocol has no authentication, so the app sends only what the owner
-  asked for.
+- **Receiver control.** The address comes only from SSDP on the local subnet, or, when SSDP
+  finds none, from a configured literal address on a local subnet
+  ([0039](0039-network-control.md)). Status lines are hostile input: at most 135 bytes each, the
+  cap in Denon's protocol spec, and at most 135 bytes buffered without a carriage return, past
+  which the connection is dropped and reported; unknown lines ignored; values range-checked
+  before the model takes them. Commands are built from the registry, never from received text.
+  The protocol has no authentication, so the app sends only what the owner asked for.
 - **Info.plist.** `NSLocalNetworkUsageDescription` and the Bonjour types it uses (phase 9's
   Info.plist item); no new entitlements unless `scripts/check-signature`'s list grows with a
   reason.
