@@ -20,8 +20,10 @@ struct LibraryStatus: Equatable, Sendable {
     /// What the last playlist import or export couldn't carry over.
     var playlistFileReport: [String] = []
     /// What the health check shown found that the table can't list, and how many such items.
-    var healthLines: [String] = []
+    var healthProblems: [Problem] = []
     var healthOtherCount = 0
+    /// The lines the user dismissed, which the problems list leaves out.
+    var dismissed: Set<String> = []
 
     init() {}
 
@@ -45,11 +47,9 @@ struct LibraryStatus: Equatable, Sendable {
         }
     }
 
-    /// Whether there's anything for the problems list to show.
-    var hasProblems: Bool {
-        fileIssueCount > 0 || !folderIssues.isEmpty || !failures.isEmpty || !notices.isEmpty
-            || !playlistFileReport.isEmpty || !healthLines.isEmpty || !syncProblems.isEmpty
-    }
+    /// Whether there's anything for the problems list to show. `fileIssueCount` counts only
+    /// the files with a problem not dismissed.
+    var hasProblems: Bool { fileIssueCount > 0 || !problems.isEmpty }
 
     /// "1,204 tracks, 5.1 GiB, 3 days 2 hours · 2 tracks not in the library": what the list shown
     /// holds, with the totals of `selection` as `shown` asks. `missingCount` is how many of a
@@ -107,21 +107,36 @@ struct LibraryStatus: Equatable, Sendable {
     /// that count nothing still have a list to show. Nil when there's nothing to list.
     var problemsTitle: String? {
         guard hasProblems else { return nil }
-        let folders = Set(folderIssues.keys).union(failures.keys).count
+        let folders = Set(folderLines.filter { !dismissed.contains($0.line) }.map(\.folder)).count
         var problems: [String] = []
         if fileIssueCount > 0 { problems.append(count(fileIssueCount, "file")) }
         if folders > 0 { problems.append(count(folders, "folder")) }
-        if !syncProblems.isEmpty { problems.append("the sync") }
+        if syncProblems.contains(where: { !dismissed.contains($0) }) {
+            problems.append("the sync")
+        }
         guard !problems.isEmpty else { return "Show Problems" }
         let text = problems.joined(separator: " and ") + " with problems"
         return text.prefix(1).uppercased() + text.dropFirst()
     }
 
-    /// Every notice and folder problem as a line, for the top of the problems list.
-    var problemLines: [String] {
-        notices + playlistFileReport + healthLines + syncProblems
-            + failures.sorted { $0.key < $1.key }.map { "\($0.key): the scan failed: \($0.value)" }
-            + folderIssues.sorted { $0.key < $1.key }.flatMap { $0.value.map(\.description) }
+    /// Every notice and folder problem not dismissed, for the top of the problems list.
+    var problems: [Problem] {
+        let plain = notices + playlistFileReport
+        let after = syncProblems + folderLines.map(\.line)
+        return (plain.map { Problem($0) } + healthProblems + after.map { Problem($0) })
+            .filter { !dismissed.contains($0.line) }
+    }
+
+    var problemLines: [String] { problems.map(\.line) }
+
+    /// Each folder's failed scan and the problems its last scan had, as lines.
+    private var folderLines: [(folder: String, line: String)] {
+        failures.sorted { $0.key < $1.key }.map {
+            ($0.key, "\($0.key): the scan failed: \($0.value)")
+        }
+            + folderIssues.sorted { $0.key < $1.key }.flatMap { folder, issues in
+                issues.map { (folder, $0.description) }
+            }
     }
 }
 

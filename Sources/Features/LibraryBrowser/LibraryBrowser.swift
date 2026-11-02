@@ -477,9 +477,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         guard let report = health.report else { return }
         sidebarController.show(health: report)
         if case .health = model.filter.source {
-            Task { await model.refresh() }
+            Task {
+                await model.refresh()
+                refreshProblems()
+            }
         } else {
             showStatus()
+            refreshProblems()
         }
     }
 
@@ -512,7 +516,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     private func countIssues() async {
         do {
-            status.fileIssueCount = Set(try await reader.fileIssues().map(\.path)).count
+            status.dismissed = try await reader.dismissedProblems()
+            let issues = try await reader.fileIssues().filter {
+                !status.dismissed.contains($0.description)
+            }
+            status.fileIssueCount = Set(issues.map(\.path)).count
         } catch {
             report(problemsUnreadable(error))
         }
@@ -553,9 +561,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     private func showStatus() {
-        let found: HealthFindings? =
-            if case .health(let check) = model.filter.source { health.report?[check] } else { nil }
-        status.healthLines = found?.lines ?? []
+        let check: HealthCheck? =
+            if case .health(let check) = model.filter.source { check } else { nil }
+        let found = check.flatMap { health.report?[$0] }
+        status.healthProblems =
+            if let check, let found { healthProblems(found, of: check) } else { [] }
         status.healthOtherCount = found?.otherCount ?? 0
         statusLabel.stringValue = status.summary(
             list: listTotals, selection: selectionTotals,
@@ -681,15 +691,61 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     @objc private func showProblems() {
         Task {
-            let issues: [String]
-            do {
-                issues = try await reader.fileIssues().map(\.description)
-            } catch {
-                issues = [problemsUnreadable(error)]
-            }
-            let window = problems ?? ProblemsWindow()
+            let rows = await problemRows()
+            let window = problems ?? makeProblemsWindow()
             problems = window
-            window.show(status.problemLines + issues)
+            window.show(rows)
+        }
+    }
+
+    /// Lists the problems again in the Problems window, if it's open.
+    private func refreshProblems() {
+        guard let problems, problems.window.isVisible else { return }
+        Task { problems.refresh(await problemRows()) }
+    }
+
+    /// The status's problems, then each file's, leaving out those dismissed.
+    private func problemRows() async -> [Problem] {
+        do {
+            let issues = try await reader.fileIssues().map(\.description)
+            return status.problems
+                + issues.filter { !status.dismissed.contains($0) }.map { Problem($0) }
+        } catch {
+            return status.problems + [Problem(problemsUnreadable(error))]
+        }
+    }
+
+    private func makeProblemsWindow() -> ProblemsWindow {
+        let window = ProblemsWindow()
+        window.act = { [weak self] action, selected in
+            Task { await self?.fix(selected, by: action) }
+        }
+        return window
+    }
+
+    /// Does `action` to the problems `selected`. Remove and Restore run the health report, which
+    /// lists the problems again when it ends.
+    func fix(_ selected: [Problem], by action: ProblemAction) async {
+        switch action {
+        case .dismiss:
+            do {
+                try await reader.dismissProblems(selected.map(\.line))
+            } catch {
+                report("couldn't dismiss the problems: \(error)")
+            }
+            await countIssues()
+            refreshProblems()
+        case .remove:
+            guard let ids = action.pathIDs(of: selected) else { return }
+            do {
+                try await reader.removeFromLibrary(trackIDs: ids)
+            } catch {
+                report("couldn't remove the tracks: \(error)")
+            }
+            runHealth()
+        case .restore:
+            guard let ids = action.pathIDs(of: selected) else { return }
+            await restore(ids)
         }
     }
 

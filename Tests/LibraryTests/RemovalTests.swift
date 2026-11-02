@@ -22,6 +22,7 @@ import Testing
     // It didn't leave, so its rating isn't offered to another track.
     #expect(try index.lostFiles().isEmpty)
     #expect(try index.healthReport()[.removed].lines == [path])
+    #expect(try index.healthReport()[.removed].pathIDs == [id])
 
     #expect(try index.restoreRemoved([id]) == [path])
     _ = try library.scan()
@@ -29,6 +30,14 @@ import Testing
     #expect(row.path == path)
     #expect(row.rating == 4)
     #expect(try index.healthReport()[.removed].count == 0)
+}
+
+@Test func aDismissedProblemStaysDismissedAcrossConnections() throws {
+    let library = try TestLibrary()
+    let index = try library.index()
+    let line = "/M/a.flac: warning tag: cut short"
+    try index.dismissProblems([line, line])
+    #expect(try library.index().dismissedProblems() == [line])
 }
 
 @Test func aTrashedTrackIsntLostAndComesBackWhenPutBack() throws {

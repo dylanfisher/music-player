@@ -26,12 +26,17 @@ public struct HealthFindings: Equatable, Sendable {
     public var lines: [String] = []
     /// Every such item, listed or not.
     public var otherCount = 0
+    /// The path ID of each listed line, where the line is a path the Problems window can act on
+    /// (Lost Stats and Removed); empty for the other checks.
+    public var pathIDs: [Int64] = []
 
     /// Tracks and other items together.
     public var count: Int { trackIDs.count + otherCount }
 
-    init(trackIDs: [Int64] = [], others: [String] = []) {
+    init(trackIDs: [Int64] = [], others: [String] = [], otherIDs: [Int64] = []) {
+        precondition(otherIDs.isEmpty || otherIDs.count == others.count, "an ID per line or none")
         self.trackIDs = trackIDs
+        pathIDs = Array(otherIDs.prefix(healthLinesListed))
         lines = Array(others.prefix(healthLinesListed))
         if others.count > healthLinesListed {
             lines.append("… and \(others.count - healthLinesListed) more")
@@ -199,7 +204,9 @@ extension LibraryIndex {
         case .lostStats:
             return try lostStatsFindings()
         case .removed:
-            return HealthFindings(others: try removedPaths().map { terminalSafe($0.path) })
+            let removed = try removedPaths()
+            return HealthFindings(
+                others: removed.map { terminalSafe($0.path) }, otherIDs: removed.map(\.id))
         }
     }
 

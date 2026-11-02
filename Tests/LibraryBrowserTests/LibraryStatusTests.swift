@@ -91,7 +91,7 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
 
 @Test func aHealthCheckCountsWhatTheTableCantListAndListsIt() {
     var status = LibraryStatus()
-    status.healthLines = ["/M/bad.flac: failure malformed: no header"]
+    status.healthProblems = [Problem("/M/bad.flac: failure malformed: no header")]
     status.healthOtherCount = 1
     #expect(
         status.summary(list: totals(2), selection: totals(0), shown: .list)

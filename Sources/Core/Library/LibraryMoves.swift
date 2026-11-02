@@ -46,7 +46,7 @@ extension LibraryIndex {
             trackIDs: Set(lost.flatMap(\.candidates)).sorted(),
             others: lost.map { file in
                 terminalSafe("\(file.path): matching tracks: \(file.matching)")
-            })
+            }, otherIDs: lost.map(\.id))
     }
 
     /// Gives the stats of the lost path `lost` to the track `track`, which has none of its own,

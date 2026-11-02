@@ -14,7 +14,7 @@ func askToRestore(
     alert.informativeText =
         "\(removed.count == 1 ? "1 track was" : "\(removed.count) tracks were") removed from the"
         + " library. A restored track comes back when its folder is scanned, which starts now."
-    alert.addButton(withTitle: "Restore")
+    alert.addButton(withTitle: ProblemAction.restore.title)
     alert.addButton(withTitle: "Restore All")
     alert.addButton(withTitle: "Cancel")
     let paths = NSPopUpButton()

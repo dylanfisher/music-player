@@ -151,6 +151,7 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
     let findings = try index.healthReport()[.lostStats]
     #expect(findings.trackIDs == [new])
     #expect(findings.lines == ["/M/1.flac: matching tracks: 1", "/M/2.flac: matching tracks: 1"])
+    #expect(findings.pathIDs == [one, two])
 
     // The user picks the first; the track now has stats, so the second has no candidate left.
     #expect(try index.moveStats(from: one, to: new))

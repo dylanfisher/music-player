@@ -173,6 +173,10 @@ public actor LibraryReader {
         try index.restoreRemoved(ids)
     }
 
+    public func dismissProblems(_ lines: [String]) throws { try index.dismissProblems(lines) }
+
+    public func dismissedProblems() throws -> Set<String> { try index.dismissedProblems() }
+
     public func discards() throws -> [DiscardNotice] { try index.discards() }
 
     public func forgetDiscards(_ ids: [Int64]) throws { try index.forgetDiscards(ids) }

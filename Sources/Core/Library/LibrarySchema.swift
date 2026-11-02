@@ -32,6 +32,9 @@ enum SchemaPart: String, CaseIterable {
     /// The paths with a row in `history`, which History lists (ADR 0057). Derived from
     /// `history`, so building the part fills it from there, and rebuilding it discards nothing.
     case recorded
+    /// The lines of the Problems window the user dismissed (ADR 0053). A part of its own for
+    /// the same reason as `loved`.
+    case dismissed
 
     var sql: String {
         switch self {
@@ -44,6 +47,7 @@ enum SchemaPart: String, CaseIterable {
         case .scans: scansSchema
         case .removed: removedSchema
         case .recorded: recordedSchema
+        case .dismissed: dismissedSchema
         }
     }
 
@@ -59,6 +63,7 @@ enum SchemaPart: String, CaseIterable {
         case .scans: [scannedFoldersTable]
         case .removed: [removedTable]
         case .recorded: [recordedTable]
+        case .dismissed: [dismissedProblemsTable]
         }
     }
 }
@@ -80,6 +85,7 @@ let dislikedTable = "disliked"
 let scannedFoldersTable = "scanned_folders"
 let removedTable = "removed"
 let recordedTable = "recorded_paths"
+let dismissedProblemsTable = "dismissed_problems"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let syncStateTable = "sync_state"
@@ -294,6 +300,13 @@ private let recordedSchema = """
 /// Adds the paths with a row in `history` to `recordedTable`, for a fill from scratch.
 package let fillRecordedSQL =
     "INSERT OR IGNORE INTO \(recordedTable) (path_id) SELECT DISTINCT path_id FROM history"
+
+private let dismissedSchema = """
+    -- A row for each line of the Problems window the user dismissed, as the window showed it.
+    CREATE TABLE \(dismissedProblemsTable) (
+        line TEXT PRIMARY KEY
+    ) WITHOUT ROWID;
+    """
 
 private let lovedSchema = """
     -- A row for each loved path; none means not loved.

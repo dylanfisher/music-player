@@ -26,7 +26,7 @@ func askToRemove(
         + " they're restored from Library Health. Remove and Move to Trash also moves the files"
         + " to the Trash."
     alert.addButton(withTitle: "Cancel")
-    alert.addButton(withTitle: "Remove from Library")
+    alert.addButton(withTitle: ProblemAction.remove.title)
     alert.addButton(withTitle: "Remove and Move to Trash")
     alert.beginSheetModal(for: window) { response in
         switch response {

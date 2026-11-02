@@ -33,7 +33,7 @@ final class LostStatsSheet {
             + " left the library with plays, a rating or playlist entries. Give them to a track"
             + " that matches it, or dismiss it. Music files aren't touched."
         alert.addButton(withTitle: "Give Stats")
-        alert.addButton(withTitle: "Dismiss")
+        alert.addButton(withTitle: ProblemAction.dismiss.title)
         alert.addButton(withTitle: "Later")
         candidates.removeAllItems()
         for id in file.candidates {

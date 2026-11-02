@@ -3,6 +3,8 @@
 - **Date:** 2026-11-02
 - **Status:** accepted
 - **Amends:** [0020](0020-tag-writing.md), [0034](0034-folders-and-library-health.md)
+- **Amended by:** [0053](0053-problems-window-actions.md): the Problems window restores a
+  Removed row, and removes a Lost Stats one from the library.
 
 ## Context
 
