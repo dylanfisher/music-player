@@ -88,6 +88,14 @@ extension LibraryIndex {
             newFile.precomposedStringWithCanonicalMapping
         )
         let newFiles = exactPathRange(under: newFile)
+        // The folder's finished scan moves with it, unless files left under `new` are dropped,
+        // which leaves it short of them.
+        let droppedAny = try statement(
+            "SELECT EXISTS (SELECT 1 FROM files WHERE path >= ? AND path < ?)"
+        ).map(newFiles.lowerBound, newFiles.upperBound) { try $0.int(0) == 1 }[0]
+        let finished = try finishedWholeScan(of: old)
+        try setFinishedWholeScan(of: old, false)
+        try setFinishedWholeScan(of: new, finished && !droppedAny)
         try statement(
             "DELETE FROM track_search WHERE rowid IN (SELECT id FROM files WHERE path >= ? AND path < ?)"
         ).run(newFiles.lowerBound, newFiles.upperBound)

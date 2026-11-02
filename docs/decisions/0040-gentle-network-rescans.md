@@ -15,13 +15,18 @@ scanning. Default should be more like 60 minutes."
 
 ## Decision
 
-**No rescan of a network folder at launch.** A network folder the index holds files for shows
-them at once, and its first poll comes `pollIntervalMinutes` after the watcher starts. One the
-index holds nothing for (just added, or never scanned) is scanned at once. The watcher sends
-`keptIndex` for each folder it leaves, so the first health report still runs and
-`--report-launch` still ends. `library.rescanNetworkFoldersAtLaunch`, off by default, brings
-back the launch rescan. Local folders are unchanged: FSEvents reports nothing from before
-launch, so they're still scanned whole at launch.
+**No rescan of a network folder at launch.** A network folder whose last whole scan finished
+shows what the index holds at once, and its first poll comes `pollIntervalMinutes` after the
+watcher starts. The index records each finished whole scan in a `scans` part of its own,
+rebuilt with the index part: a whole scan deletes its folder's row as it starts and adds it
+back when its walk finishes, and a rewrite for a moved share moves the row. So a folder just
+added, never scanned, or whose last whole scan was cut short (the app quit, the share dropped)
+is scanned at once, rather than showing part of the library for an interval. The watcher sends
+`keptIndex` for each folder it leaves, so the first health report still runs, and
+`launchScansEnded` once every other folder's whole scan at start has finished or failed, for
+`--report-launch`. `library.rescanNetworkFoldersAtLaunch`, off by default, brings back the
+launch rescan. Local folders are unchanged: FSEvents reports nothing from before launch, so
+they're still scanned whole at launch.
 
 The rest of start is unchanged: the shares are located, paths rewritten for a share mounted
 somewhere new, files outside the watched folders removed, and a sync runs. The sync never
@@ -57,6 +62,8 @@ line, which only this user's processes can reach (ADR 0036).
   more stored state for little gain; one interval after launch is close enough.
 - **Rescan Now from links** — rejected, for the reason above; the command line covers
   scripting.
+- **Count a folder as scanned when the index holds any of its files** — rejected: a first scan
+  cut short stores some batches, and the folder would show part of the library for an hour.
 - **Change the stored interval of existing folders to 60** — rejected: pre-release data has no
   migrations, and the owner may have chosen 15.
 

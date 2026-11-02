@@ -20,6 +20,9 @@ enum SchemaPart: String, CaseIterable {
     /// earlier shape rebuilds the stats too: the new machine ID reads every log from the
     /// start, its own old one included, which the old stats already hold.
     case sync
+    /// Which watched folders' last whole scan finished (ADR 0040). Rebuilt with the index,
+    /// whose files it vouches for.
+    case scans
 
     var sql: String {
         switch self {
@@ -28,6 +31,7 @@ enum SchemaPart: String, CaseIterable {
         case .loved: lovedSchema
         case .imports: importsSchema
         case .sync: syncSchema
+        case .scans: scansSchema
         }
     }
 
@@ -39,6 +43,7 @@ enum SchemaPart: String, CaseIterable {
         case .loved: [lovedTable]
         case .imports: [importedPlaysTable]
         case .sync: syncTables
+        case .scans: [scannedFoldersTable]
         }
     }
 }
@@ -56,6 +61,7 @@ let statsTables: Set<String> = [
 ]
 
 let lovedTable = "loved"
+let scannedFoldersTable = "scanned_folders"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let syncStateTable = "sync_state"
@@ -241,6 +247,14 @@ private let statsSchema = """
     CREATE INDEX playlist_entries_order ON playlist_entries (playlist_id, position);
     -- Move matching asks whether a path is in any playlist.
     CREATE INDEX playlist_entries_path ON playlist_entries (path_id);
+    """
+
+private let scansSchema = """
+    -- Each watched folder whose last whole scan finished, by its root in canonicalPath's form.
+    -- A whole scan deletes its folder's row as it starts, so one cut short leaves none.
+    CREATE TABLE \(scannedFoldersTable) (
+        root TEXT PRIMARY KEY
+    );
     """
 
 private let lovedSchema = """

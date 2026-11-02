@@ -108,6 +108,15 @@ private final class LockedEvents: @unchecked Sendable {
         }
     }
 
+    var launchesEnded: Int {
+        lock.withLock {
+            events.filter { event in
+                if case .launchScansEnded = event { return true }
+                return false
+            }.count
+        }
+    }
+
     var kept: [String] {
         lock.withLock {
             events.compactMap { event in
@@ -272,6 +281,7 @@ private func watcher(
     try await Task.sleep(nanoseconds: 2_000_000_000)
     #expect(received.scanned.count == 1)
     #expect(access.directories.allSatisfy { $0 == added || isPath($0, under: added) })
+    #expect(received.launchesEnded == 1)
 }
 
 @Test func theSettingWalksANetworkFolderTheIndexHoldsAtLaunch() async throws {
@@ -381,4 +391,29 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     #expect(
         try await eventually(within: 20) { try index.trackCount() == library.readableCount + 1 })
     #expect(try await eventually(within: 20) { received.scanned.count == 1 })
+}
+
+@Test func aFirstScanCutShortIsScannedAgainAtLaunch() async throws {
+    let library = try TestLibrary()
+    let network = WatchedFolder(path: library.root, kind: .network)
+    let access = GatedAccess(readsBeforeGate: 20)
+    let control = ScanControl()
+    let scanner = LibraryScanner(
+        databaseURL: library.databaseURL, networkReaders: 4, access: access, batchSize: 1)
+    let cut = Task.detached { try scanner.scan(network, control: control) }
+    #expect(try await eventually(within: 20) { access.isHeld })
+    control.cancel()
+    access.open()
+    #expect(try await cut.value.cancelled)
+    #expect(try library.index().trackCount() > 0, "the cut scan stored some files")
+
+    let received = LockedEvents()
+    let watcher = watcher(library, through: ListingRecorder(), events: received.append)
+    watcher.start(
+        folders: [network], rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: false)
+    defer { watcher.stop() }
+    #expect(try await eventually(within: 20) { received.scanned.count == 1 })
+    #expect(received.kept.isEmpty)
+    #expect(try library.index().trackCount() == library.readableCount)
+    #expect(received.launchesEnded == 1)
 }

@@ -317,7 +317,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 refreshNow()
                 runHealth()
             }
-        case .syncFailed:
+        case .syncFailed, .launchScansEnded:
             break
         }
     }

@@ -16,7 +16,7 @@ struct WatchJob: Equatable, Sendable {
 ///
 /// Local folders are scanned whole at start, then by the subtrees FSEvents reports. Network
 /// folders are polled `pollIntervalMinutes` after start and after each scan ends, and never
-/// while playback holds polls back. One the index holds no files for is polled at start.
+/// while playback holds polls back. One whose last whole scan didn't finish is polled at start.
 struct WatchState {
     /// How long after a failed scan of a local folder it's first scanned again, whole. FSEvents
     /// reports a change once, so a failed scan would otherwise lose it until the next launch;
@@ -44,8 +44,10 @@ struct WatchState {
     private var requested: [String] = []
     /// The network folders not polled at start, by path, in Settings order.
     private(set) var leftToTheIndex: [String] = []
+    /// The folders, by path, whose scan at start hasn't ended yet.
+    private var launchPending: Set<String> = []
 
-    /// `indexed` is the network folders, by path, the index already holds files for. Unless
+    /// `indexed` is the network folders, by path, whose last whole scan finished. Unless
     /// `rescanNetworkFoldersAtLaunch`, those show what the index holds until their first poll,
     /// since walking a share at launch keeps the NAS busy when the first track is read.
     init(
@@ -64,7 +66,11 @@ struct WatchState {
                 pollDue[folder.path] = now
             }
         }
+        launchPending = Set(folders.map(\.path)).subtracting(leftToTheIndex)
     }
+
+    /// Whether a folder's scan at start, whole, hasn't ended yet, as finished or failed.
+    var launchScansPending: Bool { !launchPending.isEmpty }
 
     /// The folders at new paths, in the same order, after a share moved (ADR 0028). What was
     /// pending for each moves with it, but its changed directories are dropped: a moved network
@@ -73,6 +79,7 @@ struct WatchState {
         precondition(moved.count == folders.count, "relocated a different set of folders")
         precondition(running == nil, "relocated during a scan")
         for (old, new) in zip(folders, moved) where old.path != new.path {
+            if launchPending.remove(old.path) != nil { launchPending.insert(new.path) }
             changed[old.path] = nil
             wholeScans = wholeScans.map { $0 == old.path ? new.path : $0 }
             requested = requested.map { $0 == old.path ? new.path : $0 }
@@ -195,6 +202,7 @@ struct WatchState {
     mutating func finished(now: Date) {
         guard let job = running else { preconditionFailure("no scan is running") }
         running = nil
+        if job.subtrees.isEmpty { launchPending.remove(job.folder.path) }
         failuresInARow[job.folder.path] = nil
         if job.folder.kind == .network {
             pollDue[job.folder.path] = now.addingTimeInterval(
@@ -211,6 +219,7 @@ struct WatchState {
         let failures = (failuresInARow[path] ?? 0) + 1
         if job.folder.kind == .local {
             running = nil
+            if job.subtrees.isEmpty { launchPending.remove(path) }
             let wait = min(
                 Self.failedScanRetrySeconds * pow(2, Double(failures - 1)), Self.longestRetrySeconds
             )

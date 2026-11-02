@@ -256,3 +256,24 @@ private struct FakeEngine {
     state.finished(now: minutes(1))
     #expect(state.start(now: minutes(1)) == nil, "the running scan counted")
 }
+
+@Test func theLaunchScansEndWithEachFolderWholeNotWithASubtreeScan() {
+    var state = WatchState(
+        folders: [local, nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false, now: start)
+    state.directoriesChanged([local.path + "/Album"])
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: [local.path + "/Album"]))
+    state.finished(now: start)
+    #expect(state.launchScansPending)
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
+    state.finished(now: start)
+    #expect(state.launchScansPending, "the network folder's hasn't ended")
+    #expect(state.start(now: start) == WatchJob(folder: nas, subtrees: []))
+    _ = state.failed(now: start)
+    #expect(!state.launchScansPending)
+
+    let kept = WatchState(
+        folders: [nas], indexed: [nas.path], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false, now: start)
+    #expect(!kept.launchScansPending)
+}

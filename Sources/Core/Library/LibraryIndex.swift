@@ -143,17 +143,20 @@ public final class LibraryIndex {
             // Stats tables that don't match are discarded with everything else, since every
             // other part refers to their paths, and so are they when an earlier sync part is
             // (SchemaPart.sync); any other part is rebuilt around the rest.
-            let rebuilt =
+            var rebuilt =
                 stale.contains(.stats)
                     || (stale.contains(.sync) && stored[SchemaPart.sync.rawValue] != nil)
                 ? SchemaPart.allCases : stale
+            if rebuilt.contains(.index), !rebuilt.contains(.scans) { rebuilt.append(.scans) }
             for part in rebuilt where stored[part.rawValue] != nil {
                 logger.notice("the \(part.rawValue) tables don't match this build; rebuilding them")
             }
             // The sync part's rows are where reading the logs got to, which the next sync
             // reads again, not the owner's stats.
-            let discarded = rebuilt.filter { stored[$0.rawValue] != nil && $0 != .sync }
-                .compactMap(\.tables).reduce(into: Set<String>()) { $0.formUnion($1) }
+            let discarded = rebuilt.filter {
+                stored[$0.rawValue] != nil && $0 != .sync && $0 != .scans
+            }
+            .compactMap(\.tables).reduce(into: Set<String>()) { $0.formUnion($1) }
             if !discarded.isEmpty { try recordDiscardedStats(discarded) }
             let kept = SchemaPart.allCases.filter { !rebuilt.contains($0) }.compactMap(\.tables)
                 .reduce(into: Set<String>()) { $0.formUnion($1) }
@@ -264,14 +267,21 @@ public final class LibraryIndex {
         return files
     }
 
-    /// Whether the index holds any file under `directory`, as it does after a folder's first
-    /// scan stored something.
-    func holdsFiles(under directory: String) throws -> Bool {
-        let range = pathRange(under: directory)
-        return try database.prepare(
-            "SELECT EXISTS (SELECT 1 FROM files WHERE path >= ? AND path < ?)"
-        )
-        .map(range.lowerBound, range.upperBound) { try $0.int(0) == 1 }[0]
+    /// Whether the last whole scan of the folder at `root` finished, so the index holds all of
+    /// it as of then.
+    func finishedWholeScan(of root: String) throws -> Bool {
+        try database.prepare(
+            "SELECT EXISTS (SELECT 1 FROM \(scannedFoldersTable) WHERE root = ?)"
+        ).map(canonicalPath(root)) { try $0.int(0) == 1 }[0]
+    }
+
+    /// Records whether the whole scan of the folder at `root` finished: false as one starts.
+    func setFinishedWholeScan(of root: String, _ finished: Bool) throws {
+        try statement(
+            finished
+                ? "INSERT OR IGNORE INTO \(scannedFoldersTable) (root) VALUES (?)"
+                : "DELETE FROM \(scannedFoldersTable) WHERE root = ?"
+        ).run(canonicalPath(root))
     }
 
     /// Stores a batch of read results in one transaction.
@@ -474,6 +484,13 @@ public final class LibraryIndex {
             (id: try row.int64(0), path: try row.text(1))
         }.filter { file in !roots.contains { isPath(file.path, under: $0) } }
         try remove(outside.map(\.id))
+        let watched = Set(roots.map(canonicalPath))
+        let finished = try database.prepare("SELECT root FROM \(scannedFoldersTable)").map {
+            try $0.text(0)
+        }
+        for root in finished where !watched.contains(root) {
+            try setFinishedWholeScan(of: root, false)
+        }
         return outside.count
     }
 

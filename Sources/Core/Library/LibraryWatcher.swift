@@ -43,6 +43,8 @@ public final class LibraryWatcher: @unchecked Sendable {
     private var syncDue = false
     private var pushDue = false
     private var syncing = false
+    /// Set once `launchScansEnded` went out.
+    private var launchReported = false
 
     /// `networkReaders` is the files a network scan reads at once, or nil to tune it per scan.
     /// `mounts` finds the shares that folders on one are under. `events` is called on a
@@ -67,7 +69,7 @@ public final class LibraryWatcher: @unchecked Sendable {
     }
 
     /// Finds each of `folders` (ADR 0028), removes files outside them from the index, scans
-    /// the local folders and the network ones the index holds nothing for, and starts watching
+    /// the local folders and the network ones whose last whole scan didn't finish, and starts watching
     /// them, and syncs through `syncFolder` at start, after each scan and on each trigger. The
     /// caller reads them from Settings.
     public func start(
@@ -103,6 +105,7 @@ public final class LibraryWatcher: @unchecked Sendable {
                 pausePollingDuringPlayback: pausePollingDuringPlayback, now: Date())
             state = started
             for path in started.leftToTheIndex { events(.keptIndex(folder: path)) }
+            reportLaunchIfEnded()
             if locatedAll { removeFiles(outside: folders) }
             watchLocalFolders(folders.filter { $0.kind == .local })
             advance()
@@ -192,16 +195,17 @@ public final class LibraryWatcher: @unchecked Sendable {
         }
     }
 
-    /// The network folders among `folders` that the index holds files for, by path. One whose
-    /// files can't be counted is scanned, as if it had none.
+    /// The network folders among `folders` whose last whole scan finished, by path. When the
+    /// index can't say, they're all scanned.
     private func indexed(_ folders: [WatchedFolder]) -> Set<String> {
         let network = folders.filter { $0.kind == .network }
         guard !network.isEmpty else { return [] }
         do {
             let index = try LibraryIndex(at: scanner.databaseURL)
-            return Set(try network.filter { try index.holdsFiles(under: $0.path) }.map(\.path))
+            return Set(try network.filter { try index.finishedWholeScan(of: $0.path) }.map(\.path))
         } catch {
-            logger.error("couldn't tell which network folders are indexed; scanning them: \(error)")
+            logger.error(
+                "couldn't tell which network folders were scanned whole; scanning them: \(error)")
             return []
         }
     }
@@ -318,7 +322,14 @@ public final class LibraryWatcher: @unchecked Sendable {
                 events(.scanFailed(folder: job.folder.path, reason: "\(error)"))
             }
         }
+        reportLaunchIfEnded()
         advance()
+    }
+
+    private func reportLaunchIfEnded() {
+        guard !launchReported, state?.launchScansPending == false else { return }
+        launchReported = true
+        events(.launchScansEnded)
     }
 
     /// Starts a sync on the scan queue, or only a push when an edit is all that's due, and

@@ -12,6 +12,8 @@ public enum WatcherEvent: Sendable {
     /// At start, the network folder at this path shows what the index holds, and is first
     /// polled `pollIntervalMinutes` later.
     case keptIndex(folder: String)
+    /// Every folder's scan at start has ended, or was left to the index: once per start.
+    case launchScansEnded
     /// At start, this many files outside every watched folder left the index, such as those of a
     /// folder no longer watched.
     case removed(count: Int)

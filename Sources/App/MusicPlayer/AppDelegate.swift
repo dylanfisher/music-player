@@ -34,8 +34,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let paths: AppPaths
     private let measuring: Bool
     private let reportingLaunch: Bool
-    /// Watched folders whose first scan hasn't ended yet, while `reportingLaunch`.
-    private var foldersScanning = 0
     private let snapshotURL: URL?
     private let snapshotOf: SnapshotTarget
     /// How long after the first rows the snapshot waits, for the scan and art to show.
@@ -535,7 +533,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             networkReaders: settings[\.networkScanReaders],
             events: reportingLaunch
                 ? reportingLaunchEnd(browser.watcherEvents) : browser.watcherEvents)
-        foldersScanning = folders.count
         let pause = settings[\.pausePollingDuringPlayback]
         watcher.start(
             folders: folders, syncFolder: settings[\.syncFolder],
@@ -547,26 +544,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.watcher = watcher
     }
 
-    /// `events`, and after it has the first scan of every watched folder's end, or word that a
-    /// network folder isn't scanned at launch, a "launched" line on standard output.
+    /// `events`, and a "launched" line on standard output once the watcher's scans at start
+    /// have ended.
     private func reportingLaunchEnd(
         _ events: @escaping @Sendable (WatcherEvent) -> Void
     ) -> @Sendable (WatcherEvent) -> Void {
-        { [weak self] event in
+        { event in
             events(event)
-            switch event {
-            case .scanned, .scanFailed, .keptIndex:
-                DispatchQueue.main.async { self?.firstScanEnded() }
-            default: break
+            if case .launchScansEnded = event {
+                FileHandle.standardOutput.write(Data("launched\n".utf8))
             }
-        }
-    }
-
-    private func firstScanEnded() {
-        guard foldersScanning > 0 else { return }
-        foldersScanning -= 1
-        if foldersScanning == 0 {
-            FileHandle.standardOutput.write(Data("launched\n".utf8))
         }
     }
 
