@@ -16,6 +16,9 @@ that is → by default. → is already Focus Next Pane's, and a key had one mean
   narrowing it, and selects and centers the first row of that list that is one of the entry's
   tracks. ⌘↩ and ⌘-click filter, as ↩ did. A genre in ⌘K still filters on either, and a track
   still shows where it is.
+- **⌘↩ is a fixed palette key**, as ⌘W is: the palette takes it before the menu bar whatever the
+  user binds it to, since it is the modified ↩ the palette's rows already answer to. Only the
+  filter key that acts beside the query, → by default, is set in Shortcuts.
 - **Filter to Item is a palette key**: a command marked `inPalette`, whose chords are claimed
   apart from the app's, so it can share → with Focus Next Pane. It runs from no menu, and the
   Shortcuts pane lists it last, under Palette. Reserved chords and fixed primaries (⌘A) stay out of
