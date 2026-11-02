@@ -32,6 +32,15 @@ settings and the library. A few choices follow from that.
   the 30 ms budget. ⌘K lists a few thousand items and costs less.
 - **Playlists** join ⌘K in phase 7, when they exist. **Settings** that aren't commands join with
   the Settings window, which choosing one opens at its row.
+- **Two palettes by what they find (amended 2026-11-01).** The owner asked for ⌘K to hold what
+  the app does and ⌘P what it plays. ⌘K lists commands, settings, playlists and genres; ⌘P lists
+  artists, albums and the current list's tracks, every matching artist first, then albums, then
+  tracks, each kind ranked by the score and frecency rules above. Each kind keeps its own best
+  50, so a query matching many artists still shows its albums and tracks, and a keystroke over
+  43k tracks still costs one score per row. The tracks stay the current list's rows, as
+  Searcher's Go to Item has them, so it also finds a row in a playlist or the timeline; in the
+  default view that list is the whole library. Both palettes share one frecency log, since their
+  keys can't collide. The alternate chords ⇧⌘P and ⇧⌘K are gone, so each palette has one chord.
 - `--snapshot-of palette` opens ⌘K before the snapshot, so the panel can be checked on a Mac
   where screen recording isn't allowed.
 

@@ -14,9 +14,10 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   applies until it's fixed. The Settings window (⌘,) edits the same file, with a General pane
   for the settings in sections, a Watched Folders pane and a Shortcuts pane for every command's
   two chords.
-- **⌘K** opens the command palette: every command, setting, playlist, genre, artist and album,
-  ranked by how well they match and how often and recently you chose or played them.
-- **⌘P** is Go to Item: the tracks of the current list, by title.
+- **⌘K** opens the command palette: every command, setting, playlist and genre, ranked by how
+  well they match and how often and recently you chose or played them.
+- **⌘P** is Go to Item: the artists and albums, then the tracks of the current list, each kind
+  in turn.
 - **Playlists** (⌘N, or ⇧⌘N from the selection) take tracks dragged onto them in the sidebar,
   and reorder by dragging while sorted by Order. **Smart playlists** (⌥⌘N) pick tracks by rules
   and follow the library as it changes. Plays, skips, ratings and History are kept in the

@@ -9,6 +9,8 @@ public final class PaletteModel {
 
     public private(set) var items: [PaletteItem] = []
     public private(set) var query = ""
+    /// Whether the listing ranks each kind in turn, as `rankPalette` does with `byKind`.
+    public private(set) var byKind = false
     public private(set) var results: [RankedItem] = []
     public private(set) var frecency: Frecency
     /// Counts the listings `open` starts, so items read for one aren't added to the next.
@@ -30,9 +32,10 @@ public final class PaletteModel {
     /// Starts a listing of `items` with an empty query, as when the palette opens, and returns
     /// its session. The change is made before this returns, so an `append` made after builds on
     /// it. Call `rank` to rank it.
-    public func open(_ items: [PaletteItem]) -> Int {
+    public func open(_ items: [PaletteItem], byKind: Bool) -> Int {
         session += 1
         self.items = items
+        self.byKind = byKind
         query = ""
         return session
     }
@@ -59,9 +62,10 @@ public final class PaletteModel {
     func rank() async {
         generation += 1
         let mine = generation
-        let (items, query, session, scores) = (items, query, session, frecency.scores(now: now()))
+        let (items, query, session, byKind) = (items, query, session, byKind)
+        let scores = frecency.scores(now: now())
         let results = await Task.detached(priority: .userInitiated) {
-            rankPalette(items, query: query, frecency: scores, limit: Self.limit)
+            rankPalette(items, query: query, frecency: scores, limit: Self.limit, byKind: byKind)
         }.value
         guard mine == generation else { return }
         let sameQuery = ranked.map { $0 == (session, query) } ?? false

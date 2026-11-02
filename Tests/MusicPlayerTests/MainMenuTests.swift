@@ -49,21 +49,24 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
 
 @MainActor @Test func alternatesGoOnHiddenItemsAndChangeInPlace() throws {
     let (menu, dispatcher) = try menu()
-    func palette() -> [NSMenuItem] {
-        items(menu.bar).map(\.0).filter { ($0.representedObject as? CommandID) == .showPalette }
+    func reveal() -> [NSMenuItem] {
+        items(menu.bar).map(\.0).filter {
+            ($0.representedObject as? CommandID) == .revealInFinder
+        }
     }
-    #expect(palette().map(\.isHidden) == [false, true])
-    #expect(palette()[1].keyEquivalent == "p")
-    #expect(palette()[1].keyEquivalentModifierMask == [.command, .shift])
+    #expect(reveal().map(\.isHidden) == [false, true])
+    #expect(reveal()[1].keyEquivalent == "r")
+    #expect(reveal()[1].keyEquivalentModifierMask == [.command, .option])
     dispatcher.setBindings(
         try KeyBindings(
             AppCommands.all(),
             overrides: [
-                "window.showPalette": ShortcutOverride(primary: .chord(KeyChord("j", .command)))
+                CommandID.revealInFinder.rawValue: ShortcutOverride(
+                    primary: .chord(KeyChord("j", .command)))
             ],
             rules: AppMenus.rules(appName: "App")))
     menu.showChords()
-    #expect(palette()[0].keyEquivalent == "j")
+    #expect(reveal()[0].keyEquivalent == "j")
 }
 
 @MainActor @Test func reservedItemsKeepTheirChords() throws {

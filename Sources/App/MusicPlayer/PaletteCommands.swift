@@ -46,25 +46,24 @@ extension AppDelegate {
             palette.close()
             return
         }
-        switch mode {
-        case .commands:
-            let session = palette.show(
-                .commands, items: commandItems() + playlistItems(browser.playlists), over: window,
-                place: state[\.palettePlace])
-            Task {
-                do {
-                    let (items, entries) = libraryItems(try await browser.allEntries())
-                    // A listing the palette has replaced since keeps none of these.
-                    guard palette.model.session == session else { return }
-                    paletteEntries = entries
-                    palette.append(items, to: session)
-                } catch {
-                    browser.report("couldn't list the library for the palette: \(error)")
-                }
+        let panes = listedPanes(mode)
+        let session = palette.show(
+            mode,
+            items: mode == .commands ? commandItems() + playlistItems(browser.playlists) : [],
+            over: window, place: state[\.palettePlace])
+        Task {
+            do {
+                let (items, entries) = libraryItems(
+                    try await browser.allEntries().filter { panes.contains($0.0) })
+                // A listing the palette has replaced since keeps none of these.
+                guard palette.model.session == session else { return }
+                paletteEntries = entries
+                palette.append(items, to: session)
+            } catch {
+                browser.report("couldn't list the library for the palette: \(error)")
             }
-        case .goToItem:
-            let session = palette.show(
-                .goToItem, items: [], over: window, place: state[\.palettePlace])
+        }
+        if mode == .goToItem {
             Task {
                 do {
                     let names = try await browser.trackNames()
@@ -188,6 +187,11 @@ func goToItems(_ names: [TrackName]) -> [PaletteItem] {
             kind: .track, key: "track:\(row):\(name.id)", title: name.title,
             detail: [name.artist, name.album].compactMap { $0 }.joined(separator: " — "))
     }
+}
+
+/// The panes whose entries `mode` lists: ⌘K the genres, ⌘P the artists and albums (ADR 0016).
+func listedPanes(_ mode: PaletteMode) -> Set<BrowserModel.Pane> {
+    mode == .commands ? [.genre] : [.artist, .album]
 }
 
 /// The row a Go to Item key names, if that row still holds the same ID.

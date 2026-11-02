@@ -25,7 +25,10 @@ let paletteBenchmarks = [
         }
         let samples = try millisecondSamples(
             typed.map { query in
-                { _ = rankPalette(items, query: query, frecency: [:], limit: PaletteModel.limit) }
+                {
+                    _ = rankPalette(
+                        items, query: query, frecency: [:], limit: PaletteModel.limit, byKind: true)
+                }
             })
         return Measured(
             value: p95(samples),

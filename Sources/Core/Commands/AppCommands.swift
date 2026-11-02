@@ -128,9 +128,8 @@ public enum AppCommands {
     /// The commands written here, without the ones generated from settings.
     static let fixedSet: [Command] =
         [
-            Command(
-                .showPalette, "Command Palette…", [.init("k", cmd), .init("p", [cmd, shift])]),
-            Command(.goToItem, "Go to Item…", [.init("p", cmd), .init("k", [cmd, shift])]),
+            Command(.showPalette, "Command Palette…", [.init("k", cmd)]),
+            Command(.goToItem, "Go to Item…", [.init("p", cmd)]),
 
             Command(.selectNext, "Select Next Row", [.init(.down)]),
             Command(.selectPrevious, "Select Previous Row", [.init(.up)]),

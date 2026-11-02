@@ -2,8 +2,8 @@ import AppKit
 import KeyChord
 import Settings
 
-/// Which list the palette shows: ⌘K's commands, settings and library entries, or ⌘P's rows of
-/// the current track list.
+/// Which list the palette shows: ⌘K's commands, settings, playlists and genres, or ⌘P's artists,
+/// albums and rows of the current track list, each kind in turn.
 public enum PaletteMode: Equatable, Sendable {
     case commands
     case goToItem
@@ -70,7 +70,8 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         previousResponder = window.firstResponder
         field.stringValue = ""
         field.placeholderString =
-            mode == .commands ? "Commands, settings, artists, albums, genres" : "Go to Item"
+            mode == .commands
+            ? "Commands, settings, playlists, genres" : "Artists, albums, tracks"
         panel.setAccessibilityTitle(mode == .commands ? "Command Palette" : "Go to Item")
         let screen = (window.screen ?? NSScreen.main)?.visibleFrame ?? window.frame
         let frame = Self.frame(size: panel.frame.size, on: screen, place: place)
@@ -78,7 +79,7 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         shownAt = frame
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(field)
-        let session = model.open(items)
+        let session = model.open(items, byKind: mode == .goToItem)
         Task { await model.rank() }
         return session
     }

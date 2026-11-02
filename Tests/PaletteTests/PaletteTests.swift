@@ -25,6 +25,19 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     #expect(frecent.first?.index == 0)
 }
 
+@Test func byKindListsEachKindsBestInTurn() {
+    // Three artists would fill the limit, yet each kind keeps its own best, artists first.
+    let items = [
+        item("Abba Gold", .track), item("Abbas", .artist), item("Abba Live", .album),
+        item("Abba", .track), item("Abba Teens", .artist), item("Abba Band", .artist),
+    ]
+    let ranked = rankPalette(items, query: "abba", frecency: [:], limit: 2, byKind: true)
+    #expect(ranked.map(\.item.title) == ["Abbas", "Abba Band", "Abba Live", "Abba", "Abba Gold"])
+    let empty = rankPalette(items, query: "", frecency: ["track:Abba": 16], limit: 2, byKind: true)
+    #expect(empty.map(\.item.kind) == [.artist, .artist, .album, .track, .track])
+    #expect(empty.last?.item.title == "Abba Gold")
+}
+
 @Test func anEmptyQueryListsTheMostFrecentFirst() {
     let items = ["A", "B", "C"].map { item($0) }
     let ranked = rankPalette(items, query: "", frecency: ["artist:C": 4], limit: 5)
@@ -61,7 +74,7 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
 
 @MainActor @Test func theLatestQueryWins() async {
     let model = PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 })
-    _ = model.open((0..<2000).map { item("Artist \($0)") } + [item("Zappa")])
+    _ = model.open((0..<2000).map { item("Artist \($0)") } + [item("Zappa")], byKind: false)
     async let first: Void = model.setQuery("a")
     async let second: Void = model.setQuery("zap")
     _ = await (first, second)
@@ -87,8 +100,8 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
 
 @MainActor @Test func itemsAppendedBeforeTheFirstRankingAreKept() async {
     let model = PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 })
-    let stale = model.open([item("Old")])
-    let session = model.open([item("Abba", .command)])
+    let stale = model.open([item("Old")], byKind: false)
+    let session = model.open([item("Abba", .command)], byKind: false)
     // An earlier open's items arrive late, and this one's before its ranking ran.
     async let late: Void = model.append([item("Old")], to: stale)
     async let more: Void = model.append([item("Queen")], to: session)

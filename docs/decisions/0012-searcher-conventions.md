@@ -74,7 +74,7 @@ before macOS 26.
   change of list starts a new query. A repeated letter doesn't cycle. Space while a query is
   being typed joins the query, ahead of Play/Pause.
 - The Shortcuts pane has a recorder for each slot, with Reset per command and Reset All. A chord
-  another command has says "⇧⌘P is used by Go to Item." with Replace and Cancel. Recording never
+  another command has says "⌘P is used by Go to Item." with Replace and Cancel. Recording never
   runs the command (0106's amendment of 2026-10-26).
 - **Which settings are commands.** The registry generates a command from the schema for each
   Boolean setting (a toggle titled with what it would do, such as "Turn On Hog Mode") and one
@@ -94,8 +94,8 @@ Kept from Searcher, the same job on the same key:
 
 | Action | Default |
 |---|---|
-| Command palette | ⌘K, alternate ⇧⌘P. Pressing it again or ⌘W closes it |
-| Go to Item in the current list | ⌘P, alternate ⇧⌘K |
+| Command palette | ⌘K. Pressing it again or ⌘W closes it |
+| Go to Item: artists, albums and the current list | ⌘P |
 | Next / previous row, extend the selection | ↓ / ↑, ⇧↓ / ⇧↑ |
 | Move 10 rows | ⌥↓ / ⌥↑, alternate ⌃⇧↓ / ⌃⇧↑ |
 | First / last row | Home / End, alternate ⌘⌥↑ / ⌘⌥↓ |
@@ -193,10 +193,9 @@ We take Searcher's model, without the configurable location. Each part was weigh
 - ↑, ↓, Page Up and Page Down move; Return runs; Esc closes and gives the keys back to whatever
   had them. The opening chords and ⌘W close it; the other palette's chords switch to it. An off
   command is listed greyed, and Return beeps on it.
-- **⌘K** lists commands, settings, artists, albums, genres and playlists, a few thousand items.
-  **⌘P** (Go to Item) lists the rows of the current track list, prepared off the main actor as
-  0101 does, and selects the chosen row, centred. Tracks aren't in ⌘K: the search field (FTS5)
-  and ⌘P cover them, and 43k titles would crowd out the rest.
+- **⌘K** lists commands, settings, playlists and genres. **⌘P** (Go to Item) lists the
+  artists and albums, then the rows of the current track list, prepared off the main actor as
+  0101 does, and selects the chosen row, centred ([0016](0016-palette.md) has the split).
 - Matching follows 0079 and ranking 0085: word-start, component-start and initials bonuses, the
   prefix rule from three letters, a kind bonus, and frecency with zoxide's weights (4 within the
   hour, 2 the day, 1/2 the week, 1/4 before), counted from palette choices and plays. Ranking runs

@@ -48,3 +48,8 @@ import Testing
     #expect(goToRow(items[1].key, rowID: rowID) == nil)
     #expect(goToRow("track:x:1", rowID: rowID) == nil)
 }
+
+@Test func commandsListGenresAndGoToItemListsArtistsAndAlbums() {
+    #expect(listedPanes(.commands) == [.genre])
+    #expect(listedPanes(.goToItem) == [.artist, .album])
+}
