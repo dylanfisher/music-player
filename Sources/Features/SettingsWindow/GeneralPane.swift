@@ -9,7 +9,8 @@ private let logger = moduleLogger()
 let noValueText = "None"
 
 /// Settings ▸ General: the config file's place and buttons, then the settings from the schema in
-/// sections, a grid of rows each.
+/// sections, a grid of rows each. Settings ▸ Appearance is one too, with its section alone and
+/// no config file.
 @MainActor
 final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     static let width = 640.0
@@ -17,7 +18,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     static let copiedSeconds = 1.5
 
     private let model: GeneralModel
-    private let configPath: String
+    /// Nil for a pane without the config file's place and buttons.
+    private let configPath: String?
+    private let sections: [GeneralModel.Section]
     private let actions: SettingsActions
     private var controls: [String: NSView] = [:]
     private let copyButton = NSButton()
@@ -25,9 +28,13 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private var copiedGeneration = 0
     private var syncFolderLabel: NSTextField?
 
-    init(model: GeneralModel, configPath: String, actions: SettingsActions) {
+    init(
+        model: GeneralModel, configPath: String?, actions: SettingsActions,
+        sections: [GeneralModel.Section] = GeneralModel.Section.allCases
+    ) {
         self.model = model
         self.configPath = configPath
+        self.sections = sections
         self.actions = actions
         super.init(nibName: nil, bundle: nil)
     }
@@ -36,6 +43,36 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
 
     override func loadView() {
+        // One grid for every section, so the labels of all of them line up.
+        let grid = NSGridView(numberOfColumns: 2, rows: 0)
+        grid.rowSpacing = 10
+        grid.columnSpacing = 12
+        let shown = model.sections.filter { sections.contains($0.section) }
+        for (index, (section, rows)) in shown.enumerated() {
+            let heading = NSTextField(labelWithString: section.title)
+            heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+            let headingRow = grid.addRow(with: [NSGridCell.emptyContentView, heading])
+            headingRow.topPadding = index == 0 ? 0 : 12
+            for row in rows { addRow(row, to: grid) }
+        }
+        grid.column(at: 0).xPlacement = .trailing
+        grid.rowAlignment = .firstBaseline
+        errorLabel.textColor = .systemRed
+        errorLabel.isHidden = true
+        let views = configPath.map { [configHeader($0), NSBox.separator()] } ?? []
+        let stack = NSStackView(views: views + [grid, errorLabel])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 16
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.widthAnchor.constraint(equalToConstant: Self.width).isActive = true
+        view = stack
+        reload()
+    }
+
+    /// The config file's place, and buttons to open, reveal and copy it.
+    private func configHeader(_ configPath: String) -> NSView {
         let path = NSTextField(
             labelWithString: (configPath as NSString).abbreviatingWithTildeInPath)
         path.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
@@ -56,31 +93,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         header.orientation = .vertical
         header.alignment = .leading
         header.spacing = 6
-
-        // One grid for every section, so the labels of all of them line up.
-        let grid = NSGridView(numberOfColumns: 2, rows: 0)
-        grid.rowSpacing = 10
-        grid.columnSpacing = 12
-        for (index, (section, rows)) in model.sections.enumerated() {
-            let heading = NSTextField(labelWithString: section.title)
-            heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
-            let headingRow = grid.addRow(with: [NSGridCell.emptyContentView, heading])
-            headingRow.topPadding = index == 0 ? 0 : 12
-            for row in rows { addRow(row, to: grid) }
-        }
-        grid.column(at: 0).xPlacement = .trailing
-        grid.rowAlignment = .firstBaseline
-        errorLabel.textColor = .systemRed
-        errorLabel.isHidden = true
-        let stack = NSStackView(views: [header, NSBox.separator(), grid, errorLabel])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 16
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.widthAnchor.constraint(equalToConstant: Self.width).isActive = true
-        view = stack
-        reload()
+        return header
     }
 
     private func addRow(_ row: GeneralModel.Row, to grid: NSGridView) {

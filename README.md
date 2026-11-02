@@ -12,7 +12,8 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   lists every setting at its default with what it takes. Edit it in any editor and the app picks
   the change up on save; a mistake shows in a banner across the window and nothing in the file
   applies until it's fixed. The Settings window (⌘,) edits the same file, with a General pane
-  for the settings in sections, a Watched Folders pane and a Shortcuts pane for every command's
+  for the settings in sections, an Appearance pane for light or dark and the track table's
+  lines, rows and album art, a Watched Folders pane and a Shortcuts pane for every command's
   two chords.
 - **⌘K** opens the command palette: every command, setting, output, playlist and genre, ranked
   by how well they match and how often and recently you chose or played them.

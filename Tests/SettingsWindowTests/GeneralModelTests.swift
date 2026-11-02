@@ -1,4 +1,5 @@
 import AppKit
+import Commands
 import Foundation
 import Testing
 
@@ -254,4 +255,35 @@ private func modelWithFolders() -> GeneralModel {
         #expect(setting.summary.hasSuffix("."), "\(setting.key)")
         #expect(!setting.summary.dropLast().contains(". "), "\(setting.key): one sentence")
     }
+}
+
+@MainActor @Test func theAppearanceSettingsHaveAPaneOfTheirOwn() throws {
+    let schema = AppSettings()
+    let model = GeneralModel(settings: schema.settings, value: { _ in nil }, set: { _, _ in })
+    let bindings = try KeyBindings(
+        AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
+    let controller = SettingsWindowController(
+        general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
+        configPath: "/tmp/config.json", actions: actions())
+    func keys(_ view: NSView) -> Set<String> {
+        view.subviews.reduce(into: Set(view.identifier.map { [$0.rawValue] } ?? [])) {
+            $0.formUnion(keys($1))
+        }
+    }
+    let appearanceKeys = Set(
+        schema.settings.map(\.key).filter { GeneralModel.Section(key: $0) == .appearance })
+    #expect(appearanceKeys.contains(schema.rowHeight.key))
+    #expect(appearanceKeys.contains(schema.appearance.key))
+
+    controller.show(setting: schema.rowHeight.key)
+    #expect(controller.window.title == "Appearance")
+    let appearance = try #require(controller.window.contentViewController?.view)
+    #expect(keys(appearance).isSuperset(of: appearanceKeys))
+    #expect(!keys(appearance).contains(schema.hogMode.key))
+
+    controller.show(.general)
+    let general = try #require(controller.window.contentViewController?.view)
+    #expect(keys(general).contains(schema.hogMode.key))
+    #expect(keys(general).isDisjoint(with: appearanceKeys))
+    controller.window.close()
 }
