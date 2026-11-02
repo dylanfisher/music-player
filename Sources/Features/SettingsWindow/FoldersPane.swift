@@ -1,10 +1,13 @@
 import AppKit
 import Commands
+import Log
 import Settings
 
-/// Settings ▸ Watched Folders: each folder with its kind and how often it's rescanned, buttons to
-/// add and remove one, and Rescan for the selected folders or Rescan All, from buttons or the
-/// table's context menu.
+private let logger = moduleLogger()
+
+/// Settings ▸ Watched Folders: each folder with its kind and how often it's rescanned, which a
+/// network folder's popup changes, buttons to add and remove one, and Rescan for the selected
+/// folders or Rescan All, from buttons or the table's context menu.
 @MainActor
 final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
     NSMenuItemValidation
@@ -170,6 +173,9 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
             return nil
         }
         let folder = folders[row]
+        if column == .rescans, let minutes = folder.pollIntervalMinutes {
+            return intervalPopUp(minutes, row: row)
+        }
         let text =
             switch column {
             case .location: folder.location
@@ -180,6 +186,34 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         label.lineBreakMode = .byTruncatingMiddle
         label.toolTip = text
         return label
+    }
+
+    /// The Rescans popup for the network folder in `row`, set to `minutes`.
+    private func intervalPopUp(_ minutes: Int, row: Int) -> NSPopUpButton {
+        let popUp = NSPopUpButton(frame: .zero, pullsDown: false)
+        popUp.controlSize = .small
+        popUp.isBordered = false
+        for interval in GeneralModel.rescanIntervals(folders[row]) {
+            popUp.addItem(withTitle: GeneralModel.rescansText(minutes: interval))
+            popUp.lastItem?.tag = interval
+        }
+        popUp.selectItem(withTag: minutes)
+        popUp.tag = row
+        popUp.target = self
+        popUp.action = #selector(choseInterval(_:))
+        popUp.setAccessibilityLabel("\(Column.rescans.title), \(folders[row].location)")
+        return popUp
+    }
+
+    @objc private func choseInterval(_ popUp: NSPopUpButton) {
+        guard let minutes = popUp.selectedItem?.tag else { return }
+        do {
+            try model.setPollInterval(row.key, at: popUp.tag, minutes: minutes)
+        } catch {
+            logger.error("\(error)")
+            reload()
+            _ = presentError(error)
+        }
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) { updateButtons() }

@@ -105,27 +105,31 @@ private var appearanceChoices: [SettingKind.Choice] {
     #expect(values()["a.count"] as? Int == 5)
 }
 
-/// A model whose watched folders are a local folder, a folder on a share and a whole share.
+/// A model whose watched folders are a local folder, a folder on a share and a whole share,
+/// and the folders as the config file has them after any change.
 @MainActor
-private func modelWithFolders() -> GeneralModel {
-    GeneralModel(
-        settings: Schema().settings,
-        value: {
-            $0 == "a.folders"
-                ? [
-                    ["path": "/Music", "kind": "local", "pollIntervalMinutes": 60],
-                    [
-                        "path": "library", "share": "smb://nas/music", "kind": "network",
-                        "pollIntervalMinutes": 30,
-                    ],
-                    [
-                        "path": "", "share": "smb://nas/other", "kind": "network",
-                        "pollIntervalMinutes": 5,
-                    ],
-                ] : nil
-        },
-        set: { _, _ in })
+private func modelWithFoldersAndValues() -> (GeneralModel, () -> [[String: Any]]) {
+    nonisolated(unsafe) var folders: [[String: Any]] = [
+        ["path": "/Music", "kind": "local", "pollIntervalMinutes": 60],
+        [
+            "path": "library", "share": "smb://nas/music", "kind": "network",
+            "pollIntervalMinutes": 30,
+        ],
+        [
+            "path": "", "share": "smb://nas/other", "kind": "network",
+            "pollIntervalMinutes": 5,
+        ],
+    ]
+    let model = GeneralModel(
+        settings: Schema().settings, value: { $0 == "a.folders" ? folders : nil },
+        set: { key, json in
+            if key == "a.folders", let json = json as? [[String: Any]] { folders = json }
+        })
+    return (model, { folders })
 }
+
+@MainActor
+private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 }
 
 @MainActor @Test func theWatchedFoldersAreListedWithTheirKindAndRescans() {
     let (model, _) = model()
@@ -133,9 +137,47 @@ private func modelWithFolders() -> GeneralModel {
     #expect(
         modelWithFolders().folders("a.folders") == [
             .init(location: "/Music", kind: "Local", rescans: "On change"),
-            .init(location: "library on smb://nas/music", kind: "Network", rescans: "Every 30 min"),
-            .init(location: "smb://nas/other", kind: "Network", rescans: "Every 5 min"),
+            .init(
+                location: "library on smb://nas/music", kind: "Network", rescans: "Every 30 min",
+                pollIntervalMinutes: 30),
+            .init(
+                location: "smb://nas/other", kind: "Network", rescans: "Every 5 min",
+                pollIntervalMinutes: 5),
         ])
+}
+
+@MainActor @Test func theRescanIntervalsStayInTheSchemasRange() {
+    let range = WatchedFolder.pollIntervalRangeMinutes
+    #expect(GeneralModel.rescanIntervalsMinutes.first == range.lowerBound)
+    #expect(GeneralModel.rescanIntervalsMinutes.last == range.upperBound)
+    #expect(GeneralModel.rescanIntervalsMinutes == GeneralModel.rescanIntervalsMinutes.sorted())
+    #expect(GeneralModel.rescansText(minutes: 60) == "Every hour")
+    #expect(GeneralModel.rescansText(minutes: 1440) == "Every 24 hours")
+    #expect(GeneralModel.rescansText(minutes: 90) == "Every 90 min")
+    let odd = GeneralModel.Folder(
+        location: "x", kind: "Network", rescans: "", pollIntervalMinutes: 45)
+    #expect(GeneralModel.rescanIntervals(odd).contains(45))
+}
+
+@MainActor @Test func theRescansColumnSetsANetworkFoldersInterval() throws {
+    let (model, folders) = modelWithFoldersAndValues()
+    let pane = FoldersPane(model: model, actions: actions())
+    _ = pane.view
+    let column = try #require(pane.table.tableColumns.firstIndex { $0.title == "Rescans" })
+    let local = pane.table.delegate?.tableView?(
+        pane.table, viewFor: pane.table.tableColumns[column], row: 0)
+    #expect((local as? NSTextField)?.stringValue == "On change")
+    let popUp = try #require(
+        pane.table.delegate?.tableView?(
+            pane.table, viewFor: pane.table.tableColumns[column], row: 1) as? NSPopUpButton)
+    #expect(popUp.titleOfSelectedItem == "Every 30 min")
+    #expect(popUp.itemTitles.contains("Every 6 hours"))
+    popUp.selectItem(withTag: 360)
+    _ = popUp.sendAction(popUp.action, to: popUp.target)
+    #expect(folders()[1]["pollIntervalMinutes"] as? Int == 360)
+    #expect(folders()[1]["share"] as? String == "smb://nas/music")
+    #expect(folders()[2]["pollIntervalMinutes"] as? Int == 5)
+    #expect(model.folders("a.folders")[1].rescans == "Every 6 hours")
 }
 
 @MainActor @Test func theWatchedFoldersHaveAPaneOfTheirOwn() throws {
