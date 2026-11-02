@@ -255,6 +255,22 @@ func theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost(
     #expect(contiguousFrames(of: high, from: frame, in: resumed.samples)?.start == 0)
 }
 
+@Test func aDeviceThatRefusesARateSwitchStopsPlaybackInsteadOfFailingTheTrack() async throws {
+    let low = try album(44_100, 16)
+    let high = try album(96_000, 24)
+    let rig = try await Rig()
+    rig.device.refuse(.configure, call: switchCall(.configure))
+    await rig.engine.setQueue([low.tracks[0], high.tracks[1], low.tracks[1]])
+    await rig.engine.play()
+
+    let failed = try await rig.wait { if case .failed = $0.event { true } else { false } }
+    #expect(failed.state.status == .stopped)
+    try await Task.sleep(nanoseconds: 300_000_000)
+    #expect(!rig.events.contains { if case .trackFailed = $0 { true } else { false } })
+    #expect(!rig.events.contains(.trackStarted(index: 2)))
+    #expect(rig.device.openSessionCount == 0)
+}
+
 @Test func aDeviceThatReadsAsGoneOnlyAfterTheSettleIsStillOfferedForResume() async throws {
     let low = try album(44_100, 16)
     let high = try album(96_000, 24)

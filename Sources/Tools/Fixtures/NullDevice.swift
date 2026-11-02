@@ -29,9 +29,10 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     private var runs: [CapturedRun] = []
     private var restoredDefaults = 0
     private var openSessions = 0
-    private var goesAwayDuring: (step: SessionStep, callsLeft: Int, afterSeconds: Double)?
+    /// `goneAfterSeconds` is nil for a call that fails while the device stays.
+    private var failsDuring: (step: SessionStep, callsLeft: Int, goneAfterSeconds: Double?)?
 
-    /// A call on a session the device can go away during.
+    /// A call on a session the device can go away during, or refuse.
     enum SessionStep: String, CaseIterable, Sendable {
         case stop, configure, start
     }
@@ -40,6 +41,12 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     struct WentAway: Error, CustomStringConvertible {
         var step: SessionStep
         var description: String { "the null device went away during \(step.rawValue)" }
+    }
+
+    /// What a session call throws when the device refuses it and stays connected.
+    struct Refused: Error, CustomStringConvertible {
+        var step: SessionStep
+        var description: String { "the null device refused \(step.rawValue)" }
     }
 
     /// What the IO proc wrote while the device ran at one rate.
@@ -141,20 +148,29 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     /// depends on when an event reaches the test.
     func goAway(during step: SessionStep, call: Int = 1, afterSeconds: Double = 0) {
         precondition(call >= 1, "calls count from 1")
-        lock.withLock { goesAwayDuring = (step, call, afterSeconds) }
+        lock.withLock { failsDuring = (step, call, afterSeconds) }
+    }
+
+    /// Makes the `call`th call of `step` from now fail while the device stays connected, as a
+    /// device that won't take a setting does.
+    func refuse(_ step: SessionStep, call: Int = 1) {
+        precondition(call >= 1, "calls count from 1")
+        lock.withLock { failsDuring = (step, call, nil) }
     }
 
     fileprivate func perform(_ step: SessionStep) throws {
-        let delay = lock.withLock { () -> Double? in
-            guard let goes = goesAwayDuring, goes.step == step else { return nil }
-            guard goes.callsLeft == 1 else {
-                goesAwayDuring?.callsLeft -= 1
+        // Nil when this call doesn't fail; then nil inside when the device stays.
+        let failure = lock.withLock { () -> Double?? in
+            guard let fails = failsDuring, fails.step == step else { return nil }
+            guard fails.callsLeft == 1 else {
+                failsDuring?.callsLeft -= 1
                 return nil
             }
-            goesAwayDuring = nil
-            return goes.afterSeconds
+            failsDuring = nil
+            return .some(fails.goneAfterSeconds)
         }
-        guard let delay else { return }
+        guard let failure else { return }
+        guard let delay = failure else { throw Refused(step: step) }
         if delay == 0 {
             unplug()
         } else {

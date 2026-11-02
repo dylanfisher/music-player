@@ -94,6 +94,28 @@ private final class TwoDevices: @unchecked Sendable {
     #expect(rig.events.filter { $0 == .trackStarted(index: 0) }.count == 1)
 }
 
+@Test func aDeviceThatWontTakeNewSettingsStopsPlaybackInsteadOfFailingTracks() async throws {
+    let album = try album(44_100, 16)
+    let rig = try await TwoDevices()
+    await rig.engine.setQueue(album.tracks)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+
+    // As turning hog mode off reopens the DAC with other settings.
+    rig.dac.refuse(.configure)
+    rig.output.use(DeviceChoice(provider: rig.dac, digitalVolume: true, gain: 1, formats: nil))
+    let failed = try await rig.wait { if case .failed = $0.event { true } else { false } }
+    #expect(failed.event == .failed(reason: "the null device refused configure"))
+    #expect(failed.state.status == .stopped)
+    #expect(failed.state.currentIndex == 0)
+    // Long enough for a skip to the next track to have started it.
+    try await Task.sleep(nanoseconds: 300_000_000)
+    #expect(!rig.events.contains { if case .trackFailed = $0 { true } else { false } })
+    #expect(!rig.events.contains(.trackStarted(index: 1)))
+    #expect(rig.events.filter { if case .failed = $0 { true } else { false } }.count == 1)
+    #expect(rig.dac.openSessionCount == 0)
+}
+
 @Test func theLostDeviceGetsOutputBackWhenNothingPlaysElsewhere() async throws {
     let album = try album(96_000, 24)
     let rig = try await TwoDevices()

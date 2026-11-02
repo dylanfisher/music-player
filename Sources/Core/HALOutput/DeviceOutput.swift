@@ -284,9 +284,16 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             let stream: RenderStream
             do {
                 stream = try configure(for: track)
-                try feed(track, into: stream, atFrame: frame)
             } catch {
                 if deviceIsGone(after: error, resuming: item.id, at: startSeconds) { return }
+                // The track was checked against the device's formats, so this is the device's
+                // failure: every track after it would fail the same way.
+                fail(error, item: item.id)
+                return
+            }
+            do {
+                try feed(track, into: stream, atFrame: frame)
+            } catch {
                 cannotPlay(item, error)
                 return
             }
@@ -589,7 +596,13 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         var ahead: Data?
         do {
             next = try configure(for: track)
-            clock.add(next.format.steps)
+        } catch {
+            if deviceIsGone(after: error, resuming: track.item.id, at: 0) { return }
+            fail(error, item: track.item.id)
+            return
+        }
+        clock.add(next.format.steps)
+        do {
             if let predecoded = track.predecoded,
                 StoredFormat(predecoded.format) == StoredFormat(next.decoderFormat)
             {
@@ -606,7 +619,6 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                 try clock.time("open") { try feed(track, into: next, atFrame: 0) }
             }
         } catch {
-            if deviceIsGone(after: error, resuming: track.item.id, at: 0) { return }
             emit(.trackFailed(track.item.id, error))
             unload()
             closeDevice()
@@ -682,9 +694,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         return true
     }
 
-    /// The device itself failed: drop everything and report it.
-    private func fail(_ error: any Error) {
-        let item = segments.first?.item.id
+    /// The device itself failed: drop everything and report it for `item`, by default the track
+    /// playing.
+    private func fail(_ error: any Error, item: OutputItem.ID? = nil) {
+        let item = item ?? segments.first?.item.id
         unload()
         closeDevice()
         emit(.failed(item, error))
