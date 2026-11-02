@@ -39,12 +39,25 @@ extension AppDelegate {
             return
         }
         guard volumeKeyTap == nil else { return }
-        guard MediaKeyTap.isPermitted else {
-            if !askedForAccessibility {
-                askedForAccessibility = true
-                logger.notice("the volume keys need Accessibility permission to reach the receiver")
-                MediaKeyTap.askForPermission()
+        switch ReceiverControl.volumeKeyAccess(
+            permitted: MediaKeyTap.isPermitted,
+            promptedBefore: state?[\.askedForAccessibility] == true,
+            explainedThisLaunch: explainedAccessibility)
+        {
+        case .tap: break
+        case .prompt:
+            do {
+                try state?.set(\.askedForAccessibility, to: true)
+            } catch {
+                logger.error("couldn't record the Accessibility prompt: \(error)")
             }
+            MediaKeyTap.askForPermission()
+            return
+        case .explain:
+            explainedAccessibility = true
+            browser?.report(ReceiverControl.accessibilityHint)
+            return
+        case .nothing:
             return
         }
         volumeKeyTap = MediaKeyTap { [weak self] key in

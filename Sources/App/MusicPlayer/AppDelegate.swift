@@ -67,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var rendererPathUpdates: Task<Void, Never>?
     /// The volume keys' tap, while they drive the receiver.
     var volumeKeyTap: MediaKeyTap?
-    var askedForAccessibility = false
+    var explainedAccessibility = false
     /// The device output's latest path, shown again when playback comes back from a renderer.
     private(set) var devicePath: SignalPath?
     private(set) var engine: PlaybackEngine?

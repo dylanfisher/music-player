@@ -535,6 +535,21 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     #expect(!ReceiverControl.isWanted(enabled: false, playingTo: denon(model: "Denon Home 150")))
 }
 
+@Test func theAccessibilityPromptComesOnceEverThenTheStatusLineSaysHow() {
+    typealias Access = ReceiverControl.VolumeKeyAccess
+    func access(_ permitted: Bool, _ prompted: Bool, _ explained: Bool) -> Access {
+        ReceiverControl.volumeKeyAccess(
+            permitted: permitted, promptedBefore: prompted, explainedThisLaunch: explained)
+    }
+    #expect(access(false, false, false) == .prompt)
+    // Declined: never prompted again, told once a launch where to grant it.
+    #expect(access(false, true, false) == .explain)
+    #expect(access(false, true, true) == .nothing)
+    #expect(access(true, true, true) == .tap)
+    #expect(
+        ReceiverControl.accessibilityHint.contains("Security & Privacy › Privacy › Accessibility"))
+}
+
 @Test func theVolumeKeysDriveTheReceiverOnlyWhilePlayingToIt() {
     #expect(
         ReceiverControl.takesVolumeKeys(setting: true, controlRunning: true, playingTo: denon()))

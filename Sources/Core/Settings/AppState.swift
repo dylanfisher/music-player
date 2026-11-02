@@ -35,6 +35,9 @@ public struct AppState: SettingsSchema {
         "window.signalPathVisible", title: "Show Signal Path", default: false,
         "Show what happens to the samples between the file and the device, under the"
             + " now-playing bar.")
+    public let askedForAccessibility = Setting(
+        "receiver.askedForAccessibility", title: "Asked for Accessibility", default: false,
+        "Whether the system's Accessibility prompt was shown for the volume keys.")
     public let queueWidth = Setting(
         "window.queueWidth", title: "Queue Width", default: 220, range: queueWidthRange,
         "Width of the queue, in points.")

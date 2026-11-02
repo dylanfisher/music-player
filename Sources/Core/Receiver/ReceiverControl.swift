@@ -112,6 +112,25 @@ public final class ReceiverControl {
         setting && controlRunning && renderer?.isDenonReceiver == true
     }
 
+    /// What to do for volume keys that are wanted: tap them with permission; without it, show
+    /// the system's prompt once ever, and after that say once a launch how to grant it, so an
+    /// owner who declined isn't asked again.
+    public enum VolumeKeyAccess: Equatable, Sendable {
+        case tap, prompt, explain, nothing
+    }
+
+    public nonisolated static let accessibilityHint =
+        "The volume keys need Accessibility permission to control the receiver: System"
+        + " Preferences › Security & Privacy › Privacy › Accessibility."
+
+    public nonisolated static func volumeKeyAccess(
+        permitted: Bool, promptedBefore: Bool, explainedThisLaunch: Bool
+    ) -> VolumeKeyAccess {
+        if permitted { return .tap }
+        if !promptedBefore { return .prompt }
+        return explainedThisLaunch ? .nothing : .explain
+    }
+
     /// Receiver control as `receiver.enabled` asks: started when it's on and stopped and gone
     /// when it's off. `current` is the control running now; `make` makes one.
     public static func applying(
