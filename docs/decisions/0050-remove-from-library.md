@@ -42,7 +42,9 @@ Moving a file to the Trash moves a music file, which AGENTS.md allowed only `Tag
   the sidebar's count and the Problems window. **Restore Removed Tracks…**
   (`library.restoreRemoved`) opens a sheet with a menu of the removed paths and Restore, Restore
   All and Cancel. Restoring deletes the paths' rows and rescans their folders, which reads the
-  files back with their stats.
+  files back with their stats. The check itself offers no Restore: as with Lost Stats, the
+  command is in the File menu and ⌘K, short of row 25.3's "can restore them" from Library
+  Health. Actions on the report's rows are row 26.1's.
 
 ## Alternatives considered
 
