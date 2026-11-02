@@ -34,7 +34,8 @@ private final class Fixture: @unchecked Sendable {
     }
 
     func start(
-        accepts: (@Sendable (IPAddress) -> Bool)? = nil, idleSeconds: Double = 30
+        accepts: (@Sendable (IPAddress) -> Bool)? = nil, idleSeconds: Double = 30,
+        headSeconds: Double = 10
     ) async throws {
         server = try await HTTPServer<String>.start(
             on: loopback, accepts: accepts ?? loopback.holds,
@@ -45,7 +46,7 @@ private final class Fixture: @unchecked Sendable {
                     path: folder.appendingPathComponent(key).path, contentType: "audio/flac")
             },
             problem: { [self] message in lock.withLock { heard.append(message) } },
-            idleSeconds: idleSeconds,
+            idleSeconds: idleSeconds, headSeconds: headSeconds,
             now: { [self] in lock.withLock { clock } })
     }
 
@@ -261,4 +262,19 @@ func waitFor(_ condition: @escaping () -> Bool) async throws {
         }
         try await Task.sleep(nanoseconds: 5_000_000)
     }
+}
+
+@Test func aHeadTricklingInIsCutOffAtItsDeadline() async throws {
+    let fixture = try Fixture()
+    try await fixture.start(headSeconds: 0.5)
+    let connection = try await LoopbackConnection.connect(port: fixture.server.port)
+    defer { connection.close() }
+    let started = Date()
+    // A byte every 100 ms keeps the idle timer from ever firing.
+    for byte in "GET /aaaaaaaaaaaaaaaaaa".utf8 {
+        guard !(await connection.closes(within: 0.1)) else { break }
+        try? await connection.send([byte])
+    }
+    #expect(await connection.closes(within: 1))
+    #expect(Date().timeIntervalSince(started) < 1.5)
 }

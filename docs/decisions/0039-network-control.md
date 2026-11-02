@@ -76,8 +76,9 @@ Anything that isn't a live token is 404 before `resolve` or the file system sees
 opened `O_RDONLY | O_NOFOLLOW | O_NONBLOCK` and must be regular files by `fstat`. `GET` and
 `HEAD` only; `Host` must be the bound address and port, which stops DNS rebinding; heads over
 8 KiB are 431; a body, a `Transfer-Encoding`, two `Range` fields, a range list, a unit other
-than bytes or a range outside the file are refused. At most 8 connections, each closed after
-30 s without progress and after its one reply (`Connection: close`). Its public entry point has
+than bytes or a range outside the file are refused. At most 8 connections, each closed when its
+request head isn't whole within 10 s however slowly it trickles in, after 30 s without progress,
+and after its one reply (`Connection: close`). Its public entry point has
 no caller until 9b, the one exception to "no type without a caller"; `scripts/surface-allow.txt`
 says so.
 

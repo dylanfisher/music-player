@@ -19,7 +19,8 @@ public struct HTTPServedFile: Sendable, Equatable {
 /// subnet. A URL names a random token, which maps to a key, which `resolve` maps to a file at
 /// request time; an unknown token is 404 before `resolve` or the file system sees it. Requests
 /// are `GET` or `HEAD` with the bound address as `Host`, no body and at most one range. At most
-/// `connectionCap` connections at once, each closed after `idleSeconds` without progress and
+/// `connectionCap` connections at once, each closed when its request head isn't whole within
+/// `headSeconds`, however slowly it trickles in, after `idleSeconds` without progress and
 /// after its one reply.
 ///
 /// 9b's UPnP output is its caller: it starts a server when a renderer is chosen and stops it
@@ -30,6 +31,7 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
     static var requestHeadCap: Int { 8 * 1024 }
     static var connectionCap: Int { 8 }
     static var idleSeconds: Double { 30 }
+    static var headSeconds: Double { 10 }
     static var tokenLifetimeSeconds: Double { 24 * 60 * 60 }
     static var chunkBytes: Int { 64 * 1024 }
 
@@ -42,6 +44,7 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
     private let problem: @Sendable (String) -> Void
     private let now: @Sendable () -> Double
     private let idleSeconds: Double
+    private let headSeconds: Double
     private var tokens = TokenMap<Key>(lifetimeSeconds: tokenLifetimeSeconds)
     private var clients: [ObjectIdentifier: Client] = [:]
     private var boundPort: UInt16 = 0
@@ -59,12 +62,12 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
     static func start(
         on interface: NetworkInterface, accepts: @escaping @Sendable (IPAddress) -> Bool,
         resolve: @escaping Resolve, problem: @escaping @Sendable (String) -> Void,
-        idleSeconds: Double = idleSeconds,
+        idleSeconds: Double = idleSeconds, headSeconds: Double = headSeconds,
         now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }
     ) async throws(LocalNetworkError) -> HTTPServer {
         let server = try HTTPServer(
             interface: interface, accepts: accepts, resolve: resolve, problem: problem,
-            idleSeconds: idleSeconds, now: now)
+            idleSeconds: idleSeconds, headSeconds: headSeconds, now: now)
         try await server.listen()
         return server
     }
@@ -72,7 +75,7 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
     private init(
         interface: NetworkInterface, accepts: @escaping @Sendable (IPAddress) -> Bool,
         resolve: @escaping Resolve, problem: @escaping @Sendable (String) -> Void,
-        idleSeconds: Double, now: @escaping @Sendable () -> Double
+        idleSeconds: Double, headSeconds: Double, now: @escaping @Sendable () -> Double
     ) throws(LocalNetworkError) {
         let parameters = directTCP()
         parameters.requiredLocalEndpoint = .hostPort(
@@ -87,6 +90,7 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
         self.resolve = resolve
         self.problem = problem
         self.idleSeconds = idleSeconds
+        self.headSeconds = headSeconds
         self.now = now
     }
 
@@ -161,6 +165,9 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
         }
         connection.start(queue: queue)
         touch(client)
+        queue.asyncAfter(deadline: .now() + headSeconds) { [self] in
+            if !client.hasHead { end(client) }
+        }
         receive(client)
     }
 
@@ -176,6 +183,7 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
             case .tooLarge: reply(client, .headersTooLarge)
             case .malformed: reply(client, .badRequest)
             case .head(let head, let length):
+                client.hasHead = true
                 answer(client, head, extra: client.received.count - length)
             }
         }
@@ -312,6 +320,7 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
 private final class Client: @unchecked Sendable {
     let connection: NWConnection
     var received: [UInt8] = []
+    var hasHead = false
     var idle: DispatchWorkItem?
     var file: OpenFile?
 
