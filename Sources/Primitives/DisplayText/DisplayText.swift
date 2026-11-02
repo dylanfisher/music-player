@@ -51,4 +51,6 @@ public func terminalSafe(_ text: String) -> String {
 /// SF Symbol names more than one view draws.
 public enum SymbolName {
     public static let playlist = "music.note.list"
+    /// Something the owner should look at: a problem count, an unreadable playlist.
+    public static let problem = "exclamationmark.triangle"
 }

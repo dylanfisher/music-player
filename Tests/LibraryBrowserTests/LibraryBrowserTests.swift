@@ -50,6 +50,9 @@ import Testing
     await browser.load(state)
     #expect(browser.status.notices.map { $0.hasSuffix("first") } == [true])
     #expect(try index.discards().isEmpty)
+    // The bar offers the list the notice is in.
+    #expect(browser.problemsButtonTitle == browser.status.problemsTitle)
+    #expect(browser.problemsButtonTitle != nil)
 
     try record.run("second")
     await browser.load(state)

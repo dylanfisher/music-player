@@ -56,6 +56,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private let split = NSSplitView()
     private let statusBar = NSStackView()
     private let statusLabel = NSTextField(labelWithString: "")
+    private let scanIndicator = NSProgressIndicator()
+    private let scanLabel = NSTextField(labelWithString: "")
     private let problemsButton = NSButton()
     private(set) var status = LibraryStatus()
     private var browserHeight: Int
@@ -185,19 +187,33 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         split.addArrangedSubview(table.view)
         split.setHoldingPriority(.defaultLow, forSubviewAt: 1)
 
-        statusLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        statusLabel.textColor = .secondaryLabelColor
+        // The window's normal text size, so the counts read at a glance, as Swinsian's do.
+        statusLabel.font = .systemFont(ofSize: NSFont.systemFontSize)
         statusLabel.lineBreakMode = .byTruncatingTail
-        problemsButton.title = "Show Problems"
+        scanLabel.font = .systemFont(ofSize: NSFont.systemFontSize)
+        scanLabel.textColor = .secondaryLabelColor
+        scanLabel.lineBreakMode = .byTruncatingTail
+        scanIndicator.style = .bar
+        scanIndicator.controlSize = .small
+        scanIndicator.minValue = 0
+        scanIndicator.maxValue = 1
+        scanIndicator.widthAnchor.constraint(equalToConstant: 100).isActive = true
         problemsButton.bezelStyle = .inline
-        problemsButton.controlSize = .small
+        problemsButton.image = NSImage(
+            systemSymbolName: SymbolName.problem, accessibilityDescription: nil)
+        problemsButton.imagePosition = .imageLeading
         problemsButton.target = self
         problemsButton.action = #selector(showProblems)
-        problemsButton.isHidden = true
         let bar = statusBar
-        for view in [statusLabel, problemsButton] { bar.addArrangedSubview(view) }
-        bar.edgeInsets = NSEdgeInsets(top: 3, left: 8, bottom: 3, right: 8)
-        statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        bar.detachesHiddenViews = true
+        bar.setViews([statusLabel, scanIndicator, scanLabel], in: .leading)
+        bar.setViews([problemsButton], in: .trailing)
+        bar.spacing = 10
+        bar.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
+        for label in [statusLabel, scanLabel] {
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
+        for view in [scanIndicator, scanLabel, problemsButton] { view.isHidden = true }
         timeline.view.isHidden = true
         let stack = NSStackView(views: [split, timeline.view, bar])
         stack.orientation = .vertical
@@ -422,11 +438,30 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             if case .health(let check) = model.filter.source { health.report?[check] } else { nil }
         status.healthLines = found?.lines ?? []
         status.healthOtherCount = found?.otherCount ?? 0
-        statusLabel.stringValue = status.text(
+        statusLabel.stringValue = status.summary(
             trackCount: model.trackIDs.count, missingCount: model.missingTracks,
             playCount: showsTimeline ? timelineModel.playCount : nil)
-        statusLabel.toolTip = status.problemLines.joined(separator: "\n")
-        problemsButton.isHidden = !status.hasProblems
+        statusLabel.toolTip = nil
+        scanLabel.stringValue = status.scanText ?? ""
+        scanLabel.isHidden = status.scanText == nil
+        showScanProgress()
+        problemsButton.title = status.problemsTitle ?? ""
+        problemsButton.toolTip = status.problemLines.joined(separator: "\n")
+        problemsButton.isHidden = status.problemsTitle == nil
+    }
+
+    /// A bar that fills as the scans read, or moves on its own while one still lists folders.
+    private func showScanProgress() {
+        let scans = status.scanText != nil
+        scanIndicator.isHidden = !scans
+        let fraction = status.scanFraction
+        scanIndicator.isIndeterminate = fraction == nil
+        if let fraction { scanIndicator.doubleValue = fraction }
+        if scans && fraction == nil {
+            scanIndicator.startAnimation(nil)
+        } else {
+            scanIndicator.stopAnimation(nil)
+        }
     }
 
     /// Logs a failure and shows it in the status bar.
@@ -470,6 +505,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// What the status bar says, for tests.
     var statusText: String { statusLabel.stringValue }
+
+    /// The problems button's title while it shows, for tests.
+    var problemsButtonTitle: String? { problemsButton.isHidden ? nil : problemsButton.title }
 
     private func show(failure message: String) {
         statusLabel.stringValue = message

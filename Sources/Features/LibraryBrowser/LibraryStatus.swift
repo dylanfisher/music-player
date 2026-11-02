@@ -1,7 +1,7 @@
 import Foundation
 import Library
 
-/// The line under the track table: how many tracks it shows, what the watcher is scanning, and
+/// The bar under the track table: how many tracks it shows, what the watcher is scanning, and
 /// how many files and folders have problems, which the owner can open as a list.
 struct LibraryStatus: Equatable, Sendable {
     /// Scans running now, by folder path.
@@ -50,33 +50,53 @@ struct LibraryStatus: Equatable, Sendable {
             || !playlistFileReport.isEmpty || !healthLines.isEmpty || !syncProblems.isEmpty
     }
 
-    /// "1,204 tracks · scanning Music: 300 of 1,200 read · 3 files and 1 folder with problems".
-    /// `missingCount` is how many of a playlist's tracks aren't in the library. `playCount` is
-    /// set on the timeline, which counts plays instead of tracks.
-    func text(trackCount: Int, missingCount: Int = 0, playCount: Int? = nil) -> String {
+    /// "1,204 tracks · 2 tracks not in the library": what the list shown holds. `missingCount`
+    /// is how many of a playlist's tracks aren't in the library. `playCount` is set on the
+    /// timeline, which counts plays instead of tracks.
+    func summary(trackCount: Int, missingCount: Int = 0, playCount: Int? = nil) -> String {
         var parts = [playCount.map { count($0, "play") } ?? tracks(trackCount)]
         if !notices.isEmpty { parts.append("earlier play counts and playlists discarded") }
         if missingCount > 0 { parts.append(tracks(missingCount) + " not in the library") }
         if healthOtherCount > 0 {
             parts.append(count(healthOtherCount, "more item") + " with no track to list")
         }
-        for (folder, progress) in scanning.sorted(by: { $0.key < $1.key }) {
+        return parts.joined(separator: " · ")
+    }
+
+    /// "Scanning Music: 300 of 1,200 read", a part per folder; nil while nothing scans.
+    var scanText: String? {
+        guard !scanning.isEmpty else { return nil }
+        let parts = scanning.sorted(by: { $0.key < $1.key }).map { folder, progress in
             let name = (folder as NSString).lastPathComponent
-            parts.append(
-                progress.toRead == 0
-                    ? "scanning \(name): \(number(progress.found)) files checked"
-                    : "scanning \(name): \(number(progress.read)) of \(number(progress.toRead)) read"
-            )
+            return progress.toRead == 0
+                ? "\(name): \(number(progress.found)) files checked"
+                : "\(name): \(number(progress.read)) of \(number(progress.toRead)) read"
         }
+        return "Scanning " + parts.joined(separator: " · ")
+    }
+
+    /// How much of what the scans have to read they've read, from 0 to 1. Nil while nothing
+    /// scans, or while a scan is still listing folders, since what it has to read still grows.
+    var scanFraction: Double? {
+        guard !scanning.isEmpty,
+            scanning.values.allSatisfy({ $0.stage == .reading && $0.toRead > 0 })
+        else { return nil }
+        let values = scanning.values
+        return Double(values.map(\.read).reduce(0, +)) / Double(values.map(\.toRead).reduce(0, +))
+    }
+
+    /// "3 files and 1 folder with problems", the title of the button that lists them. Notices
+    /// that count nothing still have a list to show. Nil when there's nothing to list.
+    var problemsTitle: String? {
+        guard hasProblems else { return nil }
         let folders = Set(folderIssues.keys).union(failures.keys).count
         var problems: [String] = []
         if fileIssueCount > 0 { problems.append(count(fileIssueCount, "file")) }
         if folders > 0 { problems.append(count(folders, "folder")) }
         if !syncProblems.isEmpty { problems.append("the sync") }
-        if !problems.isEmpty {
-            parts.append(problems.joined(separator: " and ") + " with problems")
-        }
-        return parts.joined(separator: " · ")
+        guard !problems.isEmpty else { return "Show Problems" }
+        let text = problems.joined(separator: " and ") + " with problems"
+        return text.prefix(1).uppercased() + text.dropFirst()
     }
 
     /// Every notice and folder problem as a line, for the top of the problems list.

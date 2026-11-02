@@ -358,7 +358,7 @@ private final class SidebarNode {
             switch playlist.kind {
             case .manual: SymbolName.playlist
             case .smart: "gearshape"
-            case .unreadable: "exclamationmark.triangle"
+            case .unreadable: SymbolName.problem
             }
         }
     }
