@@ -160,6 +160,20 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     palette.close()
 }
 
+@MainActor @Test func goToItemListsTheRowsItIsGivenOnTheFirstFrame() {
+    let palette = PaletteController(
+        model: PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 }))
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    palette.show(
+        .goToItem, items: [item("Song", .track), item("Abba")], over: window, place: nil)
+    // ⌘P passes the rows it kept from the last open; they're listed with nothing awaited.
+    #expect(palette.shown.map(\.item.title) == ["Abba", "Song"])
+    #expect(palette.table.numberOfRows == 2)
+    palette.close()
+}
+
 @MainActor @Test func commandReturnChoosesTheRowToFilterAndReturnToGoToIt() async throws {
     let palette = PaletteController(
         model: PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 }))
