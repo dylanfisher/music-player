@@ -1971,7 +1971,7 @@ its own changes to its own log there and reads the others' logs. No file has two
 locking never matters. The library index, the layout state and the config file are never synced.
 Write the ADR first; it amends ADR 0022.
 
-- [ ] **Boundary first.** AGENTS.md gains one exception: the app may write its own log, and
+- [x] **Boundary first.** AGENTS.md gains one exception: the app may write its own log, and
       nothing else, in the sync folder the user chose, which must be outside every watched folder.
       Music files stay as they are. Tests use a temporary folder, never the NAS.
 - [x] **Track identity** ([ADR 0026](decisions/0026-sync-identity-is-the-relative-path.md)). A
@@ -1993,29 +1993,29 @@ Write the ADR first; it amends ADR 0022.
       network change, and rewrites the `paths` prefixes in one transaction when the mount point
       moved (`/Volumes/music` to `/Volumes/music-1`). An unmounted share leaves the folder offline,
       as now. This helps a single machine too, so it can land before the rest of the phase.
-- [ ] **Library root.** `sync.folder` in the config file. The library root is the watched folder,
+- [x] **Library root.** `sync.folder` in the config file. The library root is the watched folder,
       stored by share, so it's the same on every machine; relative paths start there.
-- [ ] **Logs.** One append-only file per machine (`<machine id>.log`, the ID minted on first run
+- [x] **Logs.** One append-only file per machine (`<machine id>.log`, the ID minted on first run
       and kept in the state file), one event a line: play, skip, rating, loved, Date Added, and
       playlist create, rename, delete and entry changes. Events carry a hybrid logical clock, not
       just wall time, so a machine with a wrong clock can't win every conflict. Each machine
       records how far it has read each other log.
-- [ ] **Merging.** Plays and skips are a union, so none is lost or counted twice. Ratings, loved,
+- [x] **Merging.** Plays and skips are a union, so none is lost or counted twice. Ratings, loved,
       playlist names and playlist contents take the latest change by clock, then by machine ID.
       Date Added takes the earliest. Phase 18's import runs on one machine and reaches the others
       as events.
-- [ ] **Offline.** With the NAS away, the app works as now and appends to a local copy of its log,
+- [x] **Offline.** With the NAS away, the app works as now and appends to a local copy of its log,
       which goes to the NAS when it's back. A log that ends mid-line (a machine died while
       writing) is read up to its last complete line.
-- [ ] Logs from other machines are hostile input: line and file size caps, strict decoding, rows
+- [x] Logs from other machines are hostile input: line and file size caps, strict decoding, rows
       in [ADR 0025](decisions/0025-threat-model.md).
-- [ ] Tests: two and three simulated machines in temporary folders, with interleaved and
+- [x] Tests: two and three simulated machines in temporary folders, with interleaved and
       conflicting edits, skewed clocks, the library mounted at a different path on each, a share
       remounted at `-1`, the same share reached by host name and by IP address, a renamed
       and a moved file, a move with a retag, two gone files of the same length (ambiguous, so
       reported), a move event arriving after the new path was played, a decomposed and a
       precomposed accented name, a truncated log, and the NAS going away and coming back.
-- [ ] Bench: merging 1M play events, the full scan and no-change rescan budgets still holding, and
+- [x] Bench: merging 1M play events, the full scan and no-change rescan budgets still holding, and
       move matching after every fixture file is renamed.
 - [ ] **Hardware checkpoint (owner):** with two Macs on the NAS, play and rate on each, rename a
       folder of a test album, and report whether both machines show the same plays, ratings and
@@ -2107,6 +2107,19 @@ boundary).
    coming back, the caps; SettingsTests for the folder check. Threaded ones 20 times.
 9. **Bench:** `sync: merge 1M play events`, its budget in the table above; full scan and
    no-change rescan rerun.
+
+Result, part 23b: shipped up to the owner's checkpoint. Each Mac appends its events (plays,
+skips, ratings, loved, Date Added, playlists, moves and import counts) to `<machine id>.log` in
+`sync.folder`, through an outbox written in the same transaction as the change, so the log is
+always a byte prefix of it; the machine ID lives in the database, and a `flock` guards the push.
+Other logs merge in clock order with their offsets saved in the same transaction: plays and
+skips by (machine, sequence), fields last-writer-wins by hybrid logical clock then machine, Date
+Added earliest. The clock never runs more than 1 h past wall time (ADR 0038). Edits read before
+their playlist's create wait; moves are kept in `sync_moves` so late and out-of-order events
+follow them. Hostile logs: 4 MiB lines, 1 GiB and 4M events a log, 64 logs, work counted per
+path, 100 problems a log cut to 200 characters, Cf characters refused in names, `O_NOFOLLOW`
+and `fstat` on every open (ADR 0025 rows 51 to 55, `sync-log` fuzz target). Nothing from before
+this build is sent. Merge 1M play events 11.42 s, budget 20 s.
 
 ## Later
 
