@@ -70,7 +70,7 @@ keeps at most 1,024 sink entries of four parts each. A renderer whose `GetProtoc
 is kept with no formats and the reason, since receiver control doesn't need them.
 
 **The HTTP server**, for 9b. It listens on one interface's address, on a port the system picks,
-and accepts connections only from that interface's subnet. A URL is `/<token>`: 128 bits from
+and accepts connections only from that interface's subnet, and in 9b only from the one renderer it serves ([0041](0041-upnp-output.md)). A URL is `/<token>`: 128 bits from
 `SystemRandomNumberGenerator` (`arc4random_buf` on Darwin), one per key per server session,
 renewed after 24 hours, gone when the server stops. The key, a track ID for 9b, maps to a file
 through the caller's `resolve` at request time, so a track the index no longer holds is 404.

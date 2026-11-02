@@ -43,6 +43,13 @@ search finds, and sets one setting or the other: a device clears `output.rendere
 playback is `PlaybackEngine.use(_:)`: the old output stops, the new one loads what played at
 the position it had, playing or paused as it was, and only the current output's events count.
 
+A UDN is the renderer's own text, escaped and cut like its name. It's also the only thing
+naming the renderer, so a host that copies the Denon's UDN and answers the search first would
+get it. A UDN that answers from two addresses is used for neither, and the conflict is
+reported. A renderer lost and searched for again is found by its UDN wherever it is now: the
+next load after a loss searches again, as receiver control does on the next command after a
+drop, and plays to the address the search finds, since DHCP can move it.
+
 **Formats, offered as the file's own bytes.** A track is read by the Metadata parsers, by
 content, and offered under the first of its container's types the renderer lists over
 `http-get`, with the renderer's own sink entry as the DIDL `protocolInfo`. Nothing is
@@ -70,7 +77,10 @@ what it takes, and the queue moves on.
 The DIDL-Lite carries the title (the file name when the file has none), artist, album,
 `protocolInfo`, duration, size, rate, depth and channels. Every tag is the file's own text:
 escaped, cut to 512 characters, one line, and characters XML can't hold dropped, so a tag
-can't change the request.
+can't change the request; a byte order mark is dropped too, since `XMLParser` drops it from
+text. Tab, LF and CR go as character references, so they read back unchanged. The
+`didl-lite` fuzz target checks every tag reads back as written, through the DIDL-Lite and the
+SOAP request around it.
 
 **Gapless.** The renderer's AVTransport description is fetched once per session; when it lists
 `SetNextAVTransportURI`, the next track goes over while one plays, and a `TrackURI` that
@@ -79,14 +89,25 @@ action or stops instead of playing what it was given, each track is set and play
 last has stopped: the gap, from the stop being seen to Play being answered, is logged, and the
 signal path panel says which way the renderer plays and why.
 
+A next track the renderer was given and then told to drop, as when the queue changes in a
+track's last second, may still be what it plays: the current track then counts as ended, and
+what the engine has next is set in its place. `TrackURI`s are compared with the scheme and
+host in any case, the default port and percent-encoding undone, so a renderer that rewrites
+the URI it was given isn't taken for another app.
+
 **Polling, not GENA.** `GetTransportInfo` and `GetPositionInfo` once a second, while a track is
-loaded. GENA events would need the app to accept `NOTIFY` requests with bodies from the
+loaded, and nothing at all once nothing is loaded or watched for. GENA events would need the app to accept `NOTIFY` requests with bodies from the
 renderer, which 9a's server refuses by design, plus a callback URL and renewals; polling keeps
 every exchange one the app starts, under the client's caps and deadline. The cost is up to a
 second before a track end is seen without gapless, and two connections a second.
 
-**What the polls decide.** Playing or paused: the position, and a seek that waited for the
-renderer to start (one given before it plays is refused by some). Stopped after playing, within
+**What the polls decide.** Playing or paused: the position, and a seek, Play or Pause that
+waited for the renderer to start (some refuse one given before they play). A renderer that
+plays or pauses other than the engine said, for two polls running, from its own remote or a
+refused command, is followed: `transportChanged` tells the engine, which shows it. A refused
+Play or Pause tells the engine at once, and a refused seek sends `seekFailed` with where
+playback stayed, which the engine publishes in place of the seek it showed. A seek lands at
+least a second short of the end, where a renderer would stop. Stopped after playing, within
 3 s of the renderer's duration (it resets its position when it stops, so the last poll is what
 counts): the track ended. Stopped earlier: stopped on the renderer, its remote or another app,
 reported and the engine stops. Stopped five polls running without ever playing: it won't
@@ -99,13 +120,24 @@ the local subnet, no redirects), read by `XMLTree` (no DTD, UTF-8 only), and che
 and description URLs on the description's host, times only `H+:MM:SS[.F]` and under 11 days,
 unknown states and fault text escaped as display text. An action that gets no answer, or three
 polls in a row, loses the renderer: `deviceLost` with the position, the server stopped, and
-playback pauses there as for a lost DAC. Nothing waits on the renderer: `close()` ends the
-streams and stops the server at once, and sends `Stop` without waiting for it.
+playback pauses there as for a lost DAC. A lost renderer is asked every five seconds whether
+it answers; the first answer sends `deviceReturned`, as the DAC's return does, and the polls
+stop. Nothing waits on the renderer: `close()` ends the streams and stops the server at once,
+and sends `Stop` without waiting for it.
 
 **Serving.** The server starts on the interface the renderer's description came from, on the
-first load, and stops when nothing is loaded: after Stop, the last track, a loss or close. Its
-keys are the engine's item IDs, and only the current and next items resolve, which is narrower
-than "a track the index holds": a token the server issued for an item since replaced is 404.
+first load, and stops when nothing is loaded: after Stop, the last track, a loss or close. It
+takes connections only from the renderer's own address, the `LOCATION` host, not the whole
+subnet: a renderer fetches the streams it plays itself, and nothing in the captures or in
+AVTransport has another host fetch for it. Its keys are the engine's item IDs, and only the
+current and next items resolve, which is narrower than "a track the index holds": a token the
+server issued for an item since replaced is 404.
+
+The tokens travel in plain HTTP on the LAN, as UPnP has no other way. Anyone on the network
+who sees the traffic sees the URLs and the audio of the current and next tracks, while the
+server runs; with the server taking only the renderer's address, a copied token alone gets
+nothing, though a host that can also spoof that address could fetch those two tracks. Nothing
+else in the library is reachable, and the tokens end when the server stops.
 
 **Volume.** `RendererOutput.hasVolume` is false, and the app's Volume Up and Down are off while
 a renderer plays. On the Denon, the volume is the receiver's, which receiver control sets over
