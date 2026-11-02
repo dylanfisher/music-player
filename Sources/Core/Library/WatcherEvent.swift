@@ -9,6 +9,9 @@ public enum WatcherEvent: Sendable {
     case scanned(folder: String, ScanSummary)
     /// The scan stopped because the database failed. What it stored before then stays.
     case scanFailed(folder: String, reason: String)
+    /// At start, the network folder at this path shows what the index holds, and is first
+    /// polled `pollIntervalMinutes` later.
+    case keptIndex(folder: String)
     /// At start, this many files outside every watched folder left the index, such as those of a
     /// folder no longer watched.
     case removed(count: Int)

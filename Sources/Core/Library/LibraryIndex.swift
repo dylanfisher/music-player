@@ -264,6 +264,16 @@ public final class LibraryIndex {
         return files
     }
 
+    /// Whether the index holds any file under `directory`, as it does after a folder's first
+    /// scan stored something.
+    func holdsFiles(under directory: String) throws -> Bool {
+        let range = pathRange(under: directory)
+        return try database.prepare(
+            "SELECT EXISTS (SELECT 1 FROM files WHERE path >= ? AND path < ?)"
+        )
+        .map(range.lowerBound, range.upperBound) { try $0.int(0) == 1 }[0]
+    }
+
     /// Stores a batch of read results in one transaction.
     func store(_ files: [ScannedFile]) throws {
         do {

@@ -12,8 +12,8 @@ struct WatchJob: Equatable, Sendable {
 /// it with a fake clock and a fake playback engine. One scan runs at a time.
 ///
 /// Local folders are scanned whole at start, then by the subtrees FSEvents reports. Network
-/// folders are polled: at start, then `pollIntervalMinutes` after each scan ends, and never
-/// while playback holds polls back.
+/// folders are polled `pollIntervalMinutes` after start and after each scan ends, and never
+/// while playback holds polls back. One the index holds no files for is polled at start.
 struct WatchState {
     /// How long after a failed scan of a local folder it's first scanned again, whole. FSEvents
     /// reports a change once, so a failed scan would otherwise lose it until the next launch;
@@ -37,12 +37,28 @@ struct WatchState {
     private var retryDue: [String: Date] = [:]
     /// Scans of each folder that failed in a row, by path; absent after one that finished.
     private var failuresInARow: [String: Int] = [:]
+    /// The network folders not polled at start, by path, in Settings order.
+    private(set) var leftToTheIndex: [String] = []
 
-    init(folders: [WatchedFolder], pausePollingDuringPlayback: Bool, now: Date) {
+    /// `indexed` is the network folders, by path, the index already holds files for. Unless
+    /// `rescanNetworkFoldersAtLaunch`, those show what the index holds until their first poll,
+    /// since walking a share at launch keeps the NAS busy when the first track is read.
+    init(
+        folders: [WatchedFolder], indexed: Set<String>, rescanNetworkFoldersAtLaunch: Bool,
+        pausePollingDuringPlayback: Bool, now: Date
+    ) {
         self.folders = folders
         self.pausePollingDuringPlayback = pausePollingDuringPlayback
         wholeScans = folders.filter { $0.kind == .local }.map(\.path)
-        for folder in folders where folder.kind == .network { pollDue[folder.path] = now }
+        for folder in folders where folder.kind == .network {
+            if indexed.contains(folder.path) && !rescanNetworkFoldersAtLaunch {
+                pollDue[folder.path] = now.addingTimeInterval(
+                    TimeInterval(folder.pollIntervalMinutes * 60))
+                leftToTheIndex.append(folder.path)
+            } else {
+                pollDue[folder.path] = now
+            }
+        }
     }
 
     /// The folders at new paths, in the same order, after a share moved (ADR 0028). What was

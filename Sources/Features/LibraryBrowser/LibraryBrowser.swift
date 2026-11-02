@@ -300,6 +300,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             // A network folder's scans come from polling, so one that changed nothing doesn't
             // run the report again; the first scan's end runs it once.
             if changed || (health.report == nil && !health.isRunning) { runHealth() }
+        case .keptIndex:
+            // No scan ends for it at launch, so the first report runs now.
+            if health.report == nil && !health.isRunning { runHealth() }
         case .scanFailed:
             refreshNow()
         case .removed:

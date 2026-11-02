@@ -39,7 +39,7 @@ struct LibraryStatus: Equatable, Sendable {
             syncProblems = report.problems
         case .syncFailed(let reason):
             syncProblems = ["the sync failed: \(reason)"]
-        case .removed, .folders:
+        case .removed, .folders, .keptIndex:
             break
         }
     }

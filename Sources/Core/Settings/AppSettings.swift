@@ -22,6 +22,12 @@ public struct AppSettings: SettingsSchema {
         "library.pausePollingDuringPlayback", title: "Pause Network Rescans While Playing",
         default: false,
         "Don't rescan network folders while music is playing.")
+    public let rescanNetworkFoldersAtLaunch = Setting(
+        "library.rescanNetworkFoldersAtLaunch", title: "Rescan Network Folders at Launch",
+        default: false,
+        "Rescan every network folder when the app starts. Off, a network folder shows what the"
+            + " library already holds and is first rescanned one poll interval after launch; one"
+            + " never scanned is scanned at once.")
     /// What `networkScanReaders` and `--scan --readers` accept; a scan starts that many threads.
     public static let networkScanReadersRange = 1...64
     public let networkScanReaders = Setting<Int?>(

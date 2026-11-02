@@ -47,20 +47,32 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// `networkReaders` is the files a network scan reads at once, or nil to tune it per scan.
     /// `mounts` finds the shares that folders on one are under. `events` is called on a
     /// background thread for every scan's progress and outcome.
-    public init(
+    public convenience init(
         databaseURL: URL, networkReaders: Int?, mounts: any ShareMounts = SystemShareMounts(),
         events: @escaping @Sendable (WatcherEvent) -> Void = { _ in }
     ) {
-        scanner = LibraryScanner(databaseURL: databaseURL, networkReaders: networkReaders)
+        self.init(
+            scanner: LibraryScanner(databaseURL: databaseURL, networkReaders: networkReaders),
+            mounts: mounts, events: events)
+    }
+
+    /// For tests, which scan through a simulated NAS.
+    init(
+        scanner: LibraryScanner, mounts: any ShareMounts,
+        events: @escaping @Sendable (WatcherEvent) -> Void
+    ) {
+        self.scanner = scanner
         self.mounts = mounts
         self.events = events
     }
 
     /// Finds each of `folders` (ADR 0028), removes files outside them from the index, scans
-    /// every folder, and starts watching them, and syncs through `syncFolder` at start, after
-    /// each scan and on each trigger. The caller reads them from Settings.
+    /// the local folders and the network ones the index holds nothing for, and starts watching
+    /// them, and syncs through `syncFolder` at start, after each scan and on each trigger. The
+    /// caller reads them from Settings.
     public func start(
-        folders: [WatchedFolder], syncFolder: SyncFolder? = nil, pausePollingDuringPlayback: Bool
+        folders: [WatchedFolder], syncFolder: SyncFolder? = nil,
+        rescanNetworkFoldersAtLaunch: Bool, pausePollingDuringPlayback: Bool
     ) {
         queue.async { [self] in
             precondition(state == nil, "the watcher is already running")
@@ -85,9 +97,12 @@ public final class LibraryWatcher: @unchecked Sendable {
                 locateDue = true
             }
             let folders = located.map { $0.located(at: canonicalPath($0.path)) }
-            state = WatchState(
-                folders: folders,
+            let started = WatchState(
+                folders: folders, indexed: indexed(folders),
+                rescanNetworkFoldersAtLaunch: rescanNetworkFoldersAtLaunch,
                 pausePollingDuringPlayback: pausePollingDuringPlayback, now: Date())
+            state = started
+            for path in started.leftToTheIndex { events(.keptIndex(folder: path)) }
             if locatedAll { removeFiles(outside: folders) }
             watchLocalFolders(folders.filter { $0.kind == .local })
             advance()
@@ -164,6 +179,20 @@ public final class LibraryWatcher: @unchecked Sendable {
             } catch {
                 logger.error("couldn't remove files outside the watched folders: \(error)")
             }
+        }
+    }
+
+    /// The network folders among `folders` that the index holds files for, by path. One whose
+    /// files can't be counted is scanned, as if it had none.
+    private func indexed(_ folders: [WatchedFolder]) -> Set<String> {
+        let network = folders.filter { $0.kind == .network }
+        guard !network.isEmpty else { return [] }
+        do {
+            let index = try LibraryIndex(at: scanner.databaseURL)
+            return Set(try network.filter { try index.holdsFiles(under: $0.path) }.map(\.path))
+        } catch {
+            logger.error("couldn't tell which network folders are indexed; scanning them: \(error)")
+            return []
         }
     }
 

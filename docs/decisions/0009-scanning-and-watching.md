@@ -3,7 +3,8 @@
 - **Date:** 2026-10-30
 - **Status:** accepted
 - **Amended by:** [0023](0023-failure-table.md): the failure table, and the failures phase 14a
-  changed how this reports.
+  changed how this reports. [0040](0040-gentle-network-rescans.md): network folders aren't
+  rescanned at launch.
 
 ## Context
 
@@ -37,7 +38,8 @@ because the file on disk is what's broken.
 
 **Watching.** Local folders are scanned whole at launch, then by the subtrees FSEvents reports,
 collected for 2 s; dropped events or a moved root rescan the whole folder. Network folders are
-polled at launch and then `pollIntervalMinutes` after each scan ends, by one one-shot timer for
+polled `pollIntervalMinutes` after launch, or at launch when the index holds nothing for them
+(ADR 0040), and then `pollIntervalMinutes` after each scan ends, by one one-shot timer for
 the earliest due poll. Files outside every watched folder are removed at launch. The playback
 hook keeps network scans from starting, and pauses a running one, while a track starts, and
 while playing if `library.pausePollingDuringPlayback` is on.

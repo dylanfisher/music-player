@@ -57,7 +57,8 @@ private func eventually(
         events: syncs.append)
     watcher.start(
         folders: [WatchedFolder(path: "library", share: "smb://nas/music", kind: .network)],
-        syncFolder: SyncFolder(path: sync), pausePollingDuringPlayback: false)
+        syncFolder: SyncFolder(path: sync), rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false)
     defer { watcher.stop() }
     #expect(try await eventually(within: 10, "the first sync") { syncs.count >= 1 })
     let before = syncs.count
@@ -80,7 +81,7 @@ private func eventually(
     // when the config can't, as when one is by share.
     watcher.start(
         folders: [library.folder], syncFolder: SyncFolder(path: library.root + "/Sync"),
-        pausePollingDuringPlayback: false)
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: false)
     defer { watcher.stop() }
     #expect(try await eventually(within: 10, "the refusal") { !syncs.failed.isEmpty })
     #expect(syncs.failed.first?.contains("inside the watched folder") == true)
@@ -103,7 +104,7 @@ private func eventually(
         databaseURL: databaseURL, networkReaders: 2, mounts: mounts, events: syncs.append)
     watcher.start(
         folders: [], syncFolder: SyncFolder(path: "sync", share: "smb://nas/music"),
-        pausePollingDuringPlayback: false)
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: false)
     defer { watcher.stop() }
     watcher.pushSync()
     // Nothing is mounted, so nothing syncs, and nothing fails either.

@@ -1,4 +1,6 @@
+import Fixtures
 import Foundation
+import Metadata
 import Testing
 
 @testable import Library
@@ -19,7 +21,9 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
 @Test func scansAtStartThenFollowsFSEvents() async throws {
     let library = try TestLibrary()
     let watcher = LibraryWatcher(databaseURL: library.databaseURL, networkReaders: nil)
-    watcher.start(folders: [library.folder], pausePollingDuringPlayback: true)
+    watcher.start(
+        folders: [library.folder], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: true)
     defer { watcher.stop() }
 
     let index = try library.index()
@@ -38,7 +42,7 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
     let watcher = LibraryWatcher(databaseURL: library.databaseURL, networkReaders: nil)
     watcher.start(
         folders: [WatchedFolder(path: library.root + "/", kind: .local)],
-        pausePollingDuringPlayback: true)
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
     defer { watcher.stop() }
 
     let index = try library.index()
@@ -64,7 +68,7 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
         databaseURL: library.databaseURL, networkReaders: nil, events: received.append)
     watcher.start(
         folders: [library.folder, WatchedFolder(path: library.root + "-gone", kind: .local)],
-        pausePollingDuringPlayback: true)
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
     defer { watcher.stop() }
 
     #expect(try await eventually(within: 20) { received.scanned.count == 2 })
@@ -76,7 +80,7 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
     // Watching nothing removes what the folder held.
     let next = LibraryWatcher(
         databaseURL: library.databaseURL, networkReaders: nil, events: received.append)
-    next.start(folders: [], pausePollingDuringPlayback: true)
+    next.start(folders: [], rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
     defer { next.stop() }
     #expect(try await eventually(within: 20) { received.removed == [library.manifest.files.count] })
 }
@@ -105,6 +109,15 @@ private final class LockedEvents: @unchecked Sendable {
         }
     }
 
+    var kept: [String] {
+        lock.withLock {
+            events.compactMap { event in
+                guard case .keptIndex(let folder) = event else { return nil }
+                return folder
+            }
+        }
+    }
+
     var scanned: [(String, ScanSummary)] {
         lock.withLock {
             events.compactMap { event in
@@ -119,7 +132,8 @@ private final class LockedEvents: @unchecked Sendable {
     let library = try TestLibrary()
     let network = WatchedFolder(path: library.root, kind: .network, pollIntervalMinutes: 60)
     let watcher = LibraryWatcher(databaseURL: library.databaseURL, networkReaders: 4)
-    watcher.start(folders: [network], pausePollingDuringPlayback: true)
+    watcher.start(
+        folders: [network], rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
     defer { watcher.stop() }
 
     let index = try library.index()
@@ -148,7 +162,7 @@ private final class LockedEvents: @unchecked Sendable {
         events: received.append)
     watcher.start(
         folders: [WatchedFolder(path: "library", share: "smb://nas/music", kind: .network)],
-        pausePollingDuringPlayback: false)
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: false)
     defer { watcher.stop() }
     #expect(try await eventually(within: 20) { received.scanned.count == 1 })
     let first = canonicalPath(mountPoint + "/library")
@@ -189,7 +203,9 @@ private final class LockedEvents: @unchecked Sendable {
         databaseURL: library.databaseURL, networkReaders: 4, mounts: mounts,
         events: received.append)
     let share = WatchedFolder(path: "library", share: "smb://nas/music", kind: .network)
-    watcher.start(folders: [library.folder, share], pausePollingDuringPlayback: false)
+    watcher.start(
+        folders: [library.folder, share], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false)
     defer { watcher.stop() }
     // The local folder is scanned; the share folder, never found, is offline.
     #expect(try await eventually(within: 20) { received.scanned.count == 2 })
@@ -201,4 +217,76 @@ private final class LockedEvents: @unchecked Sendable {
     watcher.sharesMayHaveMoved()
     let found = canonicalPath(mountPoint + "/library")
     #expect(try await eventually(within: 20) { received.scanned.contains { $0.0 == found } })
+}
+
+/// The file system, as a network volume, with each directory a scan lists recorded.
+private final class ListingRecorder: ScanFileAccess, @unchecked Sendable {
+    private let system = SystemFileAccess()
+    private let lock = NSLock()
+    private var listed: [String] = []
+
+    var directories: [String] { lock.withLock { listed } }
+
+    func volumeIsLocal(_ path: String) throws -> Bool? { false }
+
+    func contentsOfDirectory(_ directory: String, keys: [URLResourceKey]) throws -> [URL] {
+        lock.withLock { listed.append(directory) }
+        return try system.contentsOfDirectory(directory, keys: keys)
+    }
+
+    func readMetadata(at path: String) throws(MetadataError) -> ParsedFile {
+        try system.readMetadata(at: path)
+    }
+}
+
+private func watcher(
+    _ library: TestLibrary, through access: any ScanFileAccess,
+    events: @escaping @Sendable (WatcherEvent) -> Void
+) -> LibraryWatcher {
+    LibraryWatcher(
+        scanner: LibraryScanner(
+            databaseURL: library.databaseURL, networkReaders: 1, access: access),
+        mounts: FakeMounts(), events: events)
+}
+
+@Test func aNetworkFolderTheIndexHoldsIsntWalkedAtLaunchButANewOneIs() async throws {
+    let library = try TestLibrary()
+    let network = WatchedFolder(path: library.root, kind: .network)
+    _ = try library.scan(network)
+    // A second folder, never scanned, beside the first.
+    let added = library.root + "-added"
+    try FileManager.default.createDirectory(atPath: added, withIntermediateDirectories: true)
+    let file = try #require(library.manifest.files.first { $0.malformation == nil })
+    try FileManager.default.copyItem(atPath: library.path(file), toPath: added + "/added.flac")
+    let access = ListingRecorder()
+    let received = LockedEvents()
+    let watcher = watcher(library, through: access, events: received.append)
+    watcher.start(
+        folders: [network, WatchedFolder(path: added, kind: .network)],
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: false)
+    defer { watcher.stop() }
+
+    #expect(try await eventually(within: 20) { received.scanned.count == 1 })
+    #expect(received.scanned.map(\.0) == [added])
+    #expect(received.kept == [library.root])
+    // Long enough for a walk of the first folder to have begun, had one been started.
+    try await Task.sleep(nanoseconds: 2_000_000_000)
+    #expect(received.scanned.count == 1)
+    #expect(access.directories.allSatisfy { $0 == added || isPath($0, under: added) })
+}
+
+@Test func theSettingWalksANetworkFolderTheIndexHoldsAtLaunch() async throws {
+    let library = try TestLibrary()
+    let network = WatchedFolder(path: library.root, kind: .network)
+    _ = try library.scan(network)
+    let access = ListingRecorder()
+    let received = LockedEvents()
+    let watcher = watcher(library, through: access, events: received.append)
+    watcher.start(
+        folders: [network], rescanNetworkFoldersAtLaunch: true, pausePollingDuringPlayback: false)
+    defer { watcher.stop() }
+
+    #expect(try await eventually(within: 20) { received.scanned.count == 1 })
+    #expect(received.kept.isEmpty)
+    #expect(access.directories.contains(library.root))
 }

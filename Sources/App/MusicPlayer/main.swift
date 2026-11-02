@@ -18,8 +18,8 @@ import Settings
 // --capture-renderers writes what the UPnP renderers and the Denon receiver on the network send
 // (SSDP replies, descriptions, status lines) to the folder, for phase 9b to start from.
 // --measure-window prints the launch time and memory as JSON and quits, for Bench.
-// --report-launch prints "launched" once the first scan of every watched folder has ended, for
-// Bench to know the app is idle.
+// --report-launch prints "launched" once every watched folder's scan at launch has ended, or the
+// watcher has left it to the index, for Bench to know the app is idle.
 // --snapshot draws the window into a PNG a few seconds after its first rows, to check the layout.
 // --snapshot-of draws the palette, the smart playlist editor, the tag editor, or the Settings
 // window's General or Shortcuts pane, instead.

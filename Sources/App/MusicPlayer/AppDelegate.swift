@@ -538,22 +538,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         foldersScanning = folders.count
         let pause = settings[\.pausePollingDuringPlayback]
         watcher.start(
-            folders: folders, syncFolder: settings[\.syncFolder], pausePollingDuringPlayback: pause)
+            folders: folders, syncFolder: settings[\.syncFolder],
+            rescanNetworkFoldersAtLaunch: settings[\.rescanNetworkFoldersAtLaunch],
+            pausePollingDuringPlayback: pause)
         if activity != .stopped {
             watcher.playbackChanged(activity, pausePollingDuringPlayback: pause)
         }
         self.watcher = watcher
     }
 
-    /// `events`, and after it has the first scan of every watched folder's end, a "launched" line
-    /// on standard output.
+    /// `events`, and after it has the first scan of every watched folder's end, or word that a
+    /// network folder isn't scanned at launch, a "launched" line on standard output.
     private func reportingLaunchEnd(
         _ events: @escaping @Sendable (WatcherEvent) -> Void
     ) -> @Sendable (WatcherEvent) -> Void {
         { [weak self] event in
             events(event)
             switch event {
-            case .scanned, .scanFailed:
+            case .scanned, .scanFailed, .keptIndex:
                 DispatchQueue.main.async { self?.firstScanEnded() }
             default: break
             }

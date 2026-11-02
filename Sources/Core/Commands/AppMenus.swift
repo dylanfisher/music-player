@@ -75,6 +75,7 @@ public enum AppMenus {
                     .command(.importSwinsian), .command(.importITunes), .separator,
                     .command(.addFolder), .command(.checkHealth), .command(.resolveLostStats),
                     .setting(settings.pausePollingDuringPlayback.key),
+                    .setting(settings.rescanNetworkFoldersAtLaunch.key),
                     .setting(settings.groupByAlbumArtist.key),
                     .separator, .command(.revealInFinder), .command(.copyPath),
                     .command(.addToPlaylist), .separator, .command(.editTags),
