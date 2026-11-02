@@ -16,6 +16,26 @@ import Testing
     #expect(items.map(\.title) == [AppCommands.title(of: .selectAll)])
 }
 
+@Test func theTrackMenuIsGroupedAsSwinsiansWithEveryItemACommand() {
+    func titles(_ entries: [MenuEntry]) -> [String] {
+        entries.map { entry in
+            switch entry {
+            case .command(let id): AppCommands.title(of: id)
+            case .submenu(let title, let entries, _): "\(title) ▸ \(titles(entries).count)"
+            case .live(let title): "\(title) ▸"
+            case .separator: "-"
+            case .standard, .setting: "not a track command"
+            }
+        }
+    }
+    #expect(
+        titles(AppMenus.trackMenu) == [
+            "Play Next", "Add to Playback Queue", "Play Now", "-", "Show Album", "Show Artist",
+            "-", "Like", "Dislike", "-", "Rating ▸ 6", "-", "Get Info", "Reveal in Finder", "-",
+            "New Playlist with Selected Tracks", "Add to Playlist ▸", "Show in Playlist ▸",
+        ])
+}
+
 /// Any web page can open a link, so this list is the whole of what one can do (ADR 0036).
 @Test func onlyPlaybackAndNavigationRunFromLinks() {
     let linked = Set(AppCommands.all().filter(\.runsFromLinks).map(\.id))

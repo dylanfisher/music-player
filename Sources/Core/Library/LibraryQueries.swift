@@ -107,6 +107,18 @@ extension LibraryIndex {
             "album_id", "sort_title", filter, [.source, .genre, .artist], row: albumEntry)
     }
 
+    /// The Artist and Album pane entries that list track `id`, by `filter`'s grouping; nil for
+    /// a pane that lists it under none, or a track that isn't in the index.
+    public func entryIDs(ofTrack id: Int64, _ filter: TrackFilter) throws -> (
+        artist: Int64?, album: Int64?
+    ) {
+        try statement("SELECT \(artistColumn(filter)), album_id FROM tracks WHERE file_id = ?")
+            .map(id) { row in
+                (row.optionalInt(0).map(Int64.init), row.optionalInt(1).map(Int64.init))
+            }
+            .first ?? (nil, nil)
+    }
+
     /// The rows for `ids`, in the same order. An ID with no track, such as one a rescan just
     /// removed, is left out.
     public func rows(ids: [Int64]) throws -> [TrackRow] {

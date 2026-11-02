@@ -345,6 +345,17 @@ private final class ClosingOutput: Output, @unchecked Sendable {
     #expect(state.currentIndex == 0)
 }
 
+@Test func addingToTheQueuePutsTheTracksLast() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    let extra = URL(fileURLWithPath: "/music/extra.flac")
+    await engine.addToQueue([extra])
+    let state = await engine.state
+    #expect(state.order.map { state.queue[$0] } == urls + [extra])
+    #expect(state.currentIndex == 0)
+}
+
 @Test func movingTracksKeepsTheCurrentOnePlaying() async {
     let output = FakeOutput()
     let engine = await playing(urls, output)

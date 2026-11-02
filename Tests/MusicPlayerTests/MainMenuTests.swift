@@ -3,6 +3,7 @@ import Testing
 
 @testable import Commands
 @testable import KeyChord
+@testable import Library
 @testable import MusicPlayer
 @testable import Settings
 
@@ -81,6 +82,53 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
 @MainActor @Test func settingsReachesTheAppDelegate() {
     #expect(
         AppDelegate.instancesRespond(to: NSSelectorFromString(AppMenus.showSettingsAction)))
+}
+
+@MainActor @Test func theTrackMenuRunsAndValidatesItsCommandsThroughTheDispatcher() throws {
+    let (menu, dispatcher) = try menu()
+    var ran: [CommandID] = []
+    dispatcher.handle(.showAlbum, enabled: { true }, run: { ran.append(.showAlbum) })
+    dispatcher.handle(.showArtist, enabled: { false }, run: { ran.append(.showArtist) })
+    let shown = items(menu.trackMenu).map(\.0).filter { !$0.isHidden && !$0.isSeparatorItem }
+    func item(_ id: CommandID) throws -> NSMenuItem {
+        try #require(shown.first { ($0.representedObject as? CommandID) == id })
+    }
+    #expect(menu.validateMenuItem(try item(.showAlbum)))
+    #expect(!menu.validateMenuItem(try item(.showArtist)))
+    menu.runCommand(try item(.showAlbum))
+    #expect(ran == [.showAlbum])
+    #expect(try item(.toggleLoved).title == "Like")
+    for title in [AppMenus.addToPlaylistMenuTitle, AppMenus.showInPlaylistMenuTitle] {
+        let submenu = try #require(menu.liveMenus[title])
+        #expect(menu.trackMenu.items.contains { $0.submenu === submenu })
+    }
+    // Only the bar's items count toward every command having a menu item.
+    #expect(menu.listedCommands.filter { $0 == .showAlbum }.count == 1)
+}
+
+@MainActor @Test func aPlaylistSubmenuListsItsPlaylistsOrSaysItHasNone() throws {
+    var playlists = [
+        Playlist(id: 4, name: "Mix", kind: .manual), Playlist(id: 9, name: "Road", kind: .manual),
+    ]
+    var chosen: [Int64] = []
+    let delegate = PlaylistMenu()
+    delegate.playlists = { playlists }
+    delegate.choose = { chosen.append($0) }
+    let submenu = NSMenu()
+    submenu.delegate = delegate
+    delegate.menuNeedsUpdate(submenu)
+    #expect(submenu.items.map(\.title) == ["Mix", "Road"])
+    // AppKit enables items through NSApp, which a test run alone hasn't made yet.
+    _ = NSApplication.shared
+    submenu.update()
+    #expect(submenu.items.map(\.isEnabled) == [true, true])
+    submenu.performActionForItem(at: 1)
+    #expect(chosen == [9])
+    playlists = []
+    delegate.menuNeedsUpdate(submenu)
+    submenu.update()
+    #expect(submenu.items.map(\.title) == ["No Playlists"])
+    #expect(submenu.items.map(\.isEnabled) == [false])
 }
 
 @MainActor @Test func theOutputMenuListsTheOutputsFoundWithTheOneInUseChecked() throws {

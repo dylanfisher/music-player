@@ -3,13 +3,15 @@ import Commands
 import KeyChord
 import Settings
 
-/// The menu bar, built from `AppMenus`. Each command's item shows the first of its chords that
+/// The menu bar and the track menu, built from `AppMenus`. Each command's item shows the first of its chords that
 /// can be a key equivalent, and a hidden item beside it carries the second, so both work from
 /// the menu bar. Items run their commands through the dispatcher, which also decides whether
 /// they're on.
 @MainActor
 final class MainMenu: NSObject, NSMenuItemValidation {
     let bar = NSMenu()
+    /// The context menu of the track table and the timeline.
+    let trackMenu = NSMenu()
     /// For `NSApp.windowsMenu` and `NSApp.helpMenu`, which the app sets.
     private(set) var windowsMenu: NSMenu?
     private(set) var helpMenu: NSMenu?
@@ -19,6 +21,8 @@ final class MainMenu: NSObject, NSMenuItemValidation {
     /// Each command's shown item and its hidden alternate, and whether its menu shows chords.
     private var items: [(id: CommandID, shown: NSMenuItem, hidden: NSMenuItem, chords: Bool)] =
         []
+    /// How many of `items` are the bar's; the track menu's follow.
+    private var barItemCount = 0
 
     init(dispatcher: CommandDispatcher, appName: String, settings: AppSettings) {
         self.dispatcher = dispatcher
@@ -35,6 +39,8 @@ final class MainMenu: NSObject, NSMenuItemValidation {
             case .app, .plain: break
             }
         }
+        barItemCount = items.count
+        add(AppMenus.trackMenu, to: trackMenu, chords: true, generated, descriptors)
         showChords()
     }
 
@@ -143,8 +149,8 @@ final class MainMenu: NSObject, NSMenuItemValidation {
         return dispatcher.isEnabled(id)
     }
 
-    /// The commands the visible items run, for the test that every command has one.
+    /// The commands the bar's visible items run, for the test that every command has one.
     var listedCommands: [CommandID] {
-        items.filter { !$0.shown.isHidden }.map(\.id)
+        items.prefix(barItemCount).filter { !$0.shown.isHidden }.map(\.id)
     }
 }

@@ -16,7 +16,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// The longest the window waits between refreshes while a scan stores rows.
     static let refreshIntervalSeconds = 2.0
 
-    private let model: BrowserModel
+    let model: BrowserModel
     public let sidebar: NSViewController
     /// The panes over the track table, with the status line under them.
     public let content: NSViewController
@@ -29,6 +29,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var play: (PlayRequest) -> Void = { _ in }
     /// Queue these files after the current track.
     public var playNext: ([URL]) -> Void = { _ in }
+    /// Queue these files after the last track.
+    public var addToQueue: ([URL]) -> Void = { _ in }
+    /// The context menu of the track table and the timeline. A right-click selects the row it's
+    /// on first, so the menu's commands act on the selection.
+    public var trackMenu: NSMenu? {
+        didSet {
+            table.table.menu = trackMenu
+            timeline.table.menu = trackMenu
+        }
+    }
     public var tableLayoutChanged: (TrackTableLayout) -> Void = { _ in }
     public var browserHeightChanged: (Int) -> Void = { _ in }
     public var stateChanged: (BrowserState) -> Void = { _ in }
@@ -50,10 +60,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     private let reader: LibraryReader
     private let index: LibraryIndex
-    private let table: TrackTableController
+    let table: TrackTableController
     let timelineModel: TimelineModel
     /// Shown in place of the panes and the track table while the timeline is the source.
-    private let timeline: TimelineController
+    let timeline: TimelineController
     private let panes: PanesController
     private let sidebarController: SidebarController
     private let split = NSSplitView()
@@ -96,7 +106,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         let actions = BrowserActions(
             play: { rows, clicked in owner?.playRows(rows, clicked: clicked) },
             playNext: { rows in owner?.queueNext(rows) },
-            reveal: { rows in owner?.reveal { model.ids(ofRows: rows) } },
             move: { ids, row in
                 owner?.edit("couldn't move the tracks") { try await model.move(ids, toRow: row) }
             },
@@ -130,7 +139,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                     owner?.reportCommand("couldn't queue the selection", error)
                 }
             },
-            reveal: { rows in owner?.reveal { try timelineModel.trackIDs(ofRows: rows) } },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound },
             failed: { message in owner?.show(failure: message) })
         panes = PanesController(
@@ -490,29 +498,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         report("\(failure): \(error)")
     }
 
-    /// Shows files in Finder; tests record them instead.
-    var revealFiles: ([String]) -> Void = revealInFinder
-
-    /// Reveals the files of the tracks `ids` gives, for the context menu's rows.
-    private func reveal(_ read: () throws -> [Int64]) {
-        let failure = "couldn't reveal the tracks"
-        let ids: [Int64]
-        do {
-            ids = try read()
-        } catch {
-            reportCommand(failure, error)
-            return
-        }
-        Task {
-            do {
-                let paths = try await reader.paths(ids: ids)
-                revealFiles(ids.compactMap { paths[$0] })
-            } catch {
-                reportCommand(failure, error)
-            }
-        }
-    }
-
     /// The system beep; tests count it instead.
     var beep: () -> Void = { NSSound.beep() }
 
@@ -675,6 +660,69 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     public func playSelectionNext() {
         if showsTimeline { timeline.playSelectedNext() } else { table.playSelectedNext() }
+    }
+
+    /// Queues the selected tracks after the last track.
+    public func addSelectionToQueue() {
+        let onTimeline = showsTimeline
+        let rows = (onTimeline ? timeline : table).table.selectedRowIndexes
+        Task {
+            do {
+                addToQueue(
+                    onTimeline
+                        ? try timelineModel.urls(ofRows: rows)
+                        : try await model.urls(ofRows: rows))
+            } catch {
+                reportCommand("couldn't queue the selection", error)
+            }
+        }
+    }
+
+    /// Shows the library narrowed to the first selected track's artist or album, with that
+    /// track selected, as Show Artist and Show Album do. Beeps when it has none.
+    public func showSelection(in pane: BrowserModel.Pane) {
+        let failure = "couldn't show the track's \(pane.title.lowercased())"
+        guard let track = selectedTrackIDs(else: failure)?.first else { return }
+        let entry: Int64?
+        do {
+            let entries = try index.entryIDs(ofTrack: track, model.filter)
+            entry =
+                switch pane {
+                case .album: entries.album
+                case .artist: entries.artist
+                case .genre: nil
+                }
+        } catch {
+            reportCommand(failure, error)
+            return
+        }
+        guard let entry else { return beep() }
+        Task {
+            await showOnly(pane, id: entry)
+            if let row = model.trackIDs.firstIndex(of: track) { showRow(row) }
+        }
+    }
+
+    /// The manual playlists that list the first selected track, for Show in Playlist.
+    public func playlistsHoldingSelection() throws -> [Playlist] {
+        guard let track = try selectedTrackIDs().first else { return [] }
+        return try index.playlists(holding: track)
+    }
+
+    /// Shows the playlist `id` with the first selected track selected.
+    public func showSelection(inPlaylist id: Int64) {
+        guard let track = selectedTrackIDs(else: "couldn't show the playlist")?.first else {
+            return
+        }
+        Task {
+            await model.setSource(.playlist(id))
+            showSource()
+            if let row = model.trackIDs.firstIndex(of: track) {
+                showRow(row)
+            } else {
+                focusTracks()
+            }
+        }
     }
 
     /// The paths of the selected tracks, in table order.

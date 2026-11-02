@@ -2,7 +2,7 @@ import AppKit
 import Commands
 
 /// What the track table and the play timeline share: the scrolling table, playing rows from a
-/// double-click or the context menu, moving the selection by key, and keeping the rows the user
+/// double-click, moving the selection by key, and keeping the rows the user
 /// reads in place when the list changes. Each subclass is the table's data source and delegate,
 /// and forwards `tableViewSelectionDidChange` to `selectionDidChange`.
 @MainActor
@@ -11,8 +11,6 @@ class RowListController: NSViewController {
     /// Double-click or Return: the selected rows and the one clicked.
     let play: (IndexSet, Int) -> Void
     let playNext: (IndexSet) -> Void
-    /// The context menu's Reveal in Finder: its rows.
-    let reveal: (IndexSet) -> Void
     /// Called once, when the list first draws rows, for the launch measurement.
     var firstRowsDrawn: (() -> Void)?
     /// The row the keys move from, and the one an extending move keeps.
@@ -20,13 +18,9 @@ class RowListController: NSViewController {
     private var anchor: Int?
     private var movingByKey = false
 
-    init(
-        play: @escaping (IndexSet, Int) -> Void, playNext: @escaping (IndexSet) -> Void,
-        reveal: @escaping (IndexSet) -> Void
-    ) {
+    init(play: @escaping (IndexSet, Int) -> Void, playNext: @escaping (IndexSet) -> Void) {
         self.play = play
         self.playNext = playNext
-        self.reveal = reveal
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -42,8 +36,7 @@ class RowListController: NSViewController {
         view = scroll
     }
 
-    /// The style both lists share, double-click to play, and the Play, Play Next and Reveal in
-    /// Finder menu.
+    /// The style both lists share, and double-click to play.
     func configureRows() {
         table.style = .fullWidth
         table.rowHeight = 18
@@ -54,16 +47,6 @@ class RowListController: NSViewController {
         table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         table.target = self
         table.doubleAction = #selector(playClicked)
-        let menu = NSMenu()
-        menu.addItem(withTitle: "Play", action: #selector(playMenuRows), keyEquivalent: "")
-        menu.addItem(
-            withTitle: AppCommands.title(of: .playNext), action: #selector(playMenuRowsNext),
-            keyEquivalent: "")
-        menu.addItem(
-            withTitle: AppCommands.title(of: .revealInFinder), action: #selector(revealMenuRows),
-            keyEquivalent: "")
-        for item in menu.items { item.target = self }
-        table.menu = menu
     }
 
     /// Reports the first rows drawn, after this pass draws, so the measurement includes the
@@ -103,32 +86,6 @@ class RowListController: NSViewController {
         let clicked = table.clickedRow
         guard clicked >= 0 else { return }
         play(table.selectedRowIndexes, clicked)
-    }
-
-    /// The context menu's rows: the clicked row's selection, or the clicked row alone when it
-    /// isn't selected, as Finder does.
-    private var menuRows: IndexSet {
-        let clicked = table.clickedRow
-        if clicked >= 0, !table.selectedRowIndexes.contains(clicked) { return [clicked] }
-        return table.selectedRowIndexes
-    }
-
-    @objc private func playMenuRows() {
-        let rows = menuRows
-        guard let first = rows.first else { return }
-        play(rows, first)
-    }
-
-    @objc private func playMenuRowsNext() {
-        let rows = menuRows
-        guard !rows.isEmpty else { return }
-        playNext(rows)
-    }
-
-    @objc private func revealMenuRows() {
-        let rows = menuRows
-        guard !rows.isEmpty else { return }
-        reveal(rows)
     }
 
     /// Plays the selected rows from the first, or every row when none is selected.

@@ -33,6 +33,17 @@ extension LibraryIndex {
             .map(row: playlistRow)
     }
 
+    /// The manual playlists that list track `id`, by name, for Show in Playlist.
+    public func playlists(holding id: Int64) throws -> [Playlist] {
+        try statement(
+            """
+            SELECT id, name, rules FROM playlists WHERE id IN
+                (SELECT playlist_id FROM playlist_entries WHERE path_id = ?)
+            ORDER BY name COLLATE NOCASE, id
+            """
+        ).map(id, row: playlistRow)
+    }
+
     /// The playlist with `id`; throws when there is none.
     public func playlist(_ id: Int64) throws -> Playlist {
         guard

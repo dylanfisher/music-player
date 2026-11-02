@@ -55,7 +55,12 @@ extension CommandID {
     public static let removeArtwork = CommandID("tags.removeArtwork")
     public static let removeFromQueue = CommandID("queue.remove")
     public static let addToPlaylist = CommandID("playlist.addSelection")
+    /// Like: the loved flag.
     public static let toggleLoved = CommandID("track.toggleLoved")
+    public static let toggleDisliked = CommandID("track.toggleDisliked")
+    public static let showAlbum = CommandID("track.showAlbum")
+    public static let showArtist = CommandID("track.showArtist")
+    public static let showInPlaylist = CommandID("track.showInPlaylist")
     /// Rate the selection 0 (no rating) to 5 stars, by index.
     public static let rate = (0...5).map { CommandID("track.rate\($0)") }
 
@@ -76,6 +81,7 @@ extension CommandID {
     public static let pause = CommandID("playback.pause")
     public static let playSelection = CommandID("playback.playSelection")
     public static let playNext = CommandID("playback.playNext")
+    public static let addToQueue = CommandID("playback.addToQueue")
     public static let nextTrack = CommandID("playback.next")
     public static let previousTrack = CommandID("playback.previous")
     public static let seekForward = CommandID("playback.seekForward")
@@ -182,17 +188,21 @@ public enum AppCommands {
                 .revealInFinder, "Reveal in Finder",
                 [.init("r", [cmd, shift]), .init("r", [opt, cmd])]),
             Command(.copyPath, "Copy Path", [.init("c", [opt, cmd])]),
-            Command(.editTags, "Edit Tags…", [.init("i", cmd)]),
+            Command(.editTags, "Get Info", [.init("i", cmd)]),
             Command(.undoTagEdit, "Undo Tag Edit"),
             Command(.replaceArtwork, "Replace Artwork…"),
             Command(.removeArtwork, "Remove Artwork"),
             Command(.removeFromQueue, "Remove from Queue or Playlist", [.init(.delete, cmd)]),
             Command(.addToPlaylist, "Add to Playlist…"),
-            Command(.toggleLoved, "Love or Unlove"),
+            Command(.showInPlaylist, "Show in Playlist…"),
+            Command(.toggleLoved, "Like"),
+            Command(.toggleDisliked, "Dislike"),
+            Command(.showAlbum, "Show Album"),
+            Command(.showArtist, "Show Artist"),
 
             Command(.newPlaylist, "New Playlist", [.init("n", cmd)]),
             Command(
-                .newPlaylistFromSelection, "New Playlist from Selection",
+                .newPlaylistFromSelection, "New Playlist with Selected Tracks",
                 [.init("n", [cmd, shift])]),
             Command(.newSmartPlaylist, "New Smart Playlist…", [.init("n", [opt, cmd])]),
             Command(.editSmartPlaylist, "Edit Smart Playlist…"),
@@ -208,9 +218,10 @@ public enum AppCommands {
             Command(.play, "Play", links: true, argument: playArgument),
             Command(.pause, "Pause", links: true),
             Command(
-                .playSelection, "Play Selection", [.init(.return), .init(.down, cmd)],
+                .playSelection, "Play Now", [.init(.return), .init(.down, cmd)],
                 links: true),
             Command(.playNext, "Play Next", [.init(.return, opt)], links: true),
+            Command(.addToQueue, "Add to Playback Queue"),
             Command(.nextTrack, "Next Track", [.init(.right, cmd)], links: true),
             Command(.previousTrack, "Previous Track", [.init(.left, cmd)], links: true),
             Command(.seekForward, "Seek Forward", [.init(.right, [opt, cmd])], links: true),

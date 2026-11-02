@@ -111,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var outputSearch: Task<Void, Never>?
     var deviceListWatch: DeviceListWatch?
     var outputMenu: OutputMenu?
+    var playlistMenus: [PlaylistMenu] = []
     private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
@@ -150,6 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try openWindow(settings)
             watchOutputs(menu)
             registerCommands(dispatcher)
+            wireTrackMenu(menu)
             if let state, let saver { makePalette(dispatcher, state: state, saver: saver) }
             registerSettingCommands(dispatcher)
             settings.changed = { [weak self] keys in self?.settingsChanged(keys) }
@@ -202,6 +204,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         browser.playNext = { [weak self] urls in
             guard let engine = self?.engine else { return }
             Task { await engine.playNext(urls) }
+        }
+        browser.addToQueue = { [weak self] urls in
+            guard let engine = self?.engine else { return }
+            Task { await engine.addToQueue(urls) }
         }
         browser.tableLayoutChanged = { saver.set(\.trackTable, $0) }
         browser.browserHeightChanged = { height in

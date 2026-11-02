@@ -50,6 +50,23 @@ public enum AppMenus {
     static let showSettingsAction = "showSettings:"
     /// The Controls menu's submenu of the outputs found.
     public static let outputMenuTitle = "Output"
+    /// The track menu's submenus: every manual playlist, and those listing the first selected
+    /// track.
+    public static let addToPlaylistMenuTitle = "Add to Playlist"
+    public static let showInPlaylistMenuTitle = "Show in Playlist"
+    private static let ratingMenuTitle = "Rating"
+
+    /// The context menu of the track table and the timeline, grouped as Swinsian groups it.
+    /// Its items act on the selection, which a right-click sets.
+    public static let trackMenu: [MenuEntry] = [
+        .command(.playNext), .command(.addToQueue), .command(.playSelection), .separator,
+        .command(.showAlbum), .command(.showArtist), .separator,
+        .command(.toggleLoved), .command(.toggleDisliked), .separator,
+        .submenu(ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
+        .separator, .command(.editTags), .command(.revealInFinder), .separator,
+        .command(.newPlaylistFromSelection), .live(addToPlaylistMenuTitle),
+        .live(showInPlaylistMenuTitle),
+    ]
 
     public static func sections(appName: String) -> [MenuSection] {
         let cmd: KeyChord.Modifiers = .command
@@ -85,10 +102,12 @@ public enum AppMenus {
                     .setting(settings.rescanNetworkFoldersAtLaunch.key),
                     .setting(settings.groupByAlbumArtist.key),
                     .separator, .command(.revealInFinder), .command(.copyPath),
-                    .command(.addToPlaylist), .separator, .command(.editTags),
+                    .command(.addToPlaylist), .command(.showInPlaylist), .command(.showAlbum),
+                    .command(.showArtist), .separator, .command(.editTags),
                     .command(.undoTagEdit), .command(.replaceArtwork), .command(.removeArtwork),
-                    .submenu("Rating", CommandID.rate.map(MenuEntry.command), showsChords: true),
-                    .command(.toggleLoved), .separator,
+                    .submenu(
+                        ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
+                    .command(.toggleLoved), .command(.toggleDisliked), .separator,
                     .standard(StandardItem("Close Window", "performClose:", KeyChord("w", cmd))),
                 ]),
             MenuSection(
@@ -137,7 +156,7 @@ public enum AppMenus {
                 title: "Controls", role: .plain,
                 entries: [
                     .command(.playPause), .command(.play), .command(.pause),
-                    .command(.playSelection), .command(.playNext),
+                    .command(.playSelection), .command(.playNext), .command(.addToQueue),
                     .command(.stop), .separator, .command(.nextTrack), .command(.previousTrack),
                     .command(.seekForward), .command(.seekBack), .separator, .command(.shuffle),
                     .submenu(

@@ -229,6 +229,12 @@ public actor PlaybackEngine {
         applyEdit(queue.insert(urls, at: after + 1))
     }
 
+    /// Queues `urls` after the last track, in play order.
+    public func addToQueue(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        applyEdit(queue.insert(urls, at: queue.order.count))
+    }
+
     /// Moves the tracks at `positions` to just before `destination`, counted before the move.
     public func moveQueueItems(_ positions: IndexSet, to destination: Int) {
         guard (0...queue.order.count).contains(destination) else { return }

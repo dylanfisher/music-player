@@ -62,10 +62,32 @@ extension AppDelegate {
                 && self?.browser?.playlists.contains(where: \.isManual) == true
         }
         dispatcher.handle(.addToPlaylist, enabled: canAdd) { [weak self] in
-            self?.chooseManualPlaylist()
+            guard let browser = self?.browser else { return }
+            self?.choosePlaylist(
+                browser.playlists.filter(\.isManual), "Add the selected tracks to a playlist",
+                button: "Add"
+            ) { [weak browser] in browser?.addSelection(to: $0) }
+        }
+        dispatcher.handle(.showInPlaylist, enabled: hasSelectedTracks) { [weak self] in
+            guard let self, let browser = self.browser,
+                let playlists = self.playlistsHoldingSelection()
+            else { return }
+            guard !playlists.isEmpty else { return NSSound.beep() }
+            self.choosePlaylist(
+                playlists, "Show the selected track in a playlist", button: "Show"
+            ) { [weak browser] in browser?.showSelection(inPlaylist: $0) }
         }
         dispatcher.handle(.toggleLoved, enabled: hasSelectedTracks) { [weak self] in
             self?.browser?.toggleSelection(.liked)
+        }
+        dispatcher.handle(.toggleDisliked, enabled: hasSelectedTracks) { [weak self] in
+            self?.browser?.toggleSelection(.disliked)
+        }
+        dispatcher.handle(.showAlbum, enabled: hasSelectedTracks) { [weak self] in
+            self?.browser?.showSelection(in: .album)
+        }
+        dispatcher.handle(.showArtist, enabled: hasSelectedTracks) { [weak self] in
+            self?.browser?.showSelection(in: .artist)
         }
         for (stars, id) in CommandID.rate.enumerated() {
             dispatcher.handle(id, enabled: hasSelectedTracks) { [weak self] in
@@ -103,21 +125,47 @@ extension AppDelegate {
         }
     }
 
-    /// Add to Playlist…: a sheet with the manual playlists in a pop-up button.
-    private func chooseManualPlaylist() {
-        guard let browser, let window = window?.window else { return }
-        let playlists = browser.playlists.filter(\.isManual)
-        guard !playlists.isEmpty else { return }
+    /// The track menu's playlist submenus, which the menu holds only weakly.
+    func wireTrackMenu(_ menu: MainMenu) {
+        let add = PlaylistMenu()
+        add.playlists = { [weak self] in self?.browser?.playlists.filter(\.isManual) ?? [] }
+        add.choose = { [weak self] in self?.browser?.addSelection(to: $0) }
+        let show = PlaylistMenu()
+        show.playlists = { [weak self] in self?.playlistsHoldingSelection() ?? [] }
+        show.choose = { [weak self] in self?.browser?.showSelection(inPlaylist: $0) }
+        menu.liveMenus[AppMenus.addToPlaylistMenuTitle]?.delegate = add
+        menu.liveMenus[AppMenus.showInPlaylistMenuTitle]?.delegate = show
+        playlistMenus = [add, show]
+        browser?.trackMenu = menu.trackMenu
+    }
+
+    /// The manual playlists that list the first selected track; nil after reporting why they
+    /// couldn't be read.
+    private func playlistsHoldingSelection() -> [Playlist]? {
+        do {
+            return try browser?.playlistsHoldingSelection()
+        } catch {
+            browser?.reportCommand("couldn't read the selected track's playlists", error)
+            return nil
+        }
+    }
+
+    /// Add to Playlist… and Show in Playlist…: a sheet with `playlists` in a pop-up button.
+    private func choosePlaylist(
+        _ playlists: [Playlist], _ message: String, button: String,
+        _ chosen: @escaping (Int64) -> Void
+    ) {
+        guard let window = window?.window, !playlists.isEmpty else { return }
         let alert = NSAlert()
-        alert.messageText = "Add the selected tracks to a playlist"
+        alert.messageText = message
         let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 26))
         for playlist in playlists { menu.addItem(withTitle: playlist.name) }
         alert.accessoryView = menu
-        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: button)
         alert.addButton(withTitle: "Cancel")
-        alert.beginSheetModal(for: window) { [weak browser] response in
+        alert.beginSheetModal(for: window) { response in
             guard response == .alertFirstButtonReturn else { return }
-            browser?.addSelection(to: playlists[menu.indexOfSelectedItem].id)
+            chosen(playlists[menu.indexOfSelectedItem].id)
         }
     }
 
