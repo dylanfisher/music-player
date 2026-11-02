@@ -434,8 +434,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The output went back on its own to a device that came back.
     private func outputReturned(to uid: String) {
         guard let settings, let state else { return }
+        // It was in use before, so it has a profile, and its kind isn't read.
         let profile = state[\.deviceProfiles].profile(
-            for: uid, config: outputConfig(settings), switched: true)
+            for: uid, config: outputConfig(settings), switched: true, typeHogs: nil)
         do {
             try save(profile)
         } catch {
@@ -455,9 +456,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func outputProfile(_ settings: ConfigStore<AppSettings>, switched: Bool) throws
         -> DeviceProfile
     {
+        let uid = try HALDeviceProvider.resolve(settings[\.outputDeviceUID])
         return profileState[\.deviceProfiles].profile(
-            for: try HALDeviceProvider.resolve(settings[\.outputDeviceUID]),
-            config: outputConfig(settings), switched: switched)
+            for: uid, config: outputConfig(settings), switched: switched,
+            typeHogs: try HALDeviceProvider.hogsByDefault(uid))
     }
 
     /// Written before the output uses it, so a crash never leaves the device with settings its

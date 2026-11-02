@@ -22,11 +22,11 @@ playback stopped. Stored data has one shape before release, and the IO proc can'
   front, and the 33rd evicts the least recently used. Each keeps at most 64 rates and 64 formats
   and a UID of at most 512 bytes, so the file stays under about 300 KB whatever devices report.
 - **The config's output settings show the device in use.** A device seen for the first time
-  takes `output.hogMode` and `output.digitalVolume` as they are, at full volume (there is no
-  volume setting). After that:
+  takes `output.digitalVolume` as it is, at full volume (there is no volume setting), and hog
+  mode from its transport type (amended below). After that:
   - an edit to `output.hogMode` or `output.digitalVolume` (in the file, the settings window or
     the Controls menu) applies to the device in use only. Other profiles keep theirs; unseen
-    devices start from the edited value.
+    devices start from the edited digital volume.
   - changing `output.deviceUID` switches to that device with its own profile, and the app writes
     that profile's hog mode and digital volume back into the config, so the menus and the
     settings window read what the device plays with. Null stays null while it names the device.
@@ -67,6 +67,18 @@ playback stopped. Stored data has one shape before release, and the IO proc can'
   only its place in the list would change. In that moment a volume key still saves to the
   profile of the device output left, which then plays at that volume next time it is chosen.
 
+- **Hog mode by kind of device (amended 2026-11-01).** Hog mode turns off the Mac's volume keys
+  for the device, and the owner's 2015 MacBook Pro plays through its speakers, so a default of
+  on left the keys dead there. A device seen for the first time now hogs only when it's on USB,
+  Thunderbolt, FireWire, PCI or AVB, which is how an external DAC plays bit-perfect. The
+  built-in output, AirPlay, Bluetooth, HDMI, DisplayPort, virtual and aggregate devices don't:
+  macOS mixes or resamples them anyway, or they have their own volume. A device that isn't
+  connected when first chosen starts from `output.hogMode` as before, since its kind can't be
+  read. Its profile decides after that, and the Controls menu's Hog Mode toggle still changes
+  it. `output.hogMode` stays: it is how the menus and the settings window show and change the
+  device in use. A profile saved before this keeps its hog mode, so a built-in output already
+  seen needs Hog Mode turned off once.
+
 ## Alternatives considered
 
 - **Profiles in the config file** — rejected by the plan, and the config is what the user edits,
@@ -78,6 +90,8 @@ playback stopped. Stored data has one shape before release, and the IO proc can'
   launch** — rejected for now: a second copy of the config's output settings for one edge case.
 - **Returning whenever the remembered device comes back** — rejected: it would cut off music the
   user started on the other device.
+- **Deleting `output.hogMode`, with hog mode only in the profile** — rejected: the toggle would
+  need a second path from the menus and the settings window to the profile, for the same effect.
 - **Recreating the output and engine per device** — rejected: the queue, position and
   subscribers live in the engine, and closing the output ends its streams.
 

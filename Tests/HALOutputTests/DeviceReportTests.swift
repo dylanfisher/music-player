@@ -45,3 +45,23 @@ import Testing
     #expect(report.contains("available rates: 44.1, 192 kHz"))
     #expect(report.contains("'lpcm' 2 ch 32-bit int @ 192 kHz, non-mixable"))
 }
+
+@Test func onlyExternalInterfacesHogByDefault() {
+    for transport in [
+        kAudioDeviceTransportTypeUSB, kAudioDeviceTransportTypeThunderbolt,
+        kAudioDeviceTransportTypeFireWire, kAudioDeviceTransportTypePCI,
+        kAudioDeviceTransportTypeAVB,
+    ] {
+        #expect(HALDeviceProvider.hogsByDefault(transport: transport), "\(fourCharCode(transport))")
+    }
+    for transport in [
+        kAudioDeviceTransportTypeBuiltIn, kAudioDeviceTransportTypeAirPlay,
+        kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE,
+        kAudioDeviceTransportTypeHDMI, kAudioDeviceTransportTypeDisplayPort,
+        kAudioDeviceTransportTypeVirtual, kAudioDeviceTransportTypeAggregate,
+        kAudioDeviceTransportTypeUnknown,
+    ] {
+        #expect(
+            !HALDeviceProvider.hogsByDefault(transport: transport), "\(fourCharCode(transport))")
+    }
+}

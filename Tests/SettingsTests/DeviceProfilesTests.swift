@@ -24,21 +24,37 @@ private let twoDevices = DeviceProfiles(profiles: [
 
 @Test func aFirstSeenDeviceStartsFromTheConfigAtFullVolume() {
     let profile = twoDevices.profile(
-        for: "USB", config: OutputConfig(hogMode: false, digitalVolume: true), switched: true)
+        for: "USB", config: OutputConfig(hogMode: false, digitalVolume: true), switched: true,
+        typeHogs: nil)
     #expect(
         profile
             == DeviceProfile(
                 uid: "USB", hogMode: false, digitalVolume: true, volumeDecibels: 0, formats: nil))
 }
 
+@Test func aFirstSeenDeviceTakesHogModeFromItsKind() {
+    let hogging = OutputConfig(hogMode: true, digitalVolume: false)
+    #expect(
+        !twoDevices.profile(for: "Speakers", config: hogging, switched: true, typeHogs: false)
+            .hogMode)
+    #expect(
+        twoDevices.profile(
+            for: "USB", config: OutputConfig(hogMode: false, digitalVolume: false),
+            switched: true, typeHogs: true
+        ).hogMode)
+    // A seen device keeps its own, whatever its kind.
+    #expect(
+        twoDevices.profile(for: "DAC", config: hogging, switched: true, typeHogs: false).hogMode)
+}
+
 @Test func switchingToASeenDeviceKeepsItsOwnSettings() {
-    let profile = twoDevices.profile(for: "BuiltIn", config: config, switched: true)
+    let profile = twoDevices.profile(for: "BuiltIn", config: config, switched: true, typeHogs: nil)
     #expect(profile == twoDevices.profiles[1])
 }
 
 @Test func aConfigEditMeetsOnlyTheDeviceInUse() {
     let edited = OutputConfig(hogMode: false, digitalVolume: true)
-    var profile = twoDevices.profile(for: "DAC", config: edited, switched: false)
+    var profile = twoDevices.profile(for: "DAC", config: edited, switched: false, typeHogs: nil)
     #expect(profile.hogMode == false && profile.digitalVolume == true)
     #expect(profile.volumeDecibels == 0 && profile.formats == reported)
     profile.volumeDecibels = -6
@@ -47,21 +63,26 @@ private let twoDevices = DeviceProfiles(profiles: [
     #expect(profiles.profiles[0] == profile)
     // The other device keeps its own, and switching to it doesn't take the edit.
     #expect(
-        profiles.profile(for: "BuiltIn", config: edited, switched: true) == twoDevices.profiles[1])
+        profiles.profile(for: "BuiltIn", config: edited, switched: true, typeHogs: nil)
+            == twoDevices.profiles[1])
     // A device not seen yet starts from the edit.
-    #expect(profiles.profile(for: "USB", config: edited, switched: true).hogMode == false)
+    #expect(
+        profiles.profile(for: "USB", config: edited, switched: true, typeHogs: nil).hogMode == false
+    )
 }
 
 @Test func usingADeviceMovesItFirstAndEvictsTheLeastRecentlyUsedPastTheCap() {
     var profiles = DeviceProfiles(profiles: [])
     for index in 0..<DeviceProfiles.capacity {
         profiles = profiles.using(
-            profiles.profile(for: "d\(index)", config: config, switched: true))
+            profiles.profile(for: "d\(index)", config: config, switched: true, typeHogs: nil))
     }
     #expect(profiles.profiles.count == DeviceProfiles.capacity)
     // The oldest used again, then one more: the second oldest goes.
-    profiles = profiles.using(profiles.profile(for: "d0", config: config, switched: true))
-    profiles = profiles.using(profiles.profile(for: "new", config: config, switched: true))
+    profiles = profiles.using(
+        profiles.profile(for: "d0", config: config, switched: true, typeHogs: nil))
+    profiles = profiles.using(
+        profiles.profile(for: "new", config: config, switched: true, typeHogs: nil))
     #expect(profiles.profiles.count == DeviceProfiles.capacity)
     #expect(profiles.profiles.prefix(2).map(\.uid) == ["new", "d0"])
     #expect(!profiles.profiles.contains { $0.uid == "d1" })

@@ -55,6 +55,25 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
         return try readString(id, address(kAudioDevicePropertyDeviceUID))
     }
 
+    /// Whether the device `uid` takes hog mode when first seen, from its transport type, or nil
+    /// when it isn't connected (ADR 0037).
+    public static func hogsByDefault(_ uid: String) throws -> Bool? {
+        guard let id = try deviceID(uid: uid) else { return nil }
+        return hogsByDefault(
+            transport: try readScalar(id, address(kAudioDevicePropertyTransportType)))
+    }
+
+    /// An external interface is what a DAC plays bit-perfect through. The built-in output,
+    /// AirPlay, Bluetooth, HDMI, DisplayPort, virtual and aggregate devices aren't, and hogging
+    /// them turns off the Mac's volume keys for them.
+    static func hogsByDefault(transport: UInt32) -> Bool {
+        [
+            kAudioDeviceTransportTypeUSB, kAudioDeviceTransportTypeThunderbolt,
+            kAudioDeviceTransportTypeFireWire, kAudioDeviceTransportTypePCI,
+            kAudioDeviceTransportTypeAVB,
+        ].contains(transport)
+    }
+
     public func open() throws -> (any PCMDevice)? {
         guard let id = try liveDeviceID() else { return nil }
         return try lock.withLock {
