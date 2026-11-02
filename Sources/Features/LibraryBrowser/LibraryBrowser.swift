@@ -60,6 +60,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private let statusBar = NSStackView()
     private let statusLabel = NSTextField(labelWithString: "")
     private let scanIndicator = NSProgressIndicator()
+    /// Whether the scan bar moves on its own, which only it does while the status bar shows.
+    private(set) var scanIndicatorAnimates = false
     private let scanLabel = NSTextField(labelWithString: "")
     private let problemsButton = NSButton()
     private(set) var status = LibraryStatus()
@@ -274,7 +276,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// What the watcher reported. Refreshes as rows arrive, at most every
     /// `refreshIntervalSeconds` during a scan and at once when one ends.
-    private func libraryChanged(_ event: WatcherEvent) {
+    func libraryChanged(_ event: WatcherEvent) {
         status.apply(event)
         showStatus()
         switch event {
@@ -464,7 +466,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         let fraction = status.scanFraction
         scanIndicator.isIndeterminate = fraction == nil
         if let fraction { scanIndicator.doubleValue = fraction }
-        if scans && fraction == nil {
+        // A hidden bar would keep animating and drawing.
+        let animates = scans && fraction == nil && !statusBar.isHidden
+        guard animates != scanIndicatorAnimates else { return }
+        scanIndicatorAnimates = animates
+        if animates {
             scanIndicator.startAnimation(nil)
         } else {
             scanIndicator.stopAnimation(nil)
@@ -947,7 +953,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     public var isStatusBarVisible: Bool { !statusBar.isHidden }
 
-    public func toggleStatusBar() { statusBar.isHidden.toggle() }
+    public func toggleStatusBar() {
+        statusBar.isHidden.toggle()
+        showScanProgress()
+    }
 
     /// Selects the track at `path` in the table, centered, showing the whole library first if
     /// the source, a pane or the search hides it.

@@ -151,3 +151,20 @@ import Testing
     #expect(browser.isBrowserVisible)
     #expect(states.last?.genre == nil)
 }
+
+@MainActor @Test func theScanBarAnimatesOnlyWhileTheStatusBarShows() async throws {
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: try browserLibrary.get().databaseURL),
+        index: try LibraryIndex(at: try browserLibrary.get().databaseURL),
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    browser.libraryChanged(.scanning(folder: "/music", ScanProgress()))
+    #expect(browser.scanIndicatorAnimates)
+    browser.toggleStatusBar()
+    #expect(!browser.isStatusBarVisible && !browser.scanIndicatorAnimates)
+    // Progress arriving while it's hidden doesn't start it.
+    browser.libraryChanged(.scanning(folder: "/music", ScanProgress()))
+    #expect(!browser.scanIndicatorAnimates)
+    browser.toggleStatusBar()
+    #expect(browser.scanIndicatorAnimates)
+}
