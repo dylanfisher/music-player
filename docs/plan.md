@@ -776,6 +776,45 @@ ADR 0039. Fuzz targets: receiver line, description, SOAP reply, chunked body.
 - [ ] **Hardware checkpoint (owner):** play 16/44.1, 24/96 and 24/192 FLAC to the Denon. Report
       what its display shows, gapless behavior, seek, and volume.
 
+Implementation plan (ADR 0041), from the owner's captures of the Denon and two Sonos speakers:
+
+1. **Fixtures.** Scrubbed copies of the captures in `Tests/UPnPOutputTests/Fixtures` and the
+   status lines in `Tests/ReceiverTests/Fixtures`: addresses to 192.0.2.x, UUIDs, serials,
+   MACs, household and network IDs to fake values, every other byte as captured.
+2. **UPnP:** a `Renderer` keeps its AVTransport control and description URLs, checked like
+   any other URL a description names. SOAP actions with escaped arguments; replies read
+   through `XMLTree`, and a fault's UPnP error code and text kept from a status 500 reply.
+   AVTransport's `GetTransportInfo` and `GetPositionInfo` replies, `H+:MM:SS` times range
+   checked, a service description's action names (for `SetNextAVTransportURI`), DIDL-Lite
+   for a track with every tag escaped and control characters dropped. Receiver control's
+   "is it a Denon receiver" rule moves onto `Renderer`, where the output reads it too.
+3. **Playback:** `PlaybackEngine.use(_:)` moves playback to another output mid-track, at the
+   position it had, and ignores events from any output but the current one. `SignalSink`
+   gets a renderer case and `SignalVerdict` an `unverifiable` one.
+4. **UPnPOutput** (new Core module): `RendererOutput` implements `Output` for one renderer.
+   One task runs commands and polls in order, so nothing overlaps and nothing runs on the
+   main thread. A track is read by the Metadata parsers (no decoding), offered under the
+   first MIME type of its container the renderer's sink lists, or reported; the HTTP server
+   starts on the interface the renderer is on, serves only the current and next items by
+   token, and stops when nothing is loaded. `SetNextAVTransportURI` when the renderer's
+   AVTransport description lists it, otherwise set-URI on track end with the gap logged.
+   Position and track end come from polling `GetTransportInfo` and `GetPositionInfo` once a
+   second; three failed polls in a row or a failed command loses the renderer.
+5. **Settings and App:** `output.renderer`, a renderer's UDN, null by default, sits beside
+   `output.deviceUID`; set, the app finds it by SSDP and plays to it, null plays on the
+   device. `--list-devices` lists renderers after the devices. The signal path panel follows
+   whichever output is in use. The app's digital volume is off while a renderer plays; the
+   Denon's volume is the receiver's (port 23).
+6. **NowPlaying:** the signal path panel says the bytes go unchanged to the renderer, which
+   decodes them, so bit-perfect can't be checked from the Mac, and whether it's gapless.
+7. **Fuzz targets:** `avtransport-reply`, `service-description`.
+8. **Tests:** UPnPTests (SOAP, faults, times, actions, DIDL escaping, the captured
+   descriptions), PlaybackTests (switching outputs), UPnPOutputTests against a fake renderer
+   on loopback built from the captures (play, pause, seek, next URI, set-URI fallback, track
+   end, a renderer that vanishes, stalls or plays something else, unsupported formats, the
+   renderer fetching the file with `Range`), ReceiverTests (the captured status lines),
+   NowPlayingTests (the panel's renderer lines). Network tests looped 20 times.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
