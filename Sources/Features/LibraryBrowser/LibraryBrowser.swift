@@ -40,6 +40,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
     public var tableLayoutChanged: (TrackTableLayout) -> Void = { _ in }
+    /// Which totals the status bar shows. A click on them moves to the next and reports it.
+    public var statusTotals = AppState().statusTotals.defaultValue {
+        didSet { showStatus() }
+    }
+    public var statusTotalsChanged: (StatusTotals) -> Void = { _ in }
     public var browserHeightChanged: (Int) -> Void = { _ in }
     public var stateChanged: (BrowserState) -> Void = { _ in }
     /// Called after each refresh for a library change, so other views can read their rows again.
@@ -120,6 +125,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             failed: { message in owner?.show(failure: message) },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         table = TrackTableController(model: model, cache: cache, layout: layout, actions: actions)
+        table.selectionChanged = { owner?.showStatus() }
         let timelineModel = TimelineModel(reader: reader) { ids in try index.playedTracks(ids: ids)
         }
         self.timelineModel = timelineModel
@@ -226,9 +232,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         problemsButton.imagePosition = .imageLeading
         problemsButton.target = self
         problemsButton.action = #selector(showProblems)
+        statusLabel.addGestureRecognizer(
+            NSClickGestureRecognizer(target: self, action: #selector(showNextTotals)))
         let bar = statusBar
         bar.detachesHiddenViews = true
-        bar.setViews([statusLabel, scanIndicator, scanLabel], in: .leading)
+        bar.setViews([scanIndicator, scanLabel], in: .leading)
+        bar.setViews([statusLabel], in: .center)
         bar.setViews([problemsButton], in: .trailing)
         bar.spacing = 10
         bar.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
@@ -534,7 +543,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         status.healthLines = found?.lines ?? []
         status.healthOtherCount = found?.otherCount ?? 0
         statusLabel.stringValue = status.summary(
-            trackCount: model.trackIDs.count, missingCount: model.missingTracks,
+            list: model.listTotals, selection: model.totals(ofRows: table.table.selectedRowIndexes),
+            shown: statusTotals, missingCount: model.missingTracks,
             playCount: showsTimeline ? timelineModel.playCount : nil)
         statusLabel.toolTip = nil
         scanLabel.stringValue = status.scanText ?? ""
@@ -578,6 +588,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// The system beep; tests count it instead.
     var beep: () -> Void = { NSSound.beep() }
+
+    @objc func showNextTotals() {
+        statusTotals = statusTotals.next
+        statusTotalsChanged(statusTotals)
+    }
 
     /// What the status bar says, for tests.
     var statusText: String { statusLabel.stringValue }

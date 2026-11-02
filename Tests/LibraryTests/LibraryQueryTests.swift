@@ -100,3 +100,18 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
 @Test func untitledTracksShowTheirFileName() throws {
     #expect(displayName("/Music/A/01 Intro.flac") == "01 Intro")
 }
+
+@Test func listedTracksCarryEachFilesSizeAndLengthInTrackOrder() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let listed = try index.listedTracks(sortedBy: .title, ascending: false)
+    #expect(listed.map(\.id) == (try index.trackIDs(sortedBy: .title, ascending: false)))
+    let rows = Dictionary(
+        uniqueKeysWithValues: try index.rows(ids: listed.map(\.id)).map { ($0.id, $0) })
+    #expect(listed.contains { $0.sizeBytes > 0 && $0.durationSeconds > 0 })
+    for track in listed {
+        #expect(track.sizeBytes == rows[track.id]?.sizeBytes)
+        #expect(track.durationSeconds == rows[track.id]?.durationSeconds)
+    }
+}

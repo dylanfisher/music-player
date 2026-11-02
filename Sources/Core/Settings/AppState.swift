@@ -28,6 +28,10 @@ public struct AppState: SettingsSchema {
     public let statusBarVisible = Setting(
         "window.statusBarVisible", title: "Show Status Bar", default: true,
         "Show the status line under the track table.")
+    public let statusTotals = Setting(
+        "window.statusTotals", title: "Status Bar Totals", default: StatusTotals.listAndSelection,
+        "Which totals the status bar shows: the list's and the selection's, the list's, or the"
+            + " selection's, which falls back to the list's while nothing is selected.")
     public let queueVisible = Setting(
         "window.queueVisible", title: "Show Queue", default: false,
         "Show the queue beside the track table.")

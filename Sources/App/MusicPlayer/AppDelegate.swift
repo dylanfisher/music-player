@@ -242,6 +242,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         browser.keyCommand = keyCommand
         queue.keyCommand = keyCommand
         if !layout.statusBarVisible { browser.toggleStatusBar() }
+        browser.statusTotals = layout.statusTotals
+        browser.statusTotalsChanged = { saver.set(\.statusTotals, $0) }
         if !layout.browserVisible { browser.toggleBrowser() }
 
         window.show()

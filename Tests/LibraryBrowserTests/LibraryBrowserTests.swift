@@ -212,3 +212,31 @@ import Testing
     try press(.left, in: areas[0])
     #expect(sent == [KeyChord(.right), KeyChord(.left)])
 }
+
+@MainActor @Test func aClickOnTheTotalsCyclesThemAndTheSelectionShowsAsItChanges() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, groupByAlbumArtist: false)
+    var reported: [StatusTotals] = []
+    browser.statusTotalsChanged = { reported.append($0) }
+    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    let list = browser.model.listTotals.text()
+    #expect(browser.model.listTotals.count == browser.model.trackIDs.count)
+    #expect(browser.model.listTotals.sizeBytes > 0)
+    #expect(browser.statusText == list)
+
+    browser.table.table.selectRowIndexes([0], byExtendingSelection: false)
+    let one = browser.model.totals(ofRows: [0]).text(selected: true)
+    #expect(one.hasPrefix("1 track selected, "))
+    #expect(browser.statusText == "\(list) (\(one))")
+    browser.showNextTotals()
+    #expect(browser.statusText == list)
+    browser.showNextTotals()
+    #expect(browser.statusText == one)
+    browser.table.table.deselectAll(nil)
+    #expect(browser.statusText == list)
+    browser.showNextTotals()
+    #expect(reported == [.list, .selection, .listAndSelection])
+}

@@ -1,5 +1,6 @@
 import Foundation
 import Library
+import Settings
 
 /// The bar under the track table: how many tracks it shows, what the watcher is scanning, and
 /// how many files and folders have problems, which the owner can open as a list.
@@ -50,17 +51,34 @@ struct LibraryStatus: Equatable, Sendable {
             || !playlistFileReport.isEmpty || !healthLines.isEmpty || !syncProblems.isEmpty
     }
 
-    /// "1,204 tracks · 2 tracks not in the library": what the list shown holds. `missingCount`
-    /// is how many of a playlist's tracks aren't in the library. `playCount` is set on the
-    /// timeline, which counts plays instead of tracks.
-    func summary(trackCount: Int, missingCount: Int = 0, playCount: Int? = nil) -> String {
-        var parts = [playCount.map { count($0, "play") } ?? tracks(trackCount)]
+    /// "1,204 tracks, 5.1 GiB, 3 days 2 hours · 2 tracks not in the library": what the list shown
+    /// holds, with the totals of `selection` as `shown` asks. `missingCount` is how many of a
+    /// playlist's tracks aren't in the library. `playCount` is set on the timeline, which counts
+    /// plays instead of tracks.
+    func summary(
+        list: TrackTotals, selection: TrackTotals, shown: StatusTotals, missingCount: Int = 0,
+        playCount: Int? = nil
+    ) -> String {
+        var parts = [playCount.map { count($0, "play") } ?? totals(list, selection, shown)]
         if !notices.isEmpty { parts.append("earlier play counts and playlists discarded") }
         if missingCount > 0 { parts.append(tracks(missingCount) + " not in the library") }
         if healthOtherCount > 0 {
             parts.append(count(healthOtherCount, "more item") + " with no track to list")
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// The list's totals, the selection's, or both, falling back to the list's while nothing is
+    /// selected.
+    private func totals(_ list: TrackTotals, _ selection: TrackTotals, _ shown: StatusTotals)
+        -> String
+    {
+        guard selection.count > 0 else { return list.text() }
+        return switch shown {
+        case .listAndSelection: "\(list.text()) (\(selection.text(selected: true)))"
+        case .list: list.text()
+        case .selection: selection.text(selected: true)
+        }
     }
 
     /// "Scanning Music: 300 of 1,200 read", a part per folder; nil while nothing scans.

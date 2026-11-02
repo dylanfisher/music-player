@@ -15,6 +15,22 @@ extension LibraryIndex {
         try orderedTracks("t.file_id", filter, column, ascending) { try $0.int64(0) }
     }
 
+    /// The tracks `trackIDs` gives, in the same order, with each file's size and length for the
+    /// status bar's totals.
+    public func listedTracks(
+        _ filter: TrackFilter = TrackFilter(), sortedBy column: TrackColumn,
+        ascending: Bool = true
+    ) throws -> [ListedTrack] {
+        try orderedTracks(
+            "t.file_id, f.size_bytes, t.length_frames, t.sample_rate_hz", filter, column, ascending
+        ) { row in
+            let rate = try row.int(3)
+            return ListedTrack(
+                id: try row.int64(0), sizeBytes: try row.int(1),
+                durationSeconds: rate > 0 ? Double(try row.int(2)) / Double(rate) : 0)
+        }
+    }
+
     /// The names of the tracks `trackIDs` gives, in the same order, for Go to Item and
     /// type-to-select.
     public func trackNames(

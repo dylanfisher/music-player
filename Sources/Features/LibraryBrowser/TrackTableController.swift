@@ -27,6 +27,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// changes.
     private var artSize = ArtSize.thumbnail
     private var art: RowArt
+    /// Called after every change of the selection, the keys' and a reload's too.
+    var selectionChanged: () -> Void = {}
     /// The file of the track playing, whose row is marked wherever the table shows it.
     var playingPath: String? {
         didSet {
@@ -400,6 +402,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     func tableViewSelectionDidChange(_ notification: Notification) {
         if selectionDidChange() { typeSelect?.reset() }
+        selectionChanged()
     }
 
     /// Selects the first row whose sort column starts with `query`.
