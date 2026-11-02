@@ -3,6 +3,8 @@
 - **Date:** 2026-11-01
 - **Status:** accepted
 - **Amends:** [0009](0009-scanning-and-watching.md) (Watching)
+- **Amended by:** [0056](0056-rescan-chosen-folders.md): Rescan Now is
+  named Rescan All, and Rescan scans the chosen folders the same way.
 
 ## Context
 

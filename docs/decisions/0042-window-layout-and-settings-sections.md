@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0017](0017-settings-window.md) (the watched folders' row),
   [0034](0034-folders-and-library-health.md) (Folders)
+- **Amended by:** [0056](0056-rescan-chosen-folders.md): the pane's Rescan
+  Now is Rescan All, beside Rescan for the selected folders.
 
 ## Context
 
