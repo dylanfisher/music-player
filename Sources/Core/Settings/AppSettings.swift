@@ -52,6 +52,21 @@ public struct AppSettings: SettingsSchema {
     public let appearance = Setting(
         "appearance", title: "Appearance", default: Appearance.auto,
         "Light or dark windows; Auto follows the system.")
+    public let columnLines = Setting(
+        "appearance.columnLines", title: "Column Lines", default: false,
+        "Draw a thin line between the track table's columns.")
+    public let rowLines = Setting(
+        "appearance.rowLines", title: "Row Lines", default: false,
+        "Draw a thin line between the track table's rows.")
+    public let alternatingRows = Setting(
+        "appearance.alternatingRows", title: "Alternating Rows", default: true,
+        "Shade every other row of the track table.")
+    public let rowHeight = Setting(
+        "appearance.rowHeight", title: "Row Height", default: RowHeight.regular,
+        "How tall the track table's rows are.")
+    public let artSize = Setting(
+        "appearance.artSize", title: "Album Art", default: ArtSize.thumbnail,
+        "A thumbnail per row, or album art as wide as the column.")
 
     public func conflicts(_ values: [String: any SettingValue]) -> [SettingConflict] {
         guard let sync = values[syncFolder.key] as? SyncFolder,

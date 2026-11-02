@@ -205,6 +205,12 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
         generated.filter { $0.key == "appearance" }.map(\.command.title) == [
             "Auto Appearance", "Light Appearance", "Dark Appearance",
         ])
+    #expect(
+        generated.filter { $0.key.hasPrefix("appearance.") }.map(\.command.title) == [
+            "Column Lines", "Row Lines", "Alternating Rows", "Compact Row Height",
+            "Regular Row Height", "Large Row Height", "Thumbnail Album Art",
+            "Full Width Album Art",
+        ])
     // Numbers, lists and folders aren't commands.
     #expect(!generated.contains { $0.key == "library.watchedFolders" })
 }

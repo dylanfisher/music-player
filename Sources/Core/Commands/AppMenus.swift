@@ -153,6 +153,13 @@ public enum AppMenus {
                         ], showsChords: true),
                     .separator, .command(.back), .command(.forward), .command(.showCurrentTrack),
                     .command(.showAllTracks), .separator, .setting(settings.appearance.key),
+                    .submenu(
+                        AppState().trackTable.title,
+                        [
+                            .setting(settings.columnLines.key), .setting(settings.rowLines.key),
+                            .setting(settings.alternatingRows.key),
+                            .setting(settings.rowHeight.key), .setting(settings.artSize.key),
+                        ], showsChords: true),
                 ]),
             MenuSection(
                 title: "Controls", role: .plain,

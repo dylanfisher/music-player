@@ -221,6 +221,21 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(setting.summary.contains("ends bit-perfect output"))
 }
 
+@Test func theTrackTableAppearanceDefaultsToTheTableAsItWas() throws {
+    let settings = try StateStore(AppSettings(), fileURL: temporaryFile())
+    #expect(settings[\.columnLines] == false)
+    #expect(settings[\.rowLines] == false)
+    #expect(settings[\.alternatingRows] == true)
+    #expect(settings[\.rowHeight] == .regular)
+    #expect(settings[\.artSize] == .thumbnail)
+    let keys = AppSettings().settings.map(\.key).filter { $0.hasPrefix("appearance.") }
+    #expect(
+        keys == [
+            "appearance.columnLines", "appearance.rowLines", "appearance.alternatingRows",
+            "appearance.rowHeight", "appearance.artSize",
+        ])
+}
+
 @Test func windowLayoutSurvivesAReloadAndRejectsBadValues() throws {
     let url = temporaryFile()
     let settings = try StateStore(AppState(), fileURL: url)
