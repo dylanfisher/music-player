@@ -4,7 +4,7 @@ import AppKit
 /// text the owner can read and copy.
 @MainActor
 final class ProblemsWindow {
-    private let window: NSWindow
+    private let window: NSPanel
     private let text: NSTextView
 
     init() {
@@ -12,7 +12,7 @@ final class ProblemsWindow {
         text = scroll.documentView as! NSTextView
         text.isEditable = false
         text.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
-        window = NSWindow(
+        window = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 420),
             styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered,
             defer: true)
