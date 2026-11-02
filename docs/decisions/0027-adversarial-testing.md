@@ -49,7 +49,10 @@ input: `receiver-line` (a receiver's status lines, split at each CR; volumes mus
 and sound mode names printable and at most 25 characters), `device-description` (names,
 manufacturers and models must hold no control character) and `soap-reply` (a
 `GetProtocolInfo` sink list, at most 1,024 entries of four parts) and `chunked-body` (a
-chunked HTTP body, never past its cap) ([0039](0039-network-control.md)). A broken invariant is a
+chunked HTTP body, never past its cap) ([0039](0039-network-control.md)). Phase 9b's:
+`avtransport-reply` (`GetTransportInfo` and `GetPositionInfo` replies; states hold no control
+character and times are finite and in range) and `service-description` (an action list, at
+most 256 names) ([0041](0041-upnp-output.md)). A broken invariant is a
 `preconditionFailure`, which the fuzzer catches like any crash.
 
 **Seeds.** The parsers' seeds are a generated library of `coveringLibraryFileCount` files

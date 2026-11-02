@@ -815,6 +815,19 @@ Implementation plan (ADR 0041), from the owner's captures of the Denon and two S
    renderer fetching the file with `Range`), ReceiverTests (the captured status lines),
    NowPlayingTests (the panel's renderer lines). Network tests looped 20 times.
 
+Result: shipped up to the owner's checkpoint, checked only against a fake renderer on loopback
+built from the captures; nothing contacted the receiver. `output.renderer` (a UDN, null by
+default) plays to a renderer found by SSDP, and `--list-devices` lists renderers with their
+UDNs. Files go as their own bytes: FLAC, WAV and MP3 to both renderers, MP4 (ALAC or AAC) as
+the Denon's `audio/m4a` and the Sonos's `audio/mp4`, AIFF to the Sonos and reported on the
+Denon, hi-res as it is; the library holds no DSD. Both captured AVTransports list
+`SetNextAVTransportURI`, so the next track goes over while one plays; a renderer without it,
+or one that refuses it or stops instead, gets each track after the last stops, the gap logged.
+Polling once a second, not GENA. No volume is sent to a renderer: the Denon's is the
+receiver's over port 23. The signal path panel says the renderer decodes the bytes and
+bit-perfect can't be checked from the Mac. Fuzz targets: AVTransport replies, service
+descriptions. Benches left for the merge.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,

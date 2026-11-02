@@ -186,7 +186,8 @@ rest carries on; it exits nonzero only when no file was written.
 ## Consequences
 
 Nothing reaches the LAN until the owner turns receiver control on, and only SSDP, HTTP to
-addresses on the subnet a reply came from, and port 23 of the one Denon found. The receiver's
+addresses on the subnet a reply came from, and port 23 of the one Denon found. Phase 9b adds
+`output.renderer` and `--list-devices`, which search too ([0041](0041-upnp-output.md)). The receiver's
 volume isn't shown anywhere yet, only logged under the Receiver category as each `MV` line comes; 9b's
 output picker and the signal path panel are where it can go. Every † above is checked against
 the owner's captures before 9b builds on it: the device description's device types and
