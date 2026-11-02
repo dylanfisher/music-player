@@ -153,3 +153,16 @@ private func get(
         return
     }
 }
+
+@Test func aSignedOrOddChunkSizeIsRefusedNotTrusted() {
+    for body in [
+        "-1\r\nab\r\n0\r\n\r\n", "+2\r\nab\r\n0\r\n\r\n", " 2\r\nab\r\n0\r\n\r\n", "0x2\r\n",
+    ] {
+        #expect(
+            decodeChunked(Array(body.utf8)[...], cap: 100)
+                == .malformed("a chunk's size isn't hex"), "\(body)")
+    }
+    #expect(
+        decodeChunked(Array("A\r\n0123456789\r\n0\r\n\r\n".utf8)[...], cap: 100)
+            == .done(Array("0123456789".utf8)))
+}

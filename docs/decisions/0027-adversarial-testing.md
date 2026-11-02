@@ -48,7 +48,8 @@ to a file, applies an edit and undoes it, and the bytes must match. Phase 9a's n
 input: `receiver-line` (a receiver's status lines, split at each CR; volumes must be in range
 and sound mode names printable and at most 25 characters), `device-description` (names,
 manufacturers and models must hold no control character) and `soap-reply` (a
-`GetProtocolInfo` sink list, at most 1,024 entries of four parts) ([0039](0039-network-control.md)). A broken invariant is a
+`GetProtocolInfo` sink list, at most 1,024 entries of four parts) and `chunked-body` (a
+chunked HTTP body, never past its cap) ([0039](0039-network-control.md)). A broken invariant is a
 `preconditionFailure`, which the fuzzer catches like any crash.
 
 **Seeds.** The parsers' seeds are a generated library of `coveringLibraryFileCount` files

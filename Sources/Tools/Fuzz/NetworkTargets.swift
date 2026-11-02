@@ -1,3 +1,4 @@
+import LocalNetwork
 import Receiver
 import UPnP
 
@@ -108,5 +109,28 @@ let soapReply = FuzzTarget(
                         >= 4, "\(format) isn't four parts")
             }
             return true
+        }
+    })
+
+/// A chunked HTTP body, as a renderer may send a description or a SOAP reply.
+let chunkedBody = FuzzTarget(
+    name: "chunked-body", summary: "a chunked HTTP body, decoded under a cap",
+    seedFormats: [], tokens: ["\r\n", "0\r\n\r\n", ";ext=1", "-1", "ffffffff"],
+    madeSeeds: { _, _ in
+        [
+            "5\r\nhello\r\n0\r\n\r\n", "3;x=y\r\nabc\r\n0\r\nA: b\r\n\r\n",
+            "-1\r\nab\r\n0\r\n\r\n", "1\r\na\r\n1\r\nb\r\n0\r\n\r\n",
+        ].map { Array($0.utf8) }
+    },
+    prepare: { _ in
+        { input in
+            let cap = 64
+            switch decodeChunked(input[...], cap: cap) {
+            case .done(let body):
+                precondition(body.count <= cap, "\(body.count) bytes past the cap")
+                return true
+            case .incomplete, .tooLarge, .malformed:
+                return false
+            }
         }
     })

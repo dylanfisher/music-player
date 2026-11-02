@@ -170,15 +170,18 @@ private final class Exchange: @unchecked Sendable {
     }
 }
 
-enum Chunked: Equatable {
+/// What a chunked body decodes to so far.
+public enum Chunked: Equatable, Sendable {
     case incomplete
     case tooLarge
     case malformed(String)
     case done([UInt8])
 }
 
-/// Decodes a chunked body from its start. Extensions and trailers are skipped.
-func decodeChunked(_ bytes: ArraySlice<UInt8>, cap: Int) -> Chunked {
+/// Decodes a chunked body from its start. Extensions and trailers are skipped. A size is hex
+/// digits alone: `Int(_:radix:)` would take a sign, and a negative size would cut the body
+/// backwards.
+public func decodeChunked(_ bytes: ArraySlice<UInt8>, cap: Int) -> Chunked {
     var decoded: [UInt8] = []
     var index = bytes.startIndex
     func line() -> ArraySlice<UInt8>? {
@@ -191,7 +194,7 @@ func decodeChunked(_ bytes: ArraySlice<UInt8>, cap: Int) -> Chunked {
     while true {
         guard let sizeLine = line() else { return .incomplete }
         let digits = sizeLine.prefix { $0 != UInt8(ascii: ";") }
-        guard !digits.isEmpty, digits.count <= 8,
+        guard !digits.isEmpty, digits.count <= 8, digits.allSatisfy(isHexDigit),
             let size = Int(String(decoding: digits, as: UTF8.self), radix: 16)
         else { return .malformed("a chunk's size isn't hex") }
         if size == 0 {
@@ -206,5 +209,15 @@ func decodeChunked(_ bytes: ArraySlice<UInt8>, cap: Int) -> Chunked {
         index += size
         guard let end = line() else { return .incomplete }
         guard end.isEmpty else { return .malformed("a chunk runs past its size") }
+    }
+}
+
+private func isHexDigit(_ byte: UInt8) -> Bool {
+    switch byte {
+    case UInt8(ascii: "0")...UInt8(ascii: "9"), UInt8(ascii: "a")...UInt8(ascii: "f"),
+        UInt8(ascii: "A")...UInt8(ascii: "F"):
+        true
+    default:
+        false
     }
 }
