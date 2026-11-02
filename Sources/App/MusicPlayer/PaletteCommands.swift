@@ -58,12 +58,11 @@ extension AppDelegate {
             items: commandItems() + outputItems(outputOptionsNow(), current: currentOutput)
                 + playlistItems(browser.playlists),
             over: window, place: state[\.palettePlace])
+        let panes = listedPanes(.commands)
         Task {
             do {
                 let (items, entries) = libraryItems(
-                    try await browser.allEntries().filter {
-                        listedPanes(.commands).contains($0.0)
-                    })
+                    try await browser.allEntries().filter { panes.contains($0.0) })
                 // A listing the palette has replaced since keeps none of these.
                 guard palette.model.session == session else { return }
                 paletteEntries = entries
@@ -112,8 +111,8 @@ extension AppDelegate {
     func makeGoToListings(_ browser: LibraryBrowser) {
         goToEntries = LibraryListing { [weak browser] in
             guard let browser else { return ([], [:]) }
-            return libraryItems(
-                try await browser.allEntries().filter { listedPanes(.goToItem).contains($0.0) })
+            let panes = listedPanes(.goToItem)
+            return libraryItems(try await browser.allEntries().filter { panes.contains($0.0) })
         }
         goToTracks = LibraryListing { [weak browser] in
             guard let browser else { return [] }
