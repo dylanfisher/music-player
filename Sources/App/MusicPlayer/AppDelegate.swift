@@ -466,8 +466,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     {
         let uid = try HALDeviceProvider.resolve(settings[\.outputDeviceUID])
         return profileState[\.deviceProfiles].profile(
-            for: uid, config: outputConfig(settings), switched: switched,
-            typeHogs: try HALDeviceProvider.hogsByDefault(uid))
+            for: uid, config: outputConfig(settings), switched: switched, typeHogs: typeHogs(uid))
+    }
+
+    /// Whether a device seen for the first time hogs, from its transport type. A device whose
+    /// type can't be read starts from `output.hogMode`, as one not connected does.
+    private func typeHogs(_ uid: String) -> Bool? {
+        do {
+            return try HALDeviceProvider.hogsByDefault(uid)
+        } catch {
+            logger.error(
+                "can't read \(uid)'s transport type; it starts from output.hogMode: \(error)")
+            return nil
+        }
     }
 
     /// Written before the output uses it, so a crash never leaves the device with settings its

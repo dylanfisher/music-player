@@ -165,16 +165,17 @@ public struct DeviceProfiles: SettingValue {
 
     /// The profile `uid` plays with. A device not seen before starts from `config` at full volume,
     /// with hog mode as `typeHogs` says for its kind of device, or as `config` has it when that's
-    /// nil (ADR 0037). The config's output settings show the device in use, so when they changed
-    /// without the device changing (`switched` false, which includes launch) they are an edit,
-    /// and the profile takes them; when the device changed, they belong to the device before, and
-    /// a profile keeps its own.
+    /// nil (ADR 0037); it's read only for such a device. The config's output settings show the
+    /// device in use, so when they changed without the device changing (`switched` false, which
+    /// includes launch) they are an edit, and the profile takes them; when the device changed,
+    /// they belong to the device before, and a profile keeps its own.
     public func profile(
-        for uid: String, config: OutputConfig, switched: Bool, typeHogs: Bool?
+        for uid: String, config: OutputConfig, switched: Bool,
+        typeHogs: @autoclosure () -> Bool?
     ) -> DeviceProfile {
         guard var profile = profiles.first(where: { $0.uid == uid }) else {
             return DeviceProfile(
-                uid: uid, hogMode: typeHogs ?? config.hogMode,
+                uid: uid, hogMode: typeHogs() ?? config.hogMode,
                 digitalVolume: config.digitalVolume, volumeDecibels: 0, formats: nil)
         }
         if !switched {

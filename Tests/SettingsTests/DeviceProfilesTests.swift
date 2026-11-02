@@ -47,6 +47,19 @@ private let twoDevices = DeviceProfiles(profiles: [
         twoDevices.profile(for: "DAC", config: hogging, switched: true, typeHogs: false).hogMode)
 }
 
+@Test func aSeenDevicesKindIsNeverRead() {
+    var reads = 0
+    func kind() -> Bool? {
+        reads += 1
+        return false
+    }
+    _ = twoDevices.profile(for: "DAC", config: config, switched: true, typeHogs: kind())
+    _ = twoDevices.profile(for: "DAC", config: config, switched: false, typeHogs: kind())
+    #expect(reads == 0)
+    _ = twoDevices.profile(for: "USB", config: config, switched: true, typeHogs: kind())
+    #expect(reads == 1)
+}
+
 @Test func switchingToASeenDeviceKeepsItsOwnSettings() {
     let profile = twoDevices.profile(for: "BuiltIn", config: config, switched: true, typeHogs: nil)
     #expect(profile == twoDevices.profiles[1])
