@@ -33,7 +33,7 @@ public final class PaletteModel {
 
     /// Starts a listing of `items` with an empty query, as when the palette opens, and returns
     /// its session. The change is made before this returns, so an `append` made after builds on
-    /// it. Call `rank` to rank it.
+    /// it. Call `rank` or `rankNow` to rank it.
     public func open(
         _ items: [PaletteItem], byKind: Bool, emptyQueryKinds: Set<PaletteItem.Kind>? = nil
     ) -> Int {
@@ -76,6 +76,22 @@ public final class PaletteModel {
                 emptyQueryKinds: kinds)
         }.value
         guard mine == generation else { return }
+        publish(results, session: session, query: query)
+    }
+
+    /// Ranks the items for the query before this returns, so the palette has its rows before
+    /// its first frame. Only for a listing that ranks in well under a frame, as ⌘K's commands
+    /// do with an empty query; a ranking still running is dropped.
+    func rankNow() {
+        generation += 1
+        publish(
+            rankPalette(
+                items, query: query, frecency: frecency.scores(now: now()), limit: Self.limit,
+                byKind: byKind, emptyQueryKinds: emptyQueryKinds),
+            session: session, query: query)
+    }
+
+    private func publish(_ results: [RankedItem], session: Int, query: String) {
         let sameQuery = ranked.map { $0 == (session, query) } ?? false
         self.results = results
         ranked = (session, query)

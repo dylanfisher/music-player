@@ -77,11 +77,13 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         let frame = Self.frame(size: panel.frame.size, on: screen, place: place)
         panel.setFrame(frame, display: false)
         shownAt = frame
-        panel.makeKeyAndOrderFront(nil)
-        panel.makeFirstResponder(field)
         let session = model.open(
             items, byKind: mode == .goToItem, emptyQueryKinds: mode == .commands ? [.command] : nil)
-        Task { await model.rank() }
+        // Listed before the panel shows, so its first frame has the rows rather than the last
+        // listing's or none.
+        model.rankNow()
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(field)
         return session
     }
 

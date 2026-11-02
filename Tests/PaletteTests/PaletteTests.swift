@@ -132,14 +132,29 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     // Go to Item, since ⌘K's empty query lists only commands.
     let session = palette.show(
         .goToItem, items: ["A", "B", "C"].map { item($0, .album) }, over: window, place: nil)
-    // The ranking `show` started.
-    while palette.shown.isEmpty { await Task.yield() }
     palette.table.selectRowIndexes([1], byExtendingSelection: false)
     // Commands rank before albums, so these push "B" down a row.
     await palette.model.append([item("Play", .command)], to: session)
     #expect(palette.shown[palette.table.selectedRow].item.title == "B")
     // A new query selects its best match.
     await palette.model.setQuery("c")
+    #expect(palette.table.selectedRow == 0)
+    palette.close()
+}
+
+@MainActor @Test func commandsOpenListingOnlyCommandsOnTheFirstFrame() {
+    var visits = Frecency(VisitLog(visits: []))
+    visits.record("genre:Electronic", now: 0)
+    let palette = PaletteController(model: PaletteModel(frecency: visits, now: { 0 }))
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    palette.show(
+        .commands, items: [item("Electronic", .genre), item("Play", .command)], over: window,
+        place: nil)
+    // Listed by the time `show` returns, with nothing awaited.
+    #expect(palette.shown.map(\.item.title) == ["Play"])
+    #expect(palette.table.numberOfRows == 1)
     #expect(palette.table.selectedRow == 0)
     palette.close()
 }
