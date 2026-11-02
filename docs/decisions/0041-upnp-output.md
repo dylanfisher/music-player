@@ -95,8 +95,9 @@ to it confirms the track change, with no gap. Otherwise, or once the renderer re
 action, each track is set and played after the last has stopped, and the gap is logged.
 
 The app keeps time itself. From the moment the renderer plays a track, its end is set by the
-track's length in the file, moved only by the app's own seek, pause and play, never by a
-polled position. Two seconds past it, if the renderer hasn't moved on, the app sends the next
+track's length in the file, moved by the app's own seek, pause and play. A poll moves it only
+later, never earlier: two polls in a row finding the renderer more than 1.5 s behind the
+clock, as when it re-buffers mid-track, hold the end back to match. Two seconds past it, if the renderer hasn't moved on, the app sends the next
 track with `SetAVTransportURI` and Play, or stops. A renderer that stops at the end holding a
 next track it was given isn't answered with a second `SetAVTransportURI` over what it
 buffered; the clock decides. At the owner's checkpoint the Denon stuttered over each track's
@@ -172,7 +173,8 @@ on only while receiver control runs. While it plays to the Denon, the Mac's volu
 mute keys send Receiver Volume Up, Down and Mute (`receiver.volumeKeys`, on by default). They
 come from a session event tap on `NSSystemDefined` events, which macOS gives only to an app
 with Accessibility permission; without it there's no tap and the keys stay the Mac's, and the
-system is asked once a launch to prompt. The tap exists only while the keys are taken, its
+system's prompt is shown once ever, recorded in the state file, so an owner who declined isn't
+asked again; after that the status line says once a launch where to grant it. The tap exists only while the keys are taken, its
 callback returns at once and hands each press to the main queue. No way without the
 permission was found: MediaPlayer's remote commands have no volume, the keys never reach the
 app as events, and watching the default output's volume would move the Mac's own volume and
