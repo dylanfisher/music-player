@@ -115,7 +115,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// What the last import wrote, whose misses Locate… matches again.
     var lastImport: ImportPlan?
     /// A Locate… waiting for the scan of the folder it had watched, and the miss it was for.
-    private var pendingLocate: (folder: String, miss: String)?
+    private(set) var pendingLocate: (folder: String, miss: String)?
     /// The file an import from Swinsian reads its column layout from; tests replace it.
     var swinsianPreferences = SwinsianColumns.preferencesURL
     /// True from Resolve Lost Stats until its last sheet closes, so one is open at a time.
@@ -358,11 +358,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         case .syncFailed, .launchScansEnded:
             break
         }
-        if case .scanned(let folder, _) = event, let pending = pendingLocate,
-            isPath(pending.folder, inOrAt: folder)
-        {
+        guard let pending = pendingLocate else { return }
+        switch event {
+        case .scanned(let folder, _) where isPath(pending.folder, inOrAt: folder):
             pendingLocate = nil
             Task { await matchAgain(pending.miss, under: pending.folder) }
+        case .scanFailed(let folder, _) where isPath(pending.folder, inOrAt: folder):
+            // The status line says why; a later scan of the folder isn't the user asking again.
+            pendingLocate = nil
+        default: break
         }
     }
 
@@ -1182,6 +1186,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             do {
                 let written = try await model.applyImport(plan.library, prefix: plan.prefix)
                 lastImport = written
+                // Its miss was the old import's.
+                pendingLocate = nil
                 showSource()
                 var summary = written.summary
                 var rows = written.problems

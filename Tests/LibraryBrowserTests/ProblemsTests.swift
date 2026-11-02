@@ -155,3 +155,20 @@ private func locatingBrowser() throws -> (
     try await waitFor("the match") { try index.rows(ids: [id])[0].playCount == 5 }
     browser.problems?.window.close()
 }
+
+@MainActor @Test func aFailedScanOfTheFolderDropsTheWaitingLocate() async throws {
+    let (browser, index, id, miss, folder) = try locatingBrowser()
+    browser.watchedFolders = { [] }
+    browser.watch = { _ in }
+    browser.confirmWatch = { _, _, answer in answer(true) }
+    browser.showProblems()
+    try await waitFor("the Problems window") { browser.problems != nil }
+    await browser.locate(miss, in: folder)
+    #expect(browser.pendingLocate != nil)
+    browser.libraryChanged(.scanFailed(folder: folder.path, reason: "disk I/O error"))
+    #expect(browser.pendingLocate == nil)
+    // A later scan of the folder doesn't match the miss on its own.
+    browser.libraryChanged(.scanned(folder: folder.path, ScanSummary()))
+    #expect(try index.rows(ids: [id])[0].playCount == 0)
+    browser.problems?.window.close()
+}
