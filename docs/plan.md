@@ -657,14 +657,16 @@ checkpoint: the MediaPlayer adapters' off-main path.
 
 ### 9. UPnP/DLNA output (Denon AVR-X1800H)
 
+Split in two on 2026-11-01. 9a builds everything that can be checked against loopback stand-ins.
+9b needs the owner at the receiver, and starts from captures of the real one: its device
+description XML, its `GetProtocolInfo` reply, and the status lines it sends on port 23.
+
+#### 9a. Network control
+
 - [ ] **HTTP server** primitive on Network.framework: serves files with `Range` support, bound to
-      the LAN, and only to paths the library knows about.
+      the LAN, and only to paths the library knows about. Nothing calls it until 9b.
 - [ ] **SSDP discovery** of MediaRenderers, and fetching each renderer's description and
       `GetProtocolInfo` to learn what formats it accepts.
-- [ ] A **UPnP output** that implements the phase 4 output protocol, using AVTransport (set URI,
-      play, pause, seek, `SetNextAVTransportURI` for gapless) and RenderingControl (volume). It
-      sends original file bytes. Formats the renderer can't take are reported, not transcoded.
-- [ ] Renderers appear next to HAL devices in the output picker.
 - [ ] Info.plist gets `NSLocalNetworkUsageDescription` and Bonjour entries.
 - [ ] **Receiver control** over Denon's AVR control protocol: plain-text commands ending in a
       carriage return, on TCP port 23. It works on any input, not only while the Denon plays the
@@ -676,6 +678,7 @@ checkpoint: the MediaPlayer adapters' off-main path.
       - At least 50 ms between commands, as Denon's spec asks, so held volume keys are throttled.
       - Many Denon models accept one control client at a time. When the connection is refused or
         dropped, the UI says the receiver is unreachable; it doesn't retry silently.
+      - Off by default: nothing on the network starts until the owner turns receiver control on.
       - Tests run against a simulated receiver on loopback.
 - [ ] **Security requirements** ([ADR 0025](decisions/0025-threat-model.md), rows 28–30), each
       with a test against a loopback stand-in:
@@ -699,16 +702,64 @@ checkpoint: the MediaPlayer adapters' off-main path.
         by `XMLParser` with external entities off, timed out after 5 s. A renderer's name is
         escaped like any other display text.
       - The receiver's address comes only from SSDP on the local subnet. Its status lines are at
-        most 128 bytes, and at most 128 bytes are buffered without a carriage return before the
-        connection is dropped and reported; unknown lines are ignored and values range-checked
-        before the model takes them; commands come from the registry, never from received text.
-        The protocol has no authentication, so the app sends only what the owner asked for.
+        most 135 bytes, the cap in Denon's protocol spec, and at most 135 bytes are buffered
+        without a carriage return before the connection is dropped and reported; unknown lines
+        are ignored and values range-checked before the model takes them; commands come from the
+        registry, never from received text. The protocol has no authentication, so the app sends
+        only what the owner asked for.
       - The Info.plist item above adds only the local network usage string and Bonjour types; no
         new entitlements unless `scripts/check-signature` lists them with a reason.
+- [ ] **Hardware checkpoint (owner):** with the receiver's IP Control set to Always On, turn
+      receiver control on, switch Pure Direct on and off, change volume and input from the app,
+      then from the Denon's remote, and report whether the app follows. Paste back the captures
+      9b starts from.
+
+Implementation plan (ADR 0039):
+
+1. **LocalNetwork** (new primitive): `IPAddress` and `NetworkInterface`, the live interface
+   list from `getifaddrs` (up, not loopback or point-to-point), and `LocalSubnets`, which
+   finds the one interface whose subnet holds an address. One HTTP head parser with a byte cap,
+   shared by the three users below. `SSDPSearch`: the M-SEARCH, reply parsing and `LOCATION`
+   checks, over an injected `SSDPTransport`; the real one is a UDP socket whose destination
+   is passed in, so tests aim it at a loopback stand-in. `LocalHTTPClient`: GET and POST on
+   `NWConnection` to a checked `LocalURL` only, no redirects, a byte cap and a deadline, chunked
+   bodies decoded. `HTTPServer`: `NWListener` on one address, a token map, and the request
+   rules. Network.framework instead of URLSession, so no proxy, cache, redirect or ATS rule
+   sits between the app and the checks.
+2. **UPnP** (new Core module): device description and SOAP parsing with `XMLParser` (external
+   entities off, any DTD refused), `GetProtocolInfo`, and `RendererDiscovery`, which turns SSDP
+   replies into `Renderer`s with names escaped as display text.
+3. **Receiver** (new Core module): the line parser, the commands as typed values encoded to
+   bytes, the state the pushed lines build, and `ReceiverConnection` on `NWConnection` (135-byte
+   cap, 50 ms between commands and 1 s after power on, a refused or dropped connection reported
+   and never retried on its own). `ReceiverControl` finds the one Denon among the discovered
+   renderers and connects only to that address.
+4. **Settings and Commands:** `receiver.enabled`, false by default. Registry commands for volume
+   up, down and set, mute, Pure Direct, Direct and Stereo, each input, power on and standby, in
+   a Receiver submenu of Controls with the setting's toggle. Only Receiver Volume Down runs from
+   links.
+5. **App:** start receiver control when the setting is on, stop it when it's turned off; route
+   the commands and the set-volume argument; report problems in the status bar.
+6. **Info.plist:** `NSLocalNetworkUsageDescription`.
+7. **Fuzz targets:** `receiver-line`, `device-description` and `soap-reply`.
+8. **Tests:** LocalNetworkTests (subnets with made-up interfaces, SSDP replies hostile, oversize
+   and off-subnet, `LOCATION` refusals, the client against loopback servers that redirect,
+   send too much or stall, every server rule), UPnPTests (descriptions and SOAP, XXE and a DTD,
+   oversize, discovery end to end on loopback), ReceiverTests (a simulated receiver on loopback:
+   pushed lines, an oversize line, a line with no CR, refused and dropped connections,
+   throttling), CommandsTests (the receiver commands and links). Network tests looped 20 times
+   under a timeout.
+
+#### 9b. UPnP output
+
+- [ ] A **UPnP output** that implements the phase 4 output protocol, using AVTransport (set URI,
+      play, pause, seek, `SetNextAVTransportURI` for gapless) and RenderingControl (volume). It
+      sends original file bytes. Formats the renderer can't take are reported, not transcoded.
+      It serves tracks through 9a's HTTP server.
+- [ ] Renderers appear next to HAL devices in the output picker.
+- [ ] Tests against a fake renderer on loopback, built from the owner's captures.
 - [ ] **Hardware checkpoint (owner):** play 16/44.1, 24/96 and 24/192 FLAC to the Denon. Report
-      what its display shows, gapless behavior, seek, and volume. With the receiver's Network
-      Control set to Always On, switch Pure Direct on and off, change volume and input from the
-      app, then from the Denon's remote, and report whether the app follows.
+      what its display shows, gapless behavior, seek, and volume.
 
 ### 10. Web remote
 

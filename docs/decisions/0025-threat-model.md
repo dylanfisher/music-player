@@ -120,8 +120,8 @@ against a loopback stand-in:
   `XMLParser` with external entities off, and time out after 5 s. A renderer's name is display
   text, escaped as row 9.
 - **Receiver control.** The address comes only from SSDP on the local subnet. Status lines are
-  hostile input: at most 128 bytes each, and at most 128 bytes buffered without a carriage
-  return, past which the connection is dropped and reported; unknown lines ignored; values
+  hostile input: at most 135 bytes each, the cap in Denon's protocol spec, and at most 135
+  bytes buffered without a carriage return, past which the connection is dropped and reported; unknown lines ignored; values
   range-checked before the model takes them. Commands are built from the registry, never from
   received text. The protocol has no authentication, so the app sends only what the owner
   asked for.
