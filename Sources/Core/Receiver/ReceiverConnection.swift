@@ -66,7 +66,7 @@ final class ReceiverConnection: @unchecked Sendable {
     ) {
         connection = NWConnection(
             host: address.endpointHost, port: NWEndpoint.Port(rawValue: port)!,
-            using: .tcp)
+            using: directTCP())
         self.updates = updates
         self.now = now
     }
@@ -181,6 +181,9 @@ final class ReceiverConnection: @unchecked Sendable {
         connection.cancel()
         updates(.ended(reason))
     }
+
+    /// Whether it bypasses any proxy, as everything on the LAN does.
+    var bypassesProxies: Bool { connection.parameters.preferNoProxies }
 
     /// When each line went out so far.
     var sentTimes: [Double] { queue.sync { sendTimes } }

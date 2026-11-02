@@ -371,3 +371,8 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     control.start()
     try await wait(control, log, "connected") { control.status == .connected("AVR-X1800H") }
 }
+
+@Test func theControlConnectionNeverGoesThroughAProxy() {
+    let connection = ReceiverConnection(address: IPAddress("127.0.0.1")!, port: 1) { _ in }
+    #expect(connection.bypassesProxies)
+}

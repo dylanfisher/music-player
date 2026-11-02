@@ -41,7 +41,7 @@ extension IPAddress {
 }
 
 /// TCP parameters that never go through a proxy.
-func directTCP() -> NWParameters {
+public func directTCP() -> NWParameters {
     let parameters = NWParameters.tcp
     parameters.preferNoProxies = true
     return parameters
