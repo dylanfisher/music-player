@@ -1,6 +1,7 @@
 import AppKit
 import Artwork
 import Commands
+import DisplayText
 import Library
 import Log
 import Settings
@@ -23,6 +24,15 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     private var reportedFetchFailure = false
     private var typeSelect: TypeSelect? = TypeSelect()
     private let art = RowArt()
+    /// The file of the track playing, whose row is marked wherever the table shows it.
+    var playingPath: String? {
+        didSet {
+            guard playingPath != oldValue else { return }
+            table.enumerateAvailableRowViews { rowView, row in
+                (rowView as? MarkedRowView)?.isMarked = isPlaying(row)
+            }
+        }
+    }
 
     init(model: BrowserModel, cache: RowCache, layout: TrackTableLayout, actions: BrowserActions) {
         self.model = model
@@ -128,6 +138,19 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     // MARK: Data source and delegate
 
     func numberOfRows(in tableView: NSTableView) -> Int { model.trackIDs.count }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let rowView = MarkedRowView()
+        rowView.isMarked = isPlaying(row)
+        return rowView
+    }
+
+    /// Whether `row` shows the track playing. Read from the row cache, which already holds the
+    /// rows on screen.
+    func isPlaying(_ row: Int) -> Bool {
+        guard let playingPath, model.trackIDs.indices.contains(row) else { return false }
+        return trackRow(row)?.path == playingPath
+    }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int)
         -> NSView?

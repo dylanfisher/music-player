@@ -941,6 +941,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         if paneHadKeys { focusTracks() }
     }
 
+    /// Marks the row of the track at `path`, the one playing or paused, in the track table;
+    /// nil marks none.
+    public func showPlaying(path: String?) { table.playingPath = path }
+
     public var isStatusBarVisible: Bool { !statusBar.isHidden }
 
     public func toggleStatusBar() { statusBar.isHidden.toggle() }

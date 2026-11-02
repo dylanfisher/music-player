@@ -5,7 +5,8 @@ import KeyChord
 import Log
 import Playback
 
-/// The queue beside the track table: the tracks in play order, with the current one marked.
+/// The queue beside the track table: the tracks in play order, with the current one's row
+/// marked.
 /// Drag to reorder, Delete to remove, double-click to play one. Edits go to the engine, and the
 /// panel redraws from its next update.
 @MainActor
@@ -115,6 +116,12 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
             ?? QueueCell()
         cell.show(model.item(at: row), current: row == model.currentPosition)
         return cell
+    }
+
+    public func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let rowView = MarkedRowView()
+        rowView.isMarked = row == model.currentPosition
+        return rowView
     }
 
     // MARK: Reordering by drag

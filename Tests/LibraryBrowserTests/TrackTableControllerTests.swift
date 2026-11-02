@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 import Library
 import Settings
 import Testing
@@ -122,4 +123,43 @@ import Testing
         controller.table.menu?.items.first { $0.title == "Reveal in Finder" })
     _ = (item.target as? NSObject)?.perform(item.action, with: item)
     #expect(revealed == [[1, 3]])
+}
+
+@MainActor @Test func thePlayingTracksRowIsMarkedWhereverItSorts() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
+    let index = try LibraryIndex(at: databaseURL)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, reveal: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
+        layoutChanged: { _ in },
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { try index.rows(ids: $0) },
+        layout: AppState().trackTable.defaultValue, actions: actions)
+    _ = controller.view
+    model.changed = { controller.reload($0) }
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    func marked() -> [Int] {
+        (0..<model.trackIDs.count).filter {
+            (controller.tableView(controller.table, rowViewForRow: $0) as? MarkedRowView)?
+                .isMarked == true
+        }
+    }
+    #expect(marked().isEmpty)
+
+    let paths = try index.paths(ids: model.trackIDs)
+    let playing = model.trackIDs[3]
+    controller.playingPath = paths[playing]
+    #expect(marked() == [3])
+    controller.playingPath = paths[model.trackIDs[5]]
+    #expect(marked() == [5])
+
+    controller.playingPath = paths[playing]
+    await model.setSort(.title, ascending: false)
+    #expect(marked() == Array(model.rows(holding: [playing])))
+    controller.playingPath = nil
+    #expect(marked().isEmpty)
 }

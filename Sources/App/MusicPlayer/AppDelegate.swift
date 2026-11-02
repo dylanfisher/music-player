@@ -369,6 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 for await update in await engine.updates() {
                     self?.playback = update.state
                     self?.playbackChanged(update.state)
+                    self?.browser?.showPlaying(path: self?.currentTrackPath)
                     self?.playTracker.handle(update)
                     if case .trackStarted(let index) = update.event {
                         self?.countPlay(update.state.queue[index].path)

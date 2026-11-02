@@ -1,3 +1,5 @@
+import AppKit
+import DisplayText
 import Foundation
 import Testing
 
@@ -62,4 +64,22 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
     #expect(model.item(at: 0).title == "Old")
     model.libraryChanged()
     #expect(model.item(at: 0).title == "New")
+}
+
+@MainActor @Test func theCurrentTracksRowIsMarkedAndTheMarkFollowsIt() {
+    let model = QueueModel { _ in nil }
+    let panel = QueuePanel(model: model)
+    _ = panel.view
+    let table = NSTableView()
+    func marked() -> [Int] {
+        (0..<model.count).filter {
+            (panel.tableView(table, rowViewForRow: $0) as? MarkedRowView)?.isMarked == true
+        }
+    }
+    model.apply(state(order: [2, 1, 0], current: 1))
+    #expect(marked() == [1])
+    model.apply(state(order: [2, 1, 0], current: 0))
+    #expect(marked() == [2])
+    model.apply(state(order: [2, 1, 0], current: nil))
+    #expect(marked().isEmpty)
 }

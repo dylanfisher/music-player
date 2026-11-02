@@ -308,8 +308,8 @@ let package = Package(
         .testTarget(
             name: "LibraryBrowserTests",
             dependencies: [
-                "Artwork", "Fixtures", "Library", "LibraryBrowser", "Metadata", "SQLite",
-                "Settings",
+                "Artwork", "DisplayText", "Fixtures", "Library", "LibraryBrowser", "Metadata",
+                "SQLite", "Settings",
             ],
             swiftSettings: strictSwift
         ),
@@ -362,7 +362,7 @@ let package = Package(
         ),
         .testTarget(
             name: "QueueViewTests",
-            dependencies: ["Library", "Playback", "QueueView"],
+            dependencies: ["DisplayText", "Library", "Playback", "QueueView"],
             swiftSettings: strictSwift
         ),
         .testTarget(
