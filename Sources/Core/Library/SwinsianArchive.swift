@@ -157,17 +157,28 @@ enum SwinsianArchive {
         } catch {
             return .failure(.unreadable(error.localizedDescription))
         }
-        guard let top = plist as? [String: Any],
-            Set(top.keys) == ["$archiver", "$objects", "$top", "$version"],
-            top["$archiver"] as? String == "NSKeyedArchiver",
-            let objects = top["$objects"] as? [Any], let roots = top["$top"] as? [String: Any],
-            roots.count == 1, let root = roots["root"].flatMap(objectNumber)
+        guard let (objects, roots) = objectTable(plist), roots.count == 1,
+            let root = roots["root"].flatMap(objectNumber)
         else { return .failure(.notAnArchive) }
         if let problem = graphProblem(objects, root: root) { return .failure(problem) }
         let reader = Reader(objects: objects)
         let rule = reader.rule(roots["root"])
         return reader.reads > maximumReads ? .failure(.tooManyParts) : .success(rule)
     }
+
+    /// The objects and the top-level references of an `NSKeyedArchiver` archive read as a
+    /// property list, or nil when it isn't one. References aren't checked.
+    static func objectTable(_ plist: Any) -> (objects: [Any], top: [String: Any])? {
+        guard let top = plist as? [String: Any],
+            Set(top.keys) == ["$archiver", "$objects", "$top", "$version"],
+            top["$archiver"] as? String == "NSKeyedArchiver",
+            let objects = top["$objects"] as? [Any], let roots = top["$top"] as? [String: Any]
+        else { return nil }
+        return (objects, roots)
+    }
+
+    /// The key of an archived array's or dictionary's values.
+    static let itemsKey = "NS.objects"
 
     /// Why the object graph from `root` is too big, too deep, cyclic or names an object that
     /// isn't there, or nil.
@@ -214,7 +225,7 @@ enum SwinsianArchive {
     /// The object number a reference holds. Foundation has no API for `CFKeyedArchiverUID`'s
     /// value, so it's read from its description, `<CFKeyedArchiverUID 0x…>{value = 5}`; one of
     /// another shape is no reference, which leaves the archive refused, not misread.
-    fileprivate static func objectNumber(_ value: Any) -> Int? {
+    static func objectNumber(_ value: Any) -> Int? {
         let object = value as AnyObject
         guard NSStringFromClass(type(of: object)) == "__NSCFType" else { return nil }
         let description = String(describing: object)
@@ -331,7 +342,7 @@ enum SwinsianArchive {
             guard let (name, fields) = instance(value),
                 name == "NSArray" || name == "NSMutableArray"
             else { return nil }
-            return fields["NS.objects"] as? [Any]
+            return fields[SwinsianArchive.itemsKey] as? [Any]
         }
 
         /// A string stored as itself or as an `NSString`, refused past `maximumTextBytes`.

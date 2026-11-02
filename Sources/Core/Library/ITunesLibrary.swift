@@ -36,16 +36,7 @@ extension PlayerLibrary {
         guard data.count <= Self.maximumXMLBytes else {
             throw PlayerImportError.tooLarge(data.count, maximum: Self.maximumXMLBytes)
         }
-        let root: Any
-        do {
-            root = try PropertyListSerialization.propertyList(from: data, format: nil)
-        } catch {
-            throw PlayerImportError.notALibrary(
-                "not a property list: \(error.localizedDescription)")
-        }
-        guard let root = root as? [String: Any] else {
-            throw PlayerImportError.notALibrary("its top level isn't a dictionary")
-        }
+        let root = try propertyListRoot(data, refused: PlayerImportError.notALibrary)
         guard let tracks = root[ITunesKey.tracks] as? [String: Any] else {
             throw PlayerImportError.notALibrary("it has no \(ITunesKey.tracks) dictionary")
         }
