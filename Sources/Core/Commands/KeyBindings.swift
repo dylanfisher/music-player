@@ -82,14 +82,20 @@ public struct KeyBindings: Sendable {
                 }
             }
         }
-        var claimed: [KeyChord: CommandID] = [:]
-        func claim(_ chord: KeyChord, _ id: CommandID, _ position: ShortcutPosition) -> Bool {
+        // By whether the chord is the palette's.
+        var claimed: [Bool: [KeyChord: CommandID]] = [:]
+        func claim(_ chord: KeyChord, _ command: Command, _ position: ShortcutPosition) -> Bool {
+            let id = command.id
             if let title = rules.reserved[chord] {
                 dropped.append(
                     Dropped(command: id, position: position, chord: chord, loss: .reserved(title)))
                 return false
             }
-            if let owner = claimed[chord] {
+            // The palette's field needs a fixed chord as much as any text field.
+            let fixedOwner = rules.fixed.first { $0.value == chord }?.key
+            if let owner = claimed[command.inPalette]?[chord]
+                ?? (command.inPalette ? fixedOwner : nil)
+            {
                 if owner != id {
                     let loss: Loss = rules.fixed[owner] == chord ? .fixedTo(owner) : .takenBy(owner)
                     dropped.append(
@@ -97,14 +103,14 @@ public struct KeyBindings: Sendable {
                 }
                 return false
             }
-            claimed[chord] = id
+            claimed[command.inPalette, default: [:]][chord] = id
             slots[id, default: [:]][position] = chord
             return true
         }
         // Fixed primaries first, then the user's chords, then the defaults.
         for command in commands {
             guard let fixed = rules.fixed[command.id] else { continue }
-            _ = claim(fixed, command.id, .primary)
+            _ = claim(fixed, command, .primary)
             if let slot = overrides[command.id.rawValue]?.primary, slot != .chord(fixed) {
                 dropped.append(
                     Dropped(
@@ -116,7 +122,7 @@ public struct KeyBindings: Sendable {
             for position in ShortcutPosition.allCases {
                 if position == .primary, rules.fixed[command.id] != nil { continue }
                 if case .chord(let chord) = overrides[command.id.rawValue]?[position] {
-                    _ = claim(chord, command.id, position)
+                    _ = claim(chord, command, position)
                 }
             }
         }
@@ -126,12 +132,13 @@ public struct KeyBindings: Sendable {
                 guard overrides[command.id.rawValue]?[position] == nil,
                     let chord = command.chord(at: position)
                 else { continue }
-                _ = claim(chord, command.id, position)
+                _ = claim(chord, command, position)
             }
         }
         for command in commands {
-            let chords = ShortcutPosition.allCases.compactMap { slots[command.id]?[$0] }
-            try registry.register(Command(command.id, command.title, chords))
+            var command = command
+            command.chords = ShortcutPosition.allCases.compactMap { slots[command.id]?[$0] }
+            try registry.register(command)
         }
     }
 
@@ -155,7 +162,8 @@ public struct KeyBindings: Sendable {
             return fixed == chord ? .assigned([:]) : .fixedPrimary
         }
         var changes: [CommandID: ShortcutOverride] = [:]
-        if let owner = registry.command(for: chord), owner != id {
+        let inPalette = defaults.command(id)?.inPalette ?? false
+        if let owner = registry.command(for: chord, inPalette: inPalette), owner != id {
             guard replacing else { return .taken(by: owner) }
             let lost = ShortcutPosition.allCases.first { slots[owner]?[$0] == chord } ?? .primary
             changes[owner] = setting(owner, lost, to: .removed, in: overrides[owner.rawValue])

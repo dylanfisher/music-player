@@ -1,4 +1,5 @@
 import AppKit
+import KeyChord
 import Settings
 import Testing
 
@@ -182,6 +183,40 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     palette.runSelected()
     #expect(chosen.map(\.0) == ["Abba", "Abba"])
     #expect(chosen.map(\.1) == [true, false])
+}
+
+@MainActor @Test func theFilterKeyFiltersToAnArtistOrAlbumWithTheCursorAtTheEnd() async throws {
+    let palette = PaletteController(
+        model: PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 }))
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    var chosen: [(String, Bool)] = []
+    palette.choose = { chosen.append(($0.title, $1)) }
+    palette.filterChords = { [KeyChord(.right)] }
+    let right = try #require(
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .function, timestamp: 0,
+            windowNumber: palette.window.windowNumber, context: nil, characters: "\u{F703}",
+            charactersIgnoringModifiers: "\u{F703}", isARepeat: false, keyCode: 124))
+    palette.show(
+        .goToItem, items: [item("Abba"), item("Abba Song", .track)], over: window, place: nil)
+    while palette.shown.isEmpty { await Task.yield() }
+    let editor = try #require(palette.field.currentEditor())
+    editor.string = "ab"
+    // → moves through the query until the cursor reaches its end.
+    editor.selectedRange = NSRange(location: 0, length: 0)
+    #expect(!palette.takeFilterKey(right))
+    editor.selectedRange = NSRange(location: 2, length: 0)
+    // On a track, → stays the field's.
+    palette.table.selectRowIndexes([1], byExtendingSelection: false)
+    #expect(palette.shown[1].item.kind == .track)
+    #expect(!palette.takeFilterKey(right))
+    palette.table.selectRowIndexes([0], byExtendingSelection: false)
+    #expect(palette.takeFilterKey(right))
+    #expect(chosen.map(\.0) == ["Abba"])
+    #expect(chosen.map(\.1) == [true])
+    #expect(!palette.isShowing)
 }
 
 @MainActor @Test func theEdgeFollowsTheAppearanceAsItChanges() throws {

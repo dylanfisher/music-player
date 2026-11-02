@@ -22,6 +22,9 @@ extension AppDelegate {
             return (dispatcher?.bindings.registry.command(id)?.chords ?? []).filter(
                 \.canBeKeyEquivalent)
         }
+        palette.filterChords = { [weak dispatcher] in
+            dispatcher?.bindings.registry.command(.filterToItem)?.chords ?? []
+        }
         palette.open = { [weak dispatcher] mode in
             dispatcher?.run(mode == .commands ? .showPalette : .goToItem)
         }

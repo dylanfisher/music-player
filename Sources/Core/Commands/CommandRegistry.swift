@@ -1,11 +1,13 @@
 import KeyChord
 
-/// Commands by ID and by chord. A key has one meaning: registering a second command on an ID or
-/// a chord already taken throws and adds nothing.
+/// Commands by ID and by chord. A key has one meaning in the app and one in the palette:
+/// registering a second command on an ID, or on a chord already taken where it applies, throws
+/// and adds nothing.
 public struct CommandRegistry: Sendable {
     public private(set) var commands: [Command] = []
     private var byID: [CommandID: Int] = [:]
     private var byChord: [KeyChord: CommandID] = [:]
+    private var byPaletteChord: [KeyChord: CommandID] = [:]
 
     init() {}
 
@@ -16,19 +18,27 @@ public struct CommandRegistry: Sendable {
     mutating func register(_ command: Command) throws {
         if byID[command.id] != nil { throw CommandConflict(id: command.id, other: command.id) }
         for chord in command.chords {
-            if let other = byChord[chord] {
+            if let other = self.command(for: chord, inPalette: command.inPalette) {
                 throw CommandConflict(id: command.id, other: other, chord: chord)
             }
         }
         byID[command.id] = commands.count
         commands.append(command)
-        for chord in command.chords { byChord[chord] = command.id }
+        for chord in command.chords {
+            if command.inPalette {
+                byPaletteChord[chord] = command.id
+            } else {
+                byChord[chord] = command.id
+            }
+        }
     }
 
     public func command(_ id: CommandID) -> Command? { byID[id].map { commands[$0] } }
 
-    /// The command `chord` runs.
-    public func command(for chord: KeyChord) -> CommandID? { byChord[chord] }
+    /// The command `chord` runs in the app, or with `inPalette` in the palette.
+    public func command(for chord: KeyChord, inPalette: Bool = false) -> CommandID? {
+        (inPalette ? byPaletteChord : byChord)[chord]
+    }
 }
 
 /// Two commands registered on one ID, or on one chord.

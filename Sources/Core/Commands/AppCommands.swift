@@ -6,6 +6,8 @@ import Settings
 extension CommandID {
     public static let showPalette = CommandID("window.showPalette")
     public static let goToItem = CommandID("window.goToItem")
+    /// In Go to Item, filters the browser to the selected artist or album.
+    public static let filterToItem = CommandID("palette.filterToItem")
 
     public static let selectNext = CommandID("selection.down")
     public static let selectPrevious = CommandID("selection.up")
@@ -132,6 +134,7 @@ public enum AppCommands {
         [
             Command(.showPalette, "Command Palette…", [.init("k", cmd)]),
             Command(.goToItem, "Go to Item…", [.init("p", cmd)]),
+            Command(.filterToItem, "Filter to Item", [.init(.right)], palette: true),
 
             Command(.selectNext, "Select Next Row", [.init(.down)]),
             Command(.selectPrevious, "Select Previous Row", [.init(.up)]),

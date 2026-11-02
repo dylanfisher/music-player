@@ -34,14 +34,28 @@ private final class Harness {
     }
 }
 
-@MainActor @Test func theSectionsFollowTheMenus() throws {
+@MainActor @Test func theSectionsFollowTheMenusThenThePalettesKeys() throws {
     let model = try Harness().model!
     #expect(
         model.sections.map(\.title)
-            == AppMenus.commandsByMenu(appName: "App").map(\.title))
+            == AppMenus.commandsByMenu(appName: "App").map(\.title) + ["Palette"])
+    #expect(model.sections.last?.commands == [.filterToItem])
     let listed = model.sections.flatMap(\.commands)
     #expect(listed.contains(.showPalette))
     #expect(Set(listed).count == listed.count)
+}
+
+@MainActor @Test func aPaletteKeyMayShareTheAppsChordsButNotAFixedOne() throws {
+    let harness = try Harness()
+    let model = harness.model!
+    #expect(model.chord(.filterToItem, .primary) == KeyChord(.right))
+    #expect(model.chord(.focusNextPane, .primary) == KeyChord(.right))
+    model.record(KeyChord(.space), for: .filterToItem, at: .alternate)
+    #expect(model.notices[.filterToItem] == nil)
+    #expect(model.chord(.filterToItem, .alternate) == KeyChord(.space))
+    #expect(model.chord(.playPause, .primary) == KeyChord(.space))
+    model.record(KeyChord("a", cmd), for: .filterToItem, at: .alternate)
+    #expect(model.notices[.filterToItem] != nil)
 }
 
 @MainActor @Test func aClashNamesTheOtherCommandAndCancelKeepsBoth() throws {

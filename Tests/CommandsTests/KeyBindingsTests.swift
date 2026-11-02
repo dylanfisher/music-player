@@ -43,6 +43,23 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
     #expect(Set(all.map(\.id)).count == all.count)
 }
 
+@Test func aPaletteKeysChordsAreApartFromTheAppsAndKeepItsTraits() throws {
+    let find = CommandID("test.find")
+    let bindings = try KeyBindings(
+        commands + [
+            Command(find, "Find", [KeyChord("o", cmd)], menus: false, palette: true),
+            Command(CommandID("test.args"), "Args", argument: "x", menus: false),
+        ], overrides: ["test.find": ShortcutOverride(alternate: .chord(KeyChord("a", cmd)))],
+        rules: rules)
+    #expect(bindings.registry.command(for: KeyChord("o", cmd)) == open)
+    #expect(bindings.registry.command(for: KeyChord("o", cmd), inPalette: true) == find)
+    #expect(bindings.registry.command(find)?.inPalette == true)
+    #expect(bindings.registry.command(CommandID("test.args"))?.runsFromMenus == false)
+    // Select All's fixed chord stays the field's.
+    #expect(bindings.registry.command(find)?.chords == [KeyChord("o", cmd)])
+    #expect(bindings.dropped.map(\.loss) == [.fixedTo(selectAll)])
+}
+
 @Test func shiftCommandRRevealsInFinder() throws {
     let bindings = try KeyBindings(
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
@@ -176,6 +193,9 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
 @Test func everyCommandIsInTheMenus() {
     let listed = AppMenus.commandsByMenu(appName: "App").flatMap(\.commands)
     #expect(Set(listed) == Set(AppCommands.all().filter(\.runsFromMenus).map(\.id)))
-    #expect(AppCommands.all().filter { !$0.runsFromMenus }.map(\.id) == [.receiverSetVolume])
+    #expect(
+        AppCommands.all().filter { !$0.runsFromMenus }.map(\.id) == [
+            .filterToItem, .receiverSetVolume,
+        ])
     #expect(listed.count == Set(listed).count)
 }

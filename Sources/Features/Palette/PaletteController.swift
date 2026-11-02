@@ -27,6 +27,9 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
     /// Runs the chosen item; `filters` when it was chosen with ⌘↩ or ⌘-click, to filter the
     /// browser to it rather than go to it. The palette has closed by then.
     public var choose: (_ item: PaletteItem, _ filters: Bool) -> Void = { _, _ in }
+    /// The chords of the key that filters the browser to the selected artist or album, as the
+    /// user has them.
+    public var filterChords: () -> [KeyChord] = { [] }
     /// Opens the other palette, for its chords while this one shows.
     public var open: (PaletteMode) -> Void = { _ in }
     /// Called after a choice is counted, so the app saves the frecency.
@@ -168,6 +171,22 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
             return true
         }
         return false
+    }
+
+    /// The filter key on an artist or album row chooses it to filter. It acts only with the
+    /// insertion point at the end of the field, so → still moves through the query.
+    func takeFilterKey(_ event: NSEvent) -> Bool {
+        guard isShowing, shown.indices.contains(table.selectedRow),
+            [.artist, .album].contains(shown[table.selectedRow].item.kind),
+            KeyChord.candidates(for: event).contains(where: filterChords().contains)
+        else { return false }
+        if let editor = field.currentEditor() {
+            let selected = editor.selectedRange
+            guard selected.length == 0, selected.location == (editor.string as NSString).length
+            else { return false }
+        }
+        runSelected(filters: true)
+        return true
     }
 
     public func controlTextDidChange(_ notification: Notification) {
@@ -333,15 +352,24 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
     }
 }
 
-/// A borderless panel that can still take the keys, and offers them to its controller first.
+/// A borderless panel that can still take the keys, and offers them to its controller first:
+/// a key equivalent before the menu bar, and the filter key before the field.
 final class PalettePanel: NSPanel {
     weak var controller: PaletteController?
 
     override var canBecomeKey: Bool { true }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if controller?.takeKeyEquivalent(event) == true { return true }
+        if controller?.takeKeyEquivalent(event) == true || controller?.takeFilterKey(event) == true
+        {
+            return true
+        }
         return super.performKeyEquivalent(with: event)
+    }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, controller?.takeFilterKey(event) == true { return }
+        super.sendEvent(event)
     }
 }
 

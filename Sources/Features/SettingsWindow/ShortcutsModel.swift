@@ -31,9 +31,11 @@ public final class ShortcutsModel {
     ) {
         self.bindings = bindings
         self.save = save
-        sections = AppMenus.commandsByMenu(appName: appName).map {
-            Section(title: $0.title, commands: $0.commands)
-        }
+        let paletteKeys = bindings.defaults.commands.filter(\.inPalette).map(\.id)
+        sections =
+            AppMenus.commandsByMenu(appName: appName).map {
+                Section(title: $0.title, commands: $0.commands)
+            } + (paletteKeys.isEmpty ? [] : [Section(title: "Palette", commands: paletteKeys)])
     }
 
     /// New bindings after a save or a config file edit.
