@@ -21,7 +21,7 @@ final class PlayerImportSheet: NSObject {
     let fromField = NSTextField()
     let toField = NSTextField()
     private let updateButton = NSButton(title: "Update Preview", target: nil, action: nil)
-    private let details = NSTextView()
+    let details = NSTextView()
     private let stack = NSStackView()
 
     /// Wide enough for a NAS path in the details without wrapping most of them.
@@ -127,7 +127,7 @@ final class PlayerImportSheet: NSObject {
     private func show(_ plan: ImportPlan?) {
         if let plan {
             countsLabel.stringValue = plan.previewLines.joined(separator: "\n")
-            let lines = plan.detailLines + (readColumns?.detailLines ?? [])
+            let lines = plan.detailLines + (columnsChosen?.detailLines ?? [])
             details.string = lines.isEmpty ? "Every track matched." : lines.joined(separator: "\n")
         }
         alert.buttons.first?.isEnabled =

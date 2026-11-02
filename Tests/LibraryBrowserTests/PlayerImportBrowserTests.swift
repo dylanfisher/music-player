@@ -189,6 +189,21 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
         })
 }
 
+@MainActor @Test func theDetailsListSkippedColumnsOnlyWithImportColumnLayoutOn() throws {
+    let plan = emptyPlan()
+    let columns = try SwinsianColumns(
+        preferences: try swinsianPreferences(
+            columns: [("currentlyPlaying", 64), ("title", 390)], sort: ("artist", true)),
+        source: "/p.plist")
+    let sheet = PlayerImportSheet(
+        session: PlayerImportSession(shown: plan) { _ in plan }, player: .swinsian,
+        columns: .success(columns))
+    let skipped = "/p.plist: column layout: currentlyPlaying: no such column here"
+    #expect(sheet.details.string == "Every track matched.")
+    sheet.columnsBox.performClick(nil)
+    #expect(sheet.details.string.contains(skipped))
+}
+
 @MainActor @Test func theSheetFitsA1440x900ScreenWithEverythingFilled() throws {
     var plan = emptyPlan()
     plan.unmatched = (1...300).map {
