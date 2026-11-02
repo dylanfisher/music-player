@@ -158,14 +158,13 @@ extension AppDelegate {
         guard let window = window?.window, !playlists.isEmpty else { return }
         let alert = NSAlert()
         alert.messageText = message
-        let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 26))
-        for playlist in playlists { menu.addItem(withTitle: playlist.name) }
+        let menu = playlistPopUp(playlists)
         alert.accessoryView = menu
         alert.addButton(withTitle: button)
         alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { response in
             guard response == .alertFirstButtonReturn else { return }
-            chosen(playlists[menu.indexOfSelectedItem].id)
+            chosen(Int64(menu.selectedTag()))
         }
     }
 
@@ -286,4 +285,18 @@ extension AppDelegate {
             }
         }
     }
+}
+
+/// A pop-up of `playlists` whose selected tag is the chosen playlist's ID. Its items are added
+/// to its menu, since `addItem(withTitle:)` drops an item of the same name and two playlists can
+/// share one.
+@MainActor
+func playlistPopUp(_ playlists: [Playlist]) -> NSPopUpButton {
+    let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 26))
+    for playlist in playlists {
+        let item = NSMenuItem(title: playlist.name, action: nil, keyEquivalent: "")
+        item.tag = Int(playlist.id)
+        menu.menu?.addItem(item)
+    }
+    return menu
 }
