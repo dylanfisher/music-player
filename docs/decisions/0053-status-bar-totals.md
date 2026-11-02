@@ -34,6 +34,10 @@ plays and nothing else, since its rows are plays without one file each.
 leading edge and the problems button at the trailing edge, so they're centered while neither
 shows and move aside when one does rather than overlapping it.
 
+**Glass.** The bar sits on an `NSGlassEffectView` from macOS 26, square-cornered since it spans
+the window's width, and on an `NSVisualEffectView` with the title bar's material before that.
+The glass is what shows and hides with View ▸ Show Status Bar.
+
 A failure shown in the bar stays until the next update of the bar, and a change of the
 selection is one now.
 

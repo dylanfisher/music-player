@@ -77,6 +77,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private let sidebarController: SidebarController
     private let split = NSSplitView()
     private let statusBar = NSStackView()
+    /// The status bar on its glass, which shows and hides with it.
+    private(set) lazy var statusArea = glassBackground(around: statusBar)
     private let statusLabel = NSTextField(labelWithString: "")
     private let scanIndicator = NSProgressIndicator()
     /// Whether the scan bar moves on its own, which only it does while the status bar shows.
@@ -246,12 +248,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
         for view in [scanIndicator, scanLabel, problemsButton] { view.isHidden = true }
         timeline.view.isHidden = true
-        let stack = NSStackView(views: [split, timeline.view, bar])
+        let area = statusArea
+        let stack = NSStackView(views: [split, timeline.view, area])
         stack.orientation = .vertical
         stack.spacing = 0
         stack.alignment = .leading
         stack.detachesHiddenViews = true
-        for view in [split, timeline.view, bar] {
+        for view in [split, timeline.view, area] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
@@ -563,7 +566,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         scanIndicator.isIndeterminate = fraction == nil
         if let fraction { scanIndicator.doubleValue = fraction }
         // A hidden bar would keep animating and drawing.
-        let animates = scans && fraction == nil && !statusBar.isHidden
+        let animates = scans && fraction == nil && !statusArea.isHidden
         guard animates != scanIndicatorAnimates else { return }
         scanIndicatorAnimates = animates
         if animates {
@@ -1102,10 +1105,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// nil marks none.
     public func showPlaying(path: String?) { table.playingPath = path }
 
-    public var isStatusBarVisible: Bool { !statusBar.isHidden }
+    public var isStatusBarVisible: Bool { !statusArea.isHidden }
 
     public func toggleStatusBar() {
-        statusBar.isHidden.toggle()
+        statusArea.isHidden.toggle()
         showScanProgress()
     }
 
