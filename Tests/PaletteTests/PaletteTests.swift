@@ -227,6 +227,15 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     #expect(palette.shown[1].item.kind == .track)
     #expect(!palette.takeFilterKey(right))
     palette.table.selectRowIndexes([0], byExtendingSelection: false)
+    // An input method composing at the end keeps → for its composition.
+    let textView = try #require(editor as? NSTextView)
+    textView.setMarkedText(
+        "か", selectedRange: NSRange(location: 1, length: 0),
+        replacementRange: NSRange(location: NSNotFound, length: 0))
+    #expect(textView.hasMarkedText())
+    #expect(!palette.takeFilterKey(right))
+    textView.unmarkText()
+    editor.selectedRange = NSRange(location: (editor.string as NSString).length, length: 0)
     #expect(palette.takeFilterKey(right))
     #expect(chosen.map(\.0) == ["Abba"])
     #expect(chosen.map(\.1) == [true])

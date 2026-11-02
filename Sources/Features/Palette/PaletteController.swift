@@ -186,7 +186,8 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
     }
 
     /// The filter key on an artist or album row chooses it to filter. It acts only with the
-    /// insertion point at the end of the field, so → still moves through the query.
+    /// insertion point at the end of the field and no input method composing, so → still moves
+    /// through the query and through a composition.
     func takeFilterKey(_ event: NSEvent) -> Bool {
         guard isShowing, shown.indices.contains(table.selectedRow),
             [.artist, .album].contains(shown[table.selectedRow].item.kind),
@@ -194,7 +195,8 @@ public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableView
         else { return false }
         if let editor = field.currentEditor() {
             let selected = editor.selectedRange
-            guard selected.length == 0, selected.location == (editor.string as NSString).length
+            guard selected.length == 0, selected.location == (editor.string as NSString).length,
+                (editor as? NSTextView)?.hasMarkedText() != true
             else { return false }
         }
         runSelected(filters: true)
