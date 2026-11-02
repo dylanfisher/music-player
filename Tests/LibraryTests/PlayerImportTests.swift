@@ -157,6 +157,20 @@ private func track(
             == PathPrefix(from: "/Volumes/music/dsd/A", to: "/Users/me/Renamed"))
 }
 
+@Test func locatingUnderARenamedFolderAboveMapsTheFolderTheFileIsFoundUnder() {
+    let miss = "/Volumes/music/dsd/A/01.dsf"
+    let found = "/Volumes/music-1/dsd/A/01.dsf"
+    #expect(
+        PathPrefix(locating: miss, in: "/Volumes/music-1", fileExists: { $0 == found })
+            == PathPrefix(from: "/Volumes/music", to: "/Volumes/music-1"))
+    // Found beats the name: a folder above named like the pick isn't the one replaced.
+    #expect(
+        PathPrefix(
+            locating: "/Volumes/A/dsd/A/01.dsf", in: "/Volumes/new/A",
+            fileExists: { $0 == "/Volumes/new/A/dsd/A/01.dsf" })
+            == PathPrefix(from: "/Volumes/A", to: "/Volumes/new/A"))
+}
+
 @Test func locatedMissesMatchAgainUnderTheFolderPicked() throws {
     let (library, index, rows) = try scanned()
     let old = { (path: String) in "/Volumes/old" + path.dropFirst(library.root.count) }

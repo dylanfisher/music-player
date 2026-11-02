@@ -38,10 +38,14 @@ so no such file is ever in the index.
   `removed` and its folder is scanned. This is the Library Health Restore that 0050 left to
   this row.
 - **Locate…** is on one row of the last import's misses at a time. The user picks the folder
-  the file lives under now, and the old prefix is the deepest folder above the miss with the
-  picked folder's name: picking `/Volumes/music-1/dsd` for `/Volumes/music/dsd/A/01.flac` maps
-  `/Volumes/music/dsd`. When no folder above it has that name, the user picked the file's own
-  folder under a new name, and that folder is the prefix. Every miss under the prefix is
+  the file lives under now, and the old prefix is the deepest folder above the miss that,
+  replaced by the picked folder, gives a file that exists: picking `/Volumes/music-1` for
+  `/Volumes/music/dsd/A/01.flac` maps `/Volumes/music` when
+  `/Volumes/music-1/dsd/A/01.flac` is there. When no such file exists, it's the deepest folder
+  above the miss with the picked folder's name: picking `/Volumes/music-1/dsd` maps
+  `/Volumes/music/dsd`. When no folder above it has that name either, the user picked the
+  file's own folder under a new name, and that folder is the prefix. Names alone can't tell a
+  renamed folder above the file from a renamed album folder, and the panel invites either. Every miss under the prefix is
   imported again with it, no playlists, since the import already made them by name: the merge
   rules (0033) make a second import of a matched track add nothing, so only the tracks found
   now gain anything. The misses found leave the list; the status bar says how many.

@@ -16,23 +16,30 @@ public struct PathPrefix: Equatable, Sendable {
     }
 
     /// The prefix that moves the missing file `miss` under `folder`, the folder the user picked
-    /// as where it lives now: the deepest folder above `miss` with `folder`'s name, so picking
-    /// `/Volumes/music-1/dsd` for `/Volumes/music/dsd/A/01.dsf` maps `/Volumes/music/dsd`.
-    /// When no folder above it has that name, the user picked the file's own folder, renamed.
-    public init(locating miss: String, in folder: String) {
+    /// as where it lives now. First the deepest folder above `miss` that, replaced by `folder`,
+    /// gives a file that exists, so picking `/Volumes/music-1` for `/Volumes/music/dsd/A/01.dsf`
+    /// maps `/Volumes/music` whatever the names. Failing that, the deepest folder above `miss`
+    /// with `folder`'s name, so picking `/Volumes/music-1/dsd` maps `/Volumes/music/dsd`. Failing
+    /// both, the user picked the file's own folder, renamed.
+    public init(
+        locating miss: String, in folder: String,
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) {
         func name(_ path: String) -> String {
             (path as NSString).lastPathComponent.precomposedStringWithCanonicalMapping
         }
-        to = trimmed(folder)
-        from = (miss as NSString).deletingLastPathComponent
-        var above = from
-        while above != "/", !above.isEmpty {
-            if name(above) == name(to) {
-                from = above
-                break
-            }
-            above = (above as NSString).deletingLastPathComponent
+        let picked = trimmed(folder)
+        let own = (miss as NSString).deletingLastPathComponent
+        var above: [String] = []
+        var path = own
+        while path != "/", !path.isEmpty {
+            above.append(path)
+            path = (path as NSString).deletingLastPathComponent
         }
+        to = picked
+        from =
+            above.first { fileExists(picked + miss.dropFirst($0.count)) }
+            ?? above.first { name($0) == name(picked) } ?? own
     }
 
     /// `path` with `from` replaced by `to`, only where `from` is the whole path or a folder of
