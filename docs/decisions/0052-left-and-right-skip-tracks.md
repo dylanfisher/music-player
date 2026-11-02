@@ -1,4 +1,4 @@
-# 0048. ← and → skip tracks, except in the browser panes
+# 0052. ← and → skip tracks, except in the browser panes
 
 - **Date:** 2026-11-02
 - **Status:** accepted
