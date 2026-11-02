@@ -207,13 +207,18 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
     }
 }
 
-/// Sends key presses to the registry first, as the browser's lists do, and takes plain Delete
-/// and forward delete, which a plain NSTableView ignores.
+/// Takes Delete and forward delete, which a plain NSTableView ignores, before the registry:
+/// Delete is Remove…'s chord in the track table, and here it removes from the queue. Other key
+/// presses go to the registry first, as in the browser's lists.
 private final class QueueTable: NSTableView {
     var deleteSelection: () -> Void = {}
     var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
 
     override func keyDown(with event: NSEvent) {
+        let delete = event.charactersIgnoringModifiers?.unicodeScalars.first.map {
+            Int($0.value) == NSDeleteCharacter || Int($0.value) == NSDeleteFunctionKey
+        }
+        if delete == true { return deleteSelection() }
         let chords = KeyChord.candidates(for: event)
         switch keyCommand(chords) {
         case .ran: return
@@ -222,12 +227,7 @@ private final class QueueTable: NSTableView {
             return
         case .unbound: break
         }
-        let delete = event.charactersIgnoringModifiers?.unicodeScalars.first.map {
-            Int($0.value) == NSDeleteCharacter || Int($0.value) == NSDeleteFunctionKey
-        }
-        if delete == true {
-            deleteSelection()
-        } else if let chord = chords.first,
+        if let chord = chords.first,
             !chord.modifiers.isDisjoint(with: [.command, .control, .option])
         {
             NSSound.beep()
