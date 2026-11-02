@@ -84,6 +84,17 @@ private func loadedModel(
     _ = index
 }
 
+@MainActor @Test func theSameSearchAgainChangesNothing() async throws {
+    let (model, _) = try await loadedModel()
+    var changes = 0
+    model.changed = { _ in changes += 1 }
+    await model.setSearch("")
+    #expect(changes == 0)
+    await model.setSearch("a")
+    await model.setSearch("a")
+    #expect(changes == 1)
+}
+
 @MainActor @Test func sortingReordersByTheColumn() async throws {
     let (model, index) = try await loadedModel()
     for column in TrackColumn.allCases where column.isSortable {

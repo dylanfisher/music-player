@@ -409,7 +409,10 @@ public final class BrowserModel {
         throw NamesKeptChanging()
     }
 
+    /// Text the search already holds, as Esc in an empty field sends, runs no query and redraws
+    /// nothing.
     public func setSearch(_ text: String) async {
+        guard text != pending.search else { return }
         pending.search = text
         await reload(panesFrom: nil, reason: .user)
     }
