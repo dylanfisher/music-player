@@ -100,14 +100,16 @@ struct Fetcher: Sendable {
     var post:
         @Sendable (LocalURL, [(String, String)], [UInt8]) async throws(LocalNetworkError) -> [UInt8]
 
-    static func live(timeoutSeconds: Double) -> Fetcher {
+    static func live(timeoutSeconds: Double, keepingRefusals: Bool = false) -> Fetcher {
         Fetcher(
             get: { url throws(LocalNetworkError) in
-                try await LocalHTTPClient.get(url, timeoutSeconds: timeoutSeconds)
+                try await LocalHTTPClient.get(
+                    url, timeoutSeconds: timeoutSeconds, keepingRefusals: keepingRefusals)
             },
             post: { url, fields, body throws(LocalNetworkError) in
                 try await LocalHTTPClient.post(
-                    url, fields: fields, body: body, timeoutSeconds: timeoutSeconds)
+                    url, fields: fields, body: body, timeoutSeconds: timeoutSeconds,
+                    keepingRefusals: keepingRefusals)
             })
     }
 }

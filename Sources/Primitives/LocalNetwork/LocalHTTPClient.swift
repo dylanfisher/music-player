@@ -13,21 +13,22 @@ public enum LocalHTTPClient {
     static let headCap = 64 * 1024
 
     public static func get(
-        _ url: LocalURL, cap: Int = bodyCap, timeoutSeconds: Double = timeoutSeconds
+        _ url: LocalURL, cap: Int = bodyCap, timeoutSeconds: Double = timeoutSeconds,
+        keepingRefusals: Bool = false
     ) async throws(LocalNetworkError) -> [UInt8] {
         try await exchange(
             url, request: request("GET", url, fields: [], body: []), cap: cap,
-            timeoutSeconds: timeoutSeconds)
+            timeoutSeconds: timeoutSeconds, keepingRefusals: keepingRefusals)
     }
 
     /// Posts `body` with `fields` besides `Host`, `Connection` and `Content-Length`.
     public static func post(
         _ url: LocalURL, fields: [(String, String)], body: [UInt8], cap: Int = bodyCap,
-        timeoutSeconds: Double = timeoutSeconds
+        timeoutSeconds: Double = timeoutSeconds, keepingRefusals: Bool = false
     ) async throws(LocalNetworkError) -> [UInt8] {
         try await exchange(
             url, request: request("POST", url, fields: fields, body: body), cap: cap,
-            timeoutSeconds: timeoutSeconds)
+            timeoutSeconds: timeoutSeconds, keepingRefusals: keepingRefusals)
     }
 
     static func request(
@@ -49,9 +50,9 @@ public enum LocalHTTPClient {
     }
 
     private static func exchange(
-        _ url: LocalURL, request: [UInt8], cap: Int, timeoutSeconds: Double
+        _ url: LocalURL, request: [UInt8], cap: Int, timeoutSeconds: Double, keepingRefusals: Bool
     ) async throws(LocalNetworkError) -> [UInt8] {
-        let exchange = Exchange(url: url, cap: cap)
+        let exchange = Exchange(url: url, cap: cap, keepingRefusals: keepingRefusals)
         let outcome = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 exchange.start(request, timeoutSeconds: timeoutSeconds, continuation: continuation)
@@ -70,13 +71,17 @@ private final class Exchange: @unchecked Sendable {
     private let queue = DispatchQueue(label: "LocalHTTPClient")
     private let connection: NWConnection
     private let cap: Int
+    private let keepingRefusals: Bool
+    /// The status of a reply that isn't 200, while its body is read for the caller to keep.
+    private var refused: Int?
     private var continuation: CheckedContinuation<Outcome, Never>?
     private var received: [UInt8] = []
     private var head: (head: HTTPHead, length: Int)?
 
     private var isCancelled = false
 
-    init(url: LocalURL, cap: Int) {
+    init(url: LocalURL, cap: Int, keepingRefusals: Bool) {
+        self.keepingRefusals = keepingRefusals
         connection = NWConnection(
             host: url.host.endpointHost, port: NWEndpoint.Port(rawValue: url.port)!,
             using: directTCP())
@@ -139,8 +144,19 @@ private final class Exchange: @unchecked Sendable {
         }
     }
 
-    /// The outcome once the bytes so far settle it; nil while more are needed.
+    /// The outcome once the bytes so far settle it; nil while more are needed. A reply that
+    /// isn't 200 is a failure carrying its head and body when the caller keeps refusals and
+    /// they arrive whole and within the caps, and just its status otherwise.
     private func progress(closed: Bool) -> Outcome? {
+        guard let outcome = settle(closed: closed) else { return nil }
+        guard let status = refused else { return outcome }
+        guard case .success(let body) = outcome, let (_, length) = head else {
+            return .failure(.status(status))
+        }
+        return .failure(.statusReply(status, raw: Array(received[..<length]) + body))
+    }
+
+    private func settle(closed: Bool) -> Outcome? {
         if head == nil {
             switch HTTPHead.parse(received[...], cap: LocalHTTPClient.headCap) {
             case .incomplete:
@@ -151,7 +167,10 @@ private final class Exchange: @unchecked Sendable {
                 guard parsed.start[0].hasPrefix("HTTP/1."), let status = Int(parsed.start[1]) else {
                     return .failure(.malformed("its status line is \(parsed.start)"))
                 }
-                guard status == 200 else { return .failure(.status(status)) }
+                if status != 200 {
+                    guard keepingRefusals else { return .failure(.status(status)) }
+                    refused = status
+                }
                 head = (parsed, length)
             }
         }

@@ -90,12 +90,24 @@ public enum RendererCapture {
     private static func capture(
         _ location: LocalURL, number: Int, timeoutSeconds: Double, into result: inout Result
     ) async {
-        let live = Fetcher.live(timeoutSeconds: timeoutSeconds)
+        let live = Fetcher.live(timeoutSeconds: timeoutSeconds, keepingRefusals: true)
         let log = FetchLog()
         let recording = Fetcher(
-            get: { url throws(LocalNetworkError) in log.set(description: try await live.get(url)) },
+            get: { url throws(LocalNetworkError) in
+                do throws(LocalNetworkError) {
+                    return log.set(description: try await live.get(url))
+                } catch {
+                    log.keep(error, as: "description")
+                    throw error
+                }
+            },
             post: { url, fields, body throws(LocalNetworkError) in
-                log.set(protocolInfo: try await live.post(url, fields, body))
+                do throws(LocalNetworkError) {
+                    return log.set(protocolInfo: try await live.post(url, fields, body))
+                } catch {
+                    log.keep(error, as: "protocolinfo")
+                    throw error
+                }
             })
         switch await RendererDiscovery.renderer(at: location, fetcher: recording) {
         case .success(let renderer):
@@ -107,6 +119,10 @@ public enum RendererCapture {
             result.failures.append("\(problem)")
         }
         let (description, protocolInfo) = log.fetched
+        for (kind, status, raw) in log.refusals {
+            result.files.append(
+                CaptureFile(name: "\(number)-\(kind)-\(status).txt", bytes: raw))
+        }
         if let description {
             result.files.append(CaptureFile(name: "\(number)-description.xml", bytes: description))
             await captureServices(
@@ -148,6 +164,10 @@ public enum RendererCapture {
             do {
                 let bytes = try await fetcher.get(try location.resolving(scpd))
                 result.files.append(CaptureFile(name: file, bytes: bytes))
+            } catch let LocalNetworkError.statusReply(status, raw) {
+                result.files.append(
+                    CaptureFile(name: "\(number)-\(name)-scpd-\(status).txt", bytes: raw))
+                result.failures.append("\(file): the reply's status is \(status)")
             } catch {
                 result.failures.append("\(file): \(error)")
             }
@@ -193,6 +213,7 @@ private final class FetchLog: @unchecked Sendable {
     private let lock = NSLock()
     private var description: [UInt8]?
     private var protocolInfo: [UInt8]?
+    private var kept: [(kind: String, status: Int, raw: [UInt8])] = []
 
     /// Returns `bytes`, so a fetcher can record as it passes them on.
     func set(description bytes: [UInt8]) -> [UInt8] {
@@ -204,6 +225,14 @@ private final class FetchLog: @unchecked Sendable {
         lock.withLock { protocolInfo = bytes }
         return bytes
     }
+
+    /// Keeps what a refusing device sent, under the kind of document that was asked for.
+    func keep(_ error: LocalNetworkError, as kind: String) {
+        guard case .statusReply(let status, let raw) = error else { return }
+        lock.withLock { kept.append((kind, status, raw)) }
+    }
+
+    var refusals: [(kind: String, status: Int, raw: [UInt8])] { lock.withLock { kept } }
 
     var fetched: (description: [UInt8]?, protocolInfo: [UInt8]?) {
         lock.withLock { (description, protocolInfo) }

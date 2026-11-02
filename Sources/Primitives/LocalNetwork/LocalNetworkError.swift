@@ -16,6 +16,8 @@ public enum LocalNetworkError: Error, Equatable, CustomStringConvertible {
     case malformed(String)
     /// A status other than 200, a redirect among them; redirects are never followed.
     case status(Int)
+    /// A status other than 200 with its head and body as received, for a caller that keeps them.
+    case statusReply(Int, raw: [UInt8])
 
     public var description: String {
         switch self {
@@ -26,7 +28,7 @@ public enum LocalNetworkError: Error, Equatable, CustomStringConvertible {
         case .cancelled: "it was cancelled"
         case .tooLarge(let cap): "the reply is over the \(cap)-byte cap"
         case .malformed(let why): "the reply isn't valid HTTP: \(why)"
-        case .status(let code): "the reply's status is \(code)"
+        case .status(let code), .statusReply(let code, _): "the reply's status is \(code)"
         }
     }
 }

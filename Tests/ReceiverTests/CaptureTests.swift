@@ -62,7 +62,9 @@ private func server(_ bodies: [String: String]) async throws -> LoopbackServer {
                     .flatMap { Int($0.dropFirst("Content-Length: ".count)) } ?? 0
                 _ = try await connection.receive(count: length)
             }
-            if let body = bodies[String(parts[1])] {
+            if let body = bodies[String(parts[1])], body.hasPrefix("HTTP/") {
+                try await connection.send(body)
+            } else if let body = bodies[String(parts[1])] {
                 try await connection.send(
                     "HTTP/1.1 200 OK\r\nContent-Length: \(body.utf8.count)\r\n\r\n\(body)")
             } else {
@@ -153,7 +155,8 @@ private func read(_ name: String, in folder: URL) throws -> String {
     #expect(
         Set(report.written) == [
             "ssdp.txt", "1-description.xml", "1-protocolinfo.xml", "1-AVTransport-scpd.xml",
-            "1-ConnectionManager-scpd.xml", "2-description.xml", "status-lines.txt",
+            "1-ConnectionManager-scpd.xml", "1-RenderingControl-scpd-404.txt", "2-description.xml",
+            "status-lines.txt",
         ])
     #expect(try read("1-description.xml", in: folder) == denonDescription)
     // Saved though discovery refuses it.
@@ -201,6 +204,34 @@ private func read(_ name: String, in folder: URL) throws -> String {
     #expect(!report.capturedAnything)
     #expect(report.failures.count == 2, "\(report.failures)")
     #expect(report.failures.contains { $0.contains("receiver.address isn't set") })
+}
+
+@Test func aReplyThatIsntA200IsSavedWhole() async throws {
+    let fault = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 10\r\n\r\nUPnP fault"
+    let renderer = try await server([
+        "/desc.xml": denonDescription, "/control/ConnectionManager": fault,
+    ])
+    defer { renderer.stop() }
+    let base = "http://127.0.0.1:\(renderer.port)"
+    let folder = temporaryFolder()
+    defer { try? FileManager.default.removeItem(at: folder) }
+
+    let report = await NetworkCapture.run(
+        folder: folder,
+        transport: FakeSSDP(datagrams: [
+            reply("\(base)/desc.xml", usn: "uuid:avr"), reply("\(base)/gone.xml", usn: "uuid:gone"),
+        ]),
+        interfaces: { [loopback] }, configured: nil, port: LoopbackServer.refusingPort,
+        searchSeconds: 0.1, statusSeconds: 1)
+
+    let protocolInfo = try read("1-protocolinfo-500.txt", in: folder)
+    #expect(protocolInfo.hasPrefix("HTTP/1.1 500 Internal Server Error\r\n"))
+    #expect(protocolInfo.hasSuffix("\r\n\r\nUPnP fault"))
+    #expect(try read("1-AVTransport-scpd-404.txt", in: folder).hasPrefix("HTTP/1.1 404"))
+    #expect(try read("2-description-404.txt", in: folder).hasPrefix("HTTP/1.1 404"))
+    let failures = report.failures.joined(separator: "\n")
+    #expect(failures.contains("status is 500"), "\(failures)")
+    #expect(failures.contains("1-AVTransport-scpd.xml: the reply's status is 404"), "\(failures)")
 }
 
 @Test func aReceiverThatRefusesIsReportedAndTheRestIsKept() async throws {
