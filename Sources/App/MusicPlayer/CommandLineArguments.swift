@@ -14,6 +14,7 @@ enum Flag: String {
     case settings = "--settings"
     case home = "--home"
     case measureWindow = "--measure-window"
+    case reportLaunch = "--report-launch"
     case snapshot = "--snapshot"
     case snapshotOf = "--snapshot-of"
 }
@@ -52,7 +53,7 @@ private let valueFlags: [(Flag, String)] = [
 /// The command-line modes, which run and exit without the window.
 private let modeFlags: [Flag] = [.listDevices, .scan, .play]
 /// Flags only the window uses.
-private let windowFlags: [Flag] = [.measureWindow, .snapshot, .snapshotOf]
+private let windowFlags: [Flag] = [.measureWindow, .reportLaunch, .snapshot, .snapshotOf]
 private let scanOnlyFlags: [Flag] = [.db, .readers, .scanIOHints]
 
 /// Why `arguments` (without the executable) can't run, or nil when they can. A mistake here would

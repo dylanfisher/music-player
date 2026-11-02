@@ -9,12 +9,14 @@ import Settings
 //   MusicPlayer --play <file or folder>... [--device <part of name>]
 //   MusicPlayer --scan <folder> [--db <file>] [--readers <n>] [--scan-io-hints none|rdahead|all]
 // and the window:
-//   MusicPlayer [--measure-window] [--snapshot <png file> [--snapshot-of <window>]]
+//   MusicPlayer [--measure-window] [--report-launch] [--snapshot <png file> [--snapshot-of <window>]]
 // and in every mode [--home <folder>] [--settings <file>]:
 // --home keeps the config file, library, state file and device record in one folder instead of
 // ~/.config/music-player and Application Support, for tests and runs on the build Mac.
 // --settings reads another config file.
 // --measure-window prints the launch time and memory as JSON and quits, for Bench.
+// --report-launch prints "launched" once the first scan of every watched folder has ended, for
+// Bench to know the app is idle.
 // --snapshot draws the window into a PNG a few seconds after its first rows, to check the layout.
 // --snapshot-of draws the palette, the smart playlist editor, the tag editor, or the Settings
 // window's General or Shortcuts pane, instead.
@@ -106,7 +108,7 @@ do {
 }
 let app = NSApplication.shared
 let delegate = AppDelegate(
-    paths: launchPaths, measuring: given(.measureWindow),
+    paths: launchPaths, measuring: given(.measureWindow), reportingLaunch: given(.reportLaunch),
     snapshotURL: value(after: .snapshot).map(URL.init(fileURLWithPath:)),
     snapshotOf: snapshotTarget)
 app.delegate = delegate

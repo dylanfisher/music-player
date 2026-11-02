@@ -75,3 +75,4 @@ literal "poll" | files Sources/Primitives/LocalSocket/LocalSocketFrame.swift Sou
 literal "socket" | files Sources/Core/Scripting/Scripting.swift Sources/Primitives/LocalSocket/LocalSocketFrame.swift | the socket file's name in the data folder, and the system call socket(2) named in an error
 literal "write" | files Sources/Core/HALOutput/DeviceOutput.swift Sources/Primitives/LocalSocket/LocalSocketFrame.swift | the system call write(2) named in a socket error, and a step the output times
 literal "DELETE FROM \(…) WHERE path_id = ?" | files Sources/Core/Library/LibraryMoves.swift Sources/Core/Library/LibraryPlaylists.swift | deletes by path from two different tables, loved and the import counts; only the SQL shape repeats
+literal "--report-launch" | files Sources/App/MusicPlayer/CommandLineArguments.swift Sources/Tools/Bench/WindowBenchmarks.swift | the app's flag, which Bench passes to the app it launches

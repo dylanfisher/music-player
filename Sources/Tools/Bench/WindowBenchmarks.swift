@@ -40,7 +40,8 @@ let windowBenchmarks = [
             value: idle.cpuPercent,
             notes: [
                 String(
-                    format: "%.0f s after a %.0f s settle; %.2f interrupt wakeups a second",
+                    format:
+                        "%.0f s after the launch rescan and a %.0f s settle; %.2f interrupt wakeups a second",
                     idleSampleSeconds, idleSettleSeconds, idle.interruptWakeupsPerSecond)
             ])
     },
@@ -141,9 +142,11 @@ private func withIndexedHome<T>(showingArt: Bool = false, _ body: (URL) throws -
     }
 }
 
-/// How long the idle benchmark lets the app settle after launch, through the launch rescan, the
-/// first rows and their art.
-private let idleSettleSeconds = 20.0
+/// The longest the idle benchmark waits for the app to report that its launch rescan has ended.
+/// An old Mac on a busy disk takes tens of seconds; a rescan that never ends fails the run.
+private let idleLaunchDeadlineSeconds = 180.0
+/// How long it then waits for the refresh and the art that the rescan's end triggers.
+private let idleSettleSeconds = 5.0
 /// How long it then samples the app. The 10-minute run in phase 14e measured the same rates.
 private let idleSampleSeconds = 60.0
 
@@ -161,13 +164,30 @@ private let idleUsage = Result { () throws -> IdleUsage in
         let process = Process()
         process.executableURL = app
         process.arguments = ["--home", home.path]
-        process.standardOutput = FileHandle.nullDevice
+        process.arguments?.append("--report-launch")
+        let output = Pipe()
+        process.standardOutput = output
         let finished = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in finished.signal() }
+        let launched = DispatchSemaphore(value: 0)
+        output.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+            } else if String(decoding: data, as: UTF8.self).contains("launched") {
+                handle.readabilityHandler = nil
+                launched.signal()
+            }
+        }
         try process.run()
         defer {
+            output.fileHandleForReading.readabilityHandler = nil
             process.terminate()
             finished.wait()
+        }
+        guard launched.wait(timeout: .now() + idleLaunchDeadlineSeconds) == .success else {
+            throw BenchError.expected(
+                "the app to report its launch rescan done within \(idleLaunchDeadlineSeconds) s")
         }
         Thread.sleep(forTimeInterval: idleSettleSeconds)
         let start = try usage(of: process.processIdentifier)

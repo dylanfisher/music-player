@@ -100,7 +100,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Memory growth in that soak, from the first scan trough after minute 5 to the last (30 s after each scan ends) | < 10 MB | < 10 MB |
 | Gap between same-format tracks | 0 samples | 0 samples |
 | Track change that switches sample rate | < 500 ms | < 500 ms |
-| CPU when idle, the library window open and nothing playing, over a minute after a 20 s settle; the old Mac figure is an estimate until its checkpoint | < 0.1 percent of a core | < 0.1 percent of a core |
+| CPU when idle, the library window open and nothing playing, over a minute after the app reports its launch rescan done (`--report-launch`) and a 5 s settle; the old Mac figure is an estimate until its checkpoint | < 0.1 percent of a core | < 0.1 percent of a core |
 | Idle wakeups in the same minute, as `top` counts them | < 1 wakeups a second | < 1 wakeups a second |
 | Load and validate settings, every key changed | < 2 ms | < 20 ms |
 | Generate the fixture library | < 6 s | < 120 s |

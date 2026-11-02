@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let paths: AppPaths
     private let measuring: Bool
+    private let reportingLaunch: Bool
+    /// Watched folders whose first scan hasn't ended yet, while `reportingLaunch`.
+    private var foldersScanning = 0
     private let snapshotURL: URL?
     private let snapshotOf: SnapshotTarget
     /// How long after the first rows the snapshot waits, for the scan and art to show.
@@ -91,11 +94,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
+    /// `reportingLaunch` prints a line once the first scan of each watched folder has ended.
     /// `snapshotURL` gets a PNG of the window a few seconds after that.
-    init(paths: AppPaths, measuring: Bool, snapshotURL: URL?, snapshotOf: SnapshotTarget) {
+    init(
+        paths: AppPaths, measuring: Bool, reportingLaunch: Bool, snapshotURL: URL?,
+        snapshotOf: SnapshotTarget
+    ) {
         self.snapshotOf = snapshotOf
         self.paths = paths
         self.measuring = measuring
+        self.reportingLaunch = reportingLaunch
         self.snapshotURL = snapshotURL
     }
 
@@ -519,7 +527,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let browser else { return }
         let watcher = LibraryWatcher(
             databaseURL: libraryFileURL(in: paths.dataDirectory),
-            networkReaders: settings[\.networkScanReaders], events: browser.watcherEvents)
+            networkReaders: settings[\.networkScanReaders],
+            events: reportingLaunch
+                ? reportingLaunchEnd(browser.watcherEvents) : browser.watcherEvents)
+        foldersScanning = folders.count
         let pause = settings[\.pausePollingDuringPlayback]
         watcher.start(
             folders: folders, syncFolder: settings[\.syncFolder], pausePollingDuringPlayback: pause)
@@ -527,6 +538,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             watcher.playbackChanged(activity, pausePollingDuringPlayback: pause)
         }
         self.watcher = watcher
+    }
+
+    /// `events`, and after it has the first scan of every watched folder's end, a "launched" line
+    /// on standard output.
+    private func reportingLaunchEnd(
+        _ events: @escaping @Sendable (WatcherEvent) -> Void
+    ) -> @Sendable (WatcherEvent) -> Void {
+        { [weak self] event in
+            events(event)
+            switch event {
+            case .scanned, .scanFailed:
+                DispatchQueue.main.async { self?.firstScanEnded() }
+            default: break
+            }
+        }
+    }
+
+    private func firstScanEnded() {
+        guard foldersScanning > 0 else { return }
+        foldersScanning -= 1
+        if foldersScanning == 0 {
+            FileHandle.standardOutput.write(Data("launched\n".utf8))
+        }
     }
 
     func addFolder() {
