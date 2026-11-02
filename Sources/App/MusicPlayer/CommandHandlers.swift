@@ -34,6 +34,10 @@ extension AppDelegate {
             guard let window = self?.window?.window else { return }
             self?.browser?.resolveLostStats(over: window)
         }
+        dispatcher.handle(.restoreRemoved, enabled: hasWindow) { [weak self] in
+            guard let window = self?.window?.window else { return }
+            self?.browser?.restoreRemoved(over: window)
+        }
     }
 
     /// Whether the main window is open, for the commands that need it.
@@ -60,6 +64,10 @@ extension AppDelegate {
         }
         dispatcher.handle(.revealInFinder, enabled: hasSelectedTracks) { [weak self] in
             self?.withSelectedPaths(revealInFinder)
+        }
+        dispatcher.handle(.removeTracks, enabled: hasSelectedTracks) { [weak self] in
+            guard let window = self?.window?.window else { return }
+            self?.browser?.removeSelection(over: window)
         }
         dispatcher.handle(.copyPath, enabled: hasSelectedTracks) { [weak self] in
             self?.withSelectedPaths { paths in

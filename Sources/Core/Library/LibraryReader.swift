@@ -157,6 +157,20 @@ public actor LibraryReader {
 
     public func dismissLost(_ ids: [Int64]) throws { try index.dismissLost(ids) }
 
+    public func removeFromLibrary(trackIDs: [Int64]) throws {
+        try index.removeFromLibrary(trackIDs: trackIDs)
+    }
+
+    public func forgetTrashed(trackIDs: [Int64]) throws {
+        try index.forgetTrashed(trackIDs: trackIDs)
+    }
+
+    public func removedPaths() throws -> [RemovedPath] { try index.removedPaths() }
+
+    public func restoreRemoved(_ ids: [Int64]) throws -> [String] {
+        try index.restoreRemoved(ids)
+    }
+
     public func discards() throws -> [DiscardNotice] { try index.discards() }
 
     public func forgetDiscards(_ ids: [Int64]) throws { try index.forgetDiscards(ids) }

@@ -49,6 +49,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var editRules: (Playlist) -> Void = { _ in }
     /// Called after the user changed plays, ratings or playlists, which go in the sync log.
     public var edited: () -> Void = {}
+    /// Called with the paths of removed tracks the user restored, whose folders need a scan.
+    public var restored: ([String]) -> Void = { _ in }
+    /// Moves the files Remove… was confirmed for to the Trash; tests replace it.
+    var trash: ([URL]) async -> TrashOutcome = moveToTrash
     /// Runs the command a key press in one of the browser's lists is bound to.
     public var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
     /// Called once, when the table or the timeline first draws rows, or once loading finds none
@@ -365,6 +369,79 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 report("couldn't read the lost stats: \(error)")
             }
         }
+    }
+
+    // MARK: Removing tracks
+
+    /// Asks over `window` whether to remove the selected tracks from the library, or to move
+    /// their files to the Trash as well (ADR 0048).
+    public func removeSelection(over window: NSWindow) {
+        guard let ids = selectedTrackIDs(else: "couldn't remove the tracks"), !ids.isEmpty
+        else { return }
+        askToRemove(ids.count, over: window) { [weak self] choice in
+            guard let choice else { return }
+            Task { await self?.remove(ids, choice) }
+        }
+    }
+
+    /// Removes the tracks `ids` as the user chose. Only the files the Trash took leave the
+    /// library on `.trash`; the status bar says why the rest stayed.
+    func remove(_ ids: [Int64], _ choice: RemovalChoice) async {
+        do {
+            switch choice {
+            case .library:
+                try await reader.removeFromLibrary(trackIDs: ids)
+            case .trash:
+                let paths = try await reader.paths(ids: ids)
+                let urls = Dictionary(
+                    uniqueKeysWithValues: ids.compactMap { id in
+                        paths[id].map { (URL(fileURLWithPath: $0, isDirectory: false), id) }
+                    })
+                let outcome = await trash(Array(urls.keys))
+                try await reader.forgetTrashed(trackIDs: outcome.moved.compactMap { urls[$0] })
+                if let failure = outcome.failure {
+                    report(
+                        "couldn't move \(urls.count - outcome.moved.count) of the files to the"
+                            + " Trash: \(failure)")
+                }
+            }
+        } catch {
+            report("couldn't remove the tracks: \(error)")
+        }
+        refreshNow()
+        runHealth()
+    }
+
+    /// Offers the removed tracks over `window`, to restore one or all of them; after one, the
+    /// rest are offered again.
+    public func restoreRemoved(over window: NSWindow) {
+        Task { [weak self] in
+            guard let self else { return }
+            let removed: [RemovedPath]
+            do {
+                removed = try await reader.removedPaths()
+            } catch {
+                return report("couldn't read the removed tracks: \(error)")
+            }
+            guard !removed.isEmpty else { return show(failure: "No removed tracks to restore") }
+            askToRestore(removed, over: window) { [weak self] ids in
+                guard !ids.isEmpty else { return }
+                Task {
+                    await self?.restore(ids)
+                    if ids.count < removed.count { self?.restoreRemoved(over: window) }
+                }
+            }
+        }
+    }
+
+    /// Lets scans add the removed tracks `ids` again, and has their folders scanned.
+    func restore(_ ids: [Int64]) async {
+        do {
+            restored(try await reader.restoreRemoved(ids))
+        } catch {
+            report("couldn't restore the removed tracks: \(error)")
+        }
+        runHealth()
     }
 
     private func runHealth() {

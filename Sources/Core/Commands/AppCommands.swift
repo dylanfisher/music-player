@@ -47,8 +47,11 @@ extension CommandID {
     public static let checkHealth = CommandID("library.checkHealth")
     public static let rescanNow = CommandID("library.rescanNow")
     public static let resolveLostStats = CommandID("library.resolveLostStats")
+    public static let restoreRemoved = CommandID("library.restoreRemoved")
     public static let revealInFinder = CommandID("track.revealInFinder")
     public static let copyPath = CommandID("track.copyPath")
+    /// Removes the selection from the library, or moves its files to the Trash (ADR 0048).
+    public static let removeTracks = CommandID("track.remove")
     public static let editTags = CommandID("track.editTags")
     public static let undoTagEdit = CommandID("track.undoTagEdit")
     public static let replaceArtwork = CommandID("tags.replaceArtwork")
@@ -184,10 +187,12 @@ public enum AppCommands {
             // Not from links: it ignores the playback pause, so a page could keep the NAS busy.
             Command(.rescanNow, "Rescan Now"),
             Command(.resolveLostStats, "Resolve Lost Stats…"),
+            Command(.restoreRemoved, "Restore Removed Tracks…"),
             Command(
                 .revealInFinder, "Reveal in Finder",
                 [.init("r", [cmd, shift]), .init("r", [opt, cmd])]),
             Command(.copyPath, "Copy Path", [.init("c", [opt, cmd])]),
+            Command(.removeTracks, "Remove…", [.init(.delete)]),
             Command(.editTags, "Get Info", [.init("i", cmd)]),
             Command(.undoTagEdit, "Undo Tag Edit"),
             Command(.replaceArtwork, "Replace Artwork…"),

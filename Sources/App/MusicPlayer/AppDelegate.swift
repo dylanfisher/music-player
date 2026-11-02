@@ -230,6 +230,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue.libraryChanged()
         }
         browser.edited = { [weak self] in self?.watcher?.pushSync() }
+        browser.restored = { [weak self] paths in
+            let folders = Set(paths.map { ($0 as NSString).deletingLastPathComponent })
+            self?.watcher?.rescan(directories: folders.sorted())
+        }
         browser.firstRowsDrawn = { [weak self] in self?.interactive() }
         let keyCommand = { [weak self] (chords: [KeyChord]) in
             self?.dispatcher?.key(chords) ?? .unbound

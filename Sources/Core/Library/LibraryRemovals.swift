@@ -62,8 +62,8 @@ extension LibraryIndex {
 let restoreRemovedSQL = "DELETE FROM \(removedTable) WHERE path_id = ?"
 
 /// A path the user removed from the library.
-struct RemovedPath: Equatable, Sendable {
-    var id: Int64
+public struct RemovedPath: Equatable, Sendable {
+    public var id: Int64
     /// In NFC, as `paths` keeps it.
-    var path: String
+    public var path: String
 }
