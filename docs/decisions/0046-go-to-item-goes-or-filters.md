@@ -19,7 +19,9 @@ that is → by default. → is already Focus Next Pane's, and a key had one mean
 - **Filter to Item is a palette key**: a command marked `inPalette`, whose chords are claimed
   apart from the app's, so it can share → with Focus Next Pane. It runs from no menu, and the
   Shortcuts pane lists it last, under Palette. Reserved chords and fixed primaries (⌘A) stay out of
-  it too, since the palette's field needs them.
+  it too, since the palette's field needs them, and so does any chord that types in the field: a
+  character, Space or Delete with no modifier but ⇧ or ⌥. The palette takes its keys before the
+  field, so a Space binding would keep "Miles Davis" from being typed.
 - **The filter key acts on an artist or album row only with the insertion point at the end of
   the field.** Elsewhere, or on any other row, the key goes to the field, so → still moves
   through the query.

@@ -50,12 +50,17 @@ private final class Harness {
     let model = harness.model!
     #expect(model.chord(.filterToItem, .primary) == KeyChord(.right))
     #expect(model.chord(.focusNextPane, .primary) == KeyChord(.right))
-    model.record(KeyChord(.space), for: .filterToItem, at: .alternate)
+    model.record(KeyChord(.down), for: .filterToItem, at: .alternate)
     #expect(model.notices[.filterToItem] == nil)
-    #expect(model.chord(.filterToItem, .alternate) == KeyChord(.space))
-    #expect(model.chord(.playPause, .primary) == KeyChord(.space))
+    #expect(model.chord(.filterToItem, .alternate) == KeyChord(.down))
+    #expect(model.chord(.selectNext, .primary) == KeyChord(.down))
     model.record(KeyChord("a", cmd), for: .filterToItem, at: .alternate)
     #expect(model.notices[.filterToItem] != nil)
+    // Taken before the field, Space could never be typed in the query.
+    model.record(KeyChord(.space), for: .filterToItem, at: .alternate)
+    #expect(
+        model.notices[.filterToItem] == .refused("Space types in the palette's search field."))
+    #expect(model.chord(.filterToItem, .alternate) == KeyChord(.down))
 }
 
 @MainActor @Test func aClashNamesTheOtherCommandAndCancelKeepsBoth() throws {

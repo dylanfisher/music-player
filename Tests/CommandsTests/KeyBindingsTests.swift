@@ -60,6 +60,25 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
     #expect(bindings.dropped.map(\.loss) == [.fixedTo(selectAll)])
 }
 
+@Test func aPaletteKeyNeverTypesInTheField() throws {
+    let find = CommandID("test.find")
+    let space = KeyChord(.space)
+    let bindings = try KeyBindings(
+        commands + [Command(find, "Find", [KeyChord(.right)], menus: false, palette: true)],
+        overrides: ["test.find": ShortcutOverride(alternate: .chord(space))], rules: rules)
+    #expect(bindings.registry.command(find)?.chords == [KeyChord(.right)])
+    #expect(bindings.dropped.map(\.loss) == [.typesInPalette])
+    #expect(bindings.assign(space, to: find, at: .alternate, replacing: true) == .typesInPalette)
+    #expect(
+        bindings.assign(KeyChord("e", .shift), to: find, at: .primary, replacing: false)
+            == .typesInPalette)
+    #expect(bindings.problem(id: "test.find", position: .alternate, slot: .chord(space)) != nil)
+    // An app command may still have one.
+    #expect(
+        bindings.assign(space, to: close, at: .alternate, replacing: false)
+            == .assigned([close: ShortcutOverride(alternate: .chord(space))]))
+}
+
 @Test func shiftCommandRRevealsInFinder() throws {
     let bindings = try KeyBindings(
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))

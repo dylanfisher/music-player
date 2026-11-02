@@ -75,6 +75,16 @@ public struct KeyChord: Hashable, Sendable, CustomStringConvertible {
             && [.command, [.command, .shift], .option, [.option, .shift]].contains(modifiers)
     }
 
+    /// Whether a text field types or deletes with the chord: a character, Space or Delete,
+    /// with no modifier but Shift or Option. A key taken before a field can't be one, or that
+    /// character could never be typed there.
+    public var typesText: Bool {
+        switch key {
+        case .character, .space, .delete: modifiers.isSubset(of: [.shift, .option])
+        default: false
+        }
+    }
+
     public var description: String { stored }
 
     // MARK: Stored spelling

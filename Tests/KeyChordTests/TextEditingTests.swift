@@ -18,6 +18,21 @@ import Testing
     }
 }
 
+@Test func typingChordsAreCharactersSpaceAndDeleteWithShiftOrOption() {
+    for chord in [
+        KeyChord("a"), KeyChord("a", .shift), KeyChord("e", .option), KeyChord(.space),
+        KeyChord(.delete), KeyChord(.delete, .option),
+    ] {
+        #expect(chord.typesText, "\(chord)")
+    }
+    for chord in [
+        KeyChord(.right), KeyChord(.return), KeyChord(.function(5)), KeyChord("a", .command),
+        KeyChord(.space, .control), KeyChord(.delete, .command),
+    ] {
+        #expect(!chord.typesText, "\(chord)")
+    }
+}
+
 @MainActor
 private func editedField(_ text: String) throws -> (NSWindow, NSTextView) {
     let window = NSWindow(

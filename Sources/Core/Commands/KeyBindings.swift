@@ -28,6 +28,9 @@ public struct KeyBindings: Sendable {
         case fixedTo(CommandID)
         /// The user changed or removed a fixed primary; it stays.
         case fixedPrimary
+        /// A palette key that types in the palette's field: taken before the field, that
+        /// character could never be typed in the query.
+        case typesInPalette
     }
 
     public struct Dropped: Equatable, Sendable, CustomStringConvertible {
@@ -43,6 +46,7 @@ public struct KeyBindings: Sendable {
             case .reserved(let title): "\(command) \(position): \(what)is the \(title) item's"
             case .fixedTo(let other): "\(command) \(position): \(what)is fixed to \(other)"
             case .fixedPrimary: "\(command) \(position): the primary is fixed"
+            case .typesInPalette: "\(command) \(position): \(what)types in the palette's field"
             }
         }
     }
@@ -56,6 +60,7 @@ public struct KeyBindings: Sendable {
         case reserved(String)
         case fixed(to: CommandID)
         case fixedPrimary
+        case typesInPalette
     }
 
     public let defaults: CommandRegistry
@@ -89,6 +94,11 @@ public struct KeyBindings: Sendable {
             if let title = rules.reserved[chord] {
                 dropped.append(
                     Dropped(command: id, position: position, chord: chord, loss: .reserved(title)))
+                return false
+            }
+            if command.inPalette, chord.typesText {
+                dropped.append(
+                    Dropped(command: id, position: position, chord: chord, loss: .typesInPalette))
                 return false
             }
             // The palette's field needs a fixed chord as much as any text field.
@@ -161,8 +171,9 @@ public struct KeyBindings: Sendable {
         if position == .primary, let fixed = rules.fixed[id] {
             return fixed == chord ? .assigned([:]) : .fixedPrimary
         }
-        var changes: [CommandID: ShortcutOverride] = [:]
         let inPalette = defaults.command(id)?.inPalette ?? false
+        if inPalette, chord.typesText { return .typesInPalette }
+        var changes: [CommandID: ShortcutOverride] = [:]
         if let owner = registry.command(for: chord, inPalette: inPalette), owner != id {
             guard replacing else { return .taken(by: owner) }
             let lost = ShortcutPosition.allCases.first { slots[owner]?[$0] == chord } ?? .primary
@@ -212,6 +223,9 @@ public struct KeyBindings: Sendable {
         }
         if let owner = rules.fixed.first(where: { $0.value == chord })?.key, owner != command {
             return "\(chord.stored) is fixed to \(owner), for text fields"
+        }
+        if defaults.command(command)?.inPalette == true, chord.typesText {
+            return "\(chord.stored) types in the palette's field, so a palette key can't have it"
         }
         return nil
     }

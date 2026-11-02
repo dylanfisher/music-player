@@ -76,6 +76,7 @@ public final class ShortcutsModel {
             case .reserved(let item): "\(what)is the \(item) item's."
             case .fixedTo(let other): "\(what)is fixed to \(title(other))."
             case .fixedPrimary: "The primary shortcut is the Edit menu's."
+            case .typesInPalette: "\(what)types in the palette's search field."
             }
         }
     }
@@ -135,6 +136,9 @@ public final class ShortcutsModel {
             )
         case .fixedPrimary:
             notices[id] = .refused("The primary shortcut is the Edit menu's, for text fields.")
+        case .typesInPalette:
+            notices[id] = .refused(
+                "\(chord?.symbols ?? "That") types in the palette's search field.")
         }
     }
 
