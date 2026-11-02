@@ -41,7 +41,7 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   or mixed sample rates, tracks missing art, an album or an album artist, and Lost Stats: files
   with stats that left without a match, which **Resolve Lost Stats…** gives to a track or
   dismisses. It runs after a scan and on Check Library Health. ⌘R reveals the selected tracks
-  in Finder.
+  in Searcher, or in Finder when Searcher isn't installed or the File Viewer setting says so.
 - **Sync Folder** (Settings): Macs that play the same library on a share share their plays,
   ratings, loved tracks, playlists and Date Added through a folder outside the music, where
   each writes only its own log. They sync at launch, after each rescan and on wake; a Mac

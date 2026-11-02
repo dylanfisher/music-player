@@ -37,6 +37,9 @@ public struct AppSettings: SettingsSchema {
     public let groupByAlbumArtist = Setting(
         "library.groupByAlbumArtist", title: "Group by Album Artist", default: true,
         "List album artists, not every track artist, in the Artist pane.")
+    public let fileViewer = Setting(
+        "library.fileViewer", title: "File Viewer", default: FileViewer.searcher,
+        "Where Reveal in Finder shows tracks; without Searcher, it uses Finder.")
     public let receiverEnabled = Setting(
         "receiver.enabled", title: "Receiver Control", default: false,
         "Control a Denon receiver's volume, input and power over the network.")

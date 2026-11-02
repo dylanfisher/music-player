@@ -63,7 +63,7 @@ extension AppDelegate {
             }
         }
         dispatcher.handle(.revealInFinder, enabled: hasSelectedTracks) { [weak self] in
-            self?.withSelectedPaths(revealInFinder)
+            self?.withSelectedPaths { self?.revealTracks($0) }
         }
         dispatcher.handle(.removeTracks, enabled: hasSelectedTracks) { [weak self] in
             guard let window = self?.window?.window else { return }
@@ -242,6 +242,12 @@ extension AppDelegate {
             browser?.focusTracks()
             _ = browser?.moveSelection(move, extending: extending)
         }
+    }
+
+    /// Shows the files at `paths` in the file viewer the settings pick.
+    func revealTracks(_ paths: [String]) {
+        guard let settings else { return }
+        reveal(paths, in: settings[\.fileViewer])
     }
 
     func withSelectedPaths(_ use: @escaping ([String]) -> Void) {

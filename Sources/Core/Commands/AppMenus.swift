@@ -102,9 +102,10 @@ public enum AppMenus {
                     .setting(settings.pausePollingDuringPlayback.key),
                     .setting(settings.rescanNetworkFoldersAtLaunch.key),
                     .setting(settings.groupByAlbumArtist.key),
-                    .separator, .command(.revealInFinder), .command(.copyPath),
-                    .command(.addToPlaylist), .command(.removeTracks), .command(.showInPlaylist),
-                    .command(.showAlbum), .command(.showArtist), .separator, .command(.editTags),
+                    .separator, .command(.revealInFinder), .setting(settings.fileViewer.key),
+                    .command(.copyPath), .command(.addToPlaylist), .command(.removeTracks),
+                    .command(.showInPlaylist), .command(.showAlbum), .command(.showArtist),
+                    .separator, .command(.editTags),
                     .command(.undoTagEdit), .command(.replaceArtwork), .command(.removeArtwork),
                     .submenu(
                         ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
