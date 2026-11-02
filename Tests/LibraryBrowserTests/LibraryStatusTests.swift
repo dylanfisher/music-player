@@ -122,6 +122,7 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
             == "1 track selected, 303.5 MiB, 1 hour 2 minutes 2 seconds")
     #expect(binarySize(1023) == "1,023 bytes")
     #expect(binarySize(1536) == "1.5 KiB")
+    #expect(binarySize(1_048_575) == "1.0 MiB")
     #expect(spokenDuration(0.4) == "0 seconds")
     #expect(spokenDuration(86_400) == "1 day")
 }

@@ -32,7 +32,8 @@ func binarySize(_ bytes: Int) -> String {
     let units = ["KiB", "MiB", "GiB"]
     var value = Double(bytes) / 1024
     var unit = 0
-    while value >= 1024, unit < units.count - 1 {
+    // Compared as shown, so 1,048,575 bytes is "1.0 MiB", not "1024.0 KiB".
+    while (value * 10).rounded() / 10 >= 1024, unit < units.count - 1 {
         value /= 1024
         unit += 1
     }
