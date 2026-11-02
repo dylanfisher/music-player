@@ -174,9 +174,10 @@ public final class ReceiverControl {
         } catch {
             return unreachable("\(why), and the interfaces couldn't be listed: \(error)")
         }
-        guard LocalSubnets(up).interface(holding: address) != nil else {
+        guard LocalSubnets(up).interface(forHost: address) != nil else {
             return unreachable(
-                "\(why), and the receiver address \(address) isn't on a local subnet")
+                "\(why), and the receiver address \(address) isn't another device's address on"
+                    + " a local subnet")
         }
         receiver = (address, "the receiver at \(address)")
         connect()

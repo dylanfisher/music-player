@@ -34,6 +34,21 @@ public struct NetworkInterface: Hashable, Sendable, CustomStringConvertible {
         }
     }
 
+    /// Whether `other` is this subnet's address with the host bits all clear or, for IPv4,
+    /// all set. A /31 or /32 has neither.
+    func isNetworkOrBroadcast(_ other: IPAddress) -> Bool {
+        let bits = other.bytes.count * 8
+        guard prefixLength < bits - 1, holds(other) else { return false }
+        var clear = true
+        var set = true
+        for bit in prefixLength..<bits {
+            let on = other.bytes[bit / 8] & (0x80 >> UInt8(bit % 8)) != 0
+            if on { clear = false } else { set = false }
+        }
+        if case .v6 = other { return clear }
+        return clear || set
+    }
+
     private func samePrefix(_ a: [UInt8], _ b: [UInt8]) -> Bool {
         var bits = prefixLength
         for (x, y) in zip(a, b) where bits > 0 {

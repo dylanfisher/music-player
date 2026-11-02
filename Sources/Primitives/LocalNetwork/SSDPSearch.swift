@@ -136,6 +136,12 @@ public enum SSDPSearch {
         else { return .failure(.malformed(source, "it lacks one LOCATION, ST and USN")) }
         do throws(LocalURL.Refusal) {
             let location = try LocalURL(locationText, on: interface)
+            // A device describes itself; a reply pointing elsewhere would aim the app at a
+            // third host, or at an address that isn't one.
+            guard location.host == source else { throw LocalURL.Refusal.notTheSender(locationText) }
+            guard subnets.interface(forHost: location.host) != nil else {
+                throw LocalURL.Refusal.notAHost(locationText)
+            }
             return .success(
                 SSDPReply(location: location, searchTarget: target, usn: usn, source: source))
         } catch {

@@ -63,6 +63,28 @@ private func gather(_ datagrams: [SSDPDatagram]) -> SSDPSearch.Result {
             .badLocation(receiver, .offSubnet("http://192.168.2.20/d.xml", lan))
         ),
         (
+            SSDPDatagram(bytes: replyText(location: "http://192.168.1.21/d.xml"), source: receiver),
+            .badLocation(receiver, .notTheSender("http://192.168.1.21/d.xml"))
+        ),
+        (
+            SSDPDatagram(
+                bytes: replyText(location: "http://192.168.1.255/d.xml"),
+                source: IPAddress("192.168.1.255")!),
+            .badLocation(IPAddress("192.168.1.255")!, .notAHost("http://192.168.1.255/d.xml"))
+        ),
+        (
+            SSDPDatagram(
+                bytes: replyText(location: "http://192.168.1.0/d.xml"),
+                source: IPAddress("192.168.1.0")!),
+            .badLocation(IPAddress("192.168.1.0")!, .notAHost("http://192.168.1.0/d.xml"))
+        ),
+        (
+            SSDPDatagram(
+                bytes: replyText(location: "http://192.168.1.10/d.xml"),
+                source: IPAddress("192.168.1.10")!),
+            .badLocation(IPAddress("192.168.1.10")!, .notAHost("http://192.168.1.10/d.xml"))
+        ),
+        (
             SSDPDatagram(
                 bytes: replyText(location: "https://192.168.1.20/d.xml"), source: receiver),
             .badLocation(receiver, .notHTTP("https://192.168.1.20/d.xml"))
@@ -176,15 +198,17 @@ private final class LoopbackResponder: @unchecked Sendable {
     }
     defer { responder.stop() }
     let transport = UDPSearchTransport(destination: IPAddress("127.0.0.1")!, port: responder.port)
-    let result = try await SSDPSearch.run(
-        searchTarget: renderer, transport: transport, subnets: LocalSubnets([loopback]),
-        seconds: 0.5)
+    let request = SSDPSearch.request(searchTarget: renderer, waitSeconds: 1)
+    let datagrams = try await transport.search(request, from: [loopback], seconds: 0.5)
+    #expect(responder.requests == [request])
+    // The stand-in is this Mac, so it's judged as a device on a made-up 127/8 subnet.
+    let result = SSDPSearch.gather(
+        datagrams, searchTarget: renderer, subnets: LocalSubnets([loopbackSubnet]))
     #expect(result.problems == [])
     #expect(
         result.replies.map(\.location.description) == [
             "http://127.0.0.1:\(responder.port)/desc.xml"
         ])
-    #expect(responder.requests == [SSDPSearch.request(searchTarget: renderer, waitSeconds: 1)])
 }
 
 private final class Heard: @unchecked Sendable {

@@ -11,6 +11,9 @@ func interface(_ name: String, _ index: UInt32, _ address: String, _ prefix: Int
 
 /// Loopback, standing in for a LAN interface, so tests' devices can live on it.
 let loopback = interface("lo0", 1, "127.0.0.1", 8)
+/// A made-up interface on 127/8 that isn't 127.0.0.1, so a stand-in at 127.0.0.1 counts as
+/// another device rather than this Mac.
+let loopbackSubnet = interface("lo9", 1, "127.0.0.2", 8)
 
 @Test func literalsParseAndNamesDont() {
     #expect(IPAddress("192.168.1.20") == .v4([192, 168, 1, 20]))
@@ -125,4 +128,22 @@ let loopback = interface("lo0", 1, "127.0.0.1", 8)
     }
     let many = "GET / HTTP/1.1\r\n" + String(repeating: "A: b\r\n", count: 101) + "\r\n"
     #expect(HTTPHead.parse(Array(many.utf8)[...], cap: 8192) == .malformed("over 100 fields"))
+}
+
+@Test func aHostIsNeitherTheSubnetsEdgesNorThisMac() {
+    let wifi = interface("en0", 4, "192.168.1.10", 24)
+    let wired = interface("en1", 5, "192.168.1.11", 24)
+    let six = interface("en0", 4, "2001:db8:1::10", 64)
+    let subnets = LocalSubnets([wifi, wired, six])
+    #expect(subnets.interface(forHost: IPAddress("192.168.1.20")!) == wifi)
+    for text in [
+        "192.168.1.0", "192.168.1.255", "192.168.1.10", "192.168.1.11", "2001:db8:1::",
+        "2001:db8:1::10", "10.0.0.1",
+    ] {
+        #expect(subnets.interface(forHost: IPAddress(text)!) == nil, "\(text)")
+    }
+    #expect(subnets.interface(forHost: IPAddress("2001:db8:1::20")!) == six)
+    // A /31 has no network or broadcast address.
+    let link = LocalSubnets([interface("en2", 6, "10.0.0.0", 31)])
+    #expect(link.interface(forHost: IPAddress("10.0.0.1")!) != nil)
 }

@@ -6,8 +6,9 @@ import Testing
 @testable import LocalNetwork
 @testable import UPnP
 
+/// A made-up interface on 127/8, so stand-ins at 127.0.0.1 count as other devices.
 private let loopback = NetworkInterface(
-    name: "lo0", index: 1, address: IPAddress("127.0.0.1")!, prefixLength: 8)
+    name: "lo9", index: 1, address: IPAddress("127.0.0.2")!, prefixLength: 8)
 
 /// Hands back made-up replies without sending anything.
 struct FakeSSDP: SSDPTransport {

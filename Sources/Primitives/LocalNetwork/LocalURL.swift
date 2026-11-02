@@ -16,6 +16,8 @@ public struct LocalURL: Hashable, Sendable, CustomStringConvertible {
         case notAnAddress(String)
         case offSubnet(String, NetworkInterface)
         case otherHost(String)
+        case notTheSender(String)
+        case notAHost(String)
 
         public var description: String {
             switch self {
@@ -25,6 +27,11 @@ public struct LocalURL: Hashable, Sendable, CustomStringConvertible {
                 "\(text.debugDescription) is off the subnet of \(interface)"
             case .otherHost(let text):
                 "\(text.debugDescription) leaves the host the description came from"
+            case .notTheSender(let text):
+                "\(text.debugDescription) names a host other than the one that replied"
+            case .notAHost(let text):
+                "\(text.debugDescription) names a subnet's network or broadcast address, or"
+                    + " this Mac's own"
             }
         }
     }

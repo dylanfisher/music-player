@@ -17,4 +17,13 @@ public struct LocalSubnets: Sendable {
         }
         return best
     }
+
+    /// The interface whose subnet holds `address`, when it can be another device there: not
+    /// the subnet's network or broadcast address, and not one of this Mac's own. Nil otherwise.
+    public func interface(forHost address: IPAddress) -> NetworkInterface? {
+        guard !interfaces.contains(where: { $0.address == address }),
+            let found = interface(holding: address), !found.isNetworkOrBroadcast(address)
+        else { return nil }
+        return found
+    }
 }

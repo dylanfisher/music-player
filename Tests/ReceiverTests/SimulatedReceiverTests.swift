@@ -6,8 +6,9 @@ import Testing
 @testable import Receiver
 @testable import UPnP
 
+/// A made-up interface on 127/8, so stand-ins at 127.0.0.1 count as other devices.
 private let loopback = NetworkInterface(
-    name: "lo0", index: 1, address: IPAddress("127.0.0.1")!, prefixLength: 8)
+    name: "lo9", index: 1, address: IPAddress("127.0.0.2")!, prefixLength: 8)
 
 /// A receiver on loopback: each connection waits for the test to drive it.
 private final class SimulatedReceiver: @unchecked Sendable {
@@ -229,8 +230,8 @@ private func wait(
     for (renderers, why) in [
         ([other], "no Denon receiver answered on the local network"),
         (
-            [denon(), denon("127.0.0.2", udn: "uuid:2")],
-            "2 Denon receivers answered, at 127.0.0.1, 127.0.0.2; receiver control works with one"
+            [denon(), denon("127.0.0.3", udn: "uuid:2")],
+            "2 Denon receivers answered, at 127.0.0.1, 127.0.0.3; receiver control works with one"
         ),
     ] {
         let (control, log) = control(port: 1, renderers: renderers)
@@ -333,6 +334,18 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     #expect(log.all == [])
 }
 
+@MainActor @Test func aConfiguredAddressThatIsntAnotherDeviceIsRefused() async throws {
+    for text in ["127.0.0.2", "127.0.0.0", "127.255.255.255"] {
+        let (control, log) = control(port: 1, renderers: [], fallback: text)
+        control.start()
+        let why =
+            "no Denon receiver answered on the local network, and the receiver address \(text)"
+            + " isn't another device's address on a local subnet"
+        try await wait(control, log, "unreachable") { control.status == .unreachable(why) }
+        #expect(!control.hasReceiver)
+    }
+}
+
 @MainActor @Test func aConfiguredAddressOffTheSubnetIsRefused() async throws {
     let receiver = try await SimulatedReceiver()
     defer { receiver.stop() }
@@ -343,7 +356,7 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     control.start()
     let why =
         "no Denon receiver answered on the local network, and the receiver address 127.0.0.1"
-        + " isn't on a local subnet"
+        + " isn't another device's address on a local subnet"
     try await wait(control, log, "unreachable") { control.status == .unreachable(why) }
     try await Task.sleep(nanoseconds: 200_000_000)
     #expect(receiver.server.connectionCount == 0)

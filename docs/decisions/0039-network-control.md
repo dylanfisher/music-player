@@ -46,8 +46,9 @@ is injected; the real one takes its destination as an argument, and tests aim it
 stand-in on 127.0.0.1. Replies from off the local subnets, over 64 KiB, malformed or without
 one `LOCATION`, `ST` and `USN` are reported and ignored, at most 20 listed and the rest
 counted, and at most 64 devices kept. A `LOCATION` is followed only when it's `http`, its host
-is an IP literal (a name could resolve anywhere) on the subnet the reply came from, with no user
-or fragment. A URL a description names, such as a control URL, must stay on the description's
+is an IP literal (a name could resolve anywhere) and the very address the reply came from, with
+no user or fragment, and that address is another device's: not the subnet's network or
+broadcast address and not one of the Mac's own. A URL a description names, such as a control URL, must stay on the description's
 host and port.
 
 **Fetching.** `LocalHTTPClient` is HTTP/1.1 over `NWConnection`, not URLSession, so no proxy,
@@ -84,7 +85,8 @@ manufacturer contains "Denon"†, grouped by address, since one receiver can ans
 than one device. With more than one address it reports why and connects to nothing. With none,
 or when the search itself fails, it falls back to `receiver.address`, null by default: a
 literal IPv4 or IPv6 address, never a host name (the config check refuses one), used only
-while it's on the local subnet of an interface that's up, by the same injected check SSDP
+while it's another device's address on the local subnet of an interface that's up (not the
+network or broadcast address, nor the Mac's own), by the same injected check SSDP
 replies get. Otherwise it reports why and connects to nothing. A discovered receiver wins over
 the configured address. The address comes only from a `Renderer`, which only discovery makes,
 or from that setting. Port 23 is fixed.
