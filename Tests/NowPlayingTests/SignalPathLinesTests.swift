@@ -32,8 +32,9 @@ private let formats = DeviceFormats(
 
 @Test func aBitPerfectPathListsEachStage() {
     let lines = signalPathLines(path(device(volumes: [.init(.virtualMain, scalar: 1)])))
-    #expect(lines.verdict == "Bit-perfect")
-    #expect(lines.isBitPerfect)
+    #expect(lines.badge == "Bit-perfect")
+    #expect(lines.tone == .bitPerfect)
+    #expect(lines.detail == "")
     #expect(
         lines.rows == [
             .init(label: "File", value: "FLAC 16-bit int, 44.1 kHz, 2 ch"),
@@ -51,22 +52,26 @@ private let formats = DeviceFormats(
 @Test func eachChangeIsNamedInTheVerdict() {
     let lines = signalPathLines(
         path(device(rate: 48_000, volumes: [.init(.channel(1), scalar: 0.99999)]), gain: 0.5))
-    #expect(!lines.isBitPerfect)
+    #expect(lines.badge == "Not bit-perfect")
+    #expect(lines.tone == .changed)
     #expect(
-        lines.verdict
-            == "Not bit-perfect: the digital volume is at -6.0 dB; the device runs at 48 kHz, so"
-            + " macOS resamples from 44.1 kHz; the device's channel 1 volume is at 99.9%")
+        lines.detail
+            == "The digital volume is at -6.0 dB; the device runs at 48 kHz, so macOS resamples"
+            + " from 44.1 kHz; the device's channel 1 volume is at 99.9%")
     #expect(lines.rows.last == .init(label: "Volume", value: "channel 1 99.9%; digital -6.0 dB"))
 }
 
 @Test func noOutputNothingPlayingAndAMissingDeviceSaySo() {
     #expect(
-        signalPathLines(nil) == .init(verdict: "No output device", isBitPerfect: false, rows: []))
+        signalPathLines(nil)
+            == .init(badge: "No output device", tone: .neutral, detail: "", rows: []))
     let idle = signalPathLines(path(device(), playing: false))
-    #expect(idle.verdict == "Nothing playing")
+    #expect(idle.badge == "Nothing playing")
+    #expect(idle.tone == .neutral)
     #expect(idle.rows.map(\.label) == ["Device", "Takes", "Hog mode", "Volume"])
     let missing = signalPathLines(path(.notConnected))
-    #expect(missing.verdict == "Not bit-perfect: the device isn't connected")
+    #expect(missing.badge == "Not bit-perfect")
+    #expect(missing.detail == "The device isn't connected")
     #expect(missing.rows.last == .init(label: "Device", value: "ADI-2 DAC, not connected"))
 }
 
@@ -84,11 +89,9 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
 
 @Test func aRendererPathSaysTheBytesGoUnchangedAndCantBeChecked() {
     let lines = signalPathLines(rendererPath(.nextURI, receiver: true))
-    #expect(!lines.isBitPerfect)
-    #expect(
-        lines.verdict
-            == "Sent unchanged to a network renderer, which decodes it: bit-perfect can't be"
-            + " checked from this Mac")
+    #expect(lines.badge == "Can't be checked")
+    #expect(lines.tone == .neutral)
+    #expect(lines.detail == "Sent unchanged to a network renderer, which decodes it")
     #expect(
         lines.rows == [
             .init(label: "File", value: "FLAC 16-bit int, 44.1 kHz, 2 ch"),
@@ -101,7 +104,7 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
         ])
     let other = signalPathLines(
         rendererPath(.afterStop("its AVTransport has no X"), receiver: false, playing: false))
-    #expect(other.verdict == "Nothing playing")
+    #expect(other.badge == "Nothing playing")
     #expect(other.rows.first == .init(label: "Renderer", value: "Denon AVR-X1800H at 192.0.2.45"))
     #expect(other.rows.contains(.init(label: "Sent", value: "nothing loaded")))
     #expect(
@@ -113,14 +116,44 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
         other.rows.last == .init(label: "Volume", value: "the renderer's own; the app sends none"))
 }
 
-@MainActor @Test func thePanelShowsOnlyTheRowsOfTheLatestPathLeftAligned() {
+@Test func theStagesSplitIntoTwoColumnsWithTheFileOnTheLeft() {
+    let playing = signalPathLines(path(device()))
+    #expect(
+        playing.columns.map { $0.map(\.label) } == [
+            ["File", "Decoder", "Device"], ["Takes", "Hog mode", "Volume"],
+        ])
+    let missing = signalPathLines(path(.notConnected))
+    #expect(missing.columns.map { $0.map(\.label) } == [["File", "Decoder"], ["Device"]])
+    #expect(signalPathLines(nil).columns.isEmpty)
+}
+
+@MainActor @Test func thePanelShowsOnlyTheRowsOfTheLatestPathInTwoColumns() {
     let panel = SignalPathPanel()
     panel.show(path(device()))
     panel.show(rendererPath(.nextURI, receiver: true))
-    let shown = panel.grid.subviews.compactMap { ($0 as? NSTextField)?.stringValue }
-    let expected = signalPathLines(rendererPath(.nextURI, receiver: true)).rows
-    #expect(shown.count == expected.count * 2)
-    #expect(!shown.contains("Hog mode"))
-    #expect(panel.view.subviews.filter { $0 is NSGridView } == [panel.grid])
-    #expect((panel.view as? NSStackView)?.alignment == .leading)
+    let shown = panel.grids.map { grid in
+        grid.subviews.compactMap { ($0 as? NSTextField)?.stringValue }
+    }
+    #expect(shown.map(\.count) == [6, 6])
+    #expect(shown[0].contains("Renderer") && shown[1].contains("Gapless"))
+    #expect(!shown.joined().contains("Hog mode"))
+    let stack = panel.view as? NSStackView
+    let columns = stack?.arrangedSubviews.last as? NSStackView
+    #expect(columns?.arrangedSubviews.map(\.subviews) == panel.grids.map { [$0] })
+    #expect(columns?.subviews.count == 2)
+    #expect(stack?.alignment == .leading)
+}
+
+@MainActor @Test func theBadgeAndThreeLinesOfStagesFitTheMinimumWindowWidth() {
+    let panel = SignalPathPanel()
+    panel.show(path(device()))
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 720, height: 100), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = panel.view
+    panel.view.layoutSubtreeIfNeeded()
+    let line = NSTextField(labelWithString: "File")
+    line.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+    // The verdict and six stages one per line would take seven lines before any spacing.
+    #expect(panel.view.fittingSize.height < line.fittingSize.height * 6)
 }

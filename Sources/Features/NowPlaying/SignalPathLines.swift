@@ -2,48 +2,61 @@ import DisplayText
 import Foundation
 import Playback
 
-/// What the signal path panel shows: the verdict, then one row per stage.
+/// What the signal path panel shows: the verdict as a badge with the reasons after it, then one
+/// row per stage.
 struct SignalPathLines: Equatable {
     struct Row: Equatable {
         var label: String
         var value: String
     }
 
-    var verdict: String
-    var isBitPerfect: Bool
+    /// Picks the badge's color.
+    enum Tone: Equatable {
+        case bitPerfect, changed, neutral
+    }
+
+    var badge: String
+    var tone: Tone
+    var detail: String
     var rows: [Row]
+
+    /// The rows in two columns, the file's stages on the left and the output's on the right, with
+    /// an odd row on the left.
+    var columns: [[Row]] {
+        let split = (rows.count + 1) / 2
+        return [Array(rows[..<split]), Array(rows[split...])].filter { !$0.isEmpty }
+    }
 }
 
 /// The panel's text for `path`, or for no output at all when it's nil.
 func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
     guard let path else {
-        return SignalPathLines(verdict: "No output device", isBitPerfect: false, rows: [])
+        return SignalPathLines(badge: "No output device", tone: .neutral, detail: "", rows: [])
     }
-    let verdict: String
+    var lines = SignalPathLines(badge: "", tone: .neutral, detail: "", rows: [])
     switch signalVerdict(path) {
-    case .idle: verdict = "Nothing playing"
-    case .bitPerfect: verdict = "Bit-perfect"
+    case .idle: lines.badge = "Nothing playing"
+    case .bitPerfect: (lines.badge, lines.tone) = ("Bit-perfect", .bitPerfect)
     case .changed(let changes):
-        verdict = "Not bit-perfect: " + changes.map(describe).joined(separator: "; ")
+        let reasons = changes.map(describe).joined(separator: "; ")
+        (lines.badge, lines.tone) = ("Not bit-perfect", .changed)
+        lines.detail = reasons.prefix(1).uppercased() + reasons.dropFirst()
     case .unverifiable:
-        verdict =
-            "Sent unchanged to a network renderer, which decodes it: bit-perfect can't be"
-            + " checked from this Mac"
+        lines.badge = "Can't be checked"
+        lines.detail = "Sent unchanged to a network renderer, which decodes it"
     }
-    var rows: [SignalPathLines.Row] = []
     if let track = path.track {
-        rows.append(.init(label: "File", value: describe(track.file)))
+        lines.rows.append(.init(label: "File", value: describe(track.file)))
     }
     switch path.sink {
     case .device(let sink):
         if let track = path.track {
-            rows.append(.init(label: "Decoder", value: describe(track.decoded)))
+            lines.rows.append(.init(label: "Decoder", value: describe(track.decoded)))
         }
-        rows += deviceRows(sink)
-    case .renderer(let sink): rows += rendererRows(sink)
+        lines.rows += deviceRows(sink)
+    case .renderer(let sink): lines.rows += rendererRows(sink)
     }
-    return SignalPathLines(
-        verdict: verdict, isBitPerfect: signalVerdict(path) == .bitPerfect, rows: rows)
+    return lines
 }
 
 private func deviceRows(_ sink: DeviceSink) -> [SignalPathLines.Row] {
