@@ -41,7 +41,9 @@ Set by the owner on 2026-10-30 and 2026-10-31:
 5. Phase 9 last, if time is left, against a simulated renderer only. Nothing contacts the Denon
    or any real device: no SSDP on the LAN, no HTTP or receiver control to real addresses. Its Denon checkpoint stays
    pending.
-6. Skip 10, 12 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
+6. Phases 24 to 28 in order, each through its gate, their rows in parallel. Added by the owner
+   on 2026-11-02.
+7. Skip 10, 12 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Phase gate
@@ -2244,6 +2246,141 @@ follow them. Hostile logs: 4 MiB lines, 1 GiB and 4M events a log, 64 logs, work
 path, 100 problems a log cut to 200 characters, Cf characters refused in names, `O_NOFOLLOW`
 and `fstat` on every open (ADR 0025 rows 51 to 55, `sync-log` fuzz target). Nothing from before
 this build is sent. Merge 1M play events 11.42 s, budget 20 s.
+
+### 24. Palettes
+
+The owner's notes from 2026-11-02, after using the app on the full library. The rows in phases 24
+to 28 run in parallel, one agent each, then merge onto the phase branch and go through the gate
+together.
+
+- [ ] **24.1 ⌘K opens complete and steady.** With an empty query the palette lists only commands,
+      and genres, playlists and outputs show up only once the user types. A genre ("Electronic -
+      Glitch, Dub, Experimental, Ambient") was listed first before anything was typed. The panel
+      also flashes as it opens, as if it fills after it shows. The empty-query list is all known
+      commands, so build it before the panel shows and show it on the first frame.
+- [ ] **24.2 ⌘P opens instantly after the first time.** It flashes while it fills. The first open
+      may build its index; after that, keep the index and reuse it, and rebuild only when the
+      library changes (a scan, an import, a tag edit, a removal).
+- [ ] **24.3 ⌘P goes to the item; ⌘↩ filters to it.** Choosing an artist or an album with ↩ or a
+      click shows it in the full track list: clear any browser filter, then select and scroll to
+      its first track. ⌘↩ or ⌘-click instead filters the browser panes to it, as ↩ does today. So
+      does a key the user sets in Shortcuts, → by default, pressed on an artist or album result.
+      Tracks keep today's behavior. A track result's → still moves the text cursor when it isn't
+      at the end of the field.
+- [ ] **24.4 Palette size matches simple-spotlight.** ⌘K and ⌘P use the same width, height, row
+      height, field font and corner radius as the panel in `~/projects/simple-spotlight`. Read
+      its numbers from its code; don't copy its code (ADR 0012's rule).
+
+### 25. Track actions and navigation
+
+- [ ] **25.1 Get Info opens every time.** ⌘I opened the tag editor once; after it was closed,
+      ⌘I did nothing. Find why and fix it, with a test that opens, closes and opens again.
+- [ ] **25.2 Track context menu, grouped as Swinsian groups it.** Groups split by separators:
+      Play Next, Add to Playback Queue, Play Now · Show Album, Show Artist · Like, Dislike (the
+      loved flag: like sets it, dislike sets a disliked state; add the state if the index
+      lacks it, synced as phase 23's loved is) · Rating · Get Info, Reveal in Finder (25.3's
+      command) · Remove… · New Playlist with Selected Tracks, Add to Playlist ▸, Show in
+      Playlist ▸. Keep any item the menu has today. Every item is a command from the registry,
+      so it is in ⌘K too.
+- [ ] **25.3 Remove from library, or to the Trash.** Remove… (and ⌫ in the track table) asks
+      "Remove Track?" / "Remove N Tracks?" with Remove from Library, Remove and Move to Trash, and
+      Cancel as the default. Removing from the library keeps the paths in an exclusion table so a
+      rescan doesn't add them back; Library Health lists excluded tracks and can restore them. Move
+      to Trash uses `NSWorkspace.recycle`, only for the files the user confirmed, and is the one
+      exception to the music-file boundary besides TagWriter. Owner's answers, 2026-11-02: allow
+      the Trash; keep removed tracks excluded. Write the ADR and the AGENTS.md boundary first.
+- [ ] **25.4 ⌘R reveals the track.** In Searcher (`~/projects/searcher`; find its bundle ID
+      there) when it's installed, else in Finder. A setting picks Finder or Searcher. Bind ⌘R
+      unless it's taken, in which case say what moved.
+- [ ] **25.5 ← and → in the main window.** → plays the next track. ← restarts the track, or plays
+      the previous one when the track is within its first 3 seconds, as the transport's back
+      button does. Only when the track table, the browser panes or the sidebar has focus and no
+      text field is editing; the browser panes keep ←/→ for moving between panes if they use it
+      today, in which case say which wins and why in the commit.
+- [ ] **25.6 Organize by album artist, type-select included.** With organize by album artist on,
+      typing "vladislav" in the track table should land on Vladislav Delay's own albums, as
+      Swinsian does. It landed on a track of his inside a Various Artists compilation. The sort
+      and type-select must both use the album artist (falling back to the artist), so a
+      compilation sorts under its album artist and is never found by a track artist's name.
+      Check the browser's artist pane follows the same rule.
+
+### 26. Watched folders and library health
+
+- [ ] **26.1 Fix a folder with problems.** The health report's problem rows get actions. The
+      owner's case: a Swinsian import listed `/Users/dylanfisher/Library/Application
+      Support/Swinsian/Library.sqlite: not in the library:
+      /Volumes/music/dsd/Armstrong, Louis - 1952 - Mack The Knife (2017 DSD 128) (DR12)/01-When
+      It's Sleepy Time Down South.dsf`, a file under the watched `dsd` folder on the share. Find
+      why it wasn't matched (a mount path, the share mapping of ADR 0028, NFC, or the folder not
+      scanned yet) and fix the cause. Then give the report "Dismiss" for problems the user doesn't
+      care about, "Remove from Library" for missing tracks, and "Locate…" for import misses: the
+      user picks the folder the files now live under, the app maps the old prefix to it, checks
+      the files are in a watched folder (offering to add it if not), and reruns the import's
+      matching for those rows.
+- [ ] **26.2 Rescan one watched folder.** The Watched Folders table's Rescan Now becomes "Rescan
+      All" and gains "Rescan" for the selected folders, and the table's context menu has both.
+      The watcher scans just that folder.
+- [ ] **26.3 Rescan interval in the table.** The Rescans column is editable in place, a popup of
+      the allowed intervals (the range in the settings schema) plus "Watch only" for local
+      folders if the schema allows it. Writes the same setting the config file holds.
+- [ ] **26.4 Import column layout from Swinsian.** Find where Swinsian keeps its table columns,
+      order, widths and sort: `Library.sqlite`, its preferences plist
+      (`~/Library/Preferences/com.swinsian.Swinsian.plist`), or a file in its Application Support
+      folder. Read only; never write Swinsian's files. If found, the import (phase 18) gains
+      "Import column layout", mapping Swinsian's column IDs to ours and skipping any we lack, and
+      reporting what it skipped. If it isn't stored anywhere readable, write down where you
+      looked in the phase's Result line so the owner can be told.
+
+### 27. Appearance
+
+The owner wants to match Swinsian's look. Swinsian's track table: an Album Art column on the
+left, art filling the column's width and spanning the album's rows; thin vertical lines between
+every column; rows about 17 pt with small type; light alternating rows off. Liquid glass means
+macOS 26's `NSGlassEffectView`, behind `#available(macOS 26, *)`, with an `NSVisualEffectView`
+fallback for macOS 12 to 15.
+
+- [ ] **27.1 Appearance settings section.** A new Appearance section in the settings window and
+      the config file: vertical column lines, horizontal row lines, alternating rows, row
+      height (compact, regular, large), and the art column's art size. The Album Art column, when
+      shown, draws the art at the column's full width (minus a small inset), square, spanning the
+      album's rows, and resizes with the column. Defaults stay as today's look.
+- [ ] **27.2 Status bar like Swinsian's.** Stats centered in the status bar, as "43400 tracks,
+      1048.1 GiB, 185 days 17 hours 29 minutes 26 seconds", with the selection appended as
+      "(1 track selected, 303.5 MiB, 1 hour 2 minutes 2 seconds)". Clicking the stats cycles
+      through: all with selection, all only, selection only (falling back to all when nothing is
+      selected). The choice persists. The bar uses liquid glass.
+- [ ] **27.3 Customizable header toolbar.** The header becomes an `NSToolbar` the user customizes
+      with the standard sheet (Customize Toolbar… in View and the toolbar's context menu): items
+      for transport controls, volume, the now-playing status, search, shuffle, repeat, the
+      queue toggle, the output picker, the signal path, flexible space and space. Every item can
+      be removed, down to an empty toolbar. A second status style, "Centered", draws Swinsian's
+      header: "Title by Artist from Album" centered in bold, under it a rounded capsule with
+      elapsed time, a thin progress bar and total time, no art. Today's style stays as the
+      default "Detailed". The header uses liquid glass.
+- [ ] **27.4 Compact signal path panel.** The bit-perfect panel uses the window's width: the
+      verdict and the rows laid out in two or three columns (File, Decoder, Device on one side;
+      Takes, Hog mode, Volume on the other), so it's about half as tall. Tidy its spacing,
+      alignment and type to match the rest of the header; the verdict reads as a small colored
+      badge.
+
+### 28. Queue, history and scrolling
+
+- [ ] **28.1 The queue shows what plays next.** Today it lists all 3,229 tracks of the context,
+      and Play Next doesn't show at the top. It should list, in order: tracks added with Play
+      Next, then those added with Add to Playback Queue, then the rest of the context after the
+      playing track (playing an artist under Z shows the tracks after it, not the whole list).
+      Played tracks leave it. Find whether the model or only the view is wrong, and fix both if
+      needed, with tests on the order.
+- [ ] **28.2 History shows only plays.** With nothing played it showed the whole library. History
+      lists tracks with at least one recorded play, newest first, and says "Nothing played yet"
+      when there are none.
+- [ ] **28.3 Scrolling as smooth as Swinsian's.** Scrolling, and dragging the scroll bar above
+      all, lags. Profile the track table on the fixture library and fix what costs per row: cell
+      reuse, row height fixed and not measured, no per-row queries or string formatting on the
+      main thread at scroll time, art decoded off the main thread at the cell's pixel size and
+      cached, layer-backed views with `canDrawSubviewsIntoLayer`, responsive scrolling on, and
+      no work in `tableView(_:viewFor:row:)` that a prefetch can do. Add a bench, "scroll every
+      row by scroll-bar drag", with a budget in the table above, and record before and after.
 
 ## Later
 
