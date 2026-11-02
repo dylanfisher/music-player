@@ -103,7 +103,7 @@ private func makeFLAC(
     try made.get()
 }
 
-private func writeWAV(
+func writeWAV(
     at url: URL, sampleRateHz: Int, bitsPerSample: Int, frames: Int,
     sample: (Int, Int) -> Int32
 ) throws {

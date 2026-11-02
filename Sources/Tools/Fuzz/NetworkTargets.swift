@@ -112,6 +112,78 @@ let soapReply = FuzzTarget(
         }
     })
 
+/// AVTransport's `GetTransportInfo` and `GetPositionInfo` replies, which the UPnP output polls.
+let avTransportReply = FuzzTarget(
+    name: "avtransport-reply",
+    summary: "GetTransportInfo and GetPositionInfo replies, their states and times",
+    seedFormats: [],
+    tokens: [
+        "NOT_IMPLEMENTED", "TRANSITIONING ", "99:59:59.999", ":", ".", "<RelTime>",
+        "<TrackDuration>", "Response",
+    ],
+    madeSeeds: { _, _ in
+        ["Transport", "Position"].map { kind in
+            Array(
+                ("<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body>"
+                    + "<u:Get\(kind)InfoResponse"
+                    + " xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">"
+                    + "<CurrentTransportState>PLAYING</CurrentTransportState>"
+                    + "<CurrentTransportStatus>OK</CurrentTransportStatus>"
+                    + "<TrackDuration>0:04:00</TrackDuration><TrackURI>http://192.0.2.1/t</TrackURI>"
+                    + "<RelTime>0:01:30.5</RelTime></u:Get\(kind)InfoResponse></s:Body>"
+                    + "</s:Envelope>").utf8)
+        }
+    },
+    prepare: { _ in
+        { input in
+            var read = false
+            if let info = try? AVTransport.transportInfo(fromReply: input) {
+                read = true
+                if case .other(let state) = info.state {
+                    precondition(
+                        !state.unicodeScalars.contains { $0.value < 0x20 },
+                        "a control character in \(state.debugDescription)")
+                }
+            }
+            if let position = try? AVTransport.positionInfo(fromReply: input) {
+                read = true
+                for seconds in [position.seconds, position.durationSeconds].compactMap({ $0 }) {
+                    precondition(
+                        seconds >= 0 && seconds <= 1_000_000 && seconds.isFinite,
+                        "a time of \(seconds)")
+                }
+            }
+            return read
+        }
+    })
+
+/// A UPnP service description, whose action list says whether a renderer is gapless.
+let serviceDescription = FuzzTarget(
+    name: "service-description",
+    summary: "a UPnP service description's action names",
+    seedFormats: [], tokens: ["<action>", "</action>", "<name>", "</name>", "<actionList>"],
+    madeSeeds: { _, _ in
+        [
+            """
+            <?xml version="1.0"?><scpd xmlns="urn:schemas-upnp-org:service-1-0"><actionList>
+            <action><name>Play</name></action><action><name>SetNextAVTransportURI</name>
+            <argumentList><argument><name>NextURI</name></argument></argumentList></action>
+            </actionList></scpd>
+            """
+        ].map { Array($0.utf8) }
+    },
+    prepare: { _ in
+        { input in
+            do {
+                let actions = try serviceActions(input)
+                precondition(actions.count <= 256, "\(actions.count) actions")
+                return true
+            } catch {
+                return false
+            }
+        }
+    })
+
 /// A chunked HTTP body, as a renderer may send a description or a SOAP reply.
 let chunkedBody = FuzzTarget(
     name: "chunked-body", summary: "a chunked HTTP body, decoded under a cap",

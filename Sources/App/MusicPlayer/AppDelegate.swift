@@ -18,6 +18,7 @@ import Settings
 import SettingsWindow
 import TagEditor
 import TagWriter
+import UPnPOutput
 
 private let logger = moduleLogger()
 
@@ -51,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var window: MainWindow?
     private(set) var browser: LibraryBrowser?
     private var nowPlaying: NowPlayingBar?
-    private var signalPath: SignalPathPanel?
+    private(set) var signalPath: SignalPathPanel?
     /// Media keys, headphone buttons, Now Playing in Control Center, and the Dock menu.
     private var mediaControls: MediaControls?
     private var dockMenu: DockMenu?
@@ -59,6 +60,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var watcher: LibraryWatcher?
     private var shareChanges: ShareChangeObserver?
     private(set) var output: DeviceOutput?
+    /// The renderer `output.renderer` names, while the engine plays to it.
+    var rendererOutput: RendererOutput?
+    /// The search for that renderer, and its signal paths for the panel.
+    var rendererSearch: Task<Void, Never>?
+    var rendererPathUpdates: Task<Void, Never>?
+    /// The device output's latest path, shown again when playback comes back from a renderer.
+    private(set) var devicePath: SignalPath?
     private(set) var engine: PlaybackEngine?
     private var activity = PlaybackActivity.stopped
     /// The engine's latest state, for the menus' check marks.
@@ -233,6 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func interactive() {
         guard let settings else { return }
         startPlayback(settings)
+        applyRendererSetting()
         startScripting()
         applyReceiverSetting()
         startWatching(settings[\.watchedFolders], settings)
@@ -293,6 +302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         receiver?.stop()
         saver?.flush()
         watcher?.stop()
+        rendererOutput?.close()
         // Puts the device and the default outputs back the way they were.
         output?.close()
     }
@@ -329,7 +339,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             signalPathUpdates?.cancel()
             signalPathUpdates = Task { [weak self] in
                 for await path in output.signalPaths {
-                    self?.signalPath?.show(path)
+                    self?.devicePath = path
+                    // While a renderer plays, the panel shows its path instead.
+                    if self?.rendererOutput == nil { self?.signalPath?.show(path) }
                     self?.recordFormats(path)
                 }
             }

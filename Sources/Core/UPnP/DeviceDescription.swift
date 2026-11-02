@@ -82,7 +82,7 @@ extension DeviceDescription.Device {
 }
 
 /// A device's text as the app shows it: one line, control characters escaped, cut short.
-private func shown(_ text: String?) -> String {
+func shown(_ text: String?) -> String {
     terminalSafe(String((text ?? "").prefix(DeviceDescription.nameCap)))
 }
 

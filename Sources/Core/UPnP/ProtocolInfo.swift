@@ -1,3 +1,5 @@
+import Foundation
+
 /// One entry of a renderer's `GetProtocolInfo` sink list, `http-get:*:audio/flac:*`: what it
 /// takes over which transport (ADR 0039). 9b matches tracks against these.
 public struct ProtocolInfo: Equatable, Sendable, CustomStringConvertible {
@@ -22,6 +24,38 @@ public struct ProtocolInfo: Equatable, Sendable, CustomStringConvertible {
     public var description: String {
         "\(transport):\(network):\(contentFormat):\(additionalInfo)"
     }
+
+    /// The content format's MIME type without its parameters, lowercased: `audio/l16` for
+    /// `audio/L16;rate=44100;channels=2`.
+    package var mimeType: String {
+        String(contentFormat.prefix { $0 != ";" }).trimmingCharacters(in: .whitespaces)
+            .lowercased()
+    }
+
+    /// Streams a control point serves over HTTP, as the app does.
+    var isHTTP: Bool { transport == "http-get" }
+}
+
+extension Renderer {
+    /// The renderer's own sink entry for the first of `types` it takes over HTTP; nil when it
+    /// takes none of them.
+    package func sinkEntry(for types: [String]) -> ProtocolInfo? {
+        for type in types {
+            if let entry = sinkFormats.first(where: { $0.isHTTP && $0.mimeType == type }) {
+                return entry
+            }
+        }
+        return nil
+    }
+
+    /// Every audio type the renderer takes over HTTP, once each, for saying what it does take.
+    package var httpAudioTypes: [String] {
+        var types: [String] = []
+        for entry in sinkFormats where entry.isHTTP && entry.mimeType.hasPrefix("audio/") {
+            if !types.contains(entry.mimeType) { types.append(entry.mimeType) }
+        }
+        return types
+    }
 }
 
 /// ConnectionManager's `GetProtocolInfo`, the request and its reply.
@@ -29,35 +63,14 @@ public enum GetProtocolInfo {
     static let serviceType = "urn:schemas-upnp-org:service:ConnectionManager:1"
     static let action = "GetProtocolInfo"
 
-    /// The fields besides the body that a SOAP request needs.
-    static var fields: [(String, String)] {
-        [
-            ("Content-Type", "text/xml; charset=\"utf-8\""),
-            ("SOAPACTION", "\"\(serviceType)#\(action)\""),
-        ]
-    }
-
-    static var body: [UInt8] {
-        Array(
-            ("<?xml version=\"1.0\" encoding=\"utf-8\"?>"
-                + "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\""
-                + " s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">"
-                + "<s:Body><u:\(action) xmlns:u=\"\(serviceType)\"/></s:Body></s:Envelope>").utf8)
-    }
+    static var request: SOAPAction { SOAPAction(serviceType, action) }
 
     /// The sink list in a reply: what the renderer plays. Entries that aren't four parts are
     /// left out, and the count past `ProtocolInfo.entryCap` too.
     public static func sink(_ reply: [UInt8]) throws(DescriptionProblem) -> [ProtocolInfo] {
-        let envelope: XMLTree
-        do throws(XMLProblem) {
-            envelope = try XMLTree.parse(reply)
-        } catch {
-            throw .unreadable("\(error)")
+        guard let sink = try request.response(reply).child("Sink") else {
+            throw .unreadable("its reply has no Sink")
         }
-        guard envelope.name == "Envelope",
-            let response = envelope.child("Body")?.child("\(action)Response"),
-            let sink = response.child("Sink")
-        else { throw .unreadable("it isn't a \(action) response") }
         return sink.text.split(separator: ",").prefix(ProtocolInfo.entryCap).compactMap {
             ProtocolInfo($0.drop { $0.isWhitespace })
         }

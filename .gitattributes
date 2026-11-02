@@ -5,3 +5,6 @@
 *.jpg binary
 *.gif binary
 *.pdf binary
+# Captures from the owner's network keep every byte as received, CR LF included.
+Tests/UPnPOutputTests/Fixtures/** binary
+Tests/ReceiverTests/Fixtures/** binary

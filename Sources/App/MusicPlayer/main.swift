@@ -15,6 +15,8 @@ import Settings
 // --home keeps the config file, library, state file and device record in one folder instead of
 // ~/.config/music-player and Application Support, for tests and runs on the build Mac.
 // --settings reads another config file.
+// --list-devices lists the output devices, then the UPnP renderers a search of the local network
+// finds, with the UDN output.renderer takes.
 // --capture-renderers writes what the UPnP renderers and the Denon receiver on the network send
 // (SSDP replies, descriptions, status lines) to the folder, for phase 9b to start from.
 // --measure-window prints the launch time and memory as JSON and quits, for Bench.
@@ -81,7 +83,10 @@ func appPaths() throws -> AppPaths {
 }
 
 if given(.listDevices) {
-    runAndExit { print(deviceReport(try AudioDevice.outputDevices())) }
+    runAndExit {
+        print(deviceReport(try AudioDevice.outputDevices()))
+        print(try rendererListing())
+    }
 }
 if let folder = value(after: .captureRenderers) {
     runAndExit { try captureRenderersCommand(folder: folder) }

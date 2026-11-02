@@ -5,6 +5,9 @@ public enum SignalVerdict: Sendable, Equatable {
     case bitPerfect
     /// Each thing that changes the samples, in the order the samples meet them.
     case changed([SignalChange])
+    /// The file's bytes go unchanged to a network renderer, which decodes them, so what it
+    /// plays can't be checked from this Mac.
+    case unverifiable
 }
 
 public enum SignalChange: Sendable, Equatable {
@@ -35,6 +38,8 @@ public func signalVerdict(_ path: SignalPath) -> SignalVerdict {
     switch path.sink {
     case .device(let sink):
         changes += deviceChanges(sink, decoded: track.decoded, source: sourcePrecision(track))
+    case .renderer:
+        return .unverifiable
     }
     return changes.isEmpty ? .bitPerfect : .changed(changes)
 }

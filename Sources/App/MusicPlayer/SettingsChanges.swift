@@ -103,6 +103,7 @@ extension AppDelegate {
         if !keys.isDisjoint(with: output) {
             outputSettingsChanged(switched: keys.contains(schema.outputDeviceUID.key))
         }
+        if keys.contains(schema.outputRenderer.key) { applyRendererSetting() }
     }
 
     /// The Settings window, made on first use.

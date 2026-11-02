@@ -149,12 +149,12 @@ private func refusal(_ text: String) -> DescriptionProblem? {
 }
 
 @Test func theRequestIsTheSOAPActionItNames() {
-    let body = String(decoding: GetProtocolInfo.body, as: UTF8.self)
+    let body = String(decoding: GetProtocolInfo.request.body, as: UTF8.self)
     #expect(
         body.contains(
             "<u:GetProtocolInfo xmlns:u=\"urn:schemas-upnp-org:service:ConnectionManager:1\"/>"))
     #expect(
-        GetProtocolInfo.fields.map(\.1).contains(
+        GetProtocolInfo.request.fields.map(\.1).contains(
             "\"urn:schemas-upnp-org:service:ConnectionManager:1#GetProtocolInfo\""))
 }
 

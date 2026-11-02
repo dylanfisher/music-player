@@ -104,6 +104,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "UPnPOutput",
+            dependencies: ["LocalNetwork", "Log", "Metadata", "Playback", "UPnP"],
+            path: "Sources/Core/UPnPOutput",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Receiver",
             dependencies: ["LocalNetwork", "Log", "UPnP"],
             path: "Sources/Core/Receiver",
@@ -179,6 +185,7 @@ let package = Package(
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
                 "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Scripting",
                 "SQLite", "Settings", "SettingsWindow", "TagEditor", "TagWriter", "UPnP",
+                "UPnPOutput",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
@@ -369,6 +376,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .testTarget(
+            name: "UPnPOutputTests",
+            dependencies: ["Fixtures", "LocalNetwork", "Playback", "UPnP", "UPnPOutput"],
+            resources: [.copy("Fixtures")],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
             name: "SettingsTests",
             dependencies: ["Settings"],
             exclude: ["Crashes"],
@@ -402,6 +415,7 @@ let package = Package(
         .testTarget(
             name: "ReceiverTests",
             dependencies: ["Fixtures", "LocalNetwork", "Receiver", "UPnP"],
+            resources: [.copy("Fixtures")],
             swiftSettings: strictSwift
         ),
         .testTarget(

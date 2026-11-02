@@ -11,6 +11,9 @@ public struct AppSettings: SettingsSchema {
     public let digitalVolume = Setting(
         "output.digitalVolume", title: "Digital Volume", default: false,
         "Let the app lower the volume, which ends bit-perfect output.")
+    public let outputRenderer = Setting<String?>(
+        "output.renderer", title: "Network Renderer", default: nil,
+        "The UPnP renderer to play to, by UDN; none uses the device.")
     public let watchedFolders = Setting<[WatchedFolder]>(
         "library.watchedFolders", title: "Watched Folders", default: [],
         "Folders the library scans and watches for changes.")

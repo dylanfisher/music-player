@@ -204,7 +204,10 @@ extension AppDelegate {
         dispatcher.handle(.playNext, enabled: playsFromList) { [weak self] in
             self?.browser?.playSelectionNext()
         }
-        let hasVolume = { [weak self] in self?.engine != nil && self?.digitalVolume == true }
+        // The digital volume is the device's; a renderer has none the app sets (ADR 0041).
+        let hasVolume = { [weak self] in
+            self?.engine != nil && self?.digitalVolume == true && self?.rendererOutput == nil
+        }
         dispatcher.handle(.volumeUp, enabled: hasVolume) { [weak self] in
             self?.changeVolume(by: volumeStepDecibels)
         }

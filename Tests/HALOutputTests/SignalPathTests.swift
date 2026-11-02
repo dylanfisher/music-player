@@ -35,6 +35,7 @@ private func waitForPath(
 private func state(_ path: SignalPath) -> DeviceState {
     switch path.sink {
     case .device(let sink): sink.state
+    case .renderer: .unreadable("a device output published a renderer")
     }
 }
 

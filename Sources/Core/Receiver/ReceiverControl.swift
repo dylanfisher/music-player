@@ -185,10 +185,9 @@ public final class ReceiverControl {
     nonisolated static func receiver(
         among renderers: [Renderer], configured: LocalNetwork.IPAddress?
     ) -> Choice {
-        let denons = renderers.filter { $0.manufacturer.lowercased().contains("denon") }
         let chosen =
-            denons.filter { $0.address == configured }.nilIfEmpty
-            ?? denons.filter { $0.model.uppercased().contains("AVR") }
+            renderers.filter { $0.isDenon && $0.address == configured }.nilIfEmpty
+            ?? renderers.filter(\.isDenonReceiver)
         let addresses = Set(chosen.map(\.address))
         guard let first = chosen.first else { return .none }
         guard addresses.count == 1 else {

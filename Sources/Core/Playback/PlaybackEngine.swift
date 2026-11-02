@@ -7,7 +7,9 @@ private let logger = moduleLogger()
 /// UI, media keys and remote all read.
 public actor PlaybackEngine {
     public private(set) var state = PlaybackState()
-    private let output: any Output
+    private var output: any Output
+    /// The outputs whose events are read, each once, by identity. Only the current one's count.
+    private var reading: Set<ObjectIdentifier> = []
     private let shuffled: @Sendable ([Int]) -> [Int]
     private var queue = PlayQueue()
     private var subscribers: [UUID: AsyncStream<PlaybackUpdate>.Continuation] = [:]
@@ -37,13 +39,42 @@ public actor PlaybackEngine {
     ) {
         self.output = output
         self.shuffled = shuffled
+        reading.insert(ObjectIdentifier(output))
+        Self.read(output, into: self)
+    }
+
+    /// Hands `output`'s events to the engine as they come, for as long as it's open.
+    private nonisolated static func read(_ output: any Output, into engine: PlaybackEngine) {
         let events = output.events
-        Task { [weak self] in
+        let id = ObjectIdentifier(output)
+        Task { [weak engine] in
             for await event in events {
-                await self?.handle(event)
+                await engine?.handle(event, from: id)
             }
-            await self?.finishUpdates()
+            await engine?.closed(id)
         }
+    }
+
+    /// The current output has closed, so nothing will change again; another one closing
+    /// changes nothing.
+    private func closed(_ id: ObjectIdentifier) {
+        reading.remove(id)
+        if id == ObjectIdentifier(output) { finishUpdates() }
+    }
+
+    /// Plays through `newOutput` from now on: what's loaded moves to it at the position it had,
+    /// playing or paused as it was, and the old output is stopped. Events from any output but
+    /// the current one are ignored, so the old one can stay open to be used again.
+    public func use(_ newOutput: any Output) {
+        guard newOutput !== output else { return }
+        let resume = currentItem.map { ($0.position, resumeSeconds ?? position() ?? 0) }
+        unload()
+        output = newOutput
+        if reading.insert(ObjectIdentifier(newOutput)).inserted {
+            Self.read(newOutput, into: self)
+        }
+        guard let (position, seconds) = resume else { return }
+        load(position, startSeconds: seconds, playing: state.status == .playing)
     }
 
     /// Every change from now on, starting with the current state.
@@ -308,6 +339,11 @@ public actor PlaybackEngine {
         nextItem = nil
         resumeSeconds = nil
         state.durationSeconds = nil
+    }
+
+    private func handle(_ event: OutputEvent, from id: ObjectIdentifier) {
+        guard id == ObjectIdentifier(output) else { return }
+        handle(event)
     }
 
     func handle(_ event: OutputEvent) {

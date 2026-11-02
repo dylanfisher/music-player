@@ -14,9 +14,12 @@ public struct SignalPath: Sendable, Equatable {
 /// Where an output sends the samples.
 public enum SignalSink: Sendable, Equatable {
     case device(DeviceSink)
+    /// A network renderer, sent the file's own bytes.
+    case renderer(RendererSink)
 }
 
-/// A track's samples as the file holds them and as the decoder hands them on.
+/// A track's samples as the file holds them and as the decoder hands them on. A renderer
+/// decodes the file itself, so for one `decoded` is the file's format.
 public struct TrackSignal: Sendable, Equatable {
     public var file: SignalFormat
     public var decoded: SignalFormat
@@ -25,6 +28,41 @@ public struct TrackSignal: Sendable, Equatable {
         self.file = file
         self.decoded = decoded
     }
+}
+
+/// A UPnP renderer and how the output plays to it (ADR 0041).
+public struct RendererSink: Sendable, Equatable {
+    /// Display text, escaped.
+    public var name: String
+    public var address: String
+    /// The type the current file is offered as, such as `audio/flac`; nil when nothing is
+    /// loaded.
+    public var contentType: String?
+    public var gapless: RendererGapless
+    /// True for a Denon receiver, whose volume is the receiver's own, which receiver control
+    /// sets; the output sends no volume to any renderer.
+    public var volumeIsReceivers: Bool
+
+    public init(
+        name: String, address: String, contentType: String?, gapless: RendererGapless,
+        volumeIsReceivers: Bool
+    ) {
+        self.name = name
+        self.address = address
+        self.contentType = contentType
+        self.gapless = gapless
+        self.volumeIsReceivers = volumeIsReceivers
+    }
+}
+
+/// How one track follows another on a renderer.
+public enum RendererGapless: Sendable, Equatable {
+    /// Not known until the renderer's AVTransport description has been read.
+    case unknown
+    /// The next track is handed over with `SetNextAVTransportURI` while one plays.
+    case nextURI
+    /// Each track is sent once the last has stopped, so there's a gap; says why.
+    case afterStop(String)
 }
 
 public struct SignalFormat: Sendable, Equatable {

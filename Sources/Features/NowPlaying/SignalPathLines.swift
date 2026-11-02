@@ -25,14 +25,22 @@ func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
     case .bitPerfect: verdict = "Bit-perfect"
     case .changed(let changes):
         verdict = "Not bit-perfect: " + changes.map(describe).joined(separator: "; ")
+    case .unverifiable:
+        verdict =
+            "Sent unchanged to a network renderer, which decodes it: bit-perfect can't be"
+            + " checked from this Mac"
     }
     var rows: [SignalPathLines.Row] = []
     if let track = path.track {
         rows.append(.init(label: "File", value: describe(track.file)))
-        rows.append(.init(label: "Decoder", value: describe(track.decoded)))
     }
     switch path.sink {
-    case .device(let sink): rows += deviceRows(sink)
+    case .device(let sink):
+        if let track = path.track {
+            rows.append(.init(label: "Decoder", value: describe(track.decoded)))
+        }
+        rows += deviceRows(sink)
+    case .renderer(let sink): rows += rendererRows(sink)
     }
     return SignalPathLines(
         verdict: verdict, isBitPerfect: signalVerdict(path) == .bitPerfect, rows: rows)
@@ -69,6 +77,29 @@ private func deviceRows(_ sink: DeviceSink) -> [SignalPathLines.Row] {
             .init(label: "Volume", value: "\(volumes); \(gain)"),
         ]
     }
+}
+
+private func rendererRows(_ sink: RendererSink) -> [SignalPathLines.Row] {
+    let gapless: String
+    switch sink.gapless {
+    case .unknown: gapless = "not known yet"
+    case .nextURI: gapless = "yes, the next track is handed over while one plays"
+    case .afterStop(let why): gapless = "no, each track starts after the last stops: \(why)"
+    }
+    return [
+        .init(label: "Renderer", value: "\(sink.name) at \(sink.address)"),
+        .init(
+            label: "Sent",
+            value: sink.contentType.map { "the file's own bytes over HTTP, as \($0)" }
+                ?? "nothing loaded"),
+        .init(label: "Decoder", value: "the renderer's own"),
+        .init(label: "Gapless", value: gapless),
+        .init(
+            label: "Volume",
+            value: sink.volumeIsReceivers
+                ? "the receiver's own, set with the Receiver volume commands"
+                : "the renderer's own; the app sends none"),
+    ]
 }
 
 /// For example `44.1, 48, 88.2, 96 kHz; 2 ch 16-bit int, 2 ch 24-bit int`: the rates, then each

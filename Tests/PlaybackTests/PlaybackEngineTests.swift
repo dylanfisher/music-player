@@ -10,8 +10,8 @@ private struct Broken: Error, CustomStringConvertible {
     var description: String { "broken file" }
 }
 
-/// Records what the engine asks of it. Tests feed events to the engine directly, so nothing is
-/// ever yielded on `events`.
+/// Records what the engine asks of it. Most tests feed events to the engine directly; those
+/// about which output an event came from yield them on `events` through `emit`.
 private final class FakeOutput: Output, @unchecked Sendable {
     enum Call: Equatable {
         case load(OutputItem.ID, URL, startSeconds: Double, playing: Bool)
@@ -21,13 +21,17 @@ private final class FakeOutput: Output, @unchecked Sendable {
         case volume(Double)
     }
 
-    let events = AsyncStream<OutputEvent> { _ in }
+    let events: AsyncStream<OutputEvent>
+    let emit: AsyncStream<OutputEvent>.Continuation
     let hasVolume: Bool
     private let lock = NSLock()
     private var recorded: [Call] = []
     private var reported: OutputPosition?
 
-    init(hasVolume: Bool = false) { self.hasVolume = hasVolume }
+    init(hasVolume: Bool = false) {
+        self.hasVolume = hasVolume
+        (events, emit) = AsyncStream.makeStream(of: OutputEvent.self)
+    }
 
     /// Returns the calls since the last time, and forgets them.
     func takeCalls() -> [Call] {
@@ -865,4 +869,79 @@ private func published(
     await engine.handle(.trackStarted(2, info))
     #expect(await engine.state.currentIndex == 0)
     #expect(await engine.position() == 30)
+}
+
+/// Waits up to two seconds for `check` to hold, and fails saying what it was waiting for.
+private func eventually(_ what: String, _ check: @escaping @Sendable () async -> Bool) async {
+    let deadline = Date().addingTimeInterval(2)
+    while Date() < deadline {
+        if await check() { return }
+        try? await Task.sleep(nanoseconds: 2_000_000)
+    }
+    Issue.record("timed out waiting for \(what)")
+}
+
+@Test func anotherOutputTakesOverWhereTheTrackWasAndTheOldOneIsStopped() async {
+    let device = FakeOutput()
+    let renderer = FakeOutput()
+    let engine = await playing(urls, device)
+    await engine.handle(.trackStarted(1, info))
+    device.setPosition(OutputPosition(item: 1, seconds: 37))
+    _ = device.takeCalls()
+
+    await engine.use(renderer)
+    #expect(device.takeCalls() == [.stop])
+    #expect(
+        renderer.takeCalls() == [
+            .load(3, urls[0], startSeconds: 37, playing: true), .setNext(4, urls[1]),
+        ])
+    await engine.pause()
+    #expect(renderer.takeCalls() == [.pause])
+    #expect(device.takeCalls() == [])
+
+    // Paused, it moves back paused.
+    renderer.setPosition(OutputPosition(item: 3, seconds: 40))
+    await engine.use(device)
+    #expect(renderer.takeCalls() == [.stop])
+    #expect(
+        device.takeCalls() == [
+            .load(5, urls[0], startSeconds: 40, playing: false), .setNext(6, urls[1]),
+        ])
+    #expect(await engine.state.status == .paused)
+}
+
+@Test func withNothingLoadedSwitchingOutputsSendsNothing() async {
+    let device = FakeOutput()
+    let renderer = FakeOutput()
+    let engine = PlaybackEngine(output: device)
+    await engine.setQueue(urls)
+    await engine.use(renderer)
+    await engine.use(renderer)
+    #expect(device.takeCalls() == [])
+    #expect(renderer.takeCalls() == [])
+    await engine.play()
+    #expect(renderer.takeCalls().first == .load(1, urls[0], startSeconds: 0, playing: true))
+}
+
+@Test func onlyTheCurrentOutputsEventsCount() async {
+    let device = FakeOutput()
+    let renderer = FakeOutput()
+    let engine = await playing(urls, device)
+    await engine.use(renderer)
+    // The old output reports what it had: the engine has moved on, so it changes nothing.
+    device.emit.yield(.failed(nil, Broken()))
+    renderer.emit.yield(.trackStarted(3, info))
+    await eventually("the renderer's track to start") {
+        await engine.state.durationSeconds == 200
+    }
+    #expect(await engine.state.status == .playing)
+
+    // Back on the device, the renderer's events are the ones ignored.
+    await engine.use(device)
+    renderer.emit.yield(.failed(nil, Broken()))
+    device.emit.yield(.trackStarted(5, TrackInfo(durationSeconds: 99, outputFormat: nil)))
+    await eventually("the device's track to start") {
+        await engine.state.durationSeconds == 99
+    }
+    #expect(await engine.state.status == .playing)
 }

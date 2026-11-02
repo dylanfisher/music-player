@@ -79,18 +79,32 @@ public enum RendererDiscovery {
             do {
                 let control = try location.resolving(service.controlURL)
                 formats = try GetProtocolInfo.sink(
-                    await fetcher.post(control, GetProtocolInfo.fields, GetProtocolInfo.body))
+                    await fetcher.post(
+                        control, GetProtocolInfo.request.fields, GetProtocolInfo.request.body))
             } catch {
                 problem = "\(error)"
             }
         } else {
             problem = "it has no ConnectionManager"
         }
+        var transport: Renderer.Transport?
+        var transportProblem: String?
+        if let service = device.service(ofType: AVTransport.serviceType) {
+            do throws(LocalURL.Refusal) {
+                transport = Renderer.Transport(
+                    control: try location.resolving(service.controlURL),
+                    description: try service.scpdURL.map(location.resolving))
+            } catch {
+                transportProblem = "its AVTransport can't be used: \(error)"
+            }
+        } else {
+            transportProblem = "it has no AVTransport"
+        }
         return .success(
             Renderer(
                 udn: device.udn, name: device.name, manufacturer: device.manufacturer,
                 model: device.model, location: location, sinkFormats: formats,
-                formatsProblem: problem))
+                formatsProblem: problem, transport: transport, transportProblem: transportProblem))
     }
 }
 
