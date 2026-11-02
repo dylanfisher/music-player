@@ -96,6 +96,13 @@ public final class ReceiverControl {
         self.port = port
     }
 
+    /// Whether receiver control runs: when `receiver.enabled` is on, and while the app plays to
+    /// a Denon receiver as a renderer, whose volume is the receiver's own and set only here
+    /// (ADR 0041). Choosing that renderer already put the app on the network.
+    public nonisolated static func isWanted(enabled: Bool, playingTo renderer: Renderer?) -> Bool {
+        enabled || renderer?.isDenonReceiver == true
+    }
+
     /// Receiver control as `receiver.enabled` asks: started when it's on and stopped and gone
     /// when it's off. `current` is the control running now; `make` makes one.
     public static func applying(

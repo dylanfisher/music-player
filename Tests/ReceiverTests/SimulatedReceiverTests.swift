@@ -526,3 +526,11 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     let connection = ReceiverConnection(address: IPAddress("127.0.0.1")!, port: 1) { _ in }
     #expect(connection.bypassesProxies)
 }
+
+@Test func playingToTheDenonRunsReceiverControlForItsVolume() {
+    #expect(!ReceiverControl.isWanted(enabled: false, playingTo: nil))
+    #expect(ReceiverControl.isWanted(enabled: true, playingTo: nil))
+    #expect(ReceiverControl.isWanted(enabled: false, playingTo: denon()))
+    // A HEOS speaker or a Sonos has a volume of its own; the setting alone decides.
+    #expect(!ReceiverControl.isWanted(enabled: false, playingTo: denon(model: "Denon Home 150")))
+}

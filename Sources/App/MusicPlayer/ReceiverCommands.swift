@@ -10,12 +10,23 @@ private let logger = moduleLogger()
 /// Receiver control's wiring: the setting that starts and stops it, the registry's receiver
 /// commands, and where its problems are shown (ADR 0039).
 extension AppDelegate {
-    /// Starts receiver control when `receiver.enabled` is on and stops it when it's off. Off,
-    /// nothing is sent onto the network.
+    /// Starts receiver control when `receiver.enabled` is on or the app plays to a Denon
+    /// receiver, and stops it otherwise. Off, nothing is sent onto the network.
     func applyReceiverSetting() {
         receiver = ReceiverControl.applying(
-            enabled: settings?[\.receiverEnabled] == true, to: receiver,
-            make: makeReceiverControl)
+            enabled: receiverWanted, to: receiver, make: makeReceiverControl)
+    }
+
+    /// Starts or stops receiver control as the output moves to or from a Denon receiver,
+    /// leaving a running connection alone otherwise.
+    func receiverFollowsOutput() {
+        guard receiverWanted != (receiver != nil) else { return }
+        applyReceiverSetting()
+    }
+
+    private var receiverWanted: Bool {
+        ReceiverControl.isWanted(
+            enabled: settings?[\.receiverEnabled] == true, playingTo: rendererOutput?.renderer)
     }
 
     private func makeReceiverControl() -> ReceiverControl {

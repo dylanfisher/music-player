@@ -47,6 +47,7 @@ extension AppDelegate {
             for await path in output.signalPaths { self?.signalPath?.show(path) }
         }
         logger.notice("playing to \(output.renderer.name) at \(output.renderer.address)")
+        receiverFollowsOutput()
         Task {
             await engine.use(output)
             replaced?.close()
@@ -59,6 +60,7 @@ extension AppDelegate {
         rendererPathUpdates?.cancel()
         rendererPathUpdates = nil
         signalPath?.show(devicePath)
+        receiverFollowsOutput()
         Task {
             await engine.use(device)
             renderer.close()
