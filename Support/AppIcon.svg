@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- A beamed pair of notes, half again its natural size so it runs off the tile, on a cyan tile
+       with a sheet of paper laid over the left side. The note is black on the paper and white on
+       the tile, and the white half sits 28 px lower, so the note steps where it crosses the edge.
+       The tile is Apple's 824 px shape on a 1024 px canvas, as in Searcher and Simple Spotlight.
+
+       The paper is opaque, with its faint cyan tint mixed into its color, and is drawn straight
+       over the white note. A see-through sheet would need the tile color under it to hide the
+       white note, and two shapes cut on the same edge leave a thin cyan seam where each blends its
+       own soft edge. -->
+  <defs>
+    <clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+    <clipPath id="sheet"><rect x="-300" y="-200" width="860" height="1500" transform="rotate(8 260 512)"/></clipPath>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fafafa"/>
+      <stop offset=".35" stop-color="#f6f9fa"/>
+      <stop offset="1" stop-color="#eaf7fa"/>
+    </linearGradient>
+  </defs>
+  <!-- The note is drawn at 1.5x about the canvas center, shifted 20 px right and 3 px up.
+       The stems and beam are one outline, and each stem ends at the edge of its head. -->
+  <g clip-path="url(#tile)">
+    <rect width="1024" height="1024" fill="#24d4f8"/>
+    <g fill="#fafafa" transform="translate(-236 -227.5) scale(1.5)">
+      <path d="M275.57 728.96A104 78 -22 1 0 468.43 651.04A104 78 -22 1 0 275.57 728.96Z"/>
+      <path d="M555.57 668.96A104 78 -22 1 0 748.43 591.04A104 78 -22 1 0 555.57 668.96Z"/>
+      <path d="M429 674V300L753 240V614H709V348.1L473 391.9V674Z"/>
+    </g>
+    <rect x="-300" y="-200" width="860" height="1500" transform="rotate(8 260 512)" fill="url(#paper)"/>
+    <g clip-path="url(#sheet)">
+      <g fill="#0a0a0a" transform="translate(-236 -255.5) scale(1.5)">
+        <path d="M275.57 728.96A104 78 -22 1 0 468.43 651.04A104 78 -22 1 0 275.57 728.96Z"/>
+        <path d="M555.57 668.96A104 78 -22 1 0 748.43 591.04A104 78 -22 1 0 555.57 668.96Z"/>
+        <path d="M429 674V300L753 240V614H709V348.1L473 391.9V674Z"/>
+      </g>
+    </g>
+  </g>
+  <rect x="102" y="102" width="820" height="820" rx="183" fill="none" stroke="#000" stroke-opacity=".14" stroke-width="4"/>
+</svg>

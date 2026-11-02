@@ -35,6 +35,29 @@ mkdir -p "$app/Contents/MacOS"
 cp "$bin/MusicPlayer" "$app/Contents/MacOS/"
 cp Support/Info.plist "$app/Contents/"
 
+# The icon is drawn once, as SVG, and rendered here, so no rendered copy is checked in (ADR 0043).
+# The name matches CFBundleIconFile in the plist. sips on macOS 12 reads SVG but writes nothing,
+# and the 2015 MacBook Pro builds through scripts/pull, so Quick Look renders one 1024 px master
+# on every Mac and sips scales it to each size iconutil needs.
+work=$(mktemp -d)
+iconset="$work/AppIcon.iconset"
+mkdir -p "$iconset" "$app/Contents/Resources"
+qlmanage -t -s 1024 -o "$work" Support/AppIcon.svg >/dev/null 2>&1
+master="$work/AppIcon.svg.png"
+if [ ! -s "$master" ]; then
+  echo "Quick Look wrote no PNG from Support/AppIcon.svg." >&2; exit 1
+fi
+for size in 16 32 128 256 512; do
+  for scale in 1 2; do
+    px=$((size * scale))
+    suffix=""
+    if [ "$scale" = 2 ]; then suffix=@2x; fi
+    sips -z "$px" "$px" "$master" --out "$iconset/icon_${size}x${size}${suffix}.png" >/dev/null
+  done
+done
+iconutil -c icns -o "$app/Contents/Resources/AppIcon.icns" "$iconset"
+rm -rf "$work"
+
 # The tool's name and the link scheme are one word, declared once in Swift (ADR 0036).
 tool=$(sed -n 's/^public let toolName = "\(.*\)"$/\1/p' Sources/Core/Scripting/Scripting.swift)
 if [ -z "$tool" ]; then
