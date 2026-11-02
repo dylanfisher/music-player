@@ -2346,7 +2346,7 @@ checks of 25.1 to 25.6.
 
 ### 26. Watched folders and library health
 
-- [ ] **26.1 Fix a folder with problems.** The health report's problem rows get actions. The
+- [x] **26.1 Fix a folder with problems.** The health report's problem rows get actions. The
       owner's case: a Swinsian import listed `/Users/dylanfisher/Library/Application
       Support/Swinsian/Library.sqlite: not in the library:
       /Volumes/music/dsd/Armstrong, Louis - 1952 - Mack The Knife (2017 DSD 128) (DR12)/01-When
@@ -2357,19 +2357,45 @@ checks of 25.1 to 25.6.
       user picks the folder the files now live under, the app maps the old prefix to it, checks
       the files are in a watched folder (offering to add it if not), and reruns the import's
       matching for those rows.
-- [ ] **26.2 Rescan one watched folder.** The Watched Folders table's Rescan Now becomes "Rescan
+- [x] **26.2 Rescan one watched folder.** The Watched Folders table's Rescan Now becomes "Rescan
       All" and gains "Rescan" for the selected folders, and the table's context menu has both.
       The watcher scans just that folder.
-- [ ] **26.3 Rescan interval in the table.** The Rescans column is editable in place, a popup of
+- [x] **26.3 Rescan interval in the table.** The Rescans column is editable in place, a popup of
       the allowed intervals (the range in the settings schema) plus "Watch only" for local
       folders if the schema allows it. Writes the same setting the config file holds.
-- [ ] **26.4 Import column layout from Swinsian.** Find where Swinsian keeps its table columns,
+- [x] **26.4 Import column layout from Swinsian.** Find where Swinsian keeps its table columns,
       order, widths and sort: `Library.sqlite`, its preferences plist
       (`~/Library/Preferences/com.swinsian.Swinsian.plist`), or a file in its Application Support
       folder. Read only; never write Swinsian's files. If found, the import (phase 18) gains
       "Import column layout", mapping Swinsian's column IDs to ours and skipping any we lack, and
       reporting what it skipped. If it isn't stored anywhere readable, write down where you
       looked in the phase's Result line so the owner can be told.
+
+Result: shipped as planned; `./scripts/check` passes. Benchmarks: the memory benchmark had
+regressed to 1.8 GB since phase 24's playing-row tint (93a24ea), because the track table and the
+queue made a new `MarkedRowView` per row with no reuse identifier; `MarkedRowView.reused(in:)` fixes
+it, and the benchmark is back to 60 MB (budget under 120 MB), launch to first rows 0.47 s. 26.1: the
+owner's .dsf miss was not a mapping, NFC or scan fault; the scanner reads only `audioFileExtensions`
+and DSF waits for phase 12, so no .dsf is indexed. Import misses in a type the scanner skips are now
+listed apart as "not in the library, a format this app doesn't read yet" and get no Locate…. The
+Problems window is a table with Dismiss (kept in `dismissed_problems`), Remove from Library (Lost
+Stats rows), Restore (Removed rows, the Restore row 25.3 left here) and Locate… (one import miss: the
+user picks the folder it lives in now, the old prefix is found, every miss under it is imported again,
+and an unwatched folder is offered for watching and matched after its scan; ADR 0053). 26.2: Rescan
+Now is now Rescan All (command id `library.rescanNow` kept), and Settings ▸ Watched Folders has a
+Rescan button and a context menu with Rescan and Rescan All; `LibraryWatcher.rescan(folders:)` scans
+only the chosen folders, even while polls are paused for playback (ADR 0056). 26.3: each network
+folder's Rescans cell is a borderless popup of 1, 5, 15, 30 minutes and 1, 2, 6, 12, 24 hours that
+writes `pollIntervalMinutes`; local folders keep "On change", since the schema never polls them, so
+there is no "Watch only" choice (ADR 0054). 26.4: Swinsian keeps its table columns in
+`~/Library/Preferences/com.swinsian.Swinsian.plist` (`MainTableColumns-Ver1` for order and widths,
+`NSTableView Sort Ordering v2 main_track_table` for the sort), not in `Library.sqlite` or Application
+Support; the Swinsian import sheet gains "Import column layout", which skips and reports columns we
+lack (ADR 0055; `swinsian-columns` fuzz target, threat model row 56). Not done: .dsf matching waits
+for phase 12; Locate… works only on the last import of the session; a Locate… hit is not added to the
+playlist the import made; Lost Entries rows get only Dismiss (Remove from Library is on Lost Stats
+rows, which is how ADR 0053 reads "missing tracks"); dismissals cannot be undone. Pending the owner:
+the by-hand checks of 26.1 to 26.4, and confirming the reading of "missing tracks".
 
 ### 27. Appearance
 
