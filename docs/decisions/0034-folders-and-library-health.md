@@ -4,7 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0012](0012-searcher-conventions.md)
 - **Amended by:** [0042](0042-window-layout-and-settings-sections.md): the watched folders left
-  the sidebar, and folder browsing with them.
+  the sidebar, and folder browsing with them. [0048](0048-remove-from-library.md): a Removed
+  check lists the tracks removed from the library.
 
 ## Context
 
