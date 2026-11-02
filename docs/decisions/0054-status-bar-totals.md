@@ -48,7 +48,9 @@ selection is one now.
 - **A second query for the sizes and lengths** — rejected: it would sort the whole list a
   second time on every reload.
 - **`ByteCountFormatter`** — rejected: it writes decimal "GB", or "TB" past 1000, where the
-  owner asked for Swinsian's GiB.
+  owner asked for Swinsian's GiB. The table's Size column keeps the system's formatter, so the
+  bar and the column disagree for the same file, as "303.5 MiB" beside "318 MB"; the bar
+  follows Swinsian and the column follows the Finder, on purpose.
 - **The selection's totals replacing the list's when rows are selected** — that's one of the
   three choices, not the default; the owner's example shows both.
 
