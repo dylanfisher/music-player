@@ -1,4 +1,4 @@
-# 0041. Watched folders in Settings, Settings in sections, the window's panels as split items
+# 0042. Watched folders in Settings, Settings in sections, the window's panels as split items
 
 - **Date:** 2026-11-01
 - **Status:** accepted
@@ -23,8 +23,8 @@ clear sections with one short line per setting.
   minimum and maximum widths are the ranges the state file accepts. Neither collapses from a
   drag, so the saved Show Sidebar and Show Queue always match what shows.
 - **Show Browser (⌘B)**, iTunes' key for its column browser, hides the panes and their divider.
-  Their selections stay and still narrow the table, so showing them again puts the window back
-  as it was. `window.browserVisible` keeps the choice, as `window.queueVisible` does.
+  Hiding them selects All in each first (no query when they're already at All), so nothing
+  hidden narrows the table, and they show again at All. `window.browserVisible` keeps the choice, as `window.queueVisible` does.
 - **Watched folders leave the sidebar**, and folder browsing with them: the sidebar has the
   library's group and the playlists. The `.folder` source, `FolderTree` and their query are
   gone. Settings ▸ Watched Folders lists each folder with its kind and how often it's rescanned,
@@ -44,8 +44,8 @@ clear sections with one short line per setting.
 - **Keeping folder browsing in a sidebar group of its own**, without the add and remove
   buttons. Rejected: the owner asked for the watched folders out of the sidebar, and the
   folders' rows were the watched folders.
-- **Clearing the panes' selections when they hide.** Rejected: showing them again would lose
-  where the user was. The status line's count shows the table is narrowed.
+- **Keeping the panes' selections while hidden.** Rejected: the table would be narrowed by a
+  selection nobody can see, with nothing saying why tracks are missing.
 - **A toolbar pane per section.** Rejected: most sections hold two or three settings, and a
   pane each would be six toolbar items for eleven settings.
 - **Fixing the plain split view's delegate** to hide the divider and skip its limits for a

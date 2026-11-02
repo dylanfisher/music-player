@@ -84,6 +84,21 @@ private func loadedModel(
     _ = index
 }
 
+@MainActor @Test func clearingThePanesShowsEverythingAndIsFreeWhenTheyAreClear() async throws {
+    let (model, index) = try await loadedModel()
+    var changes = 0
+    model.changed = { _ in changes += 1 }
+    await model.clearPanes()
+    #expect(changes == 0)
+    let genre = try #require(model.genres.first)
+    await model.select(.genre, id: genre.id)
+    await model.select(.artist, id: try #require(model.artists.first).id)
+    await model.clearPanes()
+    #expect(model.filter.genre == nil && model.filter.artist == nil && model.filter.album == nil)
+    #expect(model.trackIDs.count == (try index.trackCount()))
+    #expect(changes == 3)
+}
+
 @MainActor @Test func theSameSearchAgainChangesNothing() async throws {
     let (model, _) = try await loadedModel()
     var changes = 0

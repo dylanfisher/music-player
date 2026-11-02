@@ -3,7 +3,7 @@
 - **Date:** 2026-10-31
 - **Status:** accepted
 - **Amends:** [0012](0012-searcher-conventions.md)
-- **Amended by:** [0041](0041-window-layout-and-settings-sections.md): the watched folders have
+- **Amended by:** [0042](0042-window-layout-and-settings-sections.md): the watched folders have
   a Settings pane of their own, and General is in sections.
 
 ## Context

@@ -878,8 +878,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var isBrowserVisible: Bool { !panes.view.isHidden }
 
     /// Hides or shows the genre, artist and album panes; they come back at their saved height.
-    /// Their selections still narrow the table while hidden.
+    /// Hiding them selects All in each first, since a hidden selection would narrow the table
+    /// with nothing on screen saying why.
     public func toggleBrowser() {
+        if isBrowserVisible { Task { await model.clearPanes() } }
         let paneHadKeys = if case .pane = focusedList { true } else { false }
         panes.view.isHidden.toggle()
         split.adjustSubviews()

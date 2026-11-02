@@ -123,6 +123,16 @@ public final class BrowserModel {
         await reload(panesFrom: Pane(rawValue: pane.rawValue + 1), reason: .user)
     }
 
+    /// Selects All in every pane, for hiding them, so nothing hidden narrows the table. Panes
+    /// already at All run no query and redraw nothing.
+    func clearPanes() async {
+        guard pending.genre != nil || pending.artist != nil || pending.album != nil else { return }
+        pending.genre = nil
+        pending.artist = nil
+        pending.album = nil
+        await reload(panesFrom: .genre, reason: .user)
+    }
+
     /// Shows a watched folder, a playlist or History, or the whole library for nil, as a step
     /// Back can undo.
     func setSource(_ source: BrowserSource?) async {

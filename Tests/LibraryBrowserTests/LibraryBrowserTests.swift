@@ -122,3 +122,29 @@ import Testing
     #expect(!browser.splitView(split, shouldHideDividerAt: 0))
     #expect(abs(panes.frame.height - 150) <= 1)
 }
+
+@MainActor @Test func hidingThePanesSelectsAllSoNothingHiddenNarrowsTheTable() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let index = try LibraryIndex(at: databaseURL)
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL), index: index,
+        layout: AppState().trackTable.defaultValue, browserHeight: 150, groupByAlbumArtist: false)
+    var states: [BrowserState] = []
+    browser.stateChanged = { states.append($0) }
+    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    let genre = try #require(try index.genres().first)
+    await browser.showOnly(.genre, id: genre.id)
+    #expect(states.last?.genre != nil)
+    browser.toggleBrowser()
+    let deadline = Date().addingTimeInterval(10)
+    while states.last?.genre != nil, Date() < deadline {
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    #expect(states.last?.genre == nil)
+    browser.selectAllTracks()
+    #expect(try await browser.selectedPaths().count == (try index.trackCount()))
+    // Shown again, they start at All.
+    browser.toggleBrowser()
+    #expect(browser.isBrowserVisible)
+    #expect(states.last?.genre == nil)
+}

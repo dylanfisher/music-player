@@ -3,7 +3,7 @@
 - **Date:** 2026-11-01
 - **Status:** accepted
 - **Amends:** [0012](0012-searcher-conventions.md)
-- **Amended by:** [0041](0041-window-layout-and-settings-sections.md): the watched folders left
+- **Amended by:** [0042](0042-window-layout-and-settings-sections.md): the watched folders left
   the sidebar, and folder browsing with them.
 
 ## Context
