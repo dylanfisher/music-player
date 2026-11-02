@@ -101,7 +101,7 @@ Kept from Searcher, the same job on the same key:
 | First / last row | Home / End, alternate ⌘⌥↑ / ⌘⌥↓ |
 | Page down / up | Page Down / Page Up |
 | Select All | ⌘A |
-| Search | ⌘F focuses the search field. Esc clears it and gives the keys back to the list; ↑/↓ in the field move the list |
+| Search | ⌘F focuses the search field. Esc clears it and gives the keys back to the list; ↑/↓ in the field move the list. Esc anywhere else in the main window does nothing, without the beep |
 | Sort by Title, Artist, Album, Date Added / reverse | ⌃⌥1–4 / ⇧⌥⌘P |
 | Toggle sidebar / focus sidebar | ⌃⌘S / ⌘0 |
 | Toggle status bar | ⌘/ |

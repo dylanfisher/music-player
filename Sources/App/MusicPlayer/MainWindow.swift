@@ -1,4 +1,5 @@
 import AppKit
+import KeyChord
 import LibraryBrowser
 import NowPlaying
 import QueueView
@@ -32,7 +33,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
             sidebarWidth: settings.sidebarWidth, queueWidth: settings.queueWidth)
         self.signalPath = signalPath
         self.saver = saver
-        window = NSWindow(
+        window = SilentEscapeWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
             defer: false)
@@ -119,6 +120,17 @@ final class MainWindow: NSObject, NSWindowDelegate {
             WindowFrame(
                 x: frame.minX, y: frame.minY, width: frame.width, height: frame.height))
     }
+}
+
+/// A window where Esc that no view takes does nothing. AppKit would beep, which flashes the
+/// screen when the system's "Flash the screen when an alert sound occurs" is on.
+class SilentEscapeWindow: NSWindow {
+    override func keyDown(with event: NSEvent) {
+        if KeyChord(event: event) == KeyChord(.escape) { return }
+        super.keyDown(with: event)
+    }
+
+    override func cancelOperation(_ sender: Any?) {}
 }
 
 /// The saved frame, unless no screen in `screens` (their visible frames) shows any of it, as when

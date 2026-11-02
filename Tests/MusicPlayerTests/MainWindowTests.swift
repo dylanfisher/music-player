@@ -74,3 +74,33 @@ private func split(queueVisible: Bool) -> (MainSplit, NSWindow, content: NSView)
     #expect(split.isQueueVisible)
     #expect(abs(queue.frame.width - 220) <= 1)
 }
+
+/// Records the key presses no responder took, which AppKit beeps for.
+private final class RecordingWindow: SilentEscapeWindow {
+    var unhandled: [Selector] = []
+
+    override func noResponder(for eventSelector: Selector) { unhandled.append(eventSelector) }
+}
+
+@MainActor @Test func escapeInAListDoesNothingWhereOtherKeysStillBeep() throws {
+    let window = RecordingWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    let table = NSTableView()
+    window.contentView = table
+    #expect(window.makeFirstResponder(table))
+    func press(_ characters: String, _ keyCode: UInt16) throws {
+        table.keyDown(
+            with: try #require(
+                NSEvent.keyEvent(
+                    with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                    windowNumber: window.windowNumber, context: nil, characters: characters,
+                    charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode)))
+    }
+    try press("\u{1B}", 53)
+    #expect(window.unhandled.isEmpty)
+    #expect(table.tryToPerform(#selector(NSResponder.cancelOperation(_:)), with: nil))
+    // A key nothing takes still reaches AppKit's beep.
+    try press("\u{F704}", 122)
+    #expect(window.unhandled == [#selector(NSResponder.keyDown(with:))])
+}
