@@ -26,6 +26,14 @@ struct XMLTree: Equatable {
     /// parser sees it, so neither an external entity nor an entity expansion runs.
     static func parse(_ bytes: [UInt8]) throws(XMLProblem) -> XMLTree {
         guard bytes.count <= byteCap else { throw .tooLarge(bytes: bytes.count) }
+        // UPnP documents are UTF-8 and start with their XML declaration or root. Anything else
+        // would have XMLParser guess at an encoding, or read past a NUL as libxml2 does.
+        guard bytes.first == UInt8(ascii: "<"), !bytes.contains(0) else {
+            throw .notUTF8XML("it has a NUL or a BOM, or doesn't start with <")
+        }
+        if let declared = declaredEncoding(bytes), declared.lowercased() != "utf-8" {
+            throw .notUTF8XML("it declares the encoding \(declared)")
+        }
         let upper = bytes.map { $0 >= 0x61 && $0 <= 0x7A ? $0 - 0x20 : $0 }
         guard upper.firstRange(of: Array("<!DOCTYPE".utf8)) == nil,
             upper.firstRange(of: Array("<!ENTITY".utf8)) == nil
@@ -43,11 +51,23 @@ struct XMLTree: Equatable {
         return root
     }
 
+    /// The `encoding` the XML declaration names, if there's a declaration and it names one.
+    private static func declaredEncoding(_ bytes: [UInt8]) -> String? {
+        guard bytes.starts(with: Array("<?xml".utf8)),
+            let end = bytes.firstRange(of: Array("?>".utf8))
+        else { return nil }
+        let declaration = String(decoding: bytes[..<end.lowerBound], as: UTF8.self)
+        guard let key = declaration.range(of: "encoding") else { return nil }
+        let rest = declaration[key.upperBound...].drop { $0 == " " || $0 == "=" }
+        guard let quote = rest.first, quote == "\"" || quote == "'" else { return "" }
+        return String(rest.dropFirst().prefix { $0 != quote })
+    }
 }
 
 /// Why a document wasn't read.
 enum XMLProblem: Error, Equatable, CustomStringConvertible {
     case tooLarge(bytes: Int)
+    case notUTF8XML(String)
     /// A DTD or an entity declaration, which no UPnP document has.
     case declaresEntities
     case tooDeep
@@ -58,6 +78,7 @@ enum XMLProblem: Error, Equatable, CustomStringConvertible {
     var description: String {
         switch self {
         case .tooLarge(let bytes): "\(bytes) bytes is over the \(XMLTree.byteCap)-byte cap"
+        case .notUTF8XML(let why): "it isn't UTF-8 XML: \(why)"
         case .declaresEntities: "it declares a DTD or entities"
         case .tooDeep: "it nests deeper than \(XMLTree.depthCap)"
         case .tooManyElements: "it has over \(XMLTree.elementCap) elements"

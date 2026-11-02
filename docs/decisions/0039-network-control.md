@@ -61,7 +61,9 @@ network is refused, not retried.
 
 **XML.** Descriptions and SOAP replies are read by `XMLParser` with external entities off. Any
 `<!DOCTYPE` or `<!ENTITY`, in any case, is refused before the parser sees the bytes, so neither
-an external entity nor an entity expansion runs; no UPnP document has a DTD. 1 MiB, 32 levels,
+an external entity nor an entity expansion runs; no UPnP document has a DTD. So is a document
+with a NUL or a byte order mark, one that doesn't start with `<`, and one whose declaration
+names an encoding other than UTF-8, so the parser never guesses at an encoding. 1 MiB, 32 levels,
 10,000 elements and 256 KiB of text in one element at most. A renderer's name, manufacturer
 and model are escaped with `terminalSafe` (row 9) and cut to 256 characters. `GetProtocolInfo`
 keeps at most 1,024 sink entries of four parts each. A renderer whose `GetProtocolInfo` fails

@@ -157,3 +157,31 @@ private func refusal(_ text: String) -> DescriptionProblem? {
         GetProtocolInfo.fields.map(\.1).contains(
             "\"urn:schemas-upnp-org:service:ConnectionManager:1#GetProtocolInfo\""))
 }
+
+@Test func onlyUTF8XMLIsRead() {
+    let good = descriptionXML()
+    let start = "it has a NUL or a BOM, or doesn't start with <"
+    let utf16: [UInt8] =
+        [0xFF, 0xFE]
+        + good.utf16.flatMap { (unit: UInt16) -> [UInt8] in
+            [UInt8(unit & 0xFF), UInt8(unit >> 8)]
+        }
+    let refused: [([UInt8], String)] = [
+        ([0xEF, 0xBB, 0xBF] + bytes(good), start), (utf16, start), (bytes(" " + good), start),
+        (bytes(good.replacingOccurrences(of: "Living", with: "Liv\u{0}ing")), start),
+        (
+            bytes(good.replacingOccurrences(of: "utf-8", with: "ISO-8859-1")),
+            "it declares the encoding ISO-8859-1"
+        ),
+        (
+            bytes(good.replacingOccurrences(of: "encoding=\"utf-8\"", with: "encoding='UTF-16'")),
+            "it declares the encoding UTF-16"
+        ),
+    ]
+    for (input, why) in refused {
+        var problem: DescriptionProblem?
+        do { _ = try DeviceDescription(input) } catch { problem = error }
+        #expect(problem == .unreadable("it isn't UTF-8 XML: \(why)"))
+    }
+    #expect(refusal(good.replacingOccurrences(of: "utf-8", with: "UTF-8")) == nil)
+}
