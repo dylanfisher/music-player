@@ -166,3 +166,17 @@ private func get(
         decodeChunked(Array("A\r\n0123456789\r\n0\r\n\r\n".utf8)[...], cap: 100)
             == .done(Array("0123456789".utf8)))
 }
+
+@Test func aCancelledFetchEndsAtOnce() async throws {
+    let silent = try await LoopbackServer { connection in
+        _ = try? await connection.receive(seconds: 3) { _, closed in closed ? 0 : nil }
+    }
+    defer { silent.stop() }
+    let target = try url(silent)
+    let started = Date()
+    let fetch = Task { await get(target, timeoutSeconds: 5) }
+    try await Task.sleep(nanoseconds: 100_000_000)
+    fetch.cancel()
+    #expect(await fetch.value == .failure(.cancelled))
+    #expect(Date().timeIntervalSince(started) < 1)
+}

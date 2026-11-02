@@ -8,6 +8,8 @@ public enum LocalNetworkError: Error, Equatable, CustomStringConvertible {
     /// The connection failed or closed early.
     case failed(String)
     case timedOut
+    /// The task waiting on it was cancelled.
+    case cancelled
     /// More bytes than the cap allows.
     case tooLarge(cap: Int)
     /// A reply that isn't the HTTP it should be.
@@ -21,6 +23,7 @@ public enum LocalNetworkError: Error, Equatable, CustomStringConvertible {
         case .refused(let why): "the connection was refused: \(why)"
         case .failed(let why): "the connection failed: \(why)"
         case .timedOut: "no answer in time"
+        case .cancelled: "it was cancelled"
         case .tooLarge(let cap): "the reply is over the \(cap)-byte cap"
         case .malformed(let why): "the reply isn't valid HTTP: \(why)"
         case .status(let code): "the reply's status is \(code)"

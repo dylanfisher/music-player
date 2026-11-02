@@ -51,9 +51,13 @@ public enum LocalHTTPClient {
     private static func exchange(
         _ url: LocalURL, request: [UInt8], cap: Int, timeoutSeconds: Double
     ) async throws(LocalNetworkError) -> [UInt8] {
-        let outcome = await withCheckedContinuation { continuation in
-            Exchange(url: url, cap: cap, continuation: continuation).start(
-                request, timeoutSeconds: timeoutSeconds)
+        let exchange = Exchange(url: url, cap: cap)
+        let outcome = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                exchange.start(request, timeoutSeconds: timeoutSeconds, continuation: continuation)
+            }
+        } onCancel: {
+            exchange.cancel()
         }
         return try outcome.get()
     }
@@ -70,15 +74,35 @@ private final class Exchange: @unchecked Sendable {
     private var received: [UInt8] = []
     private var head: (head: HTTPHead, length: Int)?
 
-    init(url: LocalURL, cap: Int, continuation: CheckedContinuation<Outcome, Never>) {
+    private var isCancelled = false
+
+    init(url: LocalURL, cap: Int) {
         connection = NWConnection(
             host: url.host.endpointHost, port: NWEndpoint.Port(rawValue: url.port)!,
             using: directTCP())
         self.cap = cap
-        self.continuation = continuation
     }
 
-    func start(_ request: [UInt8], timeoutSeconds: Double) {
+    /// Ends the exchange as cancelled, whether it has started or not.
+    func cancel() {
+        queue.async { [self] in
+            isCancelled = true
+            finish(.failure(.cancelled))
+        }
+    }
+
+    func start(
+        _ request: [UInt8], timeoutSeconds: Double,
+        continuation: CheckedContinuation<Outcome, Never>
+    ) {
+        queue.async { [self] in
+            self.continuation = continuation
+            if isCancelled { return finish(.failure(.cancelled)) }
+            open(request, timeoutSeconds: timeoutSeconds)
+        }
+    }
+
+    private func open(_ request: [UInt8], timeoutSeconds: Double) {
         connection.stateUpdateHandler = { [self] state in
             switch state {
             case .ready:

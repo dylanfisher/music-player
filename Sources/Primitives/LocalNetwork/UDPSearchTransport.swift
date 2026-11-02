@@ -28,14 +28,20 @@ public struct UDPSearchTransport: SSDPTransport {
         }
         let target = group.withUnsafeBytes { $0.load(as: in_addr.self) }
         let port = port
-        let outcome = await withCheckedContinuation { continuation in
-            Thread.detachNewThread {
-                continuation.resume(
-                    returning: Result { () throws(LocalNetworkError) in
-                        try exchange(
-                            request, to: target, port: port, from: sources, seconds: seconds)
-                    })
+        let cancelled = CancelFlag()
+        let outcome = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                Thread.detachNewThread {
+                    continuation.resume(
+                        returning: Result { () throws(LocalNetworkError) in
+                            try exchange(
+                                request, to: target, port: port, from: sources, seconds: seconds,
+                                cancelled: cancelled)
+                        })
+                }
             }
+        } onCancel: {
+            cancelled.set()
         }
         return try outcome.get()
     }
@@ -43,7 +49,8 @@ public struct UDPSearchTransport: SSDPTransport {
 
 /// Sends and reads on one blocking socket, on its own thread, until the deadline.
 private func exchange(
-    _ request: [UInt8], to target: in_addr, port: UInt16, from sources: [in_addr], seconds: Double
+    _ request: [UInt8], to target: in_addr, port: UInt16, from sources: [in_addr], seconds: Double,
+    cancelled: CancelFlag
 ) throws(LocalNetworkError) -> [SSDPDatagram] {
     let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
     guard fd >= 0 else { throw .system("socket", errno: errno) }
@@ -91,15 +98,17 @@ private func exchange(
     var buffer = [UInt8](repeating: 0, count: SSDPSearch.replyCap + 1)
     let deadline = ProcessInfo.processInfo.systemUptime + seconds
     while found.count < UDPSearchTransport.datagramCap {
+        if cancelled.isSet { throw .cancelled }
         let left = deadline - ProcessInfo.processInfo.systemUptime
         guard left > 0 else { break }
         var poller = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
-        let ready = poll(&poller, 1, Int32((left * 1000).rounded(.up)))
+        // A tenth of a second at most, so a cancelled search ends that soon.
+        let ready = poll(&poller, 1, Int32((min(left, 0.1) * 1000).rounded(.up)))
         if ready < 0 {
             if errno == EINTR { continue }
             throw .system("poll", errno: errno)
         }
-        guard ready > 0 else { break }
+        guard ready > 0 else { continue }
         var from = sockaddr_storage()
         var fromLength = socklen_t(MemoryLayout<sockaddr_storage>.size)
         let count = buffer.withUnsafeMutableBytes { bytes in
@@ -120,4 +129,14 @@ private func exchange(
         found.append(SSDPDatagram(bytes: Array(buffer[..<count]), source: source))
     }
     return found
+}
+
+/// Set once, from any thread, when the search's task is cancelled.
+private final class CancelFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    func set() { lock.withLock { value = true } }
+
+    var isSet: Bool { lock.withLock { value } }
 }

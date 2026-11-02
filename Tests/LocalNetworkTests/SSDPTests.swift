@@ -232,3 +232,21 @@ private final class Heard: @unchecked Sendable {
         try await transport.search(request, from: [], seconds: 0.1)
     }
 }
+
+@Test func aCancelledSearchEndsAtOnce() async throws {
+    let transport = UDPSearchTransport(destination: IPAddress("127.0.0.1")!, port: 9)
+    let request = SSDPSearch.request(searchTarget: renderer, waitSeconds: 1)
+    let started = Date()
+    let search = Task { () -> LocalNetworkError? in
+        do throws(LocalNetworkError) {
+            _ = try await transport.search(request, from: [loopback], seconds: 5)
+            return nil
+        } catch {
+            return error
+        }
+    }
+    try await Task.sleep(nanoseconds: 100_000_000)
+    search.cancel()
+    #expect(await search.value == .cancelled)
+    #expect(Date().timeIntervalSince(started) < 1)
+}
