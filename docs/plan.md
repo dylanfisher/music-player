@@ -2290,36 +2290,58 @@ browser refresh. Pending the owner: the by-hand checks of 24.1 to 24.4, and the 
 
 ### 25. Track actions and navigation
 
-- [ ] **25.1 Get Info opens every time.** ⌘I opened the tag editor once; after it was closed,
+- [x] **25.1 Get Info opens every time.** ⌘I opened the tag editor once; after it was closed,
       ⌘I did nothing. Find why and fix it, with a test that opens, closes and opens again.
-- [ ] **25.2 Track context menu, grouped as Swinsian groups it.** Groups split by separators:
+- [x] **25.2 Track context menu, grouped as Swinsian groups it.** Groups split by separators:
       Play Next, Add to Playback Queue, Play Now · Show Album, Show Artist · Like, Dislike (the
       loved flag: like sets it, dislike sets a disliked state; add the state if the index
       lacks it, synced as phase 23's loved is) · Rating · Get Info, Reveal in Finder (25.3's
       command) · Remove… · New Playlist with Selected Tracks, Add to Playlist ▸, Show in
       Playlist ▸. Keep any item the menu has today. Every item is a command from the registry,
       so it is in ⌘K too.
-- [ ] **25.3 Remove from library, or to the Trash.** Remove… (and ⌫ in the track table) asks
+- [x] **25.3 Remove from library, or to the Trash.** Remove… (and ⌫ in the track table) asks
       "Remove Track?" / "Remove N Tracks?" with Remove from Library, Remove and Move to Trash, and
       Cancel as the default. Removing from the library keeps the paths in an exclusion table so a
       rescan doesn't add them back; Library Health lists excluded tracks and can restore them. Move
       to Trash uses `NSWorkspace.recycle`, only for the files the user confirmed, and is the one
       exception to the music-file boundary besides TagWriter. Owner's answers, 2026-11-02: allow
       the Trash; keep removed tracks excluded. Write the ADR and the AGENTS.md boundary first.
-- [ ] **25.4 ⌘R reveals the track.** In Searcher (`~/projects/searcher`; find its bundle ID
+- [x] **25.4 ⌘R reveals the track.** In Searcher (`~/projects/searcher`; find its bundle ID
       there) when it's installed, else in Finder. A setting picks Finder or Searcher. Bind ⌘R
       unless it's taken, in which case say what moved.
-- [ ] **25.5 ← and → in the main window.** → plays the next track. ← restarts the track, or plays
+- [x] **25.5 ← and → in the main window.** → plays the next track. ← restarts the track, or plays
       the previous one when the track is within its first 3 seconds, as the transport's back
       button does. Only when the track table, the browser panes or the sidebar has focus and no
       text field is editing; the browser panes keep ←/→ for moving between panes if they use it
       today, in which case say which wins and why in the commit.
-- [ ] **25.6 Organize by album artist, type-select included.** With organize by album artist on,
+- [x] **25.6 Organize by album artist, type-select included.** With organize by album artist on,
       typing "vladislav" in the track table should land on Vladislav Delay's own albums, as
       Swinsian does. It landed on a track of his inside a Various Artists compilation. The sort
       and type-select must both use the album artist (falling back to the artist), so a
       compilation sorts under its album artist and is never found by a track artist's name.
       Check the browser's artist pane follows the same rule.
+
+Result: shipped as planned; `./scripts/check` passes. No benchmarks. 25.1: Cancel and Esc now
+release the tag editor (`TagEditorSheet.cancelled`), so ⌘I opens again. 25.2: the track menu is
+data in `AppMenus.trackMenu`, shared by the table and the timeline, every item a registry command;
+new commands Add to Playback Queue, Show Album, Show Artist, Dislike and Show in Playlist…; a
+right-click selects the row under the pointer; Dislike lives in a new `disliked` schema part and
+syncs through the `loved` field (ADRs 0048, 0049). 25.3: Remove… (⌫, File menu, ⌘K) removes from
+the library into a `removed` table that scans skip, or moves the files to the Trash with
+`NSWorkspace.recycle`; Library Health lists Removed; Restore Removed Tracks… brings them back
+(ADR 0050; AGENTS.md boundary amended). The refresh after a removal meets phase 24's deferred
+note. ⌫ removes only while the track table or timeline has the keys. 25.4: ⌘R reveals in Searcher
+or Finder by the `library.fileViewer` setting, with ⇧⌘R the alternate and ⌥⌘R no longer a default
+(ADR 0051). 25.5: ← and → are the alternates for Previous and Next Track; the panes keep them for
+moving between panes, so Focus Next Pane and Focus Previous Pane have no default key (ADR 0052).
+25.6: the sort already used the album artist; type-select now matches it too (`TrackName.sortArtist`),
+and the Artist pane needed no change. Not done: Library Health has no Restore action (row 26.1);
+removals are not in the sync log; Show in Playlist covers manual playlists only. For 26.4: Swinsian
+keeps its table columns in `~/Library/Preferences/com.swinsian.Swinsian.plist` (key
+`MainTableColumns-Ver1`, entries with `TableColumnIdentifier`; browser columns under
+`BrowserColumns`, sort under keys like `GridSortKey`), not in `Library.sqlite` or its Application
+Support folder; this was a look only, nothing was read in code. Pending the owner: the by-hand
+checks of 25.1 to 25.6.
 
 ### 26. Watched folders and library health
 
