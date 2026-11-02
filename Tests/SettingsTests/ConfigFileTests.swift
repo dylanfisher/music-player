@@ -294,3 +294,18 @@ func fuzzedFilesAreProblemsNotCrashes(_ name: String) throws {
         #expect(found.count == 1 && found[0].contains(problem), "\(fields): \(found)")
     }
 }
+
+@Test func aPollIntervalOutsideOneMinuteToADayIsAProblemInTheFile() {
+    func folder(_ minutes: Int) -> String {
+        #"{"folders": [{"path": "/Volumes/music/library", "kind": "network", "include": [],"#
+            + #" "exclude": [], "pollIntervalMinutes": \#(minutes)}]}"#
+    }
+    for minutes in [0, 1441] {
+        let found = problems(folder(minutes))
+        #expect(found.count == 1, "\(minutes)")
+        #expect(found.first?.contains("is outside 1...1440") == true, "\(minutes): \(found)")
+    }
+    for minutes in [1, 1440] {
+        #expect(throws: Never.self, "\(minutes)") { try parsed(folder(minutes)) }
+    }
+}
