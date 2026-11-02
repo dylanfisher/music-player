@@ -105,6 +105,18 @@ private let window = MainActor.assumeIsolated { NSWindow() }
 }
 
 @MainActor
+@Test func theEditorOpensAgainAfterItIsCancelled() async throws {
+    let seen = Seen()
+    let editing = makeEditing(seen)
+    editing.open(["/a.flac"], over: window)
+    try await eventually { editing.isOpen }
+    editing.sheet?.cancel()
+    #expect(!editing.isOpen)
+    editing.open(["/b.flac"], over: window)
+    try await eventually { seen.presented == [["/a.flac"], ["/b.flac"]] }
+}
+
+@MainActor
 @Test func nothingOpensOrUndoesWhileAWriteRuns() async throws {
     let seen = Seen()
     let gate = Gate()

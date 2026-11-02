@@ -11,6 +11,8 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
     public let window: NSWindow
     /// Called with the edit when the user saves; the sheet has closed.
     public var saved: (TagEdit) -> Void = { _ in }
+    /// Called when the user cancels; the sheet has closed.
+    public var cancelled: () -> Void = {}
     /// The art buttons, which run the registry's Replace Artwork… and Remove Artwork.
     public var replaceArtwork: () -> Void = {}
     public var removeArtwork: () -> Void = {}
@@ -178,7 +180,12 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
 
     @objc private func replaceClicked() { replaceArtwork() }
     @objc private func removeClicked() { removeArtwork() }
-    @objc private func cancelClicked() { close() }
+    @objc private func cancelClicked() { cancel() }
+
+    func cancel() {
+        close()
+        cancelled()
+    }
 
     @objc private func saveClicked() {
         do {

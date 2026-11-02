@@ -73,6 +73,7 @@ public final class TagEditing {
                 self?.sheet = nil
                 self?.confirm(edit, tracks.map(\.path), over: window)
             }
+            sheet.cancelled = { [weak self] in self?.sheet = nil }
             self.sheet = sheet
             self.effects.present(sheet, window)
         }
