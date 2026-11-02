@@ -103,6 +103,15 @@ public final class ReceiverControl {
         enabled || renderer?.isDenonReceiver == true
     }
 
+    /// Whether the Mac's volume and mute keys drive the receiver: only while receiver control
+    /// runs, the app plays to that Denon, and `receiver.volumeKeys` is on. Otherwise they're the
+    /// Mac's, as ever.
+    public nonisolated static func takesVolumeKeys(
+        setting: Bool, controlRunning: Bool, playingTo renderer: Renderer?
+    ) -> Bool {
+        setting && controlRunning && renderer?.isDenonReceiver == true
+    }
+
     /// Receiver control as `receiver.enabled` asks: started when it's on and stopped and gone
     /// when it's off. `current` is the control running now; `make` makes one.
     public static func applying(

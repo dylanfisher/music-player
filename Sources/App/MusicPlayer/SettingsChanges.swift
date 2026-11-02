@@ -99,6 +99,7 @@ extension AppDelegate {
         if !keys.isDisjoint(with: [schema.receiverEnabled.key, schema.receiverAddress.key]) {
             applyReceiverSetting()
         }
+        if keys.contains(schema.receiverVolumeKeys.key) { applyVolumeKeys() }
         let output = [schema.outputDeviceUID.key, schema.hogMode.key, schema.digitalVolume.key]
         if !keys.isDisjoint(with: output) {
             outputSettingsChanged(switched: keys.contains(schema.outputDeviceUID.key))

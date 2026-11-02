@@ -43,6 +43,9 @@ public struct AppSettings: SettingsSchema {
     public let receiverAddress = Setting<ReceiverAddress?>(
         "receiver.address", title: "Receiver Address", default: nil,
         "The receiver's IP address, for when the search can't find it.")
+    public let receiverVolumeKeys = Setting(
+        "receiver.volumeKeys", title: "Volume Keys Control the Receiver", default: true,
+        "Volume keys set the receiver's volume; needs Accessibility permission.")
     public let appearance = Setting(
         "appearance", title: "Appearance", default: Appearance.auto,
         "Light or dark windows; Auto follows the system.")

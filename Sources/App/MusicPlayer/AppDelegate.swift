@@ -65,6 +65,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The search for that renderer, and its signal paths for the panel.
     var rendererSearch: Task<Void, Never>?
     var rendererPathUpdates: Task<Void, Never>?
+    /// The volume keys' tap, while they drive the receiver.
+    var volumeKeyTap: MediaKeyTap?
+    var askedForAccessibility = false
     /// The device output's latest path, shown again when playback comes back from a renderer.
     private(set) var devicePath: SignalPath?
     private(set) var engine: PlaybackEngine?
@@ -297,7 +300,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindowController()?.show()
     }
 
+    /// Accessibility permission is given in System Settings, so the volume keys are tried
+    /// again when the owner comes back.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        applyVolumeKeys()
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        volumeKeyTap?.stop()
         scriptServer?.stop()
         receiver?.stop()
         saver?.flush()

@@ -1,4 +1,5 @@
 import Commands
+import KeyChord
 import LocalNetwork
 import Log
 import Receiver
@@ -15,13 +16,45 @@ extension AppDelegate {
     func applyReceiverSetting() {
         receiver = ReceiverControl.applying(
             enabled: receiverWanted, to: receiver, make: makeReceiverControl)
+        applyVolumeKeys()
     }
 
     /// Starts or stops receiver control as the output moves to or from a Denon receiver,
     /// leaving a running connection alone otherwise.
     func receiverFollowsOutput() {
-        guard receiverWanted != (receiver != nil) else { return }
+        guard receiverWanted != (receiver != nil) else { return applyVolumeKeys() }
         applyReceiverSetting()
+    }
+
+    /// Takes the Mac's volume and mute keys for the receiver while the app plays to it, and
+    /// gives them back otherwise. Without Accessibility permission there's no tap: the system
+    /// is asked once a launch to prompt for it, and the keys stay the Mac's.
+    func applyVolumeKeys() {
+        let wanted = ReceiverControl.takesVolumeKeys(
+            setting: settings?[\.receiverVolumeKeys] == true, controlRunning: receiver != nil,
+            playingTo: rendererOutput?.renderer)
+        guard wanted else {
+            volumeKeyTap?.stop()
+            volumeKeyTap = nil
+            return
+        }
+        guard volumeKeyTap == nil else { return }
+        guard MediaKeyTap.isPermitted else {
+            if !askedForAccessibility {
+                askedForAccessibility = true
+                logger.notice("the volume keys need Accessibility permission to reach the receiver")
+                MediaKeyTap.askForPermission()
+            }
+            return
+        }
+        volumeKeyTap = MediaKeyTap { [weak self] key in
+            switch key {
+            case .volumeUp: _ = self?.dispatcher?.run(.receiverVolumeUp)
+            case .volumeDown: _ = self?.dispatcher?.run(.receiverVolumeDown)
+            case .mute: _ = self?.dispatcher?.run(.receiverMute)
+            }
+        }
+        if volumeKeyTap == nil { logger.error("the system refused the volume key tap") }
     }
 
     private var receiverWanted: Bool {

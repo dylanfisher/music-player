@@ -534,3 +534,16 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     // A HEOS speaker or a Sonos has a volume of its own; the setting alone decides.
     #expect(!ReceiverControl.isWanted(enabled: false, playingTo: denon(model: "Denon Home 150")))
 }
+
+@Test func theVolumeKeysDriveTheReceiverOnlyWhilePlayingToIt() {
+    #expect(
+        ReceiverControl.takesVolumeKeys(setting: true, controlRunning: true, playingTo: denon()))
+    #expect(
+        !ReceiverControl.takesVolumeKeys(setting: false, controlRunning: true, playingTo: denon()))
+    #expect(
+        !ReceiverControl.takesVolumeKeys(setting: true, controlRunning: false, playingTo: denon()))
+    #expect(!ReceiverControl.takesVolumeKeys(setting: true, controlRunning: true, playingTo: nil))
+    #expect(
+        !ReceiverControl.takesVolumeKeys(
+            setting: true, controlRunning: true, playingTo: denon(model: "Denon Home 150")))
+}
