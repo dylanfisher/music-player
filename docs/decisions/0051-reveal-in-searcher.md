@@ -1,4 +1,4 @@
-# 0048. ⌘R reveals the selection, in Searcher or in Finder
+# 0051. ⌘R reveals the selection, in Searcher or in Finder
 
 - **Date:** 2026-11-02
 - **Status:** accepted

@@ -85,7 +85,7 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
     let chord = KeyChord("r", cmd)
     #expect(bindings.registry.command(for: chord) == .revealInFinder)
     #expect(bindings.chord(of: .revealInFinder, at: .primary) == chord)
-    // Music's and Swinsian's chord stays as the alternate (ADR 0048).
+    // Music's and Swinsian's chord stays as the alternate (ADR 0051).
     #expect(bindings.chord(of: .revealInFinder, at: .alternate) == KeyChord("r", [cmd, .shift]))
 }
 

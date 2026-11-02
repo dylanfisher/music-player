@@ -31,7 +31,7 @@ func searcherApp(_ viewer: FileViewer, find: (String) -> URL?) -> URL? {
 
 /// Has this process's reveals go to Finder whatever app the global `NSFileViewer` key names, as
 /// Searcher does for its own. In memory only: the argument domain wins over the global one and
-/// is never written to disk (ADR 0048).
+/// is never written to disk (ADR 0051).
 private func keepRevealsInFinder() {
     let defaults = UserDefaults.standard
     let arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)

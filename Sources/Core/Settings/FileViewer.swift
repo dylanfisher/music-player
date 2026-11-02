@@ -9,7 +9,7 @@ public enum FileViewer: String, SettingChoice {
         }
     }
 
-    /// The app's bundle ID, from its `Info.plist` (ADR 0048).
+    /// The app's bundle ID, from its `Info.plist` (ADR 0051).
     public var bundleID: String {
         switch self {
         case .searcher: "com.dylanfisher.searcher"
