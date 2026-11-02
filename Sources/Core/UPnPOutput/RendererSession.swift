@@ -34,6 +34,9 @@ actor RendererSession {
     static let seekEndMarginSeconds = 1.0
     /// Ticks between tries of a lost renderer, while waiting for it to answer again.
     static let probeEveryTicks = 5
+    /// How long past a track's end, by the app's clock, it waits for the renderer to move on
+    /// before it sends the next track itself.
+    static let leadMarginSeconds = 2.0
 
     private final class Loaded {
         let item: OutputItem
@@ -51,6 +54,9 @@ actor RendererSession {
         var disagreeingPolls = 0
         /// Where to seek once the renderer has the track playing or paused.
         var pendingSeek: Double?
+        /// When the track is over by the app's own clock, from its length in the file, with a
+        /// margin; nil while it isn't playing. Past it, the app moves on by itself.
+        var deadline: Double?
         /// The track's length as the renderer last gave it, which decides whether a stop came
         /// at the end; the file's own length until it says.
         var durationSeconds: Double
@@ -182,7 +188,7 @@ actor RendererSession {
     private func setNext(_ item: OutputItem?) async {
         guard current != nil else { return }
         if let old = next {
-            shared.unserve(old.item.id)
+            shared.retire(old.item.id)
             if old.sent { replacedNextURIs.append(old.uri) }
         }
         let wasSent = next?.sent == true
@@ -307,6 +313,11 @@ actor RendererSession {
 
     private func poll() async {
         guard let current else { return await probe() }
+        // The app leads: past the track's end by its own clock, the next track goes out
+        // whatever the renderer says, or would say if it answered.
+        if current.playing, let deadline = current.deadline, now() >= deadline {
+            return await lead(past: current)
+        }
         let transport: TransportInfo
         let position: PositionInfo
         do throws(SOAPProblem) {
@@ -355,6 +366,7 @@ actor RendererSession {
     private func playingOrPaused(_ current: Loaded, playing: Bool, _ position: PositionInfo)
         async
     {
+        let firstSeen = !current.started
         current.started = true
         current.awaitingPlay = false
         current.stoppedPolls = 0
@@ -378,9 +390,15 @@ actor RendererSession {
                 return setPosition(current, position.seconds ?? 0, advancing: rendererPlaying)
             }
             setPosition(current, target, advancing: rendererPlaying)
-        } else if let seconds = position.seconds {
-            setPosition(current, seconds, advancing: rendererPlaying)
+        } else if rendererPlaying, let seconds = position.seconds {
+            // The renderer's own position starts the app's clock for the track, once; after
+            // that it only corrects what's shown.
+            setPosition(
+                current, seconds, advancing: true,
+                resetsDeadline: firstSeen || current.deadline == nil)
         }
+        // Paused, the position can change only by the app's own seek, which set it; some
+        // renderers report the position from before that seek until they play again.
         guard rendererPlaying != current.playing else {
             current.disagreeingPolls = 0
             return
@@ -389,7 +407,22 @@ actor RendererSession {
         guard current.disagreeingPolls >= Self.disagreeingPolls else { return }
         current.disagreeingPolls = 0
         current.playing = rendererPlaying
+        if !rendererPlaying { setPosition(current, position.seconds ?? elapsed, advancing: false) }
         emit(.transportChanged(current.item.id, playing: rendererPlaying))
+    }
+
+    /// The track should have ended and the renderer hasn't moved on: the app sends the next
+    /// track itself, or stops it when nothing is next.
+    private func lead(past current: Loaded) async {
+        logger.notice("\(self.renderer.name) hadn't moved on by the track's end; the app does")
+        guard next != nil else {
+            await send(AVTransport.stop)
+            guard self.current === current else { return }
+            emit(.trackEnded(current.item.id))
+            emit(.finished(current.item.id))
+            return release()
+        }
+        await ended(current)
     }
 
     /// The renderer is on a next track it was told to drop: the change came too late. The
@@ -434,10 +467,9 @@ actor RendererSession {
             )
             return release()
         }
-        if next?.sent == true {
-            gapless = .afterStop("it stopped instead of playing the next track it was given")
-            logger.error("\(self.renderer.name) stopped instead of playing the next track")
-        }
+        // Given the next track, a renderer that stops at the end may be on its way to it; the
+        // app's own clock decides when it has waited long enough.
+        guard next?.sent != true else { return }
         await ended(current)
     }
 
@@ -467,7 +499,7 @@ actor RendererSession {
 
     private func advance(from current: Loaded, to next: Next, gapless: Bool) {
         emit(.trackEnded(current.item.id))
-        shared.unserve(current.item.id)
+        shared.retire(current.item.id)
         let loaded = Loaded(next.item, next.track, uri: next.uri, playing: true)
         loaded.started = gapless
         loaded.awaitingPlay = !gapless
@@ -550,7 +582,7 @@ actor RendererSession {
         next = nil
         replacedNextURIs = []
         failedPolls = 0
-        shared.unserveAll()
+        shared.retireAll()
         shared.setPosition(nil)
     }
 
@@ -613,10 +645,21 @@ actor RendererSession {
     /// Seconds into the loaded track now, as last polled and moved on by the clock since.
     private var elapsed: Double { shared.position(at: now()).map(\.seconds) ?? 0 }
 
-    private func setPosition(_ loaded: Loaded, _ seconds: Double, advancing: Bool) {
+    /// Sets where playback is. A position the app set itself, by a start, seek, play or pause,
+    /// also sets when the track should be over by its own clock; one a poll reports leaves
+    /// that alone, so a renderer that stalls near the end can't keep moving it.
+    private func setPosition(
+        _ loaded: Loaded, _ seconds: Double, advancing: Bool, resetsDeadline: Bool = true
+    ) {
+        let time = now()
         shared.setPosition(
-            loaded.item.id, seconds: seconds, at: now(), advancing: advancing,
+            loaded.item.id, seconds: seconds, at: time, advancing: advancing,
             durationSeconds: loaded.track.durationSeconds)
+        guard resetsDeadline else { return }
+        loaded.deadline =
+            advancing
+            ? time + max(0, loaded.track.durationSeconds - seconds) + Self.leadMarginSeconds
+            : nil
     }
 }
 

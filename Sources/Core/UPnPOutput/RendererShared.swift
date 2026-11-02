@@ -6,27 +6,58 @@ import Playback
 /// reads, the files the server's `resolve` may hand out, and the server itself, which `close()`
 /// stops without waiting on the session. Everything is under one lock.
 final class RendererShared: @unchecked Sendable {
+    /// How long a token outlives the output's use of it. A renderer buffers ahead and may fetch
+    /// the end of a track, or a next track it was given, after the app has moved past it; a
+    /// token gone too soon is a dead URL, which a renderer reports as a file it can't decode.
+    static let retiredGraceSeconds = 60.0
+
     private let lock = NSLock()
-    private var served: [OutputItem.ID: HTTPServedFile] = [:]
+    private let now: @Sendable () -> Double
+    private var served: [OutputItem.ID: (file: HTTPServedFile, retiredAt: Double?)] = [:]
     private var anchor: (item: OutputItem.ID, seconds: Double, at: Double, advancing: Bool)?
     private var duration: Double?
     private var server: HTTPServer<OutputItem.ID>?
     private var pollDue = false
     private var closed = false
 
+    init(now: @escaping @Sendable () -> Double) { self.now = now }
+
     var isClosed: Bool { lock.withLock { closed } }
 
-    /// Only the items the output holds now, the current and next ones, are served; any other
-    /// token, even one the server issued, is a 404.
+    /// Only the items the output holds now, the current and next ones, are served, and those
+    /// it let go of for `retiredGraceSeconds` after; any other token, even one the server
+    /// issued, is a 404.
     func serve(_ item: OutputItem.ID, _ file: HTTPServedFile) {
-        lock.withLock { served[item] = file }
+        lock.withLock { served[item] = (file, nil) }
     }
 
-    func unserve(_ item: OutputItem.ID) { _ = lock.withLock { served.removeValue(forKey: item) } }
+    /// The output is done with `item`; its token still serves until the grace runs out.
+    func retire(_ item: OutputItem.ID) {
+        lock.withLock {
+            let time = now()
+            if let entry = served[item], entry.retiredAt == nil {
+                served[item] = (entry.file, time)
+            }
+            served = served.filter {
+                time - ($0.value.retiredAt ?? time) < Self.retiredGraceSeconds
+            }
+        }
+    }
 
-    func unserveAll() { lock.withLock { served = [:] } }
+    func retireAll() {
+        let items = lock.withLock { Array(served.keys) }
+        for item in items { retire(item) }
+    }
 
-    func file(_ item: OutputItem.ID) -> HTTPServedFile? { lock.withLock { served[item] } }
+    func file(_ item: OutputItem.ID) -> HTTPServedFile? {
+        lock.withLock {
+            guard let entry = served[item] else { return nil }
+            if let retired = entry.retiredAt, now() - retired >= Self.retiredGraceSeconds {
+                return nil
+            }
+            return entry.file
+        }
+    }
 
     /// Sets where playback is: `seconds` into `item` at time `at`, moving on with the clock while
     /// `advancing`, up to `durationSeconds`. Nil when nothing is loaded.

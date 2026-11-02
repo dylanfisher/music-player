@@ -13,12 +13,15 @@ struct RendererTrack: Sendable {
     let durationSeconds: Double
     let signal: SignalFormat
 
-    /// The types each container is sent as, most standard first. MP4 holds ALAC or AAC alike;
-    /// the HEOS Denon lists only `audio/m4a` for it.
-    static func types(_ format: FileFormat) -> [String] {
+    /// The types each container is sent as, most standard first. `audio/m4a`, the one MP4 type
+    /// the HEOS Denon lists, is offered for AAC only: the Denon took ALAC under it and couldn't
+    /// decode it (ADR 0041), so ALAC goes only where a renderer lists a general MP4 type.
+    static func types(_ format: FileFormat, _ codec: TrackAudio.Codec) -> [String] {
         switch format {
         case .flac: ["audio/flac", "audio/x-flac"]
-        case .mp4: ["audio/mp4", "audio/x-m4a", "audio/m4a"]
+        case .mp4:
+            codec == .aac
+                ? ["audio/mp4", "audio/x-m4a", "audio/m4a"] : ["audio/mp4", "audio/x-m4a"]
         case .mp3: ["audio/mpeg", "audio/mp3"]
         case .wav: ["audio/wav", "audio/x-wav", "audio/wave"]
         case .aiff: ["audio/aiff", "audio/x-aiff"]
@@ -41,7 +44,7 @@ struct RendererTrack: Sendable {
             throw .unreadable(error.error(path: url.path))
         }
         let audio = parsed.metadata.audio
-        guard let entry = renderer.sinkEntry(for: types(format)) else {
+        guard let entry = renderer.sinkEntry(for: types(format, audio.codec)) else {
             throw .unsupported(
                 format: name(format, audio.codec), renderer: renderer.name,
                 accepts: renderer.httpAudioTypes)

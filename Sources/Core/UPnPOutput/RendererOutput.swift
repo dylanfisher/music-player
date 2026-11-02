@@ -28,7 +28,7 @@ public final class RendererOutput: Output, @unchecked Sendable {
     /// Searches the local network again, for a renderer lost and perhaps moved.
     public typealias Rediscover = @Sendable () async throws -> [Renderer]
 
-    private let shared = RendererShared()
+    private let shared: RendererShared
     private let work: AsyncStream<RendererWork>.Continuation
     private let eventContinuation: AsyncStream<OutputEvent>.Continuation
     private let pathContinuation: AsyncStream<SignalPath>.Continuation
@@ -67,7 +67,8 @@ public final class RendererOutput: Output, @unchecked Sendable {
             of: SignalPath.self, bufferingPolicy: .bufferingNewest(16))
         let (stream, work) = AsyncStream.makeStream(of: RendererWork.self)
         self.work = work
-        let shared = shared
+        let shared = RendererShared(now: now)
+        self.shared = shared
         let ticker = ticker
         // Runs only while the session wants polls, and ends when it stops wanting them.
         let startTicker: @Sendable () -> Void = {

@@ -42,6 +42,13 @@ final class FakeRenderer: @unchecked Sendable {
     private var advancesToNext = true
     private var keepsNext = false
     private var reencodes = false
+    private var buffersLikeHEOS = false
+    private var hangs = false
+    private var stalePausedPosition = false
+    /// Fetches it owes, made as soon as the action that queued them has its answer ready.
+    private var owedFetches: [(uri: String, range: String)] = []
+    /// What it last reported while paused, for one that keeps reporting it.
+    private var reportedWhilePaused: Double?
 
     // What it holds.
     private var uri = ""
@@ -103,6 +110,16 @@ final class FakeRenderer: @unchecked Sendable {
     /// Reports its URI with the token's first character percent-encoded and the scheme in
     /// capitals, as a renderer that rewrites what it was given might.
     func reencodesURIs() { lock.withLock { reencodes = true } }
+
+    /// Buffers as the Denon is thought to: it fetches a next track's start as soon as it's
+    /// given one, says the next track is current half a second before the switch, and at the
+    /// switch fetches the last bytes of the track it leaves.
+    func buffersAhead() { lock.withLock { buffersLikeHEOS = true } }
+    /// At a track's end with nothing it'll move on to, it keeps playing the end, as the Denon
+    /// stuttering on the last seconds does, instead of stopping.
+    func hangsAtEnd() { lock.withLock { hangs = true } }
+    /// Paused, it reports where it was paused until it plays again, whatever a seek did.
+    func reportsStalePositionWhilePaused() { lock.withLock { stalePausedPosition = true } }
 
     /// Pauses it as its own remote would.
     func pauseOnItsOwn() {
@@ -176,10 +193,17 @@ final class FakeRenderer: @unchecked Sendable {
     private func tick() {
         guard state == .playing, position >= trackSecondsValue else { return }
         if advancesToNext, !nextURI.isEmpty {
+            if buffersLikeHEOS {
+                owedFetches.append((uri, "bytes=-100"))
+                owedFetches.append((nextURI, "bytes=100-199"))
+            }
             uri = nextURI
             nextURI = ""
             seconds = 0
             since = now
+        } else if hangs {
+            seconds = trackSecondsValue
+            since = nil
         } else {
             state = .stopped
             seconds = 0
@@ -216,6 +240,9 @@ final class FakeRenderer: @unchecked Sendable {
                 try await connection.send(reply)
             }
             connection.close()
+        } catch let timeout as LoopbackTimeout where timeout.closed && timeout.seen.isEmpty {
+            // A client that gave up before sending, as a cancelled Stop on close does.
+            return
         } catch {
             // Vanishing cancels the connections it had open.
             if !lock.withLock({ vanished }) { Issue.record("the fake renderer failed: \(error)") }
@@ -224,13 +251,12 @@ final class FakeRenderer: @unchecked Sendable {
 
     /// The reply to `action`, or nil when it stalls.
     private func perform(_ action: String, _ body: String) async -> String? {
-        let (stalls, code, fetchURI) = lock.withLock {
-            () -> (Bool, Int?, String?) in
+        let (stalls, code, owed) = lock.withLock {
+            () -> (Bool, Int?, [(uri: String, range: String)]) in
             log.append(action)
-            if stalling.contains(action) { return (true, nil, nil) }
-            if let code = refusing[action] { return (false, code, nil) }
+            if stalling.contains(action) { return (true, nil, []) }
+            if let code = refusing[action] { return (false, code, []) }
             tick()
-            var fetch: String?
             switch action {
             case "SetAVTransportURI":
                 setURIs.append((argument("CurrentURI", body), state))
@@ -239,10 +265,19 @@ final class FakeRenderer: @unchecked Sendable {
                 state = .stopped
                 seconds = 0
                 since = nil
-                fetch = uri
+                owedFetches.append((uri, "bytes=0-99"))
             case "SetNextAVTransportURI":
-                if !keepsNext || nextURI.isEmpty { nextURI = argument("NextURI", body) }
+                if keepsNext, !nextURI.isEmpty {
+                    // It keeps buffering the next track it already had.
+                    if buffersLikeHEOS { owedFetches.append((nextURI, "bytes=100-199")) }
+                } else {
+                    nextURI = argument("NextURI", body)
+                    if buffersLikeHEOS, !nextURI.isEmpty {
+                        owedFetches.append((nextURI, "bytes=0-99"))
+                    }
+                }
             case "Play":
+                reportedWhilePaused = nil
                 if startsPlaying, !uri.isEmpty, state != .playing {
                     state = .playing
                     since = now
@@ -251,6 +286,7 @@ final class FakeRenderer: @unchecked Sendable {
                 seconds = position
                 since = nil
                 state = .paused
+                reportedWhilePaused = seconds
             case "Stop":
                 state = .stopped
                 seconds = 0
@@ -261,11 +297,12 @@ final class FakeRenderer: @unchecked Sendable {
             default:
                 break
             }
-            return (false, nil, fetch)
+            defer { owedFetches = [] }
+            return (false, nil, owedFetches)
         }
         if stalls { return nil }
         if let code { return fault(code) }
-        if let fetchURI { await fetchStart(of: fetchURI) }
+        for fetch in owed { await self.fetch(fetch.uri, range: fetch.range) }
         return lock.withLock {
             switch action {
             case "GetTransportInfo":
@@ -281,8 +318,8 @@ final class FakeRenderer: @unchecked Sendable {
                         action,
                         "<Track>1</Track><TrackDuration>\(upnpTime(trackSecondsValue)).\(Int(trackSecondsValue * 1000) % 1000)"
                             + "</TrackDuration><TrackMetaData></TrackMetaData>"
-                            + "<TrackURI>\(xmlEscaped(reported(uri)))</TrackURI>"
-                            + "<RelTime>\(upnpTime(state == .stopped ? 0 : position))</RelTime>"
+                            + "<TrackURI>\(xmlEscaped(reported(reportedURI)))</TrackURI>"
+                            + "<RelTime>\(upnpTime(reportedSeconds))</RelTime>"
                             + "<AbsTime>NOT_IMPLEMENTED</AbsTime>"))
             default:
                 ok(response(action, ""))
@@ -290,8 +327,27 @@ final class FakeRenderer: @unchecked Sendable {
         }
     }
 
-    /// Fetches the first 100 bytes of `uri` as a renderer starting a stream would.
-    private func fetchStart(of uri: String) async {
+    /// The track it says is current: the next one, half a second early, when it buffers ahead.
+    /// Call under the lock.
+    private var reportedURI: String {
+        guard buffersLikeHEOS, state == .playing, !nextURI.isEmpty,
+            position >= trackSecondsValue - 0.5
+        else { return uri }
+        return nextURI
+    }
+
+    /// Call under the lock.
+    private var reportedSeconds: Double {
+        if state == .stopped { return 0 }
+        if stalePausedPosition, state == .paused, let reportedWhilePaused {
+            return reportedWhilePaused
+        }
+        return position
+    }
+
+    /// Fetches `range` of `uri` as a renderer buffering a stream would. Anything but a 206,
+    /// a 404 or a closed connection, counts against the server.
+    private func fetch(_ uri: String, range: String) async {
         guard let url = URL(string: uri), let port = url.port else {
             Issue.record("the renderer was given \(uri)")
             return
@@ -300,7 +356,7 @@ final class FakeRenderer: @unchecked Sendable {
             let connection = try await LoopbackConnection.connect(port: UInt16(port))
             defer { connection.close() }
             try await connection.send(
-                "GET \(url.path) HTTP/1.1\r\nHost: 127.0.0.1:\(port)\r\nRange: bytes=0-99\r\n\r\n")
+                "GET \(url.path) HTTP/1.1\r\nHost: 127.0.0.1:\(port)\r\nRange: \(range)\r\n\r\n")
             let reply = try await connection.receiveAll()
             let end = try #require(reply.firstRange(of: Array("\r\n\r\n".utf8)))
             let head = String(decoding: reply[..<end.lowerBound], as: UTF8.self)
