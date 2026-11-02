@@ -99,8 +99,11 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     output.menuNeedsUpdate(submenu)
     #expect(submenu.items.map(\.title) == ["System Default", "Speakers"])
     #expect(submenu.items.map(\.state) == [.off, .on])
-    let first = submenu.items[0]
-    _ = (first.target as? NSObject)?.perform(first.action, with: first)
+    // AppKit enables items through NSApp, which a test run alone hasn't made yet.
+    _ = NSApplication.shared
+    submenu.update()
+    #expect(submenu.items.map(\.isEnabled) == [true, true])
+    submenu.performActionForItem(at: 0)
     #expect(chosen == [.systemDefault])
     // A device plugged in while the menu is open shows at once.
     options.append(OutputOption(choice: .device(uid: "DAC"), title: "DAC"))
