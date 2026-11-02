@@ -58,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mediaControls: MediaControls?
     private var dockMenu: DockMenu?
     private(set) var queue: QueuePanel?
-    private var watcher: LibraryWatcher?
+    private(set) var watcher: LibraryWatcher?
     /// The window's own connection, which says where the watched folders' paths are.
     private var windowIndex: LibraryIndex?
     private var shareChanges: ShareChangeObserver?

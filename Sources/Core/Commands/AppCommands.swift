@@ -40,6 +40,7 @@ extension CommandID {
 
     public static let addFolder = CommandID("library.addFolder")
     public static let checkHealth = CommandID("library.checkHealth")
+    public static let rescanNow = CommandID("library.rescanNow")
     public static let resolveLostStats = CommandID("library.resolveLostStats")
     public static let revealInFinder = CommandID("track.revealInFinder")
     public static let copyPath = CommandID("track.copyPath")
@@ -165,6 +166,8 @@ public enum AppCommands {
 
             Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
             Command(.checkHealth, "Check Library Health"),
+            // Not from links: it ignores the playback pause, so a page could keep the NAS busy.
+            Command(.rescanNow, "Rescan Now"),
             Command(.resolveLostStats, "Resolve Lost Stats…"),
             Command(
                 .revealInFinder, "Reveal in Finder",

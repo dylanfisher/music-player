@@ -135,6 +135,16 @@ public final class LibraryWatcher: @unchecked Sendable {
         }
     }
 
+    /// Rescan Now: scans every watched folder whole, now, whatever the poll timer says and even
+    /// while playing with `library.pausePollingDuringPlayback` on, since the owner asked for it.
+    /// It still waits while a track starts.
+    public func rescanNow() {
+        queue.async { [self] in
+            state?.rescanEverything()
+            advance()
+        }
+    }
+
     /// The playback engine's hook. While playback is starting no network scan starts, and a
     /// running one pauses; while playing, the same holds if `library.pausePollingDuringPlayback`
     /// is on.

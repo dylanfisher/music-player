@@ -218,3 +218,41 @@ private struct FakeEngine {
     state.finished(now: minutes(3))
     #expect(state.nextPoll(after: minutes(3)) == minutes(18))
 }
+
+@Test func rescanNowScansEveryFolderWhilePollsArePausedButNotWhileATrackStarts() {
+    var state = WatchState(
+        folders: [local, nas], indexed: [nas.path], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: true, now: start)
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
+    state.finished(now: start)
+    let engine = FakeEngine(pausePollingDuringPlayback: true)
+    engine.report(.starting, to: &state)
+    state.rescanEverything()
+    #expect(state.start(now: minutes(1)) == WatchJob(folder: local, subtrees: []))
+    state.finished(now: minutes(1))
+    #expect(state.start(now: minutes(1)) == nil, "a track is starting")
+    engine.report(.playing, to: &state)
+    let forced = WatchJob(folder: nas, subtrees: [], ignoresPlaybackPause: true)
+    #expect(state.start(now: minutes(1)) == forced)
+    #expect(!state.holdsRunningScan)
+    engine.report(.starting, to: &state)
+    #expect(state.holdsRunningScan)
+    engine.report(.playing, to: &state)
+    state.finished(now: minutes(2))
+    #expect(state.start(now: minutes(2)) == nil, "each folder once")
+    engine.report(.stopped, to: &state)
+    #expect(state.nextPoll(after: minutes(2)) == minutes(17))
+}
+
+@Test func rescanNowLetsAPollPausedForPlaybackGoOn() {
+    var state = WatchState(
+        folders: [nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: true, now: start)
+    #expect(state.start(now: start) == WatchJob(folder: nas, subtrees: []))
+    FakeEngine(pausePollingDuringPlayback: true).report(.playing, to: &state)
+    #expect(state.holdsRunningScan)
+    state.rescanEverything()
+    #expect(!state.holdsRunningScan)
+    state.finished(now: minutes(1))
+    #expect(state.start(now: minutes(1)) == nil, "the running scan counted")
+}

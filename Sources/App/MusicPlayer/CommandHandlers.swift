@@ -21,6 +21,9 @@ extension AppDelegate {
         dispatcher.handle(.checkHealth, enabled: hasWindow) { [weak self] in
             self?.browser?.checkHealth()
         }
+        dispatcher.handle(
+            .rescanNow, enabled: { [weak self] in self?.watcher != nil },
+            run: { [weak self] in self?.watcher?.rescanNow() })
         dispatcher.handle(.resolveLostStats, enabled: hasWindow) { [weak self] in
             guard let window = self?.window?.window else { return }
             self?.browser?.resolveLostStats(over: window)

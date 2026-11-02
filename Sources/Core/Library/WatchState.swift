@@ -6,6 +6,9 @@ struct WatchJob: Equatable, Sendable {
     var folder: WatchedFolder
     /// Empty for the whole folder.
     var subtrees: [String]
+    /// Rescan Now asked for it, so it runs while playing even if `pausePollingDuringPlayback`
+    /// says not to. It still waits while a track starts, which takes seconds.
+    var ignoresPlaybackPause = false
 }
 
 /// What the watcher scans and when, apart from timers, FSEvents and threads, so tests can drive
@@ -37,6 +40,8 @@ struct WatchState {
     private var retryDue: [String: Date] = [:]
     /// Scans of each folder that failed in a row, by path; absent after one that finished.
     private var failuresInARow: [String: Int] = [:]
+    /// Network folders Rescan Now asked for, by path, in Settings order.
+    private var requested: [String] = []
     /// The network folders not polled at start, by path, in Settings order.
     private(set) var leftToTheIndex: [String] = []
 
@@ -70,6 +75,7 @@ struct WatchState {
         for (old, new) in zip(folders, moved) where old.path != new.path {
             changed[old.path] = nil
             wholeScans = wholeScans.map { $0 == old.path ? new.path : $0 }
+            requested = requested.map { $0 == old.path ? new.path : $0 }
             retryDue[new.path] = retryDue.removeValue(forKey: old.path)
             failuresInARow[new.path] = failuresInARow.removeValue(forKey: old.path)
             pollDue[old.path] = nil
@@ -108,6 +114,22 @@ struct WatchState {
         changed[folder.path] = nil
     }
 
+    /// Rescan Now: every folder is scanned whole, network ones too while playing with
+    /// `pausePollingDuringPlayback` on. A running whole scan of a folder counts for it, and
+    /// stops waiting for playback.
+    mutating func rescanEverything() {
+        for folder in folders {
+            if running?.folder.path == folder.path, running?.subtrees.isEmpty == true {
+                running?.ignoresPlaybackPause = true
+            } else if folder.kind == .local {
+                if !wholeScans.contains(folder.path) { wholeScans.append(folder.path) }
+                changed[folder.path] = nil
+            } else if !requested.contains(folder.path) {
+                requested.append(folder.path)
+            }
+        }
+    }
+
     mutating func playbackChanged(_ activity: PlaybackActivity, pausePollingDuringPlayback: Bool) {
         self.activity = activity
         self.pausePollingDuringPlayback = pausePollingDuringPlayback
@@ -123,7 +145,11 @@ struct WatchState {
     }
 
     /// Whether the running scan has to wait for playback.
-    var holdsRunningScan: Bool { running?.folder.kind == .network && !pollsAllowed }
+    var holdsRunningScan: Bool {
+        guard let running else { return false }
+        guard running.folder.kind == .network else { return false }
+        return activity == .starting || (!running.ignoresPlaybackPause && !pollsAllowed)
+    }
 
     /// The scan to start now, which then counts as running, or nil when one is already running
     /// or nothing may run. Local changes go first, since someone is likely waiting to see them.
@@ -140,6 +166,11 @@ struct WatchState {
             changed[path] = nil
             retryDue[path] = nil
             job = WatchJob(folder: folder(path), subtrees: [])
+        } else if activity != .starting, !requested.isEmpty {
+            let path = requested.removeFirst()
+            changed[path] = nil
+            pollDue[path] = nil
+            job = WatchJob(folder: folder(path), subtrees: [], ignoresPlaybackPause: true)
         } else if pollsAllowed,
             let (path, _) = retryDue.filter({ $0.value <= now }).min(by: {
                 $0.value < $1.value

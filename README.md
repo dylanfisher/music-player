@@ -29,8 +29,10 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   what each would change. Running one again adds only the plays since.
 - **Watched folders** open in the sidebar into their subfolders, from the paths the library
   holds. A folder on a network share is stored by the share, so the library follows it when
-  macOS mounts it somewhere else, such as `/Volumes/music-1`. A renamed or moved file keeps its
-  plays, rating and playlist entries. **Library Health** lists files that couldn't be read,
+  macOS mounts it somewhere else, such as `/Volumes/music-1`. A network folder already in the
+  library isn't rescanned at launch: it's checked every `pollIntervalMinutes` (60 by default,
+  up to 1440), and **Rescan Now** checks every folder at once. A renamed or moved file keeps
+  its plays, rating and playlist entries. **Library Health** lists files that couldn't be read,
   playlist entries whose file left, likely duplicates, albums with gaps, several album artists
   or mixed sample rates, tracks missing art, an album or an album artist, and Lost Stats: files
   with stats that left without a match, which **Resolve Lost Stats…** gives to a track or

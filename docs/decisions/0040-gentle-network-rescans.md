@@ -41,16 +41,27 @@ read finish), and stopping resumes it where it was. It never starts over, so it 
 any number of pauses. This was already so; a test now covers it. While it's paused, other scans
 and syncs wait behind it, as before.
 
+**Rescan Now** (File menu, palette) scans every watched folder whole at once, ignoring the poll
+timer and, since the owner asked, the playback pause setting. A running whole scan of a folder
+counts for that folder and resumes if playback paused it. It still waits while a track starts,
+which takes seconds, so a play click isn't slowed by the scan it asked for. It doesn't run from
+`music-player://` links: it overrides the playback pause, so a page opening it in a loop could
+keep the NAS busy while the owner listens. `music-player rescanNow` runs it from the command
+line, which only this user's processes can reach (ADR 0036).
+
 ## Alternatives considered
 
 - **Rescan at launch after a delay** — rejected: it still walks the share near the first play,
   and the owner asked for less scanning, not later scanning.
 - **Persist each folder's last poll time and resume the schedule across launches** — rejected:
   more stored state for little gain; one interval after launch is close enough.
+- **Rescan Now from links** — rejected, for the reason above; the command line covers
+  scripting.
 - **Change the stored interval of existing folders to 60** — rejected: pre-release data has no
   migrations, and the owner may have chosen 15.
 
 ## Consequences
 
-Changes made on the NAS while the app was closed appear up to one interval after launch. The
+Changes made on the NAS while the app was closed appear up to one interval after launch, or at
+once with Rescan Now. The
 owner's existing config keeps its saved interval until edited.
