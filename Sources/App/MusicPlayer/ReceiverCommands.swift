@@ -13,14 +13,9 @@ extension AppDelegate {
     /// Starts receiver control when `receiver.enabled` is on and stops it when it's off. Off,
     /// nothing is sent onto the network.
     func applyReceiverSetting() {
-        guard let settings, settings[\.receiverEnabled] else {
-            receiver?.stop()
-            receiver = nil
-            return
-        }
-        let made = receiver ?? makeReceiverControl()
-        receiver = made
-        made.start()
+        receiver = ReceiverControl.applying(
+            enabled: settings?[\.receiverEnabled] == true, to: receiver,
+            make: makeReceiverControl)
     }
 
     private func makeReceiverControl() -> ReceiverControl {
@@ -42,7 +37,8 @@ extension AppDelegate {
     }
 
     func registerReceiverCommands(_ dispatcher: CommandDispatcher) {
-        let found: () -> Bool = { [weak self] in self?.receiver?.hasReceiver == true }
+        // On whenever receiver control is: a command with no connection searches again.
+        let found: () -> Bool = { [weak self] in self?.receiver != nil }
         func handle(
             _ id: CommandID, isOn: ((ReceiverState) -> Bool)? = nil,
             sends command: @escaping (ReceiverState) -> ReceiverCommand

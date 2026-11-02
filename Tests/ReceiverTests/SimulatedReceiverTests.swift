@@ -59,9 +59,12 @@ extension LoopbackConnection {
     }
 }
 
-private func denon(_ address: String = "127.0.0.1", udn: String = "uuid:1") -> Renderer {
+private func denon(
+    _ address: String = "127.0.0.1", udn: String = "uuid:1", model: String = "Denon AVR-X1800H",
+    name: String = "AVR-X1800H"
+) -> Renderer {
     Renderer(
-        udn: udn, name: "AVR-X1800H", manufacturer: "Denon", model: "AVR-X1800H",
+        udn: udn, name: name, manufacturer: "Denon", model: model,
         location: try! LocalURL("http://\(address):60006/d.xml", on: loopback), sinkFormats: [])
 }
 
@@ -75,17 +78,40 @@ private final class ProblemLog: @unchecked Sendable {
 }
 
 /// A control aimed at `port`, with what it reported.
+/// What a fake discovery finds, which a test can change, and how often it ran.
+private final class Discovery: @unchecked Sendable {
+    private let lock = NSLock()
+    private var found: [Renderer]
+    private var count = 0
+
+    init(_ renderers: [Renderer]) { found = renderers }
+
+    var renderers: [Renderer] {
+        get { lock.withLock { found } }
+        set { lock.withLock { found = newValue } }
+    }
+
+    var runs: Int { lock.withLock { count } }
+
+    func run() -> RendererDiscovery.Outcome {
+        var outcome = RendererDiscovery.Outcome()
+        outcome.renderers = lock.withLock {
+            count += 1
+            return found
+        }
+        return outcome
+    }
+}
+
 @MainActor
 private func control(
     port: UInt16, renderers: [Renderer] = [denon()], fallback: String? = nil,
-    interfaces: [NetworkInterface] = [loopback]
+    interfaces: [NetworkInterface] = [loopback], discovery: Discovery? = nil
 ) -> (ReceiverControl, ProblemLog) {
-    var outcome = RendererDiscovery.Outcome()
-    outcome.renderers = renderers
-    let found = outcome
+    let discovery = discovery ?? Discovery(renderers)
     let log = ProblemLog()
     let control = ReceiverControl(
-        discover: { found }, fallback: { fallback.flatMap(IPAddress.init) },
+        discover: { discovery.run() }, fallback: { fallback.flatMap(IPAddress.init) },
         interfaces: { interfaces }, problem: log.add, port: port)
     return (control, log)
 }
@@ -105,6 +131,25 @@ private func wait(
     }
 }
 
+/// Starts `control` and answers its first query, as a receiver does.
+@MainActor
+private func connected(
+    _ control: ReceiverControl, _ log: ProblemLog, _ receiver: SimulatedReceiver,
+    peer index: Int = 0
+) async throws -> LoopbackConnection {
+    let peer = try await receiver.peer(index)
+    try await peer.send("PWON\r")
+    try await wait(control, log, "connected") {
+        if case .connected = control.status { true } else { false }
+    }
+    return peer
+}
+
+@MainActor
+private func isUnreachable(_ control: ReceiverControl) -> Bool {
+    if case .unreachable = control.status { true } else { false }
+}
+
 @MainActor @Test func theModelFollowsPushedLinesNotWhatWasSent() async throws {
     let receiver = try await SimulatedReceiver()
     defer { receiver.stop() }
@@ -112,9 +157,11 @@ private func wait(
     control.start()
     let peer = try await receiver.peer()
     #expect(try await peer.lines(5) == ["PW?", "MV?", "MU?", "SI?", "MS?"])
-    try await wait(control, log, "connected") { control.status == .connected("AVR-X1800H") }
+    // Connected only once the receiver says something.
+    #expect(control.status == .connecting("AVR-X1800H"))
     try await peer.send("PWON\rMV455\rMUOFF\rSICD\rMSSTEREO\rCVFL 50\r")
     try await wait(control, log, "the answers taken") { control.state.soundMode == "STEREO" }
+    #expect(control.status == .connected("AVR-X1800H"))
     #expect(control.state.isOn == true)
     #expect(control.state.volume?.decibels == -34.5)
     #expect(control.state.isMuted == false)
@@ -158,105 +205,202 @@ private func wait(
     #expect(log.all.count == ReceiverControl.ignoredLineCap + 1)
 }
 
-@MainActor @Test func anOversizeLineDropsTheConnection() async throws {
+@MainActor @Test func anOversizeLineDropsTheConnectionAndClearsTheModel() async throws {
     let receiver = try await SimulatedReceiver()
     defer { receiver.stop() }
     let (control, log) = control(port: receiver.port)
     control.start()
-    let peer = try await receiver.peer()
+    let peer = try await connected(control, log, receiver)
+    try await wait(control, log, "on") { control.state.isOn == true }
+    let listener = try #require(control.listening)
     // A line of exactly the cap is fine; one byte more without a CR isn't.
     try await peer.send("MS" + String(repeating: "A", count: ReceiverConnection.lineCap - 2) + "\r")
     try await peer.send(String(repeating: "B", count: ReceiverConnection.lineCap + 1))
-    try await wait(control, log, "unreachable") {
-        if case .unreachable = control.status { true } else { false }
-    }
+    try await wait(control, log, "unreachable") { isUnreachable(control) }
     #expect(log.all.contains(.unreachable("\(ReceiverConnection.End.overlongLine)")))
     #expect(await peer.closes(within: 2))
+    // No check mark shows what the receiver said before, and nothing waits on the old stream.
+    #expect(control.state == ReceiverState())
+    #expect(listener.isCancelled)
 }
 
-@MainActor @Test func aLineWithoutItsCRWaitsForIt() async throws {
+@MainActor @Test func aFloodOfLinesDropsTheConnection() async throws {
     let receiver = try await SimulatedReceiver()
     defer { receiver.stop() }
     let (control, log) = control(port: receiver.port)
     control.start()
-    let peer = try await receiver.peer()
-    try await wait(control, log, "connected") { control.status == .connected("AVR-X1800H") }
+    let peer = try await connected(control, log, receiver)
+    try await peer.send(
+        String(repeating: "CVFL 50\r", count: ReceiverConnection.linesPerSecondCap + 50))
+    try await wait(control, log, "unreachable") { isUnreachable(control) }
+    #expect(log.all.contains(.unreachable("\(ReceiverConnection.End.flooding)")))
+    #expect(await peer.closes(within: 2))
+}
+
+@MainActor @Test func aLineWithoutItsCRWaitsForItAndCRLFIsALineEnd() async throws {
+    let receiver = try await SimulatedReceiver()
+    defer { receiver.stop() }
+    let (control, log) = control(port: receiver.port)
+    control.start()
+    let peer = try await connected(control, log, receiver)
     try await peer.send("MV50")
     try await Task.sleep(nanoseconds: 200_000_000)
     #expect(control.state.volume == nil)
     try await peer.send("\r")
     try await wait(control, log, "the line taken") { control.state.volume?.decibels == -30 }
+    try await peer.send("MV40\r\nSIGAME\r\n")
+    try await wait(control, log, "CRLF lines taken") { control.state.input == .game }
+    #expect(control.state.volume?.decibels == -40)
+    #expect(log.all == [])
+}
+
+@MainActor @Test func aSilentConnectionIsUnreachableWithTheReason() async throws {
+    let receiver = try await SimulatedReceiver()
+    defer { receiver.stop() }
+    let (control, log) = control(port: receiver.port)
+    control.start()
+    let peer = try await receiver.peer()
+    #expect(try await peer.lines(5).count == 5)
+    #expect(control.status == .connecting("AVR-X1800H"))
+    try await wait(control, log, "unreachable") { isUnreachable(control) }
+    #expect(log.all == [.unreachable("\(ReceiverConnection.End.silent)")])
+    #expect(log.all.first?.description.contains("HEOS or AVR Remote") == true)
 }
 
 @MainActor @Test func aRefusedConnectionIsUnreachableAndNotRetried() async throws {
     let port = LoopbackServer.refusingPort
-    let (control, log) = control(port: port)
+    let discovery = Discovery([denon()])
+    let (control, log) = control(port: port, discovery: discovery)
     control.start()
-    try await wait(control, log, "unreachable") {
-        if case .unreachable = control.status { true } else { false }
-    }
+    try await wait(control, log, "unreachable") { isUnreachable(control) }
     try await Task.sleep(nanoseconds: 300_000_000)
     #expect(log.all.count == 1)
     #expect(log.all.first?.description.contains("refused") == true, "\(log.all)")
-    // The owner's next command tries once more.
+    #expect(log.all.first?.description.hasSuffix(ReceiverControl.unreachableHint) == true)
+    #expect(discovery.runs == 1)
+    // The owner's next command searches and tries once more.
     control.run(.volumeUp)
     try await wait(control, log, "a second report") { log.all.count == 2 }
+    #expect(discovery.runs == 2)
 }
 
-@MainActor @Test func aDroppedConnectionIsUnreachableAndNotRetried() async throws {
+@MainActor @Test func aDroppedConnectionIsFoundAgainOnlyByACommand() async throws {
     let receiver = try await SimulatedReceiver()
     defer { receiver.stop() }
-    let (control, log) = control(port: receiver.port)
+    let discovery = Discovery([denon()])
+    let (control, log) = control(port: receiver.port, discovery: discovery)
     control.start()
-    let peer = try await receiver.peer()
-    try await wait(control, log, "connected") { control.status == .connected("AVR-X1800H") }
+    let peer = try await connected(control, log, receiver)
     peer.close()
-    try await wait(control, log, "unreachable") {
-        if case .unreachable = control.status { true } else { false }
-    }
+    try await wait(control, log, "unreachable") { isUnreachable(control) }
     #expect(log.all.count == 1)
     try await Task.sleep(nanoseconds: 300_000_000)
     #expect(receiver.server.connectionCount == 1)
+    #expect(discovery.runs == 1)
+    // The command searches again, since the receiver may have moved, then is sent.
     control.run(.mute(true))
     let second = try await receiver.peer(1)
     #expect(try await second.lines(1) == ["MUON"])
+    #expect(discovery.runs == 2)
+    try await second.send("MUON\r")
     try await wait(control, log, "connected again") { control.status == .connected("AVR-X1800H") }
 }
 
-@MainActor @Test func onlyOneDenonOnTheSubnetIsControlled() async throws {
+@MainActor @Test func aReceiverNotFoundAtFirstIsFoundByACommand() async throws {
+    let receiver = try await SimulatedReceiver()
+    defer { receiver.stop() }
+    let discovery = Discovery([])
+    let (control, log) = control(port: receiver.port, discovery: discovery)
+    control.start()
+    try await wait(control, log, "unreachable") { isUnreachable(control) }
+    discovery.renderers = [denon()]
+    control.run(.input(.game))
+    let peer = try await receiver.peer()
+    #expect(try await peer.lines(1) == ["SIGAME"])
+    #expect(discovery.runs == 2)
+}
+
+@MainActor @Test func theReceiverIsChosenAmongDenonsByAddressThenByModel() async throws {
+    let receiver = try await SimulatedReceiver()
+    defer { receiver.stop() }
+    let speaker = denon("127.0.0.3", udn: "uuid:home", model: "Denon Home 150", name: "Kitchen")
+    // A Denon Home answering alongside the receiver is passed over.
+    let (byModel, modelLog) = control(port: receiver.port, renderers: [speaker, denon()])
+    byModel.start()
+    _ = try await connected(byModel, modelLog, receiver)
+    byModel.stop()
+    // Two receivers: the configured address picks one.
+    let other = denon("127.0.0.3", udn: "uuid:2", name: "Den")
+    let (byAddress, addressLog) = control(
+        port: receiver.port, renderers: [other, denon()], fallback: "127.0.0.1")
+    byAddress.start()
+    _ = try await connected(byAddress, addressLog, receiver, peer: 1)
+    byAddress.stop()
+    // Without one, it says which answered.
+    let (unsure, unsureLog) = control(port: receiver.port, renderers: [other, denon()])
+    unsure.start()
+    let why =
+        "2 Denon receivers answered: AVR-X1800H at 127.0.0.1, Den at 127.0.0.3; set"
+        + " receiver.address to the one to control"
+    try await wait(unsure, unsureLog, "unsure") { unsure.status == .unreachable(why) }
+}
+
+@MainActor @Test func noDenonReceiverIsReportedAgainOnACommand() async throws {
     let other = Renderer(
         udn: "uuid:tv", name: "TV", manufacturer: "Acme", model: "TV",
         location: try LocalURL("http://127.0.0.1:1/d.xml", on: loopback), sinkFormats: [])
-    for (renderers, why) in [
-        ([other], "no Denon receiver answered on the local network"),
-        (
-            [denon(), denon("127.0.0.3", udn: "uuid:2")],
-            "2 Denon receivers answered, at 127.0.0.1, 127.0.0.3; receiver control works with one"
-        ),
-    ] {
-        let (control, log) = control(port: 1, renderers: renderers)
-        control.start()
-        try await wait(control, log, "unreachable") { control.status == .unreachable(why) }
-        #expect(!control.hasReceiver)
-        control.run(.volumeUp)
-        #expect(log.all == [.unreachable(why), .unreachable("no receiver was found")])
-    }
+    let why = "no Denon receiver answered on the local network"
+    let (control, log) = control(port: 1, renderers: [other])
+    control.start()
+    try await wait(control, log, "unreachable") { control.status == .unreachable(why) }
+    control.run(.volumeUp)
+    try await wait(control, log, "reported again") { log.all.count == 2 }
+    #expect(log.all == [.unreachable(why), .unreachable(why)])
 }
 
-@MainActor @Test func stoppingClosesTheConnectionAndForgetsTheReceiver() async throws {
+@MainActor @Test func stoppingClosesTheConnectionAndForgetsTheState() async throws {
     let receiver = try await SimulatedReceiver()
     defer { receiver.stop() }
     let (control, log) = control(port: receiver.port)
     control.start()
-    let peer = try await receiver.peer()
-    try await peer.send("PWON\r")
+    let peer = try await connected(control, log, receiver)
     try await wait(control, log, "on") { control.state.isOn == true }
     control.stop()
     #expect(control.status == .stopped)
     #expect(control.state == ReceiverState())
-    #expect(!control.hasReceiver)
     #expect(await peer.closes(within: 2))
     #expect(log.all == [])
+}
+
+@MainActor @Test func turningTheSettingOffStopsASearchUnderWay() async throws {
+    let cancelled = LoopbackOnce<Bool>()
+    let control = ReceiverControl(
+        discover: {
+            do {
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+            } catch {
+                cancelled.set(true)
+                throw error
+            }
+            return RendererDiscovery.Outcome()
+        }, fallback: { nil }, interfaces: { [] }, problem: { _ in }, port: 1)
+    let running = ReceiverControl.applying(enabled: true, to: nil, make: { control })
+    #expect(running === control)
+    #expect(control.status == .searching)
+    #expect(ReceiverControl.applying(enabled: false, to: running, make: { control }) == nil)
+    #expect(control.status == .stopped)
+    #expect(try await cancelled.value(seconds: 1))
+}
+
+@MainActor @Test func turningTheSettingOffClosesTheConnection() async throws {
+    let receiver = try await SimulatedReceiver()
+    defer { receiver.stop() }
+    let (made, log) = control(port: receiver.port)
+    let running = ReceiverControl.applying(enabled: true, to: nil, make: { made })
+    let peer = try await connected(made, log, receiver)
+    #expect(ReceiverControl.applying(enabled: false, to: running, make: { made }) == nil)
+    #expect(made.status == .stopped)
+    #expect(await peer.closes(within: 2))
 }
 
 /// The connection on its own, for the spacing of what it sends.
@@ -274,6 +418,8 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     let sender = connection(receiver)
     defer { sender.stop() }
     let peer = try await receiver.peer()
+    // A receiver says something at once, or the connection is taken for a silent one.
+    try await peer.send("PWON\r")
     // A key held for half a second at 30 repeats a second.
     for _ in 0..<15 {
         sender.send(ReceiverCommand.volumeUp.line)
@@ -297,6 +443,8 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     let sender = connection(receiver)
     defer { sender.stop() }
     let peer = try await receiver.peer()
+    // A receiver says something at once, or the connection is taken for a silent one.
+    try await peer.send("PWON\r")
     for command in [ReceiverCommand.power(true), .volumeUp, .volumeDown, .mute(true)] {
         sender.send(command.line)
     }
@@ -312,13 +460,16 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     defer { receiver.stop() }
     let sender = connection(receiver)
     defer { sender.stop() }
-    _ = try await receiver.peer()
+    try await receiver.peer().send("PWON\r")
     sender.send(ReceiverCommand.power(true).line)
     let accepted = (0..<40).map { index in
         sender.send(ReceiverCommand.setVolume(ReceiverVolume(halfSteps: index)!).line)
     }
-    #expect(accepted.filter { $0 }.count >= ReceiverConnection.waitingCap)
-    #expect(accepted.contains(false))
+    #expect(accepted.filter { $0 == .queued }.count >= ReceiverConnection.waitingCap)
+    #expect(accepted.contains(.full))
+    // Once it's ending, a line says so rather than claiming the queue is full.
+    sender.stop()
+    #expect(sender.send(ReceiverCommand.volumeUp.line) == .ended)
 }
 
 @MainActor @Test func theConfiguredAddressIsUsedWhenTheSearchFindsNone() async throws {
@@ -328,9 +479,8 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     control.start()
     let peer = try await receiver.peer()
     #expect(try await peer.lines(1) == ["PW?"])
-    try await wait(control, log, "connected") {
-        control.status == .connected("the receiver at 127.0.0.1")
-    }
+    _ = try await connected(control, log, receiver)
+    #expect(control.status == .connected("the receiver at 127.0.0.1"))
     #expect(log.all == [])
 }
 
@@ -342,7 +492,6 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
             "no Denon receiver answered on the local network, and the receiver address \(text)"
             + " isn't another device's address on a local subnet"
         try await wait(control, log, "unreachable") { control.status == .unreachable(why) }
-        #expect(!control.hasReceiver)
     }
 }
 
@@ -369,7 +518,8 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     // The configured address is off every subnet, so using it would fail.
     let (control, log) = control(port: receiver.port, fallback: "192.0.2.1")
     control.start()
-    try await wait(control, log, "connected") { control.status == .connected("AVR-X1800H") }
+    _ = try await connected(control, log, receiver)
+    #expect(control.status == .connected("AVR-X1800H"))
 }
 
 @Test func theControlConnectionNeverGoesThroughAProxy() {

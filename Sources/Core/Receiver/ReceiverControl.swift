@@ -5,8 +5,8 @@ import UPnP
 
 private let logger = moduleLogger()
 
-/// Receiver control: finds the one Denon among the renderers discovery gives, or else the
-/// address the owner configured when it's on a local subnet, keeps a connection to its control
+/// Receiver control: finds the one Denon receiver among the renderers discovery gives, or else
+/// the address the owner configured when it's on a local subnet, keeps a connection to its control
 /// port, and follows its status lines (ADR 0039). Nothing here runs until `start`, which the app
 /// calls only when `receiver.enabled` is on.
 @MainActor
@@ -16,7 +16,7 @@ public final class ReceiverControl {
         case searching
         case connecting(String)
         case connected(String)
-        /// Why; a command from the owner tries the connection again, nothing else does.
+        /// Why; a command from the owner searches and connects again, nothing else does.
         case unreachable(String)
     }
 
@@ -45,20 +45,29 @@ public final class ReceiverControl {
     /// Most ignored status lines reported per connection; the rest are counted once.
     static let ignoredLineCap = 20
 
+    /// Most commands kept while a search runs, to send once it connects.
+    static let pendingCap = 16
+    /// How many updates from the connection wait for the main actor; past this the oldest are
+    /// dropped, so a receiver flooding lines can't queue work without bound.
+    static let updateBufferCap = 64
+
     public private(set) var state = ReceiverState()
     public private(set) var status = Status.stopped
     /// Called after `state` or `status` changes.
     public var changed: () -> Void = {}
     private let discover: Discover
-    /// The configured address, used when discovery finds no receiver.
+    /// The configured address, preferred among Denons and used when discovery finds none.
     private let fallback: () -> LocalNetwork.IPAddress?
     private let interfaces: () throws -> [NetworkInterface]
     private let problem: (Problem) -> Void
     private let port: UInt16
-    /// Where the receiver is and what it's called, once found.
+    /// Where the receiver is and what it's called, while connected or connecting.
     private var receiver: (address: LocalNetwork.IPAddress, name: String)?
     private var connection: ReceiverConnection?
-    private var listening: Task<Void, Never>?
+    private(set) var listening: Task<Void, Never>?
+    private var searching: Task<Void, Never>?
+    /// Commands the owner gave while a search ran, sent once it connects.
+    private var pending: [ReceiverCommand] = []
     /// Bumped on each start and stop, so a search or a connection from before is dropped.
     private var session = 0
     private var ignoredLines = 0
@@ -87,54 +96,78 @@ public final class ReceiverControl {
         self.port = port
     }
 
+    /// Receiver control as `receiver.enabled` asks: started when it's on and stopped and gone
+    /// when it's off. `current` is the control running now; `make` makes one.
+    public static func applying(
+        enabled: Bool, to current: ReceiverControl?, make: () -> ReceiverControl
+    ) -> ReceiverControl? {
+        guard enabled else {
+            current?.stop()
+            return nil
+        }
+        let control = current ?? make()
+        control.start()
+        return control
+    }
+
     /// Searches for the receiver and connects to it.
     public func start() {
         stop()
+        search()
+    }
+
+    /// Ends the search and the connection, and forgets the receiver and its state.
+    public func stop() {
+        session += 1
+        searching?.cancel()
+        searching = nil
+        endConnection()
+        pending = []
+        set(.stopped)
+    }
+
+    /// Sends `command`. With no connection, it searches again first, since the receiver may
+    /// have moved; this and a setting change are the only things that search or connect.
+    public func run(_ command: ReceiverCommand) {
+        if let connection {
+            switch connection.send(command.line) {
+            case .queued: return
+            case .full:
+                problem(
+                    .ignored(
+                        "a command: \(ReceiverConnection.waitingCap) were already waiting to be"
+                            + " sent"))
+                return
+            case .ended:
+                // Its end is on the way; the command starts the search it would.
+                endConnection()
+            }
+        }
+        guard pending.count < Self.pendingCap else {
+            problem(.ignored("a command: \(Self.pendingCap) were already waiting for the receiver"))
+            return
+        }
+        pending.append(command)
+        if searching == nil { search() }
+    }
+
+    private func search() {
         session += 1
         let session = session
         set(.searching)
-        Task {
+        searching = Task {
             let outcome: RendererDiscovery.Outcome
             do {
                 outcome = try await discover()
             } catch {
                 guard session == self.session else { return }
+                searching = nil
                 useFallback(or: "the search failed: \(error)")
                 return
             }
             guard session == self.session else { return }
+            searching = nil
             found(outcome)
-        }
-    }
-
-    /// Closes the connection and forgets the receiver and its state.
-    public func stop() {
-        session += 1
-        connection?.stop()
-        connection = nil
-        listening?.cancel()
-        listening = nil
-        receiver = nil
-        state = ReceiverState()
-        set(.stopped)
-    }
-
-    /// Whether commands can go to a receiver: one was found, connected or not.
-    public var hasReceiver: Bool { receiver != nil }
-
-    /// Sends `command`. When the connection has ended, this is the one thing that opens it
-    /// again, since the owner asked.
-    public func run(_ command: ReceiverCommand) {
-        guard receiver != nil else {
-            problem(.unreachable("no receiver was found"))
-            return
-        }
-        if connection == nil { connect() }
-        guard connection?.send(command.line) == true else {
-            problem(
-                .ignored(
-                    "a command: \(ReceiverConnection.waitingCap) were already waiting to be sent"))
-            return
         }
     }
 
@@ -144,54 +177,62 @@ public final class ReceiverControl {
             problem(.ignored("\(outcome.moreProblems) more replies"))
         }
         let denons = outcome.renderers.filter { $0.manufacturer.lowercased().contains("denon") }
-        // A receiver can answer as more than one device, all at its one address.
-        let addresses = Set(denons.map(\.address))
-        guard !addresses.isEmpty else {
+        // The owner's address picks among them; otherwise only receivers count, since a Denon
+        // Home or HEOS speaker answers too. A receiver can answer as more than one device, all
+        // at its one address.
+        let configured = fallback()
+        let chosen =
+            denons.filter { $0.address == configured }.nilIfEmpty
+            ?? denons.filter { $0.model.uppercased().contains("AVR") }
+        let addresses = Set(chosen.map(\.address))
+        guard let first = chosen.first else {
             useFallback(or: "no Denon receiver answered on the local network")
             return
         }
-        guard let first = denons.first, addresses.count == 1 else {
-            unreachable(
-                "\(addresses.count) Denon receivers answered, at "
-                    + addresses.map(\.description).sorted().joined(separator: ", ")
-                    + "; receiver control works with one")
+        guard addresses.count == 1 else {
+            fail(
+                "\(addresses.count) Denon receivers answered: "
+                    + chosen.map { "\($0.name) at \($0.address)" }.sorted().joined(separator: ", ")
+                    + "; set receiver.address to the one to control")
             return
         }
-        receiver = (first.address, first.name)
         if let why = first.formatsProblem {
             logger.notice("the receiver's formats weren't read: \(why)")
         }
-        connect()
+        connect(to: first.address, name: first.name)
     }
 
-    /// Connects to `receiver.address` when it's set and on a local subnet; otherwise reports
-    /// `why` no receiver was found.
+    /// Connects to `receiver.address` when it's another device on a local subnet; otherwise
+    /// reports `why` no receiver was found.
     private func useFallback(or why: String) {
-        guard let address = fallback() else { return unreachable(why) }
+        guard let address = fallback() else { return fail(why) }
         let up: [NetworkInterface]
         do {
             up = try interfaces()
         } catch {
-            return unreachable("\(why), and the interfaces couldn't be listed: \(error)")
+            return fail("\(why), and the interfaces couldn't be listed: \(error)")
         }
         guard LocalSubnets(up).interface(forHost: address) != nil else {
-            return unreachable(
+            return fail(
                 "\(why), and the receiver address \(address) isn't another device's address on"
                     + " a local subnet")
         }
-        receiver = (address, "the receiver at \(address)")
-        connect()
+        connect(to: address, name: "the receiver at \(address)")
     }
 
-    private func connect() {
-        guard let receiver else { return }
-        let (updates, continuation) = AsyncStream.makeStream(of: ReceiverConnection.Update.self)
-        let connection = ReceiverConnection(address: receiver.address, port: port) {
-            continuation.yield($0)
+    private func connect(to address: LocalNetwork.IPAddress, name: String) {
+        endConnection()
+        receiver = (address, name)
+        let (updates, continuation) = AsyncStream.makeStream(
+            of: ReceiverConnection.Update.self,
+            bufferingPolicy: .bufferingNewest(Self.updateBufferCap))
+        let connection = ReceiverConnection(address: address, port: port) { update in
+            continuation.yield(update)
+            if case .ended = update { continuation.finish() }
         }
         self.connection = connection
         ignoredLines = 0
-        set(.connecting(receiver.name))
+        set(.connecting(name))
         let session = session
         listening = Task {
             for await update in updates {
@@ -200,14 +241,17 @@ public final class ReceiverControl {
             }
         }
         connection.start()
+        for command in pending { connection.send(command.line) }
+        pending = []
     }
 
     private func handle(_ update: ReceiverConnection.Update, from connection: ReceiverConnection) {
         switch update {
         case .connected:
-            set(.connected(receiver?.name ?? ""))
+            // Answers come first, so the model starts from the receiver's state.
             for query in statusQueries { connection.send(query) }
         case .line(let line, let text):
+            if case .connecting(let name) = status { set(.connected(name)) }
             switch line {
             case .event(let event):
                 if event == .input(nil) { ignore("an input it has no name for: \(text)") }
@@ -225,10 +269,20 @@ public final class ReceiverControl {
                 ignore("a line that isn't printable ASCII")
             }
         case .ended(let reason):
-            self.connection = nil
-            listening = nil
-            unreachable("\(reason)")
+            endConnection()
+            fail("\(reason)")
         }
+    }
+
+    /// Closes the connection, if any, and forgets what it reported, so no check mark shows a
+    /// state from before.
+    private func endConnection() {
+        connection?.stop()
+        connection = nil
+        listening?.cancel()
+        listening = nil
+        receiver = nil
+        state = ReceiverState()
     }
 
     private func ignore(_ what: String) {
@@ -240,7 +294,9 @@ public final class ReceiverControl {
         }
     }
 
-    private func unreachable(_ why: String) {
+    /// No receiver to talk to: the commands waiting for one are dropped with the report.
+    private func fail(_ why: String) {
+        pending = []
         set(.unreachable(why))
         problem(.unreachable(why))
     }
@@ -249,4 +305,8 @@ public final class ReceiverControl {
         self.status = status
         changed()
     }
+}
+
+extension Array {
+    fileprivate var nilIfEmpty: Self? { isEmpty ? nil : self }
 }

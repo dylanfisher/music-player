@@ -19,6 +19,21 @@ final class ReceiverConnection: @unchecked Sendable {
     static let connectSeconds = 5.0
     /// Most lines that may wait to be sent.
     static let waitingCap = 16
+    /// How long a connection may stay silent after it opens. A receiver answers `PW?` within
+    /// 200 ms, the spec says; one that accepts and never answers has its control slot taken.
+    static let firstLineSeconds = 1.0
+    /// Most lines in any second. A receiver sends a few dozen on an input change; past this it's
+    /// flooding, and the connection is dropped.
+    static let linesPerSecondCap = 200
+
+    /// What became of a line handed to `send`.
+    enum Sending: Equatable {
+        case queued
+        /// `waitingCap` lines already wait.
+        case full
+        /// The connection has ended, or is ending.
+        case ended
+    }
 
     enum Update: Equatable {
         case connected
@@ -32,6 +47,8 @@ final class ReceiverConnection: @unchecked Sendable {
         case dropped(String)
         case overlongLine
         case timedOut
+        case silent
+        case flooding
 
         var description: String {
             switch self {
@@ -41,6 +58,12 @@ final class ReceiverConnection: @unchecked Sendable {
                 "it sent over \(ReceiverConnection.lineCap) bytes without a line end, so the"
                     + " connection was dropped"
             case .timedOut: "it didn't answer within \(Int(ReceiverConnection.connectSeconds)) s"
+            case .silent:
+                "it took the connection but sent nothing; another app, such as HEOS or AVR"
+                    + " Remote, may hold its one control connection"
+            case .flooding:
+                "it sent over \(ReceiverConnection.linesPerSecondCap) lines in a second, so the"
+                    + " connection was dropped"
             }
         }
     }
@@ -55,6 +78,9 @@ final class ReceiverConnection: @unchecked Sendable {
     private var isReady = false
     private var isEnded = false
     private var isSending = false
+    private var heardLine = false
+    /// When each line in the last second came.
+    private var recentLines: [Double] = []
     private var nextSendTime = 0.0
     /// When each line went out, for tests of the gaps.
     private var sendTimes: [Double] = []
@@ -79,6 +105,9 @@ final class ReceiverConnection: @unchecked Sendable {
                 updates(.connected)
                 receive()
                 drain()
+                queue.asyncAfter(deadline: .now() + Self.firstLineSeconds) { [self] in
+                    if !heardLine { end(.silent) }
+                }
             case .waiting(let error): end(.refused("\(error)"))
             case .failed(let error) where error == .posix(.ECONNREFUSED): end(.refused("\(error)"))
             case .failed(let error): end(.dropped("\(error)"))
@@ -91,17 +120,17 @@ final class ReceiverConnection: @unchecked Sendable {
         }
     }
 
-    /// Queues `line` to go out after the lines before it. False when it was dropped because
-    /// `waitingCap` lines already wait; a repeat of the last waiting line is dropped quietly.
+    /// Queues `line` to go out after the lines before it. A repeat of the last waiting line is
+    /// dropped quietly, and counts as queued.
     @discardableResult
-    func send(_ line: [UInt8]) -> Bool {
+    func send(_ line: [UInt8]) -> Sending {
         queue.sync {
-            guard !isEnded else { return false }
-            if waiting.last == line { return true }
-            guard waiting.count < Self.waitingCap else { return false }
+            guard !isEnded else { return .ended }
+            if waiting.last == line { return .queued }
+            guard waiting.count < Self.waitingCap else { return .full }
             waiting.append(line)
             drain()
-            return true
+            return .queued
         }
     }
 
@@ -150,6 +179,11 @@ final class ReceiverConnection: @unchecked Sendable {
             for byte in data ?? Data() {
                 switch byte {
                 case UInt8(ascii: "\r"):
+                    heardLine = true
+                    let time = now()
+                    recentLines.removeAll { time - $0 >= 1 }
+                    recentLines.append(time)
+                    guard recentLines.count <= Self.linesPerSecondCap else { return end(.flooding) }
                     updates(
                         .line(
                             ReceiverLine(buffer[...]), text: String(decoding: buffer, as: UTF8.self)

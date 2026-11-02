@@ -85,15 +85,17 @@ no caller until 9b, the one exception to "no type without a caller"; `scripts/su
 says so.
 
 **Finding the receiver.** Receiver control runs discovery and takes the renderers whose
-manufacturer contains "Denon"†, grouped by address, since one receiver can answer as more
-than one device. With more than one address it reports why and connects to nothing. With none,
-or when the search itself fails, it falls back to `receiver.address`, null by default: a
-literal IPv4 or IPv6 address, never a host name (the config check refuses one), used only
-while it's another device's address on the local subnet of an interface that's up (not the
-network or broadcast address, nor the Mac's own), by the same injected check SSDP
-replies get. Otherwise it reports why and connects to nothing. A discovered receiver wins over
-the configured address. The address comes only from a `Renderer`, which only discovery makes,
-or from that setting. Port 23 is fixed.
+manufacturer contains "Denon"†. A Denon Home or HEOS speaker answers too, so among them it
+prefers the one at `receiver.address`, and otherwise keeps those whose model name contains
+"AVR"†. One receiver can answer as more than one device, all at its one address; with more than
+one address left, it names each and asks for `receiver.address`, and connects to nothing. With
+none, or when the search itself fails, it falls back to `receiver.address`, null by default: a
+literal IPv4 or IPv6 address, never a host name (the config check refuses one), used only while
+it's another device's address on the local subnet of an interface that's up (not the network or
+broadcast address, nor the Mac's own), by the same injected check SSDP replies get. Otherwise it
+reports why and connects to nothing. The address comes only from a `Renderer`, which only
+discovery makes, or from that setting. Port 23 is fixed. Turning the setting off cancels a
+search under way along with the connection.
 
 **The line protocol**, from the X1000 spec:
 
@@ -111,8 +113,9 @@ or from that setting. Port 23 is fixed.
   would claim an input the receiver has left. At most 20 ignored lines are reported per
   connection, then one line saying the rest aren't.
 - The model changes only on a status line, so it follows the receiver's own remote and front
-  panel, and shows what the app sent only once the receiver says so. On connect the app asks
-  `PW?`, `MV?`, `MU?`, `SI?` and `MS?`, which reads state and changes nothing.
+  panel, and shows what the app sent only once the receiver says so. On connect the app sends
+  the commands that waited for it, then asks `PW?`, `MV?`, `MU?`, `SI?` and `MS?`, which reads
+  state and changes nothing.
 
 **Commands.** Built only from typed values (`ReceiverCommand`), never from received text: volume
 up and down (`MVUP`, `MVDOWN`), set (`MV` and a level), mute (`MUON`, `MUOFF`), Pure Direct†
@@ -124,13 +127,19 @@ are left out, as HEOS has them on the X1800H. Lines go out at least 50 ms apart,
 the volume a step per 50 ms and stops when let go; past 16 waiting, a command is refused and
 reported.
 
-**Unreachable.** A refused connection (Network.framework's waiting state), a failure, a close
-by the receiver, an overlong line or no connection within 5 s ends the connection and shows
-"the receiver is unreachable", with the owner's own scripts' hint, "Is it on the network,
-with Network Control set to Always On?", in the status bar. Nothing reconnects on its own: the owner's next
-receiver command connects once, since many Denons take one control client at a time and a
-silent retry would fight the owner's other app for it. Turning the setting off and on searches
-again.
+**Unreachable.** A refused connection (Network.framework's waiting state), a failure, a close by
+the receiver, an overlong line, over 200 lines in a second, no connection within 5 s, or a
+connection that says nothing within 1 s of opening (another app, HEOS or AVR Remote, may hold
+the receiver's one control connection) ends the connection, clears the model so no check mark
+shows a state from before, and shows "the receiver is unreachable", with the owner's own
+scripts' hint, "Is it on the network, with Network Control set to Always On?", in the status
+bar. Status shows connected only once a line has come. Nothing searches or connects on its own:
+the owner's next receiver command runs discovery again, then the fallback, connects and sends,
+since the receiver may have moved (the owner's did, by DHCP) and a silent retry would fight the
+owner's other app for the one control slot. Turning the setting on searches too. At most 16
+commands wait for a search; past that, and past 16 lines waiting on a connection, a command is
+refused and reported, and one sent as the connection ends starts the search instead. Updates
+from the connection reach the main actor through a buffer of the newest 64.
 
 **In the registry.** The receiver's commands sit in a Receiver submenu of Controls with the
 setting's toggle, an Input submenu inside it. Their IDs' last parts (`raiseVolume`,
