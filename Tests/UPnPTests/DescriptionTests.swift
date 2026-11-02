@@ -7,7 +7,8 @@ import Testing
 func descriptionXML(
     name: String = "Living Room",
     controlURL: String = "/upnp/control/renderer_dvc/ConnectionManager",
-    renderer: String = "urn:schemas-upnp-org:device:MediaRenderer:1"
+    renderer: String = "urn:schemas-upnp-org:device:MediaRenderer:1",
+    udn: String = "uuid:renderer-1"
 ) -> String {
     """
     <?xml version="1.0" encoding="utf-8"?>
@@ -25,7 +26,7 @@ func descriptionXML(
             <friendlyName>\(name)</friendlyName>
             <manufacturer>Denon</manufacturer>
             <modelName>Denon AVR-X1800H</modelName>
-            <UDN>uuid:renderer-1</UDN>
+            <UDN>\(udn)</UDN>
             <serviceList>
               <service>
                 <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
@@ -82,6 +83,15 @@ private func refusal(_ text: String) -> DescriptionProblem? {
     #expect(renderer.name.hasPrefix("Den\\u{9B}2Jon\\u{A}Fake line"))
     #expect(!renderer.name.contains("\n"))
     #expect(renderer.name.count < DeviceDescription.nameCap + 20)
+}
+
+@Test func aRenderersUDNIsEscapedAndCutLikeItsName() throws {
+    let udn = "uuid:x&#x9B;2J&#10;y" + String(repeating: "u", count: 400)
+    let renderer = try #require(
+        try DeviceDescription(bytes(descriptionXML(udn: udn))).devices.last)
+    #expect(renderer.udn.hasPrefix("uuid:x\\u{9B}2J\\u{A}y"))
+    #expect(!renderer.udn.unicodeScalars.contains { $0.value < 0x20 || $0.value == 0x9B })
+    #expect(renderer.udn.count < DeviceDescription.nameCap + 20)
 }
 
 @Test func entitiesAndDTDsAreRefusedBeforeParsing() {

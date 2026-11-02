@@ -52,11 +52,25 @@ package struct DIDLTrack: Equatable, Sendable {
             + " xmlns:dc=\"http://purl.org/dc/elements/1.1/\""
             + " xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">"
             + "<item id=\"1\" parentID=\"0\" restricted=\"1\">"
-            + element("dc:title", title ?? "") + element("dc:creator", artist)
-            + element("upnp:artist", artist) + element("upnp:album", album)
+            + element(Self.titleElement, title ?? "") + element("dc:creator", artist)
+            + element(Self.artistElement, artist) + element(Self.albumElement, album)
             + "<upnp:class>object.item.audioItem.musicTrack</upnp:class>"
             + "<res\(res)>\(xmlEscaped(url))</res></item></DIDL-Lite>"
     }
+
+    /// The title, artist and album `document` holds, as a renderer reads them; empty for one
+    /// it leaves out.
+    package static func tags(in document: String) throws(DescriptionProblem) -> [String] {
+        let leaves = try xmlLeaves(Array(document.utf8))
+        return [titleElement, artistElement, albumElement].map { element in
+            let local = element.split(separator: ":").last.map(String.init)
+            return leaves.first { $0.name == local }?.text ?? ""
+        }
+    }
+
+    private static let titleElement = "dc:title"
+    private static let artistElement = "upnp:artist"
+    private static let albumElement = "upnp:album"
 }
 
 /// `H:MM:SS.FFF`, the form DIDL-Lite's `duration` takes.

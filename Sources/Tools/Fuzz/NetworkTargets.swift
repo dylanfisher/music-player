@@ -184,6 +184,94 @@ let serviceDescription = FuzzTarget(
         }
     })
 
+/// A request to the server the UPnP output streams from: its head and its `Range`.
+let httpRequest = FuzzTarget(
+    name: "http-request",
+    summary: "a request head to the track server and the bytes its Range picks",
+    seedFormats: [],
+    tokens: ["\r\n", "Range: bytes=", "-", ",", "Host: 127.0.0.1:8080", "GET /", "HEAD /"],
+    madeSeeds: { _, _ in
+        let path = "/" + String(repeating: "0", count: 32)
+        return [
+            "GET \(path) HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nRange: bytes=0-99\r\n\r\n",
+            "HEAD \(path) HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nRange: bytes=-5\r\n\r\n",
+            "GET \(path) HTTP/1.0\r\nHost: 127.0.0.1:8080\r\n\r\n",
+        ].map { Array($0.utf8) }
+    },
+    prepare: { _ in
+        { input in
+            let size: UInt64 = 1000
+            guard
+                let (status, bytes) = answer(
+                    toRequest: input, authority: "127.0.0.1:8080", fileSize: size)
+            else { return false }
+            switch status {
+            case 200:
+                precondition(
+                    bytes == 0...(size - 1), "a whole file of \(String(describing: bytes))")
+            case 206:
+                let range = bytes!
+                precondition(range.upperBound < size, "a range past the file: \(range)")
+            default: precondition(bytes == nil, "status \(status) with bytes")
+            }
+            return status == 200 || status == 206
+        }
+    })
+
+/// A track's tags as the UPnP output sends them: DIDL-Lite inside a SetAVTransportURI request.
+/// Both must read back as the text they were given, so no tag can change the XML.
+let didlLite = FuzzTarget(
+    name: "didl-lite",
+    summary: "a track's tags in DIDL-Lite in a SOAP request, read back as written",
+    seedFormats: [], tokens: ["&", "<", "]]>", "\"", "\r\n", "\u{0}", "\u{2028}", "\u{FFFE}"],
+    madeSeeds: { _, _ in
+        ["A & B <live>\0Artist\r\nName\0\"Album\" ]]>", "\u{1}\u{FFFF}\0\0", "x\0y"].map {
+            Array($0.utf8)
+        }
+    },
+    prepare: { _ in
+        { input in
+            // Tags come separated by NULs, so one field alone is no track.
+            guard input.count <= 4096, input.contains(0) else { return false }
+            let fields = input.split(separator: 0, omittingEmptySubsequences: false)
+                .map { String(decoding: $0, as: UTF8.self) }
+            let tags = (0..<3).map { $0 < fields.count ? fields[$0] : "" }
+            let track = DIDLTrack(
+                title: tags[0], artist: tags[1], album: tags[2],
+                protocolInfo: "http-get:*:audio/flac:*", durationSeconds: 1, sizeBytes: 1,
+                sampleRateHz: 44_100, bitsPerSample: 16, channels: 2)
+            let document = track.document(
+                url: "http://192.0.2.1:1/" + String(repeating: "0", count: 32))
+            let request = AVTransport.setURI("u", metadata: document)
+            guard let sent = try? AVTransport.metadata(inSetURIRequest: request.body) else {
+                preconditionFailure("the request doesn't parse")
+            }
+            precondition(sent == document, "the metadata didn't survive the request")
+            guard let read = try? DIDLTrack.tags(in: document) else {
+                preconditionFailure("the DIDL-Lite doesn't parse")
+            }
+            precondition(
+                read == tags.map(didlText), "the tags read back changed: \(tags.debugDescription)")
+            return true
+        }
+    })
+
+/// What a tag should read back as from DIDL-Lite: cut to the cap and to one line, without the
+/// characters XML 1.0 can't hold. An oracle apart from the writer's own code.
+private func didlText(_ tag: String) -> String {
+    let line = String(tag.prefix(512).map { $0.isNewline ? " " : $0 })
+    var kept = String.UnicodeScalarView()
+    for scalar in line.unicodeScalars {
+        let value = scalar.value
+        if value == 0x9 || value == 0xA || value == 0xD
+            || (value >= 0x20 && value != 0xFEFF && value != 0xFFFE && value != 0xFFFF)
+        {
+            kept.append(scalar)
+        }
+    }
+    return String(kept)
+}
+
 /// A chunked HTTP body, as a renderer may send a description or a SOAP reply.
 let chunkedBody = FuzzTarget(
     name: "chunked-body", summary: "a chunked HTTP body, decoded under a cap",

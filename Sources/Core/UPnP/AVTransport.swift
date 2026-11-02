@@ -14,7 +14,16 @@ package enum AVTransport {
     }
 
     package static func setURI(_ uri: String, metadata: String) -> SOAPAction {
-        action("SetAVTransportURI", [("CurrentURI", uri), ("CurrentURIMetaData", metadata)])
+        action("SetAVTransportURI", [("CurrentURI", uri), (uriMetadata, metadata)])
+    }
+
+    private static let uriMetadata = "CurrentURIMetaData"
+
+    /// The metadata a `setURI` request's body carries, as a renderer reads it.
+    package static func metadata(inSetURIRequest body: [UInt8]) throws(DescriptionProblem)
+        -> String?
+    {
+        try xmlLeaves(body).first { $0.name == uriMetadata }?.text
     }
 
     /// An empty `uri` clears the next track.

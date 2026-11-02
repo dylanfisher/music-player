@@ -14,9 +14,9 @@ public struct HTTPServedFile: Sendable, Equatable {
     }
 }
 
-/// Serves files to one local subnet by token (ADR 0039). It listens on one interface's
-/// address, on a port the system picks, and takes connections only from that interface's
-/// subnet. A URL names a random token, which maps to a key, which `resolve` maps to a file at
+/// Serves files to one device on a local subnet by token (ADR 0039, 0041). It listens on one
+/// interface's address, on a port the system picks, and takes connections only from that one
+/// device's address on that interface's subnet. A URL names a random token, which maps to a key, which `resolve` maps to a file at
 /// request time; an unknown token is 404 before `resolve` or the file system sees it. Requests
 /// are `GET` or `HEAD` with the bound address as `Host`, no body and at most one range. At most
 /// `connectionCap` connections at once, each closed when its request head isn't whole within
@@ -50,13 +50,16 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
     private var boundPort: UInt16 = 0
     private var listening: CheckedContinuation<Result<Void, LocalNetworkError>, Never>?
 
-    /// Starts a server on `interface`'s address. `problem` hears each connection refused and
-    /// each file that couldn't be served.
+    /// Starts a server on `interface`'s address that takes connections only from `peer`, the
+    /// one device it serves, so another host on the subnet holding a token gets nothing.
+    /// `problem` hears each connection refused and each file that couldn't be served.
     public static func start(
-        on interface: NetworkInterface, resolve: @escaping Resolve,
-        problem: @escaping @Sendable (String) -> Void
+        on interface: NetworkInterface, acceptingOnly peer: IPAddress,
+        resolve: @escaping Resolve, problem: @escaping @Sendable (String) -> Void
     ) async throws(LocalNetworkError) -> HTTPServer {
-        try await start(on: interface, accepts: interface.holds, resolve: resolve, problem: problem)
+        try await start(
+            on: interface, accepts: { interface.holds($0) && $0 == peer }, resolve: resolve,
+            problem: problem)
     }
 
     static func start(

@@ -64,6 +64,23 @@ struct XMLTree: Equatable {
     }
 }
 
+/// Every element of `bytes` with no children, in document order, as its local name and its
+/// text untrimmed: what a renderer reads back from a document the app wrote.
+func xmlLeaves(_ bytes: [UInt8]) throws(DescriptionProblem) -> [(
+    name: String, text: String
+)] {
+    let root: XMLTree
+    do throws(XMLProblem) {
+        root = try XMLTree.parse(bytes)
+    } catch {
+        throw .unreadable("\(error)")
+    }
+    func leaves(_ tree: XMLTree) -> [(name: String, text: String)] {
+        tree.children.isEmpty ? [(tree.name, tree.text)] : tree.children.flatMap(leaves)
+    }
+    return leaves(root)
+}
+
 /// Why a document wasn't read.
 enum XMLProblem: Error, Equatable, CustomStringConvertible {
     case tooLarge(bytes: Int)

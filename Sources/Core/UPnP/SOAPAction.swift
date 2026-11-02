@@ -7,7 +7,9 @@ package struct SOAPAction: Sendable {
     let name: String
     let arguments: [(name: String, value: String)]
 
-    init(_ serviceType: String, _ name: String, _ arguments: [(name: String, value: String)] = []) {
+    init(
+        _ serviceType: String, _ name: String, _ arguments: [(name: String, value: String)] = []
+    ) {
         self.serviceType = serviceType
         self.name = name
         self.arguments = arguments
@@ -21,7 +23,7 @@ package struct SOAPAction: Sendable {
         ]
     }
 
-    var body: [UInt8] {
+    package var body: [UInt8] {
         let arguments = self.arguments.map { xmlElement($0.name, $0.value) }
         let action =
             arguments.isEmpty
@@ -125,7 +127,10 @@ func xmlElement(_ name: String, _ text: String) -> String {
 }
 
 /// `text` with the five characters XML gives meaning escaped, and the characters XML 1.0 can't
-/// hold dropped, so a file's tags can't break or extend the document they're put in.
+/// hold dropped, so a file's tags can't break or extend the document they're put in; so is a
+/// byte order mark, which `XMLParser` drops from text and so wouldn't read back. Tab, LF
+/// and CR go as character references, since a parser turns CR LF into LF and, in an
+/// attribute, each of them into a space.
 func xmlEscaped(_ text: String) -> String {
     var escaped = ""
     escaped.reserveCapacity(text.utf8.count)
@@ -136,10 +141,12 @@ func xmlEscaped(_ text: String) -> String {
         case ">": escaped += "&gt;"
         case "\"": escaped += "&quot;"
         case "'": escaped += "&apos;"
-        case "\t", "\n", "\r": escaped.unicodeScalars.append(scalar)
+        case "\t": escaped += "&#9;"
+        case "\n": escaped += "&#10;"
+        case "\r": escaped += "&#13;"
         default:
             let value = scalar.value
-            if value >= 0x20 && value != 0xFFFE && value != 0xFFFF {
+            if value >= 0x20 && value != 0xFEFF && value != 0xFFFE && value != 0xFFFF {
                 escaped.unicodeScalars.append(scalar)
             }
         }

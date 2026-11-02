@@ -50,6 +50,18 @@ private final class Fixture: @unchecked Sendable {
             now: { [self] in lock.withLock { clock } })
     }
 
+    /// Starts the server the UPnP output starts: one that takes only `peer`'s connections.
+    func start(acceptingOnly peer: IPAddress) async throws {
+        server = try await HTTPServer<String>.start(
+            on: loopback, acceptingOnly: peer,
+            resolve: { [self] key in
+                lock.withLock { resolved.append(key) }
+                return HTTPServedFile(
+                    path: folder.appendingPathComponent(key).path, contentType: "audio/flac")
+            },
+            problem: { [self] message in lock.withLock { heard.append(message) } })
+    }
+
     var resolvedKeys: [String] { lock.withLock { resolved } }
     var problems: [String] { lock.withLock { heard } }
     func advance(_ seconds: Double) { lock.withLock { clock += seconds } }
@@ -219,6 +231,20 @@ private final class Fixture: @unchecked Sendable {
     #expect(try await connection.receiveAll() == [])
     #expect(fixture.problems.contains { $0.contains("refused a connection from 127.0.0.1") })
     #expect(fixture.resolvedKeys == [])
+}
+
+@Test func aServerForOneDeviceRefusesTheRestOfTheSubnet() async throws {
+    let other = try Fixture()
+    // 127.0.0.1, where the test connects from, is on the subnet but isn't the device.
+    try await other.start(acceptingOnly: IPAddress("127.0.0.9")!)
+    let refused = try await LoopbackConnection.connect(port: other.server.port)
+    try await refused.send("GET \(other.target("track")) HTTP/1.1\r\nHost: \(other.host)\r\n\r\n")
+    #expect(try await refused.receiveAll() == [])
+    #expect(other.resolvedKeys == [])
+
+    let device = try Fixture()
+    try await device.start(acceptingOnly: IPAddress("127.0.0.1")!)
+    #expect(try await device.get(device.target("track")).status == 200)
 }
 
 @Test func itListensOnItsOneAddressAndStops() async throws {

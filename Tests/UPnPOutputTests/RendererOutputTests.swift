@@ -151,7 +151,7 @@ private func output(_ fake: FakeRenderer, timeout: Double = 1) async throws -> (
     } throws: { error in
         "\(error)"
             == "no renderer uuid:gone answered on the local network; these did:"
-            + " Top Floor - Sonos Era 100 Media Renderer - RINCON_00005E00530101400"
+            + " Test Room - Sonos Era 100 Media Renderer - RINCON_00005E00530101400"
             + " (uuid:RINCON_00005E00530101400_MR), Denon AVR-X1800H"
             + " (uuid:00000000-0000-4000-8000-000000000002)"
     }

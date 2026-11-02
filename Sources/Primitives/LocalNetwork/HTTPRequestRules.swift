@@ -81,6 +81,31 @@ func route(_ head: HTTPHead, extra: Int, authority: String) -> HTTPRoute {
     return .serve(token: String(token), range: range, sendsBody: method == "GET")
 }
 
+/// What the server answers `request` with for a file of `size` bytes, from its head alone: the
+/// status, and the bytes it sends. Nil while the head is incomplete. The fuzzer drives the head
+/// parser and the range rules through this, as a request on the wire would.
+package func answer(toRequest request: [UInt8], authority: String, fileSize size: UInt64)
+    -> (status: Int, bytes: ClosedRange<UInt64>?)?
+{
+    switch HTTPHead.parse(request[...], cap: HTTPServer<Int>.requestHeadCap) {
+    case .incomplete: return nil
+    case .tooLarge: return (HTTPStatus.headersTooLarge.rawValue, nil)
+    case .malformed: return (HTTPStatus.badRequest.rawValue, nil)
+    case .head(let head, let length):
+        switch route(head, extra: request.count - length, authority: authority) {
+        case .refuse(let status): return (status.rawValue, nil)
+        case .serve(_, let range, _):
+            guard let range else {
+                return (HTTPStatus.ok.rawValue, size == 0 ? nil : 0...(size - 1))
+            }
+            guard let bytes = range.bytes(inFileOf: size) else {
+                return (HTTPStatus.rangeNotSatisfiable.rawValue, nil)
+            }
+            return (HTTPStatus.partialContent.rawValue, bytes)
+        }
+    }
+}
+
 /// `bytes=first-last`, `bytes=first-` or `bytes=-count`; nil for anything else, a list of
 /// ranges included.
 func byteRange(_ text: String) -> ByteRangeRequest? {

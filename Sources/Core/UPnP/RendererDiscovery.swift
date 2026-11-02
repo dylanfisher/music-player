@@ -45,17 +45,38 @@ public enum RendererDiscovery {
             for await result in group { found.append(result) }
             return found
         }
-        var seen: Set<String> = []
+        var renderers: [Renderer] = []
         for result in found {
             switch result {
-            case .success(let renderer):
-                if seen.insert(renderer.udn).inserted { outcome.renderers.append(renderer) }
-            case .failure(let problem):
-                outcome.add(problem)
+            case .success(let renderer): renderers.append(renderer)
+            case .failure(let problem): outcome.add(problem)
             }
         }
+        let (kept, conflicts) = oneEachByUDN(renderers)
+        outcome.renderers = kept
+        for conflict in conflicts { outcome.add(conflict) }
         outcome.renderers.sort { ($0.name, $0.udn) < ($1.name, $1.udn) }
         return outcome
+    }
+
+    /// One renderer per UDN, the first found. A UDN is one device, so one given from two
+    /// addresses means a host is posing as another; neither can be told for the real one, so
+    /// neither is kept, and the conflict is reported.
+    static func oneEachByUDN(_ renderers: [Renderer]) -> ([Renderer], [RendererProblem]) {
+        var kept: [Renderer] = []
+        var conflicts: [RendererProblem] = []
+        var udns: [String] = []
+        for renderer in renderers where !udns.contains(renderer.udn) { udns.append(renderer.udn) }
+        for udn in udns {
+            let claiming = renderers.filter { $0.udn == udn }
+            let addresses = Set(claiming.map(\.address))
+            if addresses.count == 1 {
+                kept.append(claiming[0])
+            } else {
+                conflicts.append(.conflictingUDN(udn, addresses.map { "\($0)" }.sorted()))
+            }
+        }
+        return (kept, conflicts)
     }
 
     /// The renderer whose description is at `location`. A failed `GetProtocolInfo` still
@@ -133,11 +154,15 @@ struct Fetcher: Sendable {
 public enum RendererProblem: Error, Equatable, Sendable, CustomStringConvertible {
     case search(SSDPProblem)
     case description(LocalURL, String)
+    /// Devices at more than one address gave the same UDN.
+    case conflictingUDN(String, [String])
 
     public var description: String {
         switch self {
         case .search(let problem): "\(problem)"
         case .description(let url, let why): "the description at \(url) was ignored: \(why)"
+        case .conflictingUDN(let udn, let addresses):
+            "\(udn) answered from \(addresses.joined(separator: " and ")), so neither is used"
         }
     }
 }

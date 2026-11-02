@@ -157,3 +157,22 @@ private func discover(_ datagrams: [SSDPDatagram], timeout: Double = 2) async th
     #expect(outcome.problems.count == 2)
     #expect(server.connectionCount == 0)
 }
+
+private func found(_ udn: String, at address: String, name: String = "AVR") -> Renderer {
+    Renderer(
+        udn: udn, name: name, manufacturer: "Denon", model: "AVR",
+        location: try! LocalURL("http://\(address):60006/d.xml", on: loopback), sinkFormats: [])
+}
+
+@Test func aUDNClaimedFromTwoAddressesIsUsedForNeither() {
+    let real = found("uuid:avr", at: "127.0.0.5")
+    let impostor = found("uuid:avr", at: "127.0.0.6", name: "AVR too")
+    let other = found("uuid:sonos", at: "127.0.0.7")
+    // The same device answering twice from its one address is kept once.
+    let again = found("uuid:sonos", at: "127.0.0.7", name: "second reply")
+    let (kept, conflicts) = RendererDiscovery.oneEachByUDN([impostor, other, real, again])
+    #expect(kept == [other])
+    #expect(conflicts == [.conflictingUDN("uuid:avr", ["127.0.0.5", "127.0.0.6"])])
+    #expect(
+        "\(conflicts[0])" == "uuid:avr answered from 127.0.0.5 and 127.0.0.6, so neither is used")
+}

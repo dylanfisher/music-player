@@ -34,6 +34,12 @@ private func response(_ action: String, _ body: String) -> String {
     #expect(sent.value("CurrentURIMetaData") == "<DIDL-Lite></DIDL-Lite>")
 }
 
+@Test func whitespaceInAnArgumentReadsBackAsSent() throws {
+    let value = "line one\r\nline two\r\tend\n"
+    let action = SOAPAction("urn:x", "Act", [("Text", value)])
+    #expect(try xmlLeaves(action.body).first { $0.name == "Text" }?.text == value)
+}
+
 @Test func aSeekGoesToWholeSecondsAsRelativeTime() {
     let body = String(decoding: AVTransport.seek(toSeconds: 3725.9).body, as: UTF8.self)
     #expect(body.contains("<Unit>REL_TIME</Unit><Target>1:02:05</Target>"))

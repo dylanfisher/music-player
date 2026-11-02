@@ -58,7 +58,7 @@ public struct DeviceDescription: Equatable, Sendable {
                     deviceType: element.value("deviceType") ?? "",
                     name: shown(element.value("friendlyName")),
                     manufacturer: shown(element.value("manufacturer")),
-                    model: shown(element.value("modelName")), udn: element.value("UDN") ?? "",
+                    model: shown(element.value("modelName")), udn: shown(element.value("UDN")),
                     services: Array(services)))
             for child in element.child("deviceList")?.children ?? [] where child.name == "device" {
                 visit(child)

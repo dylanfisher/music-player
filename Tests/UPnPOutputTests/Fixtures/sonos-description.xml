@@ -42,7 +42,7 @@
       <controlAPI><version>3.7.3</version><version>1.54.2</version></controlAPI>
       <trueplaySDK><version>6</version></trueplaySDK>
     </versions>
-    <roomName>Top Floor</roomName>
+    <roomName>Test Room</roomName>
     <displayName>Era 100</displayName>
     <zoneType>41</zoneType>
     <feature1>0x00000008</feature1>
@@ -148,7 +148,7 @@
       </device>
       <device>
 	<deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>
-  <friendlyName>Top Floor - Sonos Era 100 Media Renderer - RINCON_00005E00530101400</friendlyName>
+  <friendlyName>Test Room - Sonos Era 100 Media Renderer - RINCON_00005E00530101400</friendlyName>
   <manufacturer>Sonos, Inc.</manufacturer>
   <manufacturerURL>http://www.sonos.com</manufacturerURL>
   <modelNumber>S39</modelNumber>

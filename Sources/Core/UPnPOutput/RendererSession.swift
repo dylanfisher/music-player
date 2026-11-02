@@ -424,7 +424,8 @@ actor RendererSession {
         let started: HTTPServer<OutputItem.ID>
         do throws(LocalNetworkError) {
             started = try await HTTPServer<OutputItem.ID>.start(
-                on: serverInterface, resolve: { shared.file($0) },
+                on: serverInterface, acceptingOnly: renderer.address,
+                resolve: { shared.file($0) },
                 problem: { logger.notice("serving \(name): \($0)") })
         } catch {
             throw .server(error)
