@@ -66,11 +66,11 @@ extension AppDelegate {
             self?.withSelectedPaths { self?.revealTracks($0) }
         }
         dispatcher.handle(
-            .removeTracks, enabled: { [weak self] in self?.browser?.canRemoveSelection == true }
-        ) { [weak self] in
-            guard let window = self?.window?.window else { return }
-            self?.browser?.removeSelection(over: window)
-        }
+            .removeTracks, enabled: { [weak self] in self?.browser?.canRemoveSelection == true },
+            run: { [weak self] in
+                guard let window = self?.window?.window else { return }
+                self?.browser?.removeSelection(over: window)
+            })
         dispatcher.handle(.copyPath, enabled: hasSelectedTracks) { [weak self] in
             self?.withSelectedPaths { paths in
                 NSPasteboard.general.clearContents()
