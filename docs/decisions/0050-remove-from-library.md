@@ -15,8 +15,9 @@ Moving a file to the Trash moves a music file, which AGENTS.md allowed only `Tag
 
 ## Decision
 
-- **Remove…** (`track.remove`) acts on the selected tracks, in the track table or the timeline,
-  as Reveal in Finder does. Its chord is ⌫, which can't be a menu key equivalent, since text
+- **Remove…** (`track.remove`) acts on the selected tracks of the track table or the timeline,
+  and only while that list has the keys. Unlike Reveal in Finder, it is off with the keys in the
+  sidebar or a pane, so ⌫ there doesn't ask about tracks the user isn't looking at. Its chord is ⌫, which can't be a menu key equivalent, since text
   fields type it, so it reaches the command from the focused list, as Space does; the queue
   takes its own ⌫ first, to remove from the queue. It asks "Remove Track?" or "Remove N Tracks?"
   as a sheet with Remove from Library, Remove and Move to Trash, and Cancel, which is the default

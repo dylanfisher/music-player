@@ -728,6 +728,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Whether the track table has the keys.
     public var tracksHaveFocus: Bool { focusedList == .tracks }
 
+    /// Whether Remove… has tracks to act on: the track table or the timeline has the keys and a
+    /// selection. ⌫ in the sidebar or a pane runs nothing on tracks the user isn't looking at.
+    public var canRemoveSelection: Bool {
+        (focusedList == .tracks || focusedList == .timeline) && hasSelectedTracks
+    }
+
     public func selectAllTracks() {
         (showsTimeline ? timeline.table : table.table).selectAll(nil)
     }

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Settings
 import Testing
@@ -63,4 +64,23 @@ private func removalBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64]) 
     // A trashed file isn't kept out of later scans.
     #expect(try index.removedPaths().isEmpty)
     #expect(browser.statusText == "couldn't move 1 of the files to the Trash: not permitted")
+}
+
+@MainActor @Test func removingTakesTheSelectionOnlyWhileATrackListHasTheKeys() async throws {
+    let (browser, _, _) = try removalBrowser()
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 600), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = NSStackView(views: [browser.sidebar.view, browser.content.view])
+    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    try await waitFor("the tracks") { browser.rowID(at: 0) != nil }
+    browser.focusTracks()
+    browser.selectAllTracks()
+    #expect(browser.canRemoveSelection)
+    // ⌫ in the sidebar or a pane leaves the track table's selection alone.
+    let areas = browser.focusAreas
+    for area in [areas[0], areas[1]] {
+        #expect(window.makeFirstResponder(area))
+        #expect(browser.hasSelectedTracks && !browser.canRemoveSelection)
+    }
 }

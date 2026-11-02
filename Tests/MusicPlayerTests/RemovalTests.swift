@@ -43,7 +43,9 @@ import Testing
     browser.focusTracks()
     browser.selectAllTracks()
     #expect(browser.hasSelectedTracks)
-    // The timeline has the keys and a selection, and still nothing is removed.
+    // Remove… takes the timeline's selection, as it takes the track table's.
+    #expect(browser.canRemoveSelection)
+    // ⌘⌫ still removes nothing: the timeline is no playlist.
     #expect(
         removalTarget(
             queueFocused: false, queueHasSelection: false,
