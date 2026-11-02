@@ -47,3 +47,13 @@ import Testing
     #expect(
         argumentProblem(["--snapshot-of", "palette"]) == "--snapshot-of only goes with --snapshot")
 }
+
+@Test func captureRenderersNeedsAFolderAndIsAModeOfItsOwn() {
+    #expect(argumentProblem(["--capture-renderers", "/c"]) == nil)
+    #expect(
+        argumentProblem(["--capture-renderers"]) == "--capture-renderers needs a folder to write to"
+    )
+    #expect(
+        argumentProblem(["--capture-renderers", "/c", "--snapshot", "/s.png"])
+            == "--snapshot is for the window, so it can't go with --capture-renderers")
+}

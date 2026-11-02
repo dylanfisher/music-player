@@ -5,6 +5,7 @@ import Metadata
 /// Every flag the app takes; main.swift lists what each does.
 enum Flag: String {
     case listDevices = "--list-devices"
+    case captureRenderers = "--capture-renderers"
     case play = "--play"
     case device = "--device"
     case scan = "--scan"
@@ -49,9 +50,10 @@ private let valueFlags: [(Flag, String)] = [
     (.db, "a database file"), (.readers, "a number of files to read at once"),
     (.scanIOHints, ioHintsChoices), (.settings, "a config file"), (.home, "a folder"),
     (.snapshot, "a PNG file to write"), (.snapshotOf, snapshotChoices),
+    (.captureRenderers, "a folder to write to"),
 ]
 /// The command-line modes, which run and exit without the window.
-private let modeFlags: [Flag] = [.listDevices, .scan, .play]
+private let modeFlags: [Flag] = [.listDevices, .scan, .play, .captureRenderers]
 /// Flags only the window uses.
 private let windowFlags: [Flag] = [.measureWindow, .reportLaunch, .snapshot, .snapshotOf]
 private let scanOnlyFlags: [Flag] = [.db, .readers, .scanIOHints]

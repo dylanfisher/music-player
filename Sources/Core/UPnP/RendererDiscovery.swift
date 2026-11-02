@@ -37,7 +37,8 @@ public enum RendererDiscovery {
         let found = await withTaskGroup(of: Result<Renderer, RendererProblem>.self) { group in
             for reply in search.replies {
                 group.addTask {
-                    await renderer(at: reply.location, timeoutSeconds: fetchTimeoutSeconds)
+                    await renderer(
+                        at: reply.location, fetcher: .live(timeoutSeconds: fetchTimeoutSeconds))
                 }
             }
             var found: [Result<Renderer, RendererProblem>] = []
@@ -59,13 +60,13 @@ public enum RendererDiscovery {
 
     /// The renderer whose description is at `location`. A failed `GetProtocolInfo` still
     /// gives the renderer, with no formats, since receiver control doesn't need them.
-    static func renderer(at location: LocalURL, timeoutSeconds: Double) async
+    static func renderer(at location: LocalURL, fetcher: Fetcher) async
         -> Result<Renderer, RendererProblem>
     {
         let description: DeviceDescription
         do {
             description = try DeviceDescription(
-                await LocalHTTPClient.get(location, timeoutSeconds: timeoutSeconds))
+                await fetcher.get(location))
         } catch {
             return .failure(.description(location, "\(error)"))
         }
@@ -78,9 +79,7 @@ public enum RendererDiscovery {
             do {
                 let control = try location.resolving(service.controlURL)
                 formats = try GetProtocolInfo.sink(
-                    await LocalHTTPClient.post(
-                        control, fields: GetProtocolInfo.fields, body: GetProtocolInfo.body,
-                        timeoutSeconds: timeoutSeconds))
+                    await fetcher.post(control, GetProtocolInfo.fields, GetProtocolInfo.body))
             } catch {
                 problem = "\(error)"
             }
@@ -92,6 +91,24 @@ public enum RendererDiscovery {
                 udn: device.udn, name: device.name, manufacturer: device.manufacturer,
                 model: device.model, location: location, sinkFormats: formats,
                 formatsProblem: problem))
+    }
+}
+
+/// How a renderer's documents are fetched. Capture passes one that keeps the raw bytes.
+struct Fetcher: Sendable {
+    var get: @Sendable (LocalURL) async throws(LocalNetworkError) -> [UInt8]
+    var post:
+        @Sendable (LocalURL, [(String, String)], [UInt8]) async throws(LocalNetworkError) -> [UInt8]
+
+    static func live(timeoutSeconds: Double) -> Fetcher {
+        Fetcher(
+            get: { url throws(LocalNetworkError) in
+                try await LocalHTTPClient.get(url, timeoutSeconds: timeoutSeconds)
+            },
+            post: { url, fields, body throws(LocalNetworkError) in
+                try await LocalHTTPClient.post(
+                    url, fields: fields, body: body, timeoutSeconds: timeoutSeconds)
+            })
     }
 }
 

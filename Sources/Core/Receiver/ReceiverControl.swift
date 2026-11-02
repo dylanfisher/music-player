@@ -171,29 +171,48 @@ public final class ReceiverControl {
         }
     }
 
+    /// Which of the renderers is the receiver.
+    enum Choice: Equatable {
+        case found(Renderer)
+        case none
+        /// More than one address answered; says which.
+        case several(String)
+    }
+
+    /// The Denon among `renderers`. The owner's address picks among them; otherwise only
+    /// receivers count, since a Denon Home or HEOS speaker answers too. A receiver can answer
+    /// as more than one device, all at its one address.
+    nonisolated static func receiver(
+        among renderers: [Renderer], configured: LocalNetwork.IPAddress?
+    ) -> Choice {
+        let denons = renderers.filter { $0.manufacturer.lowercased().contains("denon") }
+        let chosen =
+            denons.filter { $0.address == configured }.nilIfEmpty
+            ?? denons.filter { $0.model.uppercased().contains("AVR") }
+        let addresses = Set(chosen.map(\.address))
+        guard let first = chosen.first else { return .none }
+        guard addresses.count == 1 else {
+            return .several(
+                "\(addresses.count) Denon receivers answered: "
+                    + chosen.map { "\($0.name) at \($0.address)" }.sorted().joined(separator: ", ")
+                    + "; set receiver.address to the one to control")
+        }
+        return .found(first)
+    }
+
     private func found(_ outcome: RendererDiscovery.Outcome) {
         for ignored in outcome.problems { problem(.ignored("\(ignored)")) }
         if outcome.moreProblems > 0 {
             problem(.ignored("\(outcome.moreProblems) more replies"))
         }
-        let denons = outcome.renderers.filter { $0.manufacturer.lowercased().contains("denon") }
-        // The owner's address picks among them; otherwise only receivers count, since a Denon
-        // Home or HEOS speaker answers too. A receiver can answer as more than one device, all
-        // at its one address.
-        let configured = fallback()
-        let chosen =
-            denons.filter { $0.address == configured }.nilIfEmpty
-            ?? denons.filter { $0.model.uppercased().contains("AVR") }
-        let addresses = Set(chosen.map(\.address))
-        guard let first = chosen.first else {
+        let first: Renderer
+        switch Self.receiver(among: outcome.renderers, configured: fallback()) {
+        case .found(let renderer): first = renderer
+        case .none:
             useFallback(or: "no Denon receiver answered on the local network")
             return
-        }
-        guard addresses.count == 1 else {
-            fail(
-                "\(addresses.count) Denon receivers answered: "
-                    + chosen.map { "\($0.name) at \($0.address)" }.sorted().joined(separator: ", ")
-                    + "; set receiver.address to the one to control")
+        case .several(let why):
+            fail(why)
             return
         }
         if let why = first.formatsProblem {

@@ -170,6 +170,19 @@ entitlement: the app isn't sandboxed, and the release signature check stays as i
 - **Keeping the last input when an unknown `SI` arrives** — rejected: the check mark would show
   an input the receiver has left.
 
+## Capture mode
+
+`MusicPlayer --capture-renderers <folder>` is for the owner to run at the receiver, so 9b starts
+from what it sends. It searches for MediaRenderers for 5 s, then saves, unparsed, the SSDP replies
+(`ssdp.txt`, replies discovery ignores included), each renderer's description
+(`<n>-description.xml`), `GetProtocolInfo` reply (`<n>-protocolinfo.xml`) and AVTransport,
+RenderingControl and ConnectionManager descriptions (`<n>-<service>-scpd.xml`). Then it opens the
+receiver's control port, at the Denon found or else `receiver.address`, sends `PW?`, `MV?`, `MU?`,
+`SI?` and `MS?` and records every line for 10 s with its time (`status-lines.txt`). It sends what
+discovery and receiver control send, under the same caps and local subnet checks; a document
+discovery would refuse, such as one with a DOCTYPE, is still saved. A failure is printed and the
+rest carries on; it exits nonzero only when no file was written.
+
 ## Consequences
 
 Nothing reaches the LAN until the owner turns receiver control on, and only SSDP, HTTP to

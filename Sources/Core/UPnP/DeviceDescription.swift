@@ -17,6 +17,8 @@ public struct DeviceDescription: Equatable, Sendable {
         var serviceType: String
         /// As the description gives it, often relative to the description's URL.
         var controlURL: String
+        /// The service's own description, or nil when the device lists none.
+        var scpdURL: String?
     }
 
     /// The root device first, then the devices nested in it, depth first.
@@ -48,7 +50,8 @@ public struct DeviceDescription: Equatable, Sendable {
                     guard let type = service.value("serviceType"),
                         let control = service.value("controlURL")
                     else { return nil }
-                    return Service(serviceType: type, controlURL: control)
+                    return Service(
+                        serviceType: type, controlURL: control, scpdURL: service.value("SCPDURL"))
                 }
             found.append(
                 Device(

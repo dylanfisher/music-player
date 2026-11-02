@@ -6,6 +6,7 @@ import Settings
 
 // Command-line modes, run from Terminal on the Mac the DAC is attached to:
 //   MusicPlayer --list-devices
+//   MusicPlayer --capture-renderers <folder>
 //   MusicPlayer --play <file or folder>... [--device <part of name>]
 //   MusicPlayer --scan <folder> [--db <file>] [--readers <n>] [--scan-io-hints none|rdahead|all]
 // and the window:
@@ -14,6 +15,8 @@ import Settings
 // --home keeps the config file, library, state file and device record in one folder instead of
 // ~/.config/music-player and Application Support, for tests and runs on the build Mac.
 // --settings reads another config file.
+// --capture-renderers writes what the UPnP renderers and the Denon receiver on the network send
+// (SSDP replies, descriptions, status lines) to the folder, for phase 9b to start from.
 // --measure-window prints the launch time and memory as JSON and quits, for Bench.
 // --report-launch prints "launched" once the first scan of every watched folder has ended, for
 // Bench to know the app is idle.
@@ -79,6 +82,9 @@ func appPaths() throws -> AppPaths {
 
 if given(.listDevices) {
     runAndExit { print(deviceReport(try AudioDevice.outputDevices())) }
+}
+if let folder = value(after: .captureRenderers) {
+    runAndExit { try captureRenderersCommand(folder: folder) }
 }
 if let folder = value(after: .scan) {
     runAndExit {
