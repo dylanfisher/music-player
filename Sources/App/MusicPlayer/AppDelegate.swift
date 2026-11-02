@@ -252,6 +252,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let folders = Set(paths.map { ($0 as NSString).deletingLastPathComponent })
             self?.watcher?.rescan(directories: folders.sorted())
         }
+        browser.watchedFolders = { settings[\.watchedFolders] }
+        browser.watch = { [weak self] url in self?.watch(url, settings) }
         browser.firstRowsDrawn = { [weak self] in self?.interactive() }
         let keyCommand = { [weak self] (chords: [KeyChord]) in
             self?.dispatcher?.key(chords) ?? .unbound
@@ -638,7 +640,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
-        panel.prompt = "Watch"
+        panel.prompt = watchTitle
         panel.message =
             "Choose a folder of music to add to the library. Its files are written only when"
             + " you edit their tags."

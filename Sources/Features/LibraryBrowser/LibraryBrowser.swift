@@ -67,6 +67,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var restored: ([String]) -> Void = { _ in }
     /// Moves the files Remove… was confirmed for to the Trash; tests replace it.
     var trash: ([URL]) async -> TrashOutcome = moveToTrash
+    /// The watched folders as the settings hold them, for Locate… to check a folder is in one.
+    public var watchedFolders: () -> [WatchedFolder] = { [] }
+    /// Adds the folder to the watched folders, for Locate….
+    public var watch: (URL) -> Void = { _ in }
+    /// Locate…'s questions, which tests replace.
+    var chooseFolder: @MainActor (String, NSWindow, @escaping (URL) -> Void) -> Void =
+        askForFolder
+    var confirmWatch: @MainActor (String, NSWindow, @escaping (Bool) -> Void) -> Void =
+        askToWatch
     /// Runs the command a key press in one of the browser's lists is bound to.
     public var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
     /// Called once, when the table or the timeline first draws rows, or once loading finds none
@@ -98,11 +107,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var browserHeight: Int
     private var lastRefresh = Date.distantPast
     private var refreshPending = false
-    private var problems: ProblemsWindow?
+    private(set) var problems: ProblemsWindow?
     let health: HealthModel
     /// Set from the read of another player's library until its preview sheet closes.
     private var isImporting = false
     private(set) var importSheet: PlayerImportSheet?
+    /// What the last import wrote, whose misses Locate… matches again.
+    var lastImport: ImportPlan?
+    /// A Locate… waiting for the scan of the folder it had watched, and the miss it was for.
+    private var pendingLocate: (folder: String, miss: String)?
     /// True from Resolve Lost Stats until its last sheet closes, so one is open at a time.
     private var isResolvingLostStats = false
     private(set) var lostStatsSheet: LostStatsSheet?
@@ -342,6 +355,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             }
         case .syncFailed, .launchScansEnded:
             break
+        }
+        if case .scanned(let folder, _) = event, let pending = pendingLocate,
+            isPath(pending.folder, inOrAt: folder)
+        {
+            pendingLocate = nil
+            Task { await matchAgain(pending.miss, under: pending.folder) }
         }
     }
 
@@ -689,7 +708,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
-    @objc private func showProblems() {
+    @objc func showProblems() {
         Task {
             let rows = await problemRows()
             let window = problems ?? makeProblemsWindow()
@@ -746,6 +765,60 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         case .restore:
             guard let ids = action.pathIDs(of: selected) else { return }
             await restore(ids)
+        case .locate:
+            guard let miss = action.missingPath(of: selected), let window = problems?.window
+            else { return }
+            chooseFolder(miss, window) { [weak self] folder in
+                Task { await self?.locate(miss, in: folder) }
+            }
+        }
+    }
+
+    /// Locate… for the last import's miss `miss`, now under `folder`: matches the misses again
+    /// at once when a watched folder holds `folder`, or offers to watch it and matches them
+    /// once its scan ends.
+    func locate(_ miss: String, in folder: URL) async {
+        let path = folder.standardizedFileURL.path
+        let roots: [String]
+        do {
+            roots = try await reader.lastKnownFolders(watchedFolders()).map(\.path)
+        } catch {
+            return report("couldn't read the watched folders: \(error)")
+        }
+        guard roots.contains(where: { isPath(path, inOrAt: $0) }) else {
+            guard let window = problems?.window else { return }
+            confirmWatch(path, window) { [weak self] yes in
+                guard yes, let self else { return }
+                pendingLocate = (path, miss)
+                watch(folder)
+            }
+            return
+        }
+        await matchAgain(miss, under: path)
+    }
+
+    /// Imports the last import's misses under the folder `miss` was in again, from `folder`,
+    /// and lists those still missing.
+    func matchAgain(_ miss: String, under folder: String) async {
+        guard var plan = lastImport else { return report("couldn't locate: no import to match") }
+        let prefix = PathPrefix(locating: miss, in: folder)
+        let misses = plan.misses(under: prefix.from)
+        do {
+            let written = try await model.applyImport(misses, prefix: prefix)
+            let still = Set(written.unmatched + written.unreadFormat)
+            let found = Set(misses.tracks.map(\.path).filter { !still.contains(prefix.apply($0)) })
+            plan.unmatched.removeAll { found.contains($0) }
+            lastImport = plan
+            status.playlistFileReport = plan.problems
+            showStatus()
+            show(
+                failure:
+                    "Located \(number(found.count)) of \(tracks(misses.tracks.count)) in"
+                    + " \(terminalSafe(folder))")
+            refreshProblems()
+            edited()
+        } catch {
+            report(terminalSafe("couldn't match the tracks in \(folder): \(error)"))
         }
     }
 
@@ -1033,7 +1106,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 }
             }
             showSource()
-            finishPlaylistFile(summaries.joined(separator: " · "), lines)
+            finishPlaylistFile(summaries.joined(separator: " · "), lines.map { Problem($0) })
             playlistEntriesChanged()
             edited()
         }
@@ -1053,7 +1126,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                     playlist.id, to: url, relativePaths: relativePaths)
                 let (summary, lines) = exportReport(
                     file: url.path, written: written, missing: missing, unwritable: unwritable)
-                finishPlaylistFile(summary, lines)
+                finishPlaylistFile(summary, lines.map { Problem($0) })
             } catch {
                 report(terminalSafe("couldn't export the playlist to \(url.path): \(error)"))
             }
@@ -1099,8 +1172,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         Task {
             do {
                 let written = try await model.applyImport(plan.library, prefix: plan.prefix)
+                lastImport = written
                 showSource()
-                finishPlaylistFile(written.summary, written.detailLines)
+                finishPlaylistFile(written.summary, written.problems)
                 playlistEntriesChanged()
                 edited()
             } catch {
@@ -1113,12 +1187,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Shows what an import or export did in the status bar, and opens the Problems window on
-    /// `lines` when there are any.
-    private func finishPlaylistFile(_ summary: String, _ lines: [String]) {
-        status.playlistFileReport = lines
+    /// `rows` when there are any.
+    private func finishPlaylistFile(_ summary: String, _ rows: [Problem]) {
+        status.playlistFileReport = rows
         showStatus()
         show(failure: summary)
-        if !lines.isEmpty { showProblems() }
+        if !rows.isEmpty { showProblems() }
     }
 
     /// Adds the selected tracks to a manual playlist.

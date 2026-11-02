@@ -7,7 +7,7 @@
 - **Amends:** [0018](0018-playlists-and-stats.md), [0022](0022-stable-track-identity-and-play-timeline.md),
   [0025](0025-threat-model.md), [0032](0032-playlist-files.md)
 - **Amended by:** [0053](0053-problems-window-actions.md): a miss in a format the scanner
-  skips is listed apart.
+  skips is listed apart, and Locate… matches the misses again under another folder.
 
 ## Context
 

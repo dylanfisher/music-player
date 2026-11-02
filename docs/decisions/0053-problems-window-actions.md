@@ -22,8 +22,8 @@ so no such file is ever in the index.
 - **A miss in a format the scanner skips is listed apart**, as "not in the library, a format
   this app doesn't read yet", and the preview counts it. No prefix or folder can match it, so
   it gets no Locate.
-- **The Problems window is a table**, a row a line, with Dismiss, Remove from Library and
-  Restore under it. ⌘C copies the rows selected. A button is on only when it applies to every
+- **The Problems window is a table**, a row a line, with Dismiss, Remove from Library,
+  Restore and Locate… under it. ⌘C copies the rows selected. A button is on only when it applies to every
   row selected, so one click never does two different things.
 - **Dismiss** stores the line, as the window shows it, in a table of its own schema part,
   `dismissed_problems`, so it stays dismissed after a relaunch and when a later scan or report
@@ -37,6 +37,18 @@ so no such file is ever in the index.
 - **Restore** is on a Removed row, as Restore Removed Tracks… does it: the path leaves
   `removed` and its folder is scanned. This is the Library Health Restore that 0050 left to
   this row.
+- **Locate…** is on one row of the last import's misses at a time. The user picks the folder
+  the file lives under now, and the old prefix is the deepest folder above the miss with the
+  picked folder's name: picking `/Volumes/music-1/dsd` for `/Volumes/music/dsd/A/01.flac` maps
+  `/Volumes/music/dsd`. When no folder above it has that name, the user picked the file's own
+  folder under a new name, and that folder is the prefix. Every miss under the prefix is
+  imported again with it, no playlists, since the import already made them by name: the merge
+  rules (0033) make a second import of a matched track add nothing, so only the tracks found
+  now gain anything. The misses found leave the list; the status bar says how many.
+- **A folder outside the watched folders** is offered as one to watch, with Watch and Cancel.
+  Watch adds it as Add Folder… does, and the misses are matched once the scan of that folder
+  ends. The watched folders are compared where their paths were last (0028), so a share
+  folder counts at its mount.
 - The health report keeps the path ID of each Lost Stats and Removed line it lists, so a row
   acts on the path it names. The rows of a check show only while the check is the source, as
   before.
@@ -48,6 +60,11 @@ so no such file is ever in the index.
   the one thing every row has, and it's what the user saw.
 - **Dismissing for the session only.** Rejected: the health report and the stored file issues
   come back on every launch, so a problem the user doesn't care about would too.
+- **Locate… with a From and To prefix**, as the preview sheet has. Rejected: the user knows
+  where the files are now, not which folder of an old path to replace; the folder's name
+  finds that.
+- **Locate… previewing before it writes.** Rejected: the user confirmed the import already, and
+  matching again writes only what that import would have written for these tracks.
 - **Remove from Library on Lost Entries rows** as removing the entry from its playlist.
   Rejected: that isn't removing a track from the library; the playlist editor already removes
   entries.
@@ -55,4 +72,7 @@ so no such file is ever in the index.
 ## Consequences
 
 Dismissed lines are this machine's, as `removed` is. There's no list of dismissed lines to undo
-one from; deleting the table's rows brings them back.
+one from. Locate… works on the last import of this session only: the import's file isn't kept,
+so after a relaunch its misses aren't listed and the import is run again with a prefix instead.
+A Swinsian playlist entry for a track found by Locate… isn't added to the playlist the import
+made.

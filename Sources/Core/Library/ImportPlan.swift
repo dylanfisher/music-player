@@ -1,3 +1,6 @@
+import Foundation
+import Settings
+
 /// What importing another player's library would change, or did (ADR 0033): the preview's
 /// counts, and the writes behind them.
 public struct ImportPlan: Equatable, Sendable {
@@ -37,6 +40,22 @@ public struct ImportPlan: Equatable, Sendable {
 
     /// Whether confirming would write anything.
     public var changesSomething: Bool { !updates.isEmpty || !playlists.isEmpty }
+
+    /// The tracks this plan missed under `folder`, at the paths it looked them up by, and no
+    /// playlists, whose names an import already made: what Locate… matches again (ADR 0053).
+    public func misses(under folder: String) -> PlayerLibrary {
+        let missed = Set(unmatched)
+        let folder = folder.precomposedStringWithCanonicalMapping
+        var found = PlayerLibrary(player: library.player, source: library.source)
+        for var track in library.tracks {
+            track.path = prefix?.apply(track.path) ?? track.path
+            guard missed.contains(track.path),
+                isPath(track.path.precomposedStringWithCanonicalMapping, inOrAt: folder)
+            else { continue }
+            _ = found.add(track)
+        }
+        return found
+    }
 }
 
 /// A playlist an import makes.

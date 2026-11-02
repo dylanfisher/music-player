@@ -18,7 +18,7 @@ struct LibraryStatus: Equatable, Sendable {
     /// What a rebuild of the stats discarded, shown for the session it was found in.
     var notices: [String] = []
     /// What the last playlist import or export couldn't carry over.
-    var playlistFileReport: [String] = []
+    var playlistFileReport: [Problem] = []
     /// What the health check shown found that the table can't list, and how many such items.
     var healthProblems: [Problem] = []
     var healthOtherCount = 0
@@ -121,10 +121,10 @@ struct LibraryStatus: Equatable, Sendable {
 
     /// Every notice and folder problem not dismissed, for the top of the problems list.
     var problems: [Problem] {
-        let plain = notices + playlistFileReport
         let after = syncProblems + folderLines.map(\.line)
-        return (plain.map { Problem($0) } + healthProblems + after.map { Problem($0) })
-            .filter { !dismissed.contains($0.line) }
+        return
+            (notices.map { Problem($0) } + playlistFileReport + healthProblems
+            + after.map { Problem($0) }).filter { !dismissed.contains($0.line) }
     }
 
     var problemLines: [String] { problems.map(\.line) }

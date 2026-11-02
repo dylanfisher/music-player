@@ -173,6 +173,11 @@ public actor LibraryReader {
         try index.restoreRemoved(ids)
     }
 
+    /// `folders` where their paths were last, each share folder at its last mount (ADR 0028).
+    public func lastKnownFolders(_ folders: [WatchedFolder]) throws -> [WatchedFolder] {
+        try index.lastKnownFolders(folders)
+    }
+
     public func dismissProblems(_ lines: [String]) throws { try index.dismissProblems(lines) }
 
     public func dismissedProblems() throws -> Set<String> { try index.dismissedProblems() }

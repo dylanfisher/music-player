@@ -9,6 +9,9 @@ struct Problem: Equatable, Sendable {
         case remove(pathID: Int64)
         /// A Removed path: let scans add it again.
         case restore(pathID: Int64)
+        /// A path the last import found no track for: match it again under the folder the
+        /// user picks.
+        case locate(path: String)
     }
 
     /// As the window shows it, and as a dismissal stores it.
@@ -26,23 +29,34 @@ enum ProblemAction: CaseIterable, Sendable {
     case dismiss
     case remove
     case restore
+    case locate
 
     var title: String {
         switch self {
         case .dismiss: "Dismiss"
         case .remove: "Remove from Library"
         case .restore: "Restore"
+        case .locate: "Locate…"
         }
     }
 
-    /// Whether the action applies to `selected`: Dismiss to any rows, the others only when
-    /// every row selected has their fix, so one click never does two different things.
+    /// Whether the action applies to `selected`: Dismiss to any rows, Locate… to one, and the
+    /// others only when every row selected has their fix, so one click never does two
+    /// different things.
     func applies(to selected: [Problem]) -> Bool {
         guard !selected.isEmpty else { return false }
         switch self {
         case .dismiss: return true
         case .remove, .restore: return pathIDs(of: selected) != nil
+        case .locate: return missingPath(of: selected) != nil
         }
+    }
+
+    /// The path of the one row selected when it's an import's miss.
+    func missingPath(of selected: [Problem]) -> String? {
+        guard self == .locate, selected.count == 1, case .locate(let path)? = selected[0].fix
+        else { return nil }
+        return path
     }
 
     /// The path IDs of `selected` when each one's fix is this action's; nil otherwise.

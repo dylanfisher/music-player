@@ -52,7 +52,7 @@ private func temporaryFolder() throws -> URL {
     while browser.status.playlistFileReport.isEmpty, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
-    let report = browser.status.playlistFileReport
+    let report = browser.status.playlistFileReport.map(\.line)
     #expect(
         report == [
             "\(list.path): Imported “Gone”: 0 tracks · 1 not in the library · 1 line skipped",

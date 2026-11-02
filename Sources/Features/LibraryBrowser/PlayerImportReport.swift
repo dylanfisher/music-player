@@ -82,17 +82,22 @@ extension ImportPlan {
     /// The details under the preview's counts and in the Problems window afterwards: what
     /// didn't match, wasn't made, or couldn't be read, each list cut at
     /// `PlaylistFile.maximumProblems` with a count of the rest.
-    var detailLines: [String] {
+    var detailLines: [String] { problems.map(\.line) }
+
+    /// `detailLines` as the Problems window's rows, each miss listed with Locate… (ADR 0053).
+    var problems: [Problem] {
         let source = terminalSafe(library.source)
-        var lines: [String] = []
-        func list(_ items: [String], _ what: String) {
+        var rows: [Problem] = []
+        func list(_ items: [String], _ what: String, fix: (String) -> Problem.Fix? = { _ in nil }) {
             let shown = PlaylistFile.maximumProblems
-            lines += items.prefix(shown).map { "\(source): \(what): \(terminalSafe($0))" }
+            rows += items.prefix(shown).map {
+                Problem("\(source): \(what): \(terminalSafe($0))", fix: fix($0))
+            }
             if items.count > shown {
-                lines.append("\(source): \(number(items.count - shown)) more \(what)")
+                rows.append(Problem("\(source): \(number(items.count - shown)) more \(what)"))
             }
         }
-        list(unmatched, "not in the library")
+        list(unmatched, "not in the library") { .locate(path: $0) }
         list(unreadFormat, "not in the library, a format this app doesn't read yet")
         list(existingPlaylists, "not made, a playlist has the name")
         list(
@@ -103,10 +108,11 @@ extension ImportPlan {
                 "\($0.name): \(number($0.missing)) not in the library, \(number($0.repeated)) listed twice"
             }, "playlist entries left out")
         list(playlists.filter(\.wasSmart).map(\.name), "smart playlist made a list of its tracks")
-        lines += library.problems.map { "\(source): \(terminalSafe($0.description))" }
+        rows += library.problems.map { Problem("\(source): \(terminalSafe($0.description))") }
         if library.unlistedProblemCount > 0 {
-            lines.append("\(source): \(count(library.unlistedProblemCount, "more problem"))")
+            rows.append(
+                Problem("\(source): \(count(library.unlistedProblemCount, "more problem"))"))
         }
-        return lines
+        return rows
     }
 }

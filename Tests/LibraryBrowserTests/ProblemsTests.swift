@@ -91,3 +91,67 @@ private func problemsBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64])
     window.refresh([rows[1]])
     #expect(window.selected == [rows[1]])
 }
+
+@Test func anImportsListedMissesOfferLocateAndOnlyOneAtATime() {
+    var plan = ImportPlan(
+        library: PlayerLibrary(player: .swinsian, source: "/s/Library.sqlite"), prefix: nil)
+    plan.unmatched = ["/Old/a.flac", "/Old/b.flac"]
+    plan.unreadFormat = ["/Old/c.dsf"]
+    let rows = plan.problems
+    #expect(rows.map(\.line) == plan.detailLines)
+    #expect(rows[0].fix == .locate(path: "/Old/a.flac"))
+    #expect(rows[2].fix == nil)
+    #expect(ProblemAction.locate.missingPath(of: [rows[1]]) == "/Old/b.flac")
+    #expect(!ProblemAction.locate.applies(to: [rows[0], rows[1]]))
+    #expect(!ProblemAction.locate.applies(to: [rows[2]]))
+}
+
+/// A browser whose last import missed the first track, at a path under `/Old` in a folder of
+/// the same name as the track's.
+@MainActor
+private func locatingBrowser() throws -> (
+    LibraryBrowser, LibraryIndex, id: Int64, miss: String, folder: URL
+) {
+    let (browser, index, ids) = try problemsBrowser()
+    let path = try #require(try index.paths(ids: [ids[0]])[ids[0]])
+    let folder = (path as NSString).deletingLastPathComponent
+    let miss =
+        "/Old/" + (folder as NSString).lastPathComponent + "/"
+        + (path as NSString).lastPathComponent
+    var source = PlayerLibrary(player: .swinsian, source: "/s/Library.sqlite")
+    var track = PlayerTrack(path: miss)
+    track.plays = 5
+    _ = source.add(track)
+    var plan = ImportPlan(library: source, prefix: nil)
+    plan.unmatched = [miss]
+    browser.lastImport = plan
+    return (browser, index, ids[0], miss, URL(fileURLWithPath: folder, isDirectory: true))
+}
+
+@MainActor @Test func locatingInAWatchedFolderMatchesTheMissAgain() async throws {
+    let (browser, index, id, miss, folder) = try locatingBrowser()
+    browser.watchedFolders = { [WatchedFolder(path: "/", kind: .local)] }
+    await browser.locate(miss, in: folder)
+    #expect(try index.rows(ids: [id])[0].playCount == 5)
+    #expect(browser.lastImport?.unmatched == [])
+    #expect(browser.statusText == "Located 1 of 1 track in \(folder.path)")
+}
+
+@MainActor @Test func locatingOutsideTheWatchedFoldersWatchesThenMatchesAfterTheScan()
+    async throws
+{
+    let (browser, index, id, miss, folder) = try locatingBrowser()
+    browser.watchedFolders = { [] }
+    var watched: [URL] = []
+    browser.watch = { watched.append($0) }
+    browser.confirmWatch = { _, _, answer in answer(true) }
+    // The question goes over the Problems window, so it has to be open.
+    browser.showProblems()
+    try await waitFor("the Problems window") { browser.problems != nil }
+    await browser.locate(miss, in: folder)
+    #expect(watched == [folder])
+    #expect(try index.rows(ids: [id])[0].playCount == 0)
+    browser.libraryChanged(.scanned(folder: folder.path, ScanSummary()))
+    try await waitFor("the match") { try index.rows(ids: [id])[0].playCount == 5 }
+    browser.problems?.window.close()
+}

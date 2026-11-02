@@ -144,6 +144,38 @@ private func track(
     #expect(plan.unmatched == [gone] && plan.unreadFormat == [dsf])
 }
 
+@Test func locatingMapsTheFolderWithThePickedNameOrTheFilesOwn() {
+    let miss = "/Volumes/music/dsd/A/01.dsf"
+    #expect(
+        PathPrefix(locating: miss, in: "/Volumes/music-1/dsd/")
+            == PathPrefix(from: "/Volumes/music/dsd", to: "/Volumes/music-1/dsd"))
+    #expect(
+        PathPrefix(locating: miss, in: "/Volumes/music-1/A")
+            == PathPrefix(from: "/Volumes/music/dsd/A", to: "/Volumes/music-1/A"))
+    #expect(
+        PathPrefix(locating: miss, in: "/Users/me/Renamed")
+            == PathPrefix(from: "/Volumes/music/dsd/A", to: "/Users/me/Renamed"))
+}
+
+@Test func locatedMissesMatchAgainUnderTheFolderPicked() throws {
+    let (library, index, rows) = try scanned()
+    let old = { (path: String) in "/Volumes/old" + path.dropFirst(library.root.count) }
+    let source = player(
+        [track(old(rows[0].path), plays: 2), track(old(rows[1].path), plays: 3)],
+        playlists: [PlayerPlaylist(name: "Mix", kind: .manual, paths: [old(rows[0].path)])])
+    let plan = try index.applyImport(source, prefix: nil)
+    #expect(plan.unmatched.count == 2)
+
+    let prefix = PathPrefix(
+        locating: old(rows[0].path), in: (rows[0].path as NSString).deletingLastPathComponent)
+    let misses = plan.misses(under: prefix.from)
+    #expect(misses.playlists.isEmpty)
+    #expect(misses.tracks.map(\.path).contains(old(rows[0].path)))
+    let written = try index.applyImport(misses, prefix: prefix)
+    #expect(!written.unmatched.contains(prefix.apply(old(rows[0].path))))
+    #expect(try index.rows(ids: [rows[0].id])[0].playCount == 2)
+}
+
 @Test func playlistsComeAcrossInOrderAndExistingNamesAreSkipped() throws {
     let (_, index, rows) = try scanned()
     _ = try index.createPlaylist(named: "Old")
