@@ -99,6 +99,25 @@ private func loadedModel(
     #expect(changes == 3)
 }
 
+@MainActor @Test func showAllClearsTheSourcePanesAndSearchAndIsFreeWhenShown() async throws {
+    let (model, index) = try await loadedModel()
+    var changes = 0
+    model.changed = { _ in changes += 1 }
+    #expect(await model.showAll() == false)
+    #expect(changes == 0)
+    await model.setSource(.timeline)
+    await model.setSource(nil)
+    await model.select(.genre, id: try #require(model.genres.first).id)
+    await model.setSearch("a")
+    await model.setSource(.timeline)
+    changes = 0
+    #expect(await model.showAll())
+    #expect(model.filter == TrackFilter(groupByAlbumArtist: model.filter.groupByAlbumArtist))
+    #expect(model.trackIDs.count == (try index.trackCount()))
+    #expect(changes == 1)
+    #expect(model.history.canGoBack)
+}
+
 @MainActor @Test func theSameSearchAgainChangesNothing() async throws {
     let (model, _) = try await loadedModel()
     var changes = 0

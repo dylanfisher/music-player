@@ -133,6 +133,15 @@ public final class BrowserModel {
         await reload(panesFrom: .genre, reason: .user)
     }
 
+    /// Shows the whole library with no pane or search narrowing it, as a step Back can undo.
+    /// Returns false, running no query and redrawing nothing, when that already shows.
+    func showAll() async -> Bool {
+        guard pending != everything else { return false }
+        showEverything()
+        await reload(panesFrom: .genre, reason: .user)
+        return true
+    }
+
     /// Shows a watched folder, a playlist or History, or the whole library for nil, as a step
     /// Back can undo.
     func setSource(_ source: BrowserSource?) async {

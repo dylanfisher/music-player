@@ -142,6 +142,9 @@ extension AppDelegate {
                 }
                 Task { await browser.reveal(path: path) }
             })
+        dispatcher.handle(.showAllTracks, enabled: hasWindow) { [weak self] in
+            self?.browser?.showAll()
+        }
         dispatcher.handle(
             .back, enabled: { [weak self] in self?.browser?.canGoBack == true },
             run: {

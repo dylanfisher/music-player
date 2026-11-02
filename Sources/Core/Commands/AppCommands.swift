@@ -33,6 +33,7 @@ extension CommandID {
     public static let toggleQueue = CommandID("view.toggleQueue")
     public static let toggleSignalPath = CommandID("view.toggleSignalPath")
     public static let showCurrentTrack = CommandID("view.showCurrentTrack")
+    public static let showAllTracks = CommandID("view.showAllTracks")
     public static let back = CommandID("go.back")
     public static let forward = CommandID("go.forward")
     public static let focusNextPane = CommandID("focus.nextPane")
@@ -160,6 +161,7 @@ public enum AppCommands {
             Command(
                 .toggleSignalPath, state.signalPathVisible.title, [.init("s", [opt, cmd])]),
             Command(.showCurrentTrack, "Show Current Track", [.init("l", cmd)], links: true),
+            Command(.showAllTracks, "Show All Tracks"),
             Command(.back, "Back", [.init("[", cmd)], links: true),
             Command(.forward, "Forward", [.init("]", cmd)], links: true),
             Command(.focusNextPane, "Focus Next Pane", [.init(.right)]),

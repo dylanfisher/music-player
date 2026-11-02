@@ -933,6 +933,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         return "Playing \(tracks(request.urls.count))"
     }
 
+    /// Shows every track: the library, every pane at All and no search. A browser already
+    /// showing that is left as it is.
+    public func showAll() {
+        Task {
+            guard await model.showAll() else { return }
+            if !searchField.stringValue.isEmpty { searchField.stringValue = "" }
+            showSource()
+        }
+    }
+
     /// Shows the library narrowed to one entry, as the palette chooses it.
     public func showOnly(_ pane: BrowserModel.Pane, id: Int64) async {
         searchField.stringValue = ""

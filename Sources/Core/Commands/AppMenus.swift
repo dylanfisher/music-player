@@ -126,7 +126,7 @@ public enum AppMenus {
                             .command(.reverseSort),
                         ], showsChords: true),
                     .separator, .command(.back), .command(.forward), .command(.showCurrentTrack),
-                    .separator, .setting(settings.appearance.key),
+                    .command(.showAllTracks), .separator, .setting(settings.appearance.key),
                 ]),
             MenuSection(
                 title: "Controls", role: .plain,
