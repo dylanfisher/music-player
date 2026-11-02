@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 
 @testable import NowPlaying
@@ -110,4 +111,16 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
                 value: "no, each track starts after the last stops: its AVTransport has no X")))
     #expect(
         other.rows.last == .init(label: "Volume", value: "the renderer's own; the app sends none"))
+}
+
+@MainActor @Test func thePanelShowsOnlyTheRowsOfTheLatestPathLeftAligned() {
+    let panel = SignalPathPanel()
+    panel.show(path(device()))
+    panel.show(rendererPath(.nextURI, receiver: true))
+    let shown = panel.grid.subviews.compactMap { ($0 as? NSTextField)?.stringValue }
+    let expected = signalPathLines(rendererPath(.nextURI, receiver: true)).rows
+    #expect(shown.count == expected.count * 2)
+    #expect(!shown.contains("Hog mode"))
+    #expect(panel.view.subviews.filter { $0 is NSGridView } == [panel.grid])
+    #expect((panel.view as? NSStackView)?.alignment == .leading)
 }

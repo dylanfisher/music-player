@@ -6,7 +6,10 @@ import Playback
 @MainActor
 public final class SignalPathPanel: NSViewController {
     private let verdictLabel = NSTextField(wrappingLabelWithString: "")
-    private let grid = NSGridView()
+    private let stack = NSStackView()
+    /// Made again for each path: `NSGridView.removeRow` leaves the row's views in the grid,
+    /// where they draw under the new rows.
+    private(set) var grid = NSGridView()
 
     public init() { super.init(nibName: nil, bundle: nil) }
 
@@ -16,9 +19,7 @@ public final class SignalPathPanel: NSViewController {
     override public func loadView() {
         verdictLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
         verdictLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        grid.rowSpacing = 2
-        grid.columnSpacing = 8
-        let stack = NSStackView(views: [verdictLabel, grid])
+        stack.setViews([verdictLabel, grid], in: .top)
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
@@ -34,7 +35,12 @@ public final class SignalPathPanel: NSViewController {
         let lines = signalPathLines(path)
         verdictLabel.stringValue = lines.verdict
         verdictLabel.textColor = lines.isBitPerfect ? .systemGreen : .labelColor
-        while grid.numberOfRows > 0 { grid.removeRow(at: 0) }
+        let fresh = NSGridView()
+        fresh.rowSpacing = 2
+        fresh.columnSpacing = 8
+        stack.removeView(grid)
+        stack.addView(fresh, in: .top)
+        grid = fresh
         for row in lines.rows {
             let label = NSTextField(labelWithString: row.label)
             let value = NSTextField(labelWithString: row.value)
