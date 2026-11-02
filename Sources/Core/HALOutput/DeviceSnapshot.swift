@@ -38,6 +38,35 @@ struct DeviceSnapshot: Codable, Equatable {
     }
 }
 
+/// The snapshot each device got the first time this run opened it, by UID. The app makes a new
+/// provider for every change of output settings, and one store serves them all, so a later
+/// provider restores the device to how it was before playback, not to how a session that was
+/// still restoring it left it.
+public final class DeviceSnapshots: @unchecked Sendable {
+    private let lock = NSLock()
+    private var snapshots: [String: DeviceSnapshot] = [:]
+
+    public init() {}
+
+    func snapshot(of uid: String) -> DeviceSnapshot? { lock.withLock { snapshots[uid] } }
+
+    /// What a session on `uid` restores: the snapshot this run kept, else the record an earlier
+    /// run couldn't restore, which holds the state from before that run, else `current()`.
+    func original(
+        of uid: String, recorded: [DeviceSnapshot], current: () throws -> DeviceSnapshot
+    ) rethrows -> DeviceSnapshot {
+        if let kept = snapshot(of: uid) { return kept }
+        return try recorded.first { $0.deviceUID == uid } ?? current()
+    }
+
+    /// Keeps `snapshot` unless its device already has one, which is older.
+    func keep(_ snapshot: DeviceSnapshot) {
+        lock.withLock {
+            if snapshots[snapshot.deviceUID] == nil { snapshots[snapshot.deviceUID] = snapshot }
+        }
+    }
+}
+
 /// The fields of an `AudioStreamBasicDescription`, which isn't `Codable`.
 struct StoredFormat: Codable, Equatable {
     var sampleRate: Double

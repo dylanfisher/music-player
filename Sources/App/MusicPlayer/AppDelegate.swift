@@ -65,6 +65,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var watcher: LibraryWatcher?
     private var shareChanges: ShareChangeObserver?
     private(set) var output: DeviceOutput?
+    /// Each device's state before playback first changed it, shared by every provider made for
+    /// it, since a settings change makes a new one.
+    private let deviceSnapshots = DeviceSnapshots()
     /// The renderer `output.renderer` names, while the engine plays to it.
     var rendererOutput: RendererOutput?
     /// The search for that renderer, and its signal paths for the panel.
@@ -535,7 +538,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DeviceChoice(
             provider: try HALDeviceProvider(
                 deviceUID: profile.uid, hogMode: profile.hogMode,
-                restoreRecordURL: restoreRecordURL(in: paths.dataDirectory)),
+                restoreRecordURL: restoreRecordURL(in: paths.dataDirectory),
+                snapshots: deviceSnapshots),
             digitalVolume: profile.digitalVolume, gain: pow(10, profile.volumeDecibels / 20),
             formats: profile.formats)
     }

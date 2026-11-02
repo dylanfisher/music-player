@@ -55,7 +55,8 @@ func playCommand(paths: [String], deviceName: String?) throws -> Never {
     let deviceUID = try HALDeviceProvider.resolve(
         try deviceName.map(uid(ofDeviceNamed:)) ?? settings[\.outputDeviceUID])
     let provider = try HALDeviceProvider(
-        deviceUID: deviceUID, hogMode: settings[\.hogMode], restoreRecordURL: recordURL)
+        deviceUID: deviceUID, hogMode: settings[\.hogMode], restoreRecordURL: recordURL,
+        snapshots: DeviceSnapshots())
     let output = try DeviceOutput(
         DeviceChoice(
             provider: provider, digitalVolume: settings[\.digitalVolume], gain: 1, formats: nil))

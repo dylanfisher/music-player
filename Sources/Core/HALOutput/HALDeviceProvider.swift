@@ -19,10 +19,11 @@ enum HALDeviceProviderError: Error, CustomStringConvertible {
 /// dying, and never substitutes another device. It also follows the properties that decide
 /// whether the device plays samples unchanged, and reports its state each time one changes.
 ///
-/// The first open in a run snapshots the device and the system's default outputs, and every later
-/// session restores that snapshot, so a device that was unplugged and came back is still put back
-/// the way it was before playback. The snapshot is also written to `restoreRecordURL` until a
-/// session restores it, so `recoverAfterCrash` can restore it after a run that never got to.
+/// The first open in a run snapshots the device and the system's default outputs into
+/// `snapshots`, which every provider for the device shares, and every later session restores
+/// that snapshot, so a device that was unplugged and came back is still put back the way it was
+/// before playback. The snapshot is also written to `restoreRecordURL` until a session restores
+/// it, so `recoverAfterCrash` can restore it after a run that never got to.
 public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
     public let deviceUID: String
     public let deviceName: String
@@ -30,15 +31,18 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
     private let restoreRecordURL: URL
     private let queue = DispatchQueue(label: "\(bundleIdentifier).device-watch")
     private let lock = NSLock()
-    private var snapshot: DeviceSnapshot?
+    private let snapshots: DeviceSnapshots
     private var listener: AudioObjectPropertyListenerBlock?
     /// The device the `IsAlive` listener is on, which changes when it is plugged back in.
     private var aliveListenerDevice: AudioObjectID?
     private var stateChanged: (@Sendable (DeviceState) -> Void)?
     private var signalListeners: PropertyListeners?
 
-    public init(deviceUID: String, hogMode: Bool, restoreRecordURL: URL) throws {
+    public init(
+        deviceUID: String, hogMode: Bool, restoreRecordURL: URL, snapshots: DeviceSnapshots
+    ) throws {
         self.deviceUID = deviceUID
+        self.snapshots = snapshots
         let id = try deviceID(uid: self.deviceUID)
         deviceName =
             try id.map { try readString($0, address(kAudioObjectPropertyName)) } ?? self.deviceUID
@@ -77,18 +81,16 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
     public func open() throws -> (any PCMDevice)? {
         guard let id = try liveDeviceID() else { return nil }
         return try lock.withLock {
-            // A record an earlier run couldn't restore holds the state from before that run, which
-            // is the one to put back.
             let records = try readRestoreRecords(restoreRecordURL)
-            let snapshot =
-                try self.snapshot ?? records.first { $0.deviceUID == deviceUID }
-                ?? HALDevice.snapshot(of: id, uid: deviceUID)
+            let snapshot = try snapshots.original(of: deviceUID, recorded: records) {
+                try HALDevice.snapshot(of: id, uid: deviceUID)
+            }
             let device = try HALDevice(
                 id: id, name: deviceName, hogMode: hogMode, restoring: snapshot)
             // Written only once the device is held, and for every session, since closing the last
             // one removed it.
             try writeRestoreRecords(adding(snapshot, to: records), to: restoreRecordURL)
-            self.snapshot = snapshot
+            snapshots.keep(snapshot)
             return RestoringDevice(device, uid: deviceUID, recordURL: restoreRecordURL)
         }
     }
@@ -225,7 +227,7 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
     }
 
     public func deviceReturned() {
-        guard let snapshot = lock.withLock({ snapshot }) else { return }
+        guard let snapshot = snapshots.snapshot(of: deviceUID) else { return }
         do {
             try restoreDefaultOutputs(snapshot)
         } catch {

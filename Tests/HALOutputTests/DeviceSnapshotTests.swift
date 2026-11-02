@@ -79,3 +79,28 @@ private func temporaryRecord() -> URL {
 @Test func noRecordMeansNothingToRecover() throws {
     #expect(try HALDeviceProvider.recoverAfterCrash(restoreRecordURL: temporaryRecord()) == nil)
 }
+
+@Test func aProviderMadeForASettingsChangeRestoresTheStateFromBeforeTheRun() {
+    let snapshots = DeviceSnapshots()
+    let uid = snapshot.deviceUID
+    // The first provider's first open: the device as it was before playback.
+    snapshots.keep(snapshots.original(of: uid, recorded: []) { snapshot })
+    // Hog mode was turned off and a new provider opened the device before the old session's
+    // restore landed, so the device still reads in the hog session's format.
+    var hogged = snapshot
+    hogged.sampleRateHz = 96_000
+    hogged.physicalFormat.sampleRate = 96_000
+    hogged.physicalFormat.formatFlags |= kAudioFormatFlagIsNonMixable
+    let restored = snapshots.original(of: uid, recorded: []) { hogged }
+    snapshots.keep(restored)
+    #expect(restored == snapshot)
+    #expect(snapshots.snapshot(of: uid) == snapshot)
+}
+
+@Test func theFirstOpenTakesAnUnrestoredRecordOverTheDeviceNow() {
+    var earlier = snapshot
+    earlier.sampleRateHz = 48_000
+    #expect(
+        DeviceSnapshots().original(of: snapshot.deviceUID, recorded: [earlier]) { snapshot }
+            == earlier)
+}

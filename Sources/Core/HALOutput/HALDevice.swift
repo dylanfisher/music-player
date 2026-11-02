@@ -153,7 +153,8 @@ final class HALDevice: PCMDevice {
     }
 
     /// Stops playback, restores the snapshot's rate and format, releases hog mode, and restores
-    /// the system's default output devices.
+    /// the system's default output devices. Returns once the device reads as restored, or throws
+    /// after 3 seconds.
     func close() throws {
         guard isOpen else { return }
         isOpen = false
@@ -171,9 +172,20 @@ final class HALDevice: PCMDevice {
                     self.id, address(kAudioDevicePropertyNominalSampleRate),
                     self.snapshot.sampleRateHz)
             },
+            // The HAL applies these writes asynchronously. A session opened before they land,
+            // as a settings change opens one straight after, would configure a device that is
+            // still changing under it.
+            { try self.waitForRestoredFormat() },
             {
                 if self.hogMode {
                     try writeScalar(self.id, address(kAudioDevicePropertyHogMode), pid_t(-1))
+                    try waitUntil(
+                        "hog mode released", self.id, address(kAudioDevicePropertyHogMode)
+                    ) {
+                        let owner: pid_t = try readScalar(
+                            self.id, address(kAudioDevicePropertyHogMode))
+                        return owner != getpid()
+                    }
                 }
             },
             { try restoreDefaultOutputs(self.snapshot) },
@@ -189,6 +201,19 @@ final class HALDevice: PCMDevice {
         }
         if let first = errors.first { throw first }
         logger.info("device \(self.id, privacy: .public): restored")
+    }
+
+    private func waitForRestoredFormat() throws {
+        let format = PhysicalFormat(snapshot.physicalFormat.basicDescription)
+        try waitUntil(
+            "\(kilohertz(snapshot.sampleRateHz)) kHz, \(format.summary)", stream,
+            address(kAudioStreamPropertyPhysicalFormat)
+        ) {
+            let rate: Double = try readScalar(id, address(kAudioDevicePropertyNominalSampleRate))
+            let now: AudioStreamBasicDescription = try readScalar(
+                stream, address(kAudioStreamPropertyPhysicalFormat))
+            return rate == snapshot.sampleRateHz && PhysicalFormat(now) == format
+        }
     }
 
     func abandon() -> Bool {
