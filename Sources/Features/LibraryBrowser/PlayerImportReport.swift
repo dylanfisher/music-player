@@ -9,7 +9,7 @@ extension ImportPlan {
     var previewLines: [String] {
         var lines = [
             "\(tracks(library.tracks.count)) read: \(number(matched)) in this library,"
-                + " \(number(unmatched.count + unreadFormat.count)) not"
+                + " \(number(missedCount)) not"
                 + (unreadFormat.isEmpty
                     ? "" : ", \(number(unreadFormat.count)) of them in a format not read yet"),
             "Play counts: +\(number(playsAdded)) on \(tracks(tracksGainingPlays))",
@@ -39,6 +39,9 @@ extension ImportPlan {
         if problems > 0 { lines.append("\(count(problems, "problem")) reading the library") }
         return lines
     }
+
+    /// The tracks not matched to this library, whether or not their format is read.
+    private var missedCount: Int { unmatched.count + unreadFormat.count }
 
     private var playlistNotes: String {
         var notes: [String] = []
@@ -74,8 +77,7 @@ extension ImportPlan {
         if ratings > 0 { parts.append(count(ratings, "rating")) }
         if loved > 0 { parts.append("\(number(loved)) loved") }
         parts.append(count(playlists.count, "playlist"))
-        let missed = unmatched.count + unreadFormat.count
-        if missed > 0 { parts.append("\(number(missed)) unmatched") }
+        if missedCount > 0 { parts.append("\(number(missedCount)) unmatched") }
         return parts.joined(separator: " · ")
     }
 
