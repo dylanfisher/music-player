@@ -12,8 +12,9 @@ let syncPlaylistIDSQL = "SELECT id FROM \(syncPlaylistsTable) WHERE playlist_id 
 /// A playlist's sync ID; a NULL playlist marks one deleted.
 let insertSyncPlaylistSQL = "INSERT INTO \(syncPlaylistsTable) (id, playlist_id) VALUES (?, ?)"
 
-/// A field whose latest change wins (ADR 0038): a path's rating or love, keyed by path ID, or a
-/// playlist's name, rules or entries, keyed by playlist ID.
+/// A field whose latest change wins (ADR 0038): a path's rating or opinion (`loved`, which
+/// `disliked` events share), keyed by path ID, or a playlist's name, rules or entries, keyed by
+/// playlist ID.
 enum SyncField: String {
     case rating, loved, playlistName, playlistRules, playlistEntries
 }

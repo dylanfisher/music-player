@@ -14,6 +14,7 @@ private let everyEvent: [SyncEvent] = [
     .counts(path: "music/a.flac", player: .iTunes, plays: 0, skips: 0, lastPlayed: 12.5),
     .rating(path: "music/Caf\u{e9} \"q\"\\b.flac", stars: 0),
     .loved(path: "music/line\nbreak.flac", loved: true),
+    .disliked(path: "music/a.flac"),
     .added(path: "music/a.flac", at: 0),
     .move(from: "music/a.flac", to: "music/b/\u{1F3B5}.flac"),
     .playlistCreate(playlist: playlist, name: "Mix", rules: nil),

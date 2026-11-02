@@ -58,6 +58,7 @@ the config file but music files, through the tag writer.
   | `counts` | `path`, `player`, `plays`, `skips`, `lastPlayed` (a time or null): an import's counts |
   | `rating` | `path`, `stars` (0 clears) |
   | `loved` | `path`, `loved` |
+  | `disliked` | `path`: Dislike; `loved` and `disliked` share one field ([0048](0048-like-and-dislike.md)) |
   | `added` | `path`, `at`: Date Added |
   | `move` | `from`, `to` |
   | `playlistCreate` | `playlist` (32 hex digits), `name`, `rules` (a smart playlist's JSON or null) |

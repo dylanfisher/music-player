@@ -119,7 +119,7 @@ private let addedColumns: [(TrackColumn, String, [String])] = [
     #expect(try names(index, .dateCreated).count == 3)
     #expect(try names(index, .dateModified).count == 3)
     let id = try #require(rows["two.flac"]).id
-    try index.toggleLoved(trackIDs: [id])
+    try index.toggle(.liked, trackIDs: [id])
     #expect(try names(index, .loved).last == "two")
     #expect(try index.rows(ids: [id]).first?.loved == true)
 }
@@ -129,19 +129,50 @@ private let addedColumns: [(TrackColumn, String, [String])] = [
     let a = try #require(rows["a.flac"]).id
     let b = try #require(rows["b.flac"]).id
     func loved() throws -> [Bool] { try index.rows(ids: [a, b]).map(\.loved) }
-    try index.toggleLoved(trackIDs: [a])
+    try index.toggle(.liked, trackIDs: [a])
     #expect(try loved() == [true, false])
-    try index.toggleLoved(trackIDs: [a, b])
+    try index.toggle(.liked, trackIDs: [a, b])
     #expect(try loved() == [true, true])
-    try index.toggleLoved(trackIDs: [a, b])
+    try index.toggle(.liked, trackIDs: [a, b])
     #expect(try loved() == [false, false])
+}
+
+@Test func aLikeAndADislikeReplaceEachOtherAndToggleOff() throws {
+    let (index, rows, _) = try taggedLibrary(["a": [:], "b": [:]])
+    let a = try #require(rows["a.flac"]).id
+    let b = try #require(rows["b.flac"]).id
+    func opinions() throws -> [TrackOpinion?] { try [a, b].map(index.opinion(of:)) }
+    try index.toggle(.disliked, trackIDs: [a])
+    #expect(try opinions() == [.disliked, nil])
+    try index.toggle(.liked, trackIDs: [a, b])
+    #expect(try opinions() == [.liked, .liked])
+    #expect(try index.rows(ids: [a, b]).map(\.loved) == [true, true])
+    try index.toggle(.disliked, trackIDs: [a])
+    #expect(try opinions() == [.disliked, .liked])
+    #expect(try index.rows(ids: [a]).first?.loved == false)
+    try index.toggle(.disliked, trackIDs: [a])
+    #expect(try opinions() == [nil, .liked])
+}
+
+@Test func dislikedHasItsOwnRebuildThatKeepsTheLovedTracks() throws {
+    let (index, rows, root) = try taggedLibrary(["a": [:], "b": [:]])
+    let databaseURL = root.deletingLastPathComponent().appendingPathComponent("library.sqlite")
+    let a = try #require(rows["a.flac"]).id
+    let b = try #require(rows["b.flac"]).id
+    try index.toggle(.liked, trackIDs: [a])
+    try index.toggle(.disliked, trackIDs: [b])
+    try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'disliked'")
+    let rebuilt = try LibraryIndex(at: databaseURL)
+    #expect(try rebuilt.opinion(of: a) == .liked)
+    #expect(try rebuilt.opinion(of: b) == nil)
+    #expect(try rebuilt.discards().first?.text.hasSuffix("(rows: disliked 1)") == true)
 }
 
 @Test func lovedSurvivesAnIndexRebuildAndItsOwnRebuildKeepsTheOtherStats() throws {
     let (index, rows, root) = try taggedLibrary(["a": [:]])
     let databaseURL = root.deletingLastPathComponent().appendingPathComponent("library.sqlite")
     let id = try #require(rows["a.flac"]).id
-    try index.toggleLoved(trackIDs: [id])
+    try index.toggle(.liked, trackIDs: [id])
     try index.setRating(3, trackIDs: [id])
     try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'index'")
 
@@ -165,7 +196,7 @@ private let addedColumns: [(TrackColumn, String, [String])] = [
             "fast": ["GROUPING": "Dance", "BPM": "174"],
             "slow": ["GROUPING": "Ambient", "BPM": "70"],
         ])
-    try index.toggleLoved(trackIDs: [try #require(rows["slow.flac"]).id])
+    try index.toggle(.liked, trackIDs: [try #require(rows["slow.flac"]).id])
     func matching(_ rule: SmartRule) throws -> [String] {
         let id = try index.createPlaylist(
             named: "rule", rules: SmartRules(match: .all, rules: [rule]))

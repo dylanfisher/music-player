@@ -287,8 +287,8 @@ public final class BrowserModel {
         await refresh()
     }
 
-    func toggleLoved(_ trackIDs: [Int64]) async throws {
-        try await reader.toggleLoved(trackIDs: trackIDs)
+    func toggle(_ opinion: TrackOpinion, _ trackIDs: [Int64]) async throws {
+        try await reader.toggle(opinion, trackIDs: trackIDs)
         await refresh()
     }
 

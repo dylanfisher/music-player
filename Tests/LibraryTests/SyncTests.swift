@@ -143,6 +143,24 @@ private func syncAll(_ machines: [Machine]) throws {
     }
 }
 
+@Test func theLatestOfALikeAndADislikeIsTheOpinionEverywhere() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    let onA = try a.scanned("x.flac")
+    let onB = try b.scanned("x.flac")
+    try a.index.toggle(.liked, trackIDs: [onA])
+    b.nowMs += 60_000
+    try b.index.toggle(.disliked, trackIDs: [onB])
+    try syncAll([a, b])
+    #expect(try a.index.opinion(of: onA) == .disliked)
+    #expect(try b.index.opinion(of: onB) == .disliked)
+    // Clearing the dislike later clears it everywhere, without bringing back A's like.
+    b.nowMs += 60_000
+    try b.index.toggle(.disliked, trackIDs: [onB])
+    try syncAll([a, b])
+    #expect(try a.index.opinion(of: onA) == nil)
+}
+
 @Test func aTieOnTheClockGoesToTheHigherMachineID() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair
@@ -321,7 +339,7 @@ private func syncAll(_ machines: [Machine]) throws {
     let rated = try a.index.track(path: a.path("x.flac"))!.id
     try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_000)
     try a.index.setRating(4, trackIDs: [rated])
-    try a.index.toggleLoved(trackIDs: [rated])
+    try a.index.toggle(.liked, trackIDs: [rated])
     let playlist = try a.index.createPlaylist(named: "Mix")
     _ = try a.index.addToPlaylist(playlist, trackIDs: [rated])
     try a.index.remove([old])

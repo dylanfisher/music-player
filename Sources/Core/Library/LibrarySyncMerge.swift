@@ -64,7 +64,12 @@ extension LibraryIndex {
             guard let id = try mergedPathID(path, seenAt: seconds, &merge),
                 try wins(stamp, .loved, id)
             else { return nil }
-            try setLoved(loved, id)
+            try setOpinion(loved ? .liked : nil, of: id)
+        case .disliked(let path):
+            guard let id = try mergedPathID(path, seenAt: seconds, &merge),
+                try wins(stamp, .loved, id)
+            else { return nil }
+            try setOpinion(.disliked, of: id)
         case .added(let path, let at):
             guard let id = try mergedPathID(path, seenAt: at, &merge) else { return nil }
             try statement(earliestAddedSQL).run(at, id)
@@ -159,10 +164,6 @@ extension LibraryIndex {
         }
     }
 
-    private func setLoved(_ loved: Bool, _ id: Int64) throws {
-        try statement(loved ? insertLovedSQL : deleteLovedSQL).run(id)
-    }
-
     /// Whether `stamp` is later than the change `field` of `key` holds, recording it if so.
     private func wins(_ stamp: SyncStamp, _ field: SyncField, _ key: Int64) throws -> Bool {
         if let held = try self.stamp(field, key), held >= stamp { return false }
@@ -239,7 +240,7 @@ extension LibraryIndex {
     }
 
     /// Moves the stats of the path `gone` onto `kept`, by the merge rules: counts added, the
-    /// history moved, the later rating and love, the earliest Date Added. Leaves `gone` with no
+    /// history moved, the later rating and opinion, the earliest Date Added. Leaves `gone` with no
     /// stats. Call inside a transaction.
     private func absorb(_ gone: Int64, into kept: Int64) throws {
         if let counts = try statement(
@@ -259,12 +260,13 @@ extension LibraryIndex {
             try setRating(ratings[0], of: kept)
         }
         try statement(deleteRatingSQL).run(gone)
-        let love = try statement(isLovedSQL)
-        let loves = try [gone, kept].map { id in try !love.map(id, row: { _ in () }).isEmpty }
-        if try takesGone(.loved, gone, kept, goneHas: loves[0], keptHas: loves[1]) {
-            try setLoved(loves[0], kept)
+        let opinions = try [gone, kept].map(opinion(of:))
+        if try takesGone(
+            .loved, gone, kept, goneHas: opinions[0] != nil, keptHas: opinions[1] != nil)
+        {
+            try setOpinion(opinions[0], of: kept)
         }
-        try statement(deleteLovedSQL).run(gone)
+        try setOpinion(nil, of: gone)
         try statement("UPDATE OR IGNORE playlist_entries SET path_id = ? WHERE path_id = ?").run(
             kept, gone)
         try statement("DELETE FROM playlist_entries WHERE path_id = ?").run(gone)

@@ -889,10 +889,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Follows `library.groupByAlbumArtist`.
     public func setGroupByAlbumArtist(_ on: Bool) async { await model.setGroupByAlbumArtist(on) }
 
-    /// Loves the selection, or unloves it when all of it is loved.
-    public func toggleLovedSelection() {
-        guard let ids = selectedTrackIDs(else: "couldn't love the tracks") else { return }
-        edit("couldn't love the tracks") { try await self.model.toggleLoved(ids) }
+    /// Likes or dislikes the selection, or clears that when all of it has it already.
+    public func toggleSelection(_ opinion: TrackOpinion) {
+        let failure = opinion == .liked ? "couldn't like the tracks" : "couldn't dislike the tracks"
+        guard let ids = selectedTrackIDs(else: failure) else { return }
+        edit(failure) { try await self.model.toggle(opinion, ids) }
     }
 
     /// Counts a play of the track at `path`, at `seconds` since 1970.

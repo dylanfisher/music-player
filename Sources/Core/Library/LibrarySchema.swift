@@ -13,6 +13,9 @@ enum SchemaPart: String, CaseIterable {
     /// Loved tracks, also keyed by path ID. A part of its own, so its shape can change without
     /// discarding the other stats (ADR 0031).
     case loved
+    /// Disliked tracks, keyed by path ID, a part of their own so adding them kept the loved
+    /// ones (ADR 0048). A path is loved or disliked, never both.
+    case disliked
     /// What each import from another player counted, so a second import adds only what grew
     /// (ADR 0033). A part of its own for the same reason as `loved`.
     case imports
@@ -29,6 +32,7 @@ enum SchemaPart: String, CaseIterable {
         case .index: indexSchema
         case .stats: statsSchema
         case .loved: lovedSchema
+        case .disliked: dislikedSchema
         case .imports: importsSchema
         case .sync: syncSchema
         case .scans: scansSchema
@@ -41,6 +45,7 @@ enum SchemaPart: String, CaseIterable {
         case .index: nil
         case .stats: statsTables
         case .loved: [lovedTable]
+        case .disliked: [dislikedTable]
         case .imports: [importedPlaysTable]
         case .sync: syncTables
         case .scans: [scannedFoldersTable]
@@ -61,6 +66,7 @@ let statsTables: Set<String> = [
 ]
 
 let lovedTable = "loved"
+let dislikedTable = "disliked"
 let scannedFoldersTable = "scanned_folders"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
@@ -260,6 +266,13 @@ private let scansSchema = """
 private let lovedSchema = """
     -- A row for each loved path; none means not loved.
     CREATE TABLE \(lovedTable) (
+        path_id INTEGER PRIMARY KEY REFERENCES paths (id)
+    );
+    """
+
+private let dislikedSchema = """
+    -- A row for each disliked path; none means not disliked.
+    CREATE TABLE \(dislikedTable) (
         path_id INTEGER PRIMARY KEY REFERENCES paths (id)
     );
     """

@@ -45,7 +45,7 @@ extension LibraryIndex {
             var update = TrackUpdate(
                 pathID: id, plays: max(0, now.plays - before.plays),
                 skips: max(0, now.skips - before.skips),
-                imported: now == before ? nil : now, loves: theirs.loved && !our.loved)
+                imported: now == before ? nil : now, loves: theirs.loved && !our.hasOpinion)
             if let played = theirs.lastPlayedSeconds, played > our.lastPlayedSeconds ?? -.infinity {
                 update.lastPlayedSeconds = played
                 plan.lastPlayed += 1
@@ -183,7 +183,8 @@ private func playlistKey(_ name: String) -> String {
 }
 
 private let oursSelect = """
-    SELECT pa.id, pa.added_seconds, p.last_played_seconds, r.rating, lv.path_id IS NOT NULL
+    SELECT pa.id, pa.added_seconds, p.last_played_seconds, r.rating,
+        lv.path_id IS NOT NULL OR EXISTS (SELECT 1 FROM \(dislikedTable) WHERE path_id = pa.id)
     FROM paths pa
     LEFT JOIN plays p ON p.path_id = pa.id
     LEFT JOIN ratings r ON r.path_id = pa.id
@@ -195,12 +196,13 @@ private struct OurStats {
     var addedSeconds: Double
     var lastPlayedSeconds: Double?
     var rating: Int?
-    var loved: Bool
+    /// Loved or disliked: either way, the import's love doesn't replace it.
+    var hasOpinion: Bool
 
     init(_ row: Row) throws {
         addedSeconds = try row.double(1)
         lastPlayedSeconds = row.optionalDouble(2)
         rating = row.optionalInt(3)
-        loved = try row.int(4) == 1
+        hasOpinion = try row.int(4) == 1
     }
 }

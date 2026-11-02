@@ -6,6 +6,9 @@ let insertLovedSQL = "INSERT OR IGNORE INTO \(lovedTable) (path_id) VALUES (?)"
 
 let deleteLovedSQL = "DELETE FROM \(lovedTable) WHERE path_id = ?"
 let isLovedSQL = "SELECT 1 FROM \(lovedTable) WHERE path_id = ?"
+let insertDislikedSQL = "INSERT INTO \(dislikedTable) (path_id) VALUES (?)"
+let deleteDislikedSQL = "DELETE FROM \(dislikedTable) WHERE path_id = ?"
+let isDislikedSQL = "SELECT 1 FROM \(dislikedTable) WHERE path_id = ?"
 let setRatingSQL = "INSERT OR REPLACE INTO ratings (path_id, rating) VALUES (?, ?)"
 let deleteRatingSQL = "DELETE FROM ratings WHERE path_id = ?"
 /// Adds a track to a playlist, unless it's there already.
@@ -256,20 +259,35 @@ extension LibraryIndex {
         }
     }
 
-    /// Loves the tracks `ids`, or unloves them when every one of them is loved already.
-    public func toggleLoved(trackIDs ids: [Int64]) throws {
+    /// Gives the tracks `ids` `opinion`, or clears it when every one of them has it already.
+    /// Liking a disliked track drops the dislike, and the other way round.
+    public func toggle(_ opinion: TrackOpinion, trackIDs ids: [Int64]) throws {
         try database.transaction {
-            let isLoved = try statement(isLovedSQL)
-            let allLoved = try ids.allSatisfy { !(try isLoved.map($0, row: { _ in () })).isEmpty }
-            let write =
-                allLoved
-                ? try statement(deleteLovedSQL)
-                : try statement(insertLovedSQL)
+            let all = try ids.allSatisfy { try self.opinion(of: $0) == opinion }
+            let new = all ? nil : opinion
             let roots = try syncRoots()
             for id in ids {
-                try write.run(id)
-                try logSync(pathID: id, roots, field: .loved) { .loved(path: $0, loved: !allLoved) }
+                try setOpinion(new, of: id)
+                try logSync(pathID: id, roots, field: .loved) { .opinion(path: $0, new) }
             }
+        }
+    }
+
+    /// The path `id`'s opinion, nil for none.
+    func opinion(of id: Int64) throws -> TrackOpinion? {
+        if try !statement(isLovedSQL).map(id, row: { _ in () }).isEmpty { return .liked }
+        if try !statement(isDislikedSQL).map(id, row: { _ in () }).isEmpty { return .disliked }
+        return nil
+    }
+
+    /// Gives the path `id` `opinion`, nil clearing it. Call inside a transaction.
+    func setOpinion(_ opinion: TrackOpinion?, of id: Int64) throws {
+        try statement(deleteLovedSQL).run(id)
+        try statement(deleteDislikedSQL).run(id)
+        switch opinion {
+        case .liked: try statement(insertLovedSQL).run(id)
+        case .disliked: try statement(insertDislikedSQL).run(id)
+        case nil: break
         }
     }
 

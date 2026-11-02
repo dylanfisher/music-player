@@ -75,6 +75,14 @@ private func track(
     #expect(try index.loggedPlayCount() == 1)
 }
 
+@Test func anImportedLoveLeavesADislikedTrackDisliked() throws {
+    let (_, index, rows) = try scanned()
+    try index.toggle(.disliked, trackIDs: [rows[0].id])
+    let plan = try index.applyImport(player([track(rows[0].path, loved: true)]), prefix: nil)
+    #expect(plan.loved == 0)
+    #expect(try index.opinion(of: rows[0].id) == .disliked)
+}
+
 @Test func aSecondImportAddsOnlyWhatGrew() throws {
     let (_, index, rows) = try scanned()
     let first = player(

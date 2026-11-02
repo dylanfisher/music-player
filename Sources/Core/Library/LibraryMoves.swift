@@ -144,7 +144,7 @@ private let lostCondition = """
         AND NOT EXISTS (SELECT 1 FROM files WHERE id = p.id) AND \(hasStats("p.id"))
     """
 
-/// Whether the path `id` has what a move keeps: plays, logged plays, a rating, a love or a
+/// Whether the path `id` has what a move keeps: plays, logged plays, a rating, an opinion or a
 /// playlist entry.
 func hasStats(_ id: String) -> String {
     """
@@ -152,6 +152,7 @@ func hasStats(_ id: String) -> String {
         OR EXISTS (SELECT 1 FROM history WHERE path_id = \(id))
         OR EXISTS (SELECT 1 FROM ratings WHERE path_id = \(id))
         OR EXISTS (SELECT 1 FROM \(lovedTable) WHERE path_id = \(id))
+        OR EXISTS (SELECT 1 FROM \(dislikedTable) WHERE path_id = \(id))
         OR EXISTS (SELECT 1 FROM playlist_entries WHERE path_id = \(id)))
     """
 }

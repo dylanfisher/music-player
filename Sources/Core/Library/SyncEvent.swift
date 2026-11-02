@@ -10,7 +10,9 @@ enum SyncEvent: Equatable, Sendable {
         path: String, player: PlayerLibrary.Player, plays: Int, skips: Int, lastPlayed: Double?)
     /// 0 clears the rating.
     case rating(path: String, stars: Int)
+    /// Liked, or no opinion: the latest of this and `disliked` is the path's opinion.
     case loved(path: String, loved: Bool)
+    case disliked(path: String)
     /// When a machine first saw the path: Date Added.
     case added(path: String, at: Double)
     case move(from: String, to: String)
@@ -83,6 +85,11 @@ package struct SyncRecord: Equatable, Sendable {
 }
 
 extension SyncEvent {
+    /// The event that gives `path` `opinion`, nil for none.
+    static func opinion(path: String, _ opinion: TrackOpinion?) -> SyncEvent {
+        opinion == .disliked ? .disliked(path: path) : .loved(path: path, loved: opinion == .liked)
+    }
+
     /// What applying the event costs, toward a sync's batch: one, or one per entry.
     var work: Int {
         if case .playlistEntries(_, let paths) = self { max(1, paths.count) } else { 1 }
@@ -95,6 +102,7 @@ extension SyncEvent {
         case .counts: .counts
         case .rating: .rating
         case .loved: .loved
+        case .disliked: .disliked
         case .added: .added
         case .move: .move
         case .playlistCreate: .playlistCreate
@@ -119,6 +127,7 @@ extension SyncEvent {
         case .rating(let path, let stars):
             [(.path, .string(path)), (.stars, .integer(Int64(stars)))]
         case .loved(let path, let loved): [(.path, .string(path)), (.loved, .bool(loved))]
+        case .disliked(let path): [(.path, .string(path))]
         case .added(let path, let at): [(.path, .string(path)), (.at, .number(at))]
         case .move(let from, let to): [(.from, .string(from)), (.to, .string(to))]
         case .playlistCreate(let playlist, let name, let rules):
@@ -146,7 +155,8 @@ enum SyncKey: String {
 
 /// What `event` names in a log line.
 enum SyncEventName: String {
-    case play, skip, counts, rating, loved, added, move, playlistCreate, playlistRename
+    case play, skip, counts, rating, loved, disliked, added, move, playlistCreate
+    case playlistRename
     case playlistRules, playlistEntries, playlistDelete
 }
 
@@ -197,6 +207,7 @@ extension SyncEvent {
         case .loved:
             self = .loved(
                 path: try fields.path(.path), loved: try fields.take(.loved).bool(.loved))
+        case .disliked: self = .disliked(path: try fields.path(.path))
         case .added:
             self = .added(path: try fields.path(.path), at: try fields.take(.at).seconds(.at))
         case .move: self = .move(from: try fields.path(.from), to: try fields.path(.to))
