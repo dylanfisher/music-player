@@ -2254,23 +2254,39 @@ The owner's notes from 2026-11-02, after using the app on the full library. The 
 to 28 run in parallel, one agent each, then merge onto the phase branch and go through the gate
 together.
 
-- [ ] **24.1 ⌘K opens complete and steady.** With an empty query the palette lists only commands,
+- [x] **24.1 ⌘K opens complete and steady.** With an empty query the palette lists only commands,
       and genres, playlists and outputs show up only once the user types. A genre ("Electronic -
       Glitch, Dub, Experimental, Ambient") was listed first before anything was typed. The panel
       also flashes as it opens, as if it fills after it shows. The empty-query list is all known
       commands, so build it before the panel shows and show it on the first frame.
-- [ ] **24.2 ⌘P opens instantly after the first time.** It flashes while it fills. The first open
+- [x] **24.2 ⌘P opens instantly after the first time.** It flashes while it fills. The first open
       may build its index; after that, keep the index and reuse it, and rebuild only when the
       library changes (a scan, an import, a tag edit, a removal).
-- [ ] **24.3 ⌘P goes to the item; ⌘↩ filters to it.** Choosing an artist or an album with ↩ or a
+- [x] **24.3 ⌘P goes to the item; ⌘↩ filters to it.** Choosing an artist or an album with ↩ or a
       click shows it in the full track list: clear any browser filter, then select and scroll to
       its first track. ⌘↩ or ⌘-click instead filters the browser panes to it, as ↩ does today. So
       does a key the user sets in Shortcuts, → by default, pressed on an artist or album result.
       Tracks keep today's behavior. A track result's → still moves the text cursor when it isn't
       at the end of the field.
-- [ ] **24.4 Palette size matches simple-spotlight.** ⌘K and ⌘P use the same width, height, row
+- [x] **24.4 Palette size matches simple-spotlight.** ⌘K and ⌘P use the same width, height, row
       height, field font and corner radius as the panel in `~/projects/simple-spotlight`. Read
       its numbers from its code; don't copy its code (ADR 0012's rule).
+
+Result: shipped as planned; `./scripts/check` passes. ⌘K with an empty query lists only commands
+(`rankPalette` takes `emptyQueryKinds`; ADR 0016 amended), and both palettes rank their opening
+rows on the main actor before the panel shows, so the first frame has its rows. ⌘P keeps its
+rows (artists, albums, every track's prepared row) in `LibraryListing<Value>` and rebuilds them
+lazily on the next open after `browser.libraryRefreshed`, so a scan does not prepare 43k titles
+every 2 s. ↩ or a click on an artist or album shows the full library with its first track
+selected; ⌘↩ or ⌘-click filters the panes. "Filter to Item" (`palette.filterToItem`, → by
+default, ADR 0046) is a palette key, refused if it would type in the field, and is taken only
+at the end of the field with no marked text. Applying user shortcuts no longer drops a command's
+other settings. The panel matches simple-spotlight's size: 680 wide, a 56-point 24-point light
+field, 16-point corners, 48-point rows, 8 rows, 453 points tall (ADR 0047). Bench: ranking ⌘P's
+cached rows on the main actor takes 2.3 ms on Apple Silicon over 42,964 tracks (budget 4 ms
+there, 16 ms on the old Mac, an estimate until run there). Deferred: row 25.3's removal must
+call `goToEntries?.libraryChanged()` and `goToTracks?.libraryChanged()` if it does not end in a
+browser refresh. Pending the owner: the by-hand checks of 24.1 to 24.4, and the old Mac bench.
 
 ### 25. Track actions and navigation
 
