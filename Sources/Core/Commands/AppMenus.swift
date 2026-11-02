@@ -57,6 +57,9 @@ public enum AppMenus {
     private static let ratingMenuTitle = "Rating"
     /// The Controls menu's submenu of repeat modes, and the toolbar's repeat button.
     public static let repeatMenuTitle = "Repeat"
+    /// The repeat modes' commands, in the order the submenu lists them and the toolbar's repeat
+    /// button steps through them.
+    public static let repeatCommands: [CommandID] = [.repeatOff, .repeatAll, .repeatOne]
 
     /// The context menu of the track table and the timeline, grouped as Swinsian groups it.
     /// Its items act on the selection, which a right-click sets.
@@ -175,7 +178,7 @@ public enum AppMenus {
                     .command(.seekForward), .command(.seekBack), .separator, .command(.shuffle),
                     .submenu(
                         repeatMenuTitle,
-                        [.command(.repeatOff), .command(.repeatAll), .command(.repeatOne)],
+                        repeatCommands.map { .command($0) },
                         showsChords: true),
                     .separator, .command(.volumeUp), .command(.volumeDown), .separator,
                     .live(outputMenuTitle), .setting(settings.hogMode.key),

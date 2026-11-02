@@ -75,7 +75,7 @@ private func nextTurn() async {
 @MainActor @Test func theRepeatButtonStepsThroughTheModes() throws {
     let dispatcher = try dispatcher()
     var mode = CommandID.repeatOff
-    for id in repeatCycle {
+    for id in AppMenus.repeatCommands {
         dispatcher.handle(id, isOn: { mode == id }, run: { mode = id })
     }
     let item = CommandItem(.repeat, dispatcher: dispatcher)
@@ -83,7 +83,7 @@ private func nextTurn() async {
     // A click reaches its target through NSApp, which a test run alone hasn't made yet.
     _ = NSApplication.shared
     var seen: [CommandID] = []
-    for _ in repeatCycle {
+    for _ in AppMenus.repeatCommands {
         button.performClick(nil)
         seen.append(mode)
     }

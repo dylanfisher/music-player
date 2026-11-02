@@ -209,14 +209,12 @@ extension ToolbarItem {
     }
 }
 
-/// The repeat commands in the order the repeat button steps through them.
-let repeatCycle: [CommandID] = [.repeatOff, .repeatAll, .repeatOne]
-
 /// The repeat command after the one that's on now, which the repeat button runs.
 @MainActor
 func nextRepeat(_ dispatcher: CommandDispatcher) -> CommandID {
-    let current = repeatCycle.firstIndex { dispatcher.isOn($0) == true } ?? 0
-    return repeatCycle[(current + 1) % repeatCycle.count]
+    let cycle = AppMenus.repeatCommands
+    let current = cycle.firstIndex { dispatcher.isOn($0) == true } ?? 0
+    return cycle[(current + 1) % cycle.count]
 }
 
 /// A button that runs a command, shown pressed while the command is on. The repeat button
