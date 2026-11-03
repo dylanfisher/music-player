@@ -61,10 +61,12 @@ private func rank(
         if lists[list].count > limit { lists[list].removeLast() }
     }
     if matcher.isEmpty {
-        for (index, item) in items.enumerated()
-        where emptyQueryKinds?.contains(item.kind) ?? true {
-            let bonus = Frecency.bonus(frecency[item.key] ?? 0)
-            offer(Entry(index: index, score: bonus, kind: item.kind, bonus: bonus, length: 0))
+        // By index: binding each item would copy its strings and its candidate, which over 43k
+        // tracks costs more than the frecency lookups.
+        for index in items.indices where emptyQueryKinds?.contains(items[index].kind) ?? true {
+            let bonus = Frecency.bonus(frecency[items[index].key] ?? 0)
+            offer(
+                Entry(index: index, score: bonus, kind: items[index].kind, bonus: bonus, length: 0))
         }
         return lists.joined().map {
             RankedItem(index: $0.index, item: items[$0.index], highlights: [])
