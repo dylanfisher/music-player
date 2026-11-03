@@ -503,6 +503,37 @@ private func artTable(
     #expect(controller.artHover.frame.minY == table.rect(ofRow: row).minY)
 }
 
+/// Rows under the status bar show no hover: the bar covers their art (ADR 0084).
+@MainActor @Test func theArtHoverDoesntShowUnderTheStatusBar() async throws {
+    let (controller, _, rows) = try await artTable(
+        artWidth: 5 * RowListController.rowHeight, sortedBy: .title)
+    let table = controller.table
+    // Shorter than the rows, so the bar has rows under it.
+    controller.view.frame.size.height = 300
+    controller.view.layoutSubtreeIfNeeded()
+    let clip = try #require(controller.clip)
+    let column = table.rect(
+        ofColumn: table.column(withIdentifier: NSUserInterfaceItemIdentifier("art")))
+    // The lowest row on screen with art of its own.
+    let onScreen = table.rows(in: clip.bounds)
+    let row = try #require(
+        (onScreen.location..<NSMaxRange(onScreen)).reversed().first {
+            rows[$0].art != nil && controller.artRow($0) == $0
+                && table.rect(ofRow: $0).maxY <= clip.bounds.maxY
+        })
+    let point = NSPoint(x: column.midX, y: table.rect(ofRow: row).midY)
+    let deadline = Date().addingTimeInterval(10)
+    while controller.hoveredArt(at: point) == nil, Date() < deadline {
+        controller.showArtHover(at: point)
+        try await Task.sleep(nanoseconds: 20_000_000)
+    }
+    #expect(controller.hoveredArt(at: point)?.row == row, "no hover before the bar")
+    controller.setBottomInset(clip.bounds.maxY - table.rect(ofRow: row).minY)
+    #expect(controller.hoveredArt(at: point) == nil, "under the bar")
+    controller.setBottomInset(clip.bounds.maxY - table.rect(ofRow: row).maxY)
+    #expect(controller.hoveredArt(at: point)?.row == row, "just above the bar")
+}
+
 @MainActor @Test func theArtHoverDrawsOnTopAndEndsAtItsAlbumsLastRow() async throws {
     // By title, the fixture's albums are runs of a row or two, shorter than the art's 6 rows.
     let (controller, _, rows) = try await artTable(

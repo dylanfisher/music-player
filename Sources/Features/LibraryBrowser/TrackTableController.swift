@@ -557,11 +557,12 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     /// The art of the art cell under `point`, anywhere in the cell and not only over the image,
     /// with its album's first row, where the whole art goes (as wide as the column, from the top
-    /// of that row) and the part of that over the album's rows. Nil off the art cells, or before
-    /// the art loaded.
+    /// of that row) and the part of that over the album's rows. Nil off the art cells, under the
+    /// status bar, or before the art loaded.
     func hoveredArt(at point: NSPoint) -> (
         row: Int, frame: NSRect, area: NSRect, image: NSImage
     )? {
+        if let clip, point.y >= clip.bounds.maxY - clip.contentInsets.bottom { return nil }
         let column = table.column(at: point)
         let row = table.row(at: point)
         guard column >= 0, row >= 0,
