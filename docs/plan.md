@@ -3690,7 +3690,7 @@ path is budgeted.
 
 ### 35. Seek, progress bar and buffering
 
-**Queued, not started.** Runs after 34, alongside 33 and 36.
+**Done.** Ran after 34, alongside 33 and 36.
 
 - **35.1 Optimistic seek.** A click on the bar jumps there, then jumps back to the old position
   for about a second, then comes back. The audio is right; only the playhead lags. ADR 0072 says
@@ -3734,6 +3734,16 @@ Implementation plan (ADR 0083; ADR 0072 amended for the seek bar):
    Test: a reload that keeps the track keeps the viewer; one that drops it closes it.
 4. 35.4: the buffering review in ADR 0083, from the code and from benches of seeks on the slow
    simulated NAS. A change only if a bench shows it pays against the phase 32 budgets.
+
+Result: shipped as planned. The playhead lag came from the outputs: `position()` kept the time
+from before a seek until the control thread got to it, behind any refill already reading, and
+UPnP did the same. Both now report a posted seek's target until it's done. A seek 20 ms after
+another went from 204 to 4.3 ms on the slow simulated NAS (146 to 3.4 ms local); soak memory
+growth −0.23 MB, 0 underruns. `./scripts/check` and `./scripts/bundle release` pass. One
+correctness and real-time review ran, with a small fix round (UPnP's held target clamped, two
+tests ordered by signals); no security or full bench, since only the playback path is budgeted
+and nothing parses new input. Owner check pending: click and scrub the bar on the 2015 MacBook
+Pro, in the toolbar and the status bar, glass on and off.
 
 ### 36. Window chrome and glass
 
