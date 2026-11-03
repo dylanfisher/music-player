@@ -2640,6 +2640,86 @@ config problem banner until the line is removed (pre-release, no migration). Pen
 trying 29.1 to 29.5 in the app, and saying whether the playing row's blue accent bar should go gray
 too.
 
+### 30. Owner feedback, 2026-11-02 evening
+
+The owner's feedback from trying phase 29 on the 2015 MacBook Pro. Screenshots are in
+`~/.claude/projects/-Users-dylanfisher-projects-music-player/feedback-2026-11-02/`: `s1144`,
+`s1147`, `s1152`, `s1201` and `s1204` are Swinsian's settings, `s1300` is ours, `s2010` the art
+hover, `s2016` the status bar, `s3548` Swinsian's column browser menu and `s4053` the toolbar
+customization sheet. The three batches run in parallel worktrees.
+
+#### 30a. Settings window
+
+- [ ] **30a.1 Layout like Swinsian's.** Checkbox labels go to the right of the checkbox, as the
+      checkbox's own title; only pop-ups and fields keep a short label on the left. Settings are
+      grouped into titled boxes or separated sections, with short help text under each. Receiver
+      settings are the worked example: they need clear grouping and order. No label is cut off
+      (`s1300` cuts "Pause Network Rescans While Playing").
+- [ ] **30a.2 Network Scan Readers.** An empty number field no user understands. It leaves the
+      window and stays a config-file setting.
+- [ ] **30a.3 Sync folder.** The path label pushes the row too wide and hides its button. Show
+      the folder's name, truncated, with a Change… button and an Open button that shows it in
+      Finder.
+- [ ] **30a.4 File viewer.** The Searcher choice shows only when Searcher is installed; otherwise
+      the setting isn't in the window and stays in the config file.
+- [ ] **30a.5 Played threshold.** A track counts as played once a set share of it has played,
+      not only at the end. A setting, default 75%. Check what counts as played today first.
+
+#### 30b. Track table, browser and navigation
+
+- [ ] **30b.1 Centered landing.** Type-to-select centers the found row, as ⌘L does. Every action
+      that lands on a row of the track table centers it.
+- [ ] **30b.2 Row height and type.** Taller row heights get larger type, as large as fits;
+      Large at least.
+- [ ] **30b.3 Art hover.** The hover always draws above every other art cell and above the
+      scaled-to-fit art (`s2010`: only the lowest album's hover shows on top). The hover's
+      hot area is the album's own rows: moving onto the next album's rows ends the hover there
+      and starts the next one, without leaving the art column first.
+- [ ] **30b.4 Rating in the cell.** Clicking a star in the Rating column sets the rating.
+- [ ] **30b.5 ⌘R.** Reveal in Finder opens the file in iTunes; it must reveal it.
+- [ ] **30b.6 Back to the library.** ⌘K and ⌘P offer Clear Filter / Show All Music when the
+      browser has a filter or a playlist is showing; hidden when already on the unfiltered Music
+      list.
+- [ ] **30b.7 Browser columns.** Right-clicking a browser column's header picks what it groups
+      by, from Swinsian's list (`s3548`), for each of the three columns.
+- [ ] **30b.8 Sidebar tooltips.** Music, History, Timeline, Library Health and the default
+      groupings get a tooltip saying what each is.
+
+#### 30c. Window chrome and status bar
+
+- [ ] **30c.1 Toolbar customization.** Every toolbar item shows an icon or a drawing of itself in
+      the customization sheet (`s4053`: Playback Controls, Volume, Now Playing and Search show
+      none). The default set shows what it will look like.
+- [ ] **30c.2 Status bar as now playing.** Now Playing (Centered) goes. The status bar becomes
+      the now-playing area, as in Swinsian, in a minimal or a taller style, built from parts the
+      user arranges (art, artist and title, format and bit rate, seek bar, counts) in an easy
+      editor in Settings.
+- [ ] **30c.3 Seek bar.** A click jumps straight to the position, with no animation. The playhead
+      is a thin vertical bar, not a round knob.
+- [ ] **30c.4 Status bar color and glass.** The status bar is the header's gray. The glass on
+      the status bar and table headers doesn't show on macOS 12: check and fix.
+- [ ] **30c.5 Glass everywhere.** An Appearance option puts the sidebar's translucent material
+      behind the whole window: toolbar, table, status bar.
+- [ ] **30c.6 Hide the header, distraction-free mode.** A toggle for the toolbar like the sidebar
+      and status bar ones, and one shortcut that hides all three and then restores what was
+      showing.
+- [ ] **30c.7 App icon.** The icon has a white square behind it in the app switcher; it needs a
+      transparent background and the standard macOS icon shape.
+
+### 31. Output for devices that can't play bit-perfect
+
+Bluetooth AirPods on the 2015 MacBook Pro offer only 2-channel 32-bit float at 48 kHz, and the
+output only sends integer PCM at the track's own rate (ADR 0011), so every track fails with
+`noBitPerfectFormat`. The app must always be able to play to the chosen device.
+
+- [ ] **31.1 Converted output.** When a device has no bit-perfect format for a track, decode and
+      convert to the device's best format (float, its sample rate, its channels) and play. Bit-perfect
+      stays the first choice wherever the device allows it.
+- [ ] **31.2 Position, seek and gapless** stay right in the converted path.
+- [ ] **31.3 Signal path** says the output is converted and to what, not bit-perfect.
+- [ ] **31.4 Hardware checkpoint.** The owner plays a 44.1 kHz and a 96 kHz track to the AirPods
+      on the 2015 MacBook Pro.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
