@@ -51,7 +51,7 @@ public final class GeneralModel {
         /// The key prefixes of the section's settings.
         var prefixes: [String] {
             switch self {
-            case .playback: ["output."]
+            case .playback: ["output.", "playback."]
             case .library: ["library.", "sync."]
             case .receiver: ["receiver."]
             case .appearance: [AppSettings().appearance.key]

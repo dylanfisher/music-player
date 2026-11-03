@@ -11,6 +11,9 @@ public struct AppSettings: SettingsSchema {
     public let digitalVolume = Setting(
         "output.digitalVolume", title: "Digital Volume", default: false,
         "Let the app lower the volume, which ends bit-perfect output.")
+    public let playedPercent = Setting(
+        "playback.playedPercent", title: "Count as Played At", default: 75, range: 1...100,
+        "The percent of a track that must play to count as played.")
     public let outputRenderer = Setting<String?>(
         "output.renderer", title: "Network Renderer", default: nil,
         "The UPnP renderer to play to, by UDN; none uses the device.")

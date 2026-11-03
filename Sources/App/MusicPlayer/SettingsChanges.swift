@@ -76,7 +76,7 @@ extension AppDelegate {
 
     /// What follows each changed key: the shortcuts, the appearance,
     /// the watched folders and how they're scanned, the Artist pane's grouping, the track table's
-    /// look, receiver control, and the output.
+    /// look, receiver control, the output, and when a track counts as played.
     func settingsChanged(_ keys: Set<String>) {
         guard let settings else { return }
         let schema = settings.schema
@@ -110,6 +110,9 @@ extension AppDelegate {
             outputSettingsChanged(switched: keys.contains(schema.outputDeviceUID.key))
         }
         if keys.contains(schema.outputRenderer.key) { applyRendererSetting() }
+        if keys.contains(schema.playedPercent.key) {
+            playTracker?.playedFraction = playedFraction(settings)
+        }
     }
 
     /// The Settings window, made on first use.
@@ -161,6 +164,12 @@ extension AppDelegate {
             path: settings.fileURL.path, stateFailure: saver?.failure,
             stateDiscarded: state?.discardReason)
     }
+}
+
+/// The share of a track that has to play for it to count, as the tracker takes it.
+@MainActor
+func playedFraction(_ settings: ConfigStore<AppSettings>) -> Double {
+    Double(settings[\.playedPercent]) / 100
 }
 
 /// Sets the whole app's appearance; nil follows the system as it changes.

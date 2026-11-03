@@ -35,7 +35,7 @@ private final class Harness {
     init() {
         let sleeps = sleeps
         tracker = PlayTracker(
-            now: { [unowned self] in self.clock },
+            playedFraction: 0.5, now: { [unowned self] in self.clock },
             sleep: { seconds in await sleeps.sleep(seconds) },
             record: { [unowned self] in self.recorded += $0 })
         state.queue = urls
@@ -129,6 +129,7 @@ private final class Harness {
     var calls = 0
     var recorded: [PlayCounter.Event] = []
     let tracker = PlayTracker(
+        playedFraction: 0.5,
         now: {
             // The second reading, which sets the wait, is past the deadline.
             calls += 1

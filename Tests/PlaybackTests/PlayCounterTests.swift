@@ -8,7 +8,7 @@ private let start = Date(timeIntervalSince1970: 1_000_000)
 
 /// Feeds a counter updates as the engine would send them, at seconds after `start`.
 private struct Feed {
-    var counter = PlayCounter()
+    var counter = PlayCounter(playedFraction: 0.5)
     var state = PlaybackState()
 
     init(durations: [Double]) {
@@ -42,11 +42,38 @@ private struct Feed {
     #expect(feed.tick(at: 90).isEmpty)
 }
 
-@Test func aLongTrackCountsAtFourMinutes() {
+@Test func aLongTrackCountsAtItsShareNotAfterFourMinutes() {
     var feed = Feed(durations: [100, 600, 100])
     _ = feed.send(.trackStarted(index: 1), status: .playing, at: 0)
-    #expect(feed.counter.deadline == start.addingTimeInterval(PlayCounter.playSeconds))
-    #expect(feed.tick(at: PlayCounter.playSeconds) == [.played(urls[1])])
+    #expect(feed.counter.deadline == start.addingTimeInterval(300))
+    #expect(feed.tick(at: 240).isEmpty)
+    #expect(feed.tick(at: 300) == [.played(urls[1])])
+}
+
+@Test func aTrackCountsAtTheShareSet() {
+    var feed = Feed(durations: [100, 600, 100])
+    feed.counter.playedFraction = 0.75
+    _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
+    #expect(feed.tick(at: 74).isEmpty)
+    #expect(feed.tick(at: 75) == [.played(urls[0])])
+}
+
+@Test func aChangedShareAppliesFromTheNextTrack() {
+    var feed = Feed(durations: [100, 600, 100])
+    _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
+    feed.counter.playedFraction = 0.9
+    #expect(feed.counter.deadline == start.addingTimeInterval(50))
+    _ = feed.send(.trackStarted(index: 2), status: .playing, at: 100)
+    #expect(feed.counter.deadline == start.addingTimeInterval(190))
+}
+
+@Test func aTrackThatPlayedToItsEndCountsAtAHundredPercent() {
+    // The end can come a little before the track's length on the wall clock.
+    var feed = Feed(durations: [100, 600, 100])
+    feed.counter.playedFraction = 1
+    _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
+    #expect(feed.tick(at: 99.5).isEmpty)
+    #expect(feed.send(.trackEnded(index: 0), status: .playing, at: 99.5) == [.played(urls[0])])
 }
 
 @Test func pausedTimeDoesntCount() {
@@ -66,8 +93,8 @@ private struct Feed {
     _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
     #expect(feed.send(.trackStarted(index: 1), status: .playing, at: 10) == [.skipped(urls[0])])
     // A track that counted isn't skipped when the next starts.
-    #expect(feed.tick(at: 10 + PlayCounter.playSeconds) == [.played(urls[1])])
-    #expect(feed.send(.trackStarted(index: 2), status: .playing, at: 300).isEmpty)
+    #expect(feed.tick(at: 310) == [.played(urls[1])])
+    #expect(feed.send(.trackStarted(index: 2), status: .playing, at: 400).isEmpty)
 }
 
 @Test func aTrackThatPlayedToItsEndIsntASkip() {
@@ -97,7 +124,7 @@ private struct Feed {
 @Test func aTrackWithNoKnownLengthCountsAtFourMinutes() {
     var feed = Feed(durations: [0, 600, 100])
     _ = feed.send(.trackStarted(index: 0), status: .playing, at: 0)
-    #expect(feed.counter.deadline == start.addingTimeInterval(PlayCounter.playSeconds))
+    #expect(feed.counter.deadline == start.addingTimeInterval(PlayCounter.unknownLengthSeconds))
 }
 
 @Test func stoppingEndsTheListenWithoutASkip() {
@@ -122,13 +149,13 @@ private struct Feed {
 }
 
 @Test func aTrackWithoutADurationCountsAtFourMinutes() {
-    var counter = PlayCounter()
+    var counter = PlayCounter(playedFraction: 0.5)
     var state = PlaybackState()
     state.queue = urls
     state.status = .playing
     state.durationSeconds = nil
     _ = counter.handle(PlaybackUpdate(state: state, event: .trackStarted(index: 0)), at: start)
-    #expect(counter.deadline == start.addingTimeInterval(PlayCounter.playSeconds))
+    #expect(counter.deadline == start.addingTimeInterval(PlayCounter.unknownLengthSeconds))
 }
 
 @Test func aOneSecondTrackCountsAtHalfASecond() {

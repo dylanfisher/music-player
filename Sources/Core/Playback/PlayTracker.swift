@@ -8,20 +8,29 @@ public final class PlayTracker {
     /// Waits about this many seconds. Throws when cancelled.
     public typealias Sleep = @Sendable (TimeInterval) async throws -> Void
 
-    private var counter = PlayCounter()
+    private var counter: PlayCounter
     private var wake: Task<Void, Never>?
     private let now: @MainActor () -> Date
     private let sleep: Sleep
     private let record: @MainActor ([PlayCounter.Event]) -> Void
 
+    /// The share of a track that has to play for it to count, from 0 to 1. A change applies
+    /// from the next track.
+    public var playedFraction: Double {
+        get { counter.playedFraction }
+        set { counter.playedFraction = newValue }
+    }
+
     /// `record` gets every play and skip as it's counted.
     public init(
+        playedFraction: Double,
         now: @escaping @MainActor () -> Date = Date.init,
         sleep: @escaping Sleep = { seconds in
             try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1e9))
         },
         record: @escaping @MainActor ([PlayCounter.Event]) -> Void
     ) {
+        counter = PlayCounter(playedFraction: playedFraction)
         self.now = now
         self.sleep = sleep
         self.record = record

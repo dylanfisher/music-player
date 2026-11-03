@@ -95,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var signalPathUpdates: Task<Void, Never>?
     private var returnUpdates: Task<Void, Never>?
     /// Plays and skips, counted from the engine's updates.
-    private lazy var playTracker = PlayTracker { [weak self] in self?.record($0) }
+    private(set) var playTracker: PlayTracker?
     /// The smart playlist editor while it's open.
     var ruleEditor: RuleEditorSheet?
     /// The tag editor, which writes music files only after the user saves an edit (ADR 0020).
@@ -138,6 +138,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 AppSettings(), fileURL: paths.configFile, check: try shortcutCheck(),
                 creating: true)
             self.settings = settings
+            playTracker = PlayTracker(playedFraction: playedFraction(settings)) {
+                [weak self] in self?.record($0)
+            }
             applyAppearance(settings[\.appearance])
             let dispatcher = CommandDispatcher(bindings: try keyBindings(settings.shortcuts))
             let menu = MainMenu(dispatcher: dispatcher, appName: appName, settings: AppSettings())
@@ -411,7 +414,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.playback = update.state
                     self?.playbackChanged(update.state)
                     self?.browser?.showPlaying(path: self?.currentTrackPath)
-                    self?.playTracker.handle(update)
+                    self?.playTracker?.handle(update)
                     if case .trackStarted(let index) = update.event {
                         self?.countPlay(update.state.queue[index].path)
                     }

@@ -24,7 +24,8 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   and reorder by dragging while sorted by Order. **Smart playlists** (⌥⌘N) pick tracks by rules
   and follow the library as it changes. Click a selected playlist's name, or press Return, to
   rename it in place; its context menu also duplicates and deletes it. Plays, skips, ratings and History are kept in the
-  library database, never in the music files; a play counts after half the track or 4 minutes.
+  library database, never in the music files; a play counts once 75% of the track has played (Count as
+  Played At in Settings), or 4 minutes when its length isn't known.
   History lists each track played once; **Timeline** lists every play, newest first.
 - **Import Playlist…** reads M3U, M3U8 and PLS files, also dropped on the sidebar, as new
   playlists, and lists the entries the library doesn't hold. **Export Playlist…** writes the
