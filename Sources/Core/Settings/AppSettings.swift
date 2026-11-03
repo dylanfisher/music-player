@@ -72,7 +72,7 @@ public struct AppSettings: SettingsSchema {
         "Art scaled to its album's rows, or always the column's width.")
     public let glass = Setting(
         "appearance.glass", title: "Window Glass", default: false,
-        "The sidebar's translucent material behind the whole window.")
+        "Turns the whole player into translucent glass, with the desktop showing through.")
     public let statusBarStyle = Setting(
         "appearance.statusBarStyle", title: "Status Bar", default: StatusBarStyle.minimal,
         "One line at the header's height, or two with larger art.")
