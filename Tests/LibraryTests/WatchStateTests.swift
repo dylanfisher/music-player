@@ -335,3 +335,24 @@ private struct FakeEngine {
     state.finished(now: start)
     #expect(!state.localLaunchScansPending)
 }
+
+@Test func aFolderSetToNeverIsScannedOnlyWhenAskedOrUnfinished() {
+    let never = WatchedFolder(path: "/Volumes/Never", kind: .network, pollIntervalMinutes: nil)
+    let unfinished = WatchedFolder(
+        path: "/Volumes/Unfinished", kind: .network, pollIntervalMinutes: nil)
+    // Not even with the launch rescan on, unless its last whole scan didn't finish.
+    var state = WatchState(
+        folders: [never, unfinished], indexed: [never.path], rescanNetworkFoldersAtLaunch: true,
+        pausePollingDuringPlayback: false, now: start)
+    #expect(state.leftToTheIndex == [never.path])
+    #expect(state.start(now: start) == WatchJob(folder: unfinished, subtrees: []))
+    state.finished(now: start)
+    #expect(state.nextPoll(after: start) == nil)
+    #expect(state.start(now: minutes(100_000)) == nil)
+    state.rescan(wholeFolders: [never.path])
+    #expect(
+        state.start(now: minutes(100_000))
+            == WatchJob(folder: never, subtrees: [], ignoresPlaybackPause: true))
+    state.finished(now: minutes(100_000))
+    #expect(state.nextPoll(after: minutes(100_000)) == nil)
+}

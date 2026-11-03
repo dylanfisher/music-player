@@ -6,7 +6,7 @@ public struct WatchedFolder: SettingValue {
         /// Watched with FSEvents.
         case local
         /// Rescanned every `pollIntervalMinutes`, because FSEvents doesn't report changes on SMB
-        /// volumes.
+        /// volumes, or only when asked to with null.
         case network
     }
 
@@ -32,12 +32,13 @@ public struct WatchedFolder: SettingValue {
     public var include: [String]
     /// Glob patterns relative to the root, applied after `include`.
     public var exclude: [String]
-    /// Only network roots use it.
-    public var pollIntervalMinutes: Int
+    /// Only network roots use it. Nil never rescans on a timer, only by Rescan, and at launch
+    /// only when the last whole scan didn't finish (ADR 0082).
+    public var pollIntervalMinutes: Int?
 
     public init(
         path: String, share: String? = nil, kind: Kind, include: [String] = [],
-        exclude: [String] = [], pollIntervalMinutes: Int = defaultPollIntervalMinutes
+        exclude: [String] = [], pollIntervalMinutes: Int? = defaultPollIntervalMinutes
     ) {
         self.path = path
         self.share = share
@@ -59,11 +60,23 @@ public struct WatchedFolder: SettingValue {
         kind = try container.decode(Kind.self, forKey: .kind)
         include = try container.decode([String].self, forKey: .include)
         exclude = try container.decode([String].self, forKey: .exclude)
-        pollIntervalMinutes = try container.decode(Int.self, forKey: .pollIntervalMinutes)
+        // Present, as every key is, but null for never.
+        pollIntervalMinutes = try container.decode(Int?.self, forKey: .pollIntervalMinutes)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(path, forKey: .path)
+        try container.encodeIfPresent(share, forKey: .share)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(include, forKey: .include)
+        try container.encode(exclude, forKey: .exclude)
+        // Null, not left out, since every key but the share is required.
+        try container.encode(pollIntervalMinutes, forKey: .pollIntervalMinutes)
     }
 
     public static var typeName: String {
-        "a watched folder (path, optional share, kind, include, exclude, pollIntervalMinutes)"
+        "a watched folder (path, optional share, kind, include, exclude, pollIntervalMinutes or null)"
     }
     public static var kind: SettingKind { .watchedFolder }
 
@@ -78,7 +91,7 @@ public struct WatchedFolder: SettingValue {
             return "path \"\(path)\" is a system folder or the home folder, not a music folder;"
                 + " watching it would scan, and tag-edit, everything under it"
         }
-        if !range.contains(pollIntervalMinutes) {
+        if let pollIntervalMinutes, !range.contains(pollIntervalMinutes) {
             return "pollIntervalMinutes \(pollIntervalMinutes) is outside"
                 + " \(range.lowerBound)...\(range.upperBound)"
         }

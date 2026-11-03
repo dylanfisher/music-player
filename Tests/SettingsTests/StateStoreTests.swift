@@ -377,6 +377,20 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(daily.problem() == "pollIntervalMinutes 1441 is outside 1...1440")
 }
 
+@Test func aNetworkFolderSetToNeverIsWrittenAsNullAndReadBack() throws {
+    let never = WatchedFolder(path: "/Volumes/Music", kind: .network, pollIntervalMinutes: nil)
+    #expect(never.problem() == nil)
+    let text = jsonText([never])
+    #expect(text.contains(#""pollIntervalMinutes" : null"#))
+    let back = try JSONDecoder().decode([WatchedFolder].self, from: Data(text.utf8))
+    #expect(back == [never])
+    // Left out is still a problem: every key but the share is written.
+    let missing = #"[{"path": "/m", "kind": "network", "include": [], "exclude": []}]"#
+    #expect(throws: DecodingError.self) {
+        try JSONDecoder().decode([WatchedFolder].self, from: Data(missing.utf8))
+    }
+}
+
 @Test func browserColumnsMustBeThreeDifferentKnownGroupings() throws {
     let url = temporaryFile()
     try FileManager.default.createDirectory(

@@ -195,9 +195,16 @@ public final class GeneralModel {
         var kind: String
         /// How often it's rescanned.
         var rescans: String
-        /// For a network folder, the minutes between rescans, which the Rescans column edits;
-        /// nil for a local folder, which FSEvents watches and is never polled.
-        var pollIntervalMinutes: Int? = nil
+        /// For a network folder, how often it's rescanned on a timer, which the Rescans column
+        /// edits; nil for a local folder, which FSEvents watches and is never polled.
+        var interval: Rescans? = nil
+    }
+
+    /// How often a network folder is rescanned on a timer: `pollIntervalMinutes`, or null for
+    /// never (ADR 0082).
+    enum Rescans: Hashable {
+        case every(minutes: Int)
+        case never
     }
 
     /// The intervals the Rescans column offers, inside the range the schema allows.
@@ -205,22 +212,25 @@ public final class GeneralModel {
         WatchedFolder.pollIntervalRangeMinutes.contains($0)
     }
 
-    /// The Rescans column's text for `minutes` between rescans.
-    static func rescansText(minutes: Int) -> String {
-        switch minutes {
-        case 60: "Every hour"
-        case _ where minutes > 60 && minutes.isMultiple(of: 60): "Every \(minutes / 60) hours"
-        default: "Every \(minutes) min"
+    /// The Rescans column's text for a network folder.
+    static func rescansText(_ rescans: Rescans) -> String {
+        switch rescans {
+        case .never: "Never"
+        case .every(minutes: 60): "Every hour"
+        case .every(let minutes) where minutes > 60 && minutes.isMultiple(of: 60):
+            "Every \(minutes / 60) hours"
+        case .every(let minutes): "Every \(minutes) min"
         }
     }
 
-    /// The intervals a folder's popup lists: the offered ones, plus the folder's own when the
-    /// config file sets one that isn't offered, so the popup shows what is in effect.
-    static func rescanIntervals(_ folder: Folder) -> [Int] {
-        guard let minutes = folder.pollIntervalMinutes,
-            !rescanIntervalsMinutes.contains(minutes)
-        else { return rescanIntervalsMinutes }
-        return (rescanIntervalsMinutes + [minutes]).sorted()
+    /// What a folder's popup lists: the offered intervals, plus the folder's own when the config
+    /// file sets one that isn't offered, so the popup shows what is in effect, then Never.
+    static func rescanChoices(_ folder: Folder) -> [Rescans] {
+        var minutes = rescanIntervalsMinutes
+        if case .every(let own) = folder.interval, !minutes.contains(own) {
+            minutes = (minutes + [own]).sorted()
+        }
+        return minutes.map { .every(minutes: $0) } + [.never]
     }
 
     /// The watched folders, in the setting's order.
@@ -230,23 +240,31 @@ public final class GeneralModel {
             guard folder["kind"] as? String == WatchedFolder.Kind.network.rawValue else {
                 return Folder(location: location, kind: "Local", rescans: "On change")
             }
-            let minutes = folder[WatchedFolder.pollIntervalMinutesKey] as? Int
+            let interval: Rescans? =
+                switch folder[WatchedFolder.pollIntervalMinutesKey] {
+                case let minutes as Int: .every(minutes: minutes)
+                case is NSNull: .never
+                default: nil
+                }
             return Folder(
                 location: location, kind: "Network",
-                rescans: minutes.map(Self.rescansText) ?? noValueText,
-                pollIntervalMinutes: minutes)
+                rescans: interval.map(Self.rescansText) ?? noValueText, interval: interval)
         }
     }
 
     /// Sets how often the network folder at `position` in the setting is rescanned, keeping the
     /// rest of the folder as the config file has it.
-    func setPollInterval(_ key: String, at position: Int, minutes: Int) throws {
+    func setPollInterval(_ key: String, at position: Int, to rescans: Rescans) throws {
         var folders = value(key) as? [[String: Any]] ?? []
         guard folders.indices.contains(position) else {
             throw ConfigProblem(
                 line: nil, message: "\(key) has no folder \(position + 1) to set the rescans of")
         }
-        folders[position][WatchedFolder.pollIntervalMinutesKey] = minutes
+        folders[position][WatchedFolder.pollIntervalMinutesKey] =
+            switch rescans {
+            case .every(let minutes): minutes
+            case .never: NSNull()
+            }
         try set(key, folders)
     }
 

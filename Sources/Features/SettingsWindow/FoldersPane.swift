@@ -189,8 +189,8 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
             return nil
         }
         let folder = folders[row]
-        if column == .rescans, let minutes = folder.pollIntervalMinutes {
-            return intervalPopUp(minutes, row: row)
+        if column == .rescans, let interval = folder.interval {
+            return intervalPopUp(interval, row: row)
         }
         let text =
             switch column {
@@ -204,16 +204,16 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         return label
     }
 
-    /// The Rescans popup for the network folder in `row`, set to `minutes`.
-    private func intervalPopUp(_ minutes: Int, row: Int) -> NSPopUpButton {
+    /// The Rescans popup for the network folder in `row`, set to `interval`.
+    private func intervalPopUp(_ interval: GeneralModel.Rescans, row: Int) -> NSPopUpButton {
         let popUp = NSPopUpButton(frame: .zero, pullsDown: false)
         popUp.controlSize = .small
         popUp.isBordered = false
-        for interval in GeneralModel.rescanIntervals(folders[row]) {
-            popUp.addItem(withTitle: GeneralModel.rescansText(minutes: interval))
-            popUp.lastItem?.tag = interval
+        let choices = GeneralModel.rescanChoices(folders[row])
+        for choice in choices {
+            popUp.addItem(withTitle: GeneralModel.rescansText(choice))
         }
-        popUp.selectItem(withTag: minutes)
+        popUp.selectItem(at: choices.firstIndex(of: interval) ?? -1)
         popUp.tag = row
         popUp.target = self
         popUp.action = #selector(choseInterval(_:))
@@ -222,9 +222,12 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     }
 
     @objc private func choseInterval(_ popUp: NSPopUpButton) {
-        guard let minutes = popUp.selectedItem?.tag else { return }
+        guard folders.indices.contains(popUp.tag) else { return }
+        let choices = GeneralModel.rescanChoices(folders[popUp.tag])
+        guard choices.indices.contains(popUp.indexOfSelectedItem) else { return }
         do {
-            try model.setPollInterval(row.key, at: popUp.tag, minutes: minutes)
+            try model.setPollInterval(
+                row.key, at: popUp.tag, to: choices[popUp.indexOfSelectedItem])
         } catch {
             logger.error("\(error)")
             reload()
