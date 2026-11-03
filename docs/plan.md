@@ -2730,23 +2730,23 @@ owner: the window on macOS 12, and whether the titles should be sentence case as
 
 #### 30c. Window chrome and status bar
 
-- [ ] **30c.1 Toolbar customization.** Every toolbar item shows an icon or a drawing of itself in
+- [x] **30c.1 Toolbar customization.** Every toolbar item shows an icon or a drawing of itself in
       the customization sheet (`s4053`: Playback Controls, Volume, Now Playing and Search show
       none). The default set shows what it will look like.
-- [ ] **30c.2 Status bar as now playing.** Now Playing (Centered) goes. The status bar becomes
+- [x] **30c.2 Status bar as now playing.** Now Playing (Centered) goes. The status bar becomes
       the now-playing area, as in Swinsian, in a minimal or a taller style, built from parts the
       user arranges (art, artist and title, format and bit rate, seek bar, counts) in an easy
       editor in Settings.
-- [ ] **30c.3 Seek bar.** A click jumps straight to the position, with no animation. The playhead
+- [x] **30c.3 Seek bar.** A click jumps straight to the position, with no animation. The playhead
       is a thin vertical bar, not a round knob.
-- [ ] **30c.4 Status bar color and glass.** The status bar is the header's gray. The glass on
+- [x] **30c.4 Status bar color and glass.** The status bar is the header's gray. The glass on
       the status bar and table headers doesn't show on macOS 12: check and fix.
-- [ ] **30c.5 Glass everywhere.** An Appearance option puts the sidebar's translucent material
+- [x] **30c.5 Glass everywhere.** An Appearance option puts the sidebar's translucent material
       behind the whole window: toolbar, table, status bar.
-- [ ] **30c.6 Hide the header, distraction-free mode.** A toggle for the toolbar like the sidebar
+- [x] **30c.6 Hide the header, distraction-free mode.** A toggle for the toolbar like the sidebar
       and status bar ones, and one shortcut that hides all three and then restores what was
       showing.
-- [ ] **30c.7 App icon.** The icon has a white square behind it in the app switcher; it needs a
+- [x] **30c.7 App icon.** The icon has a white square behind it in the app switcher; it needs a
       transparent background and the standard macOS icon shape.
 
 Plan:
@@ -2773,8 +2773,40 @@ Plan:
    toolbar is transparent over it, and the lists, headers and status bar stop drawing their
    backgrounds. ADR 0067.
 7. **30c.6** View ▸ Show Toolbar (⌥⌘T) saved as `window.toolbarVisible`, and Distraction-Free Mode
-   (⇧⌘F) hiding the toolbar, sidebar and status bar and restoring what showed. Tests in
-   `MainWindowTests`.
+   (⇧⌘F) hiding the toolbar, sidebar and status bar and restoring what showed. Tests on the
+   mode's logic (`ChromeVisibility`).
+
+Result: shipped as planned; `./scripts/check` passes apart from the UPnP renderer timing tests
+(`aRendererStuckAtTheEndIsMovedOnByTheApp`, `aRendererThatMovedIsFoundAgainByItsUDN`), which
+failed only under the load of three worktrees building at once and pass alone; this phase
+doesn't touch UPnP. `./scripts/bundle release` builds universal. 30c.1: the customization sheet
+shows a drawing of the transport, volume, Now Playing and search (a copy of each control wired
+to nothing), so the default set reads as the toolbar; on macOS 12 the sheet drew no image for
+items that had an image and no view. 30c.2: Now Playing (Centered) is gone. The status bar is
+built from `appearance.statusBarParts` (Art, Title and Artist, Format and Bit Rate, Seek Bar,
+Track Totals, each once) in `appearance.statusBarStyle` (Minimal at the header's height, or
+Tall, 44 points), edited in Settings ▸ Appearance as a checklist dragged into order; the style
+is in the View menu too. Defaults keep today's bar (totals alone, minimal), so nothing changes
+until the owner picks parts. 30c.3: the seek bars are a view of our own: a click moves the
+playhead at once and seeks, the playhead is a 2-point line, and the bar holds the target until
+the engine has sought. 30c.4: the status bar uses the title bar's material, the toolbar's gray.
+The glass "missing" on macOS 12 is how materials work there: within the window they show only
+what's behind them in it, and AppKit draws table headers opaque; the translucency the owner
+means is the sidebar's, behind the window, which 30c.5 adds (ADR 0067). 30c.5:
+`appearance.glass` (off by default) puts the sidebar's material under the whole window, the
+toolbar transparent over it, lists and header cells without backgrounds, alternating rows off,
+and the status bar blending behind the window; off puts everything back. AppKit then lines the
+toolbar's items up with the sidebar. 30c.6: View ▸ Show Toolbar (⌥⌘T), saved as
+`window.toolbarVisible`, and Distraction-Free Mode (⇧⌘F). 30c.7: `scripts/bundle` cuts Quick
+Look's render, which is always on white, to the SVG's tile with transparent corners
+(`scripts/icon-mask.swift`, ADR 0043 amended). Benchmarks, with other worktrees building (load
+average 6 to 10), branch then main in the same hour: launch to first rows 0.68 s (main 0.87 s),
+scroll-bar drag p95 13.35 ms (main 16.97 ms), memory after scrolling 78.3 MB, idle CPU 0.01%
+and 0 wakeups a second; single runs swung from 13 to 47 ms. Not done: glass on a table column
+added while it's on keeps AppKit's opaque header cell until glass is toggled. Pending the owner,
+on the 2015 MacBook Pro: Customize Toolbar… drawings; Settings ▸ Appearance status bar items
+and both styles while playing; clicking and dragging the seek bars; the status bar's gray
+against the toolbar in light and dark; Glass on and off; ⌥⌘T and ⇧⌘F; the app switcher icon.
 
 ### 31. Output for devices that can't play bit-perfect
 
