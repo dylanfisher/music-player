@@ -49,7 +49,7 @@ private func makeEditing(
             write: write, undo: undo,
             present: { sheet, _ in seen.presented.append(sheet.model.tracks.map(\.path)) },
             confirm: { message, _, answer in
-                seen.confirmations.append(message)
+                seen.confirmations.append(message.message)
                 answer(confirm)
             },
             alert: { message, _, _ in seen.alerts.append(message) }))
@@ -166,4 +166,45 @@ private let window = MainActor.assumeIsolated { NSWindow() }
     try await eventually { editing.isOpen }
     #expect(seen.alerts == ["1 of 2 files can't be edited"])
     #expect(seen.presented == [["/a.flac"]])
+}
+
+@MainActor
+@Test func getInfoOnMoreFilesThanTheThresholdAsksBeforeReading() async throws {
+    let seen = Seen()
+    let reads = Counter()
+    let editing = makeEditing(
+        seen,
+        read: { paths in
+            reads.add()
+            return (paths.map(editable), [])
+        }, confirm: false)
+    let atThreshold = (0..<TagEditing.confirmReadAbove).map { "/\($0).flac" }
+    editing.open(atThreshold, over: window)
+    try await eventually { seen.presented.count == 1 }
+    #expect(seen.confirmations.isEmpty)
+
+    editing.sheet?.cancelled()
+    let over = atThreshold + ["/over.flac"]
+    editing.open(over, over: window)
+    #expect(seen.confirmations == ["Read the tags of \(over.count) files?"])
+    try await Task.sleep(nanoseconds: 50_000_000)
+    #expect(reads.value == 1)
+    #expect(seen.presented.count == 1)
+
+    let agreeing = makeEditing(
+        seen,
+        read: { paths in
+            reads.add()
+            return (paths.map(editable), [])
+        })
+    agreeing.open(over, over: window)
+    try await eventually { seen.presented.count == 2 }
+    #expect(reads.value == 2)
+}
+
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func add() { lock.withLock { count += 1 } }
+    var value: Int { lock.withLock { count } }
 }

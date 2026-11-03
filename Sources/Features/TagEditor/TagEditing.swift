@@ -26,10 +26,38 @@ public final class TagEditing {
         var write: @Sendable (TagEdit, [String]) -> TagWriteReport
         var undo: @Sendable () -> TagWriteReport
         var present: @MainActor (TagEditorSheet, NSWindow) -> Void
-        /// Asks before a batch write, then calls back with the answer.
-        var confirm: @MainActor (String, NSWindow, @escaping @MainActor (Bool) -> Void) -> Void
+        /// Asks before a batch write or a big read, then calls back with the answer.
+        var confirm:
+            @MainActor (Confirmation, NSWindow, @escaping @MainActor (Bool) -> Void) -> Void
         var alert: @MainActor (String, [String], NSWindow) -> Void
     }
+
+    /// A question the user answers before the editor reads or writes a batch of files.
+    struct Confirmation: Equatable {
+        var message: String
+        var detail: String
+        var button: String
+
+        static func writing(_ count: Int) -> Confirmation {
+            Confirmation(
+                message: "Change the tags of \(count) files?",
+                detail:
+                    "Each file is rewritten with the new tags. Undo Tag Edit puts them all back.",
+                button: "Change Tags")
+        }
+
+        static func reading(_ count: Int) -> Confirmation {
+            Confirmation(
+                message: "Read the tags of \(count) files?",
+                detail: "Reading the tags of \(count) files may take minutes on a network share.",
+                button: "Read Tags")
+        }
+    }
+
+    /// Get Info on more files than this asks first. The editor reads every file before it
+    /// opens: 200 files took 3.2 s on the NAS (phase 32d), and the whole library takes minutes
+    /// there (ADR 0081).
+    static let confirmReadAbove = 200
 
     private let effects: Effects
     /// Bumped by each open, so a slow read for an earlier one is dropped.
@@ -40,7 +68,7 @@ public final class TagEditing {
         effects = Effects(
             read: { readEditableTracks($0) }, write: { writer.write($0, to: $1) },
             undo: { writer.undoLast() }, present: { $0.begin(over: $1) },
-            confirm: askBeforeWriting, alert: showProblems)
+            confirm: ask, alert: showProblems)
     }
 
     init(effects: Effects) {
@@ -53,6 +81,17 @@ public final class TagEditing {
     /// Reads `paths` and opens the editor over `window`.
     public func open(_ paths: [String], over window: NSWindow) {
         guard !paths.isEmpty, sheet == nil, !isBusy else { return }
+        guard paths.count > Self.confirmReadAbove else {
+            read(paths, over: window)
+            return
+        }
+        effects.confirm(.reading(paths.count), window) { [weak self] yes in
+            if yes { self?.read(paths, over: window) }
+        }
+    }
+
+    private func read(_ paths: [String], over window: NSWindow) {
+        guard sheet == nil, !isBusy else { return }
         session += 1
         let token = session
         Task { [weak self] in
@@ -114,7 +153,7 @@ public final class TagEditing {
             run(over: window, action) { write(edit, paths) }
             return
         }
-        effects.confirm("Change the tags of \(paths.count) files?", window) { [weak self] yes in
+        effects.confirm(.writing(paths.count), window) { [weak self] yes in
             guard yes else { return }
             self?.run(over: window, action) { write(edit, paths) }
         }
@@ -160,14 +199,14 @@ private func showProblems(_ message: String, _ problems: [String], over window: 
 }
 
 @MainActor
-private func askBeforeWriting(
-    _ message: String, over window: NSWindow, _ answer: @escaping @MainActor (Bool) -> Void
+private func ask(
+    _ question: TagEditing.Confirmation, over window: NSWindow,
+    _ answer: @escaping @MainActor (Bool) -> Void
 ) {
     let alert = NSAlert()
-    alert.messageText = message
-    alert.informativeText =
-        "Each file is rewritten with the new tags. Undo Tag Edit puts them all back."
-    alert.addButton(withTitle: "Change Tags")
+    alert.messageText = question.message
+    alert.informativeText = question.detail
+    alert.addButton(withTitle: question.button)
     alert.addButton(withTitle: "Cancel")
     alert.beginSheetModal(for: window) { answer($0 == .alertFirstButtonReturn) }
 }
