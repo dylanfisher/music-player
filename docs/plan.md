@@ -3006,6 +3006,28 @@ from the user's action to the first sample.
       reads the file a second time for art. Signpost them and fix whatever shows up as a main-thread
       hitch at track change.
 
+Plan:
+
+1. **32a.1** `NullDevice` takes estimated HAL delays: opening (finding the device, the restore
+   record, hog mode), a rate change settling, and releasing hog mode. With them set it also puts
+   back the rate it had at its first open when a session closes, as `HALDevice.close` does. It
+   times the first IO cycle after an action that carries anything but silence. `DeviceOutput`
+   takes an optional per-read file latency for benches: the decoder then opens the file through
+   AudioFile callbacks that wait on every read AudioToolbox makes, so a NAS costs what the
+   decoder actually reads. A fixture track is 20 s of silence with a ramp from 10 to 12 s.
+   `PlayLatencyBenchmarks` gets five cases, each while that track plays its silence: a
+   double-click of the same rate, of another rate, Next, a seek while the track is fed, and a
+   seek after the feed moved on, each with local files and with the slow simulated NAS's
+   latency, the median of five runs. Budgets on the NAS figure, the old Mac's estimates.
+2. Run them on the bench commit, before any fix.
+3. **32a.2:** a new queue that plays at once (`play(starting:completing:)`) no longer stops the
+   output; its `load` reuses the open device, restarting the stream or reconfiguring it. Stop,
+   and a queue set without play, still close it. Tests on both the bit-perfect and the
+   converted path. ADR 0078.
+4. **32a.3, 32a.4, 32a.5:** measure each (the queue's completion time, the NAS seek, the
+   main-actor lookups at track start) and fix only what shows a cost.
+5. Rerun the play benches, gapless, rate-switch and soak against main, the same day.
+
 #### 32b. Scrolling with art
 
 The scroll-bar-drag bench jumps a screenful at a time over local files. It never sees
