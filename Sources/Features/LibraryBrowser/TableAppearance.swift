@@ -2,7 +2,7 @@ import AppKit
 import Settings
 
 /// How the track table draws: the `appearance.` settings for its lines, rows and art, and
-/// whether the window's glass is on, which leaves out the alternating rows' opaque shading.
+/// whether the window's glass is on, which draws the alternating rows translucent.
 public struct TableAppearance: Equatable, Sendable {
     public var columnLines: Bool
     public var rowLines: Bool

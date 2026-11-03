@@ -1344,7 +1344,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func setGroupByAlbumArtist(_ on: Bool) async { await model.setGroupByAlbumArtist(on) }
 
     /// Follows the track table's `appearance.` settings.
-    public func setTableAppearance(_ appearance: TableAppearance) { table.apply(appearance) }
+    public func setTableAppearance(_ appearance: TableAppearance) {
+        table.apply(appearance)
+        // The timeline always alternates its rows; on glass, translucently.
+        timeline.table.usesAlternatingRowBackgroundColors = !appearance.glass
+        timeline.table.drawsTranslucentRows = appearance.glass
+    }
 
     /// Likes or dislikes the selection, or clears that when all of it has it already.
     public func toggleSelection(_ opinion: TrackOpinion) {

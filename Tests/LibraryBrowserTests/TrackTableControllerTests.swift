@@ -885,3 +885,38 @@ private func hoveredRescanTable() async throws -> (
     intervalPasses()
     #expect(rated.count == 2)
 }
+
+/// On glass, the alternating rows are a translucent tint the glass shows through, rather than
+/// off (ADR 0084).
+@MainActor @Test func glassDrawsTheAlternatingRowsTranslucent() async throws {
+    let (controller, _, _) = try await artTable(artWidth: RowListController.rowHeight)
+    let table = controller.table
+    func appearance(alternating: Bool, glass: Bool) -> TableAppearance {
+        TableAppearance(
+            columnLines: false, rowLines: false, alternatingRows: alternating,
+            rowHeight: .regular, artSize: .fit, glass: glass)
+    }
+    controller.apply(appearance(alternating: true, glass: true))
+    #expect(table.drawsTranslucentRows && !table.usesAlternatingRowBackgroundColors)
+    controller.apply(appearance(alternating: false, glass: true))
+    #expect(!table.drawsTranslucentRows)
+    controller.apply(appearance(alternating: true, glass: false))
+    #expect(!table.drawsTranslucentRows && table.usesAlternatingRowBackgroundColors)
+
+    // Drawn on a clear background, as the glass leaves it: even rows stay clear, odd rows get
+    // the faint tint.
+    controller.apply(appearance(alternating: true, glass: true))
+    table.backgroundColor = .clear
+    let bounds = NSRect(x: 0, y: 0, width: 400, height: 4 * table.rowHeight)
+    let bitmap = try #require(table.bitmapImageRepForCachingDisplay(in: bounds))
+    table.cacheDisplay(in: bounds, to: bitmap)
+    func alpha(_ row: Int) throws -> CGFloat {
+        let scale = CGFloat(bitmap.pixelsHigh) / bounds.height
+        let y = Int(table.rect(ofRow: row).midY * scale)
+        // Past the columns, clear of any text.
+        return try #require(bitmap.colorAt(x: Int(380 * scale), y: y)).alphaComponent
+    }
+    let alphas = try (0..<3).map(alpha)
+    #expect(alphas[0] == 0 && alphas[2] == 0, "\(alphas)")
+    #expect(alphas[1] > 0 && alphas[1] < 0.2, "\(alphas)")
+}

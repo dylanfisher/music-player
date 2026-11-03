@@ -33,6 +33,26 @@ final class KeyTableView: NSTableView, ResolvedBackgroundTable {
         return resolved
     }
 
+    /// The tint of every other row on the window's glass, where AppKit's alternating colors,
+    /// which are opaque, would hide it: the text's color, faint, so it darkens in light mode and
+    /// lightens in dark.
+    static let translucentRowColor = NSColor.labelColor.withAlphaComponent(0.05)
+    /// Draws every other row in `translucentRowColor`, in place of AppKit's alternating rows.
+    var drawsTranslucentRows = false {
+        didSet { if drawsTranslucentRows != oldValue { needsDisplay = true } }
+    }
+
+    override func drawBackground(inClipRect clipRect: NSRect) {
+        super.drawBackground(inClipRect: clipRect)
+        guard drawsTranslucentRows else { return }
+        Self.translucentRowColor.setFill()
+        let rows = rows(in: clipRect)
+        // Odd rows, as AppKit's second alternating color.
+        for row in rows.location..<rows.location + rows.length where row % 2 == 1 {
+            rect(ofRow: row).intersection(clipRect).fill(using: .sourceOver)
+        }
+    }
+
     override func frameOfCell(atColumn column: Int, row: Int) -> NSRect {
         let frame = super.frameOfCell(atColumn: column, row: row)
         guard let edgeToEdgeColumn, tableColumns.indices.contains(column),

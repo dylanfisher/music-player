@@ -111,6 +111,7 @@ struct MainWindowFixture {
                         "\(type(of: table)) grid \(table.gridStyleMask.rawValue)",
                         "\(table.gridColor) \(table.backgroundColor)",
                         "alternating \(table.usesAlternatingRowBackgroundColors)",
+                        "translucent \((table as? KeyTableView)?.drawsTranslucentRows == true)",
                         "rows \(table.rowHeight) \(table.intercellSpacing) \(table.style.rawValue)",
                         "headers \(table.tableColumns.map { "\(type(of: $0.headerCell))" })",
                         "scroll \(scroll?.drawsBackground == true) \(scroll?.backgroundColor ?? .clear)",
