@@ -152,7 +152,7 @@ public final class MediaControls {
         art = nil
         artLoad?.cancel()
         guard let track = model.track, let embedded = track.art else { return }
-        if let image = artwork.cached(ArtworkKey(path: track.path, offset: embedded.offset)) {
+        if let image = artwork.cached(ArtworkKey(path: track.path, art: embedded)) {
             art = image
             return
         }

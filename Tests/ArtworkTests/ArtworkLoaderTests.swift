@@ -36,19 +36,32 @@ private func fileWithArt(width: Int, height: Int, prefix: Int = 100) throws -> (
     )
 }
 
+@Test func artReplacedInPlaceByOneOfAnotherLengthIsReadAgain() throws {
+    let (path, art) = try fileWithArt(width: 40, height: 40)
+    let loader = ArtworkLoader(maxPixelSize: 96, capacity: 4)
+    let first = try loader.image(art, path: path)
+    #expect(first.width == 40)
+    // A tag edit writes a larger cover at the same place.
+    let (larger, replaced) = try fileWithArt(width: 80, height: 80)
+    try FileManager.default.removeItem(atPath: path)
+    try FileManager.default.copyItem(atPath: larger, toPath: path)
+    #expect(replaced.offset == art.offset)
+    #expect(try loader.image(replaced, path: path).width == 80)
+}
+
 @Test func decodesStraightToTheDisplaySize() throws {
     let (path, art) = try fileWithArt(width: 1200, height: 800)
     let loader = ArtworkLoader(maxPixelSize: 96, capacity: 4)
     let image = try loader.image(art, path: path)
     #expect(image.width == 96)
     #expect(image.height == 64)
-    #expect(loader.cached(ArtworkKey(path: path, offset: art.offset)) === image)
+    #expect(loader.cached(ArtworkKey(path: path, art: art)) === image)
 }
 
 @Test func keepsAtMostItsCapacityDroppingTheLeastRecentlyUsed() throws {
     let loader = ArtworkLoader(maxPixelSize: 32, capacity: 2)
     let files = try (0..<3).map { _ in try fileWithArt(width: 64, height: 64) }
-    let keys = files.map { ArtworkKey(path: $0.0, offset: $0.1.offset) }
+    let keys = files.map { ArtworkKey(path: $0.0, art: $0.1) }
     _ = try loader.image(files[0].1, path: files[0].0)
     _ = try loader.image(files[1].1, path: files[1].0)
     #expect(loader.cached(keys[0]) != nil)  // now the most recently used

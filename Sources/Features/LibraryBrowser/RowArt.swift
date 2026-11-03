@@ -26,9 +26,9 @@ struct ArtRequests {
         if waiting.count > Self.capacity { waiting.removeFirst(waiting.count - Self.capacity) }
     }
 
-    /// The newest request `isWanted` keeps, dropping those it doesn't.
-    mutating func next(isWanted: (ArtworkKey) -> Bool) -> ArtRequest? {
-        waiting.removeAll { !isWanted($0.key) }
+    /// The newest request still `wanted`, dropping those that aren't.
+    mutating func next(wanted: Set<ArtworkKey>) -> ArtRequest? {
+        waiting.removeAll { !wanted.contains($0.key) }
         return waiting.popLast()
     }
 }
@@ -56,8 +56,8 @@ final class RowArt {
     /// The art being read.
     private var loading: Set<ArtworkKey> = []
     private var failed: Set<ArtworkKey> = []
-    /// Whether a row on screen still shows the art `key` names.
-    var isWanted: (ArtworkKey) -> Bool = { _ in false }
+    /// The art the rows on screen show.
+    var wanted: () -> Set<ArtworkKey> = { [] }
     var loaded: (ArtworkKey, CGImage) -> Void = { _, _ in }
 
     /// Images at most `pixels` on their longer side, read by `read`.
@@ -78,7 +78,7 @@ final class RowArt {
 
     /// The cached image, or nil after asking for it to be loaded.
     func image(_ art: EmbeddedArt, path: String) -> CGImage? {
-        let key = ArtworkKey(path: path, offset: art.offset)
+        let key = ArtworkKey(path: path, art: art)
         if let image = loader.cached(key) { return image }
         guard !failed.contains(key), !loading.contains(key) else { return nil }
         requests.add(ArtRequest(key: key, art: art))
@@ -87,7 +87,10 @@ final class RowArt {
     }
 
     private func loadNext() {
-        while loading.count < Self.loadsAtOnce, let request = requests.next(isWanted: isWanted) {
+        guard loading.count < Self.loadsAtOnce, !requests.waiting.isEmpty else { return }
+        // Read once a pass: it reads the rows on screen.
+        let wanted = wanted()
+        while loading.count < Self.loadsAtOnce, let request = requests.next(wanted: wanted) {
             load(request)
         }
     }

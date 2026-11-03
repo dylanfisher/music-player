@@ -283,7 +283,7 @@ private func update(
     let (controls, _, center, _) = try controls(world, artwork: artwork)
     controls.apply(update(.trackStarted(index: 0), position: 0))
     controls.apply(update(.trackStarted(index: 1), current: 1, position: 0))
-    let key = ArtworkKey(path: file.path, offset: file.art.offset)
+    let key = ArtworkKey(path: file.path, art: file.art)
     let deadline = Date().addingTimeInterval(5)
     while artwork.cached(key) == nil, Date() < deadline {
         try await Task.sleep(for: .milliseconds(5))

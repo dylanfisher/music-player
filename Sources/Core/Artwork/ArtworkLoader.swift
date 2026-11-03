@@ -39,7 +39,7 @@ public final class ArtworkLoader: @unchecked Sendable {
     /// The thumbnail of `art` in the file at `path`, from the cache or read and decoded now.
     /// Blocks on the file, which may be on a slow network volume, so call it off the main thread.
     public func image(_ art: EmbeddedArt, path: String) throws -> CGImage {
-        let key = ArtworkKey(path: path, offset: art.offset)
+        let key = ArtworkKey(path: path, art: art)
         if let image = cached(key) { return image }
         let bytes: Data
         do {
@@ -106,14 +106,17 @@ public func thumbnail(of bytes: Data, maxPixelSize: Int) -> CGImage? {
     return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
 }
 
-/// One picture in one file.
+/// One picture in one file. Its length is part of it, so art replaced in place by one of
+/// another length isn't served from the cache.
 public struct ArtworkKey: Hashable, Sendable {
     public var path: String
     public var offset: Int
+    var byteCount: Int
 
-    public init(path: String, offset: Int) {
+    public init(path: String, art: EmbeddedArt) {
         self.path = path
-        self.offset = offset
+        offset = art.offset
+        byteCount = art.byteCount
     }
 }
 

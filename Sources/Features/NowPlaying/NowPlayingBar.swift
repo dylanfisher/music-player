@@ -257,7 +257,7 @@ public final class NowPlayingBar: NSObject {
     private func loadArt() {
         showArt(nil)
         guard let track = model.track, let embedded = track.art else { return }
-        let key = ArtworkKey(path: track.path, offset: embedded.offset)
+        let key = ArtworkKey(path: track.path, art: embedded)
         if let image = artwork.cached(key) {
             showArt(NSImage(cgImage: image, size: .zero))
             return

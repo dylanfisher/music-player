@@ -92,9 +92,9 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// Points `art` at the rows on screen. A replaced loader wants nothing more and shows
     /// nothing it was still loading.
     private func follow(_ art: RowArt) {
-        art.isWanted = { [weak self, weak art] key in
-            guard let self, art === self.art else { return false }
-            return visibleRows().contains { self.artKey($0) == key }
+        art.wanted = { [weak self, weak art] in
+            guard let self, art === self.art else { return [] }
+            return Set(visibleRows().compactMap(artKey))
         }
         art.loaded = { [weak self, weak art] key, image in
             guard let self, art === self.art else { return }
@@ -231,16 +231,39 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     }
 
     /// Reads the rows again after a rescan that kept the same tracks in the same order, and
-    /// redraws only those on screen whose tags or stats changed. A scan refreshes every 2 s, and
-    /// reloading the whole table rebuilds every row on screen each time.
+    /// redraws only those with views whose tags or stats changed. A scan refreshes every 2 s, and
+    /// reloading the whole table rebuilds every row on screen each time. The table keeps views
+    /// for some rows just off screen too, so those are compared as well.
     private func redrawChangedRows() {
-        let visible = visibleRows()
-        let shown = visible.map(trackRow)
+        var prepared: [Int] = []
+        table.enumerateAvailableRowViews { _, row in prepared.append(row) }
+        let shown = prepared.map(trackRow)
         cache.setIDs(model.trackIDs)
-        let changed = IndexSet(visible.filter { trackRow($0) != shown[$0 - visible.lowerBound] })
+        let now = prepared.map(trackRow)
+        let changed = prepared.indices.filter { now[$0] != shown[$0] }
         guard !changed.isEmpty else { return }
+        let rows = IndexSet(changed.map { prepared[$0] })
         table.reloadData(
-            forRowIndexes: changed, columnIndexes: IndexSet(integersIn: 0..<table.numberOfColumns))
+            forRowIndexes: rows, columnIndexes: IndexSet(integersIn: 0..<table.numberOfColumns))
+        for row in rows {
+            (table.rowView(atRow: row, makeIfNecessary: false) as? MarkedRowView)?.isMarked =
+                isPlaying(row)
+        }
+        // An album's art spans its rows, so a changed cover or album moves where the art of the
+        // rows around it starts and ends, and what it shows.
+        let art = table.column(withIdentifier: columnIdentifier(.art))
+        if art >= 0,
+            changed.contains(where: {
+                now[$0]?.albumID != shown[$0]?.albumID || now[$0]?.art != shown[$0]?.art
+            })
+        {
+            table.reloadData(forRowIndexes: IndexSet(prepared), columnIndexes: [art])
+        }
+        // The art shown whole may be another album's now.
+        if !rows.intersection(IndexSet(integersIn: hoveredRows)).isEmpty { hideArtHover() }
+        if let viewerRows, !rows.intersection(IndexSet(integersIn: viewerRows)).isEmpty {
+            artViewer?.close()
+        }
     }
 
     private func showSort() {
@@ -387,7 +410,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     private func artKey(_ row: Int) -> ArtworkKey? {
         guard let shown = artRow(row), let track = trackRow(shown), let embedded = track.art
         else { return nil }
-        return ArtworkKey(path: track.path, offset: embedded.offset)
+        return ArtworkKey(path: track.path, art: embedded)
     }
 
     /// The cached image of `row`'s own art, or nil after asking for it to be loaded.
@@ -467,6 +490,13 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         artHover.isHidden = false
     }
 
+    /// The rows `rect` touches, empty for an empty rect.
+    private func rowRange(under rect: NSRect) -> Range<Int> {
+        guard !rect.isEmpty else { return 0..<0 }
+        let rows = table.rows(in: rect)
+        return rows.location..<rows.location + rows.length
+    }
+
     func hideArtHover() {
         guard !artHover.isHidden else { return }
         artHover.isHidden = true
@@ -477,6 +507,9 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     /// The album's first row whose art `artHover` shows.
     private var hoveredRow: Int?
+    /// The rows under `artHover`'s album, and under the album `artViewer` shows.
+    private var hoveredRows: Range<Int> { rowRange(under: hoverArea) }
+    private var viewerRows: Range<Int>?
     /// Where the pointer keeps `artHover` showing: its frame over its own album's rows, so the
     /// next album's rows under it hover that album.
     private(set) var hoverArea = NSRect.zero
@@ -517,6 +550,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         guard let row = hoveredRow, let image = artHover.image, let track = trackRow(row),
             let embedded = track.art, let screen = table.window?.screen ?? NSScreen.main
         else { return }
+        viewerRows = hoveredRows
         hideArtHover()
         let viewer = ArtViewer(image: image, screen: screen, owner: table.window)
         viewer.closed = { [weak self, weak viewer] in

@@ -37,9 +37,14 @@ private final class HeldReads: @unchecked Sendable {
 @MainActor @Test func artLoadsSeveralAtOnceOffTheCooperativePoolAndEachOnce() async throws {
     let reads = HeldReads()
     let rowArt = RowArt(pixels: 64, read: reads.read)
-    rowArt.isWanted = { _ in true }
     let art = EmbeddedArt(offset: 0, byteCount: 1, mimeType: "image/png", unsynchronised: false)
     let requested = RowArt.loadsAtOnce + 2
+    let keys = (0..<requested).map { ArtworkKey(path: "/m/\($0).flac", art: art) }
+    var wantedReads = 0
+    rowArt.wanted = {
+        wantedReads += 1
+        return Set(keys)
+    }
     for track in 0..<requested {
         #expect(rowArt.image(art, path: "/m/\(track).flac") == nil)
         // Asked again while it loads, as a redraw does.
@@ -54,7 +59,7 @@ private final class HeldReads: @unchecked Sendable {
     // Empty bytes don't decode, so each load ends as a failure.
     func settled() -> Int {
         (0..<requested).filter {
-            rowArt.hasFailed(ArtworkKey(path: "/m/\($0).flac", offset: art.offset))
+            rowArt.hasFailed(keys[$0])
         }.count
     }
     while settled() < requested, Date() < deadline {
@@ -64,4 +69,6 @@ private final class HeldReads: @unchecked Sendable {
     #expect(reads.mostAtOnce == RowArt.loadsAtOnce)
     #expect(Set(reads.paths).count == reads.paths.count, "a path was read twice: \(reads.paths)")
     #expect(reads.queues == ["ArtworkLoader"])
+    // Once a pass, not once a request: a pass per request asked for and per load ended at most.
+    #expect(wantedReads <= 2 * requested, "the rows on screen were read \(wantedReads) times")
 }

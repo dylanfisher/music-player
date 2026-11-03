@@ -60,10 +60,9 @@ import Testing
 }
 
 private func request(_ offset: Int) -> ArtRequest {
-    ArtRequest(
-        key: ArtworkKey(path: "/a.flac", offset: offset),
-        art: EmbeddedArt(offset: offset, byteCount: 1, mimeType: "image/png", unsynchronised: false)
-    )
+    let art = EmbeddedArt(
+        offset: offset, byteCount: 1, mimeType: "image/png", unsynchronised: false)
+    return ArtRequest(key: ArtworkKey(path: "/a.flac", art: art), art: art)
 }
 
 @Test func artRequestsLoadTheNewestStillWantedAndStayBounded() {
@@ -71,8 +70,9 @@ private func request(_ offset: Int) -> ArtRequest {
     for offset in 0..<3 { requests.add(request(offset)) }
     requests.add(request(0))
     #expect(requests.waiting.map(\.key.offset) == [1, 2, 0])
-    #expect(requests.next { _ in true }?.key.offset == 0)
-    #expect(requests.next { $0.offset != 2 }?.key.offset == 1)
+    let all = Set((0..<3).map { request($0).key })
+    #expect(requests.next(wanted: all)?.key.offset == 0)
+    #expect(requests.next(wanted: all.filter { $0.offset != 2 })?.key.offset == 1)
     #expect(requests.waiting.isEmpty)
     for offset in 0..<(ArtRequests.capacity + 10) { requests.add(request(offset)) }
     #expect(requests.waiting.count == ArtRequests.capacity)

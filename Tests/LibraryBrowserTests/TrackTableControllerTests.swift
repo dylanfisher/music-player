@@ -581,7 +581,12 @@ private func artTable(
     #expect(controller.artViewer == nil)
 }
 
-@MainActor @Test func aRescanThatKeepsTheTracksRedrawsOnlyTheirChangedRows() async throws {
+/// An art table over a copy of the browser library in a window, scrolled to the first album
+/// with art and more than one row, whose art the pointer hovers, and the index to edit it with.
+@MainActor
+private func hoveredRescanTable() async throws -> (
+    TrackTableController, BrowserModel, [TrackRow], album: Range<Int>, LibraryIndex, NSWindow
+) {
     let databaseURL = try writableBrowserDatabase()
     let (controller, model, rows) = try await artTable(
         artWidth: 3 * RowListController.rowHeight, databaseURL: databaseURL)
@@ -590,30 +595,99 @@ private func artTable(
         backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.contentView = controller.view
-    defer { window.close() }
     let table = controller.table
+    let start = try #require(
+        rows.indices.dropLast().first {
+            $0 >= 3 && rows[$0].art != nil && rows[$0].albumID != nil
+                && rows[$0 + 1].albumID == rows[$0].albumID
+                && ($0 == 0 || rows[$0 - 1].albumID != rows[$0].albumID)
+        })
+    let end = rows[start...].firstIndex { $0.albumID != rows[start].albumID } ?? rows.count
+    table.scrollRowToVisible(max(0, start - 2))
+    table.scrollRowToVisible(min(rows.count - 1, end + 4))
+    // The album starts a few rows down, under rows of other albums.
+    table.scrollRowToVisible(start - 3)
+    window.displayIfNeeded()
     let art = table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
-    let title = table.column(withIdentifier: NSUserInterfaceItemIdentifier("title"))
-    let row = try #require(rows.indices.first { rows[$0].art != nil })
-    table.scrollRowToVisible(row)
-    let point = NSPoint(x: table.rect(ofColumn: art).midX, y: table.rect(ofRow: row).midY)
+    let point = NSPoint(x: table.rect(ofColumn: art).midX, y: table.rect(ofRow: start).midY)
     let deadline = Date().addingTimeInterval(10)
     while controller.artHover.isHidden, Date() < deadline {
         controller.showArtHover(at: point)
         try await Task.sleep(nanoseconds: 20_000_000)
     }
     try #require(!controller.artHover.isHidden, "the art never loaded")
+    return (controller, model, rows, start..<end, try LibraryIndex(at: databaseURL), window)
+}
+
+@MainActor @Test func aRescanThatKeepsTheTracksRedrawsOnlyTheirChangedRows() async throws {
+    let (controller, model, rows, album, index, window) = try await hoveredRescanTable()
+    defer { window.close() }
+    let table = controller.table
+    let title = table.column(withIdentifier: NSUserInterfaceItemIdentifier("title"))
+    // Two rows above the hovered album: one retitled, and the one playing, moved.
+    let retitled = album.lowerBound - 1
+    let moved = album.lowerBound - 2
+    controller.playingPath = rows[moved].path
+    #expect(
+        (table.rowView(atRow: moved, makeIfNecessary: false) as? MarkedRowView)?.isMarked == true)
+    var cells: [Int: NSView] = [:]
+    table.enumerateAvailableRowViews { _, row in
+        cells[row] = table.view(atColumn: title, row: row, makeIfNecessary: false)
+    }
     // A tag the table doesn't sort by changes, so the rows stay where they are.
-    let edited = row + 1
-    let index = try LibraryIndex(at: databaseURL)
     try index.database.prepare("UPDATE tracks SET title = ? WHERE file_id = ?").run(
-        "Retitled", rows[edited].id)
+        "Retitled", rows[retitled].id)
+    try index.database.prepare("UPDATE files SET path = ? WHERE id = ?").run(
+        "/moved.flac", rows[moved].id)
     await model.refresh()
     #expect(model.trackIDs == rows.map(\.id))
-    // The rows stayed, so the art under the pointer stays shown.
+    // Another album's rows changed, so the art under the pointer stays shown.
     #expect(!controller.artHover.isHidden)
-    let cell = table.view(atColumn: title, row: edited, makeIfNecessary: false) as? TextCell
+    let cell = table.view(atColumn: title, row: retitled, makeIfNecessary: false) as? TextCell
     #expect(cell?.text == "Retitled")
+    #expect(
+        (table.rowView(atRow: moved, makeIfNecessary: false) as? MarkedRowView)?.isMarked == false)
+    for (row, view) in cells where row != retitled && row != moved {
+        #expect(
+            table.view(atColumn: title, row: row, makeIfNecessary: false) === view, "row \(row)")
+    }
+}
+
+@MainActor @Test func aRescanRedrawsRowsTheTableKeepsOffScreen() async throws {
+    let (controller, model, rows, _, index, window) = try await hoveredRescanTable()
+    defer { window.close() }
+    let table = controller.table
+    let title = table.column(withIdentifier: NSUserInterfaceItemIdentifier("title"))
+    var prepared: [Int] = []
+    table.enumerateAvailableRowViews { _, row in prepared.append(row) }
+    let visible = table.rows(in: table.visibleRect)
+    let offScreen = try #require(
+        prepared.first { !(visible.location..<visible.location + visible.length).contains($0) },
+        "no row view kept off screen among \(prepared), \(visible)")
+    try index.database.prepare("UPDATE tracks SET title = ? WHERE file_id = ?").run(
+        "Retitled", rows[offScreen].id)
+    await model.refresh()
+    let cell = table.view(atColumn: title, row: offScreen, makeIfNecessary: false) as? TextCell
+    #expect(cell?.text == "Retitled")
+}
+
+@MainActor @Test func aRescanThatChangesAnAlbumsCoverRedrawsItsOtherRows() async throws {
+    let (controller, model, rows, album, index, window) = try await hoveredRescanTable()
+    defer { window.close() }
+    let table = controller.table
+    let art = table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
+    let second = album.lowerBound + 1
+    let drawn = table.view(atColumn: art, row: second, makeIfNecessary: false) as? AlbumArtCell
+    #expect(drawn?.art != nil)
+    // The album's first row loses its cover, which every row of the album draws a part of.
+    try index.database.prepare("UPDATE tracks SET art_offset = NULL WHERE file_id = ?").run(
+        rows[album.lowerBound].id)
+    await model.refresh()
+    #expect(model.trackIDs == rows.map(\.id))
+    let cell = table.view(atColumn: art, row: second, makeIfNecessary: false) as? AlbumArtCell
+    #expect(cell?.art == nil)
+    // The hovered album's rows changed, so its art may no longer be what the hover shows.
+    #expect(controller.artHover.isHidden)
 }
 
 @MainActor @Test func anEmptyHistorySaysNothingPlayedYet() async throws {
