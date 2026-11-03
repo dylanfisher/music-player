@@ -33,6 +33,24 @@ struct DoPLayout: Equatable {
     }
 
     var bytesPerFrame: Int { sampleBytes * channels }
+
+    /// Writes `frames` frames of DoP silence, the idle pattern under markers from 0x05.
+    func writeSilence(into buffer: UnsafeMutableRawPointer, frames: Int) {
+        let output = buffer.assumingMemoryBound(to: UInt8.self)
+        var offset = 0
+        for frame in 0..<frames {
+            for _ in 0..<channels {
+                if sampleBytes == 4 {
+                    output[offset] = 0
+                    offset += 1
+                }
+                output[offset] = dsdIdleByte
+                output[offset + 1] = dsdIdleByte
+                output[offset + 2] = dopMarkers[frame & 1]
+                offset += 3
+            }
+        }
+    }
 }
 
 /// Reads a DSF or DSDIFF file as DoP frames in the device's format (ADR 0064): 16 DSD bits per

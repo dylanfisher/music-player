@@ -52,6 +52,14 @@ playing can still leave the IO proc a cycle with nothing new to play, which it p
 as it does for PCM; the DAC drops out of DoP for those few milliseconds, and the markers carry
 on alternating across them.
 
+**Silence at the end.** After the last DSD track, or one followed by a format switch, the
+decode thread writes a tail of DoP silence, the device's latency plus 100 ms long, and the
+drain waits for the audio before it, not for the tail. The IO proc would otherwise pad the
+drain with zeros, which a DAC takes as PCM and may click on; the stop discards what's left of
+the tail. Pausing and stopping stop the device, so the IO proc pads nothing there. An underrun
+mid-stream still pads zeros: the IO proc stays a byte copy, and an underrun is already a
+fault that's reported.
+
 **Unity.** A DSD stream's render state is created with `HALRenderSamplesOpaque`, a sample
 kind the IO proc never scales, and the control thread never sets a gain on it. The kind is
 fixed with the stream when the track loads, so the volume can't reach DoP by any path. A

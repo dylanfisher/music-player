@@ -234,7 +234,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     private var tickSeconds: Double? {
         guard let stream else { return nil }
-        return controlTickSeconds(running: running, fillDue: feeding != nil && stream.isHalfEmpty)
+        let fillDue = (feeding != nil || stream.tailFramesLeft > 0) && stream.isHalfEmpty
+        return controlTickSeconds(running: running, fillDue: fillDue)
     }
 
     private func perform(_ command: Command) {
@@ -421,6 +422,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         if frame > 0 { try track.decoder.seek(toFrame: frame) }
         feeding = track
         stream.dropChunk()
+        stream.clearTail()
         segments.append(
             Segment(
                 item: track.item, startByte: stream.produced, startFrame: frame,
@@ -489,6 +491,13 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
         pendingSwitch = nil
         next = nil
+        // A DoP tail queued because no next track had been named yet: the IO proc skips what
+        // it hasn't played of it, so the new next track follows the audio without a gap.
+        if item != nil, let tailStart = stream.tailStart {
+            HALRenderDiscard(stream.render, tailStart, stream.produced)
+            stream.clearTail()
+            stream.dropChunk()
+        }
         if let item {
             do {
                 let track = try Track(item)
@@ -506,8 +515,13 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// Decodes until the ring buffer is full, `limit` bytes are written, or nothing is left.
     private func fill(_ stream: RenderStream, upTo limit: Int = .max) {
         var written = 0
-        while let track = feeding, written < limit {
+        while written < limit {
             if stream.chunkIsEmpty {
+                guard let track = feeding else {
+                    guard stream.tailFramesLeft > 0 else { return }
+                    stream.chunkTail()
+                    continue
+                }
                 let frames: UInt32
                 do {
                     frames = try track.decoder.read(
@@ -537,21 +551,28 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private func advanceFeed(_ stream: RenderStream) {
         feeding = nil
         guard let next else {
-            HALRenderSetDraining(stream.render, true)
+            endFeed(stream)
             return
         }
         self.next = nil
         guard stream.fits(next) else {
             pendingSwitch = predecoded(next, after: stream)
-            HALRenderSetDraining(stream.render, true)
+            endFeed(stream)
             return
         }
         do {
             try feed(next, into: stream, atFrame: 0)
         } catch {
             emit(.trackFailed(next.item.id, error))
-            HALRenderSetDraining(stream.render, true)
+            endFeed(stream)
         }
+    }
+
+    /// Nothing more follows in this stream. DoP gets a tail of DoP silence, so the IO proc
+    /// doesn't pad the drain with zeros, which a DAC takes as PCM and may click on.
+    private func endFeed(_ stream: RenderStream) {
+        if stream.isDoP { stream.startTail() }
+        HALRenderSetDraining(stream.render, true)
     }
 
     /// `track` with its first half second decoded, while the current track still has seconds to
@@ -600,7 +621,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         announceBoundaries(stream)
         let consumed = HALRenderConsumedBytes(stream.render)
         if let frames = stream.newUnderrunFrames() { emit(.underrun(frames: frames)) }
-        if running, feeding == nil, consumed >= stream.produced {
+        if running, feeding == nil, stream.tailFramesLeft == 0, consumed >= stream.audioEndByte {
             drained(stream)
         } else {
             drainedAt = nil
@@ -1067,6 +1088,9 @@ private final class RenderStream {
     /// Carries DoP, which the IO proc copies and never scales, so writes come in pairs of
     /// frames and every track starts on an even frame, where the markers expect it.
     let isDoP: Bool
+    /// How DoP sits in the device's samples, for the tail; nil for PCM or a format DoP can't use,
+    /// which the reader refuses.
+    private let dopLayout: DoPLayout?
 
     /// `withGain` needs a sample layout the IO proc can scale.
     init(format: DeviceFormat, withGain: Bool, isDoP: Bool) throws {
@@ -1085,6 +1109,7 @@ private final class RenderStream {
         }
         self.format = format
         bytesPerFrame = Int(stream.mBytesPerFrame)
+        dopLayout = isDoP ? DoPLayout(stream, channels: Int(stream.mChannelsPerFrame)) : nil
         guard
             let ring = RingBufferCreate(
                 Int(stream.mSampleRate * Self.bufferSeconds) * bytesPerFrame)
@@ -1131,6 +1156,42 @@ private final class RenderStream {
     }
 
     var chunkIsEmpty: Bool { chunkOffset == chunkBytes }
+
+    /// After the last DoP track the drain waits out the device's latency once the IO proc has
+    /// taken the last byte of audio, notices on a 10 ms control tick, and then stops the device,
+    /// which takes a few milliseconds more; the IO proc keeps pulling all the while. A tail
+    /// this much longer than the latency covers that with room to spare, and the stop discards
+    /// what's left of it.
+    static let dopTailSeconds = 0.1
+    /// Frames of the DoP tail still to write.
+    private(set) var tailFramesLeft = 0
+    /// Where the audio before the DoP tail ended, which the drain waits for; nil without one.
+    private(set) var tailStart: UInt64?
+
+    var audioEndByte: UInt64 { tailStart ?? produced }
+
+    /// Queues the DoP tail after what's written. It starts on an even frame, as everything in a
+    /// DoP stream does, so its markers carry on from the audio's.
+    func startTail() {
+        guard dopLayout != nil else { return }
+        let frames = Int(sampleRateHz * (format.latencySeconds + Self.dopTailSeconds))
+        tailFramesLeft = frames + frames % 2
+        tailStart = produced
+    }
+
+    func clearTail() {
+        tailFramesLeft = 0
+        tailStart = nil
+    }
+
+    /// Fills the chunk with the next part of the DoP tail.
+    func chunkTail() {
+        guard let dopLayout else { preconditionFailure("only a DoP stream has a tail") }
+        let frames = min(tailFramesLeft, Self.chunkFrames)
+        dopLayout.writeSilence(into: chunk, frames: frames)
+        chunkDecoded(frames: frames)
+        tailFramesLeft -= frames
+    }
 
     /// Refilling only from half empty decodes in bursts of two seconds instead of a few
     /// milliseconds every tick. The CPU then runs the work at full clock and goes back to sleep,

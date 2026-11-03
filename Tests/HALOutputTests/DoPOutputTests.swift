@@ -70,7 +70,8 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     // An odd byte count, so the first track ends on a half frame and an odd frame, both padded.
     let one = try dsdTrack("one", bytes: 70_001, seed: 1)
     let two = try dsdTrack("two", bytes: 40_000, seed: 2, dff: true)
-    let rig = try await Rig()
+    // At real-time pace, so the DoP tail lasts as long against the drain as it would on a DAC.
+    let rig = try await Rig(speed: 1)
     await rig.engine.setQueue([one.url, two.url])
     await rig.engine.play()
     try await rig.wait(for: .finished)
@@ -78,7 +79,15 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     let runs = rig.device.captured
     #expect(runs.map(\.sampleRateHz) == [176_400])
     let carried = try unpack(runs[0].samples)
-    #expect(carried == [0, 1].map { one.expected[$0] + two.expected[$0] })
+    for channel in 0..<2 {
+        let audio = one.expected[channel] + two.expected[channel]
+        #expect(Array(carried[channel].prefix(audio.count)) == audio)
+        // Then DoP silence until the device stopped, never zeros: the last frame is DoP.
+        let tail = carried[channel].dropFirst(audio.count)
+        #expect(!tail.isEmpty && tail.allSatisfy { $0 == dsdIdleByte })
+    }
+    let last = UInt32(bitPattern: runs[0].samples[runs[0].samples.count - 2]) >> 24
+    #expect(dopMarkers.contains(UInt8(last)))
     #expect(rig.events.contains(.trackStarted(index: 1)))
     #expect(!rig.events.contains { if case .underrun = $0 { true } else { false } })
     let output = try #require(rig.seen.last { $0.state.outputFormat != nil }?.state.outputFormat)
@@ -98,7 +107,12 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     let carried = try unpack(rig.device.captured[0].samples, allowingGaps: true)
     // From 1.5 s, 264,600 frames in, to the end.
     let tail = track.expected[0].suffix(from: 2 * 264_600)
-    #expect(carried[0].suffix(tail.count).elementsEqual(tail))
+    // Both end in DoP silence, the track's padding and the stream's tail; compare before it.
+    func audio(_ bytes: some BidirectionalCollection<UInt8>) -> [UInt8] {
+        Array(bytes.reversed().drop { $0 == dsdIdleByte }.reversed())
+    }
+    let played = audio(carried[0])
+    #expect(played.suffix(audio(tail).count) == audio(tail)[...])
     #expect(carried[0].count < track.expected[0].count)
 }
 
@@ -113,7 +127,10 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     try await rig.engine.setVolume(0.25)
     try await rig.wait(for: .finished)
 
-    #expect(try unpack(rig.device.captured[0].samples) == track.expected)
+    #expect(
+        try unpack(rig.device.captured[0].samples).enumerated().allSatisfy { channel, bytes in
+            Array(bytes.prefix(track.expected[channel].count)) == track.expected[channel]
+        })
     // The path the panel shows while it played: unity, so bit-perfect.
     var dop: SignalPath?
     while dop == nil {
