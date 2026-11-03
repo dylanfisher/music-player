@@ -10,6 +10,7 @@ private let logger = moduleLogger()
 struct ArtRequest: Equatable {
     var key: ArtworkKey
     var art: EmbeddedArt
+    var stamp: FileStamp
 }
 
 /// Art the table asked for and hasn't loaded yet, newest first. Scrolling asks for every row it
@@ -56,9 +57,10 @@ final class RowArt {
     var wanted: () -> Set<ArtworkKey> = { [] }
     var loaded: (ArtworkKey, CGImage) -> Void = { _, _ in }
 
-    /// Images at most `pixels` on their longer side, read by `read`.
-    init(pixels: Int, read: @escaping ArtRead) {
-        loader = ArtworkLoader(maxPixelSize: pixels, capacity: Self.cachedImages, read: read)
+    /// Images at most `pixels` on their longer side, read by `read` and kept in `thumbnails`.
+    init(pixels: Int, read: @escaping ArtRead, thumbnails: ThumbnailStore?) {
+        loader = ArtworkLoader(
+            maxPixelSize: pixels, capacity: Self.cachedImages, read: read, thumbnails: thumbnails)
     }
 
     /// The pixels art needs to be sharp on a retina screen in a column `width` points wide,
@@ -72,12 +74,13 @@ final class RowArt {
     /// Whether the art `key` names failed to load, so it isn't asked for again.
     func hasFailed(_ key: ArtworkKey) -> Bool { failed.contains(key) }
 
-    /// The cached image, or nil after asking for it to be loaded.
-    func image(_ art: EmbeddedArt, path: String) -> CGImage? {
+    /// The cached image, or nil after asking for it to be loaded from the file `stamp`
+    /// describes.
+    func image(_ art: EmbeddedArt, path: String, stamp: FileStamp) -> CGImage? {
         let key = ArtworkKey(path: path, art: art)
         if let image = loader.cached(key) { return image }
         guard !failed.contains(key), !loading.contains(key) else { return nil }
-        requests.add(ArtRequest(key: key, art: art))
+        requests.add(ArtRequest(key: key, art: art, stamp: stamp))
         loadNext()
         return nil
     }
@@ -94,7 +97,8 @@ final class RowArt {
     private func load(_ request: ArtRequest) {
         loading.insert(request.key)
         Task {
-            let result = await loader.load(request.art, path: request.key.path)
+            let result = await loader.load(
+                request.art, path: request.key.path, stamp: request.stamp)
             loading.remove(request.key)
             switch result {
             case .success(let image): loaded(request.key, image)

@@ -62,7 +62,9 @@ import Testing
 private func request(_ offset: Int) -> ArtRequest {
     let art = EmbeddedArt(
         offset: offset, byteCount: 1, mimeType: "image/png", unsynchronised: false)
-    return ArtRequest(key: ArtworkKey(path: "/a.flac", art: art), art: art)
+    return ArtRequest(
+        key: ArtworkKey(path: "/a.flac", art: art), art: art,
+        stamp: FileStamp(sizeBytes: 1, modifiedSeconds: 0))
 }
 
 @Test func artRequestsLoadTheNewestStillWantedAndStayBounded() {

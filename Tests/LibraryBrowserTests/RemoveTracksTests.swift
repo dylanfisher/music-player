@@ -12,7 +12,8 @@ private func removalBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64]) 
     let index = try LibraryIndex(at: databaseURL)
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     // Never the real Trash: a test that reaches it fails.
     browser.trash = { urls in
         Issue.record("moved \(urls) to the Trash")

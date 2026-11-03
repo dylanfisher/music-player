@@ -31,7 +31,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     _ = browser.content.view
     let art = NSView()
     let seek = NSView()

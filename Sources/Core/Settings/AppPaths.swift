@@ -6,26 +6,37 @@ import Log
 public struct AppPaths: Sendable {
     public var configFile: URL
     public var dataDirectory: URL
+    /// What the app can make again, which backups skip (ADR 0079).
+    var cacheDirectory: URL
 
-    public init(configFile: URL, dataDirectory: URL) {
+    init(configFile: URL, dataDirectory: URL, cacheDirectory: URL) {
         self.configFile = configFile
         self.dataDirectory = dataDirectory
+        self.cacheDirectory = cacheDirectory
     }
 
     /// Everything in one folder, for tests, Bench and runs that must not touch the real files.
     public init(home: URL) {
-        self.init(configFile: home.appendingPathComponent(configFileName), dataDirectory: home)
+        self.init(
+            configFile: home.appendingPathComponent(configFileName), dataDirectory: home,
+            cacheDirectory: home)
     }
 
-    /// `~/.config/music-player/config.json` and `~/Library/Application Support/MusicPlayer`.
+    /// `~/.config/music-player/config.json`, `~/Library/Application Support/MusicPlayer` and
+    /// `~/Library/Caches/MusicPlayer`.
     public static func standard() throws -> AppPaths {
-        AppPaths(
+        func directory(_ kind: FileManager.SearchPathDirectory) throws -> URL {
+            try FileManager.default.url(
+                for: kind, in: .userDomainMask, appropriateFor: nil, create: false
+            ).appendingPathComponent(appDirectoryName)
+        }
+        return AppPaths(
             configFile: defaultConfigFileURL(),
-            dataDirectory: try FileManager.default.url(
-                for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil,
-                create: false
-            ).appendingPathComponent(appDirectoryName))
+            dataDirectory: try directory(.applicationSupportDirectory),
+            cacheDirectory: try directory(.cachesDirectory))
     }
 
     public var stateFile: URL { dataDirectory.appendingPathComponent("state.json") }
+    /// The art column's thumbnails.
+    public var thumbnailDirectory: URL { cacheDirectory.appendingPathComponent("Thumbnails") }
 }

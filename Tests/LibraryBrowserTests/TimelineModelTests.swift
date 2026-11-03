@@ -179,7 +179,8 @@ private func play(_ count: Int, of rows: [TrackRow], from start: Int, _ index: L
     try index.recordPlay(rows[0].path, at: 2)
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: copy), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     await browser.load(BrowserState(source: .timeline))
     #expect(browser.showsTimeline)
     let deadline = Date().addingTimeInterval(10)
@@ -209,7 +210,8 @@ private func timelineBrowser() throws -> (LibraryBrowser, LibraryIndex, [TrackRo
     let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     return (browser, index, rows)
 }
 

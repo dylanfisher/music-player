@@ -41,7 +41,8 @@ private func temporaryFolder() throws -> URL {
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     let dir = try temporaryFolder()
     let list = dir.appendingPathComponent("Gone.m3u8")
     try Data("/nowhere/a.flac\nhttp://example.invalid/b\n".utf8).write(to: list)

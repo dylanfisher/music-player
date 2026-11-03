@@ -12,7 +12,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     let send = browser.watcherEvents
     let folders = (0..<200).map { "/Music/\($0)" }
     // From another thread, as the watcher sends them: each folder's progress, then its outcome.
@@ -46,7 +47,8 @@ import Testing
     try record.run("first")
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     let state = BrowserState(source: nil)
     await browser.load(state)
     #expect(browser.status.notices.map { $0.hasSuffix("first") } == [true])
@@ -66,7 +68,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     var beeps = 0
     browser.beep = { beeps += 1 }
     browser.reportCommand("couldn't rate the tracks", OnlyMissingFiles())
@@ -83,7 +86,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     let sidebar = try #require(browser.sidebar as? SidebarController)
     _ = sidebar.view
     await browser.load(BrowserState(source: nil))
@@ -101,7 +105,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 150, groupByAlbumArtist: false)
+        browserHeight: 150, groupByAlbumArtist: false,
+        thumbnails: nil)
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
         styleMask: [.titled, .resizable], backing: .buffered, defer: false)
@@ -132,7 +137,8 @@ import Testing
     let index = try LibraryIndex(at: databaseURL)
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 150, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 150, groupByAlbumArtist: false,
+        thumbnails: nil)
     var states: [BrowserState] = []
     browser.stateChanged = { states.append($0) }
     await browser.load(BrowserState(source: nil))
@@ -157,7 +163,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: try browserLibrary.get().databaseURL),
         index: try LibraryIndex(at: try browserLibrary.get().databaseURL),
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     await browser.load(BrowserState(source: nil))
     browser.libraryChanged(.scanning(folder: "/music", ScanProgress()))
     #expect(browser.scanIndicatorAnimates)
@@ -175,7 +182,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 150, groupByAlbumArtist: false)
+        browserHeight: 150, groupByAlbumArtist: false,
+        thumbnails: nil)
     var sent: [KeyChord] = []
     browser.keyCommand = { chords in
         sent += chords
@@ -218,7 +226,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     var reported: [StatusTotals] = []
     browser.statusTotalsChanged = { reported.append($0) }
     await browser.load(BrowserState(source: nil))
@@ -250,7 +259,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled],
         backing: .buffered, defer: false)
@@ -275,7 +285,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     await browser.load(BrowserState(source: nil))
     let all = browser.model.trackIDs.count
     // Out of any window, as when the user takes Search out of the toolbar.
@@ -293,7 +304,8 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
-        browserHeight: 100, groupByAlbumArtist: false)
+        browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     await browser.load(BrowserState(source: nil))
     #expect(browser.showsAllMusic)
     await browser.model.setSource(.history)

@@ -12,7 +12,8 @@ private func problemsBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64])
     let index = try LibraryIndex(at: databaseURL)
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     let ids = try index.database.prepare("SELECT file_id FROM tracks ORDER BY file_id LIMIT 2")
         .map { try $0.int64(0) }
     return (browser, index, ids)

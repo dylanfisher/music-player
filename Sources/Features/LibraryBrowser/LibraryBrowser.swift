@@ -1,4 +1,5 @@
 import AppKit
+import Artwork
 import Commands
 import DisplayText
 import KeyChord
@@ -135,7 +136,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// time: a page is one primary-key lookup per row and takes well under a millisecond.
     public init(
         reader: LibraryReader, index: LibraryIndex, layout: TrackTableLayout, browserHeight: Int,
-        groupByAlbumArtist: Bool
+        groupByAlbumArtist: Bool, thumbnails: ThumbnailStore?
     ) {
         self.reader = reader
         self.index = index
@@ -159,7 +160,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             layoutChanged: { layout in owner?.tableLayoutChanged(layout) },
             failed: { message in owner?.show(failure: message) },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
-        table = TrackTableController(model: model, cache: cache, layout: layout, actions: actions)
+        table = TrackTableController(
+            model: model, cache: cache, layout: layout, actions: actions, thumbnails: thumbnails)
         table.selectionChanged = { owner?.readSelectionTotals() }
         table.rateClicked = { id, stars in
             owner?.edit("couldn't rate the track") { try await model.rate([id], stars: stars) }

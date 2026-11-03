@@ -19,7 +19,7 @@ import Testing
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },
-        layout: AppState().trackTable.defaultValue, actions: actions)
+        layout: AppState().trackTable.defaultValue, actions: actions, thumbnails: nil)
     _ = controller.view
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil))
@@ -45,7 +45,7 @@ import Testing
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },
-        layout: AppState().trackTable.defaultValue, actions: actions)
+        layout: AppState().trackTable.defaultValue, actions: actions, thumbnails: nil)
     controller.view.frame = NSRect(x: 0, y: 0, width: 800, height: 300)
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil))
@@ -102,7 +102,7 @@ import Testing
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },
-        layout: AppState().trackTable.defaultValue, actions: actions)
+        layout: AppState().trackTable.defaultValue, actions: actions, thumbnails: nil)
     controller.view.frame = NSRect(x: 0, y: 0, width: 800, height: 300)
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil))
@@ -160,7 +160,7 @@ import Testing
         failed: { _ in }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { _ in [] }, layout: AppState().trackTable.defaultValue,
-        actions: actions)
+        actions: actions, thumbnails: nil)
     _ = controller.view
     controller.table.tableColumns[0].width = 9000
     controller.table.tableColumns[1].width = 1
@@ -180,7 +180,7 @@ import Testing
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },
-        layout: AppState().trackTable.defaultValue, actions: actions)
+        layout: AppState().trackTable.defaultValue, actions: actions, thumbnails: nil)
     _ = controller.view
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil))
@@ -246,7 +246,7 @@ import Testing
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { _ in [] }, layout: AppState().trackTable.defaultValue,
-        actions: actions)
+        actions: actions, thumbnails: nil)
     _ = controller.view
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil))
@@ -274,7 +274,7 @@ import Testing
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },
-        layout: AppState().trackTable.defaultValue, actions: actions)
+        layout: AppState().trackTable.defaultValue, actions: actions, thumbnails: nil)
     _ = controller.view
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil))
@@ -315,7 +315,7 @@ import Testing
         failed: { _ in }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { _ in [] }, layout: AppState().trackTable.defaultValue,
-        actions: actions)
+        actions: actions, thumbnails: nil)
     _ = controller.view
     let settings = AppSettings()
     let defaults = TableAppearance(
@@ -370,7 +370,7 @@ import Testing
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },
-        layout: AppState().trackTable.defaultValue, actions: actions)
+        layout: AppState().trackTable.defaultValue, actions: actions, thumbnails: nil)
     controller.view.frame = NSRect(x: 0, y: 0, width: 800, height: 300)
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil))
@@ -414,7 +414,7 @@ private func artTable(
                 ColumnLayout(column: .title, width: 200),
             ],
             sortColumn: sort, sortAscending: true),
-        actions: actions)
+        actions: actions, thumbnails: nil)
     controller.view.frame = NSRect(x: 0, y: 0, width: 400, height: 2000)
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil))
@@ -702,7 +702,7 @@ private func hoveredRescanTable() async throws -> (
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
     let controller = TrackTableController(
         model: model, cache: RowCache { _ in [] }, layout: AppState().trackTable.defaultValue,
-        actions: actions)
+        actions: actions, thumbnails: nil)
     _ = controller.view
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: .history))
@@ -732,7 +732,7 @@ private func hoveredRescanTable() async throws -> (
     layout.columns.insert(ColumnLayout(column: .art, width: TrackColumn.art.defaultWidth), at: 0)
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) }, layout: layout,
-        actions: actions)
+        actions: actions, thumbnails: nil)
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled],
         backing: .buffered, defer: false)
@@ -802,7 +802,7 @@ private func hoveredRescanTable() async throws -> (
             columns: [
                 ColumnLayout(column: .title, width: 200), ColumnLayout(column: .rating, width: 80),
             ], sortColumn: .title, sortAscending: true),
-        actions: actions)
+        actions: actions, thumbnails: nil)
     controller.view.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil))

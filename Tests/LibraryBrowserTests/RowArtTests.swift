@@ -36,7 +36,8 @@ private final class HeldReads: @unchecked Sendable {
 
 @MainActor @Test func artLoadsSeveralAtOnceOffTheCooperativePoolAndEachOnce() async throws {
     let reads = HeldReads()
-    let rowArt = RowArt(pixels: 64, read: reads.read)
+    let rowArt = RowArt(pixels: 64, read: reads.read, thumbnails: nil)
+    let stamp = FileStamp(sizeBytes: 1, modifiedSeconds: 0)
     let art = EmbeddedArt(offset: 0, byteCount: 1, mimeType: "image/png", unsynchronised: false)
     let requested = filesReadAtOnce + 2
     let keys = (0..<requested).map { ArtworkKey(path: "/m/\($0).flac", art: art) }
@@ -46,9 +47,9 @@ private final class HeldReads: @unchecked Sendable {
         return Set(keys)
     }
     for track in 0..<requested {
-        #expect(rowArt.image(art, path: "/m/\(track).flac") == nil)
+        #expect(rowArt.image(art, path: "/m/\(track).flac", stamp: stamp) == nil)
         // Asked again while it loads, as a redraw does.
-        #expect(rowArt.image(art, path: "/m/\(track).flac") == nil)
+        #expect(rowArt.image(art, path: "/m/\(track).flac", stamp: stamp) == nil)
     }
     let deadline = Date().addingTimeInterval(10)
     while reads.count < filesReadAtOnce, Date() < deadline {

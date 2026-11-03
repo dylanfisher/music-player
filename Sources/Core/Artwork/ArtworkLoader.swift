@@ -14,18 +14,24 @@ public final class ArtworkLoader: @unchecked Sendable {
     /// The most thumbnails kept. The least recently used goes first.
     public let capacity: Int
     private let read: ArtRead
+    private let thumbnails: ThumbnailStore?
     private let lock = NSLock()
     private var images: [ArtworkKey: CGImage] = [:]
     /// Least recently used first.
     private var recency: [ArtworkKey] = []
 
     /// `read` reads the art's bytes from its file; the scroll measurement wraps it to add a
-    /// NAS's latency.
-    public init(maxPixelSize: Int, capacity: Int, read: @escaping ArtRead = readArtBytes) {
+    /// NAS's latency. `thumbnails` keeps the images made for a file with a stamp between
+    /// launches.
+    public init(
+        maxPixelSize: Int, capacity: Int, read: @escaping ArtRead = readArtBytes,
+        thumbnails: ThumbnailStore? = nil
+    ) {
         precondition(maxPixelSize > 0 && capacity > 0, "an art cache needs a size and a capacity")
         self.maxPixelSize = maxPixelSize
         self.capacity = capacity
         self.read = read
+        self.thumbnails = thumbnails
     }
 
     /// The thumbnail if it's cached.
@@ -37,23 +43,28 @@ public final class ArtworkLoader: @unchecked Sendable {
         }
     }
 
-    /// The thumbnail of `art` in the file at `path`, from the cache or read and decoded now.
-    /// Blocks on the file, which may be on a slow network volume, so call it off the main thread.
-    public func image(_ art: EmbeddedArt, path: String) throws -> CGImage {
+    /// The thumbnail of `art` in the file at `path`, from the cache, from the thumbnail store
+    /// when the file's `stamp` is given, or read and decoded now. Blocks on the file, which may
+    /// be on a slow network volume, so call it off the main thread.
+    public func image(_ art: EmbeddedArt, path: String, stamp: FileStamp? = nil) throws -> CGImage {
         let key = ArtworkKey(path: path, art: art)
         if let image = cached(key) { return image }
-        let image = try signposted(.artLoad) {
-            let bytes: Data
-            do {
-                bytes = try read(art, path)
-            } catch {
-                throw ArtworkError.unreadable(path: path, reason: "\(error)")
+        let stored = stamp.flatMap { thumbnails?.image(key, stamp: $0, pixels: maxPixelSize) }
+        let image =
+            try stored
+            ?? signposted(.artLoad) {
+                let bytes: Data
+                do {
+                    bytes = try read(art, path)
+                } catch {
+                    throw ArtworkError.unreadable(path: path, reason: "\(error)")
+                }
+                guard let image = thumbnail(of: bytes, maxPixelSize: maxPixelSize) else {
+                    throw ArtworkError.undecodable(path: path, mimeType: art.mimeType)
+                }
+                if let stamp { thumbnails?.store(image, key, stamp: stamp, pixels: maxPixelSize) }
+                return image
             }
-            guard let image = thumbnail(of: bytes, maxPixelSize: maxPixelSize) else {
-                throw ArtworkError.undecodable(path: path, mimeType: art.mimeType)
-            }
-            return image
-        }
         lock.withLock {
             if images.updateValue(image, forKey: key) == nil {
                 recency.append(key)
@@ -68,10 +79,13 @@ public final class ArtworkLoader: @unchecked Sendable {
     /// `image(_:path:)` on a queue of the loaders' own instead of the cooperative pool. The pool
     /// has a thread per core, 4 on the 2015 MacBook Pro, and a read that waits on a slow NAS
     /// would hold one, stalling every other task meanwhile.
-    public func load(_ art: EmbeddedArt, path: String) async -> Result<CGImage, any Error> {
+    public func load(_ art: EmbeddedArt, path: String, stamp: FileStamp? = nil) async -> Result<
+        CGImage, any Error
+    > {
         await withCheckedContinuation { continuation in
             Self.reads.async {
-                continuation.resume(returning: Result { try self.image(art, path: path) })
+                continuation.resume(
+                    returning: Result { try self.image(art, path: path, stamp: stamp) })
             }
         }
     }

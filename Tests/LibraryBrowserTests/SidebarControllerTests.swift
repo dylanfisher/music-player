@@ -20,7 +20,8 @@ private func browserWithPlaylists() async throws -> (
         rules: SmartRules(match: .all, rules: [.init(.title, .contains, .text("a"))]))
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     let sidebar = try #require(browser.sidebar as? SidebarController)
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 200, height: 400), styleMask: [.titled],

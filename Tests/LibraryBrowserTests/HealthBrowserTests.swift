@@ -92,7 +92,8 @@ private func report(_ id: Int64) -> HealthReport {
     try #require(!expected.isEmpty)
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     let sidebar = try #require(browser.sidebar as? SidebarController)
     _ = sidebar.view
     await browser.load(
@@ -123,7 +124,8 @@ private func report(_ id: Int64) -> HealthReport {
     _ = try index.removeFiles(outside: [kept])
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     _ = browser.sidebar.view
     await browser.load(BrowserState(source: nil))
     browser.checkHealth()

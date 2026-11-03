@@ -34,10 +34,12 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// How the Album Art column reads art from a file, which the scroll measurement replaces.
     var readArt: ArtRead = readArtBytes {
         didSet {
-            art = RowArt(pixels: art.loader.maxPixelSize, read: readArt)
+            art = RowArt(pixels: art.loader.maxPixelSize, read: readArt, thumbnails: thumbnails)
             follow(art)
         }
     }
+    /// Where the art column's thumbnails are kept between launches; nil keeps none.
+    private let thumbnails: ThumbnailStore?
     /// The art of the album under the pointer, whole and at the column's width, over the rows.
     let artHover = ArtHover()
     /// The art opened by a click on `artHover`, while it's open.
@@ -75,14 +77,18 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         }
     }
 
-    init(model: BrowserModel, cache: RowCache, layout: TrackTableLayout, actions: BrowserActions) {
+    init(
+        model: BrowserModel, cache: RowCache, layout: TrackTableLayout, actions: BrowserActions,
+        thumbnails: ThumbnailStore?
+    ) {
         self.model = model
         self.cache = cache
         self.actions = actions
+        self.thumbnails = thumbnails
         art = RowArt(
             pixels: RowArt.pixels(
                 columnWidth: layout.columns.first { $0.column == .art }?.width
-                    ?? TrackColumn.art.defaultWidth), read: readArtBytes)
+                    ?? TrackColumn.art.defaultWidth), read: readArtBytes, thumbnails: thumbnails)
         super.init(play: actions.play, playNext: actions.playNext)
         configure(layout)
         follow(art)
@@ -416,7 +422,12 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// The cached image of `row`'s own art, or nil after asking for it to be loaded.
     private func image(ofArtIn row: Int) -> NSImage? {
         trackRow(row).flatMap { track in
-            track.art.flatMap { art.image($0, path: track.path) }.map {
+            track.art.flatMap {
+                art.image(
+                    $0, path: track.path,
+                    stamp: FileStamp(
+                        sizeBytes: track.sizeBytes, modifiedSeconds: track.modifiedSeconds))
+            }.map {
                 NSImage(cgImage: $0, size: .zero)
             }
         }
@@ -455,7 +466,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         hideArtHover()
         let pixels = RowArt.pixels(columnWidth: table.tableColumns[column].width)
         if pixels != art.loader.maxPixelSize {
-            art = RowArt(pixels: pixels, read: readArt)
+            art = RowArt(pixels: pixels, read: readArt, thumbnails: thumbnails)
             follow(art)
         }
         table.enumerateAvailableRowViews { rowView, row in

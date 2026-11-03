@@ -30,7 +30,8 @@ import Testing
     try index.recordPlay("/Music/a.flac", at: 1)
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled],
         backing: .buffered, defer: true)

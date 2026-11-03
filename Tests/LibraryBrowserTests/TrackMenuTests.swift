@@ -14,7 +14,8 @@ private func browser(selecting selected: IndexSet) async throws -> (LibraryBrows
     let index = try LibraryIndex(at: databaseURL)
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
+        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
+        thumbnails: nil)
     await browser.load(BrowserState(source: nil))
     browser.table.table.selectRowIndexes(selected, byExtendingSelection: false)
     return (browser, index)

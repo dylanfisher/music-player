@@ -122,6 +122,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var playlistMenus: [PlaylistMenu] = []
     private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
     /// Logs the main thread's stalls over 100 ms, for the field data the benches can't give.
+    /// The art column's thumbnails, kept between launches (ADR 0079).
+    private lazy var thumbnails = ThumbnailStore(directory: paths.thumbnailDirectory)
     private let stalls = StallDetector { NSApp.currentEvent.map { eventName($0.type) } }
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
@@ -200,7 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let browser = LibraryBrowser(
             reader: try LibraryReader(databaseURL: databaseURL), index: index,
             layout: layout.trackTable, browserHeight: layout.browserHeight,
-            groupByAlbumArtist: layout.groupByAlbumArtist)
+            groupByAlbumArtist: layout.groupByAlbumArtist, thumbnails: thumbnails)
         browser.setTableAppearance(layout.tableAppearance)
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
@@ -304,6 +306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let settings else { return }
         startPlayback(settings)
         applyRendererSetting()
+        thumbnails.trimInBackground()
         startScripting()
         applyReceiverSetting()
         startWatching(settings[\.watchedFolders], settings)
