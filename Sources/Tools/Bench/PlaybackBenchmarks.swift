@@ -52,6 +52,11 @@ private let loadedSoak = Result { () throws -> LoadedSoak in
         [try hiResTrack(in: directory)]
         + (try rampAlbum(sampleRateHz: 44_100, bitsPerSample: 16, in: directory)).tracks
         + (try rampAlbum(sampleRateHz: 96_000, bitsPerSample: 24, in: directory)).tracks
+        // The stereo null device converts it.
+        + [
+            try sineNoiseTrack(
+                sampleRateHz: 44_100, bitsPerSample: 16, channels: 1, seconds: 30, in: directory)
+        ]
     return try withScratchDirectory("soak") { scratch in
         try playing(queue, speed: 1, repeatMode: .all) { session in
             let load = SoakLoad(
@@ -192,6 +197,54 @@ let playbackBenchmarks = [
             ])
     },
     Benchmark(
+        name: "playback: CPU while playing FLAC converted for a 48 kHz float device",
+        budget: Budget(appleSilicon: 3, oldMac: 6, unit: .percentOfCore)
+    ) {
+        let directory = try defaultPlaybackFixturesDirectory()
+        var worst = 0.0
+        var notes: [String] = []
+        for (rate, bits) in [(44_100, 16), (96_000, 24)] {
+            let track = try sineNoiseTrack(
+                sampleRateHz: rate, bitsPerSample: bits, channels: 2, seconds: 60, in: directory)
+            let (percent, underruns) = try cpuPercent(
+                playing: track, speed: 1, for: cpuSeconds, formats: NullDevice.float48k)
+            worst = max(worst, percent)
+            notes.append(
+                String(
+                    format: "%@ kHz %@: %.2f percent of a core, %d underrun frames",
+                    kilohertz(Double(rate)), bitDepth(bits), percent, underruns))
+        }
+        return Measured(
+            value: worst,
+            notes: notes + [
+                String(format: "%.0f s each through the null device at real-time pace", cpuSeconds),
+                "the old Mac figure is an estimate until its checkpoint",
+            ])
+    },
+    Benchmark(
+        name: "playback: gap where tracks meet through conversion",
+        budget: Budget(appleSilicon: 0, oldMac: 0, unit: .samples)
+    ) {
+        let directory = try defaultPlaybackFixturesDirectory()
+        var worst = 0
+        var notes: [String] = []
+        for (rate, bits) in [(44_100, 16), (96_000, 24)] {
+            let album = try sineAlbum(sampleRateHz: rate, bitsPerSample: bits, in: directory)
+            let (gap, error) = try playing(
+                album.tracks, speed: 4, keepsSamples: true, formats: NullDevice.float48k
+            ) { session in
+                session.waitUntilFinished()
+                return try convertedGapFrames(album, in: session.device.captured)
+            }
+            worst = max(worst, gap)
+            notes.append(
+                String(
+                    format: "%@ kHz %@: %d samples, at most %.1e off the sine",
+                    kilohertz(Double(rate)), bitDepth(bits), gap, error))
+        }
+        return Measured(value: Double(worst), notes: notes)
+    },
+    Benchmark(
         name: "playback: gap between same-format tracks",
         budget: Budget(appleSilicon: 0, oldMac: 0, unit: .samples)
     ) {
@@ -248,7 +301,8 @@ let playbackBenchmarks = [
             value: Double(soak.underrunFrames),
             notes: [
                 String(
-                    format: "%.0f s, 24/192 then 44.1 and 96 kHz albums on repeat; "
+                    format: "%.0f s, 24/192, 44.1 and 96 kHz albums, then mono converted to"
+                        + " stereo, on repeat; "
                         + "./scripts/bench --soak 3600 for the hour", soakSeconds),
                 "under load: \(soak.scans) full scans of the fixture library into a new index,"
                     + String(format: " one every %.0f s,", soakScanIntervalSeconds)
@@ -278,10 +332,10 @@ let playbackBenchmarks = [
 
 /// CPU time over wall time while `track` plays on repeat, after a warm-up, and the underrun
 /// frames meanwhile.
-private func cpuPercent(playing track: URL, speed: Double, for duration: Double) throws -> (
-    Double, Int
-) {
-    try playing([track], speed: speed, repeatMode: .all) { session in
+private func cpuPercent(
+    playing track: URL, speed: Double, for duration: Double, formats: DeviceFormats? = nil
+) throws -> (Double, Int) {
+    try playing([track], speed: speed, repeatMode: .all, formats: formats) { session in
         Thread.sleep(forTimeInterval: 2)
         let start = cpuTimeSeconds()
         let wall = seconds { Thread.sleep(forTimeInterval: duration) }
@@ -342,12 +396,14 @@ private final class Session: @unchecked Sendable {
     }
 }
 
-/// Plays `queue` on a null device for as long as `body` runs, then closes the output.
+/// Plays `queue` on a null device for as long as `body` runs, then closes the output. `formats`
+/// narrows what the device takes.
 private func playing<T>(
     _ queue: [URL], speed: Double, keepsSamples: Bool = false, repeatMode: RepeatMode = .off,
-    _ body: (Session) throws -> T
+    formats: DeviceFormats? = nil, _ body: (Session) throws -> T
 ) throws -> T {
     let device = NullDevice(speed: speed, keepsSamples: keepsSamples)
+    if let formats { device.report(formats) }
     let output = try DeviceOutput(
         DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil))
     let engine = PlaybackEngine(output: output)
@@ -392,4 +448,41 @@ private func gapFrames(_ album: RampAlbum, in runs: [NullDevice.CapturedRun]) th
     guard let resumed = (start + frame..<samples.count / 2).first(where: { matches($0, frame) })
     else { throw BenchError.expected("the album to continue after frame \(frame)") }
     return resumed - (start + frame)
+}
+
+/// How far the second track of `album`, converted to 48 kHz float, lands from where it should,
+/// in frames, and how far from the sine the whole album is then, away from its two ends, where
+/// the converter rings. Throws when that's more than 1e-3 of full scale: a seam.
+private func convertedGapFrames(_ album: SineAlbum, in runs: [NullDevice.CapturedRun]) throws
+    -> (Int, Double)
+{
+    guard runs.count == 1, let samples = runs.first?.samples else {
+        throw BenchError.expected("one run at one rate, not \(runs.count)")
+    }
+    let rate = 48_000.0
+    let values = samples.map { Double(Float(bitPattern: UInt32(bitPattern: $0))) }
+    func frames(_ count: Int) -> Int {
+        Int((Double(count) * rate / Double(album.sampleRateHz)).rounded(.up))
+    }
+    let (join, end, edge) = (frames(album.trackFrames[0]), frames(album.totalFrames), 200)
+    guard values.count / 2 >= end else {
+        throw BenchError.expected("\(end) frames of audio, not \(values.count / 2)")
+    }
+    /// The largest error over `range` with the second track shifted by `offset` frames.
+    func error(_ range: Range<Int>, offset: Int) -> Double {
+        range.map { index in
+            let seconds = Double(index >= join ? index - offset : index) / rate
+            return (0..<2).map {
+                abs(values[2 * index + $0] - album.value(atSeconds: seconds, channel: $0))
+            }.max()!
+        }.max() ?? 0
+    }
+    let after = (join + edge)..<(end - edge)
+    let offset = (-50...50).min { error(after, offset: $0) < error(after, offset: $1) }!
+    let worst = error(edge..<(end - edge), offset: offset)
+    guard worst <= 1e-3 else {
+        throw BenchError.expected(
+            String(format: "the join within 1e-3 of the sine, not %.1e", worst))
+    }
+    return (abs(offset), worst)
 }

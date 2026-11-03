@@ -396,7 +396,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         guard let device else { preconditionFailure("configure needs an open device") }
         let format = try device.configure(
             sampleRateHz: track.sampleRateHz, channels: track.channels,
-            forDoP: track.isDoP)
+            forDoP: track.isDoP, file: track.file)
         // DoP is never scaled, so its stream gets no gain at all.
         let withGain = choice.digitalVolume && !track.isDoP
         let stream = try RenderStream(format: format, for: track, withGain: withGain)
@@ -409,11 +409,12 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private func feed(_ track: Track, into stream: RenderStream, atFrame frame: Int64) throws {
         try track.decoder.setOutputFormat(stream.decoderFormat)
         if frame > 0 { try track.decoder.seek(toFrame: frame) }
+        let startByte = try stream.startTrack()
         feeding = track
         stream.clearTail()
         segments.append(
             Segment(
-                item: track.item, startByte: try stream.startTrack(),
+                item: track.item, startByte: startByte,
                 startSeconds: Double(frame) / track.sampleRateHz,
                 durationSeconds: track.durationSeconds, signal: track.signal(into: stream)))
         HALRenderSetDraining(stream.render, false)
@@ -470,19 +471,14 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             // replacement follows without a gap. Should the IO proc cross the boundary in the
             // microseconds before the discard lands, it cuts the old next track off a few
             // milliseconds in.
-            // A converted stream's boundary can be a few frames past what's written, still
-            // inside the converter, which the reset drops along with the old next track.
-            HALRenderDiscard(
-                stream.render, min(segments[1].startByte, stream.produced), stream.produced)
-            segments.removeSubrange(1...)
-            feeding = nil
-            stream.dropChunk()
             do {
-                try stream.converter?.reset()
+                try stream.keep(upTo: segments[1].startByte)
             } catch {
                 fail(error)
                 return
             }
+            segments.removeSubrange(1...)
+            feeding = nil
         }
         pendingSwitch = nil
         next = nil
@@ -558,7 +554,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
         self.next = nil
         guard stream.fits(next) else {
-            pendingSwitch = predecoded(next, after: stream)
+            pendingSwitch = predecodes(next, after: stream) ? predecoded(next, after: stream) : next
             endFeed(stream)
             return
         }
@@ -576,6 +572,15 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private func endFeed(_ stream: RenderStream) {
         stream.startTail()
         HALRenderSetDraining(stream.render, true)
+    }
+
+    /// Whether decoding `track`'s start ahead of a switch can pay off: not when this stream or the
+    /// next converts, since the switch can't take audio decoded in the guessed format and would
+    /// decode it again.
+    private func predecodes(_ track: Track, after stream: RenderStream) -> Bool {
+        guard !stream.format.isConverted else { return false }
+        guard !track.isDoP, let knownFormats else { return true }
+        return knownFormats.takes(sampleRateHz: track.sampleRateHz, channels: track.channels)
     }
 
     /// `track` with its first half second decoded, while the current track still has seconds to
@@ -1118,9 +1123,10 @@ private final class RenderStream {
     /// unless it converts.
     private let trackRateHz: Double
     private let trackChannels: UInt32
-    /// Set when the device converts to another rate or channel count. A same-format conversion,
-    /// such as integer to float, the decoder does itself.
-    let converter: RateConverter?
+    /// Set when the device converts to another rate or channel count, or to integers too narrow
+    /// for the track, which it dithers. A conversion that loses nothing, such as integer to float,
+    /// the decoder does itself.
+    let converter: OutputConverter?
     /// `produced` when the converter's output last started from nothing.
     private var converterStart: UInt64 = 0
     /// The converter still holds the end of the last track, for the tail to write.
@@ -1148,10 +1154,14 @@ private final class RenderStream {
         dopLayout = isDoP ? DoPLayout(stream, channels: Int(stream.mChannelsPerFrame)) : nil
         var written = stream
         written.mFormatFlags &= ~kAudioFormatFlagIsNonMixable
+        let narrows = !PhysicalFormat(written).holdsSamples(of: track.file)
         converter =
             format.isConverted
-                && (stream.mSampleRate != trackRateHz || stream.mChannelsPerFrame != trackChannels)
-            ? try RateConverter(from: trackRateHz, channels: trackChannels, to: written) : nil
+                && (stream.mSampleRate != trackRateHz || stream.mChannelsPerFrame != trackChannels
+                    || narrows)
+            ? try OutputConverter(
+                from: trackRateHz, channels: trackChannels, to: written,
+                dither: narrows && written.mFormatFlags & kAudioFormatFlagIsFloat == 0) : nil
         guard
             let ring = RingBufferCreate(
                 Int(stream.mSampleRate * Self.bufferSeconds) * bytesPerFrame)
@@ -1260,6 +1270,34 @@ private final class RenderStream {
     func clearTail() {
         tailFramesLeft = 0
         tailStart = nil
+    }
+
+    /// Drops everything queued from `boundary` on and keeps all before it: what's written, what's
+    /// left of it in the chunk, and in a converted stream what the converter still holds of it,
+    /// which a flush gives up. The audio after it then starts at `boundary`.
+    func keep(upTo boundary: UInt64) throws {
+        if produced >= boundary {
+            HALRenderDiscard(render, boundary, produced)
+            dropChunk()
+        } else {
+            let missing = Int(boundary - produced)
+            let queued = chunkBytes - chunkOffset
+            if queued >= missing {
+                chunkBytes = chunkOffset + missing
+            } else if let converter {
+                memmove(chunk, chunk + chunkOffset, queued)
+                (chunkOffset, chunkBytes) = (0, queued)
+                while chunkBytes < missing {
+                    let frames = try converter.flush(
+                        into: chunk + chunkBytes,
+                        frames: UInt32((missing - chunkBytes) / bytesPerFrame))
+                    if frames == 0 { break }
+                    chunkBytes += Int(frames) * bytesPerFrame
+                }
+            }
+        }
+        try converter?.reset()
+        converterTailDue = false
     }
 
     /// Gives up the tail after it failed.

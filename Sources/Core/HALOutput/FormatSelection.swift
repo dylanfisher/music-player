@@ -29,30 +29,35 @@ func bitPerfectFormat(
     return format
 }
 
-/// The format a PCM track of `channels` at `sampleRateHz` is converted to when no format carries
-/// it unchanged, and the rate to run it at, or nil when the device has no PCM format allowed.
+/// The format a PCM `track` is converted to when no format carries it unchanged, and the rate to
+/// run it at, or nil when the device has no PCM format allowed.
 ///
-/// A format with at least the track's channels wins, so none is dropped, else the one with the
-/// most. Then the rate nearest
-/// the track's, at or above it before below it, and never below 44.1 kHz when there's one at or
-/// above: AirPods offer 16 kHz mono for calls beside 48 kHz stereo, and a low-rate track mustn't
-/// switch them to it. Then the track's own channel count, else the fewest above it, which a mono
-/// track is copied into, else the most. Then float, which holds every integer source up to 24
-/// bits exactly, and then the widest.
+/// A format that loses nothing wins: at least the track's channels, and every sample's value
+/// (float holds integers up to 24 bits). Failing that, one that keeps the depth, since a stereo
+/// DAC's extra 16-bit multichannel format would cost resolution to keep channels a downmix keeps
+/// audible; then one with enough channels. Then the rate nearest the track's, at or above it
+/// before below it, and never below 44.1 kHz when there's one at or above: AirPods offer 16 kHz
+/// mono for calls beside 48 kHz stereo, and a low-rate track mustn't switch them to it. Then the
+/// track's own channel count, else the fewest above it, else the most below it. Then float, then
+/// the widest.
 public func convertedFormat(
-    in formats: [PhysicalFormat], sampleRateHz: Double, channels: UInt32, allowNonMixable: Bool
+    in formats: [PhysicalFormat], for track: SignalFormat, allowNonMixable: Bool
 ) -> (index: Int, sampleRateHz: Double)? {
-    let lowest = max(sampleRateHz, lowestConvertedRateHz)
+    let lowest = max(track.sampleRateHz, lowestConvertedRateHz)
     func rate(_ format: PhysicalFormat) -> Double {
         min(max(lowest, format.sampleRateHz.lowerBound), format.sampleRateHz.upperBound)
     }
     func rank(_ format: PhysicalFormat) -> (Int, Int, Double, Int, Int, UInt32) {
         let rate = rate(format)
         let count = Int(format.channels)
-        let enough = format.channels >= channels
+        let enough = format.channels >= track.channels
+        let deep = format.holdsSamples(of: track)
+        // Losing nothing, then keeping the depth, then the channels.
+        let loss = (enough && deep ? 4 : 0) + (deep ? 2 : 0) + (enough ? 1 : 0)
         return (
-            enough ? Int.max : count, rate >= lowest ? 1 : 0, rate >= lowest ? -rate : rate,
-            format.channels == channels ? Int.max : enough ? -count : count,
+            loss, rate >= lowest ? 1 : 0,
+            rate >= lowest ? -rate : rate,
+            format.channels == track.channels ? Int.max : enough ? -count : count,
             format.isFloat ? 1 : 0, format.bitsPerChannel
         )
     }

@@ -52,8 +52,10 @@ final class StepClock {
 public protocol PCMDevice: AnyObject {
     /// Switches the hardware to `sampleRateHz` with `channels`, passing samples through
     /// unchanged, or when no format can, to the one `convertedFormat` picks. `forDoP` asks for a
-    /// non-mixable integer format that holds DoP's words, and is never converted.
-    func configure(sampleRateHz: Double, channels: UInt32, forDoP: Bool) throws -> DeviceFormat
+    /// non-mixable integer format that holds DoP's words, and is never converted. `file` is what
+    /// the track holds, whose depth the converted format should keep.
+    func configure(sampleRateHz: Double, channels: UInt32, forDoP: Bool, file: SignalFormat)
+        throws -> DeviceFormat
     /// Starts calling `HALRenderIOProc` with `render` (a `HALRender *`).
     func start(_ render: OpaquePointer) throws
     /// Returns once the IO proc has stopped being called.

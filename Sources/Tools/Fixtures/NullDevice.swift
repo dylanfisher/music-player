@@ -106,13 +106,13 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     }
 
     /// The device reporting other rates and formats, as one does when its listeners fire.
-    func report(_ formats: DeviceFormats) {
+    public func report(_ formats: DeviceFormats) {
         lock.withLock { self.formats = formats }
         reportState()
     }
 
     /// What Bluetooth AirPods offer on macOS 12: stereo 32-bit float at 48 kHz, mixable.
-    static let float48k = DeviceFormats(
+    public static let float48k = DeviceFormats(
         sampleRatesHz: [48_000...48_000],
         formats: [
             PhysicalFormat(
@@ -290,9 +290,9 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
 
         /// 32-bit and non-mixable, so it carries DoP, when the formats it reports take the track;
         /// otherwise the one `convertedFormat` picks from them.
-        func configure(sampleRateHz: Double, channels: UInt32, forDoP: Bool) throws
-            -> DeviceFormat
-        {
+        func configure(
+            sampleRateHz: Double, channels: UInt32, forDoP: Bool, file: SignalFormat
+        ) throws -> DeviceFormat {
             try device.perform(.configure)
             let (formats, allowNonMixable) = device.lock.withLock {
                 (device.formats, device.hogModeSetting)
@@ -303,8 +303,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
             if isConverted {
                 guard
                     let target = convertedFormat(
-                        in: formats.formats, sampleRateHz: sampleRateHz, channels: channels,
-                        allowNonMixable: allowNonMixable)
+                        in: formats.formats, for: file, allowNonMixable: allowNonMixable)
                 else { throw NoFormat() }
                 format = NullDevice.format(formats.formats[target.index], at: target.sampleRateHz)
             } else {

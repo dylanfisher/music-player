@@ -62,35 +62,36 @@ public func rampAlbum(sampleRateHz: Int, bitsPerSample: Int, in directory: URL) 
 /// One continuous sine, a different phase on each channel, split into two FLAC tracks as a
 /// `RampAlbum` is, for output that resamples: a ramp's steps would ring, but any gap, repeat or
 /// seam at the join still shows as samples off the sine.
-struct SineAlbum: Sendable {
-    let tracks: [URL]
-    let trackFrames: [Int]
-    let sampleRateHz: Int
+public struct SineAlbum: Sendable {
+    public let tracks: [URL]
+    public let trackFrames: [Int]
+    public let sampleRateHz: Int
 
-    var totalFrames: Int { trackFrames.reduce(0, +) }
-    var durationSeconds: Double { Double(totalFrames) / Double(sampleRateHz) }
+    public var totalFrames: Int { trackFrames.reduce(0, +) }
+    public var durationSeconds: Double { Double(totalFrames) / Double(sampleRateHz) }
 
     static let frequencyHz = 997.0
     static let amplitude = 0.5
 
     /// The album's signal `seconds` in, from -1 to 1.
-    func value(atSeconds seconds: Double, channel: Int) -> Double {
+    public func value(atSeconds seconds: Double, channel: Int) -> Double {
         Self.amplitude * sin(2 * .pi * Self.frequencyHz * seconds + Double(channel) * .pi / 2)
     }
 }
 
-/// Makes the album the first time it's asked for at this rate and depth, and returns it.
-func sineAlbum(sampleRateHz: Int, bitsPerSample: Int, in directory: URL) throws
-    -> SineAlbum
-{
-    let frames = [sampleRateHz + 123, sampleRateHz / 2]
+/// Makes the album the first time it's asked for at this rate, depth and first track's length,
+/// by default a second and a bit so the join isn't on a convenient frame, and returns it.
+public func sineAlbum(
+    sampleRateHz: Int, bitsPerSample: Int, firstTrackFrames: Int? = nil, in directory: URL
+) throws -> SineAlbum {
+    let frames = [firstTrackFrames ?? sampleRateHz + 123, sampleRateHz / 2]
     let album = SineAlbum(tracks: [], trackFrames: frames, sampleRateHz: sampleRateHz)
     let scale = Double(1 << (bitsPerSample - 1))
     var tracks: [URL] = []
     var start = 0
     for (index, count) in frames.enumerated() {
         let url = directory.appendingPathComponent(
-            "sine-\(sampleRateHz)-\(bitsPerSample)-\(index + 1).flac")
+            "sine-\(sampleRateHz)-\(bitsPerSample)-\(frames[0])-\(index + 1).flac")
         let first = start
         try makeFLAC(
             at: url, sampleRateHz: sampleRateHz, bitsPerSample: bitsPerSample, frames: count
@@ -104,25 +105,53 @@ func sineAlbum(sampleRateHz: Int, bitsPerSample: Int, in directory: URL) throws
     return SineAlbum(tracks: tracks, trackFrames: frames, sampleRateHz: sampleRateHz)
 }
 
+/// Half a second of 24-bit 44.1 kHz FLAC holding a different steady level on each channel,
+/// `levelOf(channel)`, so a channel mix shows as plain arithmetic on the levels.
+func levelTrack(channels: Int, in directory: URL) throws -> URL {
+    let url = directory.appendingPathComponent("levels-44100-24-\(channels)ch.flac")
+    try makeFLAC(
+        at: url, sampleRateHz: 44_100, bitsPerSample: 24, channels: channels, frames: 22_050
+    ) { _, channel in Int32((levelOf(channel) * Double(1 << 23)).rounded()) }
+    return url
+}
+
+/// The level `levelTrack` holds on `channel`: 0.1 on the first, 0.2 on the second, and so on.
+func levelOf(_ channel: Int) -> Double { 0.1 * Double(channel + 1) }
+
 /// Two minutes of 24-bit 192 kHz FLAC: a sine with noise in the low bits, so it costs about as
 /// much to decode as a real hi-res recording. Made the first time it's asked for.
 public func hiResTrack(in directory: URL) throws -> URL {
-    let rate = 192_000
-    let url = directory.appendingPathComponent("sine-noise-192000-24.flac")
-    var noise = SplitMix64(seed: 192)
-    try makeFLAC(at: url, sampleRateHz: rate, bitsPerSample: 24, frames: rate * 120) {
-        frame, channel in
+    try sineNoiseTrack(
+        sampleRateHz: 192_000, bitsPerSample: 24, channels: 2, seconds: 120, in: directory)
+}
+
+/// A sine with noise in the low half of the bits, so it costs about as much to decode as a real
+/// recording. Made the first time it's asked for.
+public func sineNoiseTrack(
+    sampleRateHz rate: Int, bitsPerSample bits: Int, channels: Int, seconds: Int,
+    in directory: URL
+) throws -> URL {
+    let url = directory.appendingPathComponent(
+        "sine-noise-\(rate)-\(bits)-\(channels)ch-\(seconds)s.flac")
+    var noise = SplitMix64(seed: UInt64(rate / 1000))
+    let noiseBits = bits / 2
+    try makeFLAC(
+        at: url, sampleRateHz: rate, bitsPerSample: bits, channels: channels,
+        frames: rate * seconds
+    ) { frame, channel in
         let sine = 0.1 * sin(2 * .pi * 997 * Double(frame) / Double(rate) + Double(channel))
-        return Int32(sine * Double(1 << 23)) + Int32(truncatingIfNeeded: noise.next() >> 52) - 2048
+        return Int32(sine * Double(1 << (bits - 1)))
+            + Int32(truncatingIfNeeded: noise.next() >> UInt64(64 - noiseBits))
+            - Int32(1 << (noiseBits - 1))
     }
     return url
 }
 
-/// Writes stereo PCM from `sample` as WAV, then encodes it, unless `url` already exists. Works in
+/// Writes PCM from `sample` as WAV, then encodes it, unless `url` already exists. Works in
 /// a scratch directory and renames the result into place, so a test running at the same time
 /// never sees half a file.
 private func makeFLAC(
-    at url: URL, sampleRateHz: Int, bitsPerSample: Int, frames: Int,
+    at url: URL, sampleRateHz: Int, bitsPerSample: Int, channels: Int = 2, frames: Int,
     sample: (_ frame: Int, _ channel: Int) -> Int32
 ) throws {
     let manager = FileManager.default
@@ -136,7 +165,8 @@ private func makeFLAC(
         let wav = scratch.appendingPathComponent("source.wav")
         let flac = scratch.appendingPathComponent("encoded.flac")
         try writeWAV(
-            at: wav, sampleRateHz: sampleRateHz, bitsPerSample: bitsPerSample, frames: frames,
+            at: wav, sampleRateHz: sampleRateHz, bitsPerSample: bitsPerSample, channels: channels,
+            frames: frames,
             sample: sample)
         try runAfconvert(["-f", "flac", "-d", "flac", wav.path, flac.path])
         guard rename(flac.path, url.path) == 0 else {
@@ -149,10 +179,9 @@ private func makeFLAC(
 }
 
 func writeWAV(
-    at url: URL, sampleRateHz: Int, bitsPerSample: Int, frames: Int,
+    at url: URL, sampleRateHz: Int, bitsPerSample: Int, channels: Int = 2, frames: Int,
     sample: (Int, Int) -> Int32
 ) throws {
-    let channels = 2
     let bytesPerSample = bitsPerSample / 8
     let dataBytes = frames * channels * bytesPerSample
     var header = Data("RIFF".utf8)

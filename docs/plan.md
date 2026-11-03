@@ -111,9 +111,11 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Page down sorted by title, art on the slow simulated NAS, to the last cover on screen (phase 32b); the old Mac figure is an estimate until its checkpoint | < 250 ms | < 500 ms |
 | Track change with the whole library queued and the queue panel open, to drawn (p95; phase 32b); the old Mac figure is an estimate until its checkpoint | < 8 ms | < 16 ms |
 | CPU while playing 24/192 FLAC | < 3 percent of a core | < 5 percent of a core |
+| CPU while playing 44.1 and 96 kHz FLAC converted for a device that takes only 48 kHz float (phase 31); the old Mac figure is an estimate until its checkpoint | < 3 percent of a core | < 6 percent of a core |
 | Underruns in a 1-hour playback soak (`--soak 3600`; 20 s by default), with a full fixture scan every 5 minutes and a search every second | 0 frames | 0 frames |
 | Memory growth in that soak, from the first scan trough after minute 5 to the last (30 s after each scan ends) | < 10 MB | < 10 MB |
 | Gap between same-format tracks | 0 samples | 0 samples |
+| Gap where tracks meet through conversion to 48 kHz float, 44.1 and 96 kHz albums, with the whole album within 1e-3 of full scale of the sine (phase 31) | 0 samples | 0 samples |
 | Track change that switches sample rate | < 500 ms | < 500 ms |
 | Double-click a row of the whole library (43k tracks) to the first frame in the output, null device; the old Mac figure is an estimate until its checkpoint | < 25 ms | < 100 ms |
 | Main thread busy over that double-click; the old Mac figure is an estimate until its checkpoint | < 4 ms | < 10 ms |
@@ -2897,7 +2899,7 @@ Plan:
    front (`deviceCannotTake` goes); a device with no PCM format at all fails the output.
    Tests: `FormatSelectionTests`.
 2. **31.1, 31.2** A converted stream whose rate or channels differ from the track's gets a
-   `RateConverter` (AudioConverter, maximum quality) between the decoder and the ring buffer,
+   `OutputConverter` (AudioConverter, maximum quality) between the decoder and the ring buffer,
    on the control thread. The decoder hands it float at the file's rate. It runs on across
    tracks of the same rate, paused at each track's end, so a gapless join is resampled as one
    signal; the next track's first byte is where its first input frame lands. It's flushed
@@ -2923,6 +2925,13 @@ device. DSD on a device without DoP still fails with its reason; converting it n
 filter of its own (ADR 0071). Benches on Apple Silicon against main the same day: playback CPU
 2.05, 1.89 and 1.28% of a core (main 1.69 and 1.59), no gap between same-format tracks on
 either, rate switch 14.7 and 13.2 ms (main 8.0 ms, the null device's stop step varying).
+After review: a format that loses neither channels nor depth comes first, then depth before
+channels, so a 24-bit 5.1 track on the ADI-2 is downmixed at 32 bits rather than cut to 16; an
+ITU downmix replaces AudioConverter's dropping of the extra channels, stereo to mono is (L+R)/2,
+and the panel says "downmixed 6→2 channels". A narrower integer output is dithered (TPDF), which
+AudioConverter doesn't do by default. Replacing a queued next track keeps the current track's
+last frames, and no start is decoded ahead into a converted switch. New benches: converted
+playback 0.56% of a core, the converted join 0 samples off, at most 2.2e-5 from the sine.
 
 ### 32. Speed hardening
 

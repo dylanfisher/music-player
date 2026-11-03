@@ -83,7 +83,9 @@ final class HALDevice: PCMDevice {
             defaultSystemOutputUID: try defaultUID(kAudioHardwarePropertyDefaultSystemOutputDevice))
     }
 
-    func configure(sampleRateHz: Double, channels: UInt32, forDoP: Bool) throws -> DeviceFormat {
+    func configure(sampleRateHz: Double, channels: UInt32, forDoP: Bool, file: SignalFormat)
+        throws -> DeviceFormat
+    {
         let minimumBits = forDoP ? dopWordBits : 0
         let available: [AudioStreamRangedDescription] = try readArray(
             stream, address(kAudioStreamPropertyAvailablePhysicalFormats))
@@ -96,8 +98,7 @@ final class HALDevice: PCMDevice {
             (format, isConverted) = (unchanged, false)
         } else if !forDoP,
             let target = convertedFormat(
-                in: available.map(PhysicalFormat.init), sampleRateHz: sampleRateHz,
-                channels: channels, allowNonMixable: hogMode)
+                in: available.map(PhysicalFormat.init), for: file, allowNonMixable: hogMode)
         {
             var converted = available[target.index].mFormat
             converted.mSampleRate = target.sampleRateHz

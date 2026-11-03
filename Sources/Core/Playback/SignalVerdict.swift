@@ -109,6 +109,17 @@ private func sourcePrecision(_ track: TrackSignal) -> Precision {
     return Precision(bits: format.bitsPerChannel ?? 0, isFloat: format.isFloat)
 }
 
+extension PhysicalFormat {
+    /// Whether every sample of `track` has an exact value in this format, by the verdict's rule.
+    /// A lossy track, whose samples have no depth until decoded, counts as 24-bit.
+    public func holdsSamples(of track: SignalFormat) -> Bool {
+        SignalFormat(
+            formatID: formatID, sampleRateHz: track.sampleRateHz, bitsPerChannel: bitsPerChannel,
+            channels: channels, isFloat: isFloat
+        ).holds(Precision(bits: track.bitsPerChannel ?? 24, isFloat: track.isFloat))
+    }
+}
+
 extension SignalFormat {
     /// Whether every sample of `source` has an exact value in this format. Integers widen into
     /// wider integers, and into floats whose significand holds them: 24 bits in a 32-bit float,

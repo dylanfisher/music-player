@@ -53,7 +53,9 @@ func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
     switch path.sink {
     case .device(let sink):
         if let track = path.track {
-            lines.rows.append(.init(label: "Decoder", value: describe(track.decoded)))
+            let (from, to) = (track.file.channels, track.decoded.channels)
+            let mix = to < from ? ", \(downmixed(from, to))" : ""
+            lines.rows.append(.init(label: "Decoder", value: describe(track.decoded) + mix))
         }
         lines.rows += deviceRows(sink, isDoP: path.track?.decoded.formatID == dopFormatID)
     case .renderer(let sink): lines.rows += rendererRows(sink)
@@ -140,7 +142,10 @@ private func describe(_ change: SignalChange) -> String {
         "the device can't take the file's format, so it's converted to \(describe(format))"
     case .decoderResamples(let from, let to):
         "the decoder resamples \(kilohertz(from)) kHz to \(kilohertz(to)) kHz"
-    case .decoderRemixes(let from, let to): "the decoder mixes \(from) channels into \(to)"
+    case .decoderRemixes(let from, let to):
+        to < from
+            ? "the decoder \(downmixed(from, to))"
+            : "the decoder copies \(from) channels into \(to)"
     case .decoderLosesPrecision(let format):
         "the decoder rounds the samples to \(sampleType(format))"
     case .deviceResamples(let from, let to):
@@ -176,6 +181,11 @@ private func describe(_ format: SignalFormat) -> String {
             .uppercased()
     let sample = format.bitsPerChannel == nil ? "" : " \(sampleType(format)),"
     return "\(codec)\(sample) \(kilohertz(format.sampleRateHz)) kHz, \(format.channels) ch"
+}
+
+/// For example `downmixed 6→2 channels`.
+private func downmixed(_ from: UInt32, _ to: UInt32) -> String {
+    "downmixed \(from)→\(to) channels"
 }
 
 private func sampleType(_ format: SignalFormat) -> String {

@@ -125,6 +125,222 @@ func aFloatOnlyDevicePlaysAnAlbumConvertedWithoutASeam(rate: Int, bits: Int) asy
     }
 }
 
+// MARK: Channels
+
+/// The frames in the middle of a run, away from where a steady level starts and stops.
+private func middle<T>(_ frames: [T], dropping edge: Int = 2_000) -> ArraySlice<T> {
+    frames[edge..<(frames.count - edge)]
+}
+
+/// What the device takes, without its trailing silence.
+private func audioFrames(_ run: NullDevice.CapturedRun) -> [(Double, Double)] {
+    var played = frames(run)
+    while let last = played.last, last == (0, 0) { played.removeLast() }
+    return played
+}
+
+@Test func aMonoTrackPlaysOnBothChannelsOfAStereoDevice() async throws {
+    let track = try levelTrack(channels: 1, in: try defaultPlaybackFixturesDirectory())
+    let rig = try await Rig(formats: NullDevice.float48k)
+    await rig.engine.setQueue([track])
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    let played = audioFrames(rig.device.captured[0])
+    try #require(played.count > 20_000)
+    #expect(
+        middle(played).allSatisfy { abs($0.0 - levelOf(0)) < 1e-4 && abs($0.1 - levelOf(0)) < 1e-4 }
+    )
+}
+
+/// The stereo levels a `levelTrack` of `channels` downmixes to.
+private func downmixedLevels(_ channels: Int) -> (Double, Double) {
+    let mix = channelMix(from: UInt32(channels), to: 2)
+    func side(_ output: Int) -> Double {
+        (0..<channels).reduce(0) { $0 + Double(mix[output * channels + $1]) * levelOf($1) }
+    }
+    return (side(0), side(1))
+}
+
+@Test func aFivePointOneTrackIsDownmixedForAStereoDevice() async throws {
+    let track = try levelTrack(channels: 6, in: try defaultPlaybackFixturesDirectory())
+    let rig = try await Rig(formats: NullDevice.float48k)
+    let paths = Collected(rig.output.signalPaths)
+    await rig.engine.setQueue([track])
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    let (left, right) = downmixedLevels(6)
+    // The centre, the surrounds and none of the LFE: more than front left and right alone.
+    #expect(left > levelOf(0) && right > levelOf(1))
+    let played = audioFrames(rig.device.captured[0])
+    try #require(played.count > 20_000)
+    #expect(middle(played).allSatisfy { abs($0.0 - left) < 1e-4 && abs($0.1 - right) < 1e-4 })
+    var downmixed = false
+    while !downmixed {
+        let path = try await paths.next()
+        guard let signal = path.track else { continue }
+        if case .changed(let changes) = signalVerdict(path) {
+            downmixed = changes.contains(.decoderRemixes(fromChannels: 6, toChannels: 2))
+        }
+        #expect(signal.decoded.channels == 2)
+    }
+}
+
+@Test func aDeepMultichannelTrackKeepsItsDepthOnTheADI2() async throws {
+    // The ADI-2's 2 ch 32-bit integer format, beside an 8 ch 16-bit one.
+    let formats = DeviceFormats(
+        sampleRatesHz: [44_100...192_000],
+        formats: [
+            PhysicalFormat(
+                formatID: linearPCMFormatID, sampleRateHz: 44_100...192_000, bitsPerChannel: 32,
+                channels: 2, isFloat: false, isMixable: false),
+            PhysicalFormat(
+                formatID: linearPCMFormatID, sampleRateHz: 44_100...192_000, bitsPerChannel: 16,
+                channels: 8, isFloat: false, isMixable: false),
+        ])
+    let track = try levelTrack(channels: 6, in: try defaultPlaybackFixturesDirectory())
+    let rig = try await Rig(formats: formats)
+    await rig.engine.setQueue([track])
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    let run = rig.device.captured[0]
+    #expect(run.sampleRateHz == 44_100)
+    let (left, right) = downmixedLevels(6)
+    let scale = Double(1 << 31)
+    var played = stride(from: 0, to: run.samples.count - 1, by: 2).map {
+        (Double(run.samples[$0]) / scale, Double(run.samples[$0 + 1]) / scale)
+    }
+    while let last = played.last, last == (0, 0) { played.removeLast() }
+    #expect(middle(played).allSatisfy { abs($0.0 - left) < 1e-6 && abs($0.1 - right) < 1e-6 })
+}
+
+// MARK: Joins, seeks and the next track
+
+/// Frames of `album`'s first track at the device's rate: where the second starts.
+private func joinFrame(_ album: SineAlbum, from frame: Int = 0) -> Int {
+    Int(
+        (Double(album.trackFrames[0] - frame) * deviceRateHz / Double(album.sampleRateHz))
+            .rounded(.up))
+}
+
+@Test func theNextTrackStartsOnItsFirstConvertedFrame() async throws {
+    let album = try sineAlbum(44_100, 16)
+    let rig = try await Rig(speed: 1, formats: NullDevice.float48k)
+    await rig.engine.setQueue(album.tracks)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 1))
+    await rig.engine.pause()
+    try await Task.sleep(nanoseconds: 50_000_000)
+    let pulled = frames(rig.device.captured[0]).count
+    let position = try #require(await rig.engine.position())
+    // Announced once the device had taken the join, and counted from it.
+    #expect(pulled >= joinFrame(album))
+    #expect(abs(position - Double(pulled - joinFrame(album)) / deviceRateHz) < 1e-6)
+}
+
+@Test func aSeekNearTheEndCarriesOnAcrossTheJoin() async throws {
+    let album = try sineAlbum(44_100, 16)
+    let rig = try await Rig(speed: 1, formats: NullDevice.float48k)
+    await rig.engine.setQueue(album.tracks)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    await rig.engine.pause()
+    try await Task.sleep(nanoseconds: 50_000_000)
+    let before = frames(rig.device.captured[0]).count
+    // The second track is already queued in the converter, well inside the last 4 s.
+    await rig.engine.seek(toSeconds: 0.8)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 1))
+    await rig.engine.pause()
+    try await Task.sleep(nanoseconds: 50_000_000)
+    let played = frames(rig.device.captured[0])
+    let join = before + joinFrame(album, from: 35_280)
+    let position = try #require(await rig.engine.position())
+    #expect(abs(position - Double(played.count - join) / deviceRateHz) < 1e-6)
+    #expect(
+        largestError(
+            played, album, from: before, atSeconds: 0.8,
+            (before + edgeFrames)..<(played.count - 10)) < tolerance)
+}
+
+/// The output on its own, with each item's id its index in `urls`.
+private func directOutput(_ device: NullDevice) throws -> (DeviceOutput, Collected<OutputEvent>) {
+    let output = try DeviceOutput(
+        DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil))
+    return (output, Collected(output.events))
+}
+
+private func waitFor(
+    _ events: Collected<OutputEvent>, _ matches: (OutputEvent) -> Bool
+) async throws {
+    while !matches(try await events.next()) {}
+}
+
+@Test func replacingAConvertedNextTrackKeepsAllOfTheCurrentOne() async throws {
+    // The ring buffer holds a power of two of bytes: 2^22 for 8 s of 48 kHz stereo float. The
+    // first track ends a few frames past that, inside what the converter holds back, so when
+    // it's full the current track's last frames are still in the decode chunk.
+    let capacity = 1 << 22 / 8
+    let firstFrames = Int((Double(capacity + 26) * 44_100 / deviceRateHz).rounded(.down))
+    let album = try sineAlbum(
+        sampleRateHz: 44_100, bitsPerSample: 16, firstTrackFrames: firstFrames,
+        in: try defaultPlaybackFixturesDirectory())
+    let join = joinFrame(album)
+    try #require(join > capacity && join - capacity < 50)
+
+    let device = NullDevice(speed: 8, keepsSamples: true)
+    device.report(NullDevice.float48k)
+    let (output, events) = try directOutput(device)
+    defer { output.close() }
+    let first = OutputItem(id: 0, url: album.tracks[0])
+    output.load(first, startSeconds: 0, playing: false)
+    output.setNext(OutputItem(id: 1, url: album.tracks[1]))
+    // Stopped, it decodes until the ring buffer is full, and the second track is fed.
+    try await Task.sleep(nanoseconds: 3_000_000_000)
+    output.setNext(OutputItem(id: 2, url: album.tracks[0]))
+    output.play()
+    try await waitFor(events) { if case .finished(2) = $0 { true } else { false } }
+
+    let played = frames(device.captured[0])
+    try #require(played.count > 2 * join)
+    #expect(largestError(played, album, from: 0, atSeconds: 0, edgeFrames..<join) < tolerance)
+    #expect(
+        largestError(
+            played, album, from: join, atSeconds: 0, (join + edgeFrames)..<(2 * join - edgeFrames)
+        ) < tolerance)
+    #expect(!events.returned.contains { if case .trackStarted(1, _) = $0 { true } else { false } })
+}
+
+@Test func aNextTrackNamedInTheLastHalfSecondFollowsWithoutAGap() async throws {
+    let album = try sineAlbum(44_100, 16)
+    let device = NullDevice(speed: 1, keepsSamples: true)
+    device.report(NullDevice.float48k)
+    let (output, events) = try directOutput(device)
+    defer { output.close() }
+    output.load(OutputItem(id: 0, url: album.tracks[0]), startSeconds: 0, playing: true)
+    let deadline = Date().addingTimeInterval(10)
+    while (output.position()?.seconds ?? 0) < 0.65 {
+        try #require(Date() < deadline, "the first track never got past 0.65 s")
+        try await Task.sleep(nanoseconds: 5_000_000)
+    }
+    output.setNext(OutputItem(id: 1, url: album.tracks[1]))
+    try await waitFor(events) { if case .finished(1) = $0 { true } else { false } }
+
+    let played = frames(device.captured[0])
+    let join = joinFrame(album)
+    #expect(
+        largestError(played, album, from: 0, atSeconds: 0, edgeFrames..<(join - edgeFrames))
+            < tolerance)
+    // The converter was flushed, so the second track starts a new one: a seam, but no gap.
+    let second = Double(album.trackFrames[0]) / 44_100
+    let length = Int((Double(album.trackFrames[1]) * deviceRateHz / 44_100).rounded(.up))
+    let best = (-1...1).map { offset in
+        largestError(
+            played, album, from: join + offset, atSeconds: second,
+            (join + edgeFrames)..<(join + length - edgeFrames))
+    }.min()!
+    #expect(best < tolerance)
+}
+
 private func deviceState(_ path: SignalPath) -> DeviceState {
     switch path.sink {
     case .device(let sink): sink.state
