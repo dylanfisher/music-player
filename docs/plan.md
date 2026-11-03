@@ -2594,6 +2594,30 @@ The owner's feedback from 2026-11-02, given during phase 12's run.
 - [ ] **29.5 Palette.** ⌘K keeps its width but gets back its old height and item count, and uses
       Searcher's selection highlight instead of bright blue.
 
+Plan:
+
+1. **29.1** `ArtSize` becomes `fit` and `fullWidth` (default fit; a config with `thumbnail`
+   no longer matches and is discarded with a problem, pre-release). `ArtFrame` (pure, tested)
+   places an album's art in its run of rows: fit scales it into the column's width and the
+   run's height, full width fills the column and is cut off at the run's last row. Art cells
+   draw edge to edge across the column's spacing. `RowArt` loads at the column's pixel width.
+   Hovering an art cell shows `ArtHover`, the whole art at full width over the rows, laid out by
+   frame (ADR 0058); clicking it opens `ArtViewer`, the art decoded off the main thread at the
+   screen's size, centered, closed by a click or Esc. Tests: `ArtFrameTests`, the controller's
+   run and hover geometry. ADR 0065.
+2. **29.2** The now-playing styles become two toolbar items, Now Playing and Now Playing
+   (Centered), each its own view; `appearance.nowPlaying` is removed. The signal path badge's
+   label goes in the box's content view so it isn't clipped. ADR 0055 amended.
+3. **29.3** The status bar uses the table header's material and the track table header's
+   height, with the lists' font (`TextCell.font`), centered vertically.
+4. **29.4** A sort or column change centers the selected row; ⌘L with nothing playing reveals
+   the selection (`LibraryBrowser.showCurrentTrack`); the playing row's tint is light gray, in
+   `MarkedRowView`; Scroll Up and Scroll Down commands on ⌃⌥↑ and ⌃⌥↓ scroll the track table a
+   row without moving the selection.
+5. **29.5** The palette's rows go back to 32 points and eleven rows (360 points of rows, as in
+   b3d9988), at 680 wide; the selection uses the system's inset row highlight, emphasized, as
+   Searcher's does. ADR 0047 amended.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
