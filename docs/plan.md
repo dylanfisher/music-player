@@ -3045,22 +3045,22 @@ key includes its length. Rerun: a refresh's frame 8.7 ms (median), the page down
 #### 32c. The database
 
 Sorting is fine: 73 ms on the old Mac in 14e. Leave it alone unless a new bench says otherwise.
-- [ ] **32c.1** **Suspect:** `trackTotals` (LibraryQueries.swift:23) reads 43k rows into a dictionary again
+- [x] **32c.1** **Suspect:** `trackTotals` (LibraryQueries.swift:23) reads 43k rows into a dictionary again
       whenever `changeStamp` moves. `recordPlay` and `setRating` move it too, so every track change
       costs a full rebuild. Key the cache to changes in `tracks` and `files` only, or use a SQL
       aggregate for the whole-library case. Bench: totals right after a recorded play.
-- [ ] **32c.2** **Suspect:** the connection setup (Database.swift:25-44) sets only WAL, synchronous, foreign
+- [x] **32c.2** **Suspect:** the connection setup (Database.swift:25-44) sets only WAL, synchronous, foreign
       keys and query_only. `cache_size`, `temp_store`, `mmap_size` and `journal_size_limit` are
       left at their defaults, and nothing ever runs `ANALYZE` or `PRAGMA optimize`. Measure each
       setting against the sort, pane, smart-playlist, history and scan benches. Keep only the ones
       that win, and check `mmap_size` on macOS 12. Run `PRAGMA optimize` after a scan or on close.
-- [ ] **32c.3** **Suspect:** one `LibraryReader` actor (LibraryReader.swift:8) runs every query in turn: the
+- [x] **32c.3** **Suspect:** one `LibraryReader` actor (LibraryReader.swift:8) runs every query in turn: the
       sorted IDs, pane lists, totals, `fileIssues`, the palette's `trackNames`, and play, rating
       and playlist writes. A slow query delays the next keystroke's search and the play write. The
       health report already has its own connection. Bench: two keystrokes 50 ms apart, then the
       p95 of the second, with and without a scan running. If the bench shows contention, split the
       work by kind: visible-result queries, background queries and writes.
-- [ ] **32c.4** **Check:** the History sort uses a temp B-tree even though `plays_last_played` exists, which
+- [x] **32c.4** **Check:** the History sort uses a temp B-tree even though `plays_last_played` exists, which
       contradicts the comment at about LibraryQueries.swift:118. Confirm it on the fixture library
       and fix either the query or the comment.
 
@@ -3084,6 +3084,35 @@ Plan:
 6. **32c.4:** EXPLAIN QUERY PLAN on the History query over the 1M-play bench index; time both
    orders, keep the faster and make the comment say what the plan does.
 7. Rerun every bench touched against main, the same hour.
+
+Result: shipped as planned; `./scripts/check` passes. Measured on the build Mac on 2026-11-03,
+before (the bench commit, b1cfcb0) and after, and against main (bf9624f) the same hour. 32c.1:
+fixed. The totals of every track after a recorded play took 11.8 ms (p95) before, against
+0.87 ms with no write between; a play, skip, rating or opinion now keeps the sizes read, and
+they take 0.9 ms. A commit by another connection still has them read again. 32c.2: `mmap_size`
+(256 MB) and `temp_store = MEMORY` kept, each run alone and then together against three
+baseline runs (ADR 0075): the health report 0.24 s to 0.18 s, a timeline page 2.2 ms to
+1.9 ms, a pane query 0.56 ms to 0.47 ms, the smart playlist 33.0 ms to 28.3 ms, recording a
+play 0.24 ms to 0.08 ms, the 1M-event sync merge 13.5 s to 10.8 s. A 16 MB `cache_size` and
+`ANALYZE` moved nothing past the spread and are dropped, and so is `PRAGMA optimize`, which
+would run `ANALYZE`. `journal_size_limit`: no cost, the system SQLite already caps the log at
+32 KB. 32c.3: dropped. The second keystroke took 10 to 11 ms (p95) idle and 23 to 24 ms during
+the scan. During the scan it is its own work: its rows (about 11 ms for a few thousand matches)
+and its totals, read again (about 12 ms) because every scan batch changes tracks. A lookup of
+only the listed IDs didn't help, since a keystroke's list holds thousands. The slowest
+keystrokes (70 to 100 ms, 2 of 40) waited behind the browser's 2 s refresh, which reloads the
+whole list; that is a visible-result query too, so splitting the reader by kind moves neither.
+A play write, which a split would move off, takes 0.3 ms. 32c.4:
+confirmed; History sorts in a temp B-tree, starting from `recorded_paths`. Forcing
+`plays_last_played`'s order took the History benchmark from 20 ms to 30.5 ms, so the query
+stays and the comment that said otherwise is gone. Against main, the same hour, everything else
+within the spread: History 19.4 ms and 21.2 ms (19 to 21 ms over five runs on both), the scan's
+added memory 24.7 to 26.7 MB on main and 25.3 to 25.4 MB here over three alternating runs, launch
+0.63 s and 0.61 s, window memory 79.9 MB and 77.9 MB, sort 44.3 ms and 42.5 ms, soak 0
+underruns on both. The palette's opening rows read 4.21 ms on main and 4.09 ms here, over their
+4 ms budget on both. No `./scripts/bundle release`: no C target, Package.swift or `#available`
+changed. The old-Mac figures are estimates until the 32f checkpoint, which also checks the
+macOS 12 SQLite's mapping limit.
 
 #### 32d. Parallelism and priority
 
