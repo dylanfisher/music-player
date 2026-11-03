@@ -555,7 +555,8 @@ private func artTable(
     #expect(controller.artHover.isHidden)
 }
 
-@MainActor @Test func aReloadClosesTheArtViewer() async throws {
+/// A scan refreshes the list every 2 s; the viewer stays open while its track is listed.
+@MainActor @Test func aReloadClosesTheArtViewerOnlyOnceItsTrackLeavesTheList() async throws {
     let (controller, model, rows) = try await artTable(artWidth: 3 * RowListController.rowHeight)
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
@@ -577,6 +578,11 @@ private func artTable(
     let viewer = try #require(controller.artViewer)
     #expect(viewer.window.isVisible)
     await model.setSort(.title, ascending: true)
+    await model.refresh()
+    #expect(viewer.window.isVisible)
+    #expect(controller.artViewer === viewer)
+    await model.setSearch("no track is called this")
+    #expect(model.trackIDs.isEmpty)
     #expect(!viewer.window.isVisible)
     #expect(controller.artViewer == nil)
 }
@@ -688,6 +694,22 @@ private func hoveredRescanTable() async throws -> (
     #expect(cell?.art == nil)
     // The hovered album's rows changed, so its art may no longer be what the hover shows.
     #expect(controller.artHover.isHidden)
+}
+
+@MainActor @Test func aRescanClosesTheArtViewerOnlyWhenItsTracksArtChanged() async throws {
+    let (controller, model, rows, album, index, window) = try await hoveredRescanTable()
+    defer { window.close() }
+    controller.openHoveredArt()
+    let viewer = try #require(controller.artViewer)
+    try index.database.prepare("UPDATE tracks SET title = ? WHERE file_id = ?").run(
+        "Retitled", rows[album.lowerBound].id)
+    await model.refresh()
+    #expect(viewer.window.isVisible)
+    try index.database.prepare("UPDATE tracks SET art_offset = NULL WHERE file_id = ?").run(
+        rows[album.lowerBound].id)
+    await model.refresh()
+    #expect(!viewer.window.isVisible)
+    #expect(controller.artViewer == nil)
 }
 
 @MainActor @Test func anEmptyHistorySaysNothingPlayedYet() async throws {

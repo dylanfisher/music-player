@@ -214,8 +214,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             change.reason == .libraryChanged ? scrollAnchor(in: change.previousIDs) : nil
         cache.setIDs(model.trackIDs)
         hideArtHover()
-        // Its album may no longer be among the rows.
-        artViewer?.close()
+        closeArtViewerIfGone()
         showSort()
         typeSelect?.reset()
         table.reloadData()
@@ -268,9 +267,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         }
         // The art shown whole may be another album's now.
         if !rows.intersection(IndexSet(integersIn: hoveredRows)).isEmpty { hideArtHover() }
-        if let viewerRows, !rows.intersection(IndexSet(integersIn: viewerRows)).isEmpty {
-            artViewer?.close()
-        }
+        closeArtViewerIfGone()
     }
 
     private func showSort() {
@@ -548,9 +545,10 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     /// The album's first row whose art `artHover` shows.
     private var hoveredRow: Int?
-    /// The rows under `artHover`'s album, and under the album `artViewer` shows.
+    /// The rows under `artHover`'s album.
     private var hoveredRows: Range<Int> { rowRange(under: hoverArea) }
-    private var viewerRows: Range<Int>?
+    /// The track whose art `artViewer` shows, as it was when the viewer opened.
+    private var viewerTrack: TrackRow?
     /// Where the pointer keeps `artHover` showing: its frame over its own album's rows, so the
     /// next album's rows under it hover that album.
     private(set) var hoverArea = NSRect.zero
@@ -591,7 +589,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         guard let row = hoveredRow, let image = artHover.image, let track = trackRow(row),
             let embedded = track.art, let screen = table.window?.screen ?? NSScreen.main
         else { return }
-        viewerRows = hoveredRows
+        viewerTrack = track
         hideArtHover()
         let viewer = ArtViewer(image: image, screen: screen, owner: table.window)
         viewer.closed = { [weak self, weak viewer] in
@@ -600,6 +598,14 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         artViewer = viewer
         viewer.show()
         viewer.load(embedded, path: track.path, failed: actions.failed)
+    }
+
+    /// A refresh, as a scan's every 2 s, keeps the viewer open while its track is still listed
+    /// with the same art and album; otherwise the art shown may no longer be the list's.
+    private func closeArtViewerIfGone() {
+        guard artViewer != nil, let shown = viewerTrack else { return }
+        let now = model.rows(holding: [shown.id]).first.flatMap(trackRow)
+        if now?.art != shown.art || now?.albumID != shown.albumID { artViewer?.close() }
     }
 
     // MARK: Rating by click
