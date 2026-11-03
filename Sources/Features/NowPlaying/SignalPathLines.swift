@@ -1,5 +1,6 @@
 import DisplayText
 import Foundation
+import Metadata
 import Playback
 
 /// What the signal path panel shows: the verdict as a badge with the reasons after it, then one
@@ -53,14 +54,17 @@ func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
         if let track = path.track {
             lines.rows.append(.init(label: "Decoder", value: describe(track.decoded)))
         }
-        lines.rows += deviceRows(sink)
+        lines.rows += deviceRows(sink, isDoP: path.track?.decoded.formatID == dopFormatID)
     case .renderer(let sink): lines.rows += rendererRows(sink)
     }
     return lines
 }
 
-private func deviceRows(_ sink: DeviceSink) -> [SignalPathLines.Row] {
-    let gain = "digital \(sink.gain == 1 ? "unity" : decibels(sink.gain))"
+/// DoP is never scaled, so the digital volume reads as bypassed while it plays (ADR 0064).
+private func deviceRows(_ sink: DeviceSink, isDoP: Bool) -> [SignalPathLines.Row] {
+    let gain =
+        isDoP
+        ? "digital bypassed for DoP" : "digital \(sink.gain == 1 ? "unity" : decibels(sink.gain))"
     switch sink.state {
     case .notConnected:
         return [.init(label: "Device", value: "\(sink.name), not connected")]
@@ -153,8 +157,15 @@ private func describe(_ change: SignalChange) -> String {
     }
 }
 
-/// For example `FLAC 24-bit int, 96 kHz, 2 ch`, or `MP3 44.1 kHz, 2 ch` for a lossy codec.
+/// For example `FLAC 24-bit int, 96 kHz, 2 ch`, or `MP3 44.1 kHz, 2 ch` for a lossy codec, or
+/// `DSD128, 2 ch` and `DoP at 352.8 kHz, 2 ch`.
 private func describe(_ format: SignalFormat) -> String {
+    switch format.formatID {
+    case dsdFormatID: return "\(sampleRateText(Int(format.sampleRateHz))), \(format.channels) ch"
+    case dopFormatID:
+        return "\(dopText(carrierRateHz: format.sampleRateHz)), \(format.channels) ch"
+    default: break
+    }
     let codec =
         format.formatID == linearPCMFormatID
         ? "PCM"

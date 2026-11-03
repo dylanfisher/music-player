@@ -157,3 +157,33 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
     // The verdict and six stages one per line would take seven lines before any spacing.
     #expect(panel.view.fittingSize.height < line.fittingSize.height * 6)
 }
+
+@Test func dsdShowsItsRateAndDoPWithTheDigitalVolumeBypassed() {
+    let dsd = SignalFormat(
+        formatID: dsdFormatID, sampleRateHz: 5_644_800, bitsPerChannel: 1, channels: 2,
+        isFloat: false)
+    let dop = SignalFormat(
+        formatID: dopFormatID, sampleRateHz: 352_800, bitsPerChannel: 24, channels: 2,
+        isFloat: false)
+    let carrier = SignalFormat(
+        formatID: "lpcm", sampleRateHz: 352_800, bitsPerChannel: 32, channels: 2, isFloat: false)
+    let state = DeviceState.connected(
+        DeviceSignal(
+            nominalSampleRateHz: 352_800, physical: carrier, isMixable: false,
+            hogMode: .thisProcess, volumes: [], formats: formats))
+    let lines = signalPathLines(
+        SignalPath(
+            track: TrackSignal(file: dsd, decoded: dop),
+            sink: .device(DeviceSink(name: "ADI-2 DAC", uid: "ADI-2", state: state, gain: 1))))
+    #expect(lines.badge == "Bit-perfect")
+    #expect(lines.rows[0] == .init(label: "File", value: "DSD128, 2 ch"))
+    #expect(lines.rows[1] == .init(label: "Decoder", value: "DoP at 352.8 kHz, 2 ch"))
+    #expect(
+        lines.rows[2]
+            == .init(
+                label: "Device",
+                value: "ADI-2 DAC at 352.8 kHz: PCM 32-bit int, 352.8 kHz, 2 ch, non-mixable"))
+    #expect(
+        lines.rows.last
+            == .init(label: "Volume", value: "no device controls; digital bypassed for DoP"))
+}
