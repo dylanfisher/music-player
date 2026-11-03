@@ -15,8 +15,9 @@ func defaultConfigFileURL() -> URL {
 
 /// The settings in effect, read from and written to the config file, which is the settings:
 /// every preference and the user's shortcuts. Changes in the app are patches to the file's text;
-/// saves in an editor are read back as they happen. A file with any problem applies nothing,
-/// and changes made meanwhile wait and are written on top of the fix.
+/// saves in an editor are read back as they happen. A file whose only problems are unknown keys
+/// applies the rest and takes patches. A file with any other problem applies nothing, and
+/// changes made meanwhile wait and are written on top of the fix (ADR 0082).
 @MainActor
 public final class ConfigStore<Schema: SettingsSchema> {
     /// How long a file found empty or gone waits for a second read, since an editor's save in
@@ -34,6 +35,8 @@ public final class ConfigStore<Schema: SettingsSchema> {
     public private(set) var shortcuts: ShortcutOverrides = [:]
     /// What's wrong with the file as last read; empty when it's good or missing.
     public private(set) var problems: [ConfigProblem] = []
+    /// The keys whose value the file or `set` gave, not a default.
+    private var given: Set<String> = []
     /// Why the last write failed, until one succeeds.
     public private(set) var writeFailure: String?
     /// Called with the keys whose values changed, `ConfigFile.shortcutsKey` for the shortcuts.
@@ -61,7 +64,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
     private var watch: DirectoryWatch?
 
     /// Reads `fileURL`. With `creating`, a missing file is written with every default. A file
-    /// with problems leaves the defaults in effect and lists them in `problems`.
+    /// with problems that block it leaves the defaults in effect; `problems` lists them.
     public init(_ schema: Schema, fileURL: URL, check: @escaping ShortcutCheck, creating: Bool) {
         self.schema = schema
         self.fileURL = fileURL
@@ -91,6 +94,17 @@ public final class ConfigStore<Schema: SettingsSchema> {
     public subscript<Value>(_ setting: KeyPath<Schema, Setting<Value>>) -> Value {
         values[schema[keyPath: setting].key] as! Value
     }
+
+    /// The setting's value when the file or a change in the app gave it; nil while it's the
+    /// default because the file doesn't apply, is gone, or doesn't name it. For a value acted
+    /// on in a way a default must never be, such as removing the files outside the watched
+    /// folders.
+    public func fileValue<Value>(_ setting: KeyPath<Schema, Setting<Value>>) -> Value? {
+        given.contains(schema[keyPath: setting].key) ? self[setting] : nil
+    }
+
+    /// Whether the file applies nothing until it's fixed, as opposed to skipping unknown keys.
+    var blocked: Bool { problems.contains(where: \.blocks) }
 
     /// A setting's value as JSON holds it, such as `true` or `"dark"`, for code that knows the
     /// setting only by its key.
@@ -177,6 +191,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
     private func take(_ patch: Patch) -> Set<String> {
         switch patch {
         case .setting(let key, let value):
+            given.insert(key)
             guard values[key].map({ !value.isEqual(to: $0) }) ?? true else { return [] }
             values[key] = value
             return [key]
@@ -241,16 +256,27 @@ public final class ConfigStore<Schema: SettingsSchema> {
             if !pending.isEmpty { writeNewFile() }
             return
         }
+        if apply(bytes) { flush() }
+    }
+
+    /// Applies `bytes` unless a problem blocks them; whether it did.
+    private func apply(_ bytes: [UInt8]) -> Bool {
         do {
             let contents = try ConfigFile.parse(
                 ConfigText(bytes: bytes), settings: descriptors, check: check,
                 conflicts: schema.conflicts)
+            if let first = contents.skipped.first {
+                logger.notice(
+                    "\(self.fileURL.path): skipped \(contents.skipped.count) unknown keys, first \(first)"
+                )
+            }
             replace(with: contents)
-            setProblems([])
-            flush()
+            setProblems(contents.skipped)
+            return true
         } catch {
             for problem in error.problems { logger.error("\(self.fileURL.path): \(problem)") }
             setProblems(error.problems)
+            return false
         }
     }
 
@@ -268,14 +294,19 @@ public final class ConfigStore<Schema: SettingsSchema> {
     private func replace(with contents: ConfigContents) {
         let oldValues = values
         let oldShortcuts = shortcuts
+        let oldGiven = given
+        given = Set(contents.values.keys)
         values = Dictionary(
             uniqueKeysWithValues: descriptors.map {
                 ($0.key, contents.values[$0.key] ?? $0.defaultValue)
             })
         shortcuts = contents.shortcuts.filter { !$0.value.isEmpty }
         for patch in pending { _ = take(patch) }
+        // A value the file now gives, or no longer does, counts as changed even when it's the
+        // same, so what `fileValue` gates runs again.
         var keys = Set(
-            descriptors.map(\.key).filter { !values[$0]!.isEqual(to: oldValues[$0]!) })
+            descriptors.map(\.key).filter { !values[$0]!.isEqual(to: oldValues[$0]!) }
+        ).union(given.symmetricDifference(oldGiven))
         if shortcuts != oldShortcuts { keys.insert(ConfigFile.shortcutsKey) }
         if !keys.isEmpty { changed(keys) }
     }
@@ -289,9 +320,10 @@ public final class ConfigStore<Schema: SettingsSchema> {
     // MARK: Writing
 
     /// Writes the waiting changes on top of the file as it is now. Nothing is written over a
-    /// file with problems, or one whose empty or missing read isn't confirmed yet.
+    /// file a problem blocks, or one whose empty or missing read isn't confirmed yet. Over one
+    /// with unknown keys, the patches change only their own keys' text.
     private func flush() {
-        guard !pending.isEmpty, problems.isEmpty, !confirming, !retryScheduled else { return }
+        guard !pending.isEmpty, !blocked, !confirming, !retryScheduled else { return }
         do {
             let current = try currentBytes()
             if current != lastBytes {
@@ -347,7 +379,8 @@ public final class ConfigStore<Schema: SettingsSchema> {
         }
     }
 
-    /// Writes through a symbolic link to the file it leads to, so the link stays a link.
+    /// Writes through a symbolic link to the file it leads to, so the link stays a link. A file
+    /// with problems is read again, since their lines can move.
     private func write(_ bytes: [UInt8]) throws {
         try Data(bytes).write(to: fileURL.resolvingSymlinksInPath(), options: .atomic)
         lastBytes = bytes
@@ -357,6 +390,24 @@ public final class ConfigStore<Schema: SettingsSchema> {
             writeFailure = nil
             problemsChanged()
         }
+        if !problems.isEmpty { _ = apply(bytes) }
+    }
+
+    /// Remove Obsolete Setting: takes each unknown key out of the file, with its line and the
+    /// comment lines directly above it, and leaves the rest of the text as it is (ADR 0082).
+    /// Changes waiting behind a problem that blocks the file keep waiting.
+    public func removeObsoleteKeys() throws {
+        if try currentBytes() != lastBytes { read(confirmed: true) }
+        let paths = problems.compactMap(\.obsoleteKey)
+        guard !paths.isEmpty, let bytes = lastBytes else { return }
+        var text = ConfigText(bytes: bytes)
+        for path in paths { text = try ConfigFile.removing(path, from: text) }
+        let waiting = pending
+        try write(text.bytes)
+        logger.notice(
+            "removed \(paths.map { $0.joined(separator: ".") }) from \(self.fileURL.path)")
+        pending = waiting
+        flush()
     }
 
     /// Keeps the changes waiting and runs `retry` later, waiting longer each time.

@@ -342,7 +342,9 @@ let package = Package(
         ),
         .testTarget(
             name: "MusicPlayerTests",
-            dependencies: ["Library", "Metadata", "MusicPlayer", "Playback"],
+            dependencies: [
+                "Fixtures", "Library", "Metadata", "MusicPlayer", "Playback", "Settings",
+            ],
             swiftSettings: strictSwift
         ),
         .testTarget(

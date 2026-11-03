@@ -177,6 +177,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings.problemsChanged = { [weak self] in self?.showConfigProblems() }
             saver?.failureChanged = { [weak self] in self?.showConfigProblems() }
             banner.openConfigFile = { [weak dispatcher] in dispatcher?.run(.openConfigFile) }
+            banner.removeObsoleteSettings = { [weak self, weak settings] in
+                do {
+                    try settings?.removeObsoleteKeys()
+                } catch {
+                    self?.fail("Couldn't remove the obsolete settings", error)
+                }
+            }
             showConfigProblems()
             settings.startWatching()
         } catch {
@@ -312,7 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         thumbnails.trimInBackground()
         startScripting()
         applyReceiverSetting()
-        startWatching(settings[\.watchedFolders], settings)
+        startWatching(settings)
         shareChanges = ShareChangeObserver { [weak self] in self?.watcher?.sharesMayHaveMoved() }
         if let snapshotURL {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.snapshotDelaySeconds) {
@@ -667,21 +674,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Watched folders
 
-    private func startWatching(_ folders: [WatchedFolder], _ settings: ConfigStore<AppSettings>) {
+    private func startWatching(_ settings: ConfigStore<AppSettings>) {
         watcher?.stop()
+        watcher = nil
         guard let browser else { return }
-        let watcher = LibraryWatcher(
-            databaseURL: libraryFileURL(in: paths.dataDirectory),
-            networkReaders: settings[\.networkScanReaders],
-            events: reportingLaunch
-                ? reportingLaunchEnd(browser.watcherEvents) : browser.watcherEvents)
-        let pause = settings[\.pausePollingDuringPlayback]
-        watcher.start(
-            folders: folders, syncFolder: settings[\.syncFolder],
-            rescanNetworkFoldersAtLaunch: settings[\.rescanNetworkFoldersAtLaunch],
-            pausePollingDuringPlayback: pause)
+        guard
+            let watcher = startedWatcher(
+                settings, databaseURL: libraryFileURL(in: paths.dataDirectory),
+                events: reportingLaunch
+                    ? reportingLaunchEnd(browser.watcherEvents) : browser.watcherEvents)
+        else {
+            // No folder has a scan to wait for.
+            if reportingLaunch { FileHandle.standardOutput.write(launchedLine) }
+            return
+        }
         if activity != .stopped {
-            watcher.playbackChanged(activity, pausePollingDuringPlayback: pause)
+            watcher.playbackChanged(
+                activity, pausePollingDuringPlayback: settings[\.pausePollingDuringPlayback])
         }
         self.watcher = watcher
     }
@@ -694,7 +703,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         { event in
             events(event)
             if case .launchScansEnded = event {
-                FileHandle.standardOutput.write(Data("launched\n".utf8))
+                FileHandle.standardOutput.write(launchedLine)
             }
         }
     }
@@ -835,9 +844,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         watcher.rescan(folders: positions.filter(folders.indices.contains).map { folders[$0] })
     }
 
-    func changedFolders(_ folders: [WatchedFolder], _ settings: ConfigStore<AppSettings>) {
-        startWatching(folders, settings)
-    }
+    func changedFolders(_ settings: ConfigStore<AppSettings>) { startWatching(settings) }
 
     // MARK: Errors
 
@@ -850,6 +857,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if window == nil { NSApp.terminate(nil) }
     }
 }
+
+/// What `--report-launch` prints once the launch's scans have ended.
+private let launchedLine = Data("launched\n".utf8)
 
 /// A play request whose start isn't one of its tracks.
 enum PlayRequestError: Error, CustomStringConvertible {

@@ -5,16 +5,23 @@ import KeyChord
 public struct ConfigProblem: Error, Equatable, CustomStringConvertible {
     public var line: Int?
     public var message: String
+    /// The path of keys to a key the app doesn't know, such as an obsolete setting, which is
+    /// skipped while the rest of the file applies. Nil for a problem that applies nothing.
+    public var obsoleteKey: [String]?
 
-    public init(line: Int?, message: String) {
+    public init(line: Int?, message: String, obsoleteKey: [String]? = nil) {
         self.line = line
         self.message = message
+        self.obsoleteKey = obsoleteKey
     }
+
+    /// Whether the file applies nothing while it has this problem.
+    public var blocks: Bool { obsoleteKey == nil }
 
     public var description: String { (line.map { "line \($0): " } ?? "") + message }
 }
 
-/// Everything wrong with a config file, which is applied only when nothing is.
+/// Everything wrong with a config file, for a command-line mode, which reads only a good one.
 struct ConfigError: Error, Equatable, CustomStringConvertible {
     var path: String
     var problems: [ConfigProblem]
@@ -31,10 +38,12 @@ public typealias ShortcutCheck =
         _ id: String, _ position: ShortcutPosition, _ slot: ShortcutSlot
     ) -> String?
 
-/// What a good config file sets: the settings it names, and the shortcut overrides.
+/// What a config file that applies sets: the settings it names, the shortcut overrides, and
+/// the unknown keys it skipped.
 struct ConfigContents: Sendable {
     var values: [String: any SettingValue]
     var shortcuts: ShortcutOverrides
+    var skipped: [ConfigProblem] = []
 }
 
 /// The config file's format: what it holds, the text of a new one, and the text patches the app
@@ -47,7 +56,8 @@ public enum ConfigFile {
     ]
 
     /// Reads `text`, collecting every problem before throwing. An unknown key, a bad value, a
-    /// key set twice and a shortcut `check` refuses are each a problem on their line.
+    /// key set twice and a shortcut `check` refuses are each a problem on their line. Unknown
+    /// keys alone don't throw: they're skipped, and listed in `skipped` (ADR 0082).
     /// `conflicts` checks the values in effect against each other, as the schema's does.
     static func parse(
         _ text: ConfigText, settings: [SettingDescriptor], check: ShortcutCheck,
@@ -107,7 +117,9 @@ public enum ConfigFile {
             }
             guard let descriptor = byKey[key] else {
                 problems.append(
-                    ConfigProblem(line: line(member), message: "unknown setting \"\(key)\""))
+                    ConfigProblem(
+                        line: line(member), message: "unknown setting \"\(key)\"",
+                        obsoleteKey: [key]))
                 continue
             }
             switch descriptor.decode(json) {
@@ -116,17 +128,16 @@ public enum ConfigFile {
                 problems.append(ConfigProblem(line: line(member), message: "\"\(key)\": \(reason)"))
             }
         }
-        if problems.isEmpty {
+        if !problems.contains(where: \.blocks) {
             let effective = Dictionary(
                 uniqueKeysWithValues: settings.map { ($0.key, values[$0.key] ?? $0.defaultValue) })
-            problems = conflicts(effective).map {
+            problems += conflicts(effective).map {
                 ConfigProblem(line: line(members[$0.key]), message: "\"\($0.key)\": \($0.reason)")
             }
         }
-        guard problems.isEmpty else {
-            throw ConfigErrorList(problems.sorted { ($0.line ?? 0) < ($1.line ?? 0) })
-        }
-        return ConfigContents(values: values, shortcuts: shortcuts)
+        problems.sort { ($0.line ?? 0) < ($1.line ?? 0) }
+        guard !problems.contains(where: \.blocks) else { throw ConfigErrorList(problems) }
+        return ConfigContents(values: values, shortcuts: shortcuts, skipped: problems)
     }
 
     private static func parseShortcuts(
@@ -161,7 +172,8 @@ public enum ConfigFile {
                     problems.append(
                         ConfigProblem(
                             line: onLine,
-                            message: "\(key): unknown slot; use \"primary\" or \"alternate\""))
+                            message: "\(key): unknown slot; use \"primary\" or \"alternate\"",
+                            obsoleteKey: [shortcutsKey, id, name]))
                     continue
                 }
                 guard let stored = value as? String else {
@@ -258,6 +270,23 @@ public enum ConfigFile {
         } else if !override.isEmpty {
             text.insert(key: id, value: value, comment: [], into: shortcuts)
         }
+        return text
+    }
+
+    /// `text` without the member at `path`, such as `["appearance.nowPlaying"]` or
+    /// `["shortcuts", "play", "third"]`, its line, and the comment lines directly above it, for
+    /// Remove Obsolete Setting. The rest of the text stays byte for byte. `text` must parse.
+    static func removing(_ path: [String], from text: ConfigText) throws -> ConfigText {
+        var text = text
+        var object = try text.scan().object
+        let missing = ConfigProblem(
+            line: nil, message: "\"\(path.joined(separator: "."))\" isn't in the file")
+        for key in path.dropLast() {
+            guard let inner = object.member(key)?.object else { throw missing }
+            object = inner
+        }
+        guard let last = path.last, let member = object.member(last) else { throw missing }
+        text.remove(member, from: object, withComment: true)
         return text
     }
 

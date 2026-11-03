@@ -94,7 +94,7 @@ extension AppDelegate {
             schema.watchedFolders.key, schema.networkScanReaders.key,
             schema.pausePollingDuringPlayback.key, schema.syncFolder.key,
         ]
-        if !keys.isDisjoint(with: library) { changedFolders(settings[\.watchedFolders], settings) }
+        if !keys.isDisjoint(with: library) { changedFolders(settings) }
         if keys.contains(schema.groupByAlbumArtist.key), let browser {
             let on = settings[\.groupByAlbumArtist]
             Task { await browser.setGroupByAlbumArtist(on) }

@@ -64,14 +64,15 @@ private func read(_ url: URL) throws -> String { try String(contentsOf: url, enc
     let settings = store(url)
     var reported = 0
     settings.problemsChanged = { reported += 1 }
-    try write(#"{"a.count": 3, "a.cont": 2}"#, to: url)
+    try write(#"{"a.count": 3, "a.flag": 2}"#, to: url)
     settings.read(confirmed: true)
-    #expect(settings.problems.map(\.description) == [#"line 1: unknown setting "a.cont""#])
+    #expect(settings.problems.map(\.description) == [#"line 1: "a.flag": expected true or false"#])
+    #expect(settings.blocked)
     #expect(reported == 1)
     // The change waits, and memory shows it.
     try settings.set(\.flag, to: true)
     #expect(settings[\.flag])
-    #expect(try read(url) == #"{"a.count": 3, "a.cont": 2}"#)
+    #expect(try read(url) == #"{"a.count": 3, "a.flag": 2}"#)
     // The fix is applied, with the waiting change on top.
     try write(#"{"a.count": 9}"#, to: url)
     settings.read(confirmed: true)
@@ -250,7 +251,7 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
 
 @MainActor @Test func changesWaitingOnABrokenFileAreAllWrittenOnceItsFixed() throws {
     let url = configURL()
-    try write(#"{"a.cont": 3}"#, to: url)
+    try write(#"{"a.count": "3"}"#, to: url)
     let settings = store(url)
     try settings.set(\.flag, to: true)
     try settings.set(\.count, to: 6)
@@ -450,4 +451,89 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
     try FileManager.default.removeItem(at: url)
     settings.read(confirmed: true)
     #expect(settings.problems.isEmpty)
+}
+
+@MainActor @Test func anUnknownKeyIsSkippedAndTheRestAppliesAndSaves() throws {
+    let url = configURL()
+    let text = "{\n  // gone\n  \"a.old\": \"x\",\n  \"a.count\": 3\n}\n"
+    try write(text, to: url)
+    let settings = store(url)
+    #expect(settings.problems.map(\.description) == [#"line 3: unknown setting "a.old""#])
+    #expect(settings.problems.map(\.obsoleteKey) == [["a.old"]])
+    #expect(!settings.blocked)
+    #expect(settings[\.count] == 3)
+    #expect(settings.fileValue(\.count) == 3)
+    #expect(settings.fileValue(\.flag) == nil)
+    // A change is a patch of its own key: the unknown line stays, and no default is written.
+    try settings.set(\.count, to: 4)
+    #expect(try read(url) == text.replacingOccurrences(of: ": 3", with: ": 4"))
+    try settings.set(\.flag, to: false)
+    #expect(settings.fileValue(\.flag) == false)
+    #expect(try read(url).contains("\"a.old\": \"x\""))
+    #expect(try read(url).contains("\"a.flag\": false"))
+    #expect(settings.problems.count == 1)
+}
+
+@MainActor @Test func aBlockedFileGivesNoValueAndAFixGivesThemEvenWhenTheyreTheDefaults() throws {
+    let url = configURL()
+    try write(#"{"a.count": 5, "a.flag": 2}"#, to: url)
+    let settings = store(url)
+    #expect(settings.blocked)
+    #expect(settings[\.count] == 5)
+    #expect(settings.fileValue(\.count) == nil)
+    var changed: [Set<String>] = []
+    settings.changed = { changed.append($0) }
+    try write(#"{"a.count": 5}"#, to: url)
+    settings.read(confirmed: true)
+    #expect(settings.fileValue(\.count) == 5)
+    #expect(changed == [["a.count"]])
+    // An edit that breaks the file keeps what it gave.
+    try write(#"{"a.count": 5,,}"#, to: url)
+    settings.read(confirmed: true)
+    #expect(settings.blocked)
+    #expect(settings.fileValue(\.count) == 5)
+    // A file that's gone gives nothing.
+    try FileManager.default.removeItem(at: url)
+    settings.read(confirmed: true)
+    #expect(settings.fileValue(\.count) == nil)
+}
+
+@MainActor @Test func aNewFileGivesOnlyWhatTheAppSet() throws {
+    let url = configURL()
+    let settings = store(url)
+    #expect(settings.fileValue(\.count) == nil)
+    try settings.set(\.count, to: 5)
+    #expect(settings.fileValue(\.count) == 5)
+    #expect(store(url).fileValue(\.flag) == false)
+}
+
+@MainActor @Test func removingObsoleteKeysLeavesEveryOtherByte() throws {
+    let url = configURL()
+    let text =
+        "{\n  // Kept.\n  \"a.count\": 3,\n\n  // Gone,\n  // both lines.\n  \"a.old\": 1, // and this\n"
+        + "  /* kept */ \"a.flag\": true,\n  \"b.old\": [\n    1\n  ]\n}\n"
+    try write(text, to: url)
+    let settings = store(url)
+    var problems = 0
+    settings.problemsChanged = { problems += 1 }
+    try settings.removeObsoleteKeys()
+    #expect(
+        try read(url)
+            == "{\n  // Kept.\n  \"a.count\": 3,\n\n  /* kept */ \"a.flag\": true\n}\n")
+    #expect(settings.problems.isEmpty)
+    #expect(problems == 1)
+    #expect(settings[\.count] == 3 && settings[\.flag])
+}
+
+@MainActor @Test func removingObsoleteKeysFromABlockedFileKeepsTheWaitingChanges() throws {
+    let url = configURL()
+    try write(#"{"a.old": 1, "a.flag": 2}"#, to: url)
+    let settings = store(url)
+    try settings.set(\.count, to: 7)
+    try settings.removeObsoleteKeys()
+    #expect(try read(url) == #"{ "a.flag": 2}"#)
+    #expect(settings.blocked)
+    try write(#"{ "a.flag": true}"#, to: url)
+    settings.read(confirmed: true)
+    #expect(try read(url) == #"{ "a.flag": true, "a.count": 7}"#)
 }

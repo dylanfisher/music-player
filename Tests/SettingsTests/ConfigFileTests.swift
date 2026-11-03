@@ -29,11 +29,12 @@ private func parsed(_ text: String) throws(ConfigErrorList) -> ConfigContents {
     try ConfigFile.parse(ConfigText(text), settings: settings, check: check)
 }
 
+/// Every problem `text` has, whether it throws or applies with keys skipped.
 private func problems(_ text: String) -> [String] {
     do {
-        _ = try parsed(text)
-        Issue.record("accepted \(text)")
-        return []
+        let skipped = try parsed(text).skipped
+        if skipped.isEmpty { Issue.record("accepted \(text)") }
+        return skipped.map(\.description)
     } catch {
         return error.problems.map(\.description)
     }
@@ -308,4 +309,84 @@ func fuzzedFilesAreProblemsNotCrashes(_ name: String) throws {
     for minutes in [1, 1440] {
         #expect(throws: Never.self, "\(minutes)") { try parsed(folder(minutes)) }
     }
+}
+
+@Test func unknownKeysAreSkippedAndOtherProblemsBlockThemAll() throws {
+    let contents = try parsed(
+        #"{"a.old": 1, "a.count": 3, "shortcuts": {"test.open": {"third": "", "primary": "cmd+o"}}}"#
+    )
+    #expect(contents.values["a.count"] as? Int == 3)
+    #expect(
+        Set(contents.skipped.compactMap(\.obsoleteKey))
+            == [["a.old"], ["shortcuts", "test.open", "third"]])
+    #expect(contents.shortcuts["test.open"]?[.primary] == .chord(KeyChord("o", .command)))
+    #expect(throws: ConfigErrorList.self) { try parsed(#"{"a.old": 1, "a.count": 11}"#) }
+    #expect(problems(#"{"a.old": 1, "a.count": 11}"#).count == 2)
+}
+
+/// Remove Obsolete Setting's edit of `text`, which must still parse.
+private func removing(_ path: [String], _ text: String) throws -> String {
+    let removed = try ConfigFile.removing(path, from: ConfigText(text)).string
+    _ = try ConfigFile.parse(
+        ConfigText(removed), settings: settings, check: { _, _, _ in nil })
+    return removed
+}
+
+@Test func removingAKeyTakesItsLineAndTheCommentsDirectlyAboveIt() throws {
+    let file = """
+        {
+          // The flag.
+          "a.flag": true,
+
+          // Old, on
+          // two lines.
+          "a.old": 1,
+
+          // The count.
+          "a.count": 3
+        }
+
+        """
+    let first = file.replacingOccurrences(of: "  // The flag.\n  \"a.flag\": true,\n", with: "")
+    #expect(try removing(["a.flag"], file) == first)
+    #expect(
+        try removing(["a.old"], file)
+            == file.replacingOccurrences(
+                of: "  // Old, on\n  // two lines.\n  \"a.old\": 1,\n", with: ""))
+    // Last: the entry before it loses its comma, as the file had none after its last entry.
+    #expect(
+        try removing(["a.count"], file)
+            == "{\n  // The flag.\n  \"a.flag\": true,\n\n  // Old, on\n  // two lines.\n  \"a.old\": 1\n\n}\n"
+    )
+    // A file that ends its entries with commas keeps doing so.
+    let trailing = "{\n  \"a.flag\": true,\n  // old\n  \"a.old\": 1,\n}\n"
+    #expect(try removing(["a.old"], trailing) == "{\n  \"a.flag\": true,\n}\n")
+    // On one line with other entries, only the entry goes.
+    #expect(try removing(["a.old"], #"{"a.flag": true, "a.old": 1}"#) == #"{"a.flag": true }"#)
+    #expect(try removing(["a.old"], #"{"a.old": 1, "a.flag": true}"#) == #"{ "a.flag": true}"#)
+    #expect(
+        try removing(["a.old"], "{\r\n  // old\r\n  \"a.old\": 1,\r\n  \"a.flag\": true\r\n}")
+            == "{\r\n  \"a.flag\": true\r\n}")
+    // A blank line ends the comment above.
+    #expect(
+        try removing(["a.old"], "{\n  // mine\n\n  \"a.old\": 1,\n  \"a.flag\": true\n}")
+            == "{\n  // mine\n\n  \"a.flag\": true\n}")
+}
+
+@Test func removingANestedKeyLeavesItsObject() throws {
+    let file = """
+        {
+          "shortcuts": {
+            "test.open": {
+              "primary": "cmd+o",
+              // a typo
+              "third": ""
+            }
+          }
+        }
+        """
+    #expect(
+        try removing(["shortcuts", "test.open", "third"], file)
+            == file.replacingOccurrences(of: ",\n      // a typo\n      \"third\": \"\"", with: ""))
+    #expect(throws: ConfigProblem.self) { try removing(["shortcuts", "nope", "third"], file) }
 }

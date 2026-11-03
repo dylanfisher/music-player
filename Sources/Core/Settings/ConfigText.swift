@@ -293,19 +293,29 @@ struct ConfigText {
     }
 
     /// Takes a member out with its comma, and its line when nothing else is on it. Comments
-    /// around it stay.
-    mutating func remove(_ member: Member, from object: Object) {
+    /// around it stay, unless `withComment`: then a `//` comment after it on its line and the
+    /// `//` lines directly above it go too.
+    mutating func remove(_ member: Member, from object: Object, withComment: Bool = false) {
         guard let position = object.members.firstIndex(where: { $0.keyStart == member.keyStart })
         else { return }
         var start = member.keyStart
         var end = member.comma.map { $0 + 1 } ?? member.valueEnd
         let lineStart = startOfLine(at: start)
         let lineEnd = endOfLine(from: end)
+        let rest = bytes[end..<lineEnd].drop(while: isWhitespace)
         if bytes[lineStart..<start].allSatisfy(isWhitespace),
-            bytes[end..<lineEnd].allSatisfy(isWhitespace)
+            rest.isEmpty || (withComment && isLineComment(rest))
         {
             start = lineStart
-            end = lineEnd < bytes.count ? lineEnd + 1 : lineEnd
+            while withComment, start > 0 {
+                let above = startOfLine(at: start - 1)
+                guard isLineComment(bytes[above..<(start - 1)].drop(while: isWhitespace)) else {
+                    break
+                }
+                start = above
+            }
+            // Past the line break, a carriage return's too.
+            end = bytes[lineEnd...].firstIndex(of: newline).map { $0 + 1 } ?? bytes.count
             if start > 0, end == bytes.count, bytes[start - 1] == newline { start -= 1 }
         }
         bytes.removeSubrange(start..<end)
@@ -313,6 +323,10 @@ struct ConfigText {
         if member.comma == nil, position > 0, let comma = object.members[position - 1].comma {
             bytes.remove(at: comma)
         }
+    }
+
+    private func isLineComment(_ text: ArraySlice<UInt8>) -> Bool {
+        text.starts(with: [slash, slash])
     }
 
     private func indentation(at offset: Int) -> String {
