@@ -101,3 +101,8 @@ their old path IDs, with their stats.
   wait for scans that won't come.
 - While the file is blocked, toggling a setting, picking an output or changing a shortcut shows
   an error until the file is fixed, and the device in use isn't written to the config.
+- An empty folder list typed into the file keeps every track, because `start` never prunes on
+  an empty list. Only Stop Watching on the last folder removes them. Keeping rows the user meant
+  to drop is the safe side of that trade.
+- Stopping the last folder while a scan runs can leave a few rows behind: the old watcher's scan
+  isn't ordered against the removal. `start`'s prune had the same shape before this change.

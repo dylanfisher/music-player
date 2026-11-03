@@ -3633,7 +3633,7 @@ Mac's numbers come from its next checkpoint.
 
 ### 34. Config safety
 
-**In progress.** From the mbp2026 test run (Mac17,6, M5 Max, 18 cores, macOS 26.6.2, Xcode
+**Done.** From the mbp2026 test run (Mac17,6, M5 Max, 18 cores, macOS 26.6.2, Xcode
 27.2) on 2026-11-03: the owner's feedback on the release build at c4c8c65, like phases 35 to 37.
 A config that doesn't parse must never cost the library or the rest of the settings.
 
@@ -3675,6 +3675,17 @@ Implementation plan:
 - Never: `WatchedFolder.pollIntervalMinutes` becomes optional, null for never; `WatchState`
   schedules no poll for it; the Rescans popup gets Never.
 - ADR 0082 for all four, and a note in ADR 0015 and 0060.
+
+Result: shipped as planned, with one finding: the unfixed app did delete the tracks. Over a copy
+of the bench index with a stale key, they went from 42,964 to 0 within seconds; the rows keyed by
+path (plays, ratings, loved, history, playlist entries) survived, so mbp2026's next launch
+rescans and they reattach. Review then closed two more paths to the same loss, both fixed and
+tested: an in-app change while the file is blocked (now refused), and a deleted config whose new
+default file gave `[]` (an empty list never prunes; Stop Watching the last folder prunes
+explicitly). `./scripts/check` and `./scripts/bundle release` pass; launch to first rows 0.64 s
+against 1 s on the build Mac. A correctness review and a re-review of the fix round ran; no
+security or full bench, since nothing parses outside input beyond the config and only the launch
+path is budgeted.
 
 ### 35. Seek, progress bar and buffering
 
