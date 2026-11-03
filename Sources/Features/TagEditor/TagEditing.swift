@@ -55,9 +55,9 @@ public final class TagEditing {
     }
 
     /// Get Info on more files than this asks first. The editor reads every file before it
-    /// opens: 200 files took 3.2 s on the NAS (phase 32d), and the whole library takes minutes
-    /// there (ADR 0081).
-    static let confirmReadAbove = 200
+    /// opens, and the 2015 MacBook Pro takes 129 ms a file on the slow simulated NAS, so 25
+    /// files open in about 3 s there; the whole library takes minutes (ADR 0081).
+    static let confirmReadAbove = 25
 
     private let effects: Effects
     /// Bumped by each open, so a slow read for an earlier one is dropped.
