@@ -25,6 +25,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
     /// What Distraction-Free Mode hid, while it's on.
     private var hidden: ChromeVisibility?
     private var toolbarObservation: NSKeyValueObservation?
+    private var glass: WindowGlass?
 
     init(
         settings: WindowSettings, banner: NSView, browser: LibraryBrowser, toolbar: MainToolbar,
@@ -68,7 +69,8 @@ final class MainWindow: NSObject, NSWindowDelegate {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
-        window.contentView = stack
+        glass = WindowGlass(window: window, content: stack)
+        glass?.set(settings.tableAppearance.glass)
 
         if let frame = restoredFrame(
             settings.frame, screens: NSScreen.screens.map(\.visibleFrame))
@@ -136,6 +138,9 @@ final class MainWindow: NSObject, NSWindowDelegate {
         if next.sidebar != current.sidebar { toggleSidebar() }
         if next.statusBar != current.statusBar { toggleStatusBar() }
     }
+
+    /// Puts the window's content on glass, or takes it off.
+    func setGlass(_ on: Bool) { glass?.set(on) }
 
     func toggleSignalPath() {
         signalPath.view.isHidden.toggle()

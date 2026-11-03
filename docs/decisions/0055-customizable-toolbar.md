@@ -1,7 +1,7 @@
 # 0055. The header is a toolbar the user customizes
 
 - **Date:** 2026-11-02
-- **Status:** accepted; the status styles amended on 2026-11-02 (phase 29.2)
+- **Status:** accepted; the status styles amended on 2026-11-02 (phase 29.2); Now Playing (Centered) removed by [0067](0067-window-chrome-and-status-bar.md) (phase 30c.2)
 
 ## Context
 

@@ -100,6 +100,9 @@ extension AppDelegate {
             Task { await browser.setGroupByAlbumArtist(on) }
         }
         if !keys.isDisjoint(with: TableAppearance.keys) {
+            // The glass first: taking it off puts back the lists' rows, which the track table's
+            // appearance then sets.
+            window?.setGlass(settings[\.glass])
             browser?.setTableAppearance(TableAppearance(settings))
         }
         if !keys.isDisjoint(with: StatusBarLayout.keys) {

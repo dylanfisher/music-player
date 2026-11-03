@@ -57,12 +57,13 @@ extension TableAppearance {
     static let keys = [
         AppSettings().columnLines.key, AppSettings().rowLines.key,
         AppSettings().alternatingRows.key, AppSettings().rowHeight.key, AppSettings().artSize.key,
+        AppSettings().glass.key,
     ]
 
     @MainActor init(_ settings: ConfigStore<AppSettings>) {
         self.init(
             columnLines: settings[\.columnLines], rowLines: settings[\.rowLines],
             alternatingRows: settings[\.alternatingRows], rowHeight: settings[\.rowHeight],
-            artSize: settings[\.artSize])
+            artSize: settings[\.artSize], glass: settings[\.glass])
     }
 }

@@ -234,7 +234,8 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(
         keys == [
             "appearance.columnLines", "appearance.rowLines", "appearance.alternatingRows",
-            "appearance.rowHeight", "appearance.artSize", "appearance.statusBarStyle",
+            "appearance.rowHeight", "appearance.artSize", "appearance.glass",
+            "appearance.statusBarStyle",
             "appearance.statusBarParts",
         ])
 }

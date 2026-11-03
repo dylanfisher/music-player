@@ -147,7 +147,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         if appearance.columnLines { lines.insert(.solidVerticalGridLineMask) }
         if appearance.rowLines { lines.insert(.solidHorizontalGridLineMask) }
         table.gridStyleMask = lines
-        table.usesAlternatingRowBackgroundColors = appearance.alternatingRows
+        table.usesAlternatingRowBackgroundColors = appearance.alternatingRows && !appearance.glass
         let rowHeight = appearance.rowHeight.points
         guard appearance.artSize != artSize || rowHeight != table.rowHeight else { return }
         table.rowHeight = rowHeight

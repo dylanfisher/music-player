@@ -262,7 +262,8 @@ import Testing
     let defaults = TableAppearance(
         columnLines: settings.columnLines.defaultValue, rowLines: settings.rowLines.defaultValue,
         alternatingRows: settings.alternatingRows.defaultValue,
-        rowHeight: settings.rowHeight.defaultValue, artSize: settings.artSize.defaultValue)
+        rowHeight: settings.rowHeight.defaultValue, artSize: settings.artSize.defaultValue,
+        glass: settings.glass.defaultValue)
     let before = (
         controller.table.gridStyleMask, controller.table.usesAlternatingRowBackgroundColors,
         controller.table.rowHeight
@@ -275,7 +276,7 @@ import Testing
     controller.apply(
         TableAppearance(
             columnLines: true, rowLines: true, alternatingRows: false, rowHeight: .compact,
-            artSize: .fit))
+            artSize: .fit, glass: false))
     #expect(
         controller.table.gridStyleMask == [
             .solidVerticalGridLineMask, .solidHorizontalGridLineMask,
@@ -285,9 +286,16 @@ import Testing
     controller.apply(
         TableAppearance(
             columnLines: true, rowLines: false, alternatingRows: true, rowHeight: .large,
-            artSize: .fit))
+            artSize: .fit, glass: false))
     #expect(controller.table.gridStyleMask == .solidVerticalGridLineMask)
     #expect(controller.table.rowHeight > RowListController.rowHeight)
+    #expect(controller.table.usesAlternatingRowBackgroundColors)
+    // The glass leaves out the rows' opaque shading.
+    controller.apply(
+        TableAppearance(
+            columnLines: true, rowLines: false, alternatingRows: true, rowHeight: .large,
+            artSize: .fit, glass: true))
+    #expect(!controller.table.usesAlternatingRowBackgroundColors)
 }
 
 /// A table over the browser library sorted by album, its Album Art column `artWidth` wide,
@@ -332,7 +340,7 @@ private func artTable(artWidth: CGFloat) async throws -> (
         controller.apply(
             TableAppearance(
                 columnLines: false, rowLines: false, alternatingRows: true,
-                rowHeight: .regular, artSize: size))
+                rowHeight: .regular, artSize: size, glass: false))
         var runStart = 0
         var spanned = false
         for row in 0..<min(rows.count, 60) {

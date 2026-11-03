@@ -167,7 +167,7 @@ public enum AppMenus {
                             .setting(settings.alternatingRows.key),
                             .setting(settings.rowHeight.key), .setting(settings.artSize.key),
                         ], showsChords: true),
-                    .setting(settings.statusBarStyle.key),
+                    .setting(settings.statusBarStyle.key), .setting(settings.glass.key),
 
                     .standard(
                         StandardItem("Customize Toolbar…", "runToolbarCustomizationPalette:")),
