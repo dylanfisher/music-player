@@ -1256,3 +1256,72 @@ private func eventually(_ condition: () -> Bool) async -> Bool {
     await engine.handle(.trackStarted(2, info))
     #expect(output.takeCalls() == [.setNext(3, urls[0])])
 }
+
+private func loadedURLs(_ output: FakeOutput) -> [URL] {
+    output.takeCalls().compactMap { call -> URL? in
+        if case .load(_, let url, _, _) = call { url } else { nil }
+    }
+}
+
+@Test func aTrackEndHeldWithAQueuedTrackStillMovesOn() async throws {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        return (urls, 0)
+    }
+    let extra = URL(fileURLWithPath: "/music/extra.flac")
+    await engine.addToQueue([extra])
+    await engine.handle(.finished(1))
+    await gate.release()
+    try await filling.value
+    #expect(loadedURLs(output) == [urls[0], extra])
+    #expect(await engine.state.status == .playing)
+}
+
+@Test func aTrackEndHeldWithAMoveEndsPlaybackWhenThereIsNothingNext() async throws {
+    let engine = PlaybackEngine(output: FakeOutput())
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        return (urls, 0)
+    }
+    await engine.handle(.finished(1))
+    await engine.moveQueueItems([0], to: 1)
+    #expect(await engine.state.status == .stopped)
+    await gate.release()
+    try await filling.value
+}
+
+@Test func aNewQueueDropsWhatWasHeldForTheOldOne() async throws {
+    let engine = PlaybackEngine(output: FakeOutput())
+    let updates = await Updates(engine)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        return (urls, 0)
+    }
+    await engine.addToQueue([URL(fileURLWithPath: "/music/extra.flac")])
+    let other = [URL(fileURLWithPath: "/music/other.flac")]
+    await engine.setQueue(other)
+    await gate.release()
+    try await filling.value
+    #expect(await engine.state.queue == other)
+    #expect(updates.events.filter { $0 == .queueChanged }.count == 2)
+}
+
+@Test func nextHeldWithTheTrackEndSkipsOneTrack() async throws {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        return (urls, 0)
+    }
+    await engine.next()
+    await engine.handle(.finished(1))
+    await gate.release()
+    try await filling.value
+    #expect(loadedURLs(output) == [urls[0], urls[1]])
+}

@@ -117,11 +117,8 @@ public actor PlaybackEngine {
     public func setQueue(_ urls: [URL], first: Int = 0) {
         unload()
         queueGeneration += 1
-        if completing {
-            // A move or removal counts positions in the one-track queue the user saw.
-            completing = false
-            releaseHeld(skipping: false)
-        }
+        completing = false
+        finishedEarly = nil
         heldSkip = nil
         heldEdits = []
         failuresInARow = 0
@@ -197,19 +194,20 @@ public actor PlaybackEngine {
     /// Replays what was held while the queue was being read: edits in order, then a Next or
     /// Previous if one was pressed (which stands in for the track's end), else the end.
     private func releaseHeld(skipping: Bool) {
+        // Edits clear what is pending when they end a window, so take it first.
         let edits = heldEdits
         heldEdits = []
-        for edit in edits { edit() }
         let skip = heldSkip
         heldSkip = nil
         let finished = finishedEarly
         finishedEarly = nil
+        for edit in edits { edit() }
         if skipping, let skip {
             switch skip {
             case .next: next()
             case .previous: previous()
             }
-        } else if let finished {
+        } else if let finished, currentItem?.id == finished {
             handle(.finished(finished))
         }
     }
@@ -374,8 +372,10 @@ public actor PlaybackEngine {
     /// Follows the current, next and starting tracks to their new positions after an edit.
     private func applyEdit(_ moved: [Int?]) {
         queueGeneration += 1
+        // A move or removal counts positions in the one-track queue the user saw, so it ends
+        // the window: the late queue is dropped, and what was held is replayed after it.
+        let endsWindow = completing
         completing = false
-        finishedEarly = nil
         state.queue = queue.entries
         state.order = queue.order
         if let nextItem {
@@ -409,6 +409,7 @@ public actor PlaybackEngine {
             state.currentIndex = queue.order.isEmpty ? nil : queue.entry(at: cursor)
         }
         publish(.queueChanged)
+        if endsWindow { releaseHeld(skipping: false) }
     }
 
     /// Linear amplitude from 0 to 1, for outputs that have a volume.
