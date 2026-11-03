@@ -58,4 +58,8 @@ import Testing
     #expect(removed == 1)
     show([])
     #expect(banner.removeButtonTitle == nil)
+    banner.show(
+        problems: [], writeFailure: nil, path: "/x/config.json", unwatched: "not watched",
+        stateFailure: nil, stateDiscarded: nil)
+    #expect(banner.text == "config.json: not watched.")
 }

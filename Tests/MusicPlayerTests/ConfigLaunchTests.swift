@@ -135,6 +135,7 @@ func aConfigWithAProblemNeverEmptiesTheLibrary(_ which: Int) async throws {
     for _ in 0..<2 {
         let settings = try library.settings()
         #expect(settings.fileValue(\.watchedFolders) == [])
+        #expect(unwatchedNotice(settings) == nil)
         let events = Events()
         let watcher = try await library.launch(settings, events)
         #expect(watcher != nil)
@@ -182,4 +183,13 @@ func aConfigWithAProblemNeverEmptiesTheLibrary(_ which: Int) async throws {
         try await Task.sleep(nanoseconds: 50_000_000)
     }
     #expect(try library.index.trackCount() == 0)
+}
+
+@MainActor @Test func aConfigThatDoesntNameTheFoldersSaysSoInTheBanner() throws {
+    let library = try IndexedHome()
+    defer { library.remove() }
+    try Data(#"{"appearance.glass": true}"#.utf8).write(to: library.paths.configFile)
+    let settings = try library.settings()
+    #expect(settings.problems.isEmpty)
+    #expect(unwatchedNotice(settings)?.contains("library.watchedFolders") == true)
 }

@@ -104,7 +104,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
     }
 
     /// Whether the file applies nothing until it's fixed, as opposed to skipping unknown keys.
-    var blocked: Bool { problems.contains(where: \.blocks) }
+    public var blocked: Bool { problems.contains(where: \.blocks) }
 
     /// A setting's value as JSON holds it, such as `true` or `"dark"`, for code that knows the
     /// setting only by its key.

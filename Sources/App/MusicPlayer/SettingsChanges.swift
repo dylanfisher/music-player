@@ -193,7 +193,8 @@ extension AppDelegate {
         guard let settings else { return }
         banner.show(
             problems: settings.problems, writeFailure: settings.writeFailure,
-            path: settings.fileURL.path, stateFailure: saver?.failure,
+            path: settings.fileURL.path, unwatched: unwatchedNotice(settings),
+            stateFailure: saver?.failure,
             stateDiscarded: state?.discardReason)
     }
 }

@@ -840,7 +840,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         watcher.rescan(folders: positions.filter(folders.indices.contains).map { folders[$0] })
     }
 
-    func changedFolders(_ settings: ConfigStore<AppSettings>) { startWatching(settings) }
+    func changedFolders(_ settings: ConfigStore<AppSettings>) {
+        startWatching(settings)
+        showConfigProblems()
+    }
 
     // MARK: Errors
 

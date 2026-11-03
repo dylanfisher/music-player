@@ -47,3 +47,12 @@ func stopWatching(
     }
     watcher.removeEveryFile()
 }
+
+/// What the banner says when the config file applies but doesn't name the watched folders, or
+/// is gone, so nothing is watched; nil otherwise.
+@MainActor
+func unwatchedNotice(_ settings: ConfigStore<AppSettings>) -> String? {
+    // A blocked file is in the banner already.
+    guard !settings.blocked, settings.fileValue(\.watchedFolders) == nil else { return nil }
+    return "\"\(settings.schema.watchedFolders.key)\" isn't set, so the library isn't watched"
+}

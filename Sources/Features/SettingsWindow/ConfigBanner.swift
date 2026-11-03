@@ -52,16 +52,17 @@ public final class ConfigBanner: NSViewController {
         view.isHidden = true
     }
 
-    /// Shows what's wrong, or hides the banner when nothing is. `stateFailure` is why the window
-    /// layout couldn't be saved to the state file.
+    /// Shows what's wrong, or hides the banner when nothing is. `unwatched` says why the library
+    /// isn't watched. `stateFailure` is why the window layout couldn't be saved to the state file.
     public func show(
-        problems: [ConfigProblem], writeFailure: String?, path: String, stateFailure: String?,
-        stateDiscarded: String?
+        problems: [ConfigProblem], writeFailure: String?, path: String, unwatched: String? = nil,
+        stateFailure: String?, stateDiscarded: String?
     ) {
         _ = view
         let name = (path as NSString).lastPathComponent
         let lines =
-            (problems.map(\.description) + (writeFailure.map { ["couldn't save: \($0)"] } ?? []))
+            (problems.map(\.description) + (writeFailure.map { ["couldn't save: \($0)"] } ?? [])
+            + (unwatched.map { [$0] } ?? []))
             .map { "\(name): \($0)" }
             + (stateFailure.map { ["couldn't save the window layout: \($0)"] } ?? [])
             + (stateDiscarded.map { ["the saved window layout was reset: \($0)"] } ?? [])
