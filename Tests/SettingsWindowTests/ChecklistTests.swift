@@ -14,7 +14,7 @@ private struct Schema: SettingsSchema {
 private func model(_ parts: [String]) -> (GeneralModel, () -> [String: Any]) {
     nonisolated(unsafe) var values: [String: Any] = ["a.parts": parts]
     let model = GeneralModel(
-        settings: Schema().settings, value: { values[$0] },
+        settings: Schema().settings, searcherInstalled: true, value: { values[$0] },
         set: { key, json in values[key] = json })
     return (model, { values })
 }
