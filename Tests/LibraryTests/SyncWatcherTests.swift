@@ -9,12 +9,17 @@ private final class Syncs: @unchecked Sendable {
     private let lock = NSLock()
     private var reports: [SyncReport] = []
     private var failures: [String] = []
+    private var scans = 0
+    private var scansBeforeSync: Int?
 
     func append(_ event: WatcherEvent) {
         lock.withLock {
             switch event {
-            case .synced(let report): reports.append(report)
+            case .synced(let report):
+                reports.append(report)
+                if scansBeforeSync == nil { scansBeforeSync = scans }
             case .syncFailed(let reason): failures.append(reason)
+            case .scanned: scans += 1
             default: break
             }
         }
@@ -22,6 +27,8 @@ private final class Syncs: @unchecked Sendable {
 
     var count: Int { lock.withLock { reports.count } }
     var failed: [String] { lock.withLock { failures } }
+    /// The scans that ended before the first sync did.
+    var scansBeforeFirstSync: Int? { lock.withLock { scansBeforeSync } }
 }
 
 /// Polls `condition` every 50 ms for up to `seconds`, and records what it last saw.
@@ -69,6 +76,24 @@ private func eventually(
             (try? String(contentsOfFile: log, encoding: .utf8))?.contains("\"play\"") == true
         })
     #expect(try await eventually(within: 10, "its report") { syncs.count > before })
+    #expect(syncs.failed.isEmpty)
+}
+
+@Test func theLaunchScanRunsBeforeTheFirstSync() async throws {
+    let library = try TestLibrary()
+    let sync = FileManager.default.temporaryDirectory
+        .appendingPathComponent("sync-first-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: sync, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: sync) }
+    let syncs = Syncs()
+    let watcher = LibraryWatcher(
+        databaseURL: library.databaseURL, networkReaders: nil, events: syncs.append)
+    watcher.start(
+        folders: [library.folder], syncFolder: SyncFolder(path: sync.path),
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: false)
+    defer { watcher.stop() }
+    #expect(try await eventually(within: 30, "the first sync") { syncs.count >= 1 })
+    #expect(syncs.scansBeforeFirstSync == 1)
     #expect(syncs.failed.isEmpty)
 }
 
