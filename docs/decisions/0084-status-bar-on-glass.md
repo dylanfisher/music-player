@@ -50,9 +50,11 @@ after the change. A test builds the real main window twice and compares the fram
 split's panes and every list's grid, background, row and alternating settings with a fresh
 window after glass on and off.
 
-**Alternating rows on glass are a translucent tint**, the text color at 5%, drawn by the table
-under its clear rows, where AppKit's opaque alternating colors stay off. The timeline, which
-always alternates, does the same.
+**Alternating rows on glass are a translucent tint**, the text color at 5%, as the background
+color of every other row view, where AppKit's opaque alternating colors stay off. The timeline,
+which always alternates, does the same. Drawing the tint in the table's
+`drawBackground(inClipRect:)` was tried: the override alone, with nothing drawn, made trackpad
+scrolling cost 64 to 69 ms a frame against 8 to 13.
 
 **The bar's art opens the viewer** that row art opens, on the playing track's art. A refresh
 that redraws rows in place leaves it open, since it belongs to no rows; a reload of the list
