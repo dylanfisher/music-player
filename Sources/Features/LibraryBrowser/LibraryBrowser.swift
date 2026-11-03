@@ -161,6 +161,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         table = TrackTableController(model: model, cache: cache, layout: layout, actions: actions)
         table.selectionChanged = { owner?.readSelectionTotals() }
+        table.rateClicked = { id, stars in
+            owner?.edit("couldn't rate the track") { try await model.rate([id], stars: stars) }
+        }
         let timelineModel = TimelineModel(reader: reader) { ids in try index.playedTracks(ids: ids)
         }
         self.timelineModel = timelineModel

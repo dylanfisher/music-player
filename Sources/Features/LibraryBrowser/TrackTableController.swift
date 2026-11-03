@@ -39,6 +39,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     let emptyLabel = NSTextField(labelWithString: "")
     /// Called after every change of the selection, the keys' and a reload's too.
     var selectionChanged: () -> Void = {}
+    /// A click in the Rating column: the clicked track and the stars to give it, 0 to clear.
+    var rateClicked: (Int64, Int) -> Void = { _, _ in }
     /// The file of the track playing, whose row is marked wherever the table shows it.
     var playingPath: String? {
         didSet {
@@ -112,6 +114,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         table.dataSource = self
         table.delegate = self
         table.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
+        table.action = #selector(clicked)
         table.edgeToEdgeColumn = columnIdentifier(.art)
         table.registerForDraggedTypes([trackIDsType])
         // Rows go only to the sidebar and to other rows, never to another app.
@@ -444,6 +447,32 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         artViewer = viewer
         viewer.show()
         viewer.load(embedded, path: track.path, failed: actions.failed)
+    }
+
+    // MARK: Rating by click
+
+    @objc private func clicked() {
+        guard let event = NSApp.currentEvent, event.type == .leftMouseUp,
+            event.modifierFlags.intersection([.command, .shift, .control, .option]).isEmpty
+        else { return }
+        rate(at: table.convert(event.locationInWindow, from: nil))
+    }
+
+    /// Rates the track at `point`, in the table's coordinates, if it's in the Rating column.
+    func rate(at point: NSPoint) {
+        let row = table.row(at: point)
+        let column = table.column(at: point)
+        guard row >= 0, column >= 0,
+            table.tableColumns[column].identifier == columnIdentifier(.rating),
+            let track = trackRow(row)
+        else { return }
+        let cell = table.frameOfCell(atColumn: column, row: row)
+        let starWidth = (stars(1) as NSString).size(withAttributes: [.font: font]).width
+        rateClicked(
+            track.id,
+            RatingClick.stars(
+                at: point.x - cell.minX - TextCell.inset, starWidth: starWidth,
+                current: track.rating))
     }
 
     private func trackRow(_ index: Int) -> TrackRow? {

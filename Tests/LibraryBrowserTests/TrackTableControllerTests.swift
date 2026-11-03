@@ -667,3 +667,47 @@ private func artTable(artWidth: CGFloat, sortedBy sort: TrackColumn = .album) as
     }
     #expect(drawn)
 }
+
+@Test func aClickOnAStarSetsThatRatingAndOnTheRatingHeldClearsIt() {
+    #expect(RatingClick.stars(at: -1, starWidth: 10, current: 3) == 0)
+    #expect(RatingClick.stars(at: 0, starWidth: 10, current: 0) == 1)
+    #expect(RatingClick.stars(at: 25, starWidth: 10, current: 0) == 3)
+    #expect(RatingClick.stars(at: 25, starWidth: 10, current: 3) == 0)
+    #expect(RatingClick.stars(at: 400, starWidth: 10, current: 1) == 5)
+}
+
+@MainActor @Test func clickingTheRatingColumnRatesTheClickedTrack() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: true,
+        groupByAlbumArtist: false)
+    let index = try LibraryIndex(at: databaseURL)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
+        layoutChanged: { _ in },
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { try index.rows(ids: $0) },
+        layout: TrackTableLayout(
+            columns: [
+                ColumnLayout(column: .title, width: 200), ColumnLayout(column: .rating, width: 80),
+            ], sortColumn: .title, sortAscending: true),
+        actions: actions)
+    controller.view.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
+    model.changed = { controller.reload($0) }
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    var rated: [(Int64, Int)] = []
+    controller.rateClicked = { rated.append(($0, $1)) }
+    let table = controller.table
+    let rating = table.column(withIdentifier: NSUserInterfaceItemIdentifier("rating"))
+    let cell = table.frameOfCell(atColumn: rating, row: 2)
+    let star = (stars(1) as NSString).size(withAttributes: [.font: RowHeight.regular.font]).width
+    // The middle of the fourth star.
+    controller.rate(at: NSPoint(x: cell.minX + TextCell.inset + 3.5 * star, y: cell.midY))
+    #expect(rated.map(\.0) == [model.trackIDs[2]])
+    #expect(rated.map(\.1) == [4])
+    // The title column rates nothing.
+    controller.rate(at: NSPoint(x: table.rect(ofColumn: 0).midX, y: cell.midY))
+    #expect(rated.count == 1)
+}

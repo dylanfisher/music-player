@@ -150,7 +150,7 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
     }
 
     /// Ratings are whole stars, 1 to this; 0 is unrated.
-    static let maxRating = 5
+    public static let maxRating = 5
 
     public var kind: Kind {
         switch self {
