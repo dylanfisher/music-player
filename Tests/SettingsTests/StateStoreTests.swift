@@ -272,6 +272,16 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(byRowNumber.problem() == "sortColumn: rowNumber can't be sorted by")
 }
 
+@Test func toolbarItemsRepeatOnlyTheSpaces() throws {
+    let settings = try StateStore(AppState(), fileURL: temporaryFile())
+    let spaced: [ToolbarItem] = [.space, .search, .space, .flexibleSpace, .flexibleSpace]
+    try settings.set(\.toolbarItems, to: spaced)
+    #expect(settings[\.toolbarItems] == spaced)
+    #expect(throws: SettingsError.self) {
+        try settings.set(\.toolbarItems, to: [.transport, .search, .transport])
+    }
+}
+
 @Test func windowLayoutRejectsUnknownKeysAtEveryLevel() throws {
     func reason(_ json: String) throws -> String {
         let url = temporaryFile()

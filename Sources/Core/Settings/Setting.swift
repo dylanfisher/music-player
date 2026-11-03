@@ -81,6 +81,21 @@ extension Setting where Value == Double {
     }
 }
 
+extension Setting where Value == [ToolbarItem] {
+    /// A toolbar's items, left to right. Only the spaces may appear more than once, since
+    /// `NSToolbar` raises on any other item inserted twice.
+    init(_ key: String, title: String, items defaultValue: [ToolbarItem], _ summary: String) {
+        self.init(key, title, defaultValue, summary, Value.kind) { items in
+            var seen: Set<ToolbarItem> = []
+            for (index, item) in items.enumerated()
+            where item != .space && item != .flexibleSpace && !seen.insert(item).inserted {
+                return .invalid("item \(index): \(item.rawValue) is listed twice")
+            }
+            return nil
+        }
+    }
+}
+
 private func outside<Bound>(_ range: ClosedRange<Bound>, _ value: Bound) -> SettingProblem.Reason? {
     range.contains(value)
         ? nil : .outOfRange("\(value) is outside \(range.lowerBound)...\(range.upperBound)")
