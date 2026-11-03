@@ -78,6 +78,8 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
     }
     model.apply(state(order: [2, 1, 0], current: 1))
     #expect(marked() == [1])
+    // An identifier lets the table reuse the row view.
+    #expect(panel.tableView(table, rowViewForRow: 0)?.identifier != nil)
     model.apply(state(order: [2, 1, 0], current: 0))
     #expect(marked() == [2])
     model.apply(state(order: [2, 1, 0], current: nil))

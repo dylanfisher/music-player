@@ -169,6 +169,9 @@ import Testing
         }
     }
     #expect(marked().isEmpty)
+    // A row view with an identifier is one the table reuses, rather than one it keeps for
+    // every row scrolled past.
+    #expect(controller.tableView(controller.table, rowViewForRow: 0)?.identifier != nil)
 
     let paths = try index.paths(ids: model.trackIDs)
     let playing = model.trackIDs[3]

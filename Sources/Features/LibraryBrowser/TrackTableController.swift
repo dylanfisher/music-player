@@ -173,7 +173,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     func numberOfRows(in tableView: NSTableView) -> Int { model.trackIDs.count }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-        let rowView = MarkedRowView()
+        let rowView = MarkedRowView.reused(in: tableView)
         rowView.isMarked = isPlaying(row)
         return rowView
     }

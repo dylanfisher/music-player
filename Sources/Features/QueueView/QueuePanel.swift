@@ -119,7 +119,7 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
     }
 
     public func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-        let rowView = MarkedRowView()
+        let rowView = MarkedRowView.reused(in: tableView)
         rowView.isMarked = row == model.currentPosition
         return rowView
     }

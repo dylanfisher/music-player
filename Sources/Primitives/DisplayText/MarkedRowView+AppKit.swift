@@ -8,6 +8,19 @@ public final class MarkedRowView: NSTableRowView {
     /// column's text.
     static let barWidth: CGFloat = 3
 
+    /// A row `table` has finished with, or a new one. A table keeps every row view made without
+    /// an identifier, so a new one per row grew memory with each row scrolled past.
+    public static func reused(in table: NSTableView) -> MarkedRowView {
+        if let row = table.makeView(withIdentifier: identifier, owner: nil) as? MarkedRowView {
+            return row
+        }
+        let row = MarkedRowView()
+        row.identifier = identifier
+        return row
+    }
+
+    private static let identifier = NSUserInterfaceItemIdentifier("MarkedRowView")
+
     public var isMarked = false {
         didSet { if isMarked != oldValue { needsDisplay = true } }
     }
