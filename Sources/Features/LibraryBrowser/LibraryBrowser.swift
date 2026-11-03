@@ -1445,12 +1445,31 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             statusParts.addArrangedSubview(view)
         }
         statusBar.middleFills = statusLayout.parts.contains(statusLayout.flexible)
+        if let art = statusPartViews[.art], art.gestureRecognizers.isEmpty {
+            art.addGestureRecognizer(
+                NSClickGestureRecognizer(target: self, action: #selector(openPlayingArt)))
+        }
         if let art = statusPartViews[.art], statusLayout.parts.contains(.art) {
             statusArtHeight = art.heightAnchor.constraint(
                 equalToConstant: statusLayout.artPoints(headerPoints: header))
             statusArtHeight?.isActive = true
         }
         insetListsUnderStatusBar()
+    }
+
+    /// Opens the status bar's art in the viewer a click on a row's art opens.
+    @objc func openPlayingArt() {
+        guard let path = table.playingPath,
+            let image = (statusPartViews[.art] as? NSImageView)?.image
+        else { return }
+        do {
+            guard let track = try index.track(path: path), let embedded = track.art else {
+                return
+            }
+            table.openArt(image, embedded, of: track)
+        } catch {
+            report("couldn't read the art of \(path): \(error)")
+        }
     }
 
     public func toggleStatusBar() {

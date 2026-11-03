@@ -49,3 +49,39 @@ import Testing
     #expect(!browser.statusLabel.isHidden)
     #expect(browser.statusText == "the disk went away")
 }
+
+/// A click on the status bar's art opens the playing track's art in the viewer a row's art
+/// opens (ADR 0084).
+@MainActor @Test func theStatusBarsArtOpensTheViewer() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let index = try LibraryIndex(at: databaseURL)
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL), index: index,
+        layout: AppState().trackTable.defaultValue, browserHeight: 100,
+        groupByAlbumArtist: false, thumbnails: nil)
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = browser.content.view
+    defer { window.close() }
+    await browser.load(BrowserState(source: nil))
+    let rows = try index.rows(ids: browser.model.trackIDs)
+    let playing = try #require(rows.first { $0.art != nil })
+    let art = NSImageView(image: NSImage(size: NSSize(width: 8, height: 8)))
+    browser.setStatusBar(StatusBarLayout(parts: [.art], style: .minimal), views: [.art: art])
+    let click = try #require(art.gestureRecognizers.first as? NSClickGestureRecognizer)
+    #expect(click.target === browser)
+
+    // Nothing playing: nothing to open.
+    browser.openPlayingArt()
+    #expect(browser.table.artViewer == nil)
+    browser.showPlaying(path: playing.path)
+    browser.openPlayingArt()
+    let viewer = try #require(browser.table.artViewer)
+    #expect(viewer.window.isVisible)
+    viewer.close()
+    // Laid out again, the art keeps its one click.
+    browser.setStatusBar(StatusBarLayout(parts: [.art], style: .tall), views: [.art: art])
+    #expect(art.gestureRecognizers.count == 1)
+}

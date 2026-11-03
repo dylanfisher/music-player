@@ -481,6 +481,28 @@ private func artTable(
     #expect(controller.artHover.isHidden)
 }
 
+/// The hover shows from anywhere in an art cell, beside the image too (ADR 0084). By title the
+/// albums are a row or two, so Fit draws their art a row or two tall in a wider column, with
+/// empty space at both sides.
+@MainActor @Test func theArtHoverShowsFromAnywhereInTheArtCell() async throws {
+    let (controller, _, rows) = try await artTable(
+        artWidth: 5 * RowListController.rowHeight, sortedBy: .title)
+    let table = controller.table
+    let column = table.rect(
+        ofColumn: table.column(withIdentifier: NSUserInterfaceItemIdentifier("art")))
+    let row = try #require(
+        rows.indices.first { rows[$0].art != nil && controller.artRow($0) == $0 })
+    table.scrollRowToVisible(row)
+    let corner = NSPoint(x: column.minX + 1, y: table.rect(ofRow: row).maxY - 1)
+    let deadline = Date().addingTimeInterval(10)
+    while controller.artHover.isHidden, Date() < deadline {
+        controller.showArtHover(at: corner)
+        try await Task.sleep(nanoseconds: 20_000_000)
+    }
+    #expect(!controller.artHover.isHidden, "no hover from the cell's corner")
+    #expect(controller.artHover.frame.minY == table.rect(ofRow: row).minY)
+}
+
 @MainActor @Test func theArtHoverDrawsOnTopAndEndsAtItsAlbumsLastRow() async throws {
     // By title, the fixture's albums are runs of a row or two, shorter than the art's 6 rows.
     let (controller, _, rows) = try await artTable(

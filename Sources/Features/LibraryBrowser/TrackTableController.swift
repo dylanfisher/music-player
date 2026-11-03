@@ -4,6 +4,7 @@ import Commands
 import DisplayText
 import Library
 import Log
+import Metadata
 import Settings
 
 private let logger = moduleLogger()
@@ -553,9 +554,10 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// next album's rows under it hover that album.
     private(set) var hoverArea = NSRect.zero
 
-    /// The art drawn under `point`, with its album's first row, where the whole art goes (as
-    /// wide as the column, from the top of that row) and the part of that over the album's
-    /// rows. Nil off the art, or before it loaded.
+    /// The art of the art cell under `point`, anywhere in the cell and not only over the image,
+    /// with its album's first row, where the whole art goes (as wide as the column, from the top
+    /// of that row) and the part of that over the album's rows. Nil off the art cells, or before
+    /// the art loaded.
     func hoveredArt(at point: NSPoint) -> (
         row: Int, frame: NSRect, area: NSRect, image: NSImage
     )? {
@@ -570,11 +572,6 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         let width = table.rect(ofColumn: column).width
         let top = table.rect(ofRow: start).minY
         let albumID = { (row: Int) in self.trackRow(row)?.albumID }
-        let rows = ArtRun.length(
-            from: start, limit: artRowsTall, rowCount: model.trackIDs.count, album: albumID)
-        let drawn = ArtFrame.rect(
-            artSize, image: image.size, width: width, runHeight: CGFloat(rows) * rowPitch)
-        guard drawn.offsetBy(dx: left, dy: top).contains(point) else { return nil }
         let frame = ArtFrame.whole(image: image.size, width: width).offsetBy(dx: left, dy: top)
         let albumRows = ArtRun.length(
             from: start, limit: max(1, Int((frame.height / rowPitch).rounded(.up))),
@@ -587,10 +584,17 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// Opens the hovered art over the screen, decoded at the screen's size.
     func openHoveredArt() {
         guard let row = hoveredRow, let image = artHover.image, let track = trackRow(row),
-            let embedded = track.art, let screen = table.window?.screen ?? NSScreen.main
+            let embedded = track.art
         else { return }
-        viewerTrack = track
         hideArtHover()
+        openArt(image, embedded, of: track)
+    }
+
+    /// Opens `image`, the art embedded in `track`'s file, over the screen, decoded at the
+    /// screen's size. It stays open across refreshes while `track` is listed with that art.
+    func openArt(_ image: NSImage, _ embedded: EmbeddedArt, of track: TrackRow) {
+        guard let screen = table.window?.screen ?? NSScreen.main else { return }
+        viewerTrack = track
         let viewer = ArtViewer(image: image, screen: screen, owner: table.window)
         viewer.closed = { [weak self, weak viewer] in
             if self?.artViewer === viewer { self?.artViewer = nil }
