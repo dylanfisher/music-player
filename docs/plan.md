@@ -2972,7 +2972,46 @@ Sorting is fine: 73 ms on the old Mac in 14e. Leave it alone unless a new bench 
       Bench the first scroll step and first keystroke right after `--report-launch` reports
       interactive. Move whatever hitches off main.
 
-#### 32e. Checkpoint and budgets
+#### 32e. Field data, the NAS, and the old Mac's hardware
+
+- [ ] **32e.1** **Signposts and a hang log.** Nothing in `Sources` uses `os_signpost`. Add intervals, defined
+      once, to the paths in 32a to 32d: play to first sample, art load, page fetch, refresh, query,
+      palette rank and scan batch. Then a Time Profiler or os_signpost trace from the old Mac lines
+      up with the code. Add a main-thread stall detector: when the main run loop is blocked over
+      ~100 ms, it logs the duration and what was running to the app's existing log. It must cost
+      nothing when idle (the idle-wakeup budget). That way the checkpoint brings back real hitches
+      from the real library, not only bench numbers.
+- [ ] **32e.2** **A persistent thumbnail cache.** Art is cached only in memory: 64 images in `ArtworkLoader`
+      and 40 in `RowArt`. Every launch, and every scroll back past the cache, reads embedded art
+      from the NAS again and decodes it again. Weigh a thumbnail table in the index, keyed by album
+      and art offset or by content hash, and checked against the file's stored stats so a tag
+      edit's new art replaces it. Weigh it against the database size budget. Bench: scroll the
+      whole art column once after a fresh launch, on simulated NAS latency.
+- [ ] **32e.3** **Large embedded art.** Fixture art may be smaller than the real library's: covers of 3000
+      px or more, and PNGs, where ImageIO's thumbnail call still decodes the whole image. Add
+      fixture covers of that size and bench the decode on Intel.
+- [ ] **32e.4** **A hung or dropped share.** Unplug the NAS mid-playback, in simulation. The control thread
+      blocks in a read, and the main thread must never wait on it. Check every file-system call
+      reachable from the main actor, for example the sync folder's `resourceValues` and
+      `fileExists` (AppDelegate.swift:670, 698, 723) and Reveal in Finder. Move the ones that can
+      block onto a background queue. Test with file access that never returns.
+- [ ] **32e.5** **The discrete GPU.** `Support/Info.plist` has no `NSSupportsAutomaticGraphicsSwitching`. If
+      the 2015 MacBook Pro has two GPUs, the app may keep the AMD one on, which costs heat,
+      battery and fan noise. Checked 2026-11-03: the 2015 MacBook Pro is a MacBookPro12,1 (13-inch,
+      Intel Iris 6100 only), so it has no second GPU. Add the key anyway, since dual-GPU Macs
+      need it; no checkpoint step.
+- [ ] **32e.6** **Hidden windows.** No code watches window occlusion. While the window is hidden, minimized
+      or under a locked screen, the 0.5 s position timer and table updates keep running during
+      playback. Pause UI updates while the window is occluded. Bench: CPU and wakeups while playing
+      with the window hidden, against the 3% playback budget.
+- [ ] **32e.7** **Cold launch.** ADR 0007 measures warm. After a reboot the old Mac launches from a cold
+      page cache, and that is the launch you actually wait for. Measure it at the checkpoint
+      (`sudo purge`, then launch) and fix what the trace shows.
+- [ ] **32e.8** **Big selections and live resize.** Bench ⌘A over 43k tracks, then Play Next, Add to
+      Playlist and Get Info. Also bench live window resize, column resize and a row height change
+      with the art column shown (art runs depend on the column width).
+
+#### 32f. Checkpoint and budgets
 
 - Run `./scripts/bench` three times. Tighten any new budget the code beats by more than 3x, as
   14e did.
@@ -2982,14 +3021,24 @@ Sorting is fine: 73 ms on the old Mac in 14e. Leave it alone unless a new bench 
     rescan runs
   - double-click tracks of the same rate and of different rates on the ADI-2, and say whether
     the start feels instant
+  - a cold launch after `sudo purge` (32e.7)
 
   Give me the exact commands, tested under bash 3.2.
 
-When the phase is done, the Result line gives before and after for every suspect: the ones
-fixed, the ones that measured as no cost and were dropped, and the old-Mac rows still pending.
+Orchestrator notes on 32e:
+- 32e.1: a run-loop watchdog can't sample the main thread's stack cheaply. Have it log the
+  open signpost intervals and the last command or event dispatched, which is enough to place
+  the hitch.
+- 32e.2: a thumbnail cache is a cache, not app state. Weigh a file under
+  `~/Library/Caches/MusicPlayer` against a table in the index; the index's size budget and
+  backup weight argue for the cache folder. Record the choice in an ADR.
+- 32e.4: line numbers in AppDelegate moved with phase 30a's sync folder buttons, which added
+  more `fileExists` and `locate` calls on the main actor; cover those too.
+- The old Mac has 2 cores, 4 threads and 16 GB. Size concurrency caps (32b.4, 32d.3) for that.
 
-Overlap: branch `perf/play-latency` (ADR 0070) already starts the clicked track before the queue's paths are read, which covers most of 32a.3; 32a measures it rather than redoing it.
-
+Overlap: the play-latency change (ADR 0070, merged as b6d2a74) already starts the clicked track
+before the queue's paths are read, with a double-click bench, which covers most of 32a.3. 32a
+extends that bench rather than redoing it.
 
 ## Later
 
