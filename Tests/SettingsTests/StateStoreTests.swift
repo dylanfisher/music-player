@@ -376,3 +376,41 @@ private func problems(_ json: String) -> [SettingProblem] {
     daily.pollIntervalMinutes = 1441
     #expect(daily.problem() == "pollIntervalMinutes 1441 is outside 1...1440")
 }
+
+@Test func browserColumnsMustBeThreeDifferentKnownGroupings() throws {
+    let url = temporaryFile()
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    func state(_ columns: String) throws -> StateStore<AppState> {
+        try Data(#"{"window.sidebarWidth": 250, "browser.columns": \#(columns)}"#.utf8).write(
+            to: url)
+        return try StateStore(AppState(), fileURL: url)
+    }
+    let good = try state(
+        #"[{"grouping": "years", "selection": "1999"}, {"grouping": "genres", "selection": null},"#
+            + #" {"grouping": "composers", "selection": null}]"#)
+    #expect(good.discardReason == nil)
+    #expect(good[\.browserColumns].map(\.grouping) == [.years, .genres, .composers])
+    #expect(good[\.browserColumns][0].selection == "1999")
+    for (columns, problem) in [
+        (
+            #"[{"grouping": "genres", "selection": null}, {"grouping": "genres", "selection": null},"#
+                + #" {"grouping": "albums", "selection": null}]"#, "genres is listed twice"
+        ),
+        (#"[{"grouping": "genres", "selection": null}]"#, "1 columns"),
+        (
+            #"[{"grouping": "moods", "selection": null}, {"grouping": "genres", "selection": null},"#
+                + #" {"grouping": "albums", "selection": null}]"#, "moods"
+        ),
+        (
+            #"[{"grouping": "years", "selection": null, "width": 3},"#
+                + #" {"grouping": "genres", "selection": null},"#
+                + #" {"grouping": "albums", "selection": null}]"#, "width"
+        ),
+    ] {
+        let discarded = try state(columns)
+        #expect(discarded.discardReason?.contains(problem) == true, "\(columns)")
+        #expect(discarded[\.browserColumns] == BrowserColumn.defaults)
+        #expect(discarded[\.sidebarWidth] == AppState().sidebarWidth.defaultValue)
+    }
+}

@@ -61,10 +61,9 @@ extension BrowserGrouping {
             let date = TrackColumn.originalDate.expression
             return .value(value: date, order: date, caseless: false)
         case .audioQuality:
+            // "24/96000", which `displayName` shows as "24-bit 96 kHz".
             return .value(
-                value:
-                    "ifnull(t.bits_per_sample || '-bit ', '')"
-                    + " || printf('%g', t.sample_rate_hz / 1000.0) || ' kHz'",
+                value: "ifnull(t.bits_per_sample, 0) || '/' || t.sample_rate_hz",
                 order: "ifnull(t.bits_per_sample, 0) * 10000000 + t.sample_rate_hz",
                 caseless: false)
         case .channels:
@@ -97,6 +96,8 @@ extension BrowserGrouping {
     func displayName(_ text: String) -> String {
         switch self {
         case .ratings: text == "0" ? "Unrated" : stars(Int(text) ?? 0)
+        case .audioQuality:
+            audioQualityText(text)
         case .channels:
             switch text {
             case "1": "Mono"
@@ -106,6 +107,30 @@ extension BrowserGrouping {
         default: text
         }
     }
+}
+
+extension BrowserGrouping {
+    /// Whether `a` and `b` name one entry of this grouping: text the column groups ignoring
+    /// case matches as SQLite's NOCASE does, ASCII letters alone; anything else matches exactly.
+    public func sameEntry(_ a: BrowserValue, _ b: BrowserValue) -> Bool {
+        guard case .text(let x) = a, case .text(let y) = b,
+            case .value(_, _, true) = sql(TrackFilter())
+        else { return a == b }
+        return asciiLowercased(x) == asciiLowercased(y)
+    }
+}
+
+/// "24-bit 96 kHz", or "44.1 kHz" for a format with no bit depth, from "bits/hertz".
+private func audioQualityText(_ text: String) -> String {
+    let parts = text.split(separator: "/")
+    guard parts.count == 2, let bits = Int(parts[0]), let hertz = Double(parts[1]) else {
+        return text
+    }
+    return (bits > 0 ? bitDepth(bits) + " " : "") + kilohertz(hertz) + " kHz"
+}
+
+private func asciiLowercased(_ text: String) -> [UInt8] {
+    text.utf8.map { (65...90).contains($0) ? $0 + 32 : $0 }
 }
 
 /// Compares text ignoring ASCII case, as the table sorts tags.

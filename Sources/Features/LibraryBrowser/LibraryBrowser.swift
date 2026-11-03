@@ -191,7 +191,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             failed: { message in owner?.show(failure: message) })
         panes = PanesController(
             model: model,
-            select: { column, value in Task { await model.select(column: column, value) } },
+            select: { grouping, value in Task { await model.select(grouping, value) } },
             setGrouping: { grouping, column in
                 Task { await model.setGrouping(grouping, ofColumn: column) }
             },

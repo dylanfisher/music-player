@@ -13,7 +13,8 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
     private let model: BrowserModel
     /// The columns' tables, left to right.
     private(set) var tables: [KeyTableView] = []
-    private let select: (Int, BrowserValue?) -> Void
+    /// An entry chosen, or All for nil, in the column grouping by what the columns showed.
+    private let select: (BrowserGrouping, BrowserValue?) -> Void
     private let setGrouping: (BrowserGrouping, Int) -> Void
     private let keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome
     /// Moves the keys to the next column, or with false the previous one.
@@ -23,7 +24,7 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
     private var typeSelect: TypeSelect? = TypeSelect()
 
     init(
-        model: BrowserModel, select: @escaping (Int, BrowserValue?) -> Void,
+        model: BrowserModel, select: @escaping (BrowserGrouping, BrowserValue?) -> Void,
         setGrouping: @escaping (BrowserGrouping, Int) -> Void,
         keyCommand: @escaping ([KeyChord]) -> CommandDispatcher.KeyOutcome,
         focusPane: @escaping (Bool) -> Void
@@ -180,7 +181,8 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
         let row = table.selectedRow
         let entries = model.entries[column]
         // No selection, or the All row, means All.
-        select(column, row > 0 && row <= entries.count ? entries[row - 1].value : nil)
+        select(
+            model.columns[column], row > 0 && row <= entries.count ? entries[row - 1].value : nil)
     }
 
     // MARK: Header menu: what the column groups by

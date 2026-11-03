@@ -70,10 +70,10 @@ extension BrowserModel {
 
     /// Selects the entry `id` of `pane`'s kind in the column that shows that kind.
     func select(_ pane: Pane, id: Int64?) async {
-        guard let column = columns.firstIndex(where: pane.groupings.contains) else {
+        guard let grouping = columns.first(where: pane.groupings.contains) else {
             Issue.record("no column shows \(pane)")
             return
         }
-        await select(column: column, id.map(BrowserValue.id))
+        await select(grouping, id.map(BrowserValue.id))
     }
 }

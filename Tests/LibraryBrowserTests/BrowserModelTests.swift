@@ -365,6 +365,8 @@ private func loadedModel(
     #expect(BrowserGrouping.ratings.displayName("3") == "★★★")
     #expect(BrowserGrouping.channels.displayName("2") == "Stereo")
     #expect(BrowserGrouping.channels.displayName("6") == "6 Channels")
+    #expect(BrowserGrouping.audioQuality.displayName("24/96000") == "24-bit 96 kHz")
+    #expect(BrowserGrouping.audioQuality.displayName("0/44100") == "44.1 kHz")
     #expect(BrowserGrouping.years.displayName("1999") == "1999")
     #expect(BrowserGrouping.years.allTitle(1) == "All (1 Year)")
     #expect(BrowserGrouping.genres.allTitle(12) == "All (12 Genres)")
@@ -385,7 +387,7 @@ private func loadedModel(
         .years, TrackFilter(genre: genre.id), ignoring: [.years])
     #expect(model.entries[2] == years)
     let year = try #require(years.last)
-    await model.select(column: 2, year.value)
+    await model.select(.years, year.value)
     #expect(model.state.columns.map(\.grouping) == [.genres, .artists, .years])
     #expect(model.state.columns[2].selection == year.savedName)
 
@@ -435,4 +437,60 @@ private func loadedModel(
     panes.reload()
     #expect(panes.tables[1].tableColumns.first?.title == "Year")
     #expect(panes.tables[1].numberOfRows == model.entries[1].count + 1)
+}
+
+@Test func aTagGroupingListsEachTextOnceIgnoringCaseAndLeavesOutEmptyOnes() throws {
+    let databaseURL = try writableBrowserDatabase()
+    let index = try LibraryIndex(at: databaseURL)
+    let ids = try index.trackIDs(sortedBy: .title)
+    let tag = try index.database.prepare(
+        "UPDATE tracks SET composer = ?, publisher = ? WHERE file_id = ?")
+    try tag.run("Bach", "Label", ids[0])
+    try tag.run("bach", nil, ids[1])
+    try tag.run("Bach", nil, ids[2])
+    try tag.run("", "", ids[3])
+    try tag.run("Arvo Pärt", nil, ids[4])
+
+    let composers = try index.columnEntries(.composers, TrackFilter(), ignoring: [])
+    #expect(composers.map(\.name).map { $0.lowercased() } == ["arvo pärt", "bach"])
+    var filter = TrackFilter()
+    filter.selections[.composers] = composers[1].value
+    #expect(Set(try index.trackIDs(filter, sortedBy: .title)) == Set(ids[0..<3]))
+    let publishers = try index.columnEntries(.publishers, TrackFilter(), ignoring: [])
+    #expect(publishers.map(\.name) == ["Label"])
+    // A selection that ignores case matches the entry in any spelling.
+    #expect(BrowserGrouping.composers.sameEntry(.text("BACH"), .text("bach")))
+    #expect(!BrowserGrouping.composers.sameEntry(.text("Bach"), .text("Bachs")))
+    #expect(!BrowserGrouping.folders.sameEntry(.text("/A"), .text("/a")))
+    #expect(!BrowserGrouping.genres.sameEntry(.id(1), .id(2)))
+}
+
+@MainActor @Test func aTextSelectionStaysWhenItsSpellingChanges() async throws {
+    let databaseURL = try writableBrowserDatabase()
+    let index = try LibraryIndex(at: databaseURL)
+    let ids = try index.trackIDs(sortedBy: .title)
+    let tag = try index.database.prepare("UPDATE tracks SET composer = ? WHERE file_id = ?")
+    for id in ids[0..<3] { try tag.run("Bach", id) }
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: true,
+        groupByAlbumArtist: false)
+    await model.load(BrowserState(source: nil))
+    await model.setGrouping(.composers, ofColumn: 0)
+    let bach = try #require(model.entries[0].first)
+    await model.select(.composers, bach.value)
+    #expect(model.trackIDs.count == 3)
+    for id in ids[0..<3] { try tag.run("BACH", id) }
+    await model.refresh()
+    #expect(model.filter.selections[.composers] == .text("BACH"))
+    #expect(model.trackIDs.count == 3)
+    #expect(model.state.columns[0].selection == "BACH")
+}
+
+@MainActor @Test func aClickOnAGroupingNoLongerShownSelectsNothing() async throws {
+    let (model, _) = try await loadedModel()
+    let album = try #require(model.albums.first)
+    await model.setGrouping(.years, ofColumn: 2)
+    // The Albums column's table still showed when the click came.
+    await model.select(.albums, .id(album.id))
+    #expect(model.filter.selections.isEmpty)
 }

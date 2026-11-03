@@ -29,7 +29,11 @@ table by ID, and the palette, `music-player play`, and Show Artist and Show Albu
   path; File Types is the extension, as the File Type column shows it. Tracks with no value are
   left out of the column, as tracks with no genre are.
 - **A filter holds one selection per grouping**, `TrackFilter.selections`, so any column order
-  works. A column lists the tracks that the source and the columns to its left let through, as
+  works. A click selects by grouping, not by the column's place, and is ignored when a change
+  still loading has taken that grouping out of the columns, since an ID means nothing in
+  another grouping. A text selection in a grouping that ignores case is kept, in the new
+  spelling, when the spelling the column lists for it changes, as SQLite's NOCASE compares
+  (ASCII letters only). A column lists the tracks that the source and the columns to its left let through, as
   before.
 - **No two columns show the same grouping.** Choosing one another column shows swaps the two.
   A column whose grouping changes goes back to All, and so do the columns to its right, which

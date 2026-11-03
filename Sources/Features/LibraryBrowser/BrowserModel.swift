@@ -132,10 +132,13 @@ public final class BrowserModel {
         await reload(panesFrom: 0, saved: saved, reason: .loaded)
     }
 
-    /// Selects an entry of the column at `column`, or All for nil. The columns to its right are
-    /// narrowed, and lose a selection they no longer list.
-    func select(column: Int, _ value: BrowserValue?) async {
-        pending.selections[pendingColumns[column]] = value
+    /// Selects an entry of the column grouping by `grouping`, or All for nil. The columns to its
+    /// right are narrowed, and lose a selection they no longer list. Ignored when a change
+    /// still loading has taken the grouping out of the columns, since `value` was one of its
+    /// entries, and an ID means nothing in another grouping.
+    func select(_ grouping: BrowserGrouping, _ value: BrowserValue?) async {
+        guard let column = pendingColumns.firstIndex(of: grouping) else { return }
+        pending.selections[grouping] = value
         let next = column + 1
         await reload(panesFrom: next < BrowserColumn.count ? next : nil, reason: .user)
     }
@@ -654,7 +657,13 @@ public final class BrowserModel {
         _ grouping: BrowserGrouping
     ) -> BrowserValue? {
         if let savedName {
-            guard let entry = entries.first(where: { $0.savedName == savedName }) else {
+            let saved = BrowserValue.text(savedName)
+            guard
+                let entry = entries.first(where: {
+                    $0.savedName == savedName
+                        || grouping.sameEntry(.text($0.savedName), saved)
+                })
+            else {
                 logger.notice(
                     "the saved \(grouping.header.lowercased()) \"\(savedName)\" is gone; showing all"
                 )
@@ -662,8 +671,9 @@ public final class BrowserModel {
             }
             return entry.value
         }
-        guard let value, entries.contains(where: { $0.value == value }) else { return nil }
-        return value
+        // The entry's spelling, which can change within a group that ignores case.
+        guard let value else { return nil }
+        return entries.first { grouping.sameEntry($0.value, value) }?.value
     }
 }
 
