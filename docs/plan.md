@@ -2746,19 +2746,19 @@ Plan (30b):
    subview; moving onto the next album's rows switches. ADR 0065 amended.
 5. **30b.4** A click in the Rating column sets the clicked track's rating to the star under the
    pointer; left of the first star, or on the rating it has, clears it. `RatingClick` (pure)
-   maps the point; tests for it and the controller.
+   maps the point; tests for it and the controller. ADR 0068.
 6. **30b.6** Show All Tracks becomes Show All Music. ⌘K lists it only while a source, pane or
    search narrows the table; ⌘P puts it first then. Tests on `LibraryBrowser.showsAllMusic`
    and the palette items.
 7. **30b.8** Music, History, Timeline and Library Health get tooltips, from one place.
-8. **30b.7** `BrowserGrouping` (Core/Library) lists Swinsian's groupings, each with its SQL
-   value over a track. `TrackFilter` holds each browser column's grouping and selected value
-   in place of genre, artist and album; the panes' queries take the column's grouping. The
+8. **30b.7** `BrowserGrouping` (Settings) lists Swinsian's groupings, and Library gives each
+   its SQL over a track. `TrackFilter` holds each grouping's selected value in place of genre,
+   artist and album; the columns' queries take the column's grouping. The
    columns' groupings are kept in the state file (`browser.columns`, default Genres, Artists,
    Albums); the header's menu in each column picks one. The palette's genre, artist and album
    and Show Artist / Show Album select in a column that shows that grouping, or else show the
    track in the whole library. Tests: each grouping's entries and filter, the menu, saving.
-   ADR 0067.
+   ADR 0069.
 
 #### 30c. Window chrome and status bar
 

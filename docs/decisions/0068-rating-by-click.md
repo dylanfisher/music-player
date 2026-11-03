@@ -1,4 +1,4 @@
-# 0067. A click in the Rating column rates the track
+# 0068. A click in the Rating column rates the track
 
 - **Date:** 2026-11-03
 - **Status:** accepted

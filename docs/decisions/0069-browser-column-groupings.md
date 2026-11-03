@@ -1,4 +1,4 @@
-# 0068. Each browser column groups by what the user picks
+# 0069. Each browser column groups by what the user picks
 
 - **Date:** 2026-11-03
 - **Status:** accepted
