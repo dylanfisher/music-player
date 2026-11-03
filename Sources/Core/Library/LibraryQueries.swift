@@ -123,9 +123,8 @@ extension LibraryIndex {
             tieBreak = "t.disc_number, t.track_number, t.sort_title, t.file_id"
         } else if column == .lastPlayed {
             // A time is almost unique, so the ID breaks ties without the artist and album
-            // lookups the other columns need. In History every row has plays, so p.path_id is
-            // t.file_id, and naming it lets plays_last_played supply the whole order.
-            tieBreak = "\(filter.source == .history ? "p.path_id" : "t.file_id") \(direction)"
+            // lookups the other columns need.
+            tieBreak = "t.file_id \(direction)"
         } else {
             tieBreak =
                 "\(filter.groupByAlbumArtist ? "ga" : "ar").sort_name, al.sort_title,"
