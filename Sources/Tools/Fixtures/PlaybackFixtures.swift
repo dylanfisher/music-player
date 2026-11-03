@@ -105,6 +105,29 @@ public func sineAlbum(
     return SineAlbum(tracks: tracks, trackFrames: frames, sampleRateHz: sampleRateHz)
 }
 
+/// Twenty seconds of 16-bit 44.1 kHz FLAC, silent but for a ramp from `burstSeconds`, so the
+/// first sound a device pulls after an action tells when the action took effect. Made the
+/// first time it's asked for.
+public struct BurstTrack: Sendable {
+    public let url: URL
+    public static let seconds = 20
+    public static let burstSeconds = 10.0..<12.0
+}
+
+public func burstTrack(in directory: URL) throws -> BurstTrack {
+    let rate = 44_100
+    let url = directory.appendingPathComponent("burst-\(rate)-16-\(BurstTrack.seconds)s.flac")
+    let burst =
+        Int(BurstTrack.burstSeconds.lowerBound) * rate..<Int(
+            BurstTrack.burstSeconds.upperBound) * rate
+    try makeEncoded(
+        at: url, sampleRateHz: rate, bitsPerSample: 16, frames: rate * BurstTrack.seconds
+    ) { frame, channel in
+        burst.contains(frame) ? rampSample(frame, channel: channel, bits: 16) : 0
+    }
+    return BurstTrack(url: url)
+}
+
 /// Half a second of 24-bit 44.1 kHz FLAC holding a different steady level on each channel,
 /// `levelOf(channel)`, so a channel mix shows as plain arithmetic on the levels.
 func levelTrack(channels: Int, in directory: URL) throws -> URL {

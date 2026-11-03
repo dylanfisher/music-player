@@ -11,7 +11,8 @@ import Playback
 /// rate, hog mode and volume as another app would, and it reports its state as the HAL's
 /// listeners would. Tests can also narrow the rates and formats it reports, and give two of
 /// them different names. A session takes a format from what it reports, as a CoreAudio device
-/// does, converting when none carries the track.
+/// does, converting when none carries the track. Benchmarks can give its HAL steps the time a
+/// real device takes, and time the first IO cycle that carries sound.
 public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     public let deviceName: String
     public var deviceUID: String { deviceName }
@@ -35,8 +36,37 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     private var runs: [CapturedRun] = []
     private var restoredDefaults = 0
     private var openSessions = 0
+    private var sessionsEverOpened = 0
     /// `goneAfterSeconds` is nil for a call that fails while the device stays.
     private var failsDuring: (step: SessionStep, callsLeft: Int, goneAfterSeconds: Double?)?
+    private let delays: HALDelays?
+    /// The rate at the first open, which closing a session puts back when `delays` is set.
+    private var originalRateHz: Double?
+    /// Set from `listenForSound()` until a cycle carries sound.
+    private var soundWatch: SoundWatch?
+
+    /// What a real device's HAL steps take, which the null device otherwise does at once. With
+    /// it set, closing a session also puts back the rate the device had when first opened, as
+    /// `HALDevice.close` does, so a close and reopen costs two rate changes.
+    public struct HALDelays: Sendable {
+        /// Finding the device, writing the restore record and taking hog mode.
+        public var openSeconds: Double
+        /// A new nominal rate settling, set by a session or put back by its close.
+        public var rateChangeSeconds: Double
+        /// Releasing hog mode when a session closes.
+        public var hogReleaseSeconds: Double
+
+        public init(openSeconds: Double, rateChangeSeconds: Double, hogReleaseSeconds: Double) {
+            self.openSeconds = openSeconds
+            self.rateChangeSeconds = rateChangeSeconds
+            self.hogReleaseSeconds = hogReleaseSeconds
+        }
+    }
+
+    private struct SoundWatch {
+        let heard = DispatchSemaphore(value: 0)
+        var cycleStart: UInt64?
+    }
 
     /// A call on a session the device can go away during, or refuse.
     enum SessionStep: String, CaseIterable, Sendable {
@@ -65,19 +95,35 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
 
     public init(
         name: String = "null device", speed: Double = 1, ioFrames: Int = 512,
-        keepsSamples: Bool = false
+        keepsSamples: Bool = false, delays: HALDelays? = nil
     ) {
         precondition(speed > 0, "speed must be positive")
         deviceName = name
         self.speed = speed
         self.ioFrames = ioFrames
         self.keepsSamples = keepsSamples
+        self.delays = delays
+    }
+
+    /// Watches for the next IO cycle that pulls anything but silence.
+    public func listenForSound() { lock.withLock { soundWatch = SoundWatch() } }
+
+    /// When that cycle began, in uptime nanoseconds, waiting up to `seconds` for it; nil if none
+    /// came.
+    public func soundStarted(within seconds: Double) -> UInt64? {
+        guard let heard = lock.withLock({ soundWatch?.heard }) else {
+            preconditionFailure("listenForSound must come first")
+        }
+        guard heard.wait(timeout: .now() + seconds) == .success else { return nil }
+        return lock.withLock { soundWatch?.cycleStart }
     }
 
     /// One run per `configure`, in order.
     public var captured: [CapturedRun] { lock.withLock { runs } }
     /// How many sessions are open; zero once every one has been closed or abandoned.
     var openSessionCount: Int { lock.withLock { openSessions } }
+    /// How many sessions have been opened, closed ones included.
+    var openedSessionCount: Int { lock.withLock { sessionsEverOpened } }
     var defaultsRestoredCount: Int { lock.withLock { restoredDefaults } }
 
     /// Whether a watcher is registered, which closing the output must undo.
@@ -86,7 +132,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     func unplug() { setConnected(false) }
 
     /// Another app setting the device's rate, as in Audio MIDI Setup.
-    func changeRate(to hertz: Double) {
+    public func changeRate(to hertz: Double) {
         lock.withLock { nominalSampleRateHz = hertz }
         reportState()
     }
@@ -234,8 +280,11 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
         let session = lock.withLock { () -> Session? in
             guard connected else { return nil }
             openSessions += 1
+            sessionsEverOpened += 1
+            if originalRateHz == nil { originalRateHz = nominalSampleRateHz }
             return Session(self)
         }
+        if session != nil, let delays { Thread.sleep(forTimeInterval: delays.openSeconds) }
         if session != nil { reportState() }
         return session
     }
@@ -260,6 +309,8 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     public func deviceReturned() { lock.withLock { restoredDefaults += 1 } }
 
     fileprivate func began(_ format: AudioStreamBasicDescription) {
+        let rateChanges = lock.withLock { nominalSampleRateHz != format.mSampleRate }
+        if rateChanges, let delays { Thread.sleep(forTimeInterval: delays.rateChangeSeconds) }
         lock.withLock {
             nominalSampleRateHz = format.mSampleRate
             physicalFormat = format
@@ -268,9 +319,30 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
         reportState()
     }
 
-    fileprivate func pulled(_ buffer: UnsafeRawBufferPointer) {
-        guard keepsSamples else { return }
-        lock.withLock { runs[runs.count - 1].samples += buffer.bindMemory(to: Int32.self) }
+    /// `cycleStart` is when the cycle that pulled `buffer` began, in uptime nanoseconds.
+    fileprivate func pulled(_ buffer: UnsafeRawBufferPointer, cycleStart: UInt64) {
+        lock.withLock {
+            if soundWatch?.cycleStart == nil, let watch = soundWatch,
+                buffer.contains(where: { $0 != 0 })
+            {
+                soundWatch?.cycleStart = cycleStart
+                watch.heard.signal()
+            }
+            if keepsSamples { runs[runs.count - 1].samples += buffer.bindMemory(to: Int32.self) }
+        }
+    }
+
+    /// A session closing: with `delays`, the rate goes back to the first open's and hog mode is
+    /// released, each taking its time.
+    fileprivate func restore() {
+        guard let delays else { return }
+        let rateChanges = lock.withLock { () -> Bool in
+            guard let originalRateHz, nominalSampleRateHz != originalRateHz else { return false }
+            nominalSampleRateHz = originalRateHz
+            return true
+        }
+        if rateChanges { Thread.sleep(forTimeInterval: delays.rateChangeSeconds) }
+        Thread.sleep(forTimeInterval: delays.hogReleaseSeconds)
     }
 
     fileprivate func ended() {
@@ -346,6 +418,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
                 let start = Double(mach_absolute_time())
                 var cycles = 0.0
                 while !stop.isSet {
+                    let cycleStart = DispatchTime.now().uptimeNanoseconds
                     var list = AudioBufferList(
                         mNumberBuffers: 1,
                         mBuffers: AudioBuffer(
@@ -353,7 +426,8 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
                     _ = HALRenderIOProc(
                         0, &time, &input, &time, &list, &time,
                         UnsafeMutableRawPointer(bitPattern: renderAddress))
-                    device.pulled(UnsafeRawBufferPointer(start: buffer, count: bytes))
+                    device.pulled(
+                        UnsafeRawBufferPointer(start: buffer, count: bytes), cycleStart: cycleStart)
                     cycles += 1
                     let deadline = UInt64(start + cycles * cycleTicks)
                     if deadline > mach_absolute_time() { mach_wait_until(deadline) }
@@ -378,6 +452,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
 
         func close() throws {
             try stop()
+            if isOpen { device.restore() }
             end()
         }
 

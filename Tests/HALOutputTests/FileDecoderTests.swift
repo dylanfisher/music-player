@@ -166,3 +166,32 @@ private func threeChannelCAF(_ layout: UnsafePointer<AudioChannelLayout>) throws
     let decoder = try FileDecoder(url: url)
     #expect(decoder.channelOrder == ChannelOrder(roles: [.left, .right, .backCentre]))
 }
+
+/// Every frame `decoder` hands on as 32-bit integers.
+private func allSamples(_ decoder: FileDecoder) throws -> [Int32] {
+    try decoder.setOutputFormat(pcm(bits: 32, rate: decoder.fileFormat.mSampleRate))
+    var samples = [Int32](repeating: 0, count: Int(decoder.lengthFrames) * 2)
+    var frames = 0
+    try samples.withUnsafeMutableBytes { bytes in
+        while true {
+            let read = try decoder.read(
+                into: bytes.baseAddress! + frames * 8,
+                frames: UInt32(Int(decoder.lengthFrames) - frames))
+            if read == 0 { break }
+            frames += Int(read)
+        }
+    }
+    return Array(samples.prefix(frames * 2))
+}
+
+@Test func aFileReadWithLatencyDecodesTheSameAfterWaiting() throws {
+    let url = try rampAlbum(
+        sampleRateHz: 44_100, bitsPerSample: 16, in: try defaultPlaybackFixturesDirectory()
+    ).tracks[1]
+    let latency = FileLatency(openSeconds: 0.1, readSeconds: 0.002)
+    let start = Date()
+    let slow = try FileDecoder(url: url, latency: latency)
+    #expect(Date().timeIntervalSince(start) >= latency.openSeconds)
+    #expect(slow.lengthFrames == (try FileDecoder(url: url).lengthFrames))
+    #expect(try allSamples(slow) == (try allSamples(FileDecoder(url: url))))
+}

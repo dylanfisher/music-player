@@ -134,9 +134,12 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private var signalBuilds = 0
     /// Streams whose IO proc may still be called because stopping it failed. They are never freed.
     private var retired: [RenderStream] = []
+    private let fileLatency: FileLatency?
 
-    public init(_ choice: DeviceChoice) throws {
+    /// `fileLatency` is for benchmarks: it makes PCM files read as from a NAS.
+    public init(_ choice: DeviceChoice, fileLatency: FileLatency? = nil) throws {
         self.choice = choice
+        self.fileLatency = fileLatency
         volumeOn = choice.digitalVolume
         gain = choice.gain
         knownFormats = choice.formats
@@ -293,7 +296,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         let started = uptime()
         let track: Track
         do {
-            track = try Track(item)
+            track = try Track(item, latency: fileLatency)
             try refuseUntakeable(track)
         } catch {
             cannotPlay(item, error)
@@ -467,7 +470,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     /// The track being decoded, rewound, when it is `item`; otherwise `item` opened again.
     private func reusableTrack(for item: OutputItem) throws -> Track {
-        guard let feeding, feeding.item.id == item.id else { return try Track(item) }
+        guard let feeding, feeding.item.id == item.id else {
+            return try Track(item, latency: fileLatency)
+        }
         try feeding.decoder.seek(toFrame: 0)
         return feeding
     }
@@ -506,7 +511,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
         if let item {
             do {
-                let track = try Track(item)
+                let track = try Track(item, latency: fileLatency)
                 try refuseUntakeable(track)
                 next = track
             } catch {
@@ -1012,7 +1017,7 @@ private struct Track {
     /// header states, or nil when there's none and the length can't be checked.
     let checkedLengthFrames: Int64?
 
-    init(_ item: OutputItem) throws {
+    init(_ item: OutputItem, latency: FileLatency?) throws {
         self.item = item
         if dsdFileExtensions.contains(item.url.pathExtension.lowercased()) {
             let reader = try DSDReader(url: item.url)
@@ -1030,7 +1035,7 @@ private struct Track {
             checkedLengthFrames = nil
             return
         }
-        let decoder = try FileDecoder(url: item.url)
+        let decoder = try FileDecoder(url: item.url, latency: latency)
         self.decoder = decoder
         sampleRateHz = decoder.fileFormat.mSampleRate
         channels = decoder.fileFormat.mChannelsPerFrame

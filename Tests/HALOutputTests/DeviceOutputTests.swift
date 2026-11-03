@@ -451,3 +451,51 @@ private func samples(of album: RampAlbum, _ ranges: [Range<Int>]) -> [Int32] {
     #expect(controlTickSeconds(running: false, fillDue: true) == 0.05)
     #expect(controlTickSeconds(running: false, fillDue: false) == nil)
 }
+
+@Test func theNullDevicesHALStepsTakeTheirTimeAndCloseRestoresTheFirstRate() throws {
+    let delays = NullDevice.HALDelays(
+        openSeconds: 0.02, rateChangeSeconds: 0.1, hogReleaseSeconds: 0.03)
+    let device = NullDevice(delays: delays)
+    device.changeRate(to: 48_000)
+    let file = SignalFormat(
+        formatID: linearPCMFormatID, sampleRateHz: 44_100, bitsPerChannel: 16, channels: 2,
+        isFloat: false)
+    func seconds(_ body: () throws -> Void) rethrows -> Double {
+        let start = Date()
+        try body()
+        return Date().timeIntervalSince(start)
+    }
+
+    var session: (any PCMDevice)?
+    #expect(try seconds { session = try device.open() } >= delays.openSeconds)
+    let configure = { (rate: Double) in
+        _ = try session!.configure(sampleRateHz: rate, channels: 2, forDoP: false, file: file)
+    }
+    #expect(try seconds { try configure(44_100) } >= delays.rateChangeSeconds)
+    #expect(try seconds { try configure(44_100) } < delays.rateChangeSeconds)
+    // Closing puts back 48 kHz and releases hog mode.
+    #expect(
+        try seconds { try session!.close() } >= delays.rateChangeSeconds + delays.hogReleaseSeconds)
+    session = try device.open()
+    #expect(try seconds { try configure(48_000) } < delays.rateChangeSeconds)
+    try session!.close()
+}
+
+@Test func theNullDeviceTimesTheFirstCycleThatCarriesSound() async throws {
+    let directory = try defaultPlaybackFixturesDirectory()
+    let burst = try burstTrack(in: directory).url
+    let device = NullDevice(speed: 8)
+    let output = try DeviceOutput(
+        DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil))
+    defer { output.close() }
+
+    device.listenForSound()
+    let start = DispatchTime.now().uptimeNanoseconds
+    output.load(OutputItem(id: 1, url: burst), startSeconds: 0, playing: true)
+    // The burst starts 10 s in, 1.25 s at 8 times real time.
+    #expect(device.soundStarted(within: 0.5) == nil)
+    let sound = try #require(device.soundStarted(within: 5))
+    let seconds = Double(sound - start) / 1e9
+    #expect(seconds > BurstTrack.burstSeconds.lowerBound / 8 - 0.1)
+    #expect(seconds < BurstTrack.burstSeconds.lowerBound / 8 + 0.5)
+}
