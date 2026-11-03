@@ -6,7 +6,7 @@ import DisplayText
 @MainActor
 final class PaletteRow: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("PaletteRow")
-    static let minimumHeight = 48.0
+    static let minimumHeight = 32.0
     private static let side = 16.0
     private static let iconSize = 18.0
     private static let gap = 8.0

@@ -17,16 +17,17 @@ public enum PaletteMode: Equatable, Sendable {
 public final class PaletteController: NSObject, NSTextFieldDelegate, NSTableViewDataSource,
     NSTableViewDelegate, NSWindowDelegate
 {
-    // The size, row height, field font and corner radius are simple-spotlight's
-    // (`~/projects/simple-spotlight`), so the owner's two launchers look alike (ADR 0047).
+    // The width, field font and corner radius are simple-spotlight's
+    // (`~/projects/simple-spotlight`), so the owner's two launchers look alike; the height and
+    // row count are the palette's first ones, 420 points and eleven 32-point rows (ADR 0047).
     public static let width = 680.0
     static let fieldHeight = 56.0
     static let cornerRadius = 16.0
-    /// The space above and below the rows.
-    static let listInset = 6.0
+    /// The space above and below the rows, what's left of the first height.
+    static let listInset = 5.5
     static let separatorHeight = 1.0
-    /// The rows the panel has room for at their least height, simple-spotlight's default count.
-    static let visibleRows = 8
+    /// The rows the panel has room for at their least height.
+    static let visibleRows = 11
     static let rowsHeight = 2 * listInset + Double(visibleRows) * PaletteRow.minimumHeight
     static let height = fieldHeight + separatorHeight + rowsHeight
 
@@ -422,11 +423,20 @@ final class PaletteClip: NSView {
     }
 }
 
-/// Draws the selection in the accent colour, rounded, as Spotlight's.
+/// Draws the selection as Searcher's palette does, which is the inset table style's: the
+/// focused selection color, rounded and inset from the sides. The style itself isn't used, since
+/// it pads the rows by 10 points above and below, which the panel's height has no room for.
 final class PaletteRowView: NSTableRowView {
+    static let selectionColor = NSColor.selectedContentBackgroundColor
+    static let selectionInset = 10.0
+    static let selectionRadius = 6.0
+
     override func drawSelection(in dirtyRect: NSRect) {
-        NSColor.controlAccentColor.setFill()
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 8, dy: 1), xRadius: 8, yRadius: 8).fill()
+        Self.selectionColor.setFill()
+        NSBezierPath(
+            roundedRect: bounds.insetBy(dx: Self.selectionInset, dy: 0),
+            xRadius: Self.selectionRadius, yRadius: Self.selectionRadius
+        ).fill()
     }
 
     override var interiorBackgroundStyle: NSView.BackgroundStyle {

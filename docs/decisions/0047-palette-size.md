@@ -1,7 +1,7 @@
 # 0047. The palette takes simple-spotlight's size
 
 - **Date:** 2026-11-02
-- **Status:** accepted
+- **Status:** accepted; height, rows and selection amended on 2026-11-02 (phase 29.5)
 - **Amends:** [0016](0016-palette.md)
 
 ## Context
@@ -33,3 +33,14 @@ default.
 - **Shrinking to the results, as simple-spotlight does** — rejected for the flashing above.
 - **simple-spotlight's two-line rows**, title over subtitle with a 40-point icon — not asked for;
   the row keeps its layout and takes the height.
+
+## Amendment, 2026-11-02 (phase 29.5)
+
+The owner found eight 48-point rows too few and too tall, and the bright accent selection too
+loud. ⌘K keeps simple-spotlight's width, field and radius, and goes back to the palette's first
+height and row count, from b3d9988: 420 points with 32-point rows, eleven of them now under the
+56-point field and a line, 5.5 points from the edges. Page Up and Page Down move ten rows.
+The selection is Searcher's, which is the inset table style's: the focused selection color
+(`selectedContentBackgroundColor`), rounded and inset 10 points from the sides. It's drawn by
+the row view rather than by `NSTableView.Style.inset`, which pads the rows 10 points above and
+below and so wouldn't fit eleven rows in 420 points.

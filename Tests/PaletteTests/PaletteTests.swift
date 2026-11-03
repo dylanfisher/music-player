@@ -254,9 +254,10 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
     #expect(try alpha() == 0.6)
 }
 
-// simple-spotlight's panel, read from its `SearchPanel` and `ResultRow`: 680 wide, a 56-point
-// field in 24-point light type, eight 48-point rows inset 6 under a 1-point line, radius 16.
-@MainActor @Test func thePanelHasSimpleSpotlightsSize() async throws {
+// simple-spotlight's width, field and radius, read from its `SearchPanel`: 680 wide, a 56-point
+// field in 24-point light type, radius 16. The palette's first height, 420, and its eleven
+// 32-point rows, under a 1-point line.
+@MainActor @Test func thePanelHasItsSize() async throws {
     let palette = PaletteController(
         model: PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 }))
     let window = NSWindow(
@@ -266,13 +267,18 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
         .goToItem, items: (0..<20).map { item("Artist \($0)") }, over: window, place: nil)
     while palette.shown.isEmpty { await Task.yield() }
     palette.window.layoutIfNeeded()
-    #expect(palette.window.frame.size == NSSize(width: 680, height: 56 + 1 + 6 + 8 * 48 + 6))
+    #expect(palette.window.frame.size == NSSize(width: 680, height: 420))
     #expect(palette.field.font == .systemFont(ofSize: 24, weight: .light))
     #expect(palette.window.contentView?.layer?.cornerRadius == 16)
-    #expect(palette.table.rect(ofRow: 0).height == 48)
+    #expect(palette.table.rect(ofRow: 0).height == 32)
     let scroll = try #require(palette.table.enclosingScrollView)
-    // The visible rect includes the insets above and below the rows.
-    let rows = scroll.documentVisibleRect.insetBy(dx: 0, dy: 6)
-    #expect(palette.table.rows(in: rows) == NSRange(location: 0, length: 8))
+    // Eleven whole rows show, 5.5 points from the line and the bottom.
+    let visible = scroll.documentVisibleRect
+    #expect(palette.table.rect(ofRow: 0).minY - visible.minY == 5.5)
+    #expect(visible.maxY - palette.table.rect(ofRow: 10).maxY == 5.5)
+    // The selection is the focused selection color, as Searcher's, not the bright accent color.
+    #expect(PaletteRowView.selectionColor == .selectedContentBackgroundColor)
+    let row = try #require(palette.table.rowView(atRow: 0, makeIfNecessary: true))
+    #expect(row.isSelected && row.interiorBackgroundStyle == .emphasized)
     palette.close()
 }
