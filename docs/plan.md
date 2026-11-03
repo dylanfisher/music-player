@@ -2728,6 +2728,38 @@ owner: the window on macOS 12, and whether the titles should be sentence case as
 - [ ] **30b.8 Sidebar tooltips.** Music, History, Timeline, Library Health and the default
       groupings get a tooltip saying what each is.
 
+Plan (30b):
+
+1. **30b.5** Reproduced on both Macs: with `NSFileViewer = com.apple.finder` in the argument
+   domain, AppKit sends Finder an open-documents event and Finder plays the file in Music. The
+   override goes, unless the global key names another viewer; then it's set to an ID no app
+   has, which AppKit answers with its own Finder reveal. Test: the override's value for each
+   global key. ADR 0051 amended.
+2. **30b.1** Type-to-select and a reload that keeps the selection center the row
+   (`RowListController.center`), not scroll it to an edge. Tests on the controller.
+3. **30b.2** `RowHeight` gives a font size beside its points (11, 12, 13); `TextCell` takes its
+   font from the controller, and the track table sets it with the row height. Test: Large
+   draws 13-point text that fits the row.
+4. **30b.3** The hover is moved to the top of the table's subviews each time it shows, since
+   row views AppKit adds later go above it. Its hot area is the album's own rows within its
+   frame, so the pointer on the next album's rows hovers that one. Tests: the hover is the top
+   subview; moving onto the next album's rows switches. ADR 0065 amended.
+5. **30b.4** A click in the Rating column sets the clicked track's rating to the star under the
+   pointer; left of the first star, or on the rating it has, clears it. `RatingClick` (pure)
+   maps the point; tests for it and the controller.
+6. **30b.6** Show All Tracks becomes Show All Music. ⌘K lists it only while a source, pane or
+   search narrows the table; ⌘P puts it first then. Tests on `LibraryBrowser.showsAllMusic`
+   and the palette items.
+7. **30b.8** Music, History, Timeline and Library Health get tooltips, from one place.
+8. **30b.7** `BrowserGrouping` (Core/Library) lists Swinsian's groupings, each with its SQL
+   value over a track. `TrackFilter` holds each browser column's grouping and selected value
+   in place of genre, artist and album; the panes' queries take the column's grouping. The
+   columns' groupings are kept in the state file (`browser.columns`, default Genres, Artists,
+   Albums); the header's menu in each column picks one. The palette's genre, artist and album
+   and Show Artist / Show Album select in a column that shows that grouping, or else show the
+   track in the whole library. Tests: each grouping's entries and filter, the menu, saving.
+   ADR 0067.
+
 #### 30c. Window chrome and status bar
 
 - [x] **30c.1 Toolbar customization.** Every toolbar item shows an icon or a drawing of itself in
