@@ -2578,20 +2578,20 @@ History source.
 
 The owner's feedback from 2026-11-02, given during phase 12's run.
 
-- [ ] **29.1 Album art.** The thumbnail / full-width option has no effect: art is always full
+- [x] **29.1 Album art.** The thumbnail / full-width option has no effect: art is always full
       width. Replace it with a choice between art scaled to fit the view and art always full
       width, cropped at the bottom on short albums. Art fills its cell edge to edge, so no row
       highlight shows behind it. Hovering art brings it to the top layer at full width; clicking
       it opens it centered, as large as the screen allows, and a click anywhere or Esc closes it.
-- [ ] **29.2 Now-playing style in the toolbar.** The now-playing style is chosen by customizing
+- [x] **29.2 Now-playing style in the toolbar.** The now-playing style is chosen by customizing
       the toolbar, as in Swinsian, not in Appearance. The signal path badge isn't cut off.
-- [ ] **29.3 Status bar.** Translucent gray glass like the table headers, the same height, its
+- [x] **29.3 Status bar.** Translucent gray glass like the table headers, the same height, its
       text centered vertically in the tables' compact font size.
-- [ ] **29.4 Selection and keys.** After any sort or column change, the selected item scrolls
+- [x] **29.4 Selection and keys.** After any sort or column change, the selected item scrolls
       to the center. With nothing playing, ⌘L focuses the selected item if there is one. The
       playing row's highlight is light gray, not light blue. Ctrl+Option+Up/Down scroll without
       changing the selection.
-- [ ] **29.5 Palette.** ⌘K keeps its width but gets back its old height and item count, and uses
+- [x] **29.5 Palette.** ⌘K keeps its width but gets back its old height and item count, and uses
       Searcher's selection highlight instead of bright blue.
 
 Plan:
@@ -2617,6 +2617,28 @@ Plan:
 5. **29.5** The palette's rows go back to 32 points and eleven rows (360 points of rows, as in
    b3d9988), at 680 wide; the selection uses the system's inset row highlight, emphasized, as
    Searcher's does. ADR 0047 amended.
+
+Result: shipped as planned; `./scripts/check` passes. 29.1: the "no effect" report wasn't
+reproduced: the setting was read and applied at launch and on every config change, and the owner's
+config on the 2015 MacBook Pro holds no art size (ADR 0065 lists the checks). The setting is now
+Scaled to Fit (the default) or Full Width, cut off at the album's last row, and art draws edge to
+edge with no highlight behind it. Hovering art shows it whole at full width, and clicking opens it
+centered at screen size, decoded off the main thread; a click, Esc, closing the window, the app
+going inactive or a reload closes it. 29.2: Now Playing and Now Playing (Centered) are toolbar
+items, `appearance.nowPlaying` is gone, and the signal path badge is no longer clipped. 29.3: the
+status bar uses the header's material, the header's height and the lists' font. 29.4: a sort or
+column change centers the selection; ⌘L with nothing playing shows the selection; the playing row
+is light gray (its accent bar stays blue); ⌃⌥↑ and ⌃⌥↓ scroll without moving the selection.
+29.5: the palette is back to 420 points, eleven 32-point rows at 680 wide, with Searcher's inset
+selection highlight. The gate fixed the art hover staying put through a scroll, a late decode
+reporting after the viewer closed, the viewer outliving its window, and recentering once per moved
+column. Benchmarks against main measured the same evening (both inflated by this Mac's display
+state, see phase 12): scroll-bar drag 12.6 ms (main 20.9), launch 0.66 s (0.68), memory after
+scrolling 76.6 MB (budget 120), palette opening rows 4.08 ms (4.10; over its 4 ms budget as on
+main). A config that still holds `appearance.nowPlaying` or `artSize: "thumbnail"` shows the
+config problem banner until the line is removed (pre-release, no migration). Pending the owner:
+trying 29.1 to 29.5 in the app, and saying whether the playing row's blue accent bar should go gray
+too.
 
 ## Later
 
