@@ -400,15 +400,8 @@ public final class LibraryWatcher: @unchecked Sendable {
         return true
     }
 
-    /// Where the sync folder is now, in canonical form; nil while its share isn't mounted.
     private func locate(_ folder: SyncFolder) throws -> String? {
-        guard let share = folder.share else { return canonicalPath(folder.path) }
-        guard let url = ShareURL(share) else {
-            preconditionFailure("\(share) passed the settings check")
-        }
-        guard case .mounted(let mountPoint) = ShareLookup(url, among: try mounts.mountedShares())
-        else { return nil }
-        return canonicalPath(folder.path.isEmpty ? mountPoint : mountPoint + "/" + folder.path)
+        Library.locate(folder, among: folder.share == nil ? [] : try mounts.mountedShares())
     }
 
     private func schedulePoll(at date: Date?) {

@@ -5,7 +5,9 @@
 - **Amends:** [0008](0008-library-schema-identity-and-stats-by-path.md),
   [0016](0016-palette.md)
 - **Amended by:** [0022](0022-stable-track-identity-and-play-timeline.md) (entries, stats and
-  History key on a path ID; the play timeline), [0032](0032-playlist-files.md) (playlist files)
+  History key on a path ID; the play timeline), [0032](0032-playlist-files.md) (playlist files),
+  [0067](0067-settings-layout-and-played-share.md) (a play counts at a set share, 75% by
+  default)
 
 ## Context
 

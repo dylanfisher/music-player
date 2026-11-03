@@ -8,14 +8,24 @@ private let logger = moduleLogger()
 /// What a setting or a shortcut with no value shows.
 let noValueText = "None"
 
-/// Settings ▸ General: the config file's place and buttons, then the settings from the schema in
-/// sections, a grid of rows each. Settings ▸ Appearance is one too, with its section alone and
-/// no config file.
+/// Settings ▸ General: the config file's place and buttons, then the settings from the schema,
+/// a titled box for each section. A checkbox carries its setting's title on its right; a pop-up
+/// or a field has the title on its left, in one column for the whole pane. Each setting's
+/// summary is under it. Settings ▸ Appearance is one too, with its section alone and no config
+/// file, and the Watched Folders pane holds one for its section.
 @MainActor
 final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     static let width = 640.0
     /// How long Copy Default Config's button says "Copied".
     static let copiedSeconds = 1.5
+    /// The space around the pane's boxes.
+    static let margin = 20.0
+    /// The space between a box's edge and its rows.
+    private static let boxInset = 12.0
+    /// How far a checkbox's title is from its left edge, where its summary starts too.
+    private static let checkboxIndent = 20.0
+    /// The widest a summary is, so the boxes keep the pane's width.
+    private static let summaryWidth = 400.0
 
     private let model: GeneralModel
     /// Nil for a pane without the config file's place and buttons.
@@ -23,10 +33,17 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private let sections: [GeneralModel.Section]
     private let actions: SettingsActions
     private var controls: [String: NSView] = [:]
+    /// The number and text rows' fields, which may sit beside a unit.
+    private var fields: [String: NSTextField] = [:]
+    /// The rows' labels on the left, for rows that have one, and their summaries, which dim
+    /// while the row is disabled.
+    private var labels: [String: NSTextField] = [:]
+    private var summaries: [String: NSTextField] = [:]
     private let copyButton = NSButton()
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
     private var copiedGeneration = 0
     private var syncFolderLabel: NSTextField?
+    private var syncFolderButtons: (change: NSButton, open: NSButton, clear: NSButton)?
 
     init(
         model: GeneralModel, configPath: String?, actions: SettingsActions,
@@ -43,32 +60,79 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
 
     override func loadView() {
-        // One grid for every section, so the labels of all of them line up.
-        let grid = NSGridView(numberOfColumns: 2, rows: 0)
-        grid.rowSpacing = 10
-        grid.columnSpacing = 12
         let shown = model.sections.filter { sections.contains($0.section) }
-        for (index, (section, rows)) in shown.enumerated() {
-            let heading = NSTextField(labelWithString: section.title)
-            heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
-            let headingRow = grid.addRow(with: [NSGridCell.emptyContentView, heading])
-            headingRow.topPadding = index == 0 ? 0 : 12
-            for row in rows { addRow(row, to: grid) }
-        }
-        grid.column(at: 0).xPlacement = .trailing
-        grid.rowAlignment = .firstBaseline
+        let grids = shown.map { grid($0.rows) }
+        // One label column width for every box, so the controls of all of them line up.
+        let labelWidth =
+            grids.flatMap { grid in
+                (0..<grid.numberOfRows).compactMap { grid.cell(atColumnIndex: 0, rowIndex: $0) }
+            }
+            .compactMap { $0.contentView?.fittingSize.width }.max() ?? 0
+        for grid in grids { grid.column(at: 0).width = labelWidth }
+        let boxes = zip(shown, grids).map { box($0.section.title, $1) }
         errorLabel.textColor = .systemRed
         errorLabel.isHidden = true
-        let views = configPath.map { [configHeader($0), NSBox.separator()] } ?? []
-        let stack = NSStackView(views: views + [grid, errorLabel])
+        let views = configPath.map { [configHeader($0)] } ?? []
+        let stack = NSStackView(views: views + boxes + [errorLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 16
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        stack.spacing = 14
+        stack.edgeInsets = NSEdgeInsets(
+            top: Self.margin, left: Self.margin, bottom: Self.margin, right: Self.margin)
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.widthAnchor.constraint(equalToConstant: Self.width).isActive = true
+        for box in boxes {
+            box.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -2 * Self.margin)
+                .isActive = true
+        }
         view = stack
         reload()
+    }
+
+    /// A section's rows, in a grid of a label column and a control column.
+    private func grid(_ rows: [GeneralModel.Row]) -> NSGridView {
+        let grid = NSGridView(numberOfColumns: 2, rows: 0)
+        grid.rowSpacing = 10
+        grid.columnSpacing = 8
+        for row in rows { addRow(row, to: grid) }
+        grid.column(at: 0).xPlacement = .trailing
+        grid.rowAlignment = .firstBaseline
+        return grid
+    }
+
+    /// A section's title over its rows in a box, as Swinsian's are. The box only draws behind
+    /// the rows: an `NSBox`'s own content view doesn't size the box from its constraints.
+    private func box(_ title: String, _ content: NSView) -> NSView {
+        let background = NSBox()
+        background.boxType = .custom
+        background.fillColor = .quaternaryLabelColor.withAlphaComponent(0.05)
+        background.borderColor = .separatorColor
+        background.cornerRadius = 6
+        let panel = NSView()
+        for view in [background, content] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            panel.addSubview(view)
+        }
+        let inset = Self.boxInset
+        NSLayoutConstraint.activate([
+            background.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
+            background.trailingAnchor.constraint(equalTo: panel.trailingAnchor),
+            background.topAnchor.constraint(equalTo: panel.topAnchor),
+            background.bottomAnchor.constraint(equalTo: panel.bottomAnchor),
+            content.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: inset),
+            content.trailingAnchor.constraint(
+                lessThanOrEqualTo: panel.trailingAnchor, constant: -inset),
+            content.topAnchor.constraint(equalTo: panel.topAnchor, constant: inset),
+            content.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -inset),
+        ])
+        let heading = NSTextField(labelWithString: title)
+        let section = NSStackView(views: [heading, panel])
+        section.orientation = .vertical
+        section.alignment = .leading
+        section.spacing = 5
+        panel.widthAnchor.constraint(equalTo: section.widthAnchor).isActive = true
+        section.translatesAutoresizingMaskIntoConstraints = false
+        return section
     }
 
     /// The config file's place, and buttons to open, reveal and copy it.
@@ -97,18 +161,27 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     private func addRow(_ row: GeneralModel.Row, to grid: NSGridView) {
-        let label = NSTextField(labelWithString: row.title + ":")
-        label.alignment = .right
         let summary = NSTextField(wrappingLabelWithString: row.summary)
         summary.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         summary.textColor = .secondaryLabelColor
-        summary.preferredMaxLayoutWidth = 380
+        summary.preferredMaxLayoutWidth = Self.summaryWidth
+        summaries[row.key] = summary
         let control = makeControl(row)
         controls[row.key] = control
-        let cell = NSStackView(views: [control, summary])
+        // A checkbox's summary sits under its title, not under the box itself.
+        let indented = NSStackView(views: [summary])
+        indented.edgeInsets.left = row.control == .checkbox ? Self.checkboxIndent : 0
+        let cell = NSStackView(views: [control, indented])
         cell.orientation = .vertical
         cell.alignment = .leading
-        cell.spacing = 3
+        cell.spacing = 2
+        guard row.control != .checkbox else {
+            grid.addRow(with: [NSGridCell.emptyContentView, cell])
+            return
+        }
+        let label = NSTextField(labelWithString: row.title + ":")
+        label.alignment = .right
+        labels[row.key] = label
         grid.addRow(with: [label, cell])
     }
 
@@ -121,9 +194,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private func makeControl(_ row: GeneralModel.Row) -> NSView {
         switch row.control {
         case .checkbox:
-            let box = NSButton(checkboxWithTitle: "", target: self, action: #selector(toggled(_:)))
+            let box = NSButton(
+                checkboxWithTitle: row.title, target: self, action: #selector(toggled(_:)))
             box.identifier = NSUserInterfaceItemIdentifier(row.key)
-            box.setAccessibilityLabel(row.title)
             return box
         case .popUp(let choices):
             let popUp = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -142,22 +215,26 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             field.placeholderString = optional ? noValueText : nil
             field.delegate = self
             field.translatesAutoresizingMaskIntoConstraints = false
-            field.widthAnchor.constraint(equalToConstant: row.control.isNumber ? 80 : 300)
+            field.widthAnchor.constraint(equalToConstant: row.control.isNumber ? 60 : 300)
                 .isActive = true
             field.setAccessibilityLabel(row.title)
-            return field
+            fields[row.key] = field
+            guard let unit = row.unit else { return field }
+            return NSStackView(views: [field, NSTextField(labelWithString: unit)])
         case .syncFolder:
             let folder = NSTextField(labelWithString: "")
-            folder.identifier = NSUserInterfaceItemIdentifier(row.key)
-            folder.font = .monospacedSystemFont(
-                ofSize: NSFont.smallSystemFontSize, weight: .regular)
-            folder.isSelectable = true
-            folder.lineBreakMode = .byTruncatingMiddle
-            let choose = button("Choose…", #selector(chooseSyncFolder))
+            folder.lineBreakMode = .byTruncatingTail
+            folder.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            folder.setAccessibilityLabel(row.title)
+            let change = button("", #selector(chooseSyncFolder))
+            let open = button("Open", #selector(openSyncFolder))
             let clear = button("Clear", #selector(clearSyncFolder(_:)))
             clear.identifier = NSUserInterfaceItemIdentifier(row.key)
             syncFolderLabel = folder
-            return NSStackView(views: [folder, choose, clear])
+            syncFolderButtons = (change, open, clear)
+            let stack = NSStackView(views: [folder, change, open, clear])
+            stack.identifier = NSUserInterfaceItemIdentifier(row.key)
+            return stack
         case .output:
             let popUp = NSPopUpButton(frame: .zero, pullsDown: false)
             popUp.identifier = NSUserInterfaceItemIdentifier(row.key)
@@ -175,40 +252,52 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             list.identifier = NSUserInterfaceItemIdentifier(row.key)
             list.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
             list.isSelectable = true
-            list.preferredMaxLayoutWidth = 380
+            list.preferredMaxLayoutWidth = Self.summaryWidth
             return list
         }
     }
 
-    /// Shows each setting's value as the config file has it now.
+    /// Shows each setting's value as the config file has it now, and which rows can change.
     func reload() {
         for row in model.rows {
             guard let control = controls[row.key] else { continue }
-            switch row.control {
-            case .checkbox: (control as? NSButton)?.state = model.isOn(row.key) ? .on : .off
-            case .popUp:
-                let popUp = control as? NSPopUpButton
-                let raw = model.choice(row.key)
-                popUp?.selectItem(
-                    at: popUp?.itemArray.firstIndex { $0.representedObject as? String == raw } ?? -1
-                )
-            case .number, .text:
-                guard let field = control as? NSTextField, field.currentEditor() == nil else {
-                    continue
-                }
-                field.stringValue = model.text(row.key)
-            case .output:
-                (control as? NSPopUpButton).map(showOutputs)
-            case .folders:
-                preconditionFailure("the Watched Folders pane lists \(row.key)")
-            case .renderer:
-                preconditionFailure("the output device's row lists \(row.key)")
-            case .syncFolder:
-                syncFolderLabel?.stringValue = model.syncFolder(row.key) ?? noValueText
-            case .readOnly:
-                (control as? NSTextField)?.stringValue =
-                    model.text(row.key) + " (edit in the config file)"
-            }
+            show(row, in: control)
+            let enabled = model.isEnabled(row.key)
+            (fields[row.key] ?? control as? NSControl)?.isEnabled = enabled
+            labels[row.key]?.textColor = enabled ? .labelColor : .disabledControlTextColor
+            summaries[row.key]?.textColor =
+                enabled ? .secondaryLabelColor : .disabledControlTextColor
+        }
+    }
+
+    private func show(_ row: GeneralModel.Row, in control: NSView) {
+        switch row.control {
+        case .checkbox: (control as? NSButton)?.state = model.isOn(row.key) ? .on : .off
+        case .popUp:
+            let popUp = control as? NSPopUpButton
+            let raw = model.choice(row.key)
+            popUp?.selectItem(
+                at: popUp?.itemArray.firstIndex { $0.representedObject as? String == raw } ?? -1)
+        case .number, .text:
+            guard let field = fields[row.key], field.currentEditor() == nil
+            else { return }
+            field.stringValue = model.text(row.key)
+        case .output:
+            (control as? NSPopUpButton).map(showOutputs)
+        case .folders:
+            preconditionFailure("the Watched Folders pane lists \(row.key)")
+        case .renderer:
+            preconditionFailure("the output device's row lists \(row.key)")
+        case .syncFolder:
+            let name = model.syncFolderName(row.key)
+            syncFolderLabel?.stringValue = name ?? noValueText
+            syncFolderLabel?.toolTip = model.syncFolder(row.key)
+            syncFolderButtons?.change.title = name == nil ? "Choose…" : "Change…"
+            syncFolderButtons?.open.isEnabled = name != nil
+            syncFolderButtons?.clear.isEnabled = name != nil
+        case .readOnly:
+            (control as? NSTextField)?.stringValue =
+                model.text(row.key) + " (edit in the config file)"
         }
     }
 
@@ -232,7 +321,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     func focus(_ key: String) {
         guard let control = controls[key] else { return }
         control.scrollToVisible(control.bounds)
-        view.window?.makeFirstResponder(control)
+        view.window?.makeFirstResponder(fields[key] ?? control)
     }
 
     /// Makes the change, or shows why it was refused and the values in effect. False when it
@@ -254,6 +343,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
 
     @objc private func chooseSyncFolder() { actions.chooseSyncFolder() }
 
+    @objc private func openSyncFolder() { actions.openSyncFolder() }
+
     @objc private func clearSyncFolder(_ button: NSButton) {
         guard let key = button.identifier?.rawValue else { return }
         attempt { try model.clear(key) }
@@ -262,6 +353,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     @objc private func toggled(_ box: NSButton) {
         guard let key = box.identifier?.rawValue else { return }
         attempt { try model.setOn(key, box.state == .on) }
+        // The rows that depend on this one follow it at once, before the file's change comes
+        // back.
+        reload()
     }
 
     @objc private func chose(_ popUp: NSPopUpButton) {
@@ -314,13 +408,5 @@ extension GeneralModel.Control {
     var isNumber: Bool {
         if case .number = self { return true }
         return false
-    }
-}
-
-extension NSBox {
-    static func separator() -> NSBox {
-        let box = NSBox()
-        box.boxType = .separator
-        return box
     }
 }

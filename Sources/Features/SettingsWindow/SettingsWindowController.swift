@@ -2,16 +2,17 @@ import AppKit
 import Commands
 import Settings
 
-/// The Settings window: one window with a toolbar of panes, General, Appearance, Watched
-/// Folders and Shortcuts. Made on first use and kept.
+/// The Settings window: one window with a toolbar of panes, General, Playback, Appearance,
+/// Watched Folders and Shortcuts. Made on first use and kept.
 @MainActor
 public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     public enum Pane: String, CaseIterable {
-        case general, appearance, folders, shortcuts
+        case general, playback, appearance, folders, shortcuts
 
         var title: String {
             switch self {
             case .general: "General"
+            case .playback: "Playback"
             case .appearance: AppSettings().appearance.title
             case .folders: AppSettings().watchedFolders.title
             case .shortcuts: "Shortcuts"
@@ -21,6 +22,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         var symbol: String {
             switch self {
             case .general: "gearshape"
+            case .playback: "speaker.wave.2"
             case .appearance: "paintbrush"
             case .folders: "folder"
             case .shortcuts: "keyboard"
@@ -29,7 +31,10 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     }
 
     public let window: NSWindow
+    private let model: GeneralModel
+    private let actions: SettingsActions
     private let general: GeneralPane
+    private let playback: GeneralPane
     private let appearance: GeneralPane
     private let folders: FoldersPane
     private let shortcuts: ShortcutsPane
@@ -39,9 +44,16 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         general: GeneralModel, shortcuts: ShortcutsModel, configPath: String,
         actions: SettingsActions
     ) {
+        model = general
+        self.actions = actions
+        let playbackSections: [GeneralModel.Section] = [.output, .playCounts]
         self.general = GeneralPane(
             model: general, configPath: configPath, actions: actions,
-            sections: GeneralModel.Section.allCases.filter { $0 != .appearance })
+            sections: GeneralModel.Section.allCases.filter {
+                !playbackSections.contains($0) && ![.appearance, .networkFolders].contains($0)
+            })
+        playback = GeneralPane(
+            model: general, configPath: nil, actions: actions, sections: playbackSections)
         appearance = GeneralPane(
             model: general, configPath: nil, actions: actions, sections: [.appearance])
         folders = FoldersPane(model: general, actions: actions)
@@ -69,14 +81,24 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
-    /// Opens General or Appearance at one setting's row, or Watched Folders for that setting,
-    /// as the palette asks.
+    /// Opens the pane with one setting's row at that row, as the palette asks, or the config
+    /// file for a setting the window doesn't show.
     public func show(setting key: String) {
         guard key != folders.key else { return show(.folders) }
-        if GeneralModel.Section(key: key) == .appearance {
+        guard model.rows.contains(where: { $0.key == key }) else {
+            return actions.openConfigFile()
+        }
+        switch GeneralModel.Section(key: key) {
+        case .output, .playCounts:
+            show(.playback)
+            playback.focus(key)
+        case .appearance:
             show(.appearance)
             appearance.focus(key)
-        } else {
+        case .networkFolders:
+            show(.folders)
+            folders.focus(key)
+        default:
             show(.general)
             general.focus(key)
         }
@@ -85,6 +107,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     /// Shows the settings and shortcuts as they are now, after any change.
     public func reload(bindings: KeyBindings) {
         general.reload()
+        playback.reload()
         appearance.reload()
         if folders.isViewLoaded { folders.reload() }
         shortcuts.model.update(bindings)
@@ -95,6 +118,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         let controller: NSViewController =
             switch pane {
             case .general: general
+            case .playback: playback
             case .appearance: appearance
             case .folders: folders
             case .shortcuts: shortcuts

@@ -30,44 +30,70 @@ public final class GeneralModel {
         public var title: String
         public var summary: String
         var control: Control
+        /// What a number field's value is in, shown after the field.
+        var unit: String? = nil
     }
 
-    /// The General pane's groups of rows, by what the setting's key starts with.
+    /// The panes' groups of rows, each in a titled box, by what the setting's key starts with.
     enum Section: CaseIterable {
-        case playback, library, receiver, appearance
+        /// The Playback pane's.
+        case output, playCounts
+        case library, sync, receiver
+        /// Shown under the Watched Folders pane's list, as Swinsian has them.
+        case networkFolders
+        case appearance
         /// A key no section claims; a test keeps the app's settings out of it.
         case other
 
         var title: String {
             switch self {
-            case .playback: "Playback"
+            case .output: "Audio Output"
+            case .playCounts: "Play Counts"
             case .library: "Library"
+            case .sync: "Sync"
             case .receiver: "Receiver"
+            case .networkFolders: "Network Folders"
             case .appearance: AppSettings().appearance.title
             case .other: "Other"
             }
         }
 
-        /// The key prefixes of the section's settings.
+        /// The key prefixes of the section's settings; the longest that matches a key wins.
         var prefixes: [String] {
-            switch self {
-            case .playback: ["output.", "playback."]
-            case .library: ["library.", "sync."]
+            let schema = AppSettings()
+            return switch self {
+            case .output: ["output."]
+            case .playCounts: ["playback."]
+            case .library: ["library."]
+            case .sync: ["sync."]
             case .receiver: ["receiver."]
-            case .appearance: [AppSettings().appearance.key]
+            case .networkFolders:
+                [schema.pausePollingDuringPlayback.key, schema.rescanNetworkFoldersAtLaunch.key]
+            case .appearance: [schema.appearance.key]
             case .other: []
             }
         }
 
+        /// The checkbox that turns the section's other settings on; they're disabled while it's
+        /// off, so the box reads as what depends on what.
+        var switchKey: String? {
+            switch self {
+            case .receiver: AppSettings().receiverEnabled.key
+            default: nil
+            }
+        }
+
         init(key: String) {
-            self =
-                Self.allCases.first { section in section.prefixes.contains { key.hasPrefix($0) } }
-                ?? .other
+            let matches = Self.allCases.flatMap { section in
+                section.prefixes.filter { key.hasPrefix($0) }.map { (section, $0.count) }
+            }
+            self = matches.max { $0.1 < $1.1 }?.0 ?? .other
         }
     }
 
+    /// A row for each setting the window shows; the rest are edited in the config file.
     public let rows: [Row]
-    /// The General pane's sections in order, each with its rows in schema order; the watched
+    /// The sections in order, each with its rows in schema order; the watched
     /// folders have a pane of their own.
     var sections: [(section: Section, rows: [Row])] {
         Section.allCases.compactMap { section in
@@ -82,14 +108,28 @@ public final class GeneralModel {
     private let value: (String) -> Any?
     private let set: (String, Any) throws -> Void
 
-    /// `value` reads a setting as JSON holds it; `set` writes one.
+    /// `value` reads a setting as JSON holds it; `set` writes one. `searcherInstalled` says
+    /// whether the File Viewer setting has a choice to make.
     public init(
-        settings: [SettingDescriptor], value: @escaping (String) -> Any?,
+        settings: [SettingDescriptor], searcherInstalled: Bool, value: @escaping (String) -> Any?,
         set: @escaping (String, Any) throws -> Void
     ) {
-        rows = settings.map(Self.row)
+        rows = settings.filter { Self.isShown($0.key, searcherInstalled: searcherInstalled) }
+            .map(Self.row)
         self.value = value
         self.set = set
+    }
+
+    /// Whether the window has a row for the setting. Network Scan Readers is a tuning number
+    /// few would understand, and File Viewer has nothing to pick without Searcher, so both stay
+    /// in the config file (ADR 0067).
+    private static func isShown(_ key: String, searcherInstalled: Bool) -> Bool {
+        let schema = AppSettings()
+        return switch key {
+        case schema.networkScanReaders.key: false
+        case schema.fileViewer.key: searcherInstalled
+        default: true
+        }
     }
 
     private static func row(_ setting: SettingDescriptor) -> Row {
@@ -111,7 +151,14 @@ public final class GeneralModel {
             default: .readOnly
             }
         return Row(
-            key: setting.key, title: setting.title, summary: setting.summary, control: control)
+            key: setting.key, title: setting.title, summary: setting.summary, control: control,
+            unit: setting.key == schema.playedPercent.key ? "%" : nil)
+    }
+
+    /// Whether a row can be changed now: not while its section's switch is off.
+    func isEnabled(_ key: String) -> Bool {
+        guard let switchKey = Section(key: key).switchKey, switchKey != key else { return true }
+        return isOn(switchKey)
     }
 
     public func isOn(_ key: String) -> Bool { value(key) as? Bool == true }
@@ -203,6 +250,16 @@ public final class GeneralModel {
     /// The sync folder as `folders` shows a folder; nil for none.
     public func syncFolder(_ key: String) -> String? {
         (value(key) as? [String: Any]).flatMap(folderText)
+    }
+
+    /// The sync folder's own name, or its share's for the share itself; nil for none.
+    func syncFolderName(_ key: String) -> String? {
+        guard let folder = value(key) as? [String: Any], let path = folder["path"] as? String
+        else { return nil }
+        guard path.isEmpty, let share = folder["share"] as? String else {
+            return (path as NSString).lastPathComponent
+        }
+        return URL(string: share)?.lastPathComponent ?? share
     }
 
     func clear(_ key: String) throws { try set(key, NSNull()) }

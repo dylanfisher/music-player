@@ -184,3 +184,14 @@ func unfoundRoot(of folder: WatchedFolder) -> String {
     guard let share = folder.share else { preconditionFailure("\(folder.path) isn't on a share") }
     return folder.path.isEmpty ? share : share + "/" + folder.path
 }
+
+/// Where the sync folder is now, in canonical form: its path, or under where its share is
+/// mounted among `shares`; nil while the share isn't mounted, or could be more than one.
+public func locate(_ folder: SyncFolder, among shares: [MountedShare]) -> String? {
+    guard let share = folder.share else { return canonicalPath(folder.path) }
+    guard let url = ShareURL(share) else {
+        preconditionFailure("\(share) passed the settings check")
+    }
+    guard case .mounted(let mountPoint) = ShareLookup(url, among: shares) else { return nil }
+    return canonicalPath(folder.path.isEmpty ? mountPoint : mountPoint + "/" + folder.path)
+}

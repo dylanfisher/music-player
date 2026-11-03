@@ -121,6 +121,8 @@ extension AppDelegate {
         guard let settings, let dispatcher else { return nil }
         let general = GeneralModel(
             settings: settings.schema.settings,
+            searcherInstalled: NSWorkspace.shared.urlForApplication(
+                withBundleIdentifier: FileViewer.searcher.bundleID) != nil,
             value: { [weak settings] in settings?.json(forKey: $0) },
             set: { [weak settings] key, json in try settings?.set(key: key, json: json) })
         let shortcuts = ShortcutsModel(bindings: dispatcher.bindings, appName: appName) {
@@ -138,6 +140,10 @@ extension AppDelegate {
                 },
                 copyDefaultConfig: { [weak dispatcher] in dispatcher?.run(.copyDefaultConfig) },
                 chooseSyncFolder: { [weak self] in self?.chooseSyncFolder() },
+                openSyncFolder: { [weak self] in
+                    guard let window = self?.settingsWindow?.window else { return }
+                    self?.openSyncFolder(over: window)
+                },
                 addFolder: { [weak self] in
                     guard let window = self?.settingsWindow?.window else { return }
                     self?.addFolder(over: window)

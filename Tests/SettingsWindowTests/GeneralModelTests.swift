@@ -25,21 +25,24 @@ private func model() -> (GeneralModel, () -> [String: Any]) {
         "a.look": "auto", "a.folders": [Any](),
     ]
     let model = GeneralModel(
-        settings: Schema().settings, value: { values[$0] },
+        settings: Schema().settings, searcherInstalled: true, value: { values[$0] },
         set: { key, json in values[key] = json })
     return (model, { values })
 }
 
 @MainActor
 private func actions(
+    openConfigFile: @escaping () -> Void = {}, chooseSyncFolder: @escaping () -> Void = {},
+    openSyncFolder: @escaping () -> Void = {},
     addFolder: @escaping () -> Void = {}, removeFolder: @escaping (Int) -> Void = { _ in },
     rescanNow: @escaping () -> Void = {}, rescanFolders: @escaping ([Int]) -> Void = { _ in },
     outputs: @escaping () -> [OutputOption] = { [] },
     chooseOutput: @escaping (OutputChoice) -> Void = { _ in }
 ) -> SettingsActions {
     SettingsActions(
-        openConfigFile: {}, revealConfigFile: {}, copyDefaultConfig: {}, chooseSyncFolder: {},
-        addFolder: addFolder, removeFolder: removeFolder, rescanNow: rescanNow,
+        openConfigFile: openConfigFile, revealConfigFile: {}, copyDefaultConfig: {},
+        chooseSyncFolder: chooseSyncFolder, openSyncFolder: openSyncFolder, addFolder: addFolder,
+        removeFolder: removeFolder, rescanNow: rescanNow,
         rescanFolders: rescanFolders, outputs: outputs,
         searchOutputs: {}, chooseOutput: chooseOutput)
 }
@@ -66,10 +69,13 @@ private var appearanceChoices: [SettingKind.Choice] {
     #expect(model.rows[0].summary == "A bool.")
 }
 
-@MainActor @Test func everyAppSettingHasARow() {
+@MainActor @Test func everyAppSettingButTheConfigFileOnesHasARow() {
+    let schema = AppSettings()
     let model = GeneralModel(
-        settings: AppSettings().settings, value: { _ in nil }, set: { _, _ in })
-    #expect(model.rows.count == AppSettings().settings.count)
+        settings: schema.settings, searcherInstalled: true, value: { _ in nil }, set: { _, _ in })
+    #expect(
+        model.rows.map(\.key)
+            == schema.settings.map(\.key).filter { $0 != schema.networkScanReaders.key })
     #expect(!model.rows.contains { $0.control == .readOnly })
     let appearance = model.rows.first { $0.key == AppSettings().appearance.key }
     #expect(appearance?.control == .popUp(appearanceChoices))
@@ -121,7 +127,8 @@ private func modelWithFoldersAndValues() -> (GeneralModel, () -> [[String: Any]]
         ],
     ]
     let model = GeneralModel(
-        settings: Schema().settings, value: { $0 == "a.folders" ? folders : nil },
+        settings: Schema().settings, searcherInstalled: true,
+        value: { $0 == "a.folders" ? folders : nil },
         set: { key, json in
             if key == "a.folders", let json = json as? [[String: Any]] { folders = json }
         })
@@ -228,13 +235,34 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(!pane.validateMenuItem(menu.items[0]))
 }
 
-@MainActor @Test func theAppSettingsSitInNamedSectionsWithoutTheWatchedFolders() {
+@MainActor @Test func withoutSearcherTheFileViewerIsLeftToTheConfigFile() {
+    let schema = AppSettings()
     let model = GeneralModel(
-        settings: AppSettings().settings, value: { _ in nil }, set: { _, _ in })
+        settings: schema.settings, searcherInstalled: false, value: { _ in nil },
+        set: { _, _ in })
+    let keys = model.rows.map(\.key)
+    #expect(!keys.contains(schema.fileViewer.key))
+    #expect(!keys.contains(schema.networkScanReaders.key))
+    #expect(keys.contains(schema.groupByAlbumArtist.key))
+}
+
+@MainActor @Test func theAppSettingsSitInNamedSectionsWithoutTheWatchedFolders() {
+    let schema = AppSettings()
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { _ in nil }, set: { _, _ in })
     let sections = model.sections
-    #expect(sections.map(\.section) == [.playback, .library, .receiver, .appearance])
+    #expect(
+        sections.map(\.section) == [
+            .output, .playCounts, .library, .sync, .receiver, .networkFolders, .appearance,
+        ])
+    #expect(
+        sections.first { $0.section == .networkFolders }?.rows.map(\.key) == [
+            schema.pausePollingDuringPlayback.key, schema.rescanNetworkFoldersAtLaunch.key,
+        ])
+    #expect(
+        sections.first { $0.section == .playCounts }?.rows.map(\.key) == [schema.playedPercent.key])
     let listed = sections.flatMap(\.rows).map(\.key)
-    #expect(listed.count == AppSettings().settings.count - 2)
+    #expect(listed.count == AppSettings().settings.count - 3)
     #expect(!listed.contains(AppSettings().watchedFolders.key))
     // The output device's row picks the renderer too.
     #expect(!listed.contains(AppSettings().outputRenderer.key))
@@ -275,7 +303,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
         renderers: [FoundOutput(id: "uuid:denon", name: "Denon")], current: .device(uid: "USB-9"))
     var chosen: [OutputChoice] = []
     let model = GeneralModel(
-        settings: schema.settings, value: { stored[$0] }, set: { key, json in stored[key] = json })
+        settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
+        set: { key, json in stored[key] = json })
     #expect(model.rows.first { $0.key == schema.outputDeviceUID.key }?.control == .output)
     let pane = GeneralPane(
         model: model, configPath: "/tmp/config.json",
@@ -305,10 +334,135 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(popUp.titleOfSelectedItem == "Denon")
 }
 
+@MainActor @Test func theReceiversRowsFollowItsSwitch() throws {
+    let schema = AppSettings()
+    var stored: [String: Any] = [schema.receiverEnabled.key: false]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
+        set: { key, json in stored[key] = json })
+    #expect(model.isEnabled(schema.receiverEnabled.key))
+    #expect(!model.isEnabled(schema.receiverAddress.key))
+    #expect(!model.isEnabled(schema.receiverVolumeKeys.key))
+    #expect(model.isEnabled(schema.hogMode.key))
+    let receiverRows = model.sections.first { $0.section == .receiver }?.rows.map(\.key)
+    #expect(receiverRows?.first == schema.receiverEnabled.key, "the switch comes first")
+
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.receiver])
+    let address = try #require(view(schema.receiverAddress.key, in: pane.view) as? NSTextField)
+    let volumeKeys = try #require(
+        view(schema.receiverVolumeKeys.key, in: pane.view) as? NSButton)
+    #expect(!address.isEnabled)
+    #expect(!volumeKeys.isEnabled)
+    let toggle = try #require(view(schema.receiverEnabled.key, in: pane.view) as? NSButton)
+    toggle.performClick(nil)
+    #expect(stored[schema.receiverEnabled.key] as? Bool == true)
+    #expect(address.isEnabled)
+    #expect(volumeKeys.isEnabled)
+}
+
+@MainActor @Test func aCheckboxCarriesItsTitleAndAFieldItsLabel() throws {
+    let (model, _) = model()
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions())
+    let flag = try #require(view("a.flag", in: pane.view) as? NSButton)
+    #expect(flag.title == "Flag")
+    #expect(labels(in: pane.view).contains("Count:"))
+    #expect(!labels(in: pane.view).contains("Flag:"))
+}
+
+@MainActor @Test func everyLabelFitsItsColumn() {
+    let model = GeneralModel(
+        settings: AppSettings().settings, searcherInstalled: true, value: { _ in nil },
+        set: { _, _ in })
+    let pane = GeneralPane(
+        model: model, configPath: "/tmp/config.json", actions: actions(),
+        sections: GeneralModel.Section.allCases)
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 700, height: 700), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = pane.view
+    pane.view.layoutSubtreeIfNeeded()
+    func fields(_ view: NSView) -> [NSTextField] {
+        (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+    }
+    for field in fields(pane.view) where !field.isEditable && !field.stringValue.isEmpty {
+        let needed =
+            field.cell?.cellSize(
+                forBounds: NSRect(
+                    x: 0, y: 0, width: field.frame.width, height: .greatestFiniteMagnitude)
+            ).height ?? 0
+        #expect(field.frame.width > 0, "\(field.stringValue)")
+        #expect(field.frame.height + 1 >= needed, "\(field.stringValue) is cut off")
+        if field.stringValue.hasSuffix(":") {
+            #expect(
+                field.frame.width + 1 >= field.fittingSize.width,
+                "\(field.stringValue) is cut off")
+        }
+    }
+    func buttons(_ view: NSView) -> [NSButton] {
+        (view as? NSButton).map { [$0] } ?? view.subviews.flatMap(buttons)
+    }
+    for button in buttons(pane.view) {
+        #expect(
+            button.frame.width + 1 >= button.fittingSize.width, "\(button.title) is cut off")
+        #expect(
+            pane.view.convert(button.bounds, from: button).maxX <= GeneralPane.width,
+            "\(button.title) is past the pane's edge")
+    }
+}
+
+@MainActor @Test func theSyncFolderRowNamesTheFolderWithChangeOpenAndClear() throws {
+    let schema = AppSettings()
+    var stored: Any? = ["path": "machines/sync", "share": "smb://nas._smb._tcp.local/music"]
+    var chosen = 0
+    var opened = 0
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true,
+        value: { $0 == schema.syncFolder.key ? stored : nil },
+        set: { _, json in stored = json })
+    #expect(model.syncFolderName(schema.syncFolder.key) == "sync")
+    let pane = GeneralPane(
+        model: model, configPath: nil,
+        actions: actions(chooseSyncFolder: { chosen += 1 }, openSyncFolder: { opened += 1 }),
+        sections: [.sync])
+    _ = pane.view
+    #expect(labels(in: pane.view).contains("sync"))
+    try #require(button("Change…", in: pane.view)).performClick(nil)
+    try #require(button("Open", in: pane.view)).performClick(nil)
+    #expect((chosen, opened) == (1, 1))
+    try #require(button("Clear", in: pane.view)).performClick(nil)
+    #expect(stored is NSNull)
+    pane.reload()
+    #expect(labels(in: pane.view).contains(noValueText))
+    #expect(button("Choose…", in: pane.view) != nil)
+    #expect(button("Open", in: pane.view)?.isEnabled == false)
+
+    stored = ["path": "", "share": "smb://nas._smb._tcp.local/music"]
+    #expect(model.syncFolderName(schema.syncFolder.key) == "music")
+}
+
+@MainActor @Test func thePlayedShareIsAPercentField() throws {
+    let schema = AppSettings()
+    var stored: [String: Any] = [schema.playedPercent.key: 75]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
+        set: { key, json in stored[key] = json })
+    #expect(model.rows.first { $0.key == schema.playedPercent.key }?.unit == "%")
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.playCounts])
+    let field = try #require(view(schema.playedPercent.key, in: pane.view) as? NSTextField)
+    #expect(field.stringValue == "75")
+    #expect(labels(in: pane.view).contains("%"))
+    try model.setText(schema.playedPercent.key, "90")
+    #expect(stored[schema.playedPercent.key] as? Int == 90)
+}
+
 @MainActor @Test func theSyncFolderShowsWhereItIsAndClears() throws {
     var stored: Any? = ["path": "sync", "share": "smb://nas/music"]
     let model = GeneralModel(
-        settings: AppSettings().settings, value: { $0 == "sync.folder" ? stored : nil },
+        settings: AppSettings().settings, searcherInstalled: true,
+        value: { $0 == "sync.folder" ? stored : nil },
         set: { key, json in
             #expect(key == "sync.folder")
             stored = json
@@ -330,7 +484,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
 
 @MainActor @Test func theAppearanceSettingsHaveAPaneOfTheirOwn() throws {
     let schema = AppSettings()
-    let model = GeneralModel(settings: schema.settings, value: { _ in nil }, set: { _, _ in })
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { _ in nil }, set: { _, _ in })
     let bindings = try KeyBindings(
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(
@@ -355,7 +510,54 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
 
     controller.show(.general)
     let general = try #require(controller.window.contentViewController?.view)
-    #expect(keys(general).contains(schema.hogMode.key))
+    #expect(keys(general).contains(schema.receiverEnabled.key))
     #expect(keys(general).isDisjoint(with: appearanceKeys))
+    #expect(!keys(general).contains(schema.pausePollingDuringPlayback.key))
+    #expect(!keys(general).contains(schema.hogMode.key))
+
+    controller.show(setting: schema.playedPercent.key)
+    #expect(controller.window.title == "Playback")
+    let playback = try #require(controller.window.contentViewController?.view)
+    #expect(keys(playback).isSuperset(of: [schema.hogMode.key, schema.playedPercent.key]))
     controller.window.close()
+}
+
+@MainActor @Test func thePaletteOpensTheWatchedFoldersPaneOrTheConfigFile() throws {
+    let schema = AppSettings()
+    var opened = 0
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: false, value: { _ in nil },
+        set: { _, _ in })
+    let bindings = try KeyBindings(
+        AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
+    let controller = SettingsWindowController(
+        general: model, shortcuts: ShortcutsModel(bindings: bindings, appName: "App") { _ in },
+        configPath: "/tmp/config.json", actions: actions(openConfigFile: { opened += 1 }))
+    controller.show(setting: schema.rescanNetworkFoldersAtLaunch.key)
+    #expect(controller.window.title == schema.watchedFolders.title)
+    let folders = try #require(controller.window.contentViewController?.view)
+    #expect(view(schema.rescanNetworkFoldersAtLaunch.key, in: folders) != nil)
+    controller.show(setting: schema.networkScanReaders.key)
+    controller.show(setting: schema.fileViewer.key)
+    #expect(opened == 2)
+    controller.window.close()
+}
+
+/// The view with `key` as its identifier, under `view`.
+@MainActor
+private func view(_ key: String, in view: NSView) -> NSView? {
+    if view.identifier?.rawValue == key { return view }
+    return view.subviews.lazy.compactMap { SettingsWindowTests.view(key, in: $0) }.first
+}
+
+/// The text of every label under `view`.
+@MainActor
+private func labels(in view: NSView) -> [String] {
+    ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(labels)
+}
+
+@MainActor
+private func button(_ title: String, in view: NSView) -> NSButton? {
+    if let button = view as? NSButton, button.title == title { return button }
+    return view.subviews.lazy.compactMap { button(title, in: $0) }.first
 }

@@ -7,7 +7,8 @@ private let logger = moduleLogger()
 
 /// Settings ▸ Watched Folders: each folder with its kind and how often it's rescanned, which a
 /// network folder's popup changes, buttons to add and remove one, and Rescan for the selected
-/// folders or Rescan All, from buttons or the table's context menu.
+/// folders or Rescan All, from buttons or the table's context menu. Under them, the network
+/// folders' settings in a box, as Swinsian has its watched folders' settings.
 @MainActor
 final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate,
     NSMenuItemValidation
@@ -39,6 +40,8 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     let removeButton = NSButton()
     let rescanButton = NSButton()
     private(set) var folders: [GeneralModel.Folder] = []
+    /// The Network Folders section's settings.
+    private let settings: GeneralPane
 
     init(model: GeneralModel, actions: SettingsActions) {
         guard let row = model.foldersRow else {
@@ -47,6 +50,8 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         self.model = model
         self.row = row
         self.actions = actions
+        settings = GeneralPane(
+            model: model, configPath: nil, actions: actions, sections: [.networkFolders])
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -104,17 +109,24 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        let margin = GeneralPane.margin
+        // The settings' pane has the margin under the buttons.
+        stack.edgeInsets = NSEdgeInsets(top: margin, left: margin, bottom: 0, right: margin)
         for view in [summary, scroll, buttons] {
             view.translatesAutoresizingMaskIntoConstraints = false
-            view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+            view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -2 * margin)
+                .isActive = true
         }
         stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             stack.widthAnchor.constraint(equalToConstant: GeneralPane.width),
             scroll.heightAnchor.constraint(equalToConstant: 220),
         ])
-        view = stack
+        addChild(settings)
+        let pane = NSStackView(views: [stack, settings.view])
+        pane.orientation = .vertical
+        pane.spacing = 0
+        view = pane
         reload()
     }
 
@@ -123,7 +135,11 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         folders = model.folders(row.key)
         table.reloadData()
         updateButtons()
+        settings.reload()
     }
+
+    /// Gives a network folder setting's control the keys, for the palette.
+    func focus(_ key: String) { settings.focus(key) }
 
     private static let rescanTitle = "Rescan"
 

@@ -6,6 +6,9 @@
   [0034](0034-folders-and-library-health.md) (Folders)
 - **Amended by:** [0062](0062-rescan-chosen-folders.md): the pane's Rescan
   Now is Rescan All, beside Rescan for the selected folders.
+  [0067](0067-settings-layout-and-played-share.md): titled boxes, Sync and Network Folders
+  sections, and the longest key prefix wins. [0067](0067-settings-layout-and-played-share.md):
+  titled boxes, Sync and Network Folders sections, the longest prefix wins.
 
 ## Context
 

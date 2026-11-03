@@ -321,7 +321,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .palette: { [weak self] in self?.palette?.window }
             case .playlist: { [weak self] in self?.ruleEditor?.window }
             case .tags: { [weak self] in self?.tagEditing.sheet?.window }
-            case .settings, .shortcuts: { [weak self] in self?.settingsWindow?.window }
+            case .settings, .playback, .appearance, .folders, .shortcuts:
+                { [weak self] in self?.settingsWindow?.window }
             }
         // The palette lists its items, and the tag editor reads its files, first.
         let wait = snapshotOf == .main ? 0 : snapshotOf == .tags ? 3.0 : 1.0
@@ -333,6 +334,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             browser?.selectAllTracks()
             dispatcher?.run(.editTags)
         case .settings: settingsWindowController()?.show(.general)
+        case .playback: settingsWindowController()?.show(.playback)
+        case .appearance: settingsWindowController()?.show(.appearance)
+        case .folders: settingsWindowController()?.show(.folders)
         case .shortcuts: settingsWindowController()?.show(.shortcuts)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
@@ -700,6 +704,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 self?.fail("Couldn't sync through \(path)", error)
             }
+        }
+    }
+
+    /// Opens the sync folder in Finder where it is now, or says in a sheet over `window` that
+    /// its share isn't mounted.
+    func openSyncFolder(over window: NSWindow) {
+        guard let settings, let folder = settings[\.syncFolder] else { return NSSound.beep() }
+        let path: String
+        do {
+            let shares = folder.share == nil ? [] : try SystemShareMounts().mountedShares()
+            guard let found = locate(folder, among: shares) else {
+                let alert = NSAlert()
+                alert.messageText = "The sync folder's share isn't mounted"
+                alert.informativeText =
+                    "Connect to \(folder.share ?? folder.path) in Finder, then open it again."
+                alert.beginSheetModal(for: window)
+                return
+            }
+            path = found
+        } catch {
+            return fail("Couldn't find the sync folder", error)
+        }
+        if !NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: true)) {
+            logger.error("Finder didn't open the sync folder at \(path)")
+            NSSound.beep()
         }
     }
 

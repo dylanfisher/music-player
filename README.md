@@ -12,9 +12,10 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   lists every setting at its default with what it takes. Edit it in any editor and the app picks
   the change up on save; a mistake shows in a banner across the window and nothing in the file
   applies until it's fixed. The Settings window (⌘,) edits the same file, with a General pane
-  for the settings in sections, an Appearance pane for light or dark and the track table's
-  lines, rows and album art, a Watched Folders pane and a Shortcuts pane for every command's
-  two chords.
+  for the settings in titled boxes, a Playback pane for the output and play counts, an
+  Appearance pane for light or dark and the track table's lines, rows and album art, a Watched
+  Folders pane with the network folders' settings, and a Shortcuts pane for every command's two chords. Network Scan Readers, and File Viewer without
+  Searcher, are set in the file only.
 - **⌘K** opens the command palette: every command, setting, output, playlist and genre, ranked
   by how well they match and how often and recently you chose or played them.
 - **Controls ▸ Output** picks the output device or a UPnP renderer on the network, by name;
@@ -62,7 +63,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 |---|---|
 | Install / bootstrap | `./scripts/setup` |
 | Run the app | `./scripts/dev` (`--home <folder>` keeps the config file, library and state in one folder; `--settings <file>` names another config file) |
-| Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|tags\|settings\|shortcuts]` |
+| Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|tags\|settings\|playback\|appearance\|folders\|shortcuts]` |
 | Run tests | `./scripts/test` |
 | Build the `.app`, signed ad hoc with the hardened runtime (debug also lets lldb attach) | `./scripts/bundle [debug\|release]` |
 | Check a release bundle's signature and entitlements, and that it launches hardened (not in `check`) | `./scripts/check-signature <MusicPlayer.app> [--launch]` |
