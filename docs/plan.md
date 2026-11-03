@@ -2952,57 +2952,87 @@ from the user's action to the first sample.
 The scroll-bar-drag bench jumps a screenful at a time over local files. It never sees
 continuous trackpad scrolling, long albums with a wide art column, art over the NAS, or
 scrolling during a scan.
-- [ ] **32b.1** **Bench:** extend the window benches with these scroll cases, each reporting the p95 frame
+- [x] **32b.1** **Bench:** extend the window benches with these scroll cases, each reporting the p95 frame
       time and the worst frame:
       - continuous small-delta scrolling, like a trackpad
       - the smallest row height with a wide art column, on fixture albums of 15 or more tracks
       - art read through simulated NAS latency, also timing when the last visible cover arrives
       - a library refresh during a scan, every 2 s
-- [ ] **32b.2** **Suspect:** each art cell's `artRow` and `ArtRun.length` walk up to `artRowsTall` rows in
+- [x] **32b.2** **Suspect:** each art cell's `artRow` and `ArtRun.length` walk up to `artRowsTall` rows in
       each direction through `RowCache.row` (TrackTableController.swift:252-295, ArtRun.swift).
       `RowCache` moves the page to the front of its recency list with an O(30) remove and append
       whenever the lookup leaves the last-used page (RowCache.swift:37-44). The walk can also fetch
       off-screen pages synchronously. Compute the album runs once per visible range instead.
-- [ ] **32b.3** **Suspect:** `isWanted` (TrackTableController.swift:63) recomputes the visible rows and their
+- [x] **32b.3** **Suspect:** `isWanted` (TrackTableController.swift:63) recomputes the visible rows and their
       art keys for each queued request, up to 200, every time an image arrives (RowArt.swift:34).
       Build the wanted set once per `next`.
-- [ ] **32b.4** **Suspect:** art loads one file at a time (`loading` flag, RowArt.swift:79). Each load is a
+- [x] **32b.4** **Suspect:** art loads one file at a time (`loading` flag, RowArt.swift:79). Each load is a
       blocking read inside the cooperative pool. Load a bounded few at once (3–4, to suit the old
       Mac's 4 pool threads), on a queue that isn't the cooperative pool. ArtViewer, NowPlayingBar
       and MediaControls block the pool the same way.
-- [ ] **32b.5** **Suspect:** the art key is the path of each run's first track (TrackTableController.swift:
+- [x] **32b.5** **Suspect:** the art key is the path of each run's first track (TrackTableController.swift:
       276), so an album longer than one run reads and decodes the same cover once per run, and each
       copy takes a cache slot. Key the cache by album and art offset, or by content.
-- [ ] **32b.6** **Suspect:** `AlbumArtCell` draws the whole image with `.high` interpolation into every row
+- [x] **32b.6** **Suspect:** `AlbumArtCell` draws the whole image with `.high` interpolation into every row
       slice (AlbumArtCell.swift:46). That is likely costly on the Intel GPU. Size the thumbnail to
       the drawn pixels, or draw the art once per run.
-- [ ] **32b.7** **Suspect:** `refreshNow` (LibraryBrowser.swift:528-569) reloads the panes and the table every
+- [x] **32b.7** **Suspect:** `refreshNow` (LibraryBrowser.swift:528-569) reloads the panes and the table every
       2 s during a scan, even when nothing changed. That costs a `reloadData`, a cleared row cache,
       synchronous page refetches on the main thread, `readTotals`, and an O(n) `rows(holding:)`.
       Skip the reload when the IDs are unchanged, and otherwise reload only the rows that changed.
-- [ ] **32b.8** **Suspect:** the queue panel reloads completely on every track start, with an O(queue)
+- [x] **32b.8** **Suspect:** the queue panel reloads completely on every track start, with an O(queue)
       `firstIndex` (QueuePanel.swift:35, QueueModel.swift:26). A 43k-track queue makes each track
       change cost a full pass.
 
 Plan:
 
 1. **32b.1** The app takes `--measure-scroll trackpad|scan` and `--art-delay-ms <ms>`. A timer
-   scrolls the track table 60 frames a second in trackpad flicks (a fling that decays to a
-   point a frame), and a run-loop observer times the main thread's busy time between frames.
-   After the last frame it times until every visible row shows its art. `scan` also sends the
-   browser a scan's progress every second, so it refreshes every 2 s as during a scan. Art reads
-   go through a closure the measurement wraps, which counts them and adds the delay. One JSON
-   line, `ScrollReport`. Bench gets four cases: the default layout, compact rows with a 256 pt art
-   column (fixture albums of 15 to 24 tracks span runs), the slow simulated NAS's per-file
-   latency on art reads, and the scan. Budgets in code and in the table. ADR 0073.
-2. Run each case on this branch before any fix, then measure each suspect (32b.2 to 32b.8) by
-   the case that shows it, with a counter or a timing where the frame times can't separate it.
+   scrolls the track table 60 frames a second in trackpad flicks from the middle of the list (a
+   fling that decays to a point a frame), and a run-loop observer times the main thread's busy
+   time between frames. After the last frame it pages down and times until every visible row
+   shows its art. `scan` also sends the browser a scan's progress every second, so it refreshes
+   every 2 s as during a scan, and notes the frames a refresh lands in. Art reads go through a
+   closure the measurement wraps, which counts them and adds the delay. One JSON line,
+   `ScrollReport`. Bench gets four cases: the default layout, compact rows with a 256 pt art
+   column, sorted by title with the slow simulated NAS's latency (43 ms) on each art read, and
+   the scan; and a queue panel track change with the whole library queued, in Bench's process.
+   Budgets in code and in the table. ADR 0073.
+2. Run each case before any fix, then measure each suspect by the case that shows it, with a
+   temporary timer around the code where the frame times can't separate it.
 3. Fix only what the numbers show, each in its own commit with a test that fails without it:
-   per visible range album runs (32b.2), one wanted set per pick (32b.3), a bounded number of
-   art loads at once from `ProcessInfo.activeProcessorCount`, on a dispatch queue (32b.4), one
-   cache entry per album's cover (32b.5), thumbnails drawn at the drawn size (32b.6), skipping a
-   refresh that changes nothing (32b.7), and the queue panel's track-change cost (32b.8).
+   32b.7 (redraw only changed rows when a rescan keeps the list), 32b.4 (art loads at once, off
+   the cooperative pool, ADR 0074) and 32b.8 (move the queue's rows up on a track change).
+   32b.2, 32b.3, 32b.5 and 32b.6 measured nothing worth fixing and are dropped.
 4. Rerun every case, and the existing window benches against main, the same day.
+
+Result: shipped as planned; `./scripts/check` passes. Measured on the build Mac on 2026-11-03,
+before (the bench commit, d1a8e24) and after, the same hour. Most of every frame is AppKit
+drawing the rows that scroll in and Core Animation's commit, about 8 to 10 ms a frame at the
+p95, which no suspect touches and which varies between runs. 32b.1: the benches above. 32b.2:
+dropped. Filling every art cell, walks included, took 0.05 ms a cell, 0.06 ms a frame in the
+compact, 256 pt column case; the trackpad frames' p95 stayed 8 to 10 ms before and after.
+32b.3: dropped. `isWanted` took 0.05 to 0.1 ms a call, 12 ms over the 10 s of the title-sorted
+NAS case with 253 calls. 32b.4: fixed. The page down's last cover, sorted by title on the slow
+simulated NAS, 641 ms before, 130 to 136 ms after, with `RowArt.loadsAtOnce` (one less than the
+active processors, at least 2: 3 on the 2015 MacBook Pro, 9 here) reads on a queue of their
+own; the now-playing bar, Now Playing and the art viewer read there too. The frames' p95 in that
+case stayed 9.2 to 9.6 ms. 32b.5: dropped. A row below its album's art shows none, so an album
+is one run and one key whatever its length: the compact case read 20 covers before and after,
+the default case 18. 32b.6: dropped. Drawing a cover slice took 0.04 ms, 13 ms over the whole
+compact case. Fixture covers are at most 300 px; 32e.3 brings large ones. 32b.7: fixed. A
+refresh during a scan rebuilt and redrew every row on screen: its frame took 49 to 54 ms
+(median 50.7) before, 8.1 to 8.8 ms (median 8.2) after, the same as an ordinary frame, and the
+launch rescan's refresh no longer leaves a 57 ms frame in the plain trackpad case. The panes
+reload only when their entries changed, and the art hover stays up through a refresh.
+32b.8: fixed, but not the suspect: finding the current track in a 43k play order took 8 µs.
+The whole reload, each row laying out its stacked fields again, took 40.5 ms (p95) before and
+3.5 ms after, when the played rows leave the top and the rest move up. A selection in the queue
+now stays on its tracks. The existing window benches against main (9cf9665), same hour: launch
+0.62 s and 0.61 s, memory 80.3 MB and 80.2 MB, scroll-bar drag 13.3 ms and 12.7 ms, idle CPU
+0.02% and 0.01%, search 8.7 ms both, re-sort 43.0 ms and 42.1 ms. No `./scripts/bundle release`:
+Package.swift changed only Bench's dependencies, and there's no new `#available`. The old-Mac
+figures are estimates until the 32f checkpoint, where the owner scrolls with the art column
+while a rescan runs.
 
 #### 32c. The database
 
