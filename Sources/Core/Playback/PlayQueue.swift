@@ -4,6 +4,9 @@ import Foundation
 /// the queue as listed, or shuffled.
 struct PlayQueue {
     private(set) var entries: [URL] = []
+    /// Per entry, whether the user queued it with Play Next or Add to Playback Queue, rather
+    /// than it coming from the list playback started in.
+    private(set) var queued: [Bool] = []
     /// Indices into `entries`, in play order.
     private(set) var order: [Int] = []
     private(set) var shuffle = false
@@ -15,6 +18,7 @@ struct PlayQueue {
         with entries: [URL], first: Int, shuffled: ([Int]) -> [Int]
     ) -> Int? {
         self.entries = entries
+        queued = entries.map { _ in false }
         guard !entries.isEmpty else {
             order = []
             return nil
@@ -63,11 +67,19 @@ struct PlayQueue {
         return repeatMode == .all && !order.isEmpty ? order.count - 1 : nil
     }
 
+    /// The first position after `position` whose track the user didn't queue: where Add to
+    /// Playback Queue goes, after what Play Next and earlier adds put there.
+    func endOfQueued(after position: Int) -> Int {
+        var end = position + 1
+        while end < order.count, queued[order[end]] { end += 1 }
+        return end
+    }
+
     // MARK: Edits, in play order
 
-    /// Puts `urls` at `position` in play order, before what is there now. Off shuffle they join
-    /// the listed queue at the same place; on shuffle they're listed last. Returns where each old
-    /// position went.
+    /// Puts `urls`, as tracks the user queued, at `position` in play order, before what is there
+    /// now. Off shuffle they join the listed queue at the same place; on shuffle they're listed
+    /// last. Returns where each old position went.
     mutating func insert(_ urls: [URL], at position: Int) -> [Int?] {
         precondition((0...order.count).contains(position), "position \(position) is outside")
         return rebuild(
@@ -112,10 +124,12 @@ struct PlayQueue {
                     return nil
                 })
             var listed: [URL] = []
+            var listedQueued: [Bool] = []
             var renumbered: [Int: Int] = [:]
             for entry in entries.indices where kept.contains(entry) {
                 renumbered[entry] = listed.count
                 listed.append(entries[entry])
+                listedQueued.append(queued[entry])
             }
             var played: [Int] = []
             for item in items {
@@ -124,11 +138,19 @@ struct PlayQueue {
                 case .added(let url):
                     played.append(listed.count)
                     listed.append(url)
+                    listedQueued.append(true)
                 }
             }
             entries = listed
+            queued = listedQueued
             order = played
         } else {
+            queued = items.map { item in
+                switch item {
+                case .kept(let old): queued[order[old]]
+                case .added: true
+                }
+            }
             entries = items.map { item in
                 switch item {
                 case .kept(let old): entries[order[old]]

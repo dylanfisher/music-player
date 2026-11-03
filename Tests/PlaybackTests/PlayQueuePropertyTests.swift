@@ -10,6 +10,8 @@ private struct QueueModel {
     var listed: [URL] = []
     var played: [URL] = []
     var shuffle = false
+    /// The tracks inserted, which the user queued, as opposed to those a replace listed.
+    var queued: Set<URL> = []
 }
 
 /// Random edits against the model: what plays at each position, where each old position went,
@@ -42,6 +44,7 @@ private struct QueueModel {
                 let first = urls.isEmpty ? 0 : Int.random(in: 0..<urls.count, using: &random)
                 let position = queue.replace(with: urls, first: first, shuffled: shuffled)
                 model.listed = urls
+                model.queued = []
                 if urls.isEmpty {
                     model.played = []
                     try #require(position == nil)
@@ -81,6 +84,7 @@ private struct QueueModel {
                 let at = Int.random(in: 0...model.played.count, using: &random)
                 moved = queue.insert(urls, at: at)
                 model.played.insert(contentsOf: urls, at: at)
+                model.queued.formUnion(urls)
                 if model.shuffle { model.listed += urls } else { model.listed = model.played }
             case 4, 5:
                 let positions = randomPositions()
@@ -104,6 +108,7 @@ private struct QueueModel {
             try #require(played == model.played, "step \(step): play order")
             try #require(queue.entries == model.listed, "step \(step): listed order")
             try #require(queue.order.sorted() == Array(queue.entries.indices), "step \(step)")
+            try checkQueued(queue, model, position: Int.random(in: 0..<1000, using: &random))
             if let moved {
                 try #require(moved.count == before.count)
                 for (old, new) in moved.enumerated() {
@@ -126,4 +131,16 @@ private struct QueueModel {
             queue.repeatMode = .off
         }
     }
+}
+
+/// Which entries the queue has as queued by the user, and where an add after `position`, taken
+/// modulo the queue's length, would go.
+private func checkQueued(_ queue: PlayQueue, _ model: QueueModel, position: Int) throws {
+    try #require(queue.queued == queue.entries.map { model.queued.contains($0) })
+    guard !model.played.isEmpty else { return }
+    let position = position % model.played.count
+    let end =
+        model.played[(position + 1)...].firstIndex { !model.queued.contains($0) }
+        ?? model.played.count
+    try #require(queue.endOfQueued(after: position) == end)
 }

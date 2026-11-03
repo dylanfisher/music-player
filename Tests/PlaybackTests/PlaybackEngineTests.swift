@@ -345,15 +345,42 @@ private final class ClosingOutput: Output, @unchecked Sendable {
     #expect(state.currentIndex == 0)
 }
 
-@Test func addingToTheQueuePutsTheTracksLast() async {
+@Test func queuedTracksPlayBeforeTheRestOfTheList() async {
     let output = FakeOutput()
     let engine = await playing(urls, output)
     await engine.handle(.trackStarted(1, info))
+    let (next1, next2, added1, added2) = (
+        URL(fileURLWithPath: "/music/next1.flac"), URL(fileURLWithPath: "/music/next2.flac"),
+        URL(fileURLWithPath: "/music/added1.flac"), URL(fileURLWithPath: "/music/added2.flac")
+    )
+    await engine.addToQueue([added1])
+    await engine.playNext([next1])
+    await engine.addToQueue([added2])
+    await engine.playNext([next2])
+    var state = await engine.state
+    // The latest Play Next goes first; adds keep the order they came in.
+    #expect(
+        state.order.map { state.queue[$0] }
+            == [urls[0], next2, next1, added1, added2, urls[1], urls[2]])
+    #expect(state.currentIndex == 0)
+    // Once the queued tracks have played, an add goes straight after the current track again.
+    await engine.play(at: 4)
+    let added3 = URL(fileURLWithPath: "/music/added3.flac")
+    await engine.addToQueue([added3])
+    state = await engine.state
+    #expect(
+        state.order.map { state.queue[$0] }
+            == [urls[0], next2, next1, added1, added2, added3, urls[1], urls[2]])
+}
+
+@Test func addingToAStoppedQueueGoesAfterTheTrackPlayWouldStart() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.setQueue(urls, first: 1)
     let extra = URL(fileURLWithPath: "/music/extra.flac")
     await engine.addToQueue([extra])
     let state = await engine.state
-    #expect(state.order.map { state.queue[$0] } == urls + [extra])
-    #expect(state.currentIndex == 0)
+    #expect(state.order.map { state.queue[$0] } == [urls[0], urls[1], extra, urls[2]])
 }
 
 @Test func movingTracksKeepsTheCurrentOnePlaying() async {
