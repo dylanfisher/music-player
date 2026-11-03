@@ -5,7 +5,7 @@
 - **Amends:** [0012](0012-searcher-conventions.md)
 - **Amended by:** [0042](0042-window-layout-and-settings-sections.md): the watched folders left
   the sidebar, and folder browsing with them. [0050](0050-remove-from-library.md): a Removed
-  check lists the tracks removed from the library. [0053](0053-problems-window-actions.md): the
+  check lists the tracks removed from the library. [0059](0059-problems-window-actions.md): the
   Problems window lists a row a line, with actions, and keeps what the user dismissed.
 
 ## Context

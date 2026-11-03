@@ -1,7 +1,7 @@
 import Library
 import Settings
 
-/// One row of the Problems window, and what it offers besides Dismiss (ADR 0053).
+/// One row of the Problems window, and what it offers besides Dismiss (ADR 0059).
 struct Problem: Equatable, Sendable {
     enum Fix: Equatable, Sendable {
         /// A Lost Stats path, whose file left: take it out of the library (ADR 0050), so its

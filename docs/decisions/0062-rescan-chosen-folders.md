@@ -1,4 +1,4 @@
-# 0056. Rescan for the chosen watched folders, and Rescan All
+# 0062. Rescan for the chosen watched folders, and Rescan All
 
 - **Date:** 2026-11-02
 - **Status:** accepted

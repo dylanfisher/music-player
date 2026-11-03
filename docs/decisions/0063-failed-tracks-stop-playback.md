@@ -1,4 +1,4 @@
-# 0046. A device failure stops playback, and three failed tracks in a row do too
+# 0063. A device failure stops playback, and three failed tracks in a row do too
 
 - **Date:** 2026-11-02
 - **Status:** accepted

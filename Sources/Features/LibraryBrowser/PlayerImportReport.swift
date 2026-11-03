@@ -86,7 +86,7 @@ extension ImportPlan {
     /// `PlaylistFile.maximumProblems` with a count of the rest.
     var detailLines: [String] { problems.map(\.line) }
 
-    /// `detailLines` as the Problems window's rows, each miss listed with Locate… (ADR 0053).
+    /// `detailLines` as the Problems window's rows, each miss listed with Locate… (ADR 0059).
     var problems: [Problem] {
         let source = terminalSafe(library.source)
         var rows: [Problem] = []
@@ -119,7 +119,7 @@ extension ImportPlan {
     }
 }
 
-/// The words for the column layout an import from Swinsian brings across (ADR 0055).
+/// The words for the column layout an import from Swinsian brings across (ADR 0061).
 extension SwinsianColumns {
     /// "6 columns, sorted by Artist; 1 skipped".
     var previewLine: String {

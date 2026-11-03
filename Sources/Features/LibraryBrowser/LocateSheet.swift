@@ -5,7 +5,7 @@ import DisplayText
 public let watchTitle = "Watch"
 
 /// Asks over `window` for the folder the missing file `miss` lives under now, and answers with
-/// it, or never on Cancel (ADR 0053).
+/// it, or never on Cancel (ADR 0059).
 @MainActor
 func askForFolder(locating miss: String, over window: NSWindow, answer: @escaping (URL) -> Void) {
     let panel = NSOpenPanel()

@@ -49,7 +49,7 @@ public func swinsianPredicateArchive(_ format: String) throws -> [UInt8] {
 }
 
 /// Swinsian's preferences file with only its track table's keys, in the shape the owner's had
-/// on 2026-11-02 (ADR 0055): the visible columns, left to right, by ID with their widths, and
+/// on 2026-11-02 (ADR 0061): the visible columns, left to right, by ID with their widths, and
 /// the sort, an `NSKeyedArchiver` archive of the dictionaries `NSTableView` saves. The keys are
 /// the reader's; its tests check them against the owner's file.
 public func swinsianPreferences(columns: [(id: String, width: Double)], sort: (String, Bool)?)

@@ -122,7 +122,7 @@ enum PlayerImportError: Error, Equatable, CustomStringConvertible {
     case unreadable(String)
     /// Not the shape of the file the player writes.
     case notALibrary(String)
-    /// Not the shape of Swinsian's preferences file (ADR 0055).
+    /// Not the shape of Swinsian's preferences file (ADR 0061).
     case notPreferences(String)
     /// Swinsian's preferences list no column this table has.
     case noColumns

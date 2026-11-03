@@ -3,7 +3,7 @@ import Metadata
 import Settings
 
 /// Swinsian's track table as its preferences file describes it, mapped to ours: the visible
-/// columns left to right with their widths, and the sort (ADR 0055). The file is only read.
+/// columns left to right with their widths, and the sort (ADR 0061). The file is only read.
 public struct SwinsianColumns: Equatable, Sendable {
     /// Where Swinsian keeps its preferences, columns included.
     public static let preferencesURL = FileManager.default.homeDirectoryForCurrentUser

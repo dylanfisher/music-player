@@ -1,4 +1,4 @@
-# 0053. The Problems window's rows have actions, and a dismissed line stays dismissed
+# 0059. The Problems window's rows have actions, and a dismissed line stays dismissed
 
 - **Date:** 2026-11-02
 - **Status:** accepted

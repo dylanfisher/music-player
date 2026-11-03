@@ -32,7 +32,7 @@ enum SchemaPart: String, CaseIterable {
     /// The paths with a row in `history`, which History lists (ADR 0057). Derived from
     /// `history`, so building the part fills it from there, and rebuilding it discards nothing.
     case recorded
-    /// The lines of the Problems window the user dismissed (ADR 0053). A part of its own for
+    /// The lines of the Problems window the user dismissed (ADR 0059). A part of its own for
     /// the same reason as `loved`.
     case dismissed
 

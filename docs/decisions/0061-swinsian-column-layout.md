@@ -1,4 +1,4 @@
-# 0055. Importing Swinsian's column layout from its preferences file
+# 0061. Importing Swinsian's column layout from its preferences file
 
 - **Date:** 2026-11-02
 - **Status:** accepted

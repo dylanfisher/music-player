@@ -1,4 +1,4 @@
-# 0054. The Rescans column offers a fixed list of intervals
+# 0060. The Rescans column offers a fixed list of intervals
 
 - **Date:** 2026-11-02
 - **Status:** accepted

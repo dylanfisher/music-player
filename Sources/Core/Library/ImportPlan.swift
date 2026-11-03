@@ -42,7 +42,7 @@ public struct ImportPlan: Equatable, Sendable {
     public var changesSomething: Bool { !updates.isEmpty || !playlists.isEmpty }
 
     /// The tracks this plan missed under `folder`, at the paths it looked them up by, and no
-    /// playlists, whose names an import already made: what Locate… matches again (ADR 0053).
+    /// playlists, whose names an import already made: what Locate… matches again (ADR 0059).
     public func misses(under folder: String) -> PlayerLibrary {
         let missed = Set(unmatched)
         let folder = folder.precomposedStringWithCanonicalMapping

@@ -2,7 +2,7 @@ import AppKit
 
 /// Every folder the watcher couldn't scan, every file with a stored warning or failure, and
 /// what the health check shown and the last import found, a row each, with buttons for what
-/// can be done about the rows selected (ADR 0053). ⌘C copies them as text.
+/// can be done about the rows selected (ADR 0059). ⌘C copies them as text.
 @MainActor
 final class ProblemsWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     /// Called with a button's action and the rows selected when it was clicked.

@@ -1,5 +1,5 @@
 extension LibraryIndex {
-    /// Keeps `lines` out of the Problems window from now on (ADR 0053). A line is the problem as
+    /// Keeps `lines` out of the Problems window from now on (ADR 0059). A line is the problem as
     /// the window showed it, so the same problem found again stays dismissed.
     func dismissProblems(_ lines: [String]) throws {
         try database.transaction {

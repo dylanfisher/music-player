@@ -2381,20 +2381,20 @@ listed apart as "not in the library, a format this app doesn't read yet" and get
 Problems window is a table with Dismiss (kept in `dismissed_problems`), Remove from Library (Lost
 Stats rows), Restore (Removed rows, the Restore row 25.3 left here) and Locate… (one import miss: the
 user picks the folder it lives in now, the old prefix is found, every miss under it is imported again,
-and an unwatched folder is offered for watching and matched after its scan; ADR 0053). 26.2: Rescan
+and an unwatched folder is offered for watching and matched after its scan; ADR 0059). 26.2: Rescan
 Now is now Rescan All (command id `library.rescanNow` kept), and Settings ▸ Watched Folders has a
 Rescan button and a context menu with Rescan and Rescan All; `LibraryWatcher.rescan(folders:)` scans
-only the chosen folders, even while polls are paused for playback (ADR 0056). 26.3: each network
+only the chosen folders, even while polls are paused for playback (ADR 0062). 26.3: each network
 folder's Rescans cell is a borderless popup of 1, 5, 15, 30 minutes and 1, 2, 6, 12, 24 hours that
 writes `pollIntervalMinutes`; local folders keep "On change", since the schema never polls them, so
-there is no "Watch only" choice (ADR 0054). 26.4: Swinsian keeps its table columns in
+there is no "Watch only" choice (ADR 0060). 26.4: Swinsian keeps its table columns in
 `~/Library/Preferences/com.swinsian.Swinsian.plist` (`MainTableColumns-Ver1` for order and widths,
 `NSTableView Sort Ordering v2 main_track_table` for the sort), not in `Library.sqlite` or Application
 Support; the Swinsian import sheet gains "Import column layout", which skips and reports columns we
-lack (ADR 0055; `swinsian-columns` fuzz target, threat model row 56). Not done: .dsf matching waits
+lack (ADR 0061; `swinsian-columns` fuzz target, threat model row 56). Not done: .dsf matching waits
 for phase 12; Locate… works only on the last import of the session; a Locate… hit is not added to the
 playlist the import made; Lost Entries rows get only Dismiss (Remove from Library is on Lost Stats
-rows, which is how ADR 0053 reads "missing tracks"); dismissals cannot be undone. Pending the owner:
+rows, which is how ADR 0059 reads "missing tracks"); dismissals cannot be undone. Pending the owner:
 the by-hand checks of 26.1 to 26.4, and confirming the reading of "missing tracks".
 
 ### 27. Appearance
