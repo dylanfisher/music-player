@@ -23,9 +23,18 @@ public final class QueueModel {
         self.lookup = lookup
     }
 
-    func apply(_ state: PlaybackState) {
+    /// Takes the engine's new state. Returns how many rows left the top when the current track
+    /// only moved further down the same play order, as it does when a track ends or on Next, so
+    /// the rows below stay as they were; nil after any other change.
+    @discardableResult
+    func apply(_ state: PlaybackState) -> Int? {
+        let previous = (state: self.state, position: currentPosition)
         self.state = state
         currentPosition = state.currentIndex.flatMap { state.order.firstIndex(of: $0) }
+        guard let from = previous.position, let to = currentPosition, to > from,
+            state.order == previous.state.order, state.queue == previous.state.queue
+        else { return nil }
+        return to - from
     }
 
     /// Forgets every row it described, after a rescan may have changed their tags.

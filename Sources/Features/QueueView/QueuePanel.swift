@@ -43,10 +43,19 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
         }
     }
 
-    /// Lists `state`'s queue from its current track on.
+    /// Lists `state`'s queue from its current track on. When the next track starts, the rows
+    /// played leave the top and the rest move up as they are: reloading them all costs about
+    /// 40 ms on the build Mac, since each row lays out its fields again.
     public func show(_ state: PlaybackState) {
-        model.apply(state)
-        table.reloadData()
+        let rowsBefore = table.numberOfRows
+        if let dropped = model.apply(state), dropped < rowsBefore {
+            table.removeRows(at: IndexSet(integersIn: 0..<dropped), withAnimation: [])
+            // Row 0 is the current track now, marked and bold.
+            table.reloadData(forRowIndexes: [0], columnIndexes: [0])
+            (table.rowView(atRow: 0, makeIfNecessary: false) as? MarkedRowView)?.isMarked = true
+        } else {
+            table.reloadData()
+        }
         summary.stringValue = model.summary
     }
 

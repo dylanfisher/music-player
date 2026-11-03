@@ -117,3 +117,44 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
     model.apply(state(order: [2, 1, 0], current: nil))
     #expect(marked().isEmpty)
 }
+
+@MainActor @Test func theNextTrackStartingMovesTheRowsUpAndKeepsTheirSelection() throws {
+    let tracks = (0..<6).map { URL(fileURLWithPath: "/m/\($0).flac", isDirectory: false) }
+    func playing(_ current: Int?, order: [Int] = Array(0..<6)) -> PlaybackState {
+        var state = PlaybackState()
+        state.queue = tracks
+        state.order = order
+        state.currentIndex = current
+        return state
+    }
+    let model = QueueModel { _ in nil }
+    #expect(model.apply(playing(0)) == nil)
+    #expect(model.apply(playing(2)) == 2)
+    // Back, reordered, or stopped: anything but moving on lists the rows again.
+    #expect(model.apply(playing(1)) == nil)
+    #expect(model.apply(playing(3, order: [5, 4, 3, 2, 1, 0])) == nil)
+    #expect(model.apply(playing(nil)) == nil)
+
+    let panel = QueuePanel(model: QueueModel { _ in nil })
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 280, height: 400), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = panel.view
+    defer { window.close() }
+    func find(_ view: NSView) -> NSTableView? {
+        view as? NSTableView ?? view.subviews.lazy.compactMap(find).first
+    }
+    let table = try #require(find(panel.view))
+    panel.show(playing(0))
+    window.displayIfNeeded()
+    table.selectRowIndexes([3], byExtendingSelection: false)
+    panel.show(playing(1))
+    window.displayIfNeeded()
+    #expect(table.numberOfRows == 5)
+    // Still track 3, a row higher.
+    #expect(table.selectedRowIndexes == [2])
+    #expect((table.rowView(atRow: 0, makeIfNecessary: false) as? MarkedRowView)?.isMarked == true)
+    let current = table.view(atColumn: 0, row: 0, makeIfNecessary: false) as? NSTableCellView
+    #expect(current?.textField?.stringValue == "▶ 1")
+}
