@@ -2749,6 +2749,33 @@ owner: the window on macOS 12, and whether the titles should be sentence case as
 - [ ] **30c.7 App icon.** The icon has a white square behind it in the app switcher; it needs a
       transparent background and the standard macOS icon shape.
 
+Plan:
+
+1. **30c.7** `scripts/bundle` cuts Quick Look's 1024 px render (always on white) to the tile
+   shape the SVG's `tile` clip path names, with a Swift script on CoreGraphics, so the icon's
+   corners are transparent on macOS 12 and later.
+2. **30c.3** A `SeekBar` view in NowPlaying replaces the sliders: a mouse down moves the playhead
+   there at once and seeks, a drag follows the pointer and seeks on release, and the playhead is
+   a thin vertical line. The position shown holds the seek's target until the engine reports it.
+   Tests: the fraction under a point, a click seeks once with no drag.
+3. **30c.1, 30c.2** The customization sheet's items get drawings: the transport's buttons, the
+   volume slider, a miniature of the now-playing status and a search field, so the default set
+   reads as the toolbar it makes. `centeredStatus` goes.
+4. **30c.2** `statusBar.parts` (art, track, format, seek bar, totals; default totals alone) and
+   `statusBar.style` (minimal, tall) in Appearance. NowPlaying makes a view per part, the browser
+   lays the parts out in the bar in the user's order with the seek bar taking the free width, and
+   the app wires them. Settings ▸ Appearance gets a parts list: a checkbox each, drag to reorder.
+   Tests: the model's order and toggles, the setting rejects a part listed twice, the bar's
+   height per style.
+5. **30c.4** The status bar uses the toolbar's title bar material, so it's the header's gray.
+   Record why the material looks solid on macOS 12 (nothing in the window behind it).
+6. **30c.5** `appearance.glass`: the window's content sits on a behind-window material, the
+   toolbar is transparent over it, and the lists, headers and status bar stop drawing their
+   backgrounds. ADR 0067.
+7. **30c.6** View ▸ Show Toolbar (⌥⌘T) saved as `window.toolbarVisible`, and Distraction-Free Mode
+   (⇧⌘F) hiding the toolbar, sidebar and status bar and restoring what showed. Tests in
+   `MainWindowTests`.
+
 ### 31. Output for devices that can't play bit-perfect
 
 Bluetooth AirPods on the 2015 MacBook Pro offer only 2-channel 32-bit float at 48 kHz, and the
