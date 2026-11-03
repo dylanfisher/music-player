@@ -25,6 +25,7 @@ public final class QueueModel {
 
     func apply(_ state: PlaybackState) {
         self.state = state
+        currentPosition = state.currentIndex.flatMap { state.order.firstIndex(of: $0) }
     }
 
     /// Forgets every row it described, after a rescan may have changed their tags.
@@ -34,10 +35,9 @@ public final class QueueModel {
 
     public var count: Int { state.order.count - firstPosition }
 
-    /// Where the current track is in play order.
-    var currentPosition: Int? {
-        state.currentIndex.flatMap { state.order.firstIndex(of: $0) }
-    }
+    /// Where the current track is in play order. Found once per state, since every row reads
+    /// it and the search is as long as the queue.
+    private(set) var currentPosition: Int?
 
     private var firstPosition: Int { currentPosition ?? 0 }
 
