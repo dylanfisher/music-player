@@ -3811,6 +3811,31 @@ Pro, in the toolbar and the status bar, glass on and off.
   that toggles glass on and off and compares the tables' grid, background and row settings with
   a fresh window.
 
+Implementation plan:
+- Probe first: a MusicPlayerTests helper builds the real main window (browser, toolbar, queue,
+  status bar parts) over a fixture library in a temporary home, to find what changes the frame
+  and the splits and what glass leaves behind, and later to compare with a fresh window.
+- Glass (App, `WindowGlass`): the window keeps a full-size content view whatever the glass, so
+  turning it on or off changes no style mask, which resized the window and its splits; glass
+  changes the title bar's transparency, the backdrop and the lists only. Fix what the 36.8 probe
+  finds, and test that glass on then off leaves the frame, the split positions and every table's
+  grid, background, row and alternating settings as a fresh window has them.
+- Status bar (LibraryBrowser): the bar's scan progress on the leading side, the problems button
+  trailing, and the parts in a middle centered on the window's content view by a constraint
+  below the window's size priority, so no part can resize the window (36.4) and nothing beside
+  it moves it (36.1). A `CenteredRow` view holds the three, for phase 37's columns to reuse. The
+  bar lies over the bottom of the track table and the timeline, whose bottom content insets
+  follow its height and visibility, on `NSGlassEffectView` from macOS 26 and the title bar
+  material before (36.2). Tests: centering with the sidebar's width and the scan text changing,
+  window frame and split positions unchanged for each part alone and together, insets.
+- Art (LibraryBrowser): a click on the status bar's art opens the playing track's art in the
+  `ArtViewer` (36.3); the hover shows anywhere in an album's art cells (36.5). Tests for both.
+- Stripes (36.7): in glass the lists that had alternating rows draw translucent stripes of
+  their own instead; test the colors' alpha. Wording (36.6) in `AppSettings`.
+- `--snapshot` at 1440x900, light and dark, glass on and off, rows scrolled under the bar;
+  `./scripts/bundle release`; the scroll and live resize benches by name against main.
+- ADR 0084, amending 0072 and 0065.
+
 ### 37. Toolbar and status bar builders
 
 **Queued, not started.** Builds on 36. Reverses ADR 0072's rejected "free-form status bar
