@@ -16,8 +16,8 @@ system's Now Playing and the art viewer read the same way.
 ## Decision
 
 `ArtworkLoader.load` reads and decodes on a concurrent dispatch queue of its own, and returns
-to the caller's actor. All four callers use it. The column keeps up to `RowArt.loadsAtOnce`
-reads going, one short of `ProcessInfo.activeProcessorCount` and at least 2: 3 on the 2015
+to the caller's actor. All four callers use it. The column keeps up to `filesReadAtOnce`
+(Metadata) reads going, one short of `ProcessInfo.activeProcessorCount` and at least 2: 3 on the 2015
 MacBook Pro, which leaves a thread for the main thread and playback, and 9 on the build Mac. A
 cover being read isn't asked for again. The page down's last cover now comes after 136 ms.
 
@@ -33,6 +33,6 @@ cover being read isn't asked for again. The page down's last cover now comes aft
 ## Consequences
 
 - A slow read holds a dispatch thread instead; GCD adds threads when they block, up to its own
-  limit, which `loadsAtOnce` stays far below.
+  limit, which `filesReadAtOnce` stays far below.
 - On a fast NAS or a local disk several covers decode at once, so a fast scroll uses more CPU
   for a moment than before.

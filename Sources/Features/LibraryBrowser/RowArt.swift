@@ -33,7 +33,7 @@ struct ArtRequests {
     }
 }
 
-/// Loads the Album Art column's images off the main thread, `loadsAtOnce` at a time, through an
+/// Loads the Album Art column's images off the main thread, `filesReadAtOnce` at a time, through an
 /// `ArtworkLoader` whose images are the size the column draws, and hands each to `loaded` on the
 /// main thread. Art that fails to load is logged once and not asked for again.
 @MainActor
@@ -46,10 +46,6 @@ final class RowArt {
     /// logged.
     static let rememberedFailures = 1000
     static let loggedFailures = 100
-    /// Art read at once, so a screen's covers on a NAS arrive together instead of one after
-    /// another. One short of the threads the cores run, which leaves the 2015 MacBook Pro's 4
-    /// threads one for the main thread and playback.
-    static let loadsAtOnce = max(2, ProcessInfo.processInfo.activeProcessorCount - 1)
 
     let loader: ArtworkLoader
     private var requests = ArtRequests()
@@ -87,10 +83,10 @@ final class RowArt {
     }
 
     private func loadNext() {
-        guard loading.count < Self.loadsAtOnce, !requests.waiting.isEmpty else { return }
+        guard loading.count < filesReadAtOnce, !requests.waiting.isEmpty else { return }
         // Read once a pass: it reads the rows on screen.
         let wanted = wanted()
-        while loading.count < Self.loadsAtOnce, let request = requests.next(wanted: wanted) {
+        while loading.count < filesReadAtOnce, let request = requests.next(wanted: wanted) {
             load(request)
         }
     }

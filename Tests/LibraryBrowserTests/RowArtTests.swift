@@ -38,7 +38,7 @@ private final class HeldReads: @unchecked Sendable {
     let reads = HeldReads()
     let rowArt = RowArt(pixels: 64, read: reads.read)
     let art = EmbeddedArt(offset: 0, byteCount: 1, mimeType: "image/png", unsynchronised: false)
-    let requested = RowArt.loadsAtOnce + 2
+    let requested = filesReadAtOnce + 2
     let keys = (0..<requested).map { ArtworkKey(path: "/m/\($0).flac", art: art) }
     var wantedReads = 0
     rowArt.wanted = {
@@ -51,10 +51,10 @@ private final class HeldReads: @unchecked Sendable {
         #expect(rowArt.image(art, path: "/m/\(track).flac") == nil)
     }
     let deadline = Date().addingTimeInterval(10)
-    while reads.count < RowArt.loadsAtOnce, Date() < deadline {
+    while reads.count < filesReadAtOnce, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
-    #expect(reads.count == RowArt.loadsAtOnce, "only \(reads.count) reads started")
+    #expect(reads.count == filesReadAtOnce, "only \(reads.count) reads started")
     reads.releaseAll(requested)
     // Empty bytes don't decode, so each load ends as a failure.
     func settled() -> Int {
@@ -66,7 +66,7 @@ private final class HeldReads: @unchecked Sendable {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
     #expect(settled() == requested, "\(settled()) of \(requested) loads ended")
-    #expect(reads.mostAtOnce == RowArt.loadsAtOnce)
+    #expect(reads.mostAtOnce == filesReadAtOnce)
     #expect(Set(reads.paths).count == reads.paths.count, "a path was read twice: \(reads.paths)")
     #expect(reads.queues == ["ArtworkLoader"])
     // Once a pass, not once a request: a pass per request asked for and per load ended at most.

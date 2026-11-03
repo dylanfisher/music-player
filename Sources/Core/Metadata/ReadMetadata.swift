@@ -16,6 +16,11 @@ public func readMetadata(at url: URL, hints: ReadHints = .all) throws(MetadataEr
     }
 }
 
+/// Files read at once for what the user is waiting to see, so on a NAS they arrive together
+/// instead of one after another. One short of the threads the cores run, which leaves the 2015
+/// MacBook Pro's 4 threads one for the main thread and playback.
+public let filesReadAtOnce = max(2, ProcessInfo.processInfo.activeProcessorCount - 1)
+
 /// The most art `readArt` reads. A length from the file is otherwise bounded only by the file's
 /// size; real art is under 2 MB.
 let maximumArtBytes = 64 * 1024 * 1024
