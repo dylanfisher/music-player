@@ -128,6 +128,9 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
     public func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int)
         -> (any NSPasteboardWriting)?
     {
+        // Moving the current track down would put the rows it passes before it, out of the
+        // list.
+        guard row != model.currentRow else { return nil }
         let item = NSPasteboardItem()
         item.setString(String(row), forType: Self.rowType)
         return item
@@ -138,7 +141,7 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
         proposedDropOperation dropOperation: NSTableView.DropOperation
     ) -> NSDragOperation {
         guard info.draggingSource as? NSTableView === tableView else { return [] }
-        tableView.setDropRow(row, dropOperation: .above)
+        tableView.setDropRow(model.dropRow(row), dropOperation: .above)
         return .move
     }
 

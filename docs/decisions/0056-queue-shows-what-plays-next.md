@@ -40,5 +40,6 @@ worse: the engine put it after the last track of the list, so it played only aft
 
 Turning shuffle on mixes queued tracks into the shuffled rest, and turning it off lists tracks
 queued while shuffled last, as before. A queued track keeps its mark after it plays, so going back
-before it and adding a track puts the add after it. Dragging a track above the current one moves
-it out of the list, since it then counts as played.
+before it and adding a track puts the add after it. A drag in the panel drops below the current
+track, and the current track's row doesn't drag: a track moved before the current one counts as
+played and would leave the list.

@@ -58,6 +58,21 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
     #expect(model.position(ofRow: 1) == 1)
 }
 
+@MainActor @Test func dragsStayBelowTheCurrentTrack() {
+    let model = QueueModel { _ in nil }
+    let panel = QueuePanel(model: model)
+    _ = panel.view
+    let table = NSTableView()
+    model.apply(state(order: [2, 1, 0], current: 1))
+    #expect(model.dropRow(0) == 1)
+    #expect(model.dropRow(2) == 2)
+    #expect(panel.tableView(table, pasteboardWriterForRow: 0) == nil)
+    #expect(panel.tableView(table, pasteboardWriterForRow: 1) != nil)
+    model.apply(state(order: [2, 1, 0], current: nil))
+    #expect(model.dropRow(0) == 0)
+    #expect(panel.tableView(table, pasteboardWriterForRow: 0) != nil)
+}
+
 @MainActor @Test func aFailedLookupStillListsTheFile() {
     struct Broken: Error {}
     let model = QueueModel { _ in throw Broken() }

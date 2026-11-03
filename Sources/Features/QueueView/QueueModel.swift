@@ -47,6 +47,10 @@ public final class QueueModel {
     /// The engine's position in play order of the track at `row`.
     func position(ofRow row: Int) -> Int { row + firstPosition }
 
+    /// Where a drag proposed for above `row` drops: below the current track, since a track
+    /// moved before it counts as played and leaves the list.
+    func dropRow(_ row: Int) -> Int { max(row, currentRow.map { $0 + 1 } ?? 0) }
+
     func positions(ofRows rows: IndexSet) -> IndexSet {
         IndexSet(rows.map(position(ofRow:)))
     }
