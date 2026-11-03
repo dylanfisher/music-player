@@ -72,6 +72,12 @@ struct WatchState {
     /// Whether a folder's scan at start, whole, hasn't ended yet, as finished or failed.
     var launchScansPending: Bool { !launchPending.isEmpty }
 
+    /// Whether a local folder's scan at start hasn't ended yet. Only these hold the first sync
+    /// back: a network folder's can hang on a dropped share, and would hold it forever.
+    var localLaunchScansPending: Bool {
+        folders.contains { $0.kind == .local && launchPending.contains($0.path) }
+    }
+
     /// The folders at new paths, in the same order, after a share moved (ADR 0028). What was
     /// pending for each moves with it, but its changed directories are dropped: a moved network
     /// folder is polled now, which scans it whole at its new path.

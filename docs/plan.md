@@ -3206,8 +3206,8 @@ Plan:
 2. Fix only what the numbers show, each in its own commit with a test that fails without it,
    and a budget in code and in the table. Concurrency limits come from
    `activeProcessorCount`, defined once: the art column's limit moves to Metadata as
-   `filesReadAtOnce`, and the tag editor reads by it (ADR 0077). The launch scans run before
-   the first sync (ADR 0076). The output picker lists devices off the main thread.
+   `filesReadAtOnce`, and the tag editor reads by it (ADR 0077). The local folders' launch scans
+   run before the first sync (ADR 0076). The output picker lists devices off the main thread.
 3. Rerun the changed benches and the existing ones they touch against main, the same day.
 
 Result: shipped as planned; `./scripts/check` passes. Measured on the build Mac on 2026-11-03,
@@ -3229,7 +3229,8 @@ dropped, no cost. The browser's search keystroke p95 was 12.0 ms without and 9.6
 reports built back to back beside it (a report takes 0.25 to 0.30 s), and 9.3 ms and 9.4 ms with
 `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`. 32d.5: fixed. With another machine's 1M plays pending,
 the launch scan's first progress came 4.9 s after start, behind the 4.6 s merge; now 0.61 to
-0.63 s, and the merge follows the scan. 32d.6: fixed, not the suspect named: `startPlayback`
+0.63 s, and the merge follows the scan. After review, only a local folder's launch scan holds the sync back,
+so one hung on a share can't hold it forever. 32d.6: fixed, not the suspect named: `startPlayback`
 took 1.7 to 1.9 ms on the main thread before and after, so it stays. The output picker's first
 device list and its watch, the run's first CoreAudio calls, took 24 to 26 ms on the main thread
 before the first rows; now 0.04 ms. Launch to the first rows, median of 3: main 0.63 s, this

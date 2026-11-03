@@ -79,21 +79,42 @@ private func eventually(
     #expect(syncs.failed.isEmpty)
 }
 
-@Test func theLaunchScanRunsBeforeTheFirstSync() async throws {
+@Test func theLocalLaunchScanRunsBeforeTheFirstSyncAndAPushWaitsForIt() async throws {
     let library = try TestLibrary()
-    let sync = FileManager.default.temporaryDirectory
+    let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("sync-first-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: sync, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: sync) }
+    let sync = root.appendingPathComponent("sync").path
+    let mount = root.appendingPathComponent("music").path
+    try FileManager.default.createDirectory(
+        atPath: mount + "/library", withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(atPath: sync, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let share = MountedShare(url: "smb://nas/music", mountPoint: mount)
+    let folders = [
+        library.folder, WatchedFolder(path: "library", share: share.url, kind: .network),
+    ]
+    // Found on its share first, so a play there is logged when it's recorded: only a share
+    // folder's plays are synced.
+    let index = try LibraryIndex(at: library.databaseURL)
+    _ = try index.locate(folders, among: [share])
     let syncs = Syncs()
     let watcher = LibraryWatcher(
-        databaseURL: library.databaseURL, networkReaders: nil, events: syncs.append)
+        databaseURL: library.databaseURL, networkReaders: 2, mounts: FakeMounts([share]),
+        events: syncs.append)
     watcher.start(
-        folders: [library.folder], syncFolder: SyncFolder(path: sync.path),
-        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: false)
+        folders: folders, syncFolder: SyncFolder(path: sync), rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false)
     defer { watcher.stop() }
+    // Pushed while the local folder's launch scan holds syncs back, it goes out after it.
+    try index.recordPlay(mount + "/library/a.flac", at: 1_700_000_000)
+    watcher.pushSync()
     #expect(try await eventually(within: 30, "the first sync") { syncs.count >= 1 })
     #expect(syncs.scansBeforeFirstSync == 1)
+    let log = sync + "/" + syncLogName(try index.machineID())
+    #expect(
+        try await eventually(within: 10, "the push") {
+            (try? String(contentsOfFile: log, encoding: .utf8))?.contains("\"play\"") == true
+        })
     #expect(syncs.failed.isEmpty)
 }
 

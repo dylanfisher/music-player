@@ -291,3 +291,47 @@ private struct FakeEngine {
         pausePollingDuringPlayback: false, now: start)
     #expect(!kept.launchScansPending)
 }
+
+@Test func onlyALocalFoldersLaunchScanHoldsTheFirstSyncBack() {
+    var state = WatchState(
+        folders: [nas, local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false, now: start)
+    #expect(state.localLaunchScansPending)
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
+    state.finished(now: start)
+    // The network folder's launch scan is still to come, and it doesn't gate.
+    #expect(state.launchScansPending)
+    #expect(!state.localLaunchScansPending)
+    #expect(state.start(now: start) == WatchJob(folder: nas, subtrees: []))
+    state.finished(now: start)
+    #expect(!state.launchScansPending)
+}
+
+@Test func aFailedLocalLaunchScanLiftsTheSyncGate() {
+    var state = WatchState(
+        folders: [local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false, now: start)
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
+    let first = state.failed(now: start)
+    #expect(first)
+    #expect(!state.localLaunchScansPending)
+}
+
+@Test func aNetworkFolderKeptToTheIndexGatesNothing() {
+    let state = WatchState(
+        folders: [nas], indexed: [nas.path], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false, now: start)
+    #expect(!state.localLaunchScansPending)
+}
+
+@Test func aRelocatedLocalFolderGatesUntilItsScanEnds() {
+    let moved = WatchedFolder(path: "/Users/me/Moved", kind: .local)
+    var state = WatchState(
+        folders: [local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false, now: start)
+    state.relocated([moved], now: start)
+    #expect(state.localLaunchScansPending)
+    #expect(state.start(now: start) == WatchJob(folder: moved, subtrees: []))
+    state.finished(now: start)
+    #expect(!state.localLaunchScansPending)
+}

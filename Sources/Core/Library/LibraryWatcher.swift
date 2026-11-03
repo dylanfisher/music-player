@@ -70,8 +70,8 @@ public final class LibraryWatcher: @unchecked Sendable {
 
     /// Finds each of `folders` (ADR 0028), removes files outside them from the index, scans
     /// the local folders and the network ones whose last whole scan didn't finish, and starts watching
-    /// them, and syncs through `syncFolder` after each scan, the scans at start included, and on
-    /// each trigger. The caller reads them from Settings.
+    /// them, and syncs through `syncFolder` at start once the local folders are scanned, after
+    /// each scan and on each trigger. The caller reads them from Settings.
     public func start(
         folders: [WatchedFolder], syncFolder: SyncFolder? = nil,
         rescanNetworkFoldersAtLaunch: Bool, pausePollingDuringPlayback: Bool
@@ -290,10 +290,10 @@ public final class LibraryWatcher: @unchecked Sendable {
             if current.holdsRunningScan { control.pause() } else { control.resume() }
         }
         // A sync reads and writes the NAS, so it waits as network scans do, and runs between
-        // scans on their queue. It waits for the launch scans too: merging a long log can take
-        // minutes on an old Mac, and the window waits for the scan (ADR 0076).
+        // scans on their queue. It waits for the local folders' launch scans too: merging a long
+        // log can take minutes on an old Mac, and the window waits for the scan (ADR 0076).
         if control == nil, !syncing, syncDue || pushDue, current.pollsAllowed,
-            !current.launchScansPending, startSync(among: current.folders)
+            !current.localLaunchScansPending, startSync(among: current.folders)
         {
             return
         }
