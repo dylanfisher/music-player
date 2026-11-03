@@ -1,4 +1,5 @@
 import AppKit
+import LibraryBrowser
 
 /// The main window's glass, `appearance.glass` (ADR 0072): the sidebar's translucent material
 /// under the whole window, the toolbar transparent over it, the lists drawing no background of
@@ -64,7 +65,9 @@ final class WindowGlass {
         guard let view, view !== backdrop else { return }
         // The sidebar's outline already sits on its own material.
         if let table = view as? NSTableView, !(table is NSOutlineView) {
-            tables.append((table, table.backgroundColor, table.usesAlternatingRowBackgroundColors))
+            let color =
+                (table as? ResolvedBackgroundTable)?.backgroundAsSet ?? table.backgroundColor
+            tables.append((table, color, table.usesAlternatingRowBackgroundColors))
             table.backgroundColor = .clear
             // Alternating rows are opaque, which would hide the glass.
             table.usesAlternatingRowBackgroundColors = false

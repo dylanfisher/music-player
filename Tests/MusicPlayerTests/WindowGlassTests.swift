@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 
+@testable import LibraryBrowser
 @testable import MusicPlayer
 
 @MainActor @Test func theGlassClearsTheListsAndPutsThemBack() {
@@ -46,4 +47,38 @@ import Testing
     #expect(scroll.drawsBackground)
     #expect(bar.blendingMode == .withinWindow)
     #expect(column.headerCell === header)
+}
+
+/// `color` as `appearance` draws it.
+@MainActor
+private func resolved(_ color: NSColor, in appearance: NSAppearance.Name) throws -> NSColor {
+    var resolved = color
+    try #require(NSAppearance(named: appearance)).performAsCurrentDrawingAppearance {
+        resolved = color.usingColorSpace(.sRGB) ?? color
+    }
+    return resolved
+}
+
+@MainActor @Test func aTrackListGlassPutsBackFollowsTheAppearance() throws {
+    let browser = KeyTableView()
+    let scroll = NSScrollView()
+    scroll.documentView = browser
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+        styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    let glass = WindowGlass(window: window, content: scroll)
+    window.appearance = NSAppearance(named: .accessibilityHighContrastAqua)
+    browser.backgroundColor = .controlBackgroundColor
+
+    glass.set(true)
+    window.appearance = NSAppearance(named: .accessibilityHighContrastDarkAqua)
+    glass.set(false)
+    // The system color itself comes back, not the color it resolved to when the glass went on.
+    #expect(browser.backgroundAsSet == .controlBackgroundColor)
+    #expect(
+        browser.backgroundColor
+            == (try resolved(.controlBackgroundColor, in: .accessibilityHighContrastDarkAqua)))
+    window.appearance = NSAppearance(named: .aqua)
+    #expect(browser.backgroundColor == (try resolved(.controlBackgroundColor, in: .aqua)))
 }
