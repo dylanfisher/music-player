@@ -30,7 +30,7 @@ private func verdict(
 ) -> SignalVerdict {
     signalVerdict(
         SignalPath(
-            track: TrackSignal(file: file, decoded: decoded),
+            track: TrackSignal(file: file, decoded: decoded, isConverted: false),
             sink: .device(DeviceSink(name: "DAC", uid: "DAC", state: state, gain: gain))))
 }
 
@@ -155,5 +155,23 @@ private func verdict(
             == .changed([
                 .decoderResamples(fromHz: 5_644_800, toHz: 176_400),
                 .deviceResamples(fromHz: 176_400, toHz: 352_800),
+            ]))
+}
+
+@Test func aConvertedTrackSaysSoFirstAndToWhat() {
+    // AirPods: 2 ch 32-bit float at 48 kHz, mixable, no hog mode.
+    let float48 = pcm(48_000, bits: 32, float: true)
+    let path = SignalPath(
+        track: TrackSignal(file: pcm(44_100, bits: 16), decoded: float48, isConverted: true),
+        sink: .device(
+            DeviceSink(
+                name: "AirPods", uid: "AirPods",
+                state: device(rate: 48_000, physical: float48, mixable: true, hog: .free),
+                gain: 1)))
+    #expect(
+        signalVerdict(path)
+            == .changed([
+                .converted(to: float48), .decoderResamples(fromHz: 44_100, toHz: 48_000),
+                .mixableFormat, .hogModeFree,
             ]))
 }

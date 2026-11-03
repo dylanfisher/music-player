@@ -14,14 +14,18 @@ public struct DeviceFormat {
     public var latencySeconds: Double
     /// How long each part of configuring took, such as waiting for the rate to settle.
     public var steps: [SwitchStep]
+    /// The device has no format that carries the track unchanged, so it runs in the one
+    /// `convertedFormat` picks, and the output converts the track to it.
+    public var isConverted: Bool
 
     public init(
         stream: AudioStreamBasicDescription, summary: String, latencySeconds: Double,
-        steps: [SwitchStep] = []
+        isConverted: Bool, steps: [SwitchStep] = []
     ) {
         self.stream = stream
         self.summary = summary
         self.latencySeconds = latencySeconds
+        self.isConverted = isConverted
         self.steps = steps
     }
 }
@@ -47,7 +51,8 @@ final class StepClock {
 /// its own thread in tests and benchmarks. Used from one thread.
 public protocol PCMDevice: AnyObject {
     /// Switches the hardware to `sampleRateHz` with `channels`, passing samples through
-    /// unchanged. `forDoP` asks for a non-mixable integer format that holds DoP's words.
+    /// unchanged, or when no format can, to the one `convertedFormat` picks. `forDoP` asks for a
+    /// non-mixable integer format that holds DoP's words, and is never converted.
     func configure(sampleRateHz: Double, channels: UInt32, forDoP: Bool) throws -> DeviceFormat
     /// Starts calling `HALRenderIOProc` with `render` (a `HALRender *`).
     func start(_ render: OpaquePointer) throws

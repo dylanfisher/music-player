@@ -59,6 +59,51 @@ public func rampAlbum(sampleRateHz: Int, bitsPerSample: Int, in directory: URL) 
         bitsPerSample: bitsPerSample)
 }
 
+/// One continuous sine, a different phase on each channel, split into two FLAC tracks as a
+/// `RampAlbum` is, for output that resamples: a ramp's steps would ring, but any gap, repeat or
+/// seam at the join still shows as samples off the sine.
+struct SineAlbum: Sendable {
+    let tracks: [URL]
+    let trackFrames: [Int]
+    let sampleRateHz: Int
+
+    var totalFrames: Int { trackFrames.reduce(0, +) }
+    var durationSeconds: Double { Double(totalFrames) / Double(sampleRateHz) }
+
+    static let frequencyHz = 997.0
+    static let amplitude = 0.5
+
+    /// The album's signal `seconds` in, from -1 to 1.
+    func value(atSeconds seconds: Double, channel: Int) -> Double {
+        Self.amplitude * sin(2 * .pi * Self.frequencyHz * seconds + Double(channel) * .pi / 2)
+    }
+}
+
+/// Makes the album the first time it's asked for at this rate and depth, and returns it.
+func sineAlbum(sampleRateHz: Int, bitsPerSample: Int, in directory: URL) throws
+    -> SineAlbum
+{
+    let frames = [sampleRateHz + 123, sampleRateHz / 2]
+    let album = SineAlbum(tracks: [], trackFrames: frames, sampleRateHz: sampleRateHz)
+    let scale = Double(1 << (bitsPerSample - 1))
+    var tracks: [URL] = []
+    var start = 0
+    for (index, count) in frames.enumerated() {
+        let url = directory.appendingPathComponent(
+            "sine-\(sampleRateHz)-\(bitsPerSample)-\(index + 1).flac")
+        let first = start
+        try makeFLAC(
+            at: url, sampleRateHz: sampleRateHz, bitsPerSample: bitsPerSample, frames: count
+        ) { frame, channel in
+            let seconds = Double(first + frame) / Double(sampleRateHz)
+            return Int32((album.value(atSeconds: seconds, channel: channel) * scale).rounded())
+        }
+        tracks.append(url)
+        start += count
+    }
+    return SineAlbum(tracks: tracks, trackFrames: frames, sampleRateHz: sampleRateHz)
+}
+
 /// Two minutes of 24-bit 192 kHz FLAC: a sine with noise in the low bits, so it costs about as
 /// much to decode as a real hi-res recording. Made the first time it's asked for.
 public func hiResTrack(in directory: URL) throws -> URL {

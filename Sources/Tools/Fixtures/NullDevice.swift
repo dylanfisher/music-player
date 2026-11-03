@@ -10,7 +10,8 @@ import Playback
 /// any rate, like the owner's DAC, and can be unplugged and plugged back in. Tests can change its
 /// rate, hog mode and volume as another app would, and it reports its state as the HAL's
 /// listeners would. Tests can also narrow the rates and formats it reports, and give two of
-/// them different names.
+/// them different names. A session takes a format from what it reports, as a CoreAudio device
+/// does, converting when none carries the track.
 public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     public let deviceName: String
     public var deviceUID: String { deviceName }
@@ -26,6 +27,8 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     private var watcher: (@Sendable () -> Void)?
     private var stateWatcher: (@Sendable (DeviceState) -> Void)?
     private var nominalSampleRateHz = 44_100.0
+    /// What the last session configured, which its state reports at the nominal rate.
+    private var physicalFormat = NullDevice.format(sampleRateHz: 44_100)
     private var otherHogOwner: Int32?
     private var volumes: [VolumeControl] = []
     private var formats = NullDevice.anyRate
@@ -55,7 +58,8 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     /// What the IO proc wrote while the device ran at one rate.
     public struct CapturedRun: Sendable {
         public var sampleRateHz: Double
-        /// Interleaved stereo. Empty unless the device keeps samples.
+        /// Interleaved stereo, a float format's as their bits. Empty unless the device keeps
+        /// samples.
         public var samples: [Int32]
     }
 
@@ -107,6 +111,15 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
         reportState()
     }
 
+    /// What Bluetooth AirPods offer on macOS 12: stereo 32-bit float at 48 kHz, mixable.
+    static let float48k = DeviceFormats(
+        sampleRatesHz: [48_000...48_000],
+        formats: [
+            PhysicalFormat(
+                formatID: linearPCMFormatID, sampleRateHz: 48_000...48_000, bitsPerChannel: 32,
+                channels: 2, isFloat: true, isMixable: true)
+        ])
+
     /// Stereo 32-bit integer at any rate up to 768 kHz.
     static let anyRate = DeviceFormats(
         sampleRatesHz: [8_000...768_000],
@@ -128,11 +141,13 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
         let hog: HogMode =
             otherHogOwner.map { .otherProcess(pid: $0) }
             ?? (openSessions > 0 ? .thisProcess : .free)
+        var physical = physicalFormat
+        physical.mSampleRate = nominalSampleRateHz
         return .connected(
             DeviceSignal(
-                nominalSampleRateHz: nominalSampleRateHz,
-                physical: SignalFormat(Self.format(sampleRateHz: nominalSampleRateHz)),
-                isMixable: false, hogMode: hog, volumes: volumes, formats: formats))
+                nominalSampleRateHz: nominalSampleRateHz, physical: SignalFormat(physical),
+                isMixable: PhysicalFormat(physical).isMixable, hogMode: hog, volumes: volumes,
+                formats: formats))
     }
 
     static func format(sampleRateHz: Double) -> AudioStreamBasicDescription {
@@ -143,6 +158,27 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
             mBytesPerPacket: 8, mFramesPerPacket: 1, mBytesPerFrame: 8, mChannelsPerFrame: 2,
             mBitsPerChannel: 32, mReserved: 0)
     }
+    /// `format` at `sampleRateHz`, packed and interleaved.
+    static func format(_ format: PhysicalFormat, at sampleRateHz: Double)
+        -> AudioStreamBasicDescription
+    {
+        let bytes = format.bitsPerChannel / 8 * format.channels
+        var flags =
+            (format.isFloat ? kAudioFormatFlagIsFloat : kAudioFormatFlagIsSignedInteger)
+            | kAudioFormatFlagIsPacked
+        if !format.isMixable { flags |= kAudioFormatFlagIsNonMixable }
+        return AudioStreamBasicDescription(
+            mSampleRate: sampleRateHz, mFormatID: kAudioFormatLinearPCM, mFormatFlags: flags,
+            mBytesPerPacket: bytes, mFramesPerPacket: 1, mBytesPerFrame: bytes,
+            mChannelsPerFrame: format.channels, mBitsPerChannel: format.bitsPerChannel,
+            mReserved: 0)
+    }
+
+    /// What a session throws when no format it reports can take a track, even converted.
+    struct NoFormat: Error, CustomStringConvertible {
+        var description: String { "the null device has no PCM format to convert to" }
+    }
+
     func plugIn() { setConnected(true) }
     /// Connects the device without telling the watcher, as when a change notification is missed.
     func plugInUnannounced() { lock.withLock { connected = true } }
@@ -223,10 +259,11 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     }
     public func deviceReturned() { lock.withLock { restoredDefaults += 1 } }
 
-    fileprivate func began(sampleRateHz: Double) {
+    fileprivate func began(_ format: AudioStreamBasicDescription) {
         lock.withLock {
-            nominalSampleRateHz = sampleRateHz
-            runs.append(CapturedRun(sampleRateHz: sampleRateHz, samples: []))
+            nominalSampleRateHz = format.mSampleRate
+            physicalFormat = format
+            runs.append(CapturedRun(sampleRateHz: format.mSampleRate, samples: []))
         }
         reportState()
     }
@@ -244,25 +281,44 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     private final class Session: PCMDevice {
         private let device: NullDevice
         private var sampleRateHz = 0.0
+        private var bytesPerFrame = 0
         private var stopRequested: StopFlag?
         private var finished: DispatchSemaphore?
         private var isOpen = true
 
         init(_ device: NullDevice) { self.device = device }
 
-        /// Always 32-bit and non-mixable, so it carries DoP.
+        /// 32-bit and non-mixable, so it carries DoP, when the formats it reports take the track;
+        /// otherwise the one `convertedFormat` picks from them.
         func configure(sampleRateHz: Double, channels: UInt32, forDoP: Bool) throws
             -> DeviceFormat
         {
-            precondition(channels == 2, "the null device is stereo")
             try device.perform(.configure)
-            self.sampleRateHz = sampleRateHz
-            device.began(sampleRateHz: sampleRateHz)
-            let format = NullDevice.format(sampleRateHz: sampleRateHz)
+            let (formats, allowNonMixable) = device.lock.withLock {
+                (device.formats, device.hogModeSetting)
+            }
+            let format: AudioStreamBasicDescription
+            let isConverted =
+                !forDoP && !formats.takes(sampleRateHz: sampleRateHz, channels: channels)
+            if isConverted {
+                guard
+                    let target = convertedFormat(
+                        in: formats.formats, sampleRateHz: sampleRateHz, channels: channels,
+                        allowNonMixable: allowNonMixable)
+                else { throw NoFormat() }
+                format = NullDevice.format(formats.formats[target.index], at: target.sampleRateHz)
+            } else {
+                format = NullDevice.format(sampleRateHz: sampleRateHz)
+            }
+            precondition(format.mChannelsPerFrame == 2, "the null device is stereo")
+            self.sampleRateHz = format.mSampleRate
+            bytesPerFrame = Int(format.mBytesPerFrame)
+            device.began(format)
             return DeviceFormat(
                 stream: format,
                 summary: "\(device.deviceName): \(PhysicalFormat(format).summary)",
-                latencySeconds: Double(device.ioFrames) / sampleRateHz / device.speed)
+                latencySeconds: Double(device.ioFrames) / format.mSampleRate / device.speed,
+                isConverted: isConverted)
         }
 
         func start(_ render: OpaquePointer) throws {
@@ -273,7 +329,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
             stopRequested = stop
             self.finished = finished
             let device = device
-            let bytes = device.ioFrames * 8
+            let bytes = device.ioFrames * bytesPerFrame
             var timebase = mach_timebase_info()
             mach_timebase_info(&timebase)
             let cycleTicks =

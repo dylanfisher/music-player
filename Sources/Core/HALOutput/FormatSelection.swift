@@ -28,3 +28,40 @@ func bitPerfectFormat(
     format.mSampleRate = sampleRateHz
     return format
 }
+
+/// The format a PCM track of `channels` at `sampleRateHz` is converted to when no format carries
+/// it unchanged, and the rate to run it at, or nil when the device has no PCM format allowed.
+///
+/// A format with at least the track's channels wins, so none is dropped, else the one with the
+/// most. Then the rate nearest
+/// the track's, at or above it before below it, and never below 44.1 kHz when there's one at or
+/// above: AirPods offer 16 kHz mono for calls beside 48 kHz stereo, and a low-rate track mustn't
+/// switch them to it. Then the track's own channel count, else the fewest above it, which a mono
+/// track is copied into, else the most. Then float, which holds every integer source up to 24
+/// bits exactly, and then the widest.
+public func convertedFormat(
+    in formats: [PhysicalFormat], sampleRateHz: Double, channels: UInt32, allowNonMixable: Bool
+) -> (index: Int, sampleRateHz: Double)? {
+    let lowest = max(sampleRateHz, lowestConvertedRateHz)
+    func rate(_ format: PhysicalFormat) -> Double {
+        min(max(lowest, format.sampleRateHz.lowerBound), format.sampleRateHz.upperBound)
+    }
+    func rank(_ format: PhysicalFormat) -> (Int, Int, Double, Int, Int, UInt32) {
+        let rate = rate(format)
+        let count = Int(format.channels)
+        let enough = format.channels >= channels
+        return (
+            enough ? Int.max : count, rate >= lowest ? 1 : 0, rate >= lowest ? -rate : rate,
+            format.channels == channels ? Int.max : enough ? -count : count,
+            format.isFloat ? 1 : 0, format.bitsPerChannel
+        )
+    }
+    let usable = formats.indices.filter {
+        formats[$0].formatID == linearPCMFormatID && (allowNonMixable || formats[$0].isMixable)
+    }
+    guard let best = usable.max(by: { rank(formats[$0]) < rank(formats[$1]) }) else { return nil }
+    return (best, rate(formats[best]))
+}
+
+/// CD's rate, the lowest a track is converted to when the device has a rate at or above it.
+let lowestConvertedRateHz = 44_100.0

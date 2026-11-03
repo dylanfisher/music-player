@@ -11,6 +11,8 @@ enum HALDeviceError: Error, CustomStringConvertible {
     case hogModeHeld(by: pid_t)
     case noOutputStream
     case noBitPerfectFormat(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32)
+    /// Nothing to convert a track to: no PCM format, or only non-mixable ones without hog mode.
+    case noPCMFormat
     case didNotSettle(String)
 
     var description: String {
@@ -21,12 +23,14 @@ enum HALDeviceError: Error, CustomStringConvertible {
         case .noBitPerfectFormat(let rate, let channels, let bits):
             "the device has no \(bits > 0 ? "non-mixable " : "")\(channels)-channel integer format"
                 + (bits > 0 ? " of \(bits) bits or more" : "") + " at \(kilohertz(rate)) kHz"
+        case .noPCMFormat: "the device has no PCM format this app can convert to"
         case .didNotSettle(let what): "the device didn't switch to \(what) within 3 seconds"
         }
     }
 }
 
-/// A CoreAudio output device switched to a bit-perfect format, optionally in hog mode so no other
+/// A CoreAudio output device switched to a bit-perfect format, or a converted one when it has
+/// none (ADR 0071), optionally in hog mode so no other
 /// process can play through it or reconfigure it. `close()` puts back the snapshot taken before
 /// this run first changed it.
 final class HALDevice: PCMDevice {
@@ -83,24 +87,38 @@ final class HALDevice: PCMDevice {
         let minimumBits = forDoP ? dopWordBits : 0
         let available: [AudioStreamRangedDescription] = try readArray(
             stream, address(kAudioStreamPropertyAvailablePhysicalFormats))
-        guard
-            let format = bitPerfectFormat(
-                in: available, sampleRateHz: sampleRateHz, channels: channels,
-                minimumBits: minimumBits, nonMixableOnly: forDoP, allowNonMixable: hogMode)
-        else {
+        let format: AudioStreamBasicDescription
+        let isConverted: Bool
+        if let unchanged = bitPerfectFormat(
+            in: available, sampleRateHz: sampleRateHz, channels: channels,
+            minimumBits: minimumBits, nonMixableOnly: forDoP, allowNonMixable: hogMode)
+        {
+            (format, isConverted) = (unchanged, false)
+        } else if !forDoP,
+            let target = convertedFormat(
+                in: available.map(PhysicalFormat.init), sampleRateHz: sampleRateHz,
+                channels: channels, allowNonMixable: hogMode)
+        {
+            var converted = available[target.index].mFormat
+            converted.mSampleRate = target.sampleRateHz
+            (format, isConverted) = (converted, true)
+        } else if forDoP {
             throw HALDeviceError.noBitPerfectFormat(
                 sampleRateHz: sampleRateHz, channels: channels, minimumBits: minimumBits)
+        } else {
+            throw HALDeviceError.noPCMFormat
         }
+        let rateHz = format.mSampleRate
 
         let clock = StepClock()
         // Rate first: on some devices setting the physical format alone leaves the clock where
         // it was.
         try clock.time("rate") {
-            try writeScalar(id, address(kAudioDevicePropertyNominalSampleRate), sampleRateHz)
+            try writeScalar(id, address(kAudioDevicePropertyNominalSampleRate), rateHz)
             try waitUntil(
-                "\(kilohertz(sampleRateHz)) kHz", id, address(kAudioDevicePropertyNominalSampleRate)
+                "\(kilohertz(rateHz)) kHz", id, address(kAudioDevicePropertyNominalSampleRate)
             ) {
-                try readScalar(id, address(kAudioDevicePropertyNominalSampleRate)) == sampleRateHz
+                try readScalar(id, address(kAudioDevicePropertyNominalSampleRate)) == rateHz
             }
         }
         try clock.time("format") {
@@ -117,13 +135,14 @@ final class HALDevice: PCMDevice {
         let current: AudioStreamBasicDescription = try readScalar(
             stream, address(kAudioStreamPropertyPhysicalFormat))
         let physical = PhysicalFormat(current)
+        let switched = physical.summary + (isConverted ? ", converting the track to it" : "")
         logger.info(
-            "device \(self.id, privacy: .public): switched to \(physical.summary, privacy: .public)"
-        )
+            "device \(self.id, privacy: .public): switched to \(switched, privacy: .public)")
         return DeviceFormat(
             stream: try readScalar(stream, address(kAudioStreamPropertyVirtualFormat)),
             summary: "\(name): \(physical.summary)\(hogMode ? ", hog mode" : "")",
-            latencySeconds: try latencyFrames() / sampleRateHz, steps: clock.steps)
+            latencySeconds: try latencyFrames() / rateHz, isConverted: isConverted,
+            steps: clock.steps)
     }
 
     /// The IO buffer plus everything the HAL and the device add after it.

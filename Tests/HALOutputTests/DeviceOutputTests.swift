@@ -57,8 +57,12 @@ final class Rig: @unchecked Sendable {
     let engine: PlaybackEngine
     private let updates: Collected<PlaybackUpdate>
 
-    init(speed: Double = 4, digitalVolume: Bool = false) async throws {
+    /// `formats` narrows what the device reports, and so what it plays tracks as.
+    init(speed: Double = 4, digitalVolume: Bool = false, formats: DeviceFormats? = nil)
+        async throws
+    {
         device = NullDevice(speed: speed, keepsSamples: true)
+        if let formats { device.report(formats) }
         output = try DeviceOutput(
             DeviceChoice(provider: device, digitalVolume: digitalVolume, gain: 1, formats: nil))
         engine = PlaybackEngine(output: output)

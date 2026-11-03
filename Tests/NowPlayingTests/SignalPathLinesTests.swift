@@ -11,7 +11,7 @@ private let int32 = SignalFormat(
 
 private func path(_ state: DeviceState, gain: Double = 1, playing: Bool = true) -> SignalPath {
     SignalPath(
-        track: playing ? TrackSignal(file: flac, decoded: int32) : nil,
+        track: playing ? TrackSignal(file: flac, decoded: int32, isConverted: false) : nil,
         sink: .device(DeviceSink(name: "ADI-2 DAC", uid: "ADI-2", state: state, gain: gain)))
 }
 
@@ -79,7 +79,7 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
     -> SignalPath
 {
     SignalPath(
-        track: playing ? TrackSignal(file: flac, decoded: flac) : nil,
+        track: playing ? TrackSignal(file: flac, decoded: flac, isConverted: false) : nil,
         sink: .renderer(
             RendererSink(
                 name: "Denon AVR-X1800H", address: "192.0.2.45",
@@ -187,7 +187,7 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
             hogMode: .thisProcess, volumes: [], formats: formats))
     let lines = signalPathLines(
         SignalPath(
-            track: TrackSignal(file: dsd, decoded: dop),
+            track: TrackSignal(file: dsd, decoded: dop, isConverted: false),
             sink: .device(DeviceSink(name: "ADI-2 DAC", uid: "ADI-2", state: state, gain: 1))))
     #expect(lines.badge == "Bit-perfect")
     #expect(lines.rows[0] == .init(label: "File", value: "DSD128, 2 ch"))
@@ -200,4 +200,27 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
     #expect(
         lines.rows.last
             == .init(label: "Volume", value: "no device controls; digital bypassed for DoP"))
+}
+
+@Test func aConvertedTrackIsBadgedConvertedWithWhatTo() {
+    let float48 = SignalFormat(
+        formatID: "lpcm", sampleRateHz: 48_000, bitsPerChannel: 32, channels: 2, isFloat: true)
+    let lines = signalPathLines(
+        SignalPath(
+            track: TrackSignal(file: flac, decoded: float48, isConverted: true),
+            sink: .device(
+                DeviceSink(
+                    name: "AirPods", uid: "AirPods",
+                    state: .connected(
+                        DeviceSignal(
+                            nominalSampleRateHz: 48_000, physical: float48, isMixable: true,
+                            hogMode: .thisProcess, volumes: [], formats: formats)),
+                    gain: 1))))
+    #expect(lines.badge == "Converted")
+    #expect(lines.tone == .changed)
+    #expect(
+        lines.detail
+            == "The device can't take the file's format, so it's converted to PCM 32-bit float,"
+            + " 48 kHz, 2 ch; the decoder resamples 44.1 kHz to 48 kHz; the format is mixable,"
+            + " so macOS mixes other apps' sound in")
 }

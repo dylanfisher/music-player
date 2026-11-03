@@ -152,7 +152,7 @@ private final class TwoDevices: @unchecked Sendable {
     #expect(rig.speakers.openSessionCount == 1)
 }
 
-@Test func aTrackNoReportedFormatTakesIsRefusedBeforeItPlays() async throws {
+@Test func aTrackNoReportedFormatTakesPlaysConverted() async throws {
     let low = try album(44_100, 16)
     let high = try album(96_000, 24)
     let rig = try await TwoDevices()
@@ -169,20 +169,19 @@ private final class TwoDevices: @unchecked Sendable {
     rig.output.use(choice)
     try await rig.waitForSink("Speakers")
 
-    // Refused when loaded, then when handed over as the next track.
+    // Converted when loaded, then when handed over as the next track; the 44.1 kHz tracks
+    // between them play unchanged.
     await rig.engine.setQueue([high.tracks[0], low.tracks[0], high.tracks[1], low.tracks[1]])
     await rig.engine.play()
     try await rig.wait(for: .finished)
 
-    let refused = rig.events.compactMap { event -> (URL, String)? in
-        guard case .trackFailed(let url, let reason) = event else { return nil }
-        return (url, reason)
-    }
-    #expect(refused.map(\.0) == [high.tracks[0], high.tracks[1]])
-    #expect(refused.allSatisfy { $0.1.contains("Speakers can't take 2-channel audio at 96 kHz") })
-    #expect(rig.events.contains(.trackStarted(index: 1)))
+    #expect(!rig.events.contains { if case .trackFailed = $0 { true } else { false } })
     #expect(rig.events.contains(.trackStarted(index: 3)))
-    #expect(rig.speakers.captured.map(\.sampleRateHz) == [44_100])
+    #expect(rig.speakers.captured.map(\.sampleRateHz) == [48_000, 44_100, 48_000, 44_100])
+    let outputs = rig.events.compactMap { event -> String? in
+        if case .formatChanged(let change) = event { change.to } else { nil }
+    }
+    #expect(outputs.map { $0.hasPrefix("converted for Speakers: ") } == [true, false, true, false])
     #expect(rig.dac.captured.isEmpty)
 }
 

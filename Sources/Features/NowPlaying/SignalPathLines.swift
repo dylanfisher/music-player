@@ -40,7 +40,8 @@ func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
     case .bitPerfect: (lines.badge, lines.tone) = ("Bit-perfect", .bitPerfect)
     case .changed(let changes):
         let reasons = changes.map(describe).joined(separator: "; ")
-        (lines.badge, lines.tone) = ("Not bit-perfect", .changed)
+        let converted = changes.contains { if case .converted = $0 { true } else { false } }
+        (lines.badge, lines.tone) = (converted ? "Converted" : "Not bit-perfect", .changed)
         lines.detail = reasons.prefix(1).uppercased() + reasons.dropFirst()
     case .unverifiable:
         lines.badge = "Can't be checked"
@@ -135,6 +136,8 @@ private func describe(_ formats: DeviceFormats) -> String {
 
 private func describe(_ change: SignalChange) -> String {
     switch change {
+    case .converted(let format):
+        "the device can't take the file's format, so it's converted to \(describe(format))"
     case .decoderResamples(let from, let to):
         "the decoder resamples \(kilohertz(from)) kHz to \(kilohertz(to)) kHz"
     case .decoderRemixes(let from, let to): "the decoder mixes \(from) channels into \(to)"

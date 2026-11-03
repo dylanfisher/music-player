@@ -174,7 +174,7 @@ private final class Player: @unchecked Sendable {
             do {
                 try await engine.setVolume(pow(10, decibels / 20))
                 volumeDecibels = decibels
-                log(decibels == 0 ? "volume: full, bit-perfect" : "volume: \(Int(decibels)) dB")
+                log(decibels == 0 ? "volume: full, at unity" : "volume: \(Int(decibels)) dB")
             } catch {
                 log("\(error); the output.digitalVolume setting turns it on")
             }

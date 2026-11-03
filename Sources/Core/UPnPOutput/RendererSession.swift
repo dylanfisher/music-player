@@ -146,7 +146,9 @@ actor RendererSession {
     /// The path as it stands, for the panel.
     func signalPath() -> SignalPath {
         SignalPath(
-            track: current.map { TrackSignal(file: $0.track.signal, decoded: $0.track.signal) },
+            track: current.map {
+                TrackSignal(file: $0.track.signal, decoded: $0.track.signal, isConverted: false)
+            },
             sink: .renderer(
                 RendererSink(
                     name: renderer.name, address: "\(renderer.address)",

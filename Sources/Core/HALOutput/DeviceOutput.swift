@@ -15,8 +15,6 @@ enum DeviceOutputError: Error, CustomStringConvertible {
     /// The file's audio stopped well before the length its header gives, as a partial file's
     /// or one cut short while it played does.
     case endedEarly(atSeconds: Double, ofSeconds: Double)
-    /// No rate or format the device reported carries the track unchanged.
-    case deviceCannotTake(device: String, sampleRateHz: Double, channels: UInt32, DeviceFormats)
     /// A DSD track the device can't carry as DoP unchanged.
     case cannotPlayDSD(device: String, dsdRateHz: Int, carrierRateHz: Double, DoPRefusal)
     /// The device format the DoP reader was handed can't hold DoP words unchanged.
@@ -44,9 +42,6 @@ enum DeviceOutputError: Error, CustomStringConvertible {
         case .noDoPLayout(let format):
             "DoP needs a \(dopWordBits)-bit integer device format; this one is \(format.formatID)"
                 + " \(format.bitsPerChannel ?? 0)-bit\(format.isFloat ? " float" : "")"
-        case .deviceCannotTake(let device, let rate, let channels, let formats):
-            "\(device) can't take \(channels)-channel audio at \(kilohertz(rate)) kHz; it offers"
-                + " \(formats.sampleRatesHz.map(kilohertz).joined(separator: ", ")) kHz"
         }
     }
 }
@@ -57,7 +52,8 @@ enum DoPRefusal: Sendable {
     case noRate, noFormat, noHogMode
 }
 
-/// Plays tracks bit-perfect on the device a `PCMDeviceProvider` finds, as an `Output`.
+/// Plays tracks bit-perfect on the device a `PCMDeviceProvider` finds, as an `Output`, or
+/// converted to the device's best format when it can't take a track unchanged (ADR 0071).
 ///
 /// One control thread does everything except the IO proc. It decodes ahead into a ring buffer the
 /// IO proc reads, and records where each track starts as a position in the count of bytes
@@ -94,7 +90,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// Set when the device list changed or playback stopped, so the pass ends by checking whether
     /// to go back to `returnTo`.
     private var returnDue = false
-    /// What the device last reported, which a track has to fit before it plays.
+    /// What the device last reported, which a DSD track has to fit before it plays.
     private var knownFormats: DeviceFormats?
     private var device: (any PCMDevice)?
     private var stream: RenderStream?
@@ -234,7 +230,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     private var tickSeconds: Double? {
         guard let stream else { return nil }
-        let fillDue = (feeding != nil || stream.tailFramesLeft > 0) && stream.isHalfEmpty
+        let fillDue = (feeding != nil || stream.hasTailToWrite) && stream.isHalfEmpty
         return controlTickSeconds(running: running, fillDue: fillDue)
     }
 
@@ -337,8 +333,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         if announcing, let stream { emit(.trackStarted(item.id, stream.info(for: track))) }
     }
 
-    /// Throws for a track that no rate or format the device reported carries unchanged, before
-    /// the device is touched for it.
+    /// Throws for a DSD track the device can't carry as DoP, before the device is touched for
+    /// it. A PCM track always plays, converted if need be; DSD isn't converted (ADR 0071).
     private func refuseUntakeable(_ track: Track) throws {
         if track.isDoP {
             let rate = track.sampleRateHz
@@ -363,14 +359,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                     device: provider.deviceName, dsdRateHz: Int(track.file.sampleRateHz),
                     carrierRateHz: rate, refusal)
             }
-            return
         }
-        guard let knownFormats,
-            !knownFormats.takes(sampleRateHz: track.sampleRateHz, channels: track.channels)
-        else { return }
-        throw DeviceOutputError.deviceCannotTake(
-            device: provider.deviceName, sampleRateHz: track.sampleRateHz,
-            channels: track.channels, knownFormats)
     }
 
     /// Reports a track that can't play at all, and releases the device since nothing else is
@@ -410,7 +399,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             forDoP: track.isDoP)
         // DoP is never scaled, so its stream gets no gain at all.
         let withGain = choice.digitalVolume && !track.isDoP
-        let stream = try RenderStream(format: format, withGain: withGain, isDoP: track.isDoP)
+        let stream = try RenderStream(format: format, for: track, withGain: withGain)
         if withGain { HALRenderSetGain(stream.render, Float(gain)) }
         self.stream = stream
         return stream
@@ -421,11 +410,11 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         try track.decoder.setOutputFormat(stream.decoderFormat)
         if frame > 0 { try track.decoder.seek(toFrame: frame) }
         feeding = track
-        stream.dropChunk()
         stream.clearTail()
         segments.append(
             Segment(
-                item: track.item, startByte: stream.produced, startFrame: frame,
+                item: track.item, startByte: try stream.startTrack(),
+                startSeconds: Double(frame) / track.sampleRateHz,
                 durationSeconds: track.durationSeconds, signal: track.signal(into: stream)))
         HALRenderSetDraining(stream.render, false)
         drainedAt = nil
@@ -437,22 +426,19 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         HALRenderDiscard(stream.render, 0, stream.produced)
         segments = []
         pendingSwitch = nil
+        stream.dropChunk()
+        try stream.converter?.reset()
         try feed(track, into: stream, atFrame: frame)
         fill(stream, upTo: stream.prefillBytes)
     }
 
     private func seekTrack(toSeconds seconds: Double) {
-        guard let stream else { return }
-        seekTrack(toFrame: Int64(seconds * stream.sampleRateHz))
-    }
-
-    private func seekTrack(toFrame frame: Int64) {
         guard let stream, let current = segments.first else { return }
         do {
             // Whatever was queued after the current track goes back to being the next track.
             if let committed = try committedNext() { next = committed }
             let track = try reusableTrack(for: current.item)
-            try restart(stream, with: track, atFrame: track.clamped(frame))
+            try restart(stream, with: track, atFrame: track.frame(atSeconds: seconds))
         } catch {
             cannotPlay(current.item, error)
         }
@@ -484,10 +470,19 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             // replacement follows without a gap. Should the IO proc cross the boundary in the
             // microseconds before the discard lands, it cuts the old next track off a few
             // milliseconds in.
-            HALRenderDiscard(stream.render, segments[1].startByte, stream.produced)
+            // A converted stream's boundary can be a few frames past what's written, still
+            // inside the converter, which the reset drops along with the old next track.
+            HALRenderDiscard(
+                stream.render, min(segments[1].startByte, stream.produced), stream.produced)
             segments.removeSubrange(1...)
             feeding = nil
             stream.dropChunk()
+            do {
+                try stream.converter?.reset()
+            } catch {
+                fail(error)
+                return
+            }
         }
         pendingSwitch = nil
         next = nil
@@ -521,14 +516,18 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         while written < limit {
             if stream.chunkIsEmpty {
                 guard let track = feeding else {
-                    guard stream.tailFramesLeft > 0 else { return }
-                    stream.chunkTail()
+                    guard stream.tailIsDue else { return }
+                    do {
+                        try stream.chunkTail()
+                    } catch {
+                        if let last = segments.last { emit(.trackFailed(last.item.id, error)) }
+                        stream.dropTail()
+                    }
                     continue
                 }
                 let frames: UInt32
                 do {
-                    frames = try track.decoder.read(
-                        into: stream.chunk, frames: UInt32(RenderStream.chunkFrames))
+                    frames = try stream.decode(track)
                 } catch {
                     // A truncated file, or a NAS that went away: end the track where its audio
                     // stops and carry on with the next.
@@ -572,9 +571,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 
     /// Nothing more follows in this stream. DoP gets a tail of DoP silence, so the IO proc
-    /// doesn't pad the drain with zeros, which a DAC takes as PCM and may click on.
+    /// doesn't pad the drain with zeros, which a DAC takes as PCM and may click on; a converter
+    /// gives up what it still holds of the last track.
     private func endFeed(_ stream: RenderStream) {
-        if stream.isDoP { stream.startTail() }
+        stream.startTail()
         HALRenderSetDraining(stream.render, true)
     }
 
@@ -624,7 +624,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         announceBoundaries(stream)
         let consumed = HALRenderConsumedBytes(stream.render)
         if let frames = stream.newUnderrunFrames() { emit(.underrun(frames: frames)) }
-        if running, feeding == nil, stream.tailFramesLeft == 0, consumed >= stream.audioEndByte {
+        if running, feeding == nil, !stream.hasTailToWrite, stream.chunkIsEmpty,
+            consumed >= stream.audioEndByte
+        {
             drained(stream)
         } else {
             drainedAt = nil
@@ -681,7 +683,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
         clock.add(next.format.steps)
         do {
-            if let predecoded = track.predecoded,
+            // Audio decoded ahead goes straight in, so a stream that converts can't take it.
+            if let predecoded = track.predecoded, next.converter == nil,
                 StoredFormat(predecoded.format) == StoredFormat(next.decoderFormat)
             {
                 // The decoder is already past what was decoded ahead, in the right format.
@@ -689,7 +692,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                 next.dropChunk()
                 segments.append(
                     Segment(
-                        item: track.item, startByte: 0, startFrame: 0,
+                        item: track.item, startByte: 0, startSeconds: 0,
                         durationSeconds: track.durationSeconds, signal: track.signal(into: next)))
                 ahead = predecoded.audio
             } else {
@@ -914,8 +917,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         let consumed = HALRenderConsumedBytes(stream.render)
         let played =
             consumed > segment.startByte
-            ? Int64((consumed - segment.startByte) / UInt64(stream.bytesPerFrame)) : 0
-        return Double(segment.startFrame + played) / stream.sampleRateHz
+            ? (consumed - segment.startByte) / UInt64(stream.bytesPerFrame) : 0
+        return segment.startSeconds + Double(played) / stream.sampleRateHz
     }
 
     private func publishPosition() {
@@ -974,7 +977,8 @@ func tailDiscardStart(tailStart: UInt64, consumed: UInt64, pairBytes: UInt64) ->
 private struct Track {
     let item: OutputItem
     let decoder: any TrackDecoder
-    /// The rate the device runs at for it: a DSD file's DoP carrier.
+    /// The rate its frames are counted at: the file's, or a DSD file's DoP carrier. The device
+    /// runs at it unless the output converts.
     let sampleRateHz: Double
     let channels: UInt32
     /// The format the file holds, for the signal path.
@@ -1040,8 +1044,8 @@ private struct Track {
             ? SignalFormat(
                 formatID: dopFormatID, sampleRateHz: sampleRateHz, bitsPerChannel: dopWordBits,
                 channels: channels, isFloat: false)
-            : SignalFormat(stream.decoderFormat)
-        return TrackSignal(file: file, decoded: decoded)
+            : SignalFormat(stream.writtenFormat)
+        return TrackSignal(file: file, decoded: decoded, isConverted: stream.format.isConverted)
     }
 
     /// Why decoding stopped short, once it has: nil unless it's more than
@@ -1069,8 +1073,8 @@ private struct Segment {
     let item: OutputItem
     /// The count of bytes written when its first byte went in.
     let startByte: UInt64
-    /// The frame of the file it starts at, after a seek.
-    let startFrame: Int64
+    /// Where in the file it starts, after a seek.
+    let startSeconds: Double
     let durationSeconds: Double
     let signal: TrackSignal
 
@@ -1110,12 +1114,25 @@ private final class RenderStream {
     /// How DoP sits in the device's samples, for the tail; nil for PCM or a format DoP can't use,
     /// which the reader refuses.
     private let dopLayout: DoPLayout?
+    /// The rate and channel count of the tracks it was configured for, which the device runs at
+    /// unless it converts.
+    private let trackRateHz: Double
+    private let trackChannels: UInt32
+    /// Set when the device converts to another rate or channel count. A same-format conversion,
+    /// such as integer to float, the decoder does itself.
+    let converter: RateConverter?
+    /// `produced` when the converter's output last started from nothing.
+    private var converterStart: UInt64 = 0
+    /// The converter still holds the end of the last track, for the tail to write.
+    private var converterTailDue = false
 
     /// `withGain` needs a sample layout the IO proc can scale.
-    init(format: DeviceFormat, withGain: Bool, isDoP: Bool) throws {
+    init(format: DeviceFormat, for track: Track, withGain: Bool) throws {
         let stream = format.stream
         let samples: HALRenderSampleKind
-        self.isDoP = isDoP
+        isDoP = track.isDoP
+        trackRateHz = track.sampleRateHz
+        trackChannels = track.channels
         if isDoP {
             samples = HALRenderSamplesOpaque
         } else if let kind = renderSampleKind(stream) {
@@ -1129,6 +1146,12 @@ private final class RenderStream {
         self.format = format
         bytesPerFrame = Int(stream.mBytesPerFrame)
         dopLayout = isDoP ? DoPLayout(stream, channels: Int(stream.mChannelsPerFrame)) : nil
+        var written = stream
+        written.mFormatFlags &= ~kAudioFormatFlagIsNonMixable
+        converter =
+            format.isConverted
+                && (stream.mSampleRate != trackRateHz || stream.mChannelsPerFrame != trackChannels)
+            ? try RateConverter(from: trackRateHz, channels: trackChannels, to: written) : nil
         guard
             let ring = RingBufferCreate(
                 Int(stream.mSampleRate * Self.bufferSeconds) * bytesPerFrame)
@@ -1152,17 +1175,44 @@ private final class RenderStream {
     var sampleRateHz: Double { format.stream.mSampleRate }
     var prefillBytes: Int { Int(sampleRateHz * Self.prefillSeconds) * bytesPerFrame }
 
-    /// The format to decode into. The converter rejects the non-mixable flag, which describes the
-    /// hardware, not the samples.
-    var decoderFormat: AudioStreamBasicDescription {
+    /// The format written to the ring buffer. Converters reject the non-mixable flag, which
+    /// describes the hardware, not the samples.
+    var writtenFormat: AudioStreamBasicDescription {
         var format = format.stream
         format.mFormatFlags &= ~kAudioFormatFlagIsNonMixable
         return format
     }
 
+    /// The format to decode into.
+    var decoderFormat: AudioStreamBasicDescription { converter?.inputFormat ?? writtenFormat }
+
+    /// Whether `track` plays on in this stream: it has the rate and channels the stream was
+    /// configured for, so a converter carries on its signal too.
     func fits(_ track: Track) -> Bool {
-        track.sampleRateHz == sampleRateHz && track.channels == format.stream.mChannelsPerFrame
+        track.sampleRateHz == trackRateHz && track.channels == trackChannels
             && track.isDoP == isDoP
+    }
+
+    /// Decodes the next part of `track` into the chunk. Returns how many frames: 0 at its end.
+    func decode(_ track: Track) throws -> UInt32 {
+        let frames = UInt32(Self.chunkFrames)
+        guard let converter else { return try track.decoder.read(into: chunk, frames: frames) }
+        return try converter.convert(from: track.decoder, into: chunk, frames: frames)
+    }
+
+    /// Where the track about to be decoded starts, as a count of bytes written: after what's
+    /// queued, or where its first frame lands in a converter that carries on from the last
+    /// track. A converter that doesn't carry on starts again from there.
+    func startTrack() throws -> UInt64 {
+        let queuedEnd = produced + UInt64(chunkBytes - chunkOffset)
+        guard let converter else { return queuedEnd }
+        converterTailDue = false
+        if let frame = converter.nextTrackStartFrame {
+            return converterStart + UInt64(frame) * UInt64(bytesPerFrame)
+        }
+        try converter.reset()
+        converterStart = queuedEnd
+        return queuedEnd
     }
 
     func info(for track: Track) -> TrackInfo {
@@ -1171,21 +1221,35 @@ private final class RenderStream {
 
     /// The device's format, after what DoP plays as when it carries DoP.
     var outputFormat: String {
-        isDoP ? "\(dopText(carrierRateHz: sampleRateHz)) on \(format.summary)" : format.summary
+        if isDoP { return "\(dopText(carrierRateHz: sampleRateHz)) on \(format.summary)" }
+        return format.isConverted ? "converted for \(format.summary)" : format.summary
     }
 
     var chunkIsEmpty: Bool { chunkOffset == chunkBytes }
 
     /// Frames of the DoP tail still to write.
     private(set) var tailFramesLeft = 0
+    /// Whether a tail is due after the last track: DoP silence, or what a converter still holds.
+    var hasTailToWrite: Bool { tailFramesLeft > 0 || converterTailDue }
+    /// DoP's tail goes in at once. A converter's waits until what's queued has nearly played,
+    /// since the engine can name the next track after the last one has been decoded, and a
+    /// flushed converter can't carry its signal on into it.
+    var tailIsDue: Bool {
+        tailFramesLeft > 0 || (converterTailDue && RingBufferReadable(ring) <= prefillBytes)
+    }
     /// Where the audio before the DoP tail ended, which the drain waits for; nil without one.
     private(set) var tailStart: UInt64?
 
     var audioEndByte: UInt64 { tailStart ?? produced }
 
-    /// Queues the DoP tail after what's written. It starts on an even frame, as everything in a
-    /// DoP stream does, so its markers carry on from the audio's.
+    /// Queues the tail after what's written. A DoP tail starts on an even frame, as everything in
+    /// a DoP stream does, so its markers carry on from the audio's. A converter's is the end of
+    /// the last track, so the drain waits for it.
     func startTail() {
+        if let converter {
+            converterTailDue = !converter.isFlushing
+            return
+        }
         // One already queued stays: a second would move the end the drain waits for past it.
         guard dopLayout != nil, tailStart == nil else { return }
         let frames = Int(sampleRateHz * (format.latencySeconds + dopTailSeconds))
@@ -1198,9 +1262,21 @@ private final class RenderStream {
         tailStart = nil
     }
 
-    /// Fills the chunk with the next part of the DoP tail.
-    func chunkTail() {
-        guard let dopLayout else { preconditionFailure("only a DoP stream has a tail") }
+    /// Gives up the tail after it failed.
+    func dropTail() {
+        clearTail()
+        converterTailDue = false
+    }
+
+    /// Fills the chunk with the next part of the tail.
+    func chunkTail() throws {
+        if let converter, converterTailDue {
+            let frames = try converter.flush(into: chunk, frames: UInt32(Self.chunkFrames))
+            if frames == 0 { converterTailDue = false }
+            chunkDecoded(frames: Int(frames))
+            return
+        }
+        guard let dopLayout else { preconditionFailure("only DoP and converters have a tail") }
         let frames = min(tailFramesLeft, Self.chunkFrames)
         dopLayout.writeSilence(into: chunk, frames: frames)
         chunkDecoded(frames: frames)

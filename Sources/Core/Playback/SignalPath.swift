@@ -23,10 +23,14 @@ public enum SignalSink: Sendable, Equatable {
 public struct TrackSignal: Sendable, Equatable {
     public var file: SignalFormat
     public var decoded: SignalFormat
+    /// The device can't take the file's format, so the output converts it to `decoded`, the
+    /// device's best (ADR 0071).
+    public var isConverted: Bool
 
-    public init(file: SignalFormat, decoded: SignalFormat) {
+    public init(file: SignalFormat, decoded: SignalFormat, isConverted: Bool) {
         self.file = file
         self.decoded = decoded
+        self.isConverted = isConverted
     }
 }
 

@@ -11,6 +11,8 @@ public enum SignalVerdict: Sendable, Equatable {
 }
 
 public enum SignalChange: Sendable, Equatable {
+    /// The device can't take the file's format, so the output converts to this one.
+    case converted(to: SignalFormat)
     case decoderResamples(fromHz: Double, toHz: Double)
     case decoderRemixes(fromChannels: UInt32, toChannels: UInt32)
     /// The decoder's output can't hold every value the file's samples can take.
@@ -46,7 +48,7 @@ public func signalVerdict(_ path: SignalPath) -> SignalVerdict {
 
 private func decoderChanges(_ track: TrackSignal) -> [SignalChange] {
     let (file, decoded) = (track.file, track.decoded)
-    var changes: [SignalChange] = []
+    var changes: [SignalChange] = track.isConverted ? [.converted(to: decoded)] : []
     // DoP carries a DSD file's bits unchanged at a sixteenth of its rate.
     let isDoP = file.formatID == dsdFormatID && decoded.formatID == dopFormatID
     let rateHz = isDoP ? file.sampleRateHz / Double(dopDSDBitsPerFrame) : file.sampleRateHz
