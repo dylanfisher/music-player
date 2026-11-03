@@ -66,9 +66,18 @@ its own toggle does, so a relaunch keeps what showed.
 **The seek bar** is a view of the app's own: a mouse down moves the playhead there at once and
 seeks, a drag seeks where it ends, and the playhead is a 2-point vertical line. `NSSlider`
 animated the knob to a clicked point and drew a round knob. The bars keep the target until the
-engine reports the seek done, so the playhead doesn't jump back for one tick. They're off while
-the track has no known length, and a track change, or the bar leaving its window, lets go of a
+engine's `seek` returns. They're off while the track has no known length, and a track change, or the bar leaving its window, lets go of a
 drag without seeking.
+
+**A seek's position, amended in phase 35.** The engine's `seek` returns once the output has the
+seek posted, not done: `DeviceOutput`'s control thread does it in turn, after any refill it's
+in the middle of, and a renderer after its Seek action's round trip. Until then the position
+the output last published was from before the seek, so the bar's read right after the click,
+and its ticks while a refill on the NAS held the control thread, drew the old time, and the system's Now Playing
+got it with the `seeked` update. Now every `Output` reports a posted seek's target from the
+moment `seek` returns until it has sought (`Output.seek`), counting the seeks it hasn't done so
+a second one keeps the hold. The fix is in the outputs, where the time comes from, rather than
+in the bar, which can't tell the old time from the new.
 
 ## Alternatives considered
 

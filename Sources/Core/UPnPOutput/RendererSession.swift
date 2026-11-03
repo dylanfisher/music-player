@@ -269,6 +269,7 @@ actor RendererSession {
     }
 
     private func seek(_ seconds: Double) async {
+        defer { shared.finishSeek() }
         guard let current else { return }
         let target = seekTarget(seconds, in: current)
         if current.started {

@@ -110,7 +110,10 @@ public final class RendererOutput: Output, @unchecked Sendable {
     public func play() { work.yield(.play) }
     public func pause() { work.yield(.pause) }
     public func stop() { work.yield(.stop) }
-    public func seek(toSeconds seconds: Double) { work.yield(.seek(seconds)) }
+    public func seek(toSeconds seconds: Double) {
+        shared.beginSeek(seconds)
+        if case .terminated = work.yield(.seek(seconds)) { shared.finishSeek() }
+    }
 
     public func setVolume(_ gain: Double) {
         logger.error("\(self.renderer.name) has no volume the app sets; asked for \(gain)")

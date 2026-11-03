@@ -350,7 +350,8 @@ let package = Package(
         .testTarget(
             name: "NowPlayingTests",
             dependencies: [
-                "Artwork", "Commands", "Library", "Metadata", "NowPlaying", "Playback", "Settings",
+                "Artwork", "Commands", "Fixtures", "HALOutput", "Library", "Metadata", "NowPlaying",
+                "Playback", "Settings",
             ],
             swiftSettings: strictSwift
         ),

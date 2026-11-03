@@ -20,6 +20,8 @@ public protocol Output: AnyObject, Sendable {
     func pause()
     /// Drops everything loaded and releases the device.
     func stop()
+    /// From the moment it returns, `position()` reports `seconds` until the output has sought,
+    /// so nothing reads the time from before the seek after asking for it.
     func seek(toSeconds seconds: Double)
     /// Linear amplitude from 0 to 1.
     func setVolume(_ gain: Double)

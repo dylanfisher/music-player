@@ -16,6 +16,9 @@ final class RendererShared: @unchecked Sendable {
     private var served: [OutputItem.ID: (file: HTTPServedFile, retiredAt: Double?)] = [:]
     private var anchor: (item: OutputItem.ID, seconds: Double, at: Double, advancing: Bool)?
     private var duration: Double?
+    /// The last seek posted, and how many posted seeks the session hasn't done; `position`
+    /// reports it until they're all done, since the anchor holds the time from before them.
+    private var seekTarget: (seconds: Double, unfinished: Int)?
     private var server: HTTPServer<OutputItem.ID>?
     private var pollDue = false
     private var closed = false
@@ -71,10 +74,25 @@ final class RendererShared: @unchecked Sendable {
         }
     }
 
+    /// Called before the seek is handed to the session.
+    func beginSeek(_ seconds: Double) {
+        lock.withLock { seekTarget = (seconds, (seekTarget?.unfinished ?? 0) + 1) }
+    }
+
+    /// One posted seek is done, and the anchor already says where it went.
+    func finishSeek() {
+        lock.withLock {
+            guard let target = seekTarget else { return }
+            seekTarget = target.unfinished > 1 ? (target.seconds, target.unfinished - 1) : nil
+        }
+    }
+
     func position(at now: Double) -> OutputPosition? {
         lock.withLock {
             guard let anchor else { return nil }
-            var seconds = anchor.seconds + (anchor.advancing ? max(0, now - anchor.at) : 0)
+            var seconds =
+                seekTarget?.seconds
+                ?? anchor.seconds + (anchor.advancing ? max(0, now - anchor.at) : 0)
             if let duration { seconds = min(seconds, duration) }
             return OutputPosition(item: anchor.item, seconds: seconds)
         }

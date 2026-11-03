@@ -646,6 +646,21 @@ private func output(
     #expect(output.position()?.seconds == 6)
 }
 
+@Test func aSeekReportsItsTargetWhileTheRendererIsAsked() async throws {
+    let fake = try await FakeRenderer.denon()
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    await log.wait(for: ["started 1"])
+    await eventually("a poll") { output.position()?.seconds ?? 0 > 0 }
+    fake.stall("Seek")
+    output.seek(toSeconds: 8)
+    #expect(output.position()?.seconds == 8)
+    await eventually("the seek sent") { fake.actions.contains("Seek") }
+    try await Task.sleep(nanoseconds: 300_000_000)
+    #expect(output.position()?.seconds == 8)
+}
+
 @Test func aSeekPastTheEndLandsJustShortOfIt() async throws {
     let fake = try await FakeRenderer.denon()
     let (output, log) = try await output(fake)

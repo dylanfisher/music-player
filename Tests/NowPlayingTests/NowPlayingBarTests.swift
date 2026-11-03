@@ -1,6 +1,8 @@
 import AppKit
 import Artwork
+import Fixtures
 import Foundation
+import HALOutput
 import Testing
 
 @testable import Library
@@ -86,4 +88,35 @@ private func bar() -> NowPlayingBar {
     #expect(!bar.ticks)
     bar.windowShowsChanged(true)
     #expect(!bar.ticks)
+}
+
+/// A click seeks a `DeviceOutput` reading from a slow NAS, whose control thread takes a while
+/// to do the seek. From the click on, neither bar goes back to the time before it.
+@MainActor @Test func aClickNeverDrawsTheTimeFromBeforeIt() async throws {
+    let track = try hiResTrack(in: try defaultPlaybackFixturesDirectory())
+    let output = try DeviceOutput(
+        DeviceChoice(provider: NullDevice(speed: 1), digitalVolume: false, gain: 1, formats: nil),
+        fileLatency: FileLatency(openSeconds: 0, readSeconds: 0.05))
+    defer { output.close() }
+    let engine = PlaybackEngine(output: output)
+    let bar = bar()
+    bar.connect(engine)
+    await engine.setQueue([track])
+    await engine.play()
+    let started = Date().addingTimeInterval(10)
+    while Date() < started {
+        let position = await engine.position() ?? 0
+        if bar.slider.isEnabled, position >= 0.2 { break }
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    try #require(bar.slider.isEnabled)
+    bar.slider.press(atX: 50)
+    bar.slider.release()
+    var drawn: [Double] = []
+    let deadline = Date().addingTimeInterval(1.5)
+    while Date() < deadline {
+        drawn += [bar.slider.fraction, bar.statusBar.seekBar.fraction]
+        try await Task.sleep(nanoseconds: 5_000_000)
+    }
+    #expect(drawn.allSatisfy { $0 >= 0.5 }, "drawn after the click: \(drawn.filter { $0 < 0.5 })")
 }

@@ -81,11 +81,16 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private let continuation: AsyncStream<OutputEvent>.Continuation
     private let signalContinuation: AsyncStream<SignalPath>.Continuation
     private let returnContinuation: AsyncStream<String>.Continuation
-    /// Guards `pending`, `published`, `isClosed` and `volumeOn`, and wakes the control thread.
+    /// Guards `pending`, `published`, `seekTarget`, `isClosed` and `volumeOn`, and wakes the
+    /// control thread.
     private let condition = NSCondition()
     /// Each command with the interval generation current when it was posted.
     private var pending: [(command: Command, generation: UInt64)] = []
     private var published: OutputPosition?
+    /// The last seek posted, and how many posted seeks the control thread hasn't done.
+    /// `position()` reports it until they're all done: `published` holds the time from before
+    /// the seek until then, which a refill on a NAS can make last a while.
+    private var seekTarget: (seconds: Double, unfinished: Int)?
     private var isClosed = false
     private var volumeOn: Bool
 
@@ -187,14 +192,25 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     public func stop() { post(.stop) }
     public func seek(toSeconds seconds: Double) {
         let generation = firstSound.begin()
-        if !post(.seek(seconds)) { firstSound.cancel(upTo: generation) }
+        // Before the post, so the control thread can't finish the seek before it's counted.
+        condition.withLock { seekTarget = (seconds, (seekTarget?.unfinished ?? 0) + 1) }
+        if !post(.seek(seconds)) {
+            firstSound.cancel(upTo: generation)
+            finishSeek()
+        }
     }
     public func setVolume(_ gain: Double) { post(.volume(gain)) }
     public var hasVolume: Bool { condition.withLock { volumeOn } }
     /// Plays on `choice` from now on: the track playing carries on there from where it is. For the
     /// device in use, it only applies the new settings.
     public func use(_ choice: DeviceChoice) { post(.use(choice)) }
-    public func position() -> OutputPosition? { condition.withLock { published } }
+    public func position() -> OutputPosition? {
+        condition.withLock {
+            guard var position = published else { return nil }
+            if let seekTarget { position.seconds = seekTarget.seconds }
+            return position
+        }
+    }
     var signalPathBuilds: Int { condition.withLock { signalBuilds } }
 
     public func close() {
@@ -295,6 +311,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         case .seek(let seconds):
             seekTrack(toSeconds: seconds)
             armFirstSound()
+            publishPosition()
+            finishSeek()
         case .volume(let gain):
             self.gain = gain
             signalDirty = true
@@ -1024,6 +1042,14 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             positionSeconds().map { OutputPosition(item: segment.item.id, seconds: $0) }
         }
         condition.withLock { published = position }
+    }
+
+    /// One posted seek is done, and `published` already says where it went.
+    private func finishSeek() {
+        condition.withLock {
+            guard let target = seekTarget else { return }
+            seekTarget = target.unfinished > 1 ? (target.seconds, target.unfinished - 1) : nil
+        }
     }
 
     private func emit(_ event: OutputEvent) { continuation.yield(event) }

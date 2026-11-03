@@ -723,3 +723,35 @@ private func copies(of album: RampAlbum) throws -> [URL] {
     #expect(after.start == pulled)
     #expect(after.count == album.totalFrames - 22_050)
 }
+
+/// On a NAS the control thread can take a while to do a seek, and until it has, the position
+/// it last published is from before the seek.
+@Test func aSeekReportsItsTargetFromTheMomentItIsAskedFor() async throws {
+    let track = try hiResTrack(in: try defaultPlaybackFixturesDirectory())
+    let device = NullDevice(speed: 1)
+    let output = try DeviceOutput(
+        DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil),
+        fileLatency: FileLatency(openSeconds: 0, readSeconds: 0.05))
+    defer { output.close() }
+    let engine = PlaybackEngine(output: output)
+    let updates = Collected(await engine.updates())
+    await engine.setQueue([track])
+    await engine.play()
+    while try await updates.next().event != .trackStarted(index: 0) {}
+    let started = Date().addingTimeInterval(10)
+    while await engine.position() ?? 0 < 0.2, Date() < started {
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    let before = try #require(await engine.position())
+    #expect(before >= 0.2 && before < 5)
+    await engine.seek(toSeconds: 60)
+    var seen: [Double] = []
+    let deadline = Date().addingTimeInterval(10)
+    while Date() < deadline, seen.last ?? 0 < 60.1 {
+        seen.append(try #require(await engine.position()))
+        try await Task.sleep(nanoseconds: 5_000_000)
+    }
+    #expect(seen.first == 60)
+    #expect(seen.allSatisfy { $0 >= 60 && $0 < 61 }, "positions after the seek: \(seen)")
+    #expect((seen.last ?? 0) >= 60.1, "playback never moved on from the seek: \(seen)")
+}
