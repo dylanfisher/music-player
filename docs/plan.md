@@ -2430,22 +2430,52 @@ drag, the Centered style, the signal path panel in light and dark), and `./scrip
 
 ### 28. Queue, history and scrolling
 
-- [ ] **28.1 The queue shows what plays next.** Today it lists all 3,229 tracks of the context,
+- [x] **28.1 The queue shows what plays next.** Today it lists all 3,229 tracks of the context,
       and Play Next doesn't show at the top. It should list, in order: tracks added with Play
       Next, then those added with Add to Playback Queue, then the rest of the context after the
       playing track (playing an artist under Z shows the tracks after it, not the whole list).
       Played tracks leave it. Find whether the model or only the view is wrong, and fix both if
       needed, with tests on the order.
-- [ ] **28.2 History shows only plays.** With nothing played it showed the whole library. History
+- [x] **28.2 History shows only plays.** With nothing played it showed the whole library. History
       lists tracks with at least one recorded play, newest first, and says "Nothing played yet"
       when there are none.
-- [ ] **28.3 Scrolling as smooth as Swinsian's.** Scrolling, and dragging the scroll bar above
+- [x] **28.3 Scrolling as smooth as Swinsian's.** Scrolling, and dragging the scroll bar above
       all, lags. Profile the track table on the fixture library and fix what costs per row: cell
       reuse, row height fixed and not measured, no per-row queries or string formatting on the
       main thread at scroll time, art decoded off the main thread at the cell's pixel size and
       cached, layer-backed views with `canDrawSubviewsIntoLayer`, responsive scrolling on, and
       no work in `tableView(_:viewFor:row:)` that a prefetch can do. Add a bench, "scroll every
       row by scroll-bar drag", with a budget in the table above, and record before and after.
+
+Result: shipped as planned; `./scripts/check` passes. The owner's screenshots weren't available and
+nobody ran the app, so the look is checked only by unit tests and off-screen renders. 28.1: both the
+model and the view were wrong. The queue marks each entry the user queued (Play Next or Add to
+Playback Queue) and Add to Playback Queue now lands after the Play Next tracks, so the order is Play
+Next newest first, then the adds in order, then the rest of the context. The panel lists from the
+current track on, played tracks hidden but kept in the engine for Previous and repeat-all; each row
+maps to its engine position for play, remove and drag, and drops land just below the current track
+(ADR 0056). Shuffle still mixes queued tracks into the shuffled rest, and a queued track keeps its
+mark after it plays. 28.2: the cause was the data. An import sets Last Played without history rows
+(ADR 0033), so History listed nearly the whole library. History now needs a recorded play, read from
+a new `recorded_paths` table the schema fills from `history` (no stats discarded), and an empty
+History says "Nothing played yet" (ADR 0057). The History source bench measured 49.78 ms against the
+30 ms budget with a per-track `history_path` lookup and 11.94 ms with the table. 28.3: a new bench,
+"scroll every row by scroll-bar drag", p95 per step over 1,386 steps on Apple Silicon: 15.2 ms before,
+9.8 ms after (median of three; budget < 16 ms, < 33 ms estimated for the old Mac). Profiling showed
+AppKit, not our row work (about 4%), so the track table and timeline use `TextCell`, which draws its
+line itself, art cells position by autoresizing mask, and each row draws into one layer (ADR 0058).
+Launch 0.47 s, memory after scrolling 82 MB. The gate fixed the cached current-track position in the
+queue, and anything drawn over the track table must be laid out without constraints. For 26.4:
+Swinsian keeps its table columns in `~/Library/Preferences/com.swinsian.Swinsian.plist` (key
+`MainTableColumns-Ver1`), not in `Library.sqlite`; row 26.4 is not part of this phase. Not done:
+prefetching rows and off-main formatting (under 2% of samples); the next scrolling gain would come
+from fewer columns or cached drawn text. Pending the owner: the by-hand checks (queue order and
+double-click, Delete and drag on queue rows; "Nothing played yet" centered in light and dark and
+gone after one play; text truncation, right-aligned numbers, selected-row color focused and
+unfocused, playing-row mark, grey missing rows, Full Width art and thumbnails while scrolling,
+Compact and Large heights, VoiceOver, and a scroll-bar drag against Swinsian on macOS 26 and the
+2015 MacBook Pro), and `./scripts/bench` on the 2015 MacBook Pro for "scroll every row" and the
+History source.
 
 ## Later
 
