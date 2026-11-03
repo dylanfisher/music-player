@@ -153,6 +153,20 @@ class RowListController: NSViewController {
         table.bounds.height - clip.bounds.height + clip.contentInsets.bottom
     }
 
+    /// Leaves `points` at the list's bottom for the status bar over it, which keeps the rows and
+    /// the scroller clear of it; the header's inset at the top is the clip's own. A list scrolled
+    /// to its end stays at its end, so a taller bar doesn't cover the last row.
+    func setBottomInset(_ points: CGFloat) {
+        guard let scroll = table.enclosingScrollView, let clip else { return }
+        let atEnd = clip.bounds.minY >= lastScrollY(clip) - 0.5
+        scroll.automaticallyAdjustsContentInsets = false
+        scroll.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: points, right: 0)
+        guard atEnd else { return }
+        clip.scroll(
+            to: NSPoint(x: clip.bounds.minX, y: max(-clip.contentInsets.top, lastScrollY(clip))))
+        scroll.reflectScrolledClipView(clip)
+    }
+
     /// Scrolls the list `rows` rows down, or up when negative, leaving the selection alone.
     func scroll(byRows rows: Int) {
         guard let clip else { return }

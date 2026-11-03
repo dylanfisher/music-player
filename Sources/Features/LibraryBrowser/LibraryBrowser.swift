@@ -1486,11 +1486,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Lets the track table and the timeline scroll their last rows clear of the bar.
     private func insetListsUnderStatusBar() {
         let bottom = statusArea.isHidden ? 0 : statusHeight?.constant ?? 0
-        for list in [table.view, timeline.view] {
-            guard let scroll = list as? NSScrollView else { continue }
-            scroll.automaticallyAdjustsContentInsets = false
-            scroll.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottom, right: 0)
-        }
+        for list in [table, timeline] as [RowListController] { list.setBottomInset(bottom) }
     }
 
     /// Whether Show Current Track has something to show: the track playing, or else a selected

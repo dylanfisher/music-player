@@ -89,3 +89,36 @@ func theStatusBarsMiddleStaysCenteredOnTheWindow(_ parts: [StatusPart]) async th
         Double(scroll.contentInsets.bottom) == StatusBarLayout.tallPoints,
         "\(scroll.contentInsets) \(area.frame)")
 }
+
+/// The scroller stops at the bar, the header keeps its inset, and a list scrolled to its end
+/// keeps its last row clear of the bar as the bar grows taller.
+@MainActor @Test func theTrackTablesScrollerAndLastRowStayClearOfTheStatusBar() async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    let browser = fixture.browser
+    let table = browser.table.table
+    let scroll = try #require(table.enclosingScrollView)
+    let clip = scroll.contentView
+    let header = try #require(table.headerView)
+    #expect(clip.contentInsets.top == header.frame.height)
+    let scroller = try #require(scroll.verticalScroller)
+    let area = browser.statusArea
+    #expect(
+        scroller.convert(scroller.bounds, to: nil).minY == area.convert(area.bounds, to: nil).maxY)
+
+    let last = table.numberOfRows - 1
+    #expect(table.rect(ofRow: last).maxY > clip.bounds.height, "the rows fit, nothing to scroll")
+    table.scrollRowToVisible(last)
+    for style in [StatusBarStyle.tall, .minimal, .tall] {
+        fixture.setParts([.art], style: style)
+        #expect(
+            table.rect(ofRow: last).maxY == clip.bounds.maxY - clip.contentInsets.bottom,
+            "\(style): \(table.rect(ofRow: last)) in \(clip.bounds), \(clip.contentInsets)")
+    }
+    // Scrolled up a row, the list stays where it is.
+    browser.table.scroll(byRows: -1)
+    let top = clip.bounds.minY
+    fixture.setParts([.art], style: .minimal)
+    #expect(clip.bounds.minY == top)
+    #expect(clip.contentInsets.top == header.frame.height)
+}
