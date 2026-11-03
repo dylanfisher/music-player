@@ -189,7 +189,7 @@ public final class ThumbnailStore: @unchecked Sendable {
     }
 }
 
-/// FNV-1a over `bytes` from `basis`. Two bases give two independent halves of the name.
+/// FNV-1a over `bytes` from `basis`. Two bases give two halves of the name; they are not independent, only a longer name.
 private func fnv1a(_ bytes: [UInt8], basis: UInt64) -> UInt64 {
     bytes.reduce(basis) { ($0 ^ UInt64($1)) &* 0x100_0000_01b3 }
 }

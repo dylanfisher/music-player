@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let snapshotOf: SnapshotTarget
     /// How long after the first rows the snapshot waits, for the scan and art to show.
     static let snapshotDelaySeconds = 4.0
-    /// How long quitting waits for the output to close: longer than a device takes to restore
+    /// How long quitting waits for the outputs to close: longer than a device takes to restore
     /// its format, which it waits up to 3 s for.
     static let closeWaitSeconds = 6.0
     private(set) var settings: ConfigStore<AppSettings>?
@@ -74,6 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let deviceSnapshots = DeviceSnapshots()
     /// The renderer `output.renderer` names, while the engine plays to it.
     var rendererOutput: RendererOutput?
+    /// Counts the sync folders chosen, so only the latest one's check applies.
+    private var syncFolderPicks = 0
     /// The search for that renderer, and its signal paths for the panel.
     var rendererSearch: Task<Void, Never>?
     var rendererPathUpdates: Task<Void, Never>?
@@ -380,12 +382,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window?.saveToolbarVisibility()
         saver?.flush()
         watcher?.stop()
-        rendererOutput?.close()
-        // Puts the device and the default outputs back the way they were. The close waits on the
-        // output's control thread, which a read from a share that stopped answering holds; the
-        // device's restore record puts it back at the next launch instead.
-        if let output, !finishes(within: Self.closeWaitSeconds, { output.close() }) {
-            logger.error("the output didn't close within \(Self.closeWaitSeconds) s; quitting")
+        // Puts the device and the default outputs back the way they were. The device output's
+        // close waits on its control thread, which a read from a share that stopped answering
+        // holds. The renderer's close stops its HTTP server, which waits on the queue that
+        // reads the file it serves, so a hung share holds that too. Both close together within
+        // one bound; the device's restore record puts it back at the next launch instead.
+        var outputs: [any Output] = []
+        if let rendererOutput { outputs.append(rendererOutput) }
+        if let output { outputs.append(output) }
+        let closing = outputs
+        if !finishes(
+            within: Self.closeWaitSeconds,
+            { DispatchQueue.concurrentPerform(iterations: closing.count) { closing[$0].close() } })
+        {
+            logger.error("the outputs didn't close within \(Self.closeWaitSeconds) s; quitting")
         }
     }
 
@@ -738,8 +748,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             + " their stats through. The app writes only its own log there."
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
+            self?.syncFolderPicks += 1
+            let pick = self?.syncFolderPicks
             Task {
                 let found = await blockingFileWork { Result { try folderToWatch(at: url) } }
+                // A later pick supersedes this one, even if this check returns after it.
+                guard self?.syncFolderPicks == pick else { return }
                 do {
                     let folder = try found.get()
                     try settings.set(
