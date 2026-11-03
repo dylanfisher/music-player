@@ -3534,7 +3534,11 @@ when run back to back, but 13 to 29 ms when run alone after a 50 ms sleep, on th
 detached alike; the signpost around the ranking isn't it either (20.4 ms without). So this Mac now
 runs a ranking after a short idle several times slower than when busy, which looks like its clock
 or core choice, not the code. The budget stays at 15 ms, so it shows if this persists or appears on
-the old Mac.
+the old Mac. A check against e7c8097, alternating three runs each, gave 16.1 to 20.2 ms there and
+14.5 to 20.9 ms here, so no commit since slowed it; the Mac had background load at the time
+(Safari's SafeBrowsing service near 92% CPU). The gap between keystrokes is how people type, so
+waking the core is part of what the user feels and the bench keeps its 50 ms sleep; the old Mac's
+run decides the budget.
 
 Tightened to about 2x the worst of three runs, each beaten by more than 3x; the old-Mac figures
 stay estimates until this checkpoint:
