@@ -318,6 +318,35 @@ private func joinFrame(_ album: SineAlbum, from frame: Int = 0) -> Int {
     #expect(abs(position - Double(pulled - joinFrame(album)) / deviceRateHz) < 1e-6)
 }
 
+@Test func aDoubleClickWhileConvertingRestartsTheConverterOnTheOpenDevice() async throws {
+    let album = try sineAlbum(44_100, 16)
+    let rig = try await Rig(speed: 1, formats: NullDevice.float48k)
+    await rig.engine.setQueue([album.tracks[0]])
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    try await Task.sleep(nanoseconds: 100_000_000)
+    await rig.engine.pause()
+    try await Task.sleep(nanoseconds: 50_000_000)
+    let pulled = frames(rig.device.captured[0]).count
+    let second = album.tracks[1]
+    let filling = await rig.engine.play(starting: second) { ([second], 0) }
+    try await filling.value
+    try await rig.wait(for: .finished)
+
+    #expect(rig.device.openedSessionCount == 1)
+    #expect(rig.device.captured.count == 1)
+    // The second track's sine from its start, straight after what played of the first.
+    let played = frames(rig.device.captured[0])
+    let remaining = Int(
+        (Double(album.trackFrames[1]) * deviceRateHz / Double(album.sampleRateHz)).rounded(.up))
+    try #require(played.count >= pulled + remaining)
+    let start = Double(album.trackFrames[0]) / Double(album.sampleRateHz)
+    #expect(
+        largestError(
+            played, album, from: pulled, atSeconds: start,
+            (pulled + edgeFrames)..<(pulled + remaining - edgeFrames)) < tolerance)
+}
+
 @Test func aSeekNearTheEndCarriesOnAcrossTheJoin() async throws {
     let album = try sineAlbum(44_100, 16)
     let rig = try await Rig(speed: 1, formats: NullDevice.float48k)

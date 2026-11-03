@@ -116,6 +116,11 @@ public actor PlaybackEngine {
     /// Stops playback and replaces the queue. `first` is the index `play()` starts at.
     public func setQueue(_ urls: [URL], first: Int = 0) {
         unload()
+        replaceQueue(urls, first: first)
+    }
+
+    /// Replaces the queue and points `play()` at `first`, leaving the output as it is.
+    private func replaceQueue(_ urls: [URL], first: Int) {
         queueGeneration += 1
         completing = false
         finishedEarly = nil
@@ -139,7 +144,10 @@ public actor PlaybackEngine {
         starting url: URL,
         completing rest: @escaping @Sendable () async throws -> (urls: [URL], first: Int)
     ) -> Task<Void, any Error> {
-        setQueue([url])
+        // The output isn't stopped: the load that follows replaces what it plays, so it keeps
+        // the device open instead of closing and reopening it (ADR 0078).
+        forgetLoaded()
+        replaceQueue([url], first: 0)
         completing = true
         play()
         let generation = queueGeneration
@@ -469,6 +477,11 @@ public actor PlaybackEngine {
 
     private func unload() {
         if currentItem != nil || resumeSeconds != nil { output.stop() }
+        forgetLoaded()
+    }
+
+    /// Forgets what the output has loaded without stopping it, for a `load` that replaces it.
+    private func forgetLoaded() {
         currentItem = nil
         nextItem = nil
         resumeSeconds = nil

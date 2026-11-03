@@ -1088,6 +1088,24 @@ private actor Gate {
     #expect(output.takeCalls() == [.setNext(2, urls[2])])
 }
 
+@Test func aQueuePlayedAtOnceReplacesWhatPlaysWithoutStoppingTheOutput() async throws {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+
+    let filling = await engine.play(starting: urls[2]) { ([urls[2]], 0) }
+    try await filling.value
+    #expect(output.takeCalls() == [.load(3, urls[2], startSeconds: 0, playing: true)])
+    #expect(await engine.state.status == .playing)
+    // The replaced track's end is the output's old news.
+    await engine.handle(.finished(1))
+    #expect(await engine.state.status == .playing)
+
+    await engine.setQueue(urls)
+    #expect(output.takeCalls() == [.stop])
+}
+
 @Test func aQueueThatArrivesAfterANewQueueIsDropped() async throws {
     let output = FakeOutput()
     let engine = PlaybackEngine(output: output)

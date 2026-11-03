@@ -499,3 +499,74 @@ private func samples(of album: RampAlbum, _ ranges: [Range<Int>]) -> [Int32] {
     #expect(seconds > BurstTrack.burstSeconds.lowerBound / 8 - 0.1)
     #expect(seconds < BurstTrack.burstSeconds.lowerBound / 8 + 0.5)
 }
+
+/// Plays `first` on `rig`, pauses it, then double-clicks `second` and plays it to its end.
+/// Returns the frames the device pulled before the pause.
+private func doubleClick(_ second: URL, after first: URL, on rig: Rig) async throws -> Int {
+    await rig.engine.setQueue([first])
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    try await Task.sleep(nanoseconds: 100_000_000)
+    await rig.engine.pause()
+    try await Task.sleep(nanoseconds: 50_000_000)
+    let pulled = rig.device.captured[0].samples.count / 2
+    let filling = await rig.engine.play(starting: second) { ([second], 0) }
+    try await filling.value
+    try await rig.wait(for: .finished)
+    return pulled
+}
+
+@Test func aDoubleClickWhilePlayingKeepsTheDeviceOpenAndStreamsOn() async throws {
+    let album = try album(44_100, 16)
+    let rig = try await Rig(speed: 1)
+    let pulled = try await doubleClick(album.tracks[1], after: album.tracks[0], on: rig)
+
+    #expect(rig.device.openedSessionCount == 1)
+    let runs = rig.device.captured
+    #expect(runs.map(\.sampleRateHz) == [44_100])
+    // The second track from its first frame, straight after what played of the first.
+    let second = try #require(
+        contiguousFrames(of: album, from: album.trackFrames[0], in: runs[0].samples))
+    #expect(second.start == pulled)
+    #expect(second.count == album.trackFrames[1])
+    #expect(rig.device.openSessionCount == 0)
+}
+
+@Test func aDoubleClickOnAnotherRateReconfiguresTheOpenDevice() async throws {
+    let low = try album(44_100, 16)
+    let high = try album(96_000, 24)
+    let rig = try await Rig(speed: 1)
+    _ = try await doubleClick(high.tracks[0], after: low.tracks[0], on: rig)
+
+    #expect(rig.device.openedSessionCount == 1)
+    let runs = rig.device.captured
+    #expect(runs.map(\.sampleRateHz) == [44_100, 96_000])
+    let second = try #require(contiguousFrames(of: high, in: runs[1].samples))
+    #expect(second.start == 0)
+    #expect(second.count == high.trackFrames[0])
+}
+
+@Test func stopAndANewQueueWithoutPlayStillCloseTheDevice() async throws {
+    let album = try album(44_100, 16)
+    let rig = try await Rig(speed: 1)
+    await rig.engine.setQueue([album.tracks[0]])
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    await rig.engine.stop()
+    try await waitUntil { rig.device.openSessionCount == 0 }
+
+    _ = await rig.engine.play(starting: album.tracks[0]) { ([album.tracks[0]], 0) }
+    try await rig.wait(for: .trackStarted(index: 0))
+    await rig.engine.setQueue([album.tracks[1]])
+    try await waitUntil { rig.device.openSessionCount == 0 }
+    #expect(rig.device.openedSessionCount == 2)
+}
+
+/// Polls `condition` every 5 ms for up to 5 s.
+private func waitUntil(_ condition: () -> Bool) async throws {
+    let deadline = Date().addingTimeInterval(5)
+    while !condition() {
+        guard Date() < deadline else { throw TimedOut(seen: "the condition never held") }
+        try await Task.sleep(nanoseconds: 5_000_000)
+    }
+}
