@@ -239,3 +239,12 @@ private func idleFrames(after audio: [UInt8], in carried: [UInt8]) -> Int {
     // queued the drain waits out the whole first one.
     #expect(idleFrames(after: track.expected[0], in: carried[0]) < tailFrames / 2)
 }
+
+@Test func aTailIsCutForANextTrackOnAPairOfFrames() {
+    // 32-bit stereo: a frame is 8 bytes, a pair 16. The tail starts at byte 1600.
+    #expect(tailDiscardStart(tailStart: 1600, consumed: 800, pairBytes: 16) == 1600)
+    #expect(tailDiscardStart(tailStart: 1600, consumed: 1600, pairBytes: 16) == 1600)
+    // Inside the tail on an odd frame: the cut moves on to the next pair.
+    #expect(tailDiscardStart(tailStart: 1600, consumed: 1608, pairBytes: 16) == 1616)
+    #expect(tailDiscardStart(tailStart: 1600, consumed: 1632, pairBytes: 16) == 1632)
+}

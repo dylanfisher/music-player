@@ -494,7 +494,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         // A DoP tail queued because no next track had been named yet: the IO proc skips what
         // it hasn't played of it, so the new next track follows the audio without a gap.
         if item != nil, let tailStart = stream.tailStart {
-            HALRenderDiscard(stream.render, tailStart, stream.produced)
+            let from = tailDiscardStart(
+                tailStart: tailStart, consumed: HALRenderConsumedBytes(stream.render),
+                pairBytes: UInt64(2 * stream.bytesPerFrame))
+            HALRenderDiscard(stream.render, from, stream.produced)
             stream.clearTail()
             stream.dropChunk()
         }
@@ -957,6 +960,15 @@ func controlTickSeconds(running: Bool, fillDue: Bool) -> Double? {
 /// much longer than the latency covers that with room to spare, and the stop discards what's left
 /// of it.
 let dopTailSeconds = 0.1
+
+/// Where to cut a DoP tail for a next track: its start, or once the IO proc is inside it, the
+/// next pair of frames after where it is, so the track still starts on an even frame and the
+/// markers keep their order. Should the IO proc pass that point before the discard lands, it
+/// skips from where its next cycle starts instead.
+func tailDiscardStart(tailStart: UInt64, consumed: UInt64, pairBytes: UInt64) -> UInt64 {
+    guard consumed > tailStart else { return tailStart }
+    return tailStart + (consumed - tailStart + pairBytes - 1) / pairBytes * pairBytes
+}
 
 /// A file opened for decoding.
 private struct Track {
