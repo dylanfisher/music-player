@@ -28,6 +28,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// How the Album Art column draws, and the loader for the column's width, replaced when the
     /// width needs other pixels.
     private var artSize = ArtSize.fit
+    /// The text cells' font, which follows the row height.
+    private var font = RowHeight.regular.font
     private var art: RowArt
     /// The art of the album under the pointer, whole and at the column's width, over the rows.
     let artHover = ArtHover()
@@ -151,9 +153,10 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         let rowHeight = appearance.rowHeight.points
         guard appearance.artSize != artSize || rowHeight != table.rowHeight else { return }
         table.rowHeight = rowHeight
+        font = appearance.rowHeight.font
         artSize = appearance.artSize
         hideArtHover()
-        // The art's rows and size change.
+        // The art's rows and size, and the text's size, change.
         table.reloadData()
     }
 
@@ -270,6 +273,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
             as? TextCell ?? TextCell(tableColumn.identifier, numeric: column.isNumeric)
+        cell.font = font
         cell.text = trackRow(row).map { column.text($0, position: row) } ?? ""
         rowsDrawn()
         return cell

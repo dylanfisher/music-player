@@ -1,7 +1,7 @@
 import AppKit
 
-/// A list cell of one line of text in the lists' small font, cut off at its end, numbers on the
-/// right. It draws the text itself: a text field per cell has a layer of its own and a layout
+/// A list cell of one line of text, in the lists' small font unless `font` says otherwise, cut
+/// off at its end, numbers on the right. It draws the text itself: a text field per cell has a layer of its own and a layout
 /// pass each time the table reuses the cell, which were most of what scrolling cost per row
 /// (ADR 0058).
 final class TextCell: NSTableCellView {
@@ -15,7 +15,14 @@ final class TextCell: NSTableCellView {
     var textColor = NSColor.labelColor {
         didSet { if textColor != oldValue { needsDisplay = true } }
     }
-    private let attributes: [NSAttributedString.Key: Any]
+    var font = TextCell.font {
+        didSet {
+            guard font != oldValue else { return }
+            attributes[.font] = font
+            needsDisplay = true
+        }
+    }
+    private var attributes: [NSAttributedString.Key: Any]
 
     init(_ identifier: NSUserInterfaceItemIdentifier, numeric: Bool) {
         let paragraph = NSMutableParagraphStyle()
@@ -37,7 +44,7 @@ final class TextCell: NSTableCellView {
     /// Where the text draws: inset from the column's edges, one line tall, centered across the
     /// row's height.
     var textRect: NSRect {
-        let height = ceil(Self.font.ascender - Self.font.descender + Self.font.leading)
+        let height = ceil(font.ascender - font.descender + font.leading)
         return NSRect(
             x: Self.inset, y: ((bounds.height - height) / 2).rounded(),
             width: max(0, bounds.width - 2 * Self.inset), height: height)

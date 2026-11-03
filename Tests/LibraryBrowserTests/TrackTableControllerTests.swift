@@ -357,6 +357,39 @@ import Testing
     #expect(!controller.table.usesAlternatingRowBackgroundColors)
 }
 
+@MainActor @Test func tallerRowsGetLargerTextThatFits() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
+    let index = try LibraryIndex(at: databaseURL)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
+        layoutChanged: { _ in },
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { try index.rows(ids: $0) },
+        layout: AppState().trackTable.defaultValue, actions: actions)
+    controller.view.frame = NSRect(x: 0, y: 0, width: 800, height: 300)
+    model.changed = { controller.reload($0) }
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    let table = controller.table
+    let title = table.column(withIdentifier: NSUserInterfaceItemIdentifier("title"))
+    var sizes: [CGFloat] = []
+    for height in [RowHeight.compact, .regular, .large] {
+        controller.apply(
+            TableAppearance(
+                columnLines: false, rowLines: false, alternatingRows: true, rowHeight: height,
+                artSize: .fit, glass: false))
+        let cell = try #require(
+            table.view(atColumn: title, row: 0, makeIfNecessary: true) as? TextCell)
+        #expect(cell.textRect.height <= table.rowHeight, "\(height)")
+        sizes.append(cell.font.pointSize)
+    }
+    #expect(sizes == [NSFont.smallSystemFontSize, 12, 13])
+}
+
 /// A table over the browser library sorted by album, its Album Art column `artWidth` wide,
 /// loaded and drawn in a window.
 @MainActor

@@ -17,6 +17,11 @@ Album Art column that draws a thumbnail in each row.
   `alternatingRows`, `rowHeight` (compact 17 pt, Swinsian's; regular 18 pt, today's; large
   22 pt) and `artSize`. Their defaults are today's table. Like every Boolean and choice
   setting, each is a command, listed in View ▸ Track Table.
+- **The text grows with the row** (amended 2026-11-03, phase 30b, the owner: "changing row
+  height should also increase the text size a little bit, as much as fits"). Compact keeps the
+  lists' 11 pt, Regular gets 12 pt and Large 13 pt, each a point larger per step and fitting
+  its row with room above and below. Regular is the default, so the default table's text is a
+  point larger than before. The panes, the timeline and the status bar keep 11 pt.
 - **`artSize` chooses between today's thumbnail and full width**, rather than full width
   replacing the thumbnail. The row asked for both "an art size setting" and "defaults stay as
   today's look"; a choice between the two drawings gives both, and keeps a thumbnail per row
