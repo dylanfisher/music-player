@@ -120,11 +120,24 @@ class RowListController: NSViewController {
     func selectCentered(_ row: Int) {
         guard row >= 0, row < table.numberOfRows else { return }
         select(ListSelection(rows: [row], cursor: row, anchor: row))
+        center(row)
+    }
+
+    /// Scrolls `row` to the middle of the visible rows, as far as the list allows.
+    func center(_ row: Int) {
         guard let clip else { return }
         let visible = clip.bounds.height - clip.contentInsets.top
         let y = table.rect(ofRow: row).midY - visible / 2 - clip.contentInsets.top
-        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: max(-clip.contentInsets.top, y)))
+        let bottom = table.bounds.height - clip.bounds.height
+        clip.scroll(
+            to: NSPoint(
+                x: clip.bounds.minX, y: max(-clip.contentInsets.top, min(y, max(0, bottom)))))
         table.enclosingScrollView?.reflectScrolledClipView(clip)
+    }
+
+    /// Scrolls the first selected row to the middle, if a row is selected.
+    func centerSelection() {
+        if let first = table.selectedRowIndexes.first { center(first) }
     }
 
     /// Selects `rows` alone, with the first as cursor and anchor, as after a reload.

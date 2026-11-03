@@ -159,7 +159,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         if let anchor {
             restore(anchor, row: model.rows(holding: [anchor.id]).first)
         } else if let first = rows.first {
-            table.scrollRowToVisible(first)
+            if change.reason == .sorted { center(first) } else { table.scrollRowToVisible(first) }
         } else if !model.trackIDs.isEmpty {
             table.scrollRowToVisible(0)
         }
@@ -379,6 +379,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     func tableViewColumnDidMove(_ notification: Notification) {
         if !applyingColumns { actions.layoutChanged(layout) }
+        centerSelection()
     }
 
     func tableViewColumnDidResize(_ notification: Notification) {
@@ -404,6 +405,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             table.tableColumns[index].width = entry.width
             if index != place { table.moveColumn(index, toColumn: place) }
         }
+        centerSelection()
     }
 
     /// The visible columns as they stand, and the model's sort.
@@ -449,6 +451,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         else { return }
         tableColumn.isHidden.toggle()
         actions.layoutChanged(layout)
+        centerSelection()
     }
 
     // MARK: Keys

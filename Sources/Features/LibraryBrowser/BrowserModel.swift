@@ -473,7 +473,7 @@ public final class BrowserModel {
 
     public func setSort(_ column: TrackColumn, ascending: Bool) async {
         pendingSort = (column, ascending)
-        await reload(panesFrom: nil, reason: .user)
+        await reload(panesFrom: nil, reason: .sorted)
     }
 
     /// Runs every query again after the library changed, keeping each selection that's still
@@ -660,8 +660,10 @@ public struct SourceHistory: Equatable, Sendable {
 public struct BrowserChange: Equatable, Sendable {
     public enum Reason: Equatable, Sendable {
         case loaded
-        /// A search, sort, source or pane change: the table scrolls to its selection.
+        /// A search, source or pane change: the table scrolls to its selection.
         case user
+        /// A new sort: the table scrolls its selection to the middle.
+        case sorted
         /// A rescan stored or removed tracks: the table keeps its selection and scroll position.
         case libraryChanged
     }

@@ -32,6 +32,47 @@ import Testing
     #expect(controller.table.selectedRowIndexes != [2, 7])
 }
 
+@MainActor @Test func aSortOrAColumnChangeCentersTheSelection() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
+    let index = try LibraryIndex(at: databaseURL)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
+        layoutChanged: { _ in },
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { try index.rows(ids: $0) },
+        layout: AppState().trackTable.defaultValue, actions: actions)
+    controller.view.frame = NSRect(x: 0, y: 0, width: 800, height: 300)
+    model.changed = { controller.reload($0) }
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    #expect(model.trackIDs.count > 100)
+    let table = controller.table
+    /// How far the selected row's middle is from the visible rows' middle, in rows.
+    func offCenter() throws -> CGFloat {
+        let clip = try #require(controller.clip)
+        let row = try #require(table.selectedRowIndexes.first)
+        let visible = clip.bounds.height - clip.contentInsets.top
+        let middle = clip.bounds.minY + clip.contentInsets.top + visible / 2
+        return abs(table.rect(ofRow: row).midY - middle) / table.rowHeight
+    }
+
+    table.selectRowIndexes([60], byExtendingSelection: false)
+    table.scrollRowToVisible(0)
+    await model.setSort(.title, ascending: false)
+    #expect(try offCenter() < 1)
+
+    table.scrollRowToVisible(0)
+    controller.showColumns(
+        TrackTableLayout(
+            columns: [ColumnLayout(column: .artist, width: 150)], sortColumn: .title,
+            sortAscending: false))
+    #expect(try offCenter() < 1)
+}
+
 @MainActor @Test func theReportedLayoutAlwaysPassesSettingsChecks() throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
