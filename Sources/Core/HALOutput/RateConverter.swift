@@ -106,9 +106,11 @@ final class RateConverter {
         switch status {
         case noErr, inputEndedStatus: return frames
         case readFailedStatus:
-            let error = readError
+            guard let error = readError else {
+                preconditionFailure("a failed read keeps its error")
+            }
             readError = nil
-            throw error!
+            throw error
         default: throw OSStatusError(operation: "AudioConverterFillComplexBuffer", status: status)
         }
     }
