@@ -50,6 +50,8 @@ public final class DeviceSnapshots: @unchecked Sendable {
 
     func snapshot(of uid: String) -> DeviceSnapshot? { lock.withLock { snapshots[uid] } }
 
+    func all() -> [DeviceSnapshot] { lock.withLock { Array(snapshots.values) } }
+
     /// What a session on `uid` restores: the snapshot this run kept, else the record an earlier
     /// run couldn't restore, which holds the state from before that run, else `current()`.
     func original(

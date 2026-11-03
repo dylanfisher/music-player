@@ -104,3 +104,27 @@ private func temporaryRecord() -> URL {
         DeviceSnapshots().original(of: snapshot.deviceUID, recorded: [earlier]) { snapshot }
             == earlier)
 }
+
+@Test func theSystemDefaultIgnoresWhereHogModeMovedIt() throws {
+    var hogged = snapshot
+    hogged.deviceUID = "built-in"
+    hogged.defaultOutputUID = "built-in"
+    let connected: (String) -> Bool = { ["built-in", "dac"].contains($0) }
+    #expect(
+        try systemDefaultUID(current: "dac", hogged: [hogged], isConnected: connected)
+            == "built-in")
+    #expect(try systemDefaultUID(current: "dac", hogged: [], isConnected: connected) == "dac")
+}
+
+@Test func withNoDefaultOnlyBecauseOfHogModeTheHoggedDeviceIsTheDefault() throws {
+    var hogged = snapshot
+    hogged.deviceUID = "built-in"
+    hogged.defaultOutputUID = "airpods"
+    let connected: (String) -> Bool = { $0 == "built-in" }
+    #expect(
+        try systemDefaultUID(current: nil, hogged: [hogged], isConnected: connected)
+            == "built-in")
+    #expect(throws: HALDeviceProviderError.self) {
+        try systemDefaultUID(current: nil, hogged: [], isConnected: connected)
+    }
+}

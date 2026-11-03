@@ -52,11 +52,13 @@ func playCommand(paths: [String], deviceName: String?) throws -> Never {
     for warning in warnings { print(terminalSafe("warning: \(warning)")) }
     guard !files.isEmpty else { throw PlayCommandError.nothingToPlay }
 
+    let snapshots = DeviceSnapshots()
     let deviceUID = try HALDeviceProvider.resolve(
-        try deviceName.map(uid(ofDeviceNamed:)) ?? settings[\.outputDeviceUID])
+        try deviceName.map(uid(ofDeviceNamed:)) ?? settings[\.outputDeviceUID],
+        snapshots: snapshots)
     let provider = try HALDeviceProvider(
         deviceUID: deviceUID, hogMode: settings[\.hogMode], restoreRecordURL: recordURL,
-        snapshots: DeviceSnapshots())
+        snapshots: snapshots)
     let output = try DeviceOutput(
         DeviceChoice(
             provider: provider, digitalVolume: settings[\.digitalVolume], gain: 1, formats: nil))

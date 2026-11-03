@@ -53,11 +53,22 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
 
     /// `uid`, or for nil the UID of the system's default output now. Resolved once, so when that
     /// device goes away playback pauses instead of following macOS to another one.
-    public static func resolve(_ uid: String?) throws -> String {
+    ///
+    /// While this process hogs a device, macOS moves the default output off it, or leaves none
+    /// when it is the only output, so the default is read through `systemDefaultUID`, which
+    /// undoes that move from `snapshots`.
+    public static func resolve(_ uid: String?, snapshots: DeviceSnapshots) throws -> String {
         if let uid { return uid }
         let id = try AudioDevice.defaultOutputID()
-        guard id != kAudioObjectUnknown else { throw HALDeviceProviderError.noDefaultOutput }
-        return try readString(id, address(kAudioDevicePropertyDeviceUID))
+        let hogged = try snapshots.all().filter { snapshot in
+            guard let device = try deviceID(uid: snapshot.deviceUID) else { return false }
+            let owner: pid_t = try readScalar(device, address(kAudioDevicePropertyHogMode))
+            return owner == getpid()
+        }
+        return try systemDefaultUID(
+            current: id == kAudioObjectUnknown
+                ? nil : try readString(id, address(kAudioDevicePropertyDeviceUID)),
+            hogged: hogged, isConnected: { try deviceID(uid: $0) != nil })
     }
 
     /// Whether the device `uid` takes hog mode when first seen, from its transport type, or nil
@@ -277,6 +288,22 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
         try writeRestoreRecords(kept, to: url)
         return report.joined(separator: "\n")
     }
+}
+
+/// The system's default output as it would be without this process's hog mode. `current` is
+/// what macOS reports, and `hogged` the snapshots of the devices this process hogs, taken before
+/// it first changed them. A hogged device's snapshot names the default from before the hog, which
+/// wins while it is connected. With no default and a device hogged, the hog is why there is none,
+/// so the hogged device is the default.
+func systemDefaultUID(
+    current: String?, hogged: [DeviceSnapshot], isConnected: (String) throws -> Bool
+) throws -> String {
+    for snapshot in hogged {
+        if let before = snapshot.defaultOutputUID, try isConnected(before) { return before }
+    }
+    if let current { return current }
+    guard let device = hogged.first else { throw HALDeviceProviderError.noDefaultOutput }
+    return device.deviceUID
 }
 
 /// `device-restore.json` in the app's data folder, `~/Library/Application Support/MusicPlayer`.

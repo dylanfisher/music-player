@@ -505,7 +505,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func outputProfile(_ settings: ConfigStore<AppSettings>, switched: Bool) throws
         -> DeviceProfile
     {
-        let uid = try HALDeviceProvider.resolve(settings[\.outputDeviceUID])
+        let uid = try HALDeviceProvider.resolve(
+            settings[\.outputDeviceUID], snapshots: deviceSnapshots)
         return profileState[\.deviceProfiles].profile(
             for: uid, config: outputConfig(settings), switched: switched, typeHogs: typeHogs(uid))
     }
@@ -555,7 +556,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Null, the system default, is left alone while it still names this device.
             let named = settings[\.outputDeviceUID]
             if named != profile.uid,
-                try named != nil || HALDeviceProvider.resolve(nil) != profile.uid
+                try named != nil
+                    || HALDeviceProvider.resolve(nil, snapshots: deviceSnapshots) != profile.uid
             {
                 try settings.set(\.outputDeviceUID, to: profile.uid)
             }
