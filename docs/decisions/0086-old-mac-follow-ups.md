@@ -34,7 +34,7 @@ Measured on the build Mac:
 
 ## Decision
 
-`LibraryReader` opens a second connection, `refreshes`. `BrowserModel` runs a reload for
+`LibraryReader` opens a second connection, `refreshes`, read-only (`query_only`). `BrowserModel` runs a reload for
 `.libraryChanged` on it, and `LibraryBrowser` reads that change's totals and the issue count on
 it. A keystroke, a click or a sort stays on the first connection, so it no longer waits for a
 refresh, and the refresh's late result is dropped by the generation check as before. Edits stay
@@ -42,14 +42,15 @@ on the first connection; a read on the second that starts after an edit commits 
 both read the same WAL file.
 
 `KeyTableView` holds its background color resolved for its appearance, and resolves it again
-when the appearance changes; the track list sets `controlBackgroundColor` through it. A resolved
-color set back, as Glass puts back the color it replaced, counts as the system color it came
-from, so it goes on following the appearance. The launch stall is gone, and so is the cost of
+when the appearance changes; the track list sets `controlBackgroundColor` through it. It keeps
+the color as set (`ResolvedBackgroundTable.backgroundAsSet`), and Glass puts that back when it
+goes off, so the table goes on following the appearance. The launch stall is gone, and so is the cost of
 redrawing a short or empty list.
 
 At launch, before the first connection opens, `Database.readAhead(at:)` asks the kernel to read
 the whole index file into its cache (`F_RDADVISE`) and returns at once. The queries then find
-their pages cached, or wait for a read already under way. A cold launch of the fixture library
+their pages cached, or wait for a read already under way. The advice's length is an `Int32`,
+so a file over 2 GB is read ahead only to there. A cold launch of the fixture library
 went from 0.43 s to 0.365 s here. The old Mac's SSD reads at random much slower than in
 sequence, so the gain should be larger there. A failed hint is logged and the launch goes on.
 
@@ -96,7 +97,8 @@ contention a little.
 - A refresh and a keystroke can run their queries at once, on two cores.
 - The whole index enters the file cache at launch, the play history too, though the first rows
   don't need it. That memory is the system's cache, not the app's footprint.
-- The memory after scrolling every row went from 80 MB to 110–115 MB here, within the 120 MB
-  budget but close to it. The old Mac's checkpoint will show its share.
-- Setting the resolved form of the last system color on purpose, such as white in the light
-  appearance after `controlBackgroundColor`, counts as that system color.
+- The memory after scrolling every row went from 80 MB to 111 MB here, within the 120 MB
+  budget but close to it, and the resolved background is all of it: one run each of the named
+  bench gave 111 MB as shipped, 111 MB without the read-ahead, 112 MB with one connection, and
+  81 MB with the background left a system color. It's kept for the launch stall and the short
+  lists' redraws; the old Mac's budget is 250 MB, and its checkpoint will show its share.
