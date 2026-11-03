@@ -2887,6 +2887,31 @@ output only sends integer PCM at the track's own rate (ADR 0011), so every track
 - [ ] **31.4 Hardware checkpoint.** The owner plays a 44.1 kHz and a 96 kHz track to the AirPods
       on the 2015 MacBook Pro.
 
+Plan:
+
+1. **31.1** `convertedFormat` in `HALOutput/FormatSelection` picks what a track converts to when
+   no format carries it: the device's rate nearest the track's, at or above it first; the
+   track's channel count, else the fewest above it, else the most; float before integer, then
+   the widest. `HALDevice.configure` and the null device fall back to it for PCM, never for
+   DoP, and `DeviceFormat.isConverted` says so. `DeviceOutput` stops refusing PCM tracks up
+   front (`deviceCannotTake` goes); a device with no PCM format at all fails the output.
+   Tests: `FormatSelectionTests`.
+2. **31.1, 31.2** A converted stream whose rate or channels differ from the track's gets a
+   `RateConverter` (AudioConverter, maximum quality) between the decoder and the ring buffer,
+   on the control thread. The decoder hands it float at the file's rate. It runs on across
+   tracks of the same rate, paused at each track's end, so a gapless join is resampled as one
+   signal; the next track's first byte is where its first input frame lands. It's flushed
+   only when nothing at that rate follows. Positions count the file's frames at the file's
+   rate up to a segment's start and device frames after it, so seeking and the position hold.
+   Tests: a null device that offers only 2 ch float at 48 kHz plays a 44.1 kHz 16-bit and a
+   96 kHz 24-bit sine album without a seam at the join; seeking lands on the right phase;
+   the position reads where it should.
+3. **31.3** `TrackSignal.isConverted`, a `SignalChange.converted(to:)` first in the verdict, a
+   "Converted" badge, and the now-playing line says "converted for" the device format.
+   Tests: `SignalVerdictTests`, `SignalPathLinesTests`, the output's signal path.
+4. DSD on a device that can't take DoP still fails, clearly, as it does now (ADR 0071).
+5. ADR 0071; playback benches against main.
+
 ### 32. Speed hardening
 
 The owner's brief from 2026-11-03.
