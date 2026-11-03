@@ -37,6 +37,9 @@ final class ScrollMeasurement {
     }
 
     private let table: TrackTableController
+    /// Moves the table a frame in place of a scroll, given the frame's number; true when the
+    /// frame counts with the refreshes.
+    private let move: ((Int) -> Bool)?
     private let frames: Int
     private let pageDowns: Int
     private var pageCoversMs: [Double] = []
@@ -59,10 +62,11 @@ final class ScrollMeasurement {
     /// frames, then pages down `pageDowns` times.
     init(
         table: TrackTableController, frames: Int, pageDowns: Int, intervalSeconds: Double,
-        everyInterval: @escaping () -> Void
+        move: ((Int) -> Bool)? = nil, everyInterval: @escaping () -> Void
     ) {
         precondition(pageDowns > 0, "a scroll measurement pages down at least once")
         self.table = table
+        self.move = move
         self.frames = frames
         self.pageDowns = pageDowns
         intervalNanos = UInt64(intervalSeconds * 1e9)
@@ -123,6 +127,10 @@ final class ScrollMeasurement {
         if now - lastInterval >= intervalNanos {
             lastInterval = now
             everyInterval()
+        }
+        if let move, framesMs.count < frames {
+            if move(framesMs.count) { refreshed() }
+            return
         }
         guard framesMs.count < frames, table.scrollFrame(by: step) else {
             table.pageDown()

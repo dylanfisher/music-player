@@ -178,6 +178,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     /// Draws the lines, rows and art as the appearance settings say.
     func apply(_ appearance: TableAppearance) {
+        self.appearance = appearance
         var lines: NSTableView.GridLineStyle = []
         if appearance.columnLines { lines.insert(.solidVerticalGridLineMask) }
         if appearance.rowLines { lines.insert(.solidHorizontalGridLineMask) }
@@ -319,6 +320,35 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     /// Moves a screenful down the list, as Page Down does, and draws it.
     func pageDown() { scroll(toRow: max(0, visibleRows().upperBound - 1)) }
+
+    /// The appearance last applied, which the resize measurement changes the row height of.
+    private var appearance: TableAppearance?
+
+    /// One frame of the resize measurement: the Album Art column a point wider or narrower,
+    /// sweeping from its default width to 160 points and back, which crosses the widths that
+    /// load art at other pixels, and the window 4 points wider or narrower; every 60th frame
+    /// the row height changes instead. True when it did, and draws.
+    func resizeFrame(_ frame: Int) -> Bool {
+        let column = table.column(withIdentifier: columnIdentifier(.art))
+        guard column >= 0, let window = table.window else {
+            preconditionFailure("the resize measurement needs the art column in a window")
+        }
+        if frame % 60 == 59, var appearance {
+            appearance.rowHeight = appearance.rowHeight == .compact ? .regular : .compact
+            apply(appearance)
+        } else {
+            let low = TrackColumn.art.defaultWidth
+            let sweep = 2 * (160 - low)
+            let along = Double(frame % Int(sweep))
+            table.tableColumns[column].width = low + (along < sweep / 2 ? along : sweep - along)
+            var bounds = window.frame
+            bounds.size.width += (frame / 20) % 2 == 0 ? 4 : -4
+            window.setFrame(bounds, display: false)
+        }
+        window.displayIfNeeded()
+        CATransaction.flush()
+        return frame % 60 == 59
+    }
 
     /// Moves the rows `points` down the list, as one frame of a trackpad scroll does, and draws
     /// them. False once the list's end is on screen.

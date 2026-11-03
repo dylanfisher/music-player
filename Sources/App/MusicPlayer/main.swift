@@ -12,7 +12,7 @@ import Settings
 //   MusicPlayer --scan <folder> [--db <file>] [--readers <n>] [--scan-io-hints none|rdahead|all]
 // and the window:
 //   MusicPlayer [--measure-window | --measure-launch
-//     | --measure-scroll trackpad|scan|pages [--art-delay-ms <ms>]]
+//     | --measure-scroll trackpad|scan|pages|resize [--art-delay-ms <ms>]]
 //     [--report-launch] [--snapshot <png file> [--snapshot-of <window>]]
 // and in every mode [--home <folder>] [--settings <file>]:
 // --home keeps the config file, library, state file and device record in one folder instead of
@@ -25,9 +25,10 @@ import Settings
 // --measure-window prints the launch time and memory as JSON and quits, for Bench.
 // --measure-launch prints only the time from the process's start to the first rows, and the
 // memory then, and quits: for a cold launch after `sudo purge`, with the owner's own library.
-// --measure-scroll scrolls the track table in trackpad flicks, the second while hearing a
-// scan's progress, or the third a screenful at a time once each screen's art is in, prints the
-// times as JSON and quits, for Bench. --art-delay-ms adds a NAS's latency to each art read.
+// --measure-scroll times the track table's frames as JSON and quits, for Bench: trackpad flicks,
+// the same while hearing a scan's progress, a screenful at a time once each screen's art is in,
+// or the window and the art column resized a frame at a time. --art-delay-ms adds a NAS's
+// latency to each art read.
 // --report-launch prints "launched" once every watched folder's scan at launch has ended, or the
 // watcher has left it to the index, for Bench to know the app is idle.
 // --snapshot draws the window into a PNG a few seconds after its first rows, to check the layout.

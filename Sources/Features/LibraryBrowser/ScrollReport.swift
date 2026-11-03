@@ -9,13 +9,17 @@ public enum ScrollCase: String, CaseIterable, Sendable {
     case scan
     /// No flicks: Page Down a screenful at a time, each once the screen's art has arrived.
     case pages
+    /// No scrolling: each frame resizes the window and the Album Art column, as a live resize
+    /// does, and now and then the row height changes.
+    case resize
 }
 
 /// What `MusicPlayer --measure-scroll` prints as one JSON line and Bench reads (ADR 0073).
 public struct ScrollReport: Codable, Equatable, Sendable {
     /// The main thread's busy time in each frame of the scroll, in milliseconds.
     public var framesMs: [Double]
-    /// The busy time of each frame a refresh for a library change landed in.
+    /// The busy time of each frame a refresh for a library change, or in the resize case a
+    /// row height change, landed in.
     public var refreshFramesMs: [Double]
     /// From a page down after the last frame until every row on screen showed its art, in
     /// milliseconds; nil when that took longer than the measurement waits.

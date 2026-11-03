@@ -366,10 +366,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         table.readArt = reads.read
         let folder = watchedFolders().first?.path ?? ""
         let paging = scrollCase == .pages
+        let table = table
         let measurement = ScrollMeasurement(
             table: table, frames: paging ? 0 : ScrollMeasurement.frames,
             pageDowns: paging ? ScrollMeasurement.pageDowns : 1,
-            intervalSeconds: LibraryWatcher.progressIntervalSeconds
+            intervalSeconds: LibraryWatcher.progressIntervalSeconds,
+            move: scrollCase == .resize ? { table.resizeFrame($0) } : nil
         ) { [weak self] in
             guard scrollCase == .scan else { return }
             self?.libraryChanged(.scanning(folder: folder, ScanProgress()))

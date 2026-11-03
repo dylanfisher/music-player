@@ -62,10 +62,12 @@ import Testing
 
 @Test func aScrollMeasurementNeedsAKnownCaseAndADelayOnlyWithIt() {
     #expect(argumentProblem(["--measure-scroll", "trackpad", "--art-delay-ms", "43"]) == nil)
-    #expect(argumentProblem(["--measure-scroll"]) == "--measure-scroll needs trackpad, scan, pages")
+    #expect(
+        argumentProblem(["--measure-scroll"])
+            == "--measure-scroll needs trackpad, scan, pages, resize")
     #expect(
         argumentProblem(["--measure-scroll", "drag"])
-            == "--measure-scroll needs one of trackpad, scan, pages, not drag")
+            == "--measure-scroll needs one of trackpad, scan, pages, resize, not drag")
     #expect(
         argumentProblem(["--measure-scroll", "scan", "--measure-window"])
             == "--measure-scroll can't go with --measure-window")

@@ -75,6 +75,24 @@ let scrollBenchmarks = [
                     separator: ", "))
         return measured
     },
+    Benchmark(
+        name: "window: live resize of the window and the art column, per frame (p95)",
+        budget: Budget(appleSilicon: 16, oldMac: 33, unit: .milliseconds)
+    ) {
+        try framesMeasured(try resizeScroll.get())
+    },
+    Benchmark(
+        name: "window: a row height change with the art column, its frame (median)",
+        budget: Budget(appleSilicon: 50, oldMac: 150, unit: .milliseconds)
+    ) {
+        let frames = try resizeScroll.get().refreshFramesMs.sorted()
+        guard !frames.isEmpty else { throw BenchError.expected("the row height to change") }
+        return Measured(
+            value: frames[frames.count / 2],
+            notes: [
+                "\(frames.count) changes; " + slowestNote(frames)
+            ])
+    },
 ]
 
 /// An art read on the slow simulated NAS: opening, one read and closing, each an operation, and
@@ -99,6 +117,9 @@ private let nasScroll = Result {
 }
 private let scanScroll = Result {
     try scroll(.scan, artColumnWidth: TrackColumn.art.defaultWidth)
+}
+private let resizeScroll = Result {
+    try scroll(.resize, artColumnWidth: TrackColumn.art.defaultWidth)
 }
 /// Paging by title on the slow simulated NAS, launched twice on one home: once as after an
 /// install, then as every later launch is.

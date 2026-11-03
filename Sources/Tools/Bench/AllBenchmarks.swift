@@ -5,7 +5,7 @@ let benchmarks =
     + moveBenchmarks + syncBenchmarks
     + healthBenchmarks + playlistBenchmarks + historyBenchmarks + readerBenchmarks
     + windowBenchmarks
-    + scrollBenchmarks + artworkBenchmarks + queueBenchmarks
+    + scrollBenchmarks + artworkBenchmarks + selectionBenchmarks + queueBenchmarks
     + paletteBenchmarks
     + playbackBenchmarks + playLatencyBenchmarks + timeToSoundBenchmarks
     + tagWriterBenchmarks + tagEditorBenchmarks
