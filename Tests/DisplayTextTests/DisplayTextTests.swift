@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 
 @testable import DisplayText
@@ -32,4 +33,18 @@ func formatsKilohertz(hertz: Double, expected: String) {
         terminalSafe("a.flac\nscanned 0 files\r\t") == "a.flac\\u{A}scanned 0 files\\u{D}\\u{9}")
     let plain = "Björk – Jóga, live side A ★ \u{202E}"
     #expect(terminalSafe(plain) == plain)
+}
+
+@MainActor @Test func theMarkedRowIsTintedGrayNotBlue() throws {
+    let row = MarkedRowView(frame: NSRect(x: 0, y: 0, width: 40, height: 18))
+    row.appearance = NSAppearance(named: .aqua)
+    row.isMarked = true
+    let bitmap = try #require(row.bitmapImageRepForCachingDisplay(in: row.bounds))
+    row.cacheDisplay(in: row.bounds, to: bitmap)
+    // Past the bar at the leading edge.
+    let color = try #require(bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2))
+    let rgb = try #require(color.usingColorSpace(.sRGB))
+    #expect(rgb.alphaComponent > 0)
+    #expect(abs(rgb.redComponent - rgb.blueComponent) < 0.03)
+    #expect(abs(rgb.greenComponent - rgb.blueComponent) < 0.03)
 }

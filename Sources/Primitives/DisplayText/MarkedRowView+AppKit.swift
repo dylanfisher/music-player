@@ -7,6 +7,9 @@ public final class MarkedRowView: NSTableRowView {
     /// The bar's width in points: enough to see, narrow enough to stay clear of the first
     /// column's text.
     static let barWidth: CGFloat = 3
+    /// The marked row's fill: a light gray, faint enough that the alternating rows and the text
+    /// read through it in light and dark mode alike, and unlike the blue of a selection.
+    static let tint = NSColor.systemGray.withAlphaComponent(0.22)
 
     /// A row `table` has finished with, or a new one. A table keeps every row view made without
     /// an identifier, so a new one per row grew memory with each row scrolled past.
@@ -28,9 +31,7 @@ public final class MarkedRowView: NSTableRowView {
     override public func drawBackground(in dirtyRect: NSRect) {
         super.drawBackground(in: dirtyRect)
         guard isMarked else { return }
-        // Faint enough that the alternating rows and the text read through it, in light and
-        // dark mode alike.
-        NSColor.controlAccentColor.withAlphaComponent(0.16).setFill()
+        Self.tint.setFill()
         bounds.fill(using: .sourceOver)
         drawBar(.controlAccentColor)
     }
