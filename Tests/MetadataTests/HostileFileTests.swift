@@ -83,6 +83,13 @@ private let hostileFiles: [(String, Data, Outcome)] = [
     ("DSDIFF form size of UInt64.max", patchedBE(dff, at: 4, .max), .warns(.truncated)),
     ("DSDIFF FVER of UInt64.max", patchedBE(dff, at: 20, .max), .fails(.malformed)),
     ("DSDIFF PROP property past PROP", patchedBE(dff, at: 52, 0x7FFF_FFFF), .fails(.malformed)),
+    (
+        // CMPR renamed: a property, not the audio, so not clamped to the file.
+        "DSDIFF PROP property named like the audio, past PROP",
+        patchedBE(
+            Data(dff.prefix(86)) + Data("DSD ".utf8) + Data(dff.dropFirst(90)), at: 90, 0x7FFF_FFFF),
+        .fails(.malformed)
+    ),
     ("DSDIFF cut inside a chunk header", dff.prefix(22), .fails(.malformed)),
     ("DSDIFF audio past the end", dff.prefix(dff.count - 100), .warns(.truncated)),
     // MP4

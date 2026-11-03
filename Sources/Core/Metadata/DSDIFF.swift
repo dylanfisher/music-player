@@ -27,13 +27,15 @@ func dffLayout(_ reader: ByteReader) throws(ParseFailure) -> (stream: DSDStream,
     var channels: Int?
     var audio: Range<Int>?
     var id3: ID3v2Tag?
-    try forEachDFFChunk(reader, in: 16..<end) { chunk throws(ParseFailure) in
+    try forEachDFFChunk(reader, in: 16..<end, clampingAudio: true) { chunk throws(ParseFailure) in
         switch chunk.id {
         case "PROP":
             let type = try reader.bytes(
                 chunk.body.lowerBound..<min(chunk.body.upperBound, chunk.body.lowerBound + 4))
             guard type.matches("SND ", at: 0) else { return }
-            try forEachDFFChunk(reader, in: chunk.body.lowerBound + 4..<chunk.body.upperBound) {
+            try forEachDFFChunk(
+                reader, in: chunk.body.lowerBound + 4..<chunk.body.upperBound, clampingAudio: false
+            ) {
                 property throws(ParseFailure) in
                 let body = try reader.bytes(property.body)
                 switch property.id {
@@ -74,10 +76,12 @@ func dffLayout(_ reader: ByteReader) throws(ParseFailure) -> (stream: DSDStream,
     return (stream, id3)
 }
 
-/// Calls `body` with each chunk that tiles `range`. The audio chunk may run past the end, as a
-/// truncated download's does: it's clamped, with a warning. Any other chunk that does is damage.
+/// Calls `body` with each chunk that tiles `range`. With `clampingAudio`, for the form's own
+/// chunks, the audio chunk may run past the end, as a truncated download's does: it's clamped,
+/// with a warning. Any other chunk that does, a property in `PROP` included, is damage.
 private func forEachDFFChunk(
-    _ reader: ByteReader, in range: Range<Int>, _ body: (RIFFChunk) throws(ParseFailure) -> Void
+    _ reader: ByteReader, in range: Range<Int>, clampingAudio: Bool,
+    _ body: (RIFFChunk) throws(ParseFailure) -> Void
 ) throws(ParseFailure) {
     var offset = range.lowerBound
     while offset < range.upperBound {
@@ -92,7 +96,7 @@ private func forEachDFFChunk(
         let size = try header.uint64BE(4)
         let start = offset + dffChunkHeaderBytes
         guard size <= UInt64(left) else {
-            guard id == dffAudioChunkID else {
+            guard clampingAudio, id == dffAudioChunkID else {
                 throw .malformed(
                     at: offset,
                     "DSDIFF chunk '\(id)' of \(size) bytes runs past its container (\(left) bytes"
@@ -100,8 +104,8 @@ private func forEachDFFChunk(
             }
             warnTruncated(
                 reader, at: offset,
-                "DSDIFF chunk '\(id)' of \(size) bytes runs past the end of the file; read what is"
-                    + " there")
+                "DSDIFF chunk '\(id)' of \(size) bytes runs past the end of the \(dffFormID) form"
+                    + " (\(left) bytes left); read what is there")
             try body(
                 RIFFChunk(id: id, start: offset, body: start..<range.upperBound, declaredSize: left)
             )
