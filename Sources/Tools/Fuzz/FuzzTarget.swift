@@ -1,5 +1,7 @@
+import CoreAudio
 import Fixtures
 import Foundation
+import HALOutput
 import Library
 import Metadata
 import SQLite
@@ -33,8 +35,8 @@ struct FuzzTarget: Sendable {
         parser(.mp3, "ID3v1 and ID3v2 tags and MPEG audio frames"),
         parser(.wav, "RIFF chunks, INFO lists and ID3 chunks"),
         parser(.aiff, "AIFF and AIFF-C chunks and ID3 chunks"),
-        parser(.dsf, "DSF headers and the ID3 tag at the metadata pointer"),
-        parser(.dff, "DSDIFF chunks, PROP properties and ID3 chunks"),
+        dsdParser(.dsf, "DSF headers and the ID3 tag at the metadata pointer"),
+        dsdParser(.dff, "DSDIFF chunks, PROP properties and ID3 chunks"),
         vorbis, config, state, journal, rules, playlistFile, syncLog, swinsian, swinsianPredicate,
         swinsianColumns, iTunesXML, tagWriter, receiverLine, deviceDescription, soapReply,
         avTransportReply, serviceDescription, httpRequest, didlLite, chunkedBody,
@@ -63,6 +65,60 @@ private func parser(_ format: FileFormat, _ summary: String) -> FuzzTarget {
                 }
             }
         })
+}
+
+/// A DSD parser, then, for a file it reads, the DoP reader over every frame from a file in the
+/// work folder: it must read exactly the frames it promises without a read past the file
+/// (threat model row 57).
+private func dsdParser(_ format: FileFormat, _ summary: String) -> FuzzTarget {
+    FuzzTarget(
+        name: format.rawValue, summary: summary, seedFormats: [format], tokens: [],
+        prepare: { work in
+            let url = work.appendingPathComponent(inputFileName + "." + format.rawValue)
+            return { input in
+                let isDSD: Bool
+                do throws(ParseFailure) {
+                    let reader = ByteReader(MemorySource(input))
+                    _ = try parse(reader)
+                    isDSD = [.dsf, .dff].contains(try FileFormat(reader))
+                } catch {
+                    return false
+                }
+                // A mutation can turn the input into another format, which the reader refuses.
+                if isDSD { readAllDoP(Data(input), at: url) }
+                return true
+            }
+        })
+}
+
+/// Reads every DoP frame of `data`, written to `url`, in 32-bit words.
+private func readAllDoP(_ data: Data, at url: URL) {
+    do {
+        try data.write(to: url)
+        let reader = try DSDReader(url: url)
+        let channels = UInt32(reader.stream.channels)
+        try reader.setOutputFormat(
+            AudioStreamBasicDescription(
+                mSampleRate: reader.carrierRateHz, mFormatID: kAudioFormatLinearPCM,
+                mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+                mBytesPerPacket: 4 * channels, mFramesPerPacket: 1, mBytesPerFrame: 4 * channels,
+                mChannelsPerFrame: channels, mBitsPerChannel: 32, mReserved: 0))
+        let chunk = 4096
+        let buffer = UnsafeMutableRawPointer.allocate(
+            byteCount: chunk * 4 * Int(channels), alignment: 16)
+        defer { buffer.deallocate() }
+        var total: Int64 = 0
+        while true {
+            let count = try reader.read(into: buffer, frames: UInt32(chunk))
+            if count == 0 { break }
+            total += Int64(count)
+        }
+        guard total == reader.lengthFrames else {
+            preconditionFailure("the DoP reader read \(total) of \(reader.lengthFrames) frames")
+        }
+    } catch {
+        preconditionFailure("the DoP reader failed on a file the parser read: \(error)")
+    }
 }
 
 private let vorbis = FuzzTarget(

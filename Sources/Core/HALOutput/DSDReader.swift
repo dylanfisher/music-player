@@ -40,17 +40,17 @@ struct DoPLayout: Equatable {
 /// the track. Frames come in pairs, so a track always starts on an even frame of the ring buffer
 /// and the markers run on unbroken from one track to the next; the length is rounded up to a
 /// pair with DoP silence. Use from one thread.
-final class DSDReader: TrackDecoder {
-    let stream: DSDStream
+package final class DSDReader: TrackDecoder {
+    package let stream: DSDStream
     /// DoP frames, a whole number of pairs.
-    let lengthFrames: Int64
+    package let lengthFrames: Int64
     private(set) var nextFrame: Int64 = 0
     private let source: FileSource
     private let path: String
     private var layout: DoPLayout?
     private var scratch: [UInt8] = []
 
-    init(url: URL) throws {
+    package init(url: URL) throws {
         path = url.path
         do throws(ParseFailure) {
             source = try FileSource(path: url.path, hints: .none)
@@ -63,9 +63,9 @@ final class DSDReader: TrackDecoder {
     }
 
     /// The PCM rate DoP runs at: the DSD rate over the 16 bits a frame carries.
-    var carrierRateHz: Double { Double(stream.rateHz) / Double(dopDSDBitsPerFrame) }
+    package var carrierRateHz: Double { Double(stream.rateHz) / Double(dopDSDBitsPerFrame) }
 
-    func setOutputFormat(_ format: AudioStreamBasicDescription) throws {
+    package func setOutputFormat(_ format: AudioStreamBasicDescription) throws {
         guard let layout = DoPLayout(format, channels: stream.channels) else {
             throw DeviceOutputError.noDoPLayout(SignalFormat(format))
         }
@@ -78,7 +78,7 @@ final class DSDReader: TrackDecoder {
     }
 
     /// `frames` must be even.
-    func read(into buffer: UnsafeMutableRawPointer, frames: UInt32) throws -> UInt32 {
+    package func read(into buffer: UnsafeMutableRawPointer, frames: UInt32) throws -> UInt32 {
         guard let layout else { preconditionFailure("setOutputFormat must be called before read") }
         precondition(frames % 2 == 0, "DoP frames are read in pairs")
         let count = Int(min(Int64(frames), lengthFrames - nextFrame))

@@ -28,7 +28,8 @@ are their own target, `Sources/Tools/FuzzCoverage`, beside the Swift driver `Sou
 flag nothing calls the hooks; a worker that sees no edges refuses to start.
 
 **Targets.** One per parser, through the same `ByteReader` the scanner uses: `flac`, `mp4`,
-`mp3` (ID3v1, ID3v2 and MPEG frames), `wav`, `aiff`, `dsf` and `dff` ([0064](0064-dsd-over-dop.md)), and
+`mp3` (ID3v1, ID3v2 and MPEG frames), `wav`, `aiff`, `dsf` and `dff` (each file the parser reads then goes through the DoP reader, which must read
+exactly the frames it promises; [0064](0064-dsd-over-dop.md)), and
 `vorbis` (a comment block on its own).
 Then the files the app reads at launch, each through its public API on a file in the target's
 work folder: `config-file` (read, change a setting, read again; a good file must read back),
