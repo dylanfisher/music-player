@@ -608,7 +608,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     // MARK: Decoding and boundaries
 
-    /// Decodes until the ring buffer is full, `limit` bytes are written, or nothing is left.
+    /// Decodes until the ring buffer is full, `limit` bytes are written, or nothing is left. A
+    /// refill with no limit also stops after any chunk once a command is waiting: a refill is up
+    /// to 7.5 s of audio, which on hi-res FLAC from a NAS takes hundreds of milliseconds, and a
+    /// seek that waited for it made scrubbing lag (ADR 0083). The next pass carries on.
     private func fill(_ stream: RenderStream, upTo limit: Int = .max) {
         var written = 0
         while written < limit {
@@ -644,6 +647,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             let count = stream.writeChunk()
             written += count
             if count == 0 { return }
+            if limit == .max, condition.withLock({ !pending.isEmpty }) { return }
         }
     }
 

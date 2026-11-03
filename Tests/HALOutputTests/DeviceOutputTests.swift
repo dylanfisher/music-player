@@ -755,3 +755,41 @@ private func copies(of album: RampAlbum) throws -> [URL] {
     #expect(seen.allSatisfy { $0 >= 60 && $0 < 61 }, "positions after the seek: \(seen)")
     #expect((seen.last ?? 0) >= 60.1, "playback never moved on from the seek: \(seen)")
 }
+
+/// A refill after a seek decodes up to 7.5 s; on a slow NAS that takes far longer than a seek
+/// clicked during it should wait.
+@Test func aSeekDuringARefillDoesntWaitForIt() async throws {
+    let track = try hiResTrack(in: try defaultPlaybackFixturesDirectory())
+    let output = try DeviceOutput(
+        DeviceChoice(provider: NullDevice(speed: 1), digitalVolume: false, gain: 1, formats: nil),
+        fileLatency: FileLatency(openSeconds: 0, readSeconds: 0.3))
+    defer { output.close() }
+    let engine = PlaybackEngine(output: output)
+    func waitForPlayback(past seconds: Double) async throws {
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            if let position = await engine.position(), position > seconds, position < seconds + 3 {
+                return
+            }
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        Issue.record("playback never passed \(seconds) s")
+    }
+    await engine.setQueue([track])
+    await engine.play()
+    // The refills so far have read the file a few seconds past this.
+    try await waitForPlayback(past: 9)
+    await engine.seek(toSeconds: 12)
+    // Its refill reads new blocks, to about 20 s.
+    try await Task.sleep(nanoseconds: 20_000_000)
+    // Off a frame, so the position the output publishes once it has sought differs from the
+    // target it reports until then.
+    let target = 13 + 0.4 / 192_000
+    let start = Date()
+    await engine.seek(toSeconds: target)
+    while await engine.position() == target, Date().timeIntervalSince(start) < 20 {
+        try await Task.sleep(nanoseconds: 1_000_000)
+    }
+    let waited = Date().timeIntervalSince(start)
+    #expect(waited < 0.5, "the seek was done after \(waited) s")
+}

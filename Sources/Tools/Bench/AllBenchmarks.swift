@@ -7,5 +7,5 @@ let benchmarks =
     + windowBenchmarks
     + scrollBenchmarks + artworkBenchmarks + selectionBenchmarks + queueBenchmarks
     + paletteBenchmarks
-    + playbackBenchmarks + playLatencyBenchmarks + timeToSoundBenchmarks
+    + playbackBenchmarks + playLatencyBenchmarks + timeToSoundBenchmarks + scrubBenchmarks
     + tagWriterBenchmarks + tagEditorBenchmarks

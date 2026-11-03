@@ -246,3 +246,67 @@ let timeToSoundBenchmarks = [
     timeToSound(.seekWhileFed, budget: Budget(appleSilicon: 25, oldMac: 80, unit: .milliseconds)),
     timeToSound(.seekAfterFeed, budget: Budget(appleSilicon: 25, oldMac: 80, unit: .milliseconds)),
 ]
+
+/// Where a quick scrub's seeks land, 5 s apart, and how long after the second the third
+/// follows: inside the refill that tops the ring buffer up from the second's half second. The
+/// first seek, a while before, puts the decoder near: AudioToolbox seeks in a FLAC file without
+/// a seek table, as afconvert writes them, by reading forward from where it is, which over a
+/// long jump costs more than the refill.
+private let scrubTargetsSeconds = [30.0, 35.0, 40.0]
+private let scrubGapSeconds = 0.02
+
+/// Milliseconds from the last of three seeks into 24/192 FLAC, the last two quick, to playing
+/// from its target, for each of `timeToSoundRuns` runs on a new output. The hi-res track's
+/// refill costs real decoding, which the burst track's silence doesn't, and it is never silent,
+/// so playing from the target is read from the position moving past it.
+private func timesToScrub(latency: FileLatency?) throws -> [Double] {
+    let track = try hiResTrack(in: try defaultPlaybackFixturesDirectory())
+    return try (0..<timeToSoundRuns).map { _ in
+        let output = try DeviceOutput(
+            DeviceChoice(
+                provider: NullDevice(speed: 1), digitalVolume: false, gain: 1, formats: nil),
+            fileLatency: latency)
+        defer { output.close() }
+        let engine = PlaybackEngine(output: output)
+        return try onMainActor {
+            await engine.setQueue([track])
+            await engine.play()
+            try await Task.sleep(nanoseconds: 1_500_000_000)
+            await engine.seek(toSeconds: scrubTargetsSeconds[0])
+            try await Task.sleep(nanoseconds: 1_500_000_000)
+            await engine.seek(toSeconds: scrubTargetsSeconds[1])
+            try await Task.sleep(nanoseconds: UInt64(scrubGapSeconds * 1e9))
+            let target = scrubTargetsSeconds[2]
+            let start = DispatchTime.now().uptimeNanoseconds
+            await engine.seek(toSeconds: target)
+            let deadline = Date().addingTimeInterval(10)
+            while Date() < deadline {
+                if let position = await engine.position(), position > target,
+                    position < target + 1
+                {
+                    return Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
+                }
+                try await Task.sleep(nanoseconds: 500_000)
+            }
+            throw BenchError.expected("playing from \(target) s within 10 s of the last seek")
+        }
+    }
+}
+
+let scrubBenchmarks = [
+    Benchmark(
+        name: "playback: a seek during the refill after another seek, 24/192 FLAC, to playing "
+            + "from its target, slow simulated NAS",
+        budget: Budget(appleSilicon: 25, oldMac: 80, unit: .milliseconds)
+    ) {
+        let nas = try timesToScrub(latency: nasFileLatency)
+        let local = try timesToScrub(latency: nil)
+        return Measured(
+            value: median(nas),
+            notes: [
+                "median of \(timeToSoundRuns) runs; NAS: \(milliseconds(nas))",
+                String(format: "local files: median %.1f ms; ", median(local))
+                    + milliseconds(local),
+            ])
+    }
+]
