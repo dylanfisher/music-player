@@ -29,9 +29,18 @@ shows each file selected in its folder.
   is Searcher or Finder, Searcher by default. Searcher reveals by opening the files with the
   app Launch Services finds for Searcher's bundle ID, which sends that event. When no app has
   the ID, the reveal goes to Finder, as the owner asked, and the setting's summary says so.
-- **Finder means Finder.** Before a reveal in Finder, the app puts `NSFileViewer =
-  com.apple.finder` in its own argument domain, in memory only, as Searcher's 0137 does, so a
-  global `NSFileViewer` naming Searcher or another app doesn't take the reveal.
+- **Finder means Finder.** When the global `NSFileViewer` names an app other than Finder, the
+  app puts `NSFileViewer = ""` in its own argument domain, in memory only, before a reveal in
+  Finder, so that app doesn't take the reveal. AppKit finds no app with the empty ID, logs
+  "Finder replacement not found", and reveals in Finder itself. With the global key unset or
+  naming Finder, nothing is overridden.
+
+  Amended 2026-11-03 (phase 30b): the override was `com.apple.finder`, as Searcher's 0137 does.
+  With any `NSFileViewer` naming Finder, AppKit treats Finder as a replacement viewer and sends
+  it an open-documents event, and Finder opens the track in its default app, Music. Reproduced
+  with a probe on macOS 12 (the 2015 MacBook Pro) and macOS 27: a `.m4a` revealed with the
+  override opened Music; without it, or with the empty ID, Finder showed it selected. ⌘R opened
+  the owner's tracks in Music for this reason.
 
 ## Alternatives considered
 

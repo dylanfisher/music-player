@@ -30,12 +30,27 @@ func searcherApp(_ viewer: FileViewer, find: (String) -> URL?) -> URL? {
 }
 
 /// Has this process's reveals go to Finder whatever app the global `NSFileViewer` key names, as
-/// Searcher does for its own. In memory only: the argument domain wins over the global one and
-/// is never written to disk (ADR 0051).
+/// Searcher does for its own. With the key naming Finder, AppKit sends Finder an open-documents
+/// event, which plays a track in Music; with an ID no app has, it reveals in Finder itself. So
+/// the key is overridden only when the global one names another app. In memory only: the
+/// argument domain wins over the global one and is never written to disk (ADR 0051).
 private func keepRevealsInFinder() {
+    let global = CFPreferencesCopyValue(
+        fileViewerKey as CFString, kCFPreferencesAnyApplication, kCFPreferencesCurrentUser,
+        kCFPreferencesAnyHost)
+    guard let override = fileViewerOverride(global: global as? String) else { return }
     let defaults = UserDefaults.standard
     let arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
     defaults.setVolatileDomain(
-        arguments.merging(["NSFileViewer": FileViewer.finder.bundleID]) { _, finder in finder },
+        arguments.merging([fileViewerKey: override]) { _, new in new },
         forName: UserDefaults.argumentDomain)
+}
+
+private let fileViewerKey = "NSFileViewer"
+
+/// The `NSFileViewer` this process sets for a reveal in Finder when the global key is
+/// `global`: nil leaves it alone, and the empty ID, which no app has, sends AppKit to Finder.
+func fileViewerOverride(global: String?) -> String? {
+    guard let global, global != FileViewer.finder.bundleID else { return nil }
+    return ""
 }

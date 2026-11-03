@@ -23,3 +23,9 @@ private let installed = URL(fileURLWithPath: "/Applications/Searcher.app", isDir
 @Test func finderRevealsWhenTheSettingSaysFinder() {
     #expect(searcherApp(.finder) { _ in installed } == nil)
 }
+
+@Test func aRevealInFinderOverridesOnlyAnotherFileViewer() {
+    #expect(fileViewerOverride(global: nil) == nil)
+    #expect(fileViewerOverride(global: "com.apple.finder") == nil)
+    #expect(fileViewerOverride(global: "com.dylanfisher.searcher") == "")
+}
