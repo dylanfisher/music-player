@@ -46,7 +46,8 @@ Set by the owner on 2026-10-30, 2026-10-31 and 2026-11-02:
 7. Phase 12 next, through its gate. Moved up by the owner on 2026-11-02. Its DSD to the Denon
    is built against the simulated renderer only, like phase 9, and its Denon and ADI-2
    checkpoints stay pending.
-8. Skip 10 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
+8. Phase 29 after phase 12, through its gate. Added by the owner on 2026-11-02.
+9. Skip 10 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Phase gate
@@ -1059,12 +1060,12 @@ command, not ⌘Z; the SMB fallbacks are untested until the checkpoint.
 
 ### 12. DSD over DoP
 
-- [ ] DSF and DFF parsers, and DSD in the library (rate shown as DSD64, DSD128 or DSD256).
-- [ ] DoP packing in Swift on the decode thread, with markers 0x05/0xFA in the top byte. The IO
+- [x] DSF and DFF parsers, and DSD in the library (rate shown as DSD64, DSD128 or DSD256).
+- [x] DoP packing in Swift on the decode thread, with markers 0x05/0xFA in the top byte. The IO
       proc stays a byte copy.
-- [ ] DoP carrier selection: DSD64 at 176.4 kHz, DSD128 at 352.8 kHz, DSD256 at 705.6 kHz. A
+- [x] DoP carrier selection: DSD64 at 176.4 kHz, DSD128 at 352.8 kHz, DSD256 at 705.6 kHz. A
       device without the rate is refused, never converted.
-- [ ] DSD to the Denon over UPnP, if its `GetProtocolInfo` lists it.
+- [x] DSD to the Denon over UPnP, if its `GetProtocolInfo` lists it.
 - [ ] **Hardware checkpoint (owner):** DSD64, DSD128 and DSD256 on the ADI-2. Its DSD indicator
       lighting is the bit-perfect proof for the whole HAL path.
 
@@ -1099,6 +1100,41 @@ Implementation plan (ADR 0064):
    "DoP at 352.8 kHz on …" as the output in the now-playing line.
 7. **UPnPOutput:** DSF and DFF offered under the DSD types the renderer lists, against the fake
    Denon and Sonos on loopback only.
+
+Result: shipped as planned; `./scripts/check` passes. DSF and DSDIFF are read and indexed, and
+the rate shows as DSD64, DSD128 or DSD256 (`sampleRateText`). DST, unknown rates and more than 6
+channels are typed `unsupported` errors, and a DSF tag pointer that misses the tag drops the tags
+with a warning and keeps the audio. A Swinsian miss in .dsf or .dff now matches on the next import
+and through Locate…, and no longer counts as "a format this app doesn't read yet"
+(`aSwinsianMissInDSDMatchesOnceTheScannerReadsDSD`,
+`aDSDMissUnderAnOldMountIsLocatedNotListedAsUnread`). `DSDReader` packs DoP on the decode thread,
+and the IO proc stays a byte copy: a new opaque sample kind that the gain never scales keeps DoP at
+unity, and the panel's Volume row says "digital bypassed for DoP". The markers stay continuous
+across gapless changes, seeks and a tail cut, because every write and cut lands on a pair of
+frames. After the last DSD track the decode thread queues one DoP idle tail (device latency plus
+100 ms), so the DAC doesn't drop out on zeros; a mid-stream underrun is still zeros. DoP needs hog
+mode and a non-mixable integer format of 24 bits or more at the carrier rate. A device without them
+refuses the track through `refuseUntakeable`, so a DSD album there stops at ADR 0063's failure limit
+(`aDSDAlbumOnADeviceWithoutTheCarrierStopsAtTheFailureLimit`). The signal path panel and the
+now-playing line show "DSD128" and "DoP at 352.8 kHz". UPnP offers DSF and DFF under the DSD type
+the renderer lists, and refuses otherwise; it was built against the loopback fakes only. Fuzz
+targets `dsf` and `dff` parse every input and read whatever parses through `DSDReader` (threat model
+row 57). Fixtures add DSF and DFF at DSD64, 128 and 256, with and without ID3 in the DSF (ADR 0064).
+The gate fixed a DSF with a bad tag pointer being dropped, zeros at the end of DSD, DoP over a
+mixable format, a second tail delaying `finished`, and a tail cut on an odd frame. Benchmarks with
+the DSD fixtures: full scan 1.75 s (budget 5), no-change rescan 0.55 s (1.5), generator 3.49 s,
+rerun 1.24 s, parse 1.65 s, playback CPU 2.14 percent. Two budgets miss, and main (912fca5) misses
+them the same way, so phase 12 didn't cause either. Scroll-bar drag measures 20.9 ms against 16.
+Every commit back to 39a4eca, where 9.8 ms was recorded at 16:52 on 2026-11-02, now runs about
+twice as slow on the same macOS 27.2, and the times fall just past one 60 Hz frame where they used
+to fall past one 120 Hz frame. The likely cause is the closet Mac's display state, and
+`caffeinate -d -u` didn't restore it, so the budget is unchanged until the owner reruns it with the
+display awake. Palette opening rows measures 4.10 ms against 4 ms, the same as at its first commit,
+6dfb9c6. Launch measures 0.68 s against 0.47 s recorded; main measures 0.68 s too. One run of the
+full check failed `aRendererStuckAtTheEndIsMovedOnByTheApp` at 5.1 s against its 5 s limit, and it
+passed three reruns. Pending the owner: DSD64, DSD128 and DSD256 on the ADI-2 with the DSD
+indicator lit, a DSD album with hog mode off (it should be refused with the hog-mode message and
+stop after three tracks), and DSD to the Denon, if its `GetProtocolInfo` lists a DSD type.
 
 ### 13. Release readiness
 
@@ -2537,6 +2573,26 @@ unfocused, playing-row mark, grey missing rows, Full Width art and thumbnails wh
 Compact and Large heights, VoiceOver, and a scroll-bar drag against Swinsian on macOS 26 and the
 2015 MacBook Pro), and `./scripts/bench` on the 2015 MacBook Pro for "scroll every row" and the
 History source.
+
+### 29. Art, status bar, selection and palette
+
+The owner's feedback from 2026-11-02, given during phase 12's run.
+
+- [ ] **29.1 Album art.** The thumbnail / full-width option has no effect: art is always full
+      width. Replace it with a choice between art scaled to fit the view and art always full
+      width, cropped at the bottom on short albums. Art fills its cell edge to edge, so no row
+      highlight shows behind it. Hovering art brings it to the top layer at full width; clicking
+      it opens it centered, as large as the screen allows, and a click anywhere or Esc closes it.
+- [ ] **29.2 Now-playing style in the toolbar.** The now-playing style is chosen by customizing
+      the toolbar, as in Swinsian, not in Appearance. The signal path badge isn't cut off.
+- [ ] **29.3 Status bar.** Translucent gray glass like the table headers, the same height, its
+      text centered vertically in the tables' compact font size.
+- [ ] **29.4 Selection and keys.** After any sort or column change, the selected item scrolls
+      to the center. With nothing playing, ⌘L focuses the selected item if there is one. The
+      playing row's highlight is light gray, not light blue. Ctrl+Option+Up/Down scroll without
+      changing the selection.
+- [ ] **29.5 Palette.** ⌘K keeps its width but gets back its old height and item count, and uses
+      Searcher's selection highlight instead of bright blue.
 
 ## Later
 
