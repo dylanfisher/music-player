@@ -3032,7 +3032,12 @@ now stays on its tracks. The existing window benches against main (9cf9665), sam
 0.02% and 0.01%, search 8.7 ms both, re-sort 43.0 ms and 42.1 ms. No `./scripts/bundle release`:
 Package.swift changed only Bench's dependencies, and there's no new `#available`. The old-Mac
 figures are estimates until the 32f checkpoint, where the owner scrolls with the art column
-while a rescan runs.
+while a rescan runs. After review: the rescan redraw compares every row with a view, not only
+the visible ones, fills the art column again when a cover or album changed, sets the playing
+mark again, and closes the hover and the viewer of an album whose rows changed; the queue's key
+cursor moves up with its rows; the art column reads the rows on screen once per pass; and an art
+key includes its length. Rerun: a refresh's frame 8.7 ms (median), the page down's last cover
+127 ms.
 
 #### 32c. The database
 
