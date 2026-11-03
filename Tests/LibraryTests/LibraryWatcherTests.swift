@@ -76,11 +76,17 @@ private func eventually(within seconds: Double, _ condition: () throws -> Bool) 
     #expect(byFolder[library.root + "-gone"]?.issues.map(\.kind) == [.rootUnavailable])
     watcher.stop()
 
-    // Watching nothing removes what the folder held.
+    // Watching nothing removes nothing, since a lost or default config gives that (ADR 0082)...
     let next = LibraryWatcher(
         databaseURL: library.databaseURL, networkReaders: nil, events: received.append)
     next.start(folders: [], rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
     defer { next.stop() }
+    #expect(try await eventually(within: 20) { received.launchesEnded == 2 })
+    try await Task.sleep(nanoseconds: 500_000_000)
+    #expect(received.removed.isEmpty)
+    #expect(try library.index().trackCount() > 0)
+    // ...but Stop Watching on the last folder removes what it held.
+    next.removeEveryFile()
     #expect(try await eventually(within: 20) { received.removed == [library.manifest.files.count] })
 }
 

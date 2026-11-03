@@ -29,7 +29,7 @@ let settingsBenchmarks = [
                             include: ["*.flac", "*.m4a"], exclude: ["**/Scans/**"])
                     })
                 for command in AppCommands.all().prefix(20) {
-                    settings.setShortcut(
+                    try settings.setShortcut(
                         command.id.rawValue, to: ShortcutOverride(alternate: .removed))
                 }
                 guard settings.problems.isEmpty, settings.writeFailure == nil else {

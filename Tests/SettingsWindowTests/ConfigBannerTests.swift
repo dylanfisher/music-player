@@ -51,7 +51,8 @@ import Testing
     show([old, ConfigProblem(line: 4, message: "x", obsoleteKey: ["b.old"])])
     #expect(banner.removeButtonTitle == "Remove Obsolete Settings")
     show([old, ConfigProblem(line: 5, message: "\"a.count\": 11 is outside 1...10")])
-    #expect(banner.text.hasSuffix("Nothing in it applies, and changes wait, until it's fixed."))
+    #expect(
+        banner.text.hasSuffix("Nothing in it applies, and nothing can change, until it's fixed."))
     #expect(banner.removeButtonTitle == "Remove Obsolete Setting")
     banner.perform(NSSelectorFromString("remove"))
     #expect(removed == 1)

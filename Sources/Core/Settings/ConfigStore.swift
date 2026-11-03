@@ -16,8 +16,8 @@ func defaultConfigFileURL() -> URL {
 /// The settings in effect, read from and written to the config file, which is the settings:
 /// every preference and the user's shortcuts. Changes in the app are patches to the file's text;
 /// saves in an editor are read back as they happen. A file whose only problems are unknown keys
-/// applies the rest and takes patches. A file with any other problem applies nothing, and
-/// changes made meanwhile wait and are written on top of the fix (ADR 0082).
+/// applies the rest and takes patches. A file with any other problem applies nothing, and the
+/// app's changes are refused until it's fixed (ADR 0082).
 @MainActor
 public final class ConfigStore<Schema: SettingsSchema> {
     /// How long a file found empty or gone waits for a second read, since an editor's save in
@@ -129,7 +129,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
                 problems: [ConfigProblem(line: nil, message: "\"\(setting.key)\": \(reason)")])
         }
         try checkConflicts(setting.key, value)
-        apply(.setting(setting.key, value))
+        try apply(.setting(setting.key, value))
     }
 
     /// Throws what setting `key` to `value` would conflict with, leaving the settings as they
@@ -155,7 +155,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
         switch descriptor.decode(json) {
         case .success(let value):
             try checkConflicts(key, value)
-            apply(.setting(key, value))
+            try apply(.setting(key, value))
         case .failure(let reason):
             throw ConfigError(
                 path: fileURL.path,
@@ -164,19 +164,31 @@ public final class ConfigStore<Schema: SettingsSchema> {
     }
 
     /// Sets command `id`'s shortcut overrides; an empty override goes back to the defaults.
-    public func setShortcut(_ id: String, to override: ShortcutOverride) {
-        apply([.shortcut(id, override)])
+    public func setShortcut(_ id: String, to override: ShortcutOverride) throws {
+        try apply([.shortcut(id, override)])
     }
 
     /// Sets several commands' overrides as one change, so a chord moving from one command to
     /// another is never seen half done.
-    public func setShortcuts(_ overrides: [String: ShortcutOverride]) {
-        apply(overrides.sorted { $0.key < $1.key }.map { .shortcut($0.key, $0.value) })
+    public func setShortcuts(_ overrides: [String: ShortcutOverride]) throws {
+        try apply(overrides.sorted { $0.key < $1.key }.map { .shortcut($0.key, $0.value) })
     }
 
-    private func apply(_ patch: Patch) { apply([patch]) }
+    private func apply(_ patch: Patch) throws { try apply([patch]) }
 
-    private func apply(_ patches: [Patch]) {
+    /// Takes `patches` and writes them. Refused while a problem blocks the file: the values in
+    /// memory are defaults then, so a change built on them, written when the file is fixed,
+    /// would replace what the file has, such as the watched folders (ADR 0082).
+    private func apply(_ patches: [Patch]) throws {
+        if let problem = problems.first(where: \.blocks) {
+            throw ConfigError(
+                path: fileURL.path,
+                problems: [
+                    ConfigProblem(
+                        line: nil,
+                        message: "nothing can change until the file is fixed: \(problem)")
+                ])
+        }
         var keys: Set<String> = []
         for patch in patches {
             keys.formUnion(take(patch))
@@ -351,6 +363,11 @@ public final class ConfigStore<Schema: SettingsSchema> {
                 at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try write(text.bytes)
             logger.info("wrote a new config file at \(self.fileURL.path)")
+            // The file names every key now. An empty list of watched folders removes nothing
+            // (ADR 0082), so its defaults can count as given.
+            let newlyGiven = Set(descriptors.map(\.key)).subtracting(given)
+            given.formUnion(newlyGiven)
+            if !newlyGiven.isEmpty { changed(newlyGiven) }
         } catch {
             // There may be no changes waiting, so the retry writes the new file itself, unless
             // one has appeared meanwhile.
@@ -395,7 +412,7 @@ public final class ConfigStore<Schema: SettingsSchema> {
 
     /// Remove Obsolete Setting: takes each unknown key out of the file, with its line and the
     /// comment lines directly above it, and leaves the rest of the text as it is (ADR 0082).
-    /// Changes waiting behind a problem that blocks the file keep waiting.
+    /// Changes waiting on a failed write keep waiting.
     public func removeObsoleteKeys() throws {
         if try currentBytes() != lastBytes { read(confirmed: true) }
         let paths = problems.compactMap(\.obsoleteKey)

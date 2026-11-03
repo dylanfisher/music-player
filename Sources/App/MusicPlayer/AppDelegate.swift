@@ -825,12 +825,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
-            // Found again by value: the file can change while the sheet is open.
-            var folders = settings[\.watchedFolders]
-            guard let position = folders.firstIndex(of: folder) else { return }
-            folders.remove(at: position)
             do {
-                try settings.set(\.watchedFolders, to: folders)
+                try stopWatching(folder, settings) { self?.watcher }
             } catch {
                 self?.fail("Couldn't stop watching \(folder.path)", error)
             }

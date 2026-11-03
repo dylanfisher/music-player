@@ -58,7 +58,7 @@ private func read(_ url: URL) throws -> String { try String(contentsOf: url, enc
     #expect(!settings.isOn("a.flag"))
 }
 
-@MainActor @Test func aBrokenFileAppliesNothingAndIsNeverWrittenOver() throws {
+@MainActor @Test func aBrokenFileAppliesNothingAndRefusesChanges() throws {
     let url = configURL()
     try write(#"{"a.count": 3}"#, to: url)
     let settings = store(url)
@@ -69,16 +69,20 @@ private func read(_ url: URL) throws -> String { try String(contentsOf: url, enc
     #expect(settings.problems.map(\.description) == [#"line 1: "a.flag": expected true or false"#])
     #expect(settings.blocked)
     #expect(reported == 1)
-    // The change waits, and memory shows it.
-    try settings.set(\.flag, to: true)
-    #expect(settings[\.flag])
+    // A change would be built on what memory holds, not the file, so it's refused, not kept to
+    // be written over the fix.
+    #expect(throws: ConfigError.self) { try settings.set(\.flag, to: true) }
+    #expect(throws: ConfigError.self) {
+        try settings.setShortcut("test.open", to: ShortcutOverride(alternate: .removed))
+    }
+    #expect(!settings[\.flag])
     #expect(try read(url) == #"{"a.count": 3, "a.flag": 2}"#)
-    // The fix is applied, with the waiting change on top.
     try write(#"{"a.count": 9}"#, to: url)
     settings.read(confirmed: true)
     #expect(settings.problems.isEmpty)
     #expect(settings[\.count] == 9)
-    #expect(settings[\.flag])
+    #expect(try read(url) == #"{"a.count": 9}"#)
+    try settings.set(\.flag, to: true)
     #expect(try read(url) == #"{"a.count": 9, "a.flag": true}"#)
 }
 
@@ -103,11 +107,11 @@ private func read(_ url: URL) throws -> String { try String(contentsOf: url, enc
     let url = configURL()
     let settings = store(url)
     let override = ShortcutOverride(primary: .chord(KeyChord("j", .command)))
-    settings.setShortcut("test.open", to: override)
+    try settings.setShortcut("test.open", to: override)
     #expect(settings.shortcuts == ["test.open": override])
     let reread = try ConfigStore.strict(Schema(), fileURL: url, check: { _, _, _ in nil })
     #expect(reread.shortcuts == ["test.open": override])
-    settings.setShortcut("test.open", to: ShortcutOverride())
+    try settings.setShortcut("test.open", to: ShortcutOverride())
     #expect(settings.shortcuts.isEmpty)
     #expect(!(try read(url)).contains("test.open"))
 }
@@ -118,7 +122,7 @@ private func read(_ url: URL) throws -> String { try String(contentsOf: url, enc
     var changed: [Set<String>] = []
     settings.changed = { changed.append($0) }
     let chord = KeyChord("j", .command)
-    settings.setShortcuts([
+    try settings.setShortcuts([
         "test.open": ShortcutOverride(primary: .chord(chord)),
         "test.close": ShortcutOverride(primary: .removed),
     ])
@@ -217,7 +221,7 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
         let settings = store(url)
         #expect(!settings.problems.isEmpty, "\(cut)")
         #expect(settings[\.count] == Schema().count.defaultValue)
-        try settings.set(\.count, to: 7)
+        #expect(throws: ConfigError.self) { try settings.set(\.count, to: 7) }
         #expect(try read(url) == cut)
     }
 }
@@ -249,17 +253,31 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
     }
 }
 
-@MainActor @Test func changesWaitingOnABrokenFileAreAllWrittenOnceItsFixed() throws {
+/// The review's case: folders in the file, a bad value beside them, and the user adding one in
+/// the app. Taking the change would have given `[X]` as the file's folders, and written it over
+/// the fix.
+@MainActor @Test func aFolderChangeOnABlockedFileIsRefusedAndTheFixKeepsTheFilesFolders() throws {
     let url = configURL()
-    try write(#"{"a.count": "3"}"#, to: url)
-    let settings = store(url)
-    try settings.set(\.flag, to: true)
-    try settings.set(\.count, to: 6)
-    try settings.set(\.count, to: 7)
-    try write("{}", to: url)
+    let text =
+        #"{"a.folders": [{"path": "/A", "kind": "local", "include": [], "exclude": [], "pollIntervalMinutes": 60}], "a.count": "3"}"#
+    try write(text, to: url)
+    let settings = ConfigStore(
+        FolderSchema(), fileURL: url, check: { _, _, _ in nil }, creating: true)
+    #expect(settings.blocked)
+    #expect(throws: ConfigError.self) {
+        try settings.set(\.folders, to: [WatchedFolder(path: "/X", kind: .local)])
+    }
+    #expect(settings.fileValue(\.folders) == nil)
+    #expect(try read(url) == text)
+    try write(text.replacingOccurrences(of: #""3""#, with: "3"), to: url)
     settings.read(confirmed: true)
-    let reread = try ConfigStore.strict(Schema(), fileURL: url, check: { _, _, _ in nil })
-    #expect(reread[\.flag] && reread[\.count] == 7)
+    #expect(settings.fileValue(\.folders)?.map(\.path) == ["/A"])
+    #expect(try read(url) == text.replacingOccurrences(of: #""3""#, with: "3"))
+}
+
+private struct FolderSchema: SettingsSchema {
+    let folders = Setting<[WatchedFolder]>("a.folders", title: "Folders", default: [], "A list.")
+    let count = Setting("a.count", title: "Count", default: 5, range: 1...10, "An integer.")
 }
 
 @MainActor @Test func aFileThatCantBeReadIsAProblem() throws {
@@ -498,13 +516,13 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
     #expect(settings.fileValue(\.count) == nil)
 }
 
-@MainActor @Test func aNewFileGivesOnlyWhatTheAppSet() throws {
+@MainActor @Test func aNewFileGivesEveryDefaultItWrote() throws {
     let url = configURL()
     let settings = store(url)
-    #expect(settings.fileValue(\.count) == nil)
-    try settings.set(\.count, to: 5)
     #expect(settings.fileValue(\.count) == 5)
     #expect(store(url).fileValue(\.flag) == false)
+    // Without creating, a missing file gives nothing.
+    #expect(store(configURL(), creating: false).fileValue(\.count) == nil)
 }
 
 @MainActor @Test func removingObsoleteKeysLeavesEveryOtherByte() throws {
@@ -525,15 +543,12 @@ private func wait(seconds: Double, until done: () throws -> Bool) async rethrows
     #expect(settings[\.count] == 3 && settings[\.flag])
 }
 
-@MainActor @Test func removingObsoleteKeysFromABlockedFileKeepsTheWaitingChanges() throws {
+@MainActor @Test func removingObsoleteKeysFromABlockedFileLeavesItBlocked() throws {
     let url = configURL()
     try write(#"{"a.old": 1, "a.flag": 2}"#, to: url)
     let settings = store(url)
-    try settings.set(\.count, to: 7)
     try settings.removeObsoleteKeys()
     #expect(try read(url) == #"{ "a.flag": 2}"#)
     #expect(settings.blocked)
-    try write(#"{ "a.flag": true}"#, to: url)
-    settings.read(confirmed: true)
-    #expect(try read(url) == #"{ "a.flag": true, "a.count": 7}"#)
+    #expect(settings.problems.count == 1)
 }

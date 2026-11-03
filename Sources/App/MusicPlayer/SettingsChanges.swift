@@ -146,9 +146,15 @@ extension AppDelegate {
             value: { [weak settings] in settings?.json(forKey: $0) },
             set: { [weak settings] key, json in try settings?.set(key: key, json: json) })
         let shortcuts = ShortcutsModel(bindings: dispatcher.bindings, appName: appName) {
-            [weak settings] changes in
-            settings?.setShortcuts(
-                Dictionary(uniqueKeysWithValues: changes.map { ($0.key.rawValue, $0.value) }))
+            [weak self, weak settings, weak dispatcher] changes in
+            do {
+                try settings?.setShortcuts(
+                    Dictionary(uniqueKeysWithValues: changes.map { ($0.key.rawValue, $0.value) }))
+            } catch {
+                // The pane shows the shortcuts in effect again.
+                if let dispatcher { self?.settingsWindow?.reload(bindings: dispatcher.bindings) }
+                self?.fail("Couldn't change the shortcuts", error)
+            }
         }
         let controller = SettingsWindowController(
             general: general, shortcuts: shortcuts, configPath: settings.fileURL.path,

@@ -68,7 +68,8 @@ public final class LibraryWatcher: @unchecked Sendable {
         self.events = events
     }
 
-    /// Finds each of `folders` (ADR 0028), removes files outside them from the index, scans
+    /// Finds each of `folders` (ADR 0028), removes files outside them from the index unless
+    /// there are none (ADR 0082), scans
     /// the local folders and the network ones whose last whole scan didn't finish, and starts watching
     /// them, and syncs through `syncFolder` at start once the local folders are scanned, after
     /// each scan and on each trigger. The caller reads them from Settings.
@@ -106,7 +107,9 @@ public final class LibraryWatcher: @unchecked Sendable {
             state = started
             for path in started.leftToTheIndex { events(.keptIndex(folder: path)) }
             reportLaunchIfEnded()
-            if locatedAll { removeFiles(outside: folders) }
+            // No folders is what a lost or default config gives, so it never empties the index;
+            // Stop Watching on the last folder calls `removeEveryFile` instead.
+            if locatedAll, !folders.isEmpty { removeFiles(outside: folders) }
             watchLocalFolders(folders.filter { $0.kind == .local })
             advance()
         }
@@ -194,6 +197,12 @@ public final class LibraryWatcher: @unchecked Sendable {
             pushDue = true
             advance()
         }
+    }
+
+    /// Stop Watching on the last folder: removes every file from the index, as `start` does for
+    /// the files outside the folders when there are some. Its stats stay, by path.
+    public func removeEveryFile() {
+        queue.async { [self] in removeFiles(outside: []) }
     }
 
     /// Removes the index's files outside `folders`, such as those of a folder no longer

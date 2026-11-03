@@ -40,57 +40,146 @@ private let brokenConfigs: [(text: String, watching: Bool)] = [
     (#"{"library.watchedFolders": [{"path": "/Music"}]}"#, false),
 ]
 
+/// A home folder over an indexed copy of the fixture library, and how many tracks it holds.
+private struct IndexedHome {
+    let home: URL
+    let paths: AppPaths
+    let databaseURL: URL
+    let folder: WatchedFolder
+    let index: LibraryIndex
+    let tracks: Int
+
+    init() throws {
+        home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("config-launch-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        paths = AppPaths(home: home)
+        databaseURL = libraryFileURL(in: paths.dataDirectory)
+        folder = WatchedFolder(path: try music.get().path, kind: .local)
+        _ = try LibraryScanner(databaseURL: databaseURL).scan(folder)
+        index = try LibraryIndex(at: databaseURL)
+        tracks = try index.trackCount()
+    }
+
+    /// The config as the app reads it at launch.
+    @MainActor func settings() throws -> ConfigStore<AppSettings> {
+        ConfigStore(
+            AppSettings(), fileURL: paths.configFile, check: try shortcutCheck(), creating: true)
+    }
+
+    /// Starts the watcher as the app does, and waits for its launch scans and the removal
+    /// beside them.
+    @MainActor func launch(_ settings: ConfigStore<AppSettings>, _ events: Events) async throws
+        -> LibraryWatcher?
+    {
+        let watcher = startedWatcher(settings, databaseURL: databaseURL, events: events.append)
+        guard watcher != nil else { return nil }
+        let deadline = Date().addingTimeInterval(30)
+        while !events.launchEnded, Date() < deadline {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        #expect(events.launchEnded, "\(events.all)")
+        try await Task.sleep(nanoseconds: 500_000_000)
+        return watcher
+    }
+
+    /// Whether the track list shows rows.
+    @MainActor func rowsShow() async throws -> Bool {
+        let browser = LibraryBrowser(
+            reader: try LibraryReader(databaseURL: databaseURL), index: index,
+            layout: AppState().trackTable.defaultValue, browserHeight: 100,
+            groupByAlbumArtist: false, thumbnails: nil)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled],
+            backing: .buffered, defer: true)
+        window.contentView = browser.content.view
+        await browser.load(BrowserState(source: nil))
+        let deadline = Date().addingTimeInterval(10)
+        while browser.rowID(at: 0) == nil, Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return browser.rowID(at: 0) != nil
+    }
+
+    func remove() { try? FileManager.default.removeItem(at: home) }
+}
+
 /// The launch path from reading the config to the watcher, over an indexed library: no file
 /// leaves the index, and the track list shows them (ADR 0082). Before, a config with a problem
 /// left `library.watchedFolders` at its default, no folders, and the watcher removed every file
 /// as outside them.
 @MainActor @Test(arguments: brokenConfigs.indices)
 func aConfigWithAProblemNeverEmptiesTheLibrary(_ which: Int) async throws {
-    let home = FileManager.default.temporaryDirectory
-        .appendingPathComponent("config-launch-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: home) }
-    let paths = AppPaths(home: home)
-    let databaseURL = libraryFileURL(in: paths.dataDirectory)
-    let folder = WatchedFolder(path: try music.get().path, kind: .local)
-    _ = try LibraryScanner(databaseURL: databaseURL).scan(folder)
-    let index = try LibraryIndex(at: databaseURL)
-    let indexed = try index.trackCount()
-    #expect(indexed > 0)
+    let library = try IndexedHome()
+    defer { library.remove() }
+    #expect(library.tracks > 0)
     let config = brokenConfigs[which]
-    try Data(config.text.replacingOccurrences(of: "@folder", with: jsonText(folder)).utf8).write(
-        to: paths.configFile)
-
-    let settings = ConfigStore(
-        AppSettings(), fileURL: paths.configFile, check: try shortcutCheck(), creating: true)
+    try Data(
+        config.text.replacingOccurrences(of: "@folder", with: jsonText(library.folder)).utf8
+    ).write(to: library.paths.configFile)
+    let settings = try library.settings()
     #expect(!settings.problems.isEmpty)
     let events = Events()
-    let watcher = startedWatcher(settings, databaseURL: databaseURL, events: events.append)
+    let watcher = try await library.launch(settings, events)
     defer { watcher?.stop() }
     #expect((watcher != nil) == config.watching)
-    if watcher != nil {
-        let deadline = Date().addingTimeInterval(30)
-        while !events.launchEnded, Date() < deadline {
-            try await Task.sleep(nanoseconds: 50_000_000)
-        }
-        #expect(events.launchEnded, "\(events.all)")
-        // The removal outside the folders runs beside the scan; give it time to show.
-        try await Task.sleep(nanoseconds: 500_000_000)
-    }
-    #expect(try index.trackCount() == indexed, "\(events.all)")
+    #expect(try library.index.trackCount() == library.tracks, "\(events.all)")
+    #expect(try await library.rowsShow())
+}
 
-    let browser = LibraryBrowser(
-        reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
-        thumbnails: nil)
-    let window = NSWindow(
-        contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled],
-        backing: .buffered, defer: true)
-    window.contentView = browser.content.view
-    await browser.load(BrowserState(source: nil))
-    let deadline = Date().addingTimeInterval(10)
-    while browser.rowID(at: 0) == nil, Date() < deadline {
-        try await Task.sleep(nanoseconds: 10_000_000)
+/// A config deleted or lost: the app writes one with no watched folders, and neither that launch
+/// nor the next, which reads it, removes a file.
+@MainActor @Test func aLostConfigKeepsEveryRowOverTwoLaunches() async throws {
+    let library = try IndexedHome()
+    defer { library.remove() }
+    for _ in 0..<2 {
+        let settings = try library.settings()
+        #expect(settings.fileValue(\.watchedFolders) == [])
+        let events = Events()
+        let watcher = try await library.launch(settings, events)
+        #expect(watcher != nil)
+        watcher?.stop()
+        #expect(try library.index.trackCount() == library.tracks, "\(events.all)")
     }
-    #expect(browser.rowID(at: 0) != nil)
+    #expect(try await library.rowsShow())
+}
+
+/// Adding a folder in the app while the file is blocked is refused: memory holds no folders then,
+/// so the change would have watched only the new one, removed the rest, and been written over
+/// the fix.
+@MainActor @Test func aFolderChangeWhileTheFileIsBlockedIsRefused() async throws {
+    let library = try IndexedHome()
+    defer { library.remove() }
+    let text = #"{"library.watchedFolders": [@folder], "appearance.glass": 1}"#
+        .replacingOccurrences(of: "@folder", with: jsonText(library.folder))
+    try Data(text.utf8).write(to: library.paths.configFile)
+    let settings = try library.settings()
+    let added = WatchedFolder(path: library.home.appendingPathComponent("X").path, kind: .local)
+    #expect(throws: ConfigError.self) { try settings.set(\.watchedFolders, to: [added]) }
+    #expect(try await library.launch(settings, Events()) == nil)
+    #expect(try library.index.trackCount() == library.tracks)
+    #expect(try String(contentsOf: library.paths.configFile, encoding: .utf8) == text)
+}
+
+/// Stop Watching on the last folder still takes its tracks out, by its own call, since the
+/// watcher never empties the index for no folders.
+@MainActor @Test func stoppingTheLastFolderRemovesItsTracks() async throws {
+    let library = try IndexedHome()
+    defer { library.remove() }
+    let settings = try library.settings()
+    try settings.set(\.watchedFolders, to: [library.folder])
+    var watcher = try await library.launch(settings, Events())
+    defer { watcher?.stop() }
+    settings.changed = { keys in
+        guard keys.contains(settings.schema.watchedFolders.key) else { return }
+        watcher?.stop()
+        watcher = startedWatcher(settings, databaseURL: library.databaseURL, events: { _ in })
+    }
+    try stopWatching(library.folder, settings) { watcher }
+    #expect(settings[\.watchedFolders].isEmpty)
+    let deadline = Date().addingTimeInterval(20)
+    while try library.index.trackCount() > 0, Date() < deadline {
+        try await Task.sleep(nanoseconds: 50_000_000)
+    }
+    #expect(try library.index.trackCount() == 0)
 }

@@ -75,7 +75,7 @@ public final class ConfigBanner: NSViewController {
             if problems.isEmpty {
                 ""
             } else if problems.contains(where: \.blocks) {
-                " Nothing in it applies, and changes wait, until it's fixed."
+                " Nothing in it applies, and nothing can change, until it's fixed."
             } else {
                 " The rest of it applies."
             }
