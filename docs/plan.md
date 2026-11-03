@@ -2650,19 +2650,19 @@ customization sheet. The three batches run in parallel worktrees.
 
 #### 30a. Settings window
 
-- [ ] **30a.1 Layout like Swinsian's.** Checkbox labels go to the right of the checkbox, as the
+- [x] **30a.1 Layout like Swinsian's.** Checkbox labels go to the right of the checkbox, as the
       checkbox's own title; only pop-ups and fields keep a short label on the left. Settings are
       grouped into titled boxes or separated sections, with short help text under each. Receiver
       settings are the worked example: they need clear grouping and order. No label is cut off
       (`s1300` cuts "Pause Network Rescans While Playing").
-- [ ] **30a.2 Network Scan Readers.** An empty number field no user understands. It leaves the
+- [x] **30a.2 Network Scan Readers.** An empty number field no user understands. It leaves the
       window and stays a config-file setting.
-- [ ] **30a.3 Sync folder.** The path label pushes the row too wide and hides its button. Show
+- [x] **30a.3 Sync folder.** The path label pushes the row too wide and hides its button. Show
       the folder's name, truncated, with a Change… button and an Open button that shows it in
       Finder.
-- [ ] **30a.4 File viewer.** The Searcher choice shows only when Searcher is installed; otherwise
+- [x] **30a.4 File viewer.** The Searcher choice shows only when Searcher is installed; otherwise
       the setting isn't in the window and stays in the config file.
-- [ ] **30a.5 Played threshold.** A track counts as played once a set share of it has played,
+- [x] **30a.5 Played threshold.** A track counts as played once a set share of it has played,
       not only at the end. A setting, default 75%. Check what counts as played today first.
 
 Plan:
@@ -2679,9 +2679,9 @@ Plan:
    Choosing one in ⌘K opens the config file. Tests: `GeneralModelTests`.
 3. **30a.1** Sections become titled boxes with one label column for the whole pane. A checkbox
    carries its setting's title to its right, with the summary under the title; only pop-ups and
-   fields have a label on the left. Sections: Playback (`output.`, `playback.`), Library,
-   Sync, Receiver, and Network Folders, whose two settings move to a box under the Watched
-   Folders list, as in Swinsian. Receiver Control comes first in its box, and the receiver's
+   fields have a label on the left. Sections: Audio Output (`output.`) and Play Counts (`playback.`)
+   in a new Playback pane; Library, Sync and Receiver in General; and Network Folders, whose
+   two settings move to a box under the Watched Folders list, as in Swinsian. Receiver Control comes first in its box, and the receiver's
    other rows are disabled while it's off. Tests: sections, dependent rows, the label column
    holding the longest title, the network folder settings in the Folders pane.
 4. **30a.3** The sync folder row shows the folder's name, truncated, with its full place as a
@@ -2689,6 +2689,22 @@ Plan:
    (the watcher's lookup, made public in Library) and opens it in Finder, or says the share
    isn't mounted. Tests: the name, the buttons' actions.
 5. ADR 0067; README; snapshot of each pane at 1440x900.
+
+Result: shipped as planned; `./scripts/check` passes. 30a.5: a play used to count after half
+the track or 4 minutes, whichever came first, so long tracks counted early; it now counts at
+Count as Played At (Settings ▸ Playback, 75% by default), 4 minutes only for a track of unknown
+length, and a track played to its end counts even at 100%. 30a.1: checkboxes carry their titles
+on the right with the summary underneath; pop-ups and fields share one label column per pane;
+sections are titled boxes. General has Library, Sync and Receiver; a new Playback pane has Audio
+Output and Play Counts, so General fits the 2015 MacBook Pro's screen; the two network rescan
+settings sit in a box under the Watched Folders list. Receiver Control heads its box and the
+address and volume keys rows are disabled while it's off. 30a.2 and 30a.4: Network Scan Readers,
+and File Viewer when Searcher isn't installed, have no row; ⌘K opens the config file for them.
+30a.3: the sync folder row shows the folder's name, truncated, with its place as a tooltip, and
+Choose…/Change…, Open (in Finder, where its share is mounted now) and Clear. `--snapshot-of`
+takes playback, appearance and folders. No benchmark: no budgeted path changed. Pending the
+owner: the window on macOS 12, and whether the titles should be sentence case as Swinsian's are
+(ADR 0067 keeps title case, since they're also the palette's command names).
 
 #### 30b. Track table, browser and navigation
 
