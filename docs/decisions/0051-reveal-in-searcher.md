@@ -29,11 +29,10 @@ shows each file selected in its folder.
   is Searcher or Finder, Searcher by default. Searcher reveals by opening the files with the
   app Launch Services finds for Searcher's bundle ID, which sends that event. When no app has
   the ID, the reveal goes to Finder, as the owner asked, and the setting's summary says so.
-- **Finder means Finder.** When the global `NSFileViewer` names an app other than Finder, the
-  app puts `NSFileViewer = ""` in its own argument domain, in memory only, before a reveal in
-  Finder, so that app doesn't take the reveal. AppKit finds no app with the empty ID, logs
-  "Finder replacement not found", and reveals in Finder itself. With the global key unset or
-  naming Finder, nothing is overridden.
+- **Finder means Finder.** When the global `NSFileViewer` is set, to any app, Finder included,
+  the app puts `NSFileViewer = ""` in its own argument domain, in memory only, before a reveal in
+  Finder. AppKit finds no app with the empty ID, logs "Finder replacement not found", and
+  reveals in Finder itself. With the global key unset, nothing is overridden.
 
   Amended 2026-11-03 (phase 30b): the override was `com.apple.finder`, as Searcher's 0137 does.
   With any `NSFileViewer` naming Finder, AppKit treats Finder as a replacement viewer and sends

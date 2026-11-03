@@ -24,8 +24,24 @@ private let installed = URL(fileURLWithPath: "/Applications/Searcher.app", isDir
     #expect(searcherApp(.finder) { _ in installed } == nil)
 }
 
-@Test func aRevealInFinderOverridesOnlyAnotherFileViewer() {
+@Test func aRevealInFinderOverridesAnySetFileViewerFinderIncluded() {
     #expect(fileViewerOverride(global: nil) == nil)
-    #expect(fileViewerOverride(global: "com.apple.finder") == nil)
+    #expect(fileViewerOverride(global: "com.apple.finder") == "")
     #expect(fileViewerOverride(global: "com.dylanfisher.searcher") == "")
+}
+
+@Test func theOverrideGoesInTheArgumentDomainInMemory() throws {
+    let suite = "music-player-reveal-\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    let domain = UserDefaults.argumentDomain
+    let before = defaults.volatileDomain(forName: domain)
+    defer {
+        defaults.setVolatileDomain(before, forName: domain)
+        defaults.removePersistentDomain(forName: suite)
+    }
+    keepRevealsInFinder(defaults) { nil }
+    #expect(defaults.volatileDomain(forName: domain)[fileViewerKey] == nil)
+    keepRevealsInFinder(defaults) { "com.apple.finder" }
+    #expect(defaults.string(forKey: fileViewerKey) == "")
+    #expect(defaults.persistentDomain(forName: suite)?[fileViewerKey] == nil)
 }
