@@ -135,7 +135,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | The same, a seek while the track is decoded (phase 32a); the old Mac figure is an estimate until its checkpoint | < 25 ms | < 80 ms |
 | The same, a seek in the last seconds after decoding moved on (phase 32a); the old Mac figure is an estimate until its checkpoint | < 25 ms | < 80 ms |
 | A seek 20 ms after another, inside the refill that follows it, 24/192 FLAC on the slow simulated NAS, to playing from its target, null device (median of 5; phase 35); the old Mac figure is an estimate until its checkpoint | < 25 ms | < 80 ms |
-| CPU when idle, the library window open and nothing playing, over a minute after the app reports its launch rescan done (`--report-launch`) and a 5 s settle; the old Mac figure is an estimate until its checkpoint | < 0.1 percent of a core | < 0.1 percent of a core |
+| CPU when idle, the library window open and nothing playing, over a minute after the app reports its launch rescan done (`--report-launch`) and a 5 s settle; the old Mac figure set from the 32f checkpoint's 0.11% in phase 33 | < 0.1 percent of a core | < 0.15 percent of a core |
 | Idle wakeups in the same minute, as `top` counts them | < 1 wakeups a second | < 1 wakeups a second |
 | Load and validate settings, every key changed | < 2 ms | < 20 ms |
 | Generate the fixture library | < 6 s | < 120 s |
