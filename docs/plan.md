@@ -2710,22 +2710,22 @@ owner: the window on macOS 12, and whether the titles should be sentence case as
 
 #### 30b. Track table, browser and navigation
 
-- [ ] **30b.1 Centered landing.** Type-to-select centers the found row, as ⌘L does. Every action
+- [x] **30b.1 Centered landing.** Type-to-select centers the found row, as ⌘L does. Every action
       that lands on a row of the track table centers it.
-- [ ] **30b.2 Row height and type.** Taller row heights get larger type, as large as fits;
+- [x] **30b.2 Row height and type.** Taller row heights get larger type, as large as fits;
       Large at least.
-- [ ] **30b.3 Art hover.** The hover always draws above every other art cell and above the
+- [x] **30b.3 Art hover.** The hover always draws above every other art cell and above the
       scaled-to-fit art (`s2010`: only the lowest album's hover shows on top). The hover's
       hot area is the album's own rows: moving onto the next album's rows ends the hover there
       and starts the next one, without leaving the art column first.
-- [ ] **30b.4 Rating in the cell.** Clicking a star in the Rating column sets the rating.
-- [ ] **30b.5 ⌘R.** Reveal in Finder opens the file in iTunes; it must reveal it.
-- [ ] **30b.6 Back to the library.** ⌘K and ⌘P offer Clear Filter / Show All Music when the
+- [x] **30b.4 Rating in the cell.** Clicking a star in the Rating column sets the rating.
+- [x] **30b.5 ⌘R.** Reveal in Finder opens the file in iTunes; it must reveal it.
+- [x] **30b.6 Back to the library.** ⌘K and ⌘P offer Clear Filter / Show All Music when the
       browser has a filter or a playlist is showing; hidden when already on the unfiltered Music
       list.
-- [ ] **30b.7 Browser columns.** Right-clicking a browser column's header picks what it groups
+- [x] **30b.7 Browser columns.** Right-clicking a browser column's header picks what it groups
       by, from Swinsian's list (`s3548`), for each of the three columns.
-- [ ] **30b.8 Sidebar tooltips.** Music, History, Timeline, Library Health and the default
+- [x] **30b.8 Sidebar tooltips.** Music, History, Timeline, Library Health and the default
       groupings get a tooltip saying what each is.
 
 Plan (30b):
@@ -2759,6 +2759,29 @@ Plan (30b):
    and Show Artist / Show Album select in a column that shows that grouping, or else show the
    track in the whole library. Tests: each grouping's entries and filter, the menu, saving.
    ADR 0069.
+
+Result: shipped as planned; `./scripts/check` passes. 30b.5: reproduced with a probe on macOS 12
+and 27: `NSFileViewer = com.apple.finder` in the argument domain makes AppKit send Finder an
+open-documents event, and Finder opens the track in Music. The override now applies only when
+the global key names another app, and uses an ID no app has, which AppKit answers with its own
+Finder reveal (ADR 0051 amended). The owner's config says Finder and Searcher isn't installed on
+the 2015 MacBook Pro, so both settings took that path. 30b.1: type-to-select, and a source, pane
+or search change that keeps the selection, center the row. 30b.2: Regular rows draw 12-point
+text and Large 13-point; Compact keeps 11 (ADR 0053 amended; the default table's text is a
+point larger). 30b.3: the table added row views above the hover, so lower albums' art covered
+it; each showing now moves the hover to the top, and its hot area ends at its album's last row
+(ADR 0065 amended). 30b.4: a plain click on a star sets the clicked track's rating; left of the
+stars, or the rating it has, clears it (ADR 0068). 30b.6: Show All Tracks is Show All Music, off
+and left out of ⌘K while the table lists the whole library, first in ⌘P otherwise. 30b.7: every
+grouping in Swinsian's menu, picked from each column's header menu; a grouping another column
+shows swaps places; columns and selections are saved as `browser.columns`, replacing
+`browser.genre`, `browser.artist` and `browser.album` (ADR 0069). Text groupings read every
+track once: about 4 ms for Composers, 28 ms for Audio Quality and 67 ms for Folders over the
+bench library on this Mac, warm. 30b.8: Music, History, Timeline, Library Health and the two
+headings have tooltips, on the row's name too. Benchmarks against main measured the same night:
+browser pane query 0.52 ms (main 0.66), search keystroke 9.81 ms (13.76), sort by each column
+49.2 ms (44.9), scroll-bar drag 13.4 ms (main 18.4, over budget on main from this Mac's display
+state, as in phase 29). Pending the owner: trying 30b on the 2015 MacBook Pro.
 
 #### 30c. Window chrome and status bar
 
