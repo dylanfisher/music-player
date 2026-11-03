@@ -10,10 +10,7 @@ let moveBenchmarks = [
     ) {
         // A clone of the fixture library, which on APFS costs no copy of the audio.
         let fixtures = try defaultFixturesDirectory()
-        let directory = fixtures.deletingLastPathComponent().appendingPathComponent("bench-moves")
-        if FileManager.default.fileExists(atPath: directory.path) {
-            try FileManager.default.removeItem(at: directory)
-        }
+        let directory = try emptyCacheDirectory("bench-moves")
         let root = directory.appendingPathComponent("renamed")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try FileManager.default.copyItem(at: fixtures, to: root)

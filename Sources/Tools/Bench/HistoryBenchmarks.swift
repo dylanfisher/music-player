@@ -83,8 +83,8 @@ let historyBenchmarks = [
     },
 ]
 
-/// A copy of the scanned fixture library with `syntheticPlayCount` plays logged, under `.build`
-/// so the generated data stays out of git and the user's folders.
+/// A copy of the scanned fixture library with `syntheticPlayCount` plays logged, beside the
+/// fixtures, so the generated data stays out of git and the user's folders.
 private struct PlayedLibrary: @unchecked Sendable {
     var index: LibraryIndex
     /// A second connection, for what `LibraryIndex` doesn't offer, such as page sizes.
@@ -94,10 +94,7 @@ private struct PlayedLibrary: @unchecked Sendable {
 
 private let playedLibrary = Result { () throws -> PlayedLibrary in
     let source = try scannedLibrary.get().databaseURL
-    let directory = try buildDirectory().appendingPathComponent("bench-plays")
-    if FileManager.default.fileExists(atPath: directory.path) {
-        try FileManager.default.removeItem(at: directory)
-    }
+    let directory = try emptyCacheDirectory("bench-plays")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let databaseURL = libraryFileURL(in: directory)
     for suffix in ["", Database.walSuffix]
@@ -129,15 +126,4 @@ private let playedLibrary = Result { () throws -> PlayedLibrary in
     }
     try index.checkpoint()
     return PlayedLibrary(index: index, database: database, paths: rows.map(\.path))
-}
-
-/// The `.build` folder the Bench binary was built into.
-private func buildDirectory() throws -> URL {
-    var url = URL(fileURLWithPath: CommandLine.arguments[0], isDirectory: false)
-        .resolvingSymlinksInPath()
-    while url.pathComponents.count > 1 {
-        url.deleteLastPathComponent()
-        if url.lastPathComponent == ".build" { return url }
-    }
-    throw BenchError.expected("Bench to run from inside a .build folder")
 }

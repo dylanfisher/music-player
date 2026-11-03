@@ -1,3 +1,4 @@
+import Fixtures
 import Foundation
 
 /// The machines the budgets in docs/plan.md are set for.
@@ -191,6 +192,17 @@ func seconds(_ body: () throws -> Void) rethrows -> Double {
     let start = DispatchTime.now().uptimeNanoseconds
     try body()
     return Double(DispatchTime.now().uptimeNanoseconds - start) / 1e9
+}
+
+/// `~/Library/Caches/MusicPlayer/<name>`, beside the fixtures, with anything an earlier run left
+/// there deleted: for a benchmark's database, which stays for a look after the run.
+func emptyCacheDirectory(_ name: String) throws -> URL {
+    let directory = try defaultFixturesDirectory().deletingLastPathComponent()
+        .appendingPathComponent(name)
+    if FileManager.default.fileExists(atPath: directory.path) {
+        try FileManager.default.removeItem(at: directory)
+    }
+    return directory
 }
 
 /// Runs `body` with a fresh directory for its files, then deletes the directory.

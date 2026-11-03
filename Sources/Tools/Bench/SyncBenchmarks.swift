@@ -13,11 +13,7 @@ let syncBenchmarks = [
         name: "sync: merge 1M play events from another machine's log",
         budget: Budget(appleSilicon: 20, oldMac: 120, unit: .seconds)
     ) {
-        let directory = try defaultFixturesDirectory().deletingLastPathComponent()
-            .appendingPathComponent("bench-sync")
-        if FileManager.default.fileExists(atPath: directory.path) {
-            try FileManager.default.removeItem(at: directory)
-        }
+        let directory = try emptyCacheDirectory("bench-sync")
         let sync = directory.appendingPathComponent("sync")
         try FileManager.default.createDirectory(at: sync, withIntermediateDirectories: true)
         let share = "smb://bench/music"
@@ -50,11 +46,7 @@ let syncBenchmarks = [
         budget: Budget(appleSilicon: 1, oldMac: 3, unit: .seconds)
     ) {
         let library = try scannedLibrary.get()
-        let directory = try defaultFixturesDirectory().deletingLastPathComponent()
-            .appendingPathComponent("bench-launch-sync")
-        if FileManager.default.fileExists(atPath: directory.path) {
-            try FileManager.default.removeItem(at: directory)
-        }
+        let directory = try emptyCacheDirectory("bench-launch-sync")
         let sync = directory.appendingPathComponent("sync")
         try FileManager.default.createDirectory(at: sync, withIntermediateDirectories: true)
         let databaseURL = libraryFileURL(in: directory)

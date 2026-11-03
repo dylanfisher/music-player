@@ -22,10 +22,7 @@ struct ScannedLibrary: @unchecked Sendable {
 let scannedLibrary = Result { () throws -> ScannedLibrary in
     let root = try defaultFixturesDirectory()
     _ = try generateFixtures(count: fullLibraryFileCount, in: root)
-    let directory = root.deletingLastPathComponent().appendingPathComponent("bench-library")
-    if FileManager.default.fileExists(atPath: directory.path) {
-        try FileManager.default.removeItem(at: directory)
-    }
+    let directory = try emptyCacheDirectory("bench-library")
     let databaseURL = libraryFileURL(in: directory)
     let folder = WatchedFolder(path: root.path, kind: .local)
     let before = try footprintMB()
