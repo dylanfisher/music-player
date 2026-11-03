@@ -478,9 +478,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func play(_ request: PlayRequest) {
         guard let engine else { return }
+        guard request.urls.indices.contains(request.first) else {
+            fail("Couldn't play", PlayRequestError.noStart(request.first, of: request.urls.count))
+            return
+        }
+        // Through `play(starting:)`, so the output keeps the device open (ADR 0078).
         Task {
-            await engine.setQueue(request.urls, first: request.first)
-            await engine.play()
+            let filling = await engine.play(starting: request.urls[request.first]) {
+                (request.urls, request.first)
+            }
+            do {
+                try await filling.value
+            } catch {
+                fail("Couldn't play the queue", error)
+            }
         }
     }
 
@@ -800,5 +811,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.informativeText = "\(error)"
         alert.runModal()
         if window == nil { NSApp.terminate(nil) }
+    }
+}
+
+/// A play request whose start isn't one of its tracks.
+enum PlayRequestError: Error, CustomStringConvertible {
+    case noStart(Int, of: Int)
+
+    var description: String {
+        switch self {
+        case .noStart(let first, let count): "track \(first + 1) of \(count) isn't in the queue"
+        }
     }
 }
