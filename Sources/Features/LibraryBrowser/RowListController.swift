@@ -91,8 +91,12 @@ class RowListController: NSViewController {
     @objc private func playClicked() {
         let clicked = table.clickedRow
         guard clicked >= 0 else { return }
+        doubleClicked()
         play(table.selectedRowIndexes, clicked)
     }
+
+    /// A double-click on a row, before it plays: what its first click started can be undone.
+    func doubleClicked() {}
 
     /// Plays the selected rows from the first, or every row when none is selected.
     func playSelected() {

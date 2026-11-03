@@ -41,6 +41,23 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     var selectionChanged: () -> Void = {}
     /// A click in the Rating column: the clicked track and the stars to give it, 0 to clear.
     var rateClicked: (Int64, Int) -> Void = { _, _ in }
+    /// Runs a click's rating once a double-click can no longer follow it.
+    var afterDoubleClickInterval: (@escaping @MainActor () -> Void) -> Void = { rate in
+        Task { @MainActor in
+            do {
+                try await Task.sleep(
+                    nanoseconds: UInt64(NSEvent.doubleClickInterval * 1_000_000_000))
+            } catch {
+                return
+            }
+            rate()
+        }
+    }
+    /// Counts clicks in the Rating column, so a double-click drops its first click's rating.
+    private var ratingClicks = 0
+    /// The ratings clicks set since the rows were last read, which the row cache doesn't hold
+    /// yet, so a second click on the same star clears it.
+    private var ratingsSet: [Int64: Int] = [:]
     /// The file of the track playing, whose row is marked wherever the table shows it.
     var playingPath: String? {
         didSet {
@@ -170,6 +187,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// `change.previousIDs`, so the selection and position are read through those.
     func reload(_ change: BrowserChange) {
         reportedFetchFailure = false
+        ratingsSet = [:]
         let selection = Set(
             table.selectedRowIndexes.compactMap {
                 change.previousIDs.indices.contains($0) ? change.previousIDs[$0] : nil
@@ -458,7 +476,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         rate(at: table.convert(event.locationInWindow, from: nil))
     }
 
-    /// Rates the track at `point`, in the table's coordinates, if it's in the Rating column.
+    /// Rates the track at `point`, in the table's coordinates, if it's in the Rating column,
+    /// unless a double-click follows, which only plays.
     func rate(at point: NSPoint) {
         let row = table.row(at: point)
         let column = table.column(at: point)
@@ -468,12 +487,19 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         else { return }
         let cell = table.frameOfCell(atColumn: column, row: row)
         let starWidth = (stars(1) as NSString).size(withAttributes: [.font: font]).width
-        rateClicked(
-            track.id,
-            RatingClick.stars(
-                at: point.x - cell.minX - TextCell.inset, starWidth: starWidth,
-                current: track.rating))
+        let x = point.x - cell.minX - TextCell.inset
+        ratingClicks += 1
+        let click = ratingClicks
+        afterDoubleClickInterval { [weak self] in
+            guard let self, click == ratingClicks else { return }
+            let rating = RatingClick.stars(
+                at: x, starWidth: starWidth, current: ratingsSet[track.id] ?? track.rating)
+            ratingsSet[track.id] = rating
+            rateClicked(track.id, rating)
+        }
     }
+
+    override func doubleClicked() { ratingClicks += 1 }
 
     private func trackRow(_ index: Int) -> TrackRow? {
         do {

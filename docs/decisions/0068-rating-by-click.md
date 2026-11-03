@@ -16,6 +16,10 @@ column draws a track's stars as text, filled stars only, so an unrated track's c
   does; the rating goes to the clicked track only, not the rest of a selection.
 - **A click left of the first star, or on the last star of the rating the track has, clears
   it.** The empty stars don't show, so there's nothing else to aim at to clear a rating.
+- **A double-click only plays.** A click's rating waits out the system's double-click interval
+  and is dropped if a double-click, or another click in the column, comes first. A second click
+  on the same star before the table reads the rating back clears it, from the rating the first
+  click set, not the one the row cache still holds.
 - **A click with ⌘, ⇧, ⌥ or ⌃ only selects**, so extending a selection over the column never
   rates. The rating is written as Rating ▸ writes it: through the index, synced, and the table
   refreshes.

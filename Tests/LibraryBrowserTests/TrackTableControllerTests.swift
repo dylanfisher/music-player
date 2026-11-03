@@ -699,15 +699,36 @@ private func artTable(artWidth: CGFloat, sortedBy sort: TrackColumn = .album) as
     await model.load(BrowserState(source: nil))
     var rated: [(Int64, Int)] = []
     controller.rateClicked = { rated.append(($0, $1)) }
+    // The ratings wait here for the double-click interval to pass.
+    var waiting: [@MainActor () -> Void] = []
+    controller.afterDoubleClickInterval = { waiting.append($0) }
+    func intervalPasses() {
+        let due = waiting
+        waiting = []
+        for rate in due { rate() }
+    }
     let table = controller.table
     let rating = table.column(withIdentifier: NSUserInterfaceItemIdentifier("rating"))
     let cell = table.frameOfCell(atColumn: rating, row: 2)
     let star = (stars(1) as NSString).size(withAttributes: [.font: RowHeight.regular.font]).width
     // The middle of the fourth star.
-    controller.rate(at: NSPoint(x: cell.minX + TextCell.inset + 3.5 * star, y: cell.midY))
+    let fourth = NSPoint(x: cell.minX + TextCell.inset + 3.5 * star, y: cell.midY)
+    controller.rate(at: fourth)
+    #expect(rated.isEmpty)
+    intervalPasses()
     #expect(rated.map(\.0) == [model.trackIDs[2]])
     #expect(rated.map(\.1) == [4])
+    // A second click on that star, before the table reads the rating back, clears it.
+    controller.rate(at: fourth)
+    intervalPasses()
+    #expect(rated.map(\.1) == [4, 0])
+    // A double-click only plays.
+    controller.rate(at: fourth)
+    controller.doubleClicked()
+    intervalPasses()
+    #expect(rated.count == 2)
     // The title column rates nothing.
     controller.rate(at: NSPoint(x: table.rect(ofColumn: 0).midX, y: cell.midY))
-    #expect(rated.count == 1)
+    intervalPasses()
+    #expect(rated.count == 2)
 }
