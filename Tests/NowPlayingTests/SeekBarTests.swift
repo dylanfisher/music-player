@@ -49,3 +49,17 @@ private func bar() -> (SeekBar, () -> [(Double, Bool)]) {
     #expect(seeks().isEmpty)
     #expect(bar.fraction == 0)
 }
+
+@MainActor @Test func disablingOrLeavingTheWindowLetsGoWithoutSeeking() {
+    let (bar, seeks) = bar()
+    bar.press(atX: 20)
+    bar.drag(toX: 60)
+    bar.isEnabled = false
+    bar.release()
+    bar.isEnabled = true
+    bar.press(atX: 20)
+    bar.drag(toX: 60)
+    bar.viewDidMoveToWindow()
+    bar.release()
+    #expect(seeks().map(\.1) == [true, false, true, false])
+}

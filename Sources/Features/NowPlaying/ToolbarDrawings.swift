@@ -17,9 +17,11 @@ extension NowPlayingBar {
     /// The now-playing status as the customization sheet shows it: art, a title, an artist and
     /// album, and a seek bar part played, at the size the toolbar shows it at its narrowest.
     public static func statusDrawing() -> NSView {
-        let art = NSImageView(
-            image: NSImage(systemSymbolName: "music.quarternote.3", accessibilityDescription: nil)
-                ?? NSImage())
+        guard
+            let note = NSImage(
+                systemSymbolName: "music.quarternote.3", accessibilityDescription: nil)
+        else { preconditionFailure("SF Symbols has no music.quarternote.3") }
+        let art = NSImageView(image: note)
         art.wantsLayer = true
         art.layer?.cornerRadius = 3
         art.layer?.backgroundColor = NSColor.quaternaryLabelColor.cgColor

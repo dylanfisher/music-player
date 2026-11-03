@@ -32,6 +32,8 @@ public final class NowPlayingBar: NSObject {
     private var timer: Timer?
     /// Seeks sent to the engine and not yet done, while which the bars keep the target.
     private var pendingSeeks = 0
+    /// Whether the engine is connected and an output opened.
+    private var connected = false
 
     private let art = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
@@ -39,7 +41,7 @@ public final class NowPlayingBar: NSObject {
     private let formatLabel = NSTextField(labelWithString: "")
     private let elapsedLabel = NSTextField(labelWithString: "")
     private let remainingLabel = NSTextField(labelWithString: "")
-    private let slider = SeekBar()
+    let slider = SeekBar()
     private let previousButton = NSButton()
     private let playButton = NSButton()
     private let nextButton = NSButton()
@@ -173,15 +175,26 @@ public final class NowPlayingBar: NSObject {
         }
     }
 
-    private func setEnabled(_ enabled: Bool) {
+    func setEnabled(_ enabled: Bool) {
+        connected = enabled
         for control in [previousButton, playButton, nextButton] { control.isEnabled = enabled }
-        for bar in [slider, statusBar.seekBar] { bar.isEnabled = enabled }
+        enableSeekBars()
     }
 
-    private func apply(_ update: PlaybackUpdate) {
+    /// The bars seek only in a track of known length, with the engine connected.
+    private func enableSeekBars() {
+        let seekable = connected && (model.state.durationSeconds ?? 0) > 0
+        for bar in [slider, statusBar.seekBar] { bar.isEnabled = seekable }
+    }
+
+    func apply(_ update: PlaybackUpdate) {
         let before = model.currentURL
         model.apply(update)
-        if model.currentURL != before { loadArt() }
+        if model.currentURL != before {
+            loadArt()
+            // A drag over the last track mustn't seek this one.
+            for bar in [slider, statusBar.seekBar] { bar.cancelTracking() }
+        }
         show()
         if model.isPlaying {
             startTimer()
@@ -205,6 +218,7 @@ public final class NowPlayingBar: NSObject {
         playButton.image = NSImage(
             systemSymbolName: playing ? "pause.fill" : "play.fill", accessibilityDescription: title)
         playButton.toolTip = title
+        enableSeekBars()
     }
 
     private func startTimer() {
@@ -221,8 +235,9 @@ public final class NowPlayingBar: NSObject {
 
     private func showPosition() async {
         let position = await engine?.position()
-        showTimes(model.times(positionSeconds: position))
+        // While the pointer holds a bar, the times follow it instead.
         guard pendingSeeks == 0, !slider.isTracking, !statusBar.seekBar.isTracking else { return }
+        showTimes(model.times(positionSeconds: position))
         let fraction =
             if let duration = model.state.durationSeconds, duration > 0, let position {
                 position / duration
@@ -291,7 +306,10 @@ public final class NowPlayingBar: NSObject {
     /// Shows the times at `fraction` and both bars there; `done` seeks the engine, and the bars
     /// hold the target until it has.
     private func seek(to fraction: Double, done: Bool) {
-        guard let engine, let duration = model.state.durationSeconds else { return }
+        guard let engine, let duration = model.state.durationSeconds, duration > 0 else {
+            for bar in [slider, statusBar.seekBar] { bar.fraction = 0 }
+            return
+        }
         let seconds = fraction * duration
         slider.fraction = fraction
         statusBar.seekBar.fraction = fraction

@@ -14,7 +14,10 @@ final class SeekBar: NSView {
         didSet { needsDisplay = true }
     }
     var isEnabled = true {
-        didSet { needsDisplay = true }
+        didSet {
+            if !isEnabled { cancelTracking() }
+            needsDisplay = true
+        }
     }
     /// Called with the fraction under the pointer: `done` is false while a drag goes on, and
     /// true on a click and where a drag ends, where the track should seek to.
@@ -58,6 +61,18 @@ final class SeekBar: NSView {
         moved = true
         fraction = Self.fraction(atX: x, width: bounds.width)
         seek(fraction, false)
+    }
+
+    /// Lets go of the playhead without seeking, as when the track changes under a drag.
+    func cancelTracking() {
+        isTracking = false
+        moved = false
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Taken out of the window mid-drag, it would never see the mouse up.
+        if window == nil { cancelTracking() }
     }
 
     func release() {

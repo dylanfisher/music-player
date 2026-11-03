@@ -8,6 +8,7 @@ import Settings
 public final class StatusBarParts {
     /// The text's size in the minimal style, the track table's.
     static let minimalFontPoints = 11.0
+    static let seekMinimumPoints = 60.0
 
     let art = NSImageView()
     let seekBar = SeekBar()
@@ -31,6 +32,10 @@ public final class StatusBarParts {
         seek = NSStackView(views: [elapsedLabel, seekBar, remainingLabel])
         seek.spacing = 4
         seek.distribution = .fill
+        // The text parts give way first; the bar keeps enough width to aim a click at.
+        seekBar.translatesAutoresizingMaskIntoConstraints = false
+        seekBar.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.seekMinimumPoints)
+            .isActive = true
         art.imageScaling = .scaleProportionallyUpOrDown
         art.wantsLayer = true
         art.layer?.cornerRadius = 2
