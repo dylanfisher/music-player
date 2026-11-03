@@ -1,3 +1,4 @@
+import AppKit
 import Artwork
 import Foundation
 import Metadata
@@ -145,4 +146,33 @@ private func request(_ offset: Int) -> ArtRequest {
     #expect(
         ArtViewer.frame(of: CGSize(width: 4000, height: 1000), in: screen)
             == CGRect(x: 0, y: 257.5, width: 1440, height: 360))
+}
+
+@MainActor @Test func theViewerClosesOnEscOrAClick() throws {
+    let screen = try #require(NSScreen.main)
+    for close in ["esc", "click"] {
+        let viewer = ArtViewer(image: NSImage(size: NSSize(width: 10, height: 10)), screen: screen)
+        var closed = 0
+        viewer.closed = { closed += 1 }
+        viewer.show()
+        #expect(viewer.window.isVisible)
+        let view = try #require(viewer.window.contentView)
+        if close == "esc" {
+            let esc = try #require(
+                NSEvent.keyEvent(
+                    with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                    windowNumber: viewer.window.windowNumber, context: nil, characters: "\u{1b}",
+                    charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+            view.keyDown(with: esc)
+        } else {
+            let click = try #require(
+                NSEvent.mouseEvent(
+                    with: .leftMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+                    windowNumber: viewer.window.windowNumber, context: nil, eventNumber: 0,
+                    clickCount: 1, pressure: 1))
+            view.mouseDown(with: click)
+        }
+        #expect(!viewer.window.isVisible, "\(close)")
+        #expect(closed == 1, "\(close)")
+    }
 }
