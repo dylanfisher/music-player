@@ -760,36 +760,46 @@ private func copies(of album: RampAlbum) throws -> [URL] {
 /// clicked during it should wait.
 @Test func aSeekDuringARefillDoesntWaitForIt() async throws {
     let track = try hiResTrack(in: try defaultPlaybackFixturesDirectory())
+    let blocksRead = BlockCount()
+    var latency = FileLatency(openSeconds: 0, readSeconds: 0.5)
+    latency.blockRead = { blocksRead.add() }
     let output = try DeviceOutput(
         DeviceChoice(provider: NullDevice(speed: 1), digitalVolume: false, gain: 1, formats: nil),
-        fileLatency: FileLatency(openSeconds: 0, readSeconds: 0.3))
+        fileLatency: latency)
     defer { output.close() }
     let engine = PlaybackEngine(output: output)
-    func waitForPlayback(past seconds: Double) async throws {
-        let deadline = Date().addingTimeInterval(20)
-        while Date() < deadline {
-            if let position = await engine.position(), position > seconds, position < seconds + 3 {
+    func waitFor(_ what: String, _ done: () async -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(30)
+        while await !done() {
+            guard Date() < deadline else {
+                Issue.record("timed out waiting for \(what)")
                 return
             }
             try await Task.sleep(nanoseconds: 1_000_000)
         }
-        Issue.record("playback never passed \(seconds) s")
     }
     await engine.setQueue([track])
     await engine.play()
     // The refills so far have read the file a few seconds past this.
-    try await waitForPlayback(past: 9)
+    try await waitFor("playback past 9 s") { await engine.position() ?? 0 > 9 }
+    let before = blocksRead.count
     await engine.seek(toSeconds: 12)
-    // Its refill reads new blocks, to about 20 s.
-    try await Task.sleep(nanoseconds: 20_000_000)
+    // Its refill reads new blocks to about 20 s: once it has read one, it has more to read.
+    try await waitFor("the refill's first new block") { blocksRead.count > before }
     // Off a frame, so the position the output publishes once it has sought differs from the
     // target it reports until then.
     let target = 13 + 0.4 / 192_000
     let start = Date()
     await engine.seek(toSeconds: target)
-    while await engine.position() == target, Date().timeIntervalSince(start) < 20 {
-        try await Task.sleep(nanoseconds: 1_000_000)
-    }
+    try await waitFor("the seek") { await engine.position() != target }
     let waited = Date().timeIntervalSince(start)
-    #expect(waited < 0.5, "the seek was done after \(waited) s")
+    #expect(waited < 0.3, "the seek was done after \(waited) s")
+}
+
+/// Blocks a `FileLatency` read, counted from the decoding thread.
+private final class BlockCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var blocks = 0
+    func add() { lock.withLock { blocks += 1 } }
+    var count: Int { lock.withLock { blocks } }
 }

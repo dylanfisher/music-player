@@ -113,6 +113,9 @@ public struct FileLatency: Sendable {
     public var readSeconds: Double
     /// The largest read macOS's SMB client asks for.
     static let blockBytes: Int64 = 1 << 20
+    /// Called on the decoding thread after each block's wait, so a test can act while a refill
+    /// is reading.
+    var blockRead: @Sendable () -> Void = {}
 
     public init(openSeconds: Double, readSeconds: Double) {
         self.openSeconds = openSeconds
@@ -125,6 +128,7 @@ private final class SlowFile {
     private let descriptor: Int32
     private let size: Int64
     private let readSeconds: Double
+    private let blockRead: @Sendable () -> Void
     private var audioFile: AudioFileID?
     /// The blocks read so far. AudioToolbox calls back on the thread that reads the file.
     private var fetched: Set<Int64> = []
@@ -140,6 +144,7 @@ private final class SlowFile {
         }
         size = Int64(status.st_size)
         readSeconds = latency.readSeconds
+        blockRead = latency.blockRead
     }
 
     /// Opens the file for AudioToolbox, which reads it through this object until `close()`.
@@ -174,6 +179,7 @@ private final class SlowFile {
             position / FileLatency.blockBytes...(position + count - 1) / FileLatency.blockBytes
         for block in blocks where fetched.insert(block).inserted {
             Thread.sleep(forTimeInterval: readSeconds)
+            blockRead()
         }
     }
 
