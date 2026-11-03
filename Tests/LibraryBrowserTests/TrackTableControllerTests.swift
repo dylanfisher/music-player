@@ -89,6 +89,65 @@ import Testing
     #expect(try offCenter() < 1)
 }
 
+@MainActor @Test func typingOrAPaneChangeCentersTheRowItLandsOn() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: true,
+        groupByAlbumArtist: false)
+    let index = try LibraryIndex(at: databaseURL)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
+        layoutChanged: { _ in },
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { try index.rows(ids: $0) },
+        layout: AppState().trackTable.defaultValue, actions: actions)
+    controller.view.frame = NSRect(x: 0, y: 0, width: 800, height: 300)
+    model.changed = { controller.reload($0) }
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    let table = controller.table
+    func offCenter() throws -> CGFloat {
+        let clip = try #require(controller.clip)
+        let row = try #require(table.selectedRowIndexes.first)
+        let visible = clip.bounds.height - clip.contentInsets.top
+        let middle = clip.bounds.minY + clip.contentInsets.top + visible / 2
+        return abs(table.rect(ofRow: row).midY - middle) / table.rowHeight
+    }
+
+    // A title well down the list, far enough from its end to center.
+    let names = try await model.trackNames()
+    let typed = try #require(
+        names.indices.dropFirst(names.count / 2).first { row in
+            let title = names[row].title.lowercased()
+            return title.first?.isLetter == true
+                && TypeSelect.firstIndex(
+                    startingWith: String(title.prefix(3)), in: names.lazy.map(\.title))
+                    == row
+                && row < names.count - 20
+        })
+    table.scrollRowToVisible(0)
+    for character in names[typed].title.lowercased().prefix(3) {
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: 0, context: nil, characters: String(character),
+                charactersIgnoringModifiers: String(character), isARepeat: false, keyCode: 0))
+        #expect(table.takeKey(event))
+    }
+    let deadline = Date().addingTimeInterval(10)
+    while table.selectedRowIndexes != [typed], Date() < deadline {
+        try await Task.sleep(nanoseconds: 20_000_000)
+    }
+    #expect(table.selectedRowIndexes == [typed])
+    #expect(try offCenter() < 1)
+
+    // A change of the panes' grouping lands on the same track, centered.
+    table.scrollRowToVisible(0)
+    await model.setGroupByAlbumArtist(true)
+    #expect(try offCenter() < 1)
+}
+
 @MainActor @Test func theReportedLayoutAlwaysPassesSettingsChecks() throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(

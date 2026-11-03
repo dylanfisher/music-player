@@ -189,7 +189,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         if let anchor {
             restore(anchor, row: model.rows(holding: [anchor.id]).first)
         } else if let first = rows.first {
-            if change.reason == .sorted { center(first) } else { table.scrollRowToVisible(first) }
+            center(first)
         } else if !model.trackIDs.isEmpty {
             table.scrollRowToVisible(0)
         }
@@ -572,7 +572,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         selectionChanged()
     }
 
-    /// Selects the first row whose sort column starts with `query`.
+    /// Selects the first row whose sort column starts with `query`, centered, as Go to Item
+    /// lands on one.
     private func typeToSelect(_ query: String) {
         let column = model.sortColumn
         Task {
@@ -589,13 +590,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
                 NSSound.beep()
                 return
             }
-            move(to: row)
+            selectCentered(row)
         }
-    }
-
-    private func move(to row: Int) {
-        select(ListSelection(rows: [row], cursor: row, anchor: row))
-        table.scrollRowToVisible(row)
     }
 }
 

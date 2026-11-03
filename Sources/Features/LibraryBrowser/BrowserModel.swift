@@ -686,9 +686,9 @@ public struct SourceHistory: Equatable, Sendable {
 public struct BrowserChange: Equatable, Sendable {
     public enum Reason: Equatable, Sendable {
         case loaded
-        /// A search, source or pane change: the table scrolls to its selection.
+        /// A search, source or pane change: the table centers its selection.
         case user
-        /// A new sort: the table scrolls its selection to the middle.
+        /// A new sort: the table centers its selection.
         case sorted
         /// A rescan stored or removed tracks: the table keeps its selection and scroll position.
         case libraryChanged
