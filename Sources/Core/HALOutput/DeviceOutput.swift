@@ -291,12 +291,13 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private func loadTrack(
         _ item: OutputItem, startSeconds: Double, playing: Bool, announcing: Bool = true
     ) {
+        let reused = openTrack(for: item)
         unload()
         self.playing = playing
         let started = uptime()
         let track: Track
         do {
-            track = try Track(item, latency: fileLatency)
+            track = try reused ?? Track(item, latency: fileLatency)
             try refuseUntakeable(track)
         } catch {
             cannotPlay(item, error)
@@ -429,7 +430,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         stream.clearTail()
         segments.append(
             Segment(
-                item: track.item, startByte: startByte,
+                track: track, startByte: startByte,
                 startSeconds: Double(frame) / track.sampleRateHz,
                 durationSeconds: track.durationSeconds, signal: track.signal(into: stream)))
         HALRenderSetDraining(stream.render, false)
@@ -468,13 +469,33 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         return try reusableTrack(for: segments[1].item)
     }
 
-    /// The track being decoded, rewound, when it is `item`; otherwise `item` opened again.
+    /// `item`'s track, rewound, when it's being decoded or still queued; otherwise `item`
+    /// opened again.
     private func reusableTrack(for item: OutputItem) throws -> Track {
-        guard let feeding, feeding.item.id == item.id else {
+        let open = [feeding].compactMap { $0 } + segments.map(\.track)
+        guard let track = open.first(where: { $0.item.id == item.id }) else {
             return try Track(item, latency: fileLatency)
         }
-        try feeding.decoder.seek(toFrame: 0)
-        return feeding
+        try track.decoder.seek(toFrame: 0)
+        return track
+    }
+
+    /// A track already open on `item`'s file, as Next's track is once the engine named it,
+    /// rewound and given `item`; nil when there is none. Opening a file on a NAS costs round
+    /// trips the open one has already paid.
+    private func openTrack(for item: OutputItem) -> Track? {
+        let open =
+            [next, pendingSwitch, feeding].compactMap { $0 } + segments.map(\.track)
+        guard var track = open.first(where: { $0.item.url == item.url }) else { return nil }
+        do {
+            try track.decoder.seek(toFrame: 0)
+        } catch {
+            logger.info("rewinding an open track failed, opening it again: \(error)")
+            return nil
+        }
+        track.item = item
+        track.predecoded = nil
+        return track
     }
 
     private func replaceNext(_ item: OutputItem?) {
@@ -714,7 +735,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                 next.dropChunk()
                 segments.append(
                     Segment(
-                        item: track.item, startByte: 0, startSeconds: 0,
+                        track: track, startByte: 0, startSeconds: 0,
                         durationSeconds: track.durationSeconds, signal: track.signal(into: next)))
                 ahead = predecoded.audio
             } else {
@@ -997,7 +1018,7 @@ func tailDiscardStart(tailStart: UInt64, consumed: UInt64, pairBytes: UInt64) ->
 
 /// A file opened for decoding.
 private struct Track {
-    let item: OutputItem
+    var item: OutputItem
     let decoder: any TrackDecoder
     /// The rate its frames are counted at: the file's, or a DSD file's DoP carrier. The device
     /// runs at it unless the output converts.
@@ -1097,9 +1118,11 @@ private struct Predecoded {
     let audio: Data
 }
 
-/// A track's place in the ring buffer.
+/// A track's place in the ring buffer. It keeps the track's file open, so a seek back into it
+/// after decoding moved on doesn't open the file again, which on a NAS costs a round trip or two.
 private struct Segment {
-    let item: OutputItem
+    let track: Track
+    var item: OutputItem { track.item }
     /// The count of bytes written when its first byte went in.
     let startByte: UInt64
     /// Where in the file it starts, after a seek.

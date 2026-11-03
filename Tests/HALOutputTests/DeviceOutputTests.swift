@@ -570,3 +570,65 @@ private func waitUntil(_ condition: () -> Bool) async throws {
         try await Task.sleep(nanoseconds: 5_000_000)
     }
 }
+
+/// `album`'s tracks copied into a temporary folder, so a test can delete them under the output.
+private func copies(of album: RampAlbum) throws -> [URL] {
+    let folder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("open-tracks-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    return try album.tracks.map { track in
+        let copy = folder.appendingPathComponent(track.lastPathComponent)
+        try FileManager.default.copyItem(at: track, to: copy)
+        return copy
+    }
+}
+
+@Test func nextPlaysTheTrackTheOutputAlreadyOpened() async throws {
+    let album = try album(44_100, 16)
+    let tracks = try copies(of: album)
+    defer { try? FileManager.default.removeItem(at: tracks[0].deletingLastPathComponent()) }
+    let rig = try await Rig(speed: 1)
+    await rig.engine.setQueue(tracks)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    await rig.engine.pause()
+    try await Task.sleep(nanoseconds: 50_000_000)
+    let pulled = rig.device.captured[0].samples.count / 2
+    // Opening the file again would fail now.
+    try FileManager.default.removeItem(at: tracks[1])
+    await rig.engine.next()
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+
+    #expect(!rig.events.contains { if case .trackFailed = $0 { true } else { false } })
+    let second = try #require(
+        contiguousFrames(of: album, from: album.trackFrames[0], in: rig.device.captured[0].samples))
+    #expect(second.start == pulled)
+    #expect(second.count == album.trackFrames[1])
+}
+
+@Test func aSeekAfterDecodingMovedOnUsesTheOpenFile() async throws {
+    let album = try album(44_100, 16)
+    let tracks = try copies(of: album)
+    defer { try? FileManager.default.removeItem(at: tracks[0].deletingLastPathComponent()) }
+    let rig = try await Rig(speed: 1)
+    await rig.engine.setQueue(tracks)
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    // The first track is shorter than the ring buffer, so decoding moved on at once.
+    try await Task.sleep(nanoseconds: 100_000_000)
+    await rig.engine.pause()
+    try await Task.sleep(nanoseconds: 50_000_000)
+    let pulled = rig.device.captured[0].samples.count / 2
+    try FileManager.default.removeItem(at: tracks[0])
+    await rig.engine.seek(toSeconds: 0.5)
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+
+    #expect(!rig.events.contains { if case .trackFailed = $0 { true } else { false } })
+    // From half a second in, through the second track without a gap.
+    let after = try #require(
+        contiguousFrames(of: album, from: 22_050, in: rig.device.captured[0].samples))
+    #expect(after.start == pulled)
+    #expect(after.count == album.totalFrames - 22_050)
+}
