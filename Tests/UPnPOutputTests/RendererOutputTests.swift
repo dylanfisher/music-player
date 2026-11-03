@@ -54,7 +54,8 @@ private let audio: [String: URL] = {
         try! runAfconvert(arguments + [wav.path, url.path])
         files[name] = url
     }
-    let channels = (0..<2).map { dsdTone(samples: 2_822_400, rateHz: 2_822_400, channel: $0) }
+    // One second of DSD64 silence; a tone would take a debug build seconds to make.
+    let channels = [Data](repeating: Data(repeating: 0x69, count: 352_800), count: 2)
     files["dsf"] = folder.appendingPathComponent("tone.dsf", isDirectory: false)
     try! dsfFile(rateHz: 2_822_400, channels: channels).write(to: files["dsf"]!)
     files["dff"] = folder.appendingPathComponent("tone.dff", isDirectory: false)
