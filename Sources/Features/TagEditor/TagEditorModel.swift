@@ -138,21 +138,55 @@ public struct TagEditorModel: Equatable, Sendable {
     }
 }
 
-/// Reads each file's tags and art for the editor, through `read`. A file that can't be read is
-/// reported and left out, so the rest can still be edited.
+/// Reads each file's tags and art for the editor, through `read`, `filesReadAtOnce` at a time,
+/// since on a NAS each file waits on a few round trips. A file that can't be read is reported
+/// and left out, so the rest can still be edited. Both lists keep the order of `paths`.
 package func readEditableTracks(
-    _ paths: [String], read: (String) throws -> EditableTrack = readEditableTrack
+    _ paths: [String], read: @Sendable (String) throws -> EditableTrack = readEditableTrack
 ) -> (tracks: [EditableTrack], problems: [String]) {
+    let results = ReadResults(count: paths.count)
+    DispatchQueue.concurrentPerform(iterations: min(filesReadAtOnce, paths.count)) { _ in
+        while let index = results.claim() {
+            results.store(Result { try read(paths[index]) }, at: index)
+        }
+    }
     var tracks: [EditableTrack] = []
     var problems: [String] = []
-    for path in paths {
-        do {
-            tracks.append(try read(path))
-        } catch {
-            problems.append("\(error)")
+    for result in results.all {
+        switch result {
+        case .success(let track): tracks.append(track)
+        case .failure(let error): problems.append("\(error)")
         }
     }
     return (tracks, problems)
+}
+
+/// The files `readEditableTracks` has handed out, and what each read returned.
+private final class ReadResults: @unchecked Sendable {
+    // Every field is guarded by `lock`.
+    private let lock = NSLock()
+    private var claimed = 0
+    private var results: [Result<EditableTrack, any Error>?]
+
+    init(count: Int) { results = Array(repeating: nil, count: count) }
+
+    /// The next file to read, or nil when every one is taken.
+    func claim() -> Int? {
+        lock.withLock {
+            guard claimed < results.count else { return nil }
+            claimed += 1
+            return claimed - 1
+        }
+    }
+
+    func store(_ result: Result<EditableTrack, any Error>, at index: Int) {
+        lock.withLock { results[index] = result }
+    }
+
+    /// Every file's result, once all are read.
+    var all: [Result<EditableTrack, any Error>] {
+        lock.withLock { results.map { $0! } }
+    }
 }
 
 /// The tags, art and fields holding several values of the file at `path`.

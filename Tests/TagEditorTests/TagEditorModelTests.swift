@@ -90,6 +90,36 @@ private func track(_ name: String, album: String?, number: Int?, art: Data? = ni
     #expect(problems.count == 2)
 }
 
+/// The most reads running at once.
+private final class ReadCount: @unchecked Sendable {
+    // Every field is guarded by `lock`.
+    private let lock = NSLock()
+    private var running = 0
+    private(set) var most = 0
+
+    func read(_ path: String) throws -> EditableTrack {
+        lock.withLock {
+            running += 1
+            most = max(most, running)
+        }
+        defer { lock.withLock { running -= 1 } }
+        // Long enough for every reader to start, as each waits on the NAS.
+        Thread.sleep(forTimeInterval: 0.05)
+        guard !path.hasSuffix("bad") else { throw MetadataError(unreadable: path, detail: "bad") }
+        return track(path, album: nil, number: nil)
+    }
+}
+
+@Test func filesAreReadAFewAtOnceAndKeepTheirOrder() {
+    let paths = (0..<(filesReadAtOnce * 3)).map { $0 == 4 ? "\($0) bad" : "\($0)" }
+    let count = ReadCount()
+    let (tracks, problems) = readEditableTracks(paths) { try count.read($0) }
+    // Several at once, never more than the limit; a busy machine may start fewer.
+    #expect(count.most > 1 && count.most <= filesReadAtOnce, "\(count.most) at once")
+    #expect(tracks.map(\.tags.title) == paths.filter { !$0.hasSuffix("bad") })
+    #expect(problems.count == 1)
+}
+
 @Test func editingAFieldWithSeveralValuesSaysOnlyOneIsKept() {
     var several = track("A", album: "X", number: 1)
     several.multiValued = [.artist]
