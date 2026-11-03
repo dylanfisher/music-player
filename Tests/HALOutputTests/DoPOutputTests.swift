@@ -216,3 +216,26 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
                     + " at 176.4 kHz for DoP")))
     #expect(noHog.device.captured.isEmpty && mixable.device.captured.isEmpty)
 }
+
+/// DoP silence frames after the last frame of `audio` in what the device took.
+private func idleFrames(after audio: [UInt8], in carried: [UInt8]) -> Int {
+    (carried.count - audio.count) / 2
+}
+
+@Test func aRefusedNextTrackAndThenNoneQueueOneTailNotTwo() async throws {
+    let track = try dsdTrack("last", bytes: 70_000, seed: 5)
+    let missing = folder.appendingPathComponent("missing.dsf", isDirectory: false)
+    // Real-time pace, so the drain's timing against the tail is a DAC's.
+    let rig = try await Rig(speed: 1)
+    // The engine names the missing file next, which fails, then names none.
+    await rig.engine.setQueue([track.url, missing])
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+
+    let carried = try unpack(rig.device.captured[0].samples)
+    let tailFrames = Int(176_400 * dopTailSeconds)
+    #expect(rig.events.contains { if case .trackFailed = $0 { true } else { false } })
+    // The device stops a tick or so after the audio, well inside one tail; with a second tail
+    // queued the drain waits out the whole first one.
+    #expect(idleFrames(after: track.expected[0], in: carried[0]) < tailFrames / 2)
+}

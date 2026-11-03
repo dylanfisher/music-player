@@ -951,6 +951,13 @@ func controlTickSeconds(running: Bool, fillDue: Bool) -> Double? {
     return fillDue ? 0.05 : nil
 }
 
+/// After the last DoP track the drain waits out the device's latency once the IO proc has taken
+/// the last byte of audio, notices on a 10 ms control tick, and then stops the device, which takes
+/// a few milliseconds more; the IO proc keeps pulling all the while. A tail of DoP silence this
+/// much longer than the latency covers that with room to spare, and the stop discards what's left
+/// of it.
+let dopTailSeconds = 0.1
+
 /// A file opened for decoding.
 private struct Track {
     let item: OutputItem
@@ -1157,12 +1164,6 @@ private final class RenderStream {
 
     var chunkIsEmpty: Bool { chunkOffset == chunkBytes }
 
-    /// After the last DoP track the drain waits out the device's latency once the IO proc has
-    /// taken the last byte of audio, notices on a 10 ms control tick, and then stops the device,
-    /// which takes a few milliseconds more; the IO proc keeps pulling all the while. A tail
-    /// this much longer than the latency covers that with room to spare, and the stop discards
-    /// what's left of it.
-    static let dopTailSeconds = 0.1
     /// Frames of the DoP tail still to write.
     private(set) var tailFramesLeft = 0
     /// Where the audio before the DoP tail ended, which the drain waits for; nil without one.
@@ -1173,8 +1174,9 @@ private final class RenderStream {
     /// Queues the DoP tail after what's written. It starts on an even frame, as everything in a
     /// DoP stream does, so its markers carry on from the audio's.
     func startTail() {
-        guard dopLayout != nil else { return }
-        let frames = Int(sampleRateHz * (format.latencySeconds + Self.dopTailSeconds))
+        // One already queued stays: a second would move the end the drain waits for past it.
+        guard dopLayout != nil, tailStart == nil else { return }
+        let frames = Int(sampleRateHz * (format.latencySeconds + dopTailSeconds))
         tailFramesLeft = frames + frames % 2
         tailStart = produced
     }
