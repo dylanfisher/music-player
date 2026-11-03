@@ -11,7 +11,7 @@ import Settings
 //   MusicPlayer --play <file or folder>... [--device <part of name>]
 //   MusicPlayer --scan <folder> [--db <file>] [--readers <n>] [--scan-io-hints none|rdahead|all]
 // and the window:
-//   MusicPlayer [--measure-window | --measure-scroll trackpad|scan [--art-delay-ms <ms>]]
+//   MusicPlayer [--measure-window | --measure-scroll trackpad|scan|pages [--art-delay-ms <ms>]]
 //     [--report-launch] [--snapshot <png file> [--snapshot-of <window>]]
 // and in every mode [--home <folder>] [--settings <file>]:
 // --home keeps the config file, library, state file and device record in one folder instead of
@@ -23,8 +23,8 @@ import Settings
 // (SSDP replies, descriptions, status lines) to the folder, for phase 9b to start from.
 // --measure-window prints the launch time and memory as JSON and quits, for Bench.
 // --measure-scroll scrolls the track table in trackpad flicks, the second while hearing a
-// scan's progress, prints each frame's time as JSON and quits, for Bench. --art-delay-ms adds a
-// NAS's latency to each art read.
+// scan's progress, or the third a screenful at a time once each screen's art is in, prints the
+// times as JSON and quits, for Bench. --art-delay-ms adds a NAS's latency to each art read.
 // --report-launch prints "launched" once every watched folder's scan at launch has ended, or the
 // watcher has left it to the index, for Bench to know the app is idle.
 // --snapshot draws the window into a PNG a few seconds after its first rows, to check the layout.

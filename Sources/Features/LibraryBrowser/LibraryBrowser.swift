@@ -363,8 +363,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         let reads = SlowArtReads(delaySeconds: artDelaySeconds)
         table.readArt = reads.read
         let folder = watchedFolders().first?.path ?? ""
+        let paging = scrollCase == .pages
         let measurement = ScrollMeasurement(
-            table: table, intervalSeconds: LibraryWatcher.progressIntervalSeconds
+            table: table, frames: paging ? 0 : ScrollMeasurement.frames,
+            pageDowns: paging ? ScrollMeasurement.pageDowns : 1,
+            intervalSeconds: LibraryWatcher.progressIntervalSeconds
         ) { [weak self] in
             guard scrollCase == .scan else { return }
             self?.libraryChanged(.scanning(folder: folder, ScanProgress()))
@@ -378,7 +381,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         libraryRefreshed = refreshed
         return ScrollReport(
             framesMs: result.framesMs, refreshFramesMs: result.refreshFramesMs,
-            lastCoverMs: result.lastCoverMs, artReads: reads.count)
+            lastCoverMs: result.lastCoverMs, artReads: reads.count,
+            pageCoversMs: result.pageCoversMs)
     }
 
     /// What the watcher reported. Refreshes as rows arrive, at most every

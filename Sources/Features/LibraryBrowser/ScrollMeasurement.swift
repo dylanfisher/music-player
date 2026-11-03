@@ -8,13 +8,15 @@ import Metadata
 /// observer adds up the time the main thread waits, so a frame's busy time is the rest of it:
 /// the scroll, the drawing, and whatever else ran on the main thread, such as art arriving or a
 /// refresh. After the last frame it moves a screenful down, as Page Down does, and times until
-/// that screen's art shows.
+/// that screen's art shows, as many times as it's asked to.
 @MainActor
 final class ScrollMeasurement {
     /// A display's frame.
     static let frameSeconds = 1.0 / 60
     /// Frames scrolled: ten seconds' worth.
     static let frames = 600
+    /// Page downs in the pages case: enough screens to see the art come from where it's kept.
+    static let pageDowns = 30
     /// A flick's first step, which each frame's step then shrinks by `flickDecay`, until a step
     /// under a point starts the next flick. About a hundred rows a flick.
     static let flickPoints: CGFloat = 80
@@ -28,11 +30,16 @@ final class ScrollMeasurement {
         var framesMs: [Double]
         /// The busy time of each frame a refresh landed in.
         var refreshFramesMs: [Double]
-        /// From the page down until its art showed; nil after `coverTimeoutSeconds`.
+        /// From the last page down until its art showed; nil after `coverTimeoutSeconds`.
         var lastCoverMs: Double?
+        /// The same for each page down.
+        var pageCoversMs: [Double]
     }
 
     private let table: TrackTableController
+    private let frames: Int
+    private let pageDowns: Int
+    private var pageCoversMs: [Double] = []
     private let intervalNanos: UInt64
     private let everyInterval: () -> Void
     private var timer: Timer?
@@ -48,12 +55,16 @@ final class ScrollMeasurement {
     private var pagedDownAt: UInt64?
     private var finished: ((Double?) -> Void)?
 
-    /// `everyInterval` runs every `intervalSeconds` while the rows scroll.
+    /// `everyInterval` runs every `intervalSeconds` while the rows scroll. It scrolls `frames`
+    /// frames, then pages down `pageDowns` times.
     init(
-        table: TrackTableController, intervalSeconds: Double,
+        table: TrackTableController, frames: Int, pageDowns: Int, intervalSeconds: Double,
         everyInterval: @escaping () -> Void
     ) {
+        precondition(pageDowns > 0, "a scroll measurement pages down at least once")
         self.table = table
+        self.frames = frames
+        self.pageDowns = pageDowns
         intervalNanos = UInt64(intervalSeconds * 1e9)
         self.everyInterval = everyInterval
     }
@@ -64,7 +75,7 @@ final class ScrollMeasurement {
         refreshFrames.insert(framesMs.count)
     }
 
-    /// Scrolls `frames` frames, then pages down and waits for the art on screen.
+    /// Scrolls the frames, then pages down and waits for the art on screen, each time.
     func run() async -> Result {
         // The top of the list holds the files without tags, and no art.
         table.scroll(toRow: table.table.numberOfRows / 2)
@@ -82,7 +93,7 @@ final class ScrollMeasurement {
             framesMs: framesMs,
             refreshFramesMs: refreshFrames.sorted().filter(framesMs.indices.contains).map {
                 framesMs[$0]
-            }, lastCoverMs: lastCoverMs)
+            }, lastCoverMs: lastCoverMs, pageCoversMs: pageCoversMs)
     }
 
     private func tick() {
@@ -95,6 +106,12 @@ final class ScrollMeasurement {
             let sinceMs = Double(now - pagedDownAt) / 1e6
             let waiting = table.rowsAwaitingArt()
             guard waiting == 0 || sinceMs > Self.coverTimeoutSeconds * 1000 else { return }
+            if waiting == 0 { pageCoversMs.append(sinceMs) }
+            if waiting == 0, pageCoversMs.count < pageDowns {
+                table.pageDown()
+                self.pagedDownAt = DispatchTime.now().uptimeNanoseconds
+                return
+            }
             timer?.invalidate()
             finished?(waiting == 0 ? sinceMs : nil)
             finished = nil
@@ -107,7 +124,7 @@ final class ScrollMeasurement {
             lastInterval = now
             everyInterval()
         }
-        guard framesMs.count < Self.frames, table.scrollFrame(by: step) else {
+        guard framesMs.count < frames, table.scrollFrame(by: step) else {
             table.pageDown()
             pagedDownAt = DispatchTime.now().uptimeNanoseconds
             return

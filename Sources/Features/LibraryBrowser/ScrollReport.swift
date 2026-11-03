@@ -7,6 +7,8 @@ public enum ScrollCase: String, CaseIterable, Sendable {
     case trackpad
     /// The same, while the browser hears a scan's progress and refreshes as during a scan.
     case scan
+    /// No flicks: Page Down a screenful at a time, each once the screen's art has arrived.
+    case pages
 }
 
 /// What `MusicPlayer --measure-scroll` prints as one JSON line and Bench reads (ADR 0073).
@@ -20,18 +22,22 @@ public struct ScrollReport: Codable, Equatable, Sendable {
     public var lastCoverMs: Double?
     /// Art reads from files during the scroll.
     public var artReads: Int
+    /// For each page down, the milliseconds until every row on screen showed its art.
+    public var pageCoversMs: [Double]
 
     public init(
-        framesMs: [Double], refreshFramesMs: [Double], lastCoverMs: Double?, artReads: Int
+        framesMs: [Double], refreshFramesMs: [Double], lastCoverMs: Double?, artReads: Int,
+        pageCoversMs: [Double]
     ) {
         self.framesMs = framesMs
         self.refreshFramesMs = refreshFramesMs
         self.lastCoverMs = lastCoverMs
         self.artReads = artReads
+        self.pageCoversMs = pageCoversMs
     }
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
-        case framesMs, refreshFramesMs, lastCoverMs, artReads
+        case framesMs, refreshFramesMs, lastCoverMs, artReads, pageCoversMs
     }
 
     /// Rejects a key it doesn't know, so a renamed field fails instead of reading as missing.
@@ -42,5 +48,6 @@ public struct ScrollReport: Codable, Equatable, Sendable {
         refreshFramesMs = try container.decode([Double].self, forKey: .refreshFramesMs)
         lastCoverMs = try container.decodeIfPresent(Double.self, forKey: .lastCoverMs)
         artReads = try container.decode(Int.self, forKey: .artReads)
+        pageCoversMs = try container.decode([Double].self, forKey: .pageCoversMs)
     }
 }
