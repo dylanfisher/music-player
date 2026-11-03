@@ -16,7 +16,7 @@ public final class LibraryWatcher: @unchecked Sendable {
     static let fsEventsLatencySeconds = 2.0
     /// How often a running scan reports progress: often enough that rows appear while a long
     /// first scan runs, rarely enough that the window's refreshes cost little.
-    static let progressIntervalSeconds = 1.0
+    public static let progressIntervalSeconds = 1.0
 
     private let scanner: LibraryScanner
     private let mounts: any ShareMounts

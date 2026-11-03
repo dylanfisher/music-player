@@ -125,14 +125,20 @@ private let windowRunTimeoutSeconds = 300.0
 private let windowRuns = Result { () throws -> [WindowReport] in
     let app = try appExecutable()
     return try (0..<windowRunCount).map { _ in
-        try withIndexedHome(showingArt: true) { home in try measureWindow(app, home: home) }
+        try withIndexedHome(artColumnWidth: TrackColumn.art.defaultWidth) { home in
+            try WindowReport.decode(try runMeasuring(app, home: home, ["--measure-window"]))
+        }
     }
 }
 
 /// Runs `body` with a fresh home folder whose settings watch the fixture library and which holds
-/// a copy of its index, then deletes the folder. `showingArt` adds the Album Art column to the
-/// default track table, so scrolling loads a thumbnail for every row with art.
-private func withIndexedHome<T>(showingArt: Bool = false, _ body: (URL) throws -> T) throws -> T {
+/// a copy of its index, then deletes the folder. `artColumnWidth` adds the Album Art column that
+/// wide to the default track table, so scrolling loads a thumbnail for every row with art.
+/// `rowHeight` sets the table's Row Height, and `sortColumn` the column it sorts by.
+func withIndexedHome<T>(
+    artColumnWidth: Double? = nil, rowHeight: RowHeight? = nil, sortColumn: TrackColumn? = nil,
+    _ body: (URL) throws -> T
+) throws -> T {
     let library = try scannedLibrary.get()
     return try withScratchDirectory("window") { directory in
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -143,14 +149,17 @@ private func withIndexedHome<T>(showingArt: Bool = false, _ body: (URL) throws -
                 AppSettings(), fileURL: paths.configFile, check: { _, _, _ in nil },
                 creating: true)
             try settings.set(\.watchedFolders, to: [library.folder])
+            if let rowHeight { try settings.set(\.rowHeight, to: rowHeight) }
         }
         try FileManager.default.copyItem(
             at: library.databaseURL, to: libraryFileURL(in: paths.dataDirectory))
-        if showingArt {
+        if artColumnWidth != nil || sortColumn != nil {
             let state = try StateStore(AppState(), fileURL: paths.stateFile)
             var layout = AppState().trackTable.defaultValue
-            layout.columns.insert(
-                ColumnLayout(column: .art, width: TrackColumn.art.defaultWidth), at: 0)
+            if let artColumnWidth {
+                layout.columns.insert(ColumnLayout(column: .art, width: artColumnWidth), at: 0)
+            }
+            if let sortColumn { layout.sortColumn = sortColumn }
             try state.set(\.trackTable, to: layout)
         }
         return try body(directory)
@@ -242,11 +251,11 @@ private func usage(of pid: pid_t) throws -> (
     )
 }
 
-/// Runs the app with `--measure-window` and reads the JSON line it prints.
-private func measureWindow(_ app: URL, home: URL) throws -> WindowReport {
+/// Runs the app with `arguments`, one of its measurements, and returns the JSON line it prints.
+func runMeasuring(_ app: URL, home: URL, _ arguments: [String]) throws -> Data {
     let process = Process()
     process.executableURL = app
-    process.arguments = ["--home", home.path, "--measure-window"]
+    process.arguments = ["--home", home.path] + arguments
     let output = Pipe()
     process.standardOutput = output
     let finished = DispatchSemaphore(value: 0)
@@ -263,13 +272,13 @@ private func measureWindow(_ app: URL, home: URL) throws -> WindowReport {
         throw BenchError.expected(
             "the app to exit cleanly with a measurement, not status \(process.terminationStatus)")
     }
-    return try WindowReport.decode(Data(line.utf8))
+    return Data(line.utf8)
 }
 
 /// The app beside this Bench: the executable `scripts/bench` builds next to it, else the one in
 /// `MusicPlayer.app`, for a copy of the release bundle. The bare one comes first, since a bundle
 /// beside it can be left from an older build.
-private func appExecutable() throws -> URL {
+func appExecutable() throws -> URL {
     let directory = URL(fileURLWithPath: CommandLine.arguments[0], isDirectory: false)
         .resolvingSymlinksInPath()
         .deletingLastPathComponent()

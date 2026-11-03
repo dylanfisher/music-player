@@ -59,3 +59,26 @@ import Testing
         argumentProblem(["--capture-renderers", "/c", "--snapshot", "/s.png"])
             == "--snapshot is for the window, so it can't go with --capture-renderers")
 }
+
+@Test func aScrollMeasurementNeedsAKnownCaseAndADelayOnlyWithIt() {
+    #expect(argumentProblem(["--measure-scroll", "trackpad", "--art-delay-ms", "43"]) == nil)
+    #expect(argumentProblem(["--measure-scroll"]) == "--measure-scroll needs trackpad, scan")
+    #expect(
+        argumentProblem(["--measure-scroll", "drag"])
+            == "--measure-scroll needs one of trackpad, scan, not drag")
+    #expect(
+        argumentProblem(["--measure-scroll", "scan", "--measure-window"])
+            == "--measure-scroll can't go with --measure-window")
+    #expect(
+        argumentProblem(["--art-delay-ms", "43"])
+            == "--art-delay-ms only goes with --measure-scroll")
+    #expect(
+        argumentProblem(["--measure-scroll", "scan", "--art-delay-ms"])
+            == "--art-delay-ms needs milliseconds")
+    #expect(
+        argumentProblem(["--measure-scroll", "scan", "--art-delay-ms", "-1"])
+            == "--art-delay-ms needs a number of milliseconds, not -1")
+    #expect(
+        argumentProblem(["--measure-scroll", "scan", "--scan", "/m"])
+            == "--measure-scroll is for the window, so it can't go with --scan")
+}

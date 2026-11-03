@@ -5,13 +5,33 @@ import Foundation
 import Library
 import LibraryBrowser
 
+/// What the app measures once the table first draws rows, before it quits.
+enum MeasurementKind {
+    /// `--measure-window`.
+    case window
+    /// `--measure-scroll`, with `--art-delay-ms` added to each art read.
+    case scroll(ScrollCase, artDelaySeconds: Double)
+}
+
 /// `--measure-window`: what Bench's window benchmarks read. Once the table first draws rows it
 /// records the time since the process started and the memory in use, then scrolls through
 /// every row as a scroll-bar drag does, timing each screenful, with album art loaded for each
-/// album, records memory again, prints one JSON line and quits.
+/// album, records memory again, prints one JSON line and quits. `--measure-scroll` prints
+/// `LibraryBrowser.measureScroll`'s report instead (ADR 0073).
 @MainActor
 enum WindowMeasurement {
-    static func run(browser: LibraryBrowser, artwork: ArtworkLoader) {
+    static func run(_ kind: MeasurementKind, browser: LibraryBrowser, artwork: ArtworkLoader) {
+        switch kind {
+        case .window: measureWindow(browser: browser, artwork: artwork)
+        case .scroll(let scrollCase, let artDelaySeconds):
+            Task {
+                printAndQuit(
+                    await browser.measureScroll(scrollCase, artDelaySeconds: artDelaySeconds))
+            }
+        }
+    }
+
+    private static func measureWindow(browser: LibraryBrowser, artwork: ArtworkLoader) {
         let launchSeconds = Date().timeIntervalSince1970 - processStartSeconds()
         let loadedMB = footprintMB()
         var rows = 0
@@ -28,10 +48,15 @@ enum WindowMeasurement {
                 artFailures += 1
             }
         }
-        let report = WindowReport(
-            launchSeconds: launchSeconds, loadedMB: loadedMB, scrolledMB: footprintMB(),
-            scrollStepsMs: scrollStepsMs, rows: rows, artImages: artImages, artFailures: artFailures
-        )
+        printAndQuit(
+            WindowReport(
+                launchSeconds: launchSeconds, loadedMB: loadedMB, scrolledMB: footprintMB(),
+                scrollStepsMs: scrollStepsMs, rows: rows, artImages: artImages,
+                artFailures: artFailures))
+    }
+
+    /// Prints `report` as one JSON line, which Bench reads, and quits.
+    private static func printAndQuit(_ report: some Encodable) {
         do {
             FileHandle.standardOutput.write(try JSONEncoder().encode(report) + Data("\n".utf8))
         } catch {

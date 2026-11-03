@@ -54,9 +54,9 @@ final class RowArt {
     var isWanted: (ArtworkKey) -> Bool = { _ in false }
     var loaded: (ArtworkKey, CGImage) -> Void = { _, _ in }
 
-    /// Images at most `pixels` on their longer side.
-    init(pixels: Int) {
-        loader = ArtworkLoader(maxPixelSize: pixels, capacity: Self.cachedImages)
+    /// Images at most `pixels` on their longer side, read by `read`.
+    init(pixels: Int, read: @escaping ArtRead) {
+        loader = ArtworkLoader(maxPixelSize: pixels, capacity: Self.cachedImages, read: read)
     }
 
     /// The pixels art needs to be sharp on a retina screen in a column `width` points wide,
@@ -66,6 +66,9 @@ final class RowArt {
         while pixels < Int((width * 2).rounded(.up)), pixels < largestPixels { pixels *= 2 }
         return pixels
     }
+
+    /// Whether the art `key` names failed to load, so it isn't asked for again.
+    func hasFailed(_ key: ArtworkKey) -> Bool { failed.contains(key) }
 
     /// The cached image, or nil after asking for it to be loaded.
     func image(_ art: EmbeddedArt, path: String) -> CGImage? {

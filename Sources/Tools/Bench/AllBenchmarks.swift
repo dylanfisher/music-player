@@ -4,6 +4,7 @@ let benchmarks =
     settingsBenchmarks + fixtureBenchmarks + metadataBenchmarks + libraryBenchmarks
     + moveBenchmarks + syncBenchmarks
     + healthBenchmarks + playlistBenchmarks + historyBenchmarks + windowBenchmarks
+    + scrollBenchmarks + queueBenchmarks
     + paletteBenchmarks
     + playbackBenchmarks + playLatencyBenchmarks
     + tagWriterBenchmarks

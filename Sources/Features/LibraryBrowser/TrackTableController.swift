@@ -31,6 +31,13 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// The text cells' font, which follows the row height.
     private var font = RowHeight.regular.font
     private var art: RowArt
+    /// How the Album Art column reads art from a file, which the scroll measurement replaces.
+    var readArt: ArtRead = readArtBytes {
+        didSet {
+            art = RowArt(pixels: art.loader.maxPixelSize, read: readArt)
+            follow(art)
+        }
+    }
     /// The art of the album under the pointer, whole and at the column's width, over the rows.
     let artHover = ArtHover()
     /// The art opened by a click on `artHover`, while it's open.
@@ -75,7 +82,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         art = RowArt(
             pixels: RowArt.pixels(
                 columnWidth: layout.columns.first { $0.column == .art }?.width
-                    ?? TrackColumn.art.defaultWidth))
+                    ?? TrackColumn.art.defaultWidth), read: readArtBytes)
         super.init(play: actions.play, playNext: actions.playNext)
         configure(layout)
         follow(art)
@@ -256,6 +263,42 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         return steps
     }
 
+    /// Puts `row` at the top and draws it.
+    func scroll(toRow row: Int) {
+        guard let clip, model.trackIDs.indices.contains(row) else { return }
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: table.rect(ofRow: row).minY))
+        table.enclosingScrollView?.reflectScrolledClipView(clip)
+        table.window?.displayIfNeeded()
+    }
+
+    /// Moves a screenful down the list, as Page Down does, and draws it.
+    func pageDown() { scroll(toRow: max(0, visibleRows().upperBound - 1)) }
+
+    /// Moves the rows `points` down the list, as one frame of a trackpad scroll does, and draws
+    /// them. False once the list's end is on screen.
+    func scrollFrame(by points: CGFloat) -> Bool {
+        guard let clip, let scrollView = table.enclosingScrollView else { return false }
+        let bottom = table.bounds.height - clip.bounds.height
+        guard clip.bounds.minY < bottom else { return false }
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: min(clip.bounds.minY + points, bottom)))
+        scrollView.reflectScrolledClipView(clip)
+        table.window?.displayIfNeeded()
+        CATransaction.flush()
+        return true
+    }
+
+    /// How many rows on screen should show art and don't yet: their art is neither drawn nor
+    /// known to be unreadable.
+    func rowsAwaitingArt() -> Int {
+        let column = table.column(withIdentifier: columnIdentifier(.art))
+        guard column >= 0 else { return 0 }
+        return visibleRows().filter { row in
+            guard let key = artKey(row), !art.hasFailed(key) else { return false }
+            let cell = table.view(atColumn: column, row: row, makeIfNecessary: false)
+            return (cell as? AlbumArtCell)?.art == nil
+        }.count
+    }
+
     // MARK: Data source and delegate
 
     func numberOfRows(in tableView: NSTableView) -> Int { model.trackIDs.count }
@@ -372,7 +415,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         hideArtHover()
         let pixels = RowArt.pixels(columnWidth: table.tableColumns[column].width)
         if pixels != art.loader.maxPixelSize {
-            art = RowArt(pixels: pixels)
+            art = RowArt(pixels: pixels, read: readArt)
             follow(art)
         }
         table.enumerateAvailableRowViews { rowView, row in

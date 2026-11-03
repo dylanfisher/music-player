@@ -21,6 +21,8 @@ public struct ScanProgress: Equatable, Sendable {
     /// or the volume holds it back.
     public var load = Load()
 
+    public init() {}
+
     /// What the scan's threads are doing at one moment.
     public struct Load: Equatable, Sendable {
         /// Files read at once: the level the scan has set, fixed or tuned.

@@ -89,6 +89,22 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
     }
 }
 
+@Test func aScrollReportRoundTripsAndRejectsUnknownKeys() throws {
+    for lastCoverMs in [120, nil] as [Double?] {
+        let report = ScrollReport(
+            framesMs: [2.5, 3], refreshFramesMs: [3], lastCoverMs: lastCoverMs, artReads: 4)
+        #expect(
+            try JSONDecoder().decode(ScrollReport.self, from: try JSONEncoder().encode(report))
+                == report)
+    }
+    #expect(throws: DecodingError.self) {
+        try JSONDecoder().decode(
+            ScrollReport.self,
+            from: Data(#"{"framesMs": [1], "refreshFramesMs": [], "artReads": 1, "extra": 1}"#.utf8)
+        )
+    }
+}
+
 @Test func aHealthCheckCountsWhatTheTableCantListAndListsIt() {
     var status = LibraryStatus()
     status.healthProblems = [Problem("/M/bad.flac: failure malformed: no header")]

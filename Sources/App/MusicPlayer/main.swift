@@ -1,6 +1,7 @@
 import AppKit
 import HALOutput
 import Library
+import LibraryBrowser
 import Metadata
 import Settings
 
@@ -10,7 +11,8 @@ import Settings
 //   MusicPlayer --play <file or folder>... [--device <part of name>]
 //   MusicPlayer --scan <folder> [--db <file>] [--readers <n>] [--scan-io-hints none|rdahead|all]
 // and the window:
-//   MusicPlayer [--measure-window] [--report-launch] [--snapshot <png file> [--snapshot-of <window>]]
+//   MusicPlayer [--measure-window | --measure-scroll trackpad|scan [--art-delay-ms <ms>]]
+//     [--report-launch] [--snapshot <png file> [--snapshot-of <window>]]
 // and in every mode [--home <folder>] [--settings <file>]:
 // --home keeps the config file, library, state file and device record in one folder instead of
 // ~/.config/music-player and Application Support, for tests and runs on the build Mac.
@@ -20,6 +22,9 @@ import Settings
 // --capture-renderers writes what the UPnP renderers and the Denon receiver on the network send
 // (SSDP replies, descriptions, status lines) to the folder, for phase 9b to start from.
 // --measure-window prints the launch time and memory as JSON and quits, for Bench.
+// --measure-scroll scrolls the track table in trackpad flicks, the second while hearing a
+// scan's progress, prints each frame's time as JSON and quits, for Bench. --art-delay-ms adds a
+// NAS's latency to each art read.
 // --report-launch prints "launched" once every watched folder's scan at launch has ended, or the
 // watcher has left it to the index, for Bench to know the app is idle.
 // --snapshot draws the window into a PNG a few seconds after its first rows, to check the layout.
@@ -119,9 +124,20 @@ do {
     printError(error)
     exit(1)
 }
+let measurement: MeasurementKind? =
+    if given(.measureWindow) {
+        .window
+    } else if let text = value(after: .measureScroll), let scrollCase = ScrollCase(rawValue: text) {
+        .scroll(
+            scrollCase,
+            artDelaySeconds: value(after: .artDelayMs).flatMap(artDelaySeconds) ?? 0)
+    } else {
+        nil
+    }
+
 let app = NSApplication.shared
 let delegate = AppDelegate(
-    paths: launchPaths, measuring: given(.measureWindow), reportingLaunch: given(.reportLaunch),
+    paths: launchPaths, measuring: measurement, reportingLaunch: given(.reportLaunch),
     snapshotURL: value(after: .snapshot).map { URL(fileURLWithPath: $0, isDirectory: false) },
     snapshotOf: snapshotTarget)
 app.delegate = delegate

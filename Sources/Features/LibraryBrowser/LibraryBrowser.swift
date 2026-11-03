@@ -353,6 +353,34 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         table.scrollThroughEveryRow(visit)
     }
 
+    /// Scrolls the track table in trackpad flicks, timing each frame, then pages down and waits
+    /// for the art on screen (ADR 0073). Each art read waits `artDelaySeconds` first, as on a NAS. `.scan` also
+    /// reports a scan's progress as often as the watcher does, so the browser refreshes as it
+    /// does during a scan.
+    public func measureScroll(_ scrollCase: ScrollCase, artDelaySeconds: Double) async
+        -> ScrollReport
+    {
+        let reads = SlowArtReads(delaySeconds: artDelaySeconds)
+        table.readArt = reads.read
+        let folder = watchedFolders().first?.path ?? ""
+        let measurement = ScrollMeasurement(
+            table: table, intervalSeconds: LibraryWatcher.progressIntervalSeconds
+        ) { [weak self] in
+            guard scrollCase == .scan else { return }
+            self?.libraryChanged(.scanning(folder: folder, ScanProgress()))
+        }
+        let refreshed = libraryRefreshed
+        libraryRefreshed = { [weak measurement] in
+            measurement?.refreshed()
+            refreshed()
+        }
+        let result = await measurement.run()
+        libraryRefreshed = refreshed
+        return ScrollReport(
+            framesMs: result.framesMs, refreshFramesMs: result.refreshFramesMs,
+            lastCoverMs: result.lastCoverMs, artReads: reads.count)
+    }
+
     /// What the watcher reported. Refreshes as rows arrive, at most every
     /// `refreshIntervalSeconds` during a scan and at once when one ends.
     func libraryChanged(_ event: WatcherEvent) {

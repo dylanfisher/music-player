@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let systemArtCacheImages = 2
 
     let paths: AppPaths
-    private let measuring: Bool
+    private let measuring: MeasurementKind?
     private let reportingLaunch: Bool
     private let snapshotURL: URL?
     private let snapshotOf: SnapshotTarget
@@ -122,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `reportingLaunch` prints a line once the first scan of each watched folder has ended.
     /// `snapshotURL` gets a PNG of the window a few seconds after that.
     init(
-        paths: AppPaths, measuring: Bool, reportingLaunch: Bool, snapshotURL: URL?,
+        paths: AppPaths, measuring: MeasurementKind?, reportingLaunch: Bool, snapshotURL: URL?,
         snapshotOf: SnapshotTarget
     ) {
         self.snapshotOf = snapshotOf
@@ -305,10 +305,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 [weak self] in self?.snapshot(to: snapshotURL)
             }
         }
-        if measuring, let browser {
+        if let measuring, let browser {
             // After this turn of the run loop, so the first frame is counted as drawn.
             DispatchQueue.main.async { [artwork] in
-                WindowMeasurement.run(browser: browser, artwork: artwork)
+                WindowMeasurement.run(measuring, browser: browser, artwork: artwork)
             }
         }
     }

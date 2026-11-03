@@ -38,11 +38,16 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
                 guard let self else { return }
                 // Only queue changes and track changes move rows or the marker.
                 guard update.event.map(Self.concernsQueue) ?? true else { continue }
-                self.model.apply(update.state)
-                self.table.reloadData()
-                self.summary.stringValue = self.model.summary
+                self.show(update.state)
             }
         }
+    }
+
+    /// Lists `state`'s queue from its current track on.
+    public func show(_ state: PlaybackState) {
+        model.apply(state)
+        table.reloadData()
+        summary.stringValue = model.summary
     }
 
     /// A rescan may have changed the queued tracks' tags.

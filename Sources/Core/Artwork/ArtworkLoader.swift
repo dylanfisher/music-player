@@ -12,15 +12,19 @@ public final class ArtworkLoader: @unchecked Sendable {
     public let maxPixelSize: Int
     /// The most thumbnails kept. The least recently used goes first.
     public let capacity: Int
+    private let read: ArtRead
     private let lock = NSLock()
     private var images: [ArtworkKey: CGImage] = [:]
     /// Least recently used first.
     private var recency: [ArtworkKey] = []
 
-    public init(maxPixelSize: Int, capacity: Int) {
+    /// `read` reads the art's bytes from its file; the scroll measurement wraps it to add a
+    /// NAS's latency.
+    public init(maxPixelSize: Int, capacity: Int, read: @escaping ArtRead = readArtBytes) {
         precondition(maxPixelSize > 0 && capacity > 0, "an art cache needs a size and a capacity")
         self.maxPixelSize = maxPixelSize
         self.capacity = capacity
+        self.read = read
     }
 
     /// The thumbnail if it's cached.
@@ -39,7 +43,7 @@ public final class ArtworkLoader: @unchecked Sendable {
         if let image = cached(key) { return image }
         let bytes: Data
         do {
-            bytes = try readArt(art, at: URL(fileURLWithPath: path, isDirectory: false))
+            bytes = try read(art, path)
         } catch {
             throw ArtworkError.unreadable(path: path, reason: "\(error)")
         }
@@ -63,6 +67,14 @@ public final class ArtworkLoader: @unchecked Sendable {
         recency.remove(at: index)
         recency.append(key)
     }
+}
+
+/// Reads the bytes of `art` from the file at a path.
+public typealias ArtRead = @Sendable (EmbeddedArt, String) throws -> Data
+
+/// The bytes of `art` in the file at `path`.
+public func readArtBytes(_ art: EmbeddedArt, path: String) throws -> Data {
+    try readArt(art, at: URL(fileURLWithPath: path, isDirectory: false))
 }
 
 /// `bytes` decoded straight to an image whose longest side is at most `maxPixelSize`, or nil

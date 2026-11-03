@@ -234,7 +234,7 @@ let libraryBenchmarks = [
 ]
 
 /// A NAS the network scan benchmarks simulate, and how many fixture files they scan on it.
-private struct SimulatedProfile {
+struct SimulatedProfile {
     var operationSeconds: Double
     var listingSeconds: Double
     var capacity: Int
@@ -249,7 +249,7 @@ private let fastNAS = SimulatedProfile(
 /// operations and half a disk delay with a long tail, and 16 in flight read about 16x as fast
 /// as one; listing a directory costs about 45 ms. Fixture albums hold about ten files each,
 /// under a folder per artist.
-private let slowNAS = SimulatedProfile(
+let slowNAS = SimulatedProfile(
     operationSeconds: 0.010, listingSeconds: 0.045, capacity: 24,
     fileDelay: SimulatedNAS.FileDelay(medianSeconds: 0.013, sigma: 1.3), fileCount: 2000)
 /// The fixed levels the slow NAS's tuned scan is held against, and the share of the best one's
