@@ -2932,6 +2932,13 @@ and the panel says "downmixed 6→2 channels". A narrower integer output is dith
 AudioConverter doesn't do by default. Replacing a queued next track keeps the current track's
 last frames, and no start is decoded ahead into a converted switch. New benches: converted
 playback 0.56% of a core, the converted join 0 samples off, at most 2.2e-5 from the sine.
+After the second review: the decoder reads the channel layout each file states and hands the
+channels on in the WAV order, so an ALAC or AAC 5.1 file's centre reaches both sides; a file
+that names none is mixed in the default order and the panel says "channel order assumed". Only
+stereo and mono get a downmix (8→6 is refused by name), the 44.1 kHz floor outranks depth and
+channels, a lossy track's precision follows the verdict, and a downmix has a fixed -4.6 dB
+headroom, clipping at an integer output. Benches: converted playback 0.59% of a core, the
+converted join 0 samples off, at most 2.2e-5 from the sine.
 
 ### 32. Speed hardening
 
