@@ -202,8 +202,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let signalPath = SignalPathPanel()
         let toolbar = MainToolbar(
             identifier: String(describing: MainWindow.self), transport: nowPlaying.transport,
-            status: nowPlaying.status, centeredStatus: nowPlaying.centeredStatus,
-            search: browser.searchField, dispatcher: dispatcher, items: state[\.toolbarItems])
+            status: nowPlaying.status, search: browser.searchField, dispatcher: dispatcher,
+            items: state[\.toolbarItems])
         toolbar.itemsChanged = { items in
             saver.set(\.toolbarItems, items)
             if !items.contains(.search) { browser.clearSearch() }
@@ -266,6 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         browser.keyCommand = keyCommand
         queue.keyCommand = keyCommand
+        applyStatusBar(layout.statusBar)
         if !layout.statusBarVisible { browser.toggleStatusBar() }
         browser.statusTotals = layout.statusTotals
         browser.statusTotalsChanged = { saver.set(\.statusTotals, $0) }

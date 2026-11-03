@@ -70,6 +70,12 @@ public struct AppSettings: SettingsSchema {
     public let artSize = Setting(
         "appearance.artSize", title: "Album Art", default: ArtSize.fit,
         "Art scaled to its album's rows, or always the column's width.")
+    public let statusBarStyle = Setting(
+        "appearance.statusBarStyle", title: "Status Bar", default: StatusBarStyle.minimal,
+        "One line at the header's height, or two with larger art.")
+    public let statusBarParts = Setting(
+        "appearance.statusBarParts", title: "Status Bar Items", parts: [StatusPart.totals],
+        "What the status bar shows, left to right; drag to reorder.")
 
     public func conflicts(_ values: [String: any SettingValue]) -> [SettingConflict] {
         guard let sync = values[syncFolder.key] as? SyncFolder,

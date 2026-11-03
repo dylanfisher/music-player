@@ -72,17 +72,6 @@ public final class NowPlayingModel {
         [track?.artist, track?.album].compactMap { $0 }.joined(separator: " — ")
     }
 
-    /// "Title by Artist from Album", with whichever the tags have, for the centered status.
-    var byline: String {
-        title + (track?.artist.map { " by \($0)" } ?? "")
-            + (track?.album.map { " from \($0)" } ?? "")
-    }
-
-    /// The track's length, as "4:19", or empty when nothing is loaded.
-    var totalTime: String {
-        state.durationSeconds.map(clock) ?? ""
-    }
-
     /// "96 kHz 24-bit FLAC → ADI-2 DAC: 'lpcm' 2 ch 32-bit int @ 96 kHz, non-mixable, hog mode":
     /// the file's format, then what the output is running, once it says.
     var formatLine: String {

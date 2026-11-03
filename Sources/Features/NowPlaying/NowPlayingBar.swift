@@ -9,8 +9,8 @@ import Settings
 private let logger = moduleLogger()
 
 /// The toolbar's playback items: the transport buttons, and the now-playing status with the
-/// current track, its times, a seek bar and the output format, in two styles, each a toolbar
-/// item of its own. It reads the engine's updates and sends it the buttons; the model decides
+/// current track, its times, a seek bar and the output format; and the playing track's parts of
+/// the status bar. It reads the engine's updates and sends it the buttons; the model decides
 /// what to show.
 @MainActor
 public final class NowPlayingBar: NSObject {
@@ -18,17 +18,14 @@ public final class NowPlayingBar: NSObject {
     static let positionIntervalSeconds = 0.5
     /// The art's size in points.
     public static let artPoints = 48.0
-    /// The height of the centered style's capsule, in points.
-    static let capsulePoints = 18.0
 
     public let model: NowPlayingModel
     /// The previous, play and next buttons.
     public let transport: NSView
     /// Art, title, artist and album, the format line, and a seek bar with times.
     public let status = NSView()
-    /// "Title by Artist from Album" centered in bold, over a capsule with the elapsed time, a
-    /// thin progress bar and the total time, as Swinsian's header draws it.
-    public let centeredStatus = NSView()
+    /// The status bar's art, track, format and seek bar.
+    public let statusBar = StatusBarParts()
     private let artwork: ArtworkLoader
     private var engine: PlaybackEngine?
     private var updates: Task<Void, Never>?
@@ -47,11 +44,6 @@ public final class NowPlayingBar: NSObject {
     private let playButton = NSButton()
     private let nextButton = NSButton()
     private let detailed = NSStackView()
-    private let centered = NSStackView()
-    private let bylineLabel = NSTextField(labelWithString: "")
-    private let centeredElapsedLabel = NSTextField(labelWithString: "")
-    private let totalLabel = NSTextField(labelWithString: "")
-    private let progress = SeekBar()
 
     public init(model: NowPlayingModel, artwork: ArtworkLoader) {
         self.model = model
@@ -60,37 +52,34 @@ public final class NowPlayingBar: NSObject {
         transport.spacing = 4
         self.transport = transport
         super.init()
-        setUp(previousButton, symbol: "backward.fill", label: "Previous", #selector(previous))
-        setUp(
-            playButton, symbol: "play.fill", label: AppCommands.title(of: .play),
-            #selector(playPause))
-        setUp(nextButton, symbol: "forward.fill", label: "Next", #selector(next))
-        for label in [elapsedLabel, remainingLabel, centeredElapsedLabel, totalLabel] {
+        for (button, action) in [
+            (previousButton, #selector(previous)), (playButton, #selector(playPause)),
+            (nextButton, #selector(next)),
+        ] {
+            button.target = self
+            button.action = action
+        }
+        Self.setUpTransport(previousButton, playButton, nextButton)
+        for label in [elapsedLabel, remainingLabel] {
             label.font = .monospacedDigitSystemFont(
                 ofSize: NSFont.smallSystemFontSize, weight: .regular)
             label.textColor = .secondaryLabelColor
-            label.alignment = [elapsedLabel, centeredElapsedLabel].contains(label) ? .right : .left
+            label.alignment = label == elapsedLabel ? .right : .left
             label.translatesAutoresizingMaskIntoConstraints = false
             label.widthAnchor.constraint(equalToConstant: 52).isActive = true
         }
-        for bar in [slider, progress] {
+        for bar in [slider, statusBar.seekBar] {
             bar.seek = { [weak self] fraction, done in self?.seek(to: fraction, done: done) }
         }
         buildDetailed()
-        buildCentered()
-        for (layout, item) in [(detailed, status), (centered, centeredStatus)] {
-            layout.translatesAutoresizingMaskIntoConstraints = false
-            item.addSubview(layout)
-            NSLayoutConstraint.activate([
-                layout.leadingAnchor.constraint(equalTo: item.leadingAnchor),
-                layout.trailingAnchor.constraint(equalTo: item.trailingAnchor),
-                layout.centerYAnchor.constraint(equalTo: item.centerYAnchor),
-            ])
-        }
-        detailed.heightAnchor.constraint(equalTo: status.heightAnchor).isActive = true
-        // As tall as the art, the detailed layout's tallest view, so the toolbar keeps its
-        // height whichever style it holds.
-        centeredStatus.heightAnchor.constraint(equalToConstant: Self.artPoints).isActive = true
+        detailed.translatesAutoresizingMaskIntoConstraints = false
+        status.addSubview(detailed)
+        NSLayoutConstraint.activate([
+            detailed.leadingAnchor.constraint(equalTo: status.leadingAnchor),
+            detailed.trailingAnchor.constraint(equalTo: status.trailingAnchor),
+            detailed.centerYAnchor.constraint(equalTo: status.centerYAnchor),
+            detailed.heightAnchor.constraint(equalTo: status.heightAnchor),
+        ])
         setEnabled(false)
         show()
     }
@@ -119,6 +108,7 @@ public final class NowPlayingBar: NSObject {
         setEnabled(false)
         formatLabel.stringValue = reason
         formatLabel.textColor = .systemRed
+        statusBar.show(format: reason, color: .systemRed)
     }
 
     /// Art, then the title, the artist and album, and the format line over the seek bar.
@@ -170,46 +160,22 @@ public final class NowPlayingBar: NSObject {
         art.setContentHuggingPriority(.required, for: .horizontal)
     }
 
-    /// The byline centered in bold, over a capsule with the elapsed time, a thin bar and the
-    /// total time. No art.
-    private func buildCentered() {
-        bylineLabel.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
-        bylineLabel.alignment = .center
-        bylineLabel.lineBreakMode = .byTruncatingTail
-        bylineLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let times = NSStackView(views: [centeredElapsedLabel, progress, totalLabel])
-        times.spacing = 6
-        times.edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
-        let capsule = NSBox()
-        capsule.boxType = .custom
-        capsule.borderWidth = 0
-        capsule.fillColor = .quaternaryLabelColor
-        capsule.cornerRadius = Self.capsulePoints / 2
-        capsule.contentViewMargins = .zero
-        capsule.contentView = times
-        capsule.translatesAutoresizingMaskIntoConstraints = false
-        capsule.heightAnchor.constraint(equalToConstant: Self.capsulePoints).isActive = true
-        centered.setViews([bylineLabel, capsule], in: .center)
-        centered.orientation = .vertical
-        centered.alignment = .centerX
-        centered.spacing = 3
-        for view in [bylineLabel, capsule] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            view.widthAnchor.constraint(equalTo: centered.widthAnchor).isActive = true
+    /// Gives the previous, play and next buttons their look, for the bar and for the drawing
+    /// the toolbar's customization sheet shows.
+    static func setUpTransport(_ previous: NSButton, _ play: NSButton, _ next: NSButton) {
+        for (button, symbol, label) in [
+            (previous, "backward.fill", "Previous"),
+            (play, "play.fill", AppCommands.title(of: .play)), (next, "forward.fill", "Next"),
+        ] {
+            button.bezelStyle = .texturedRounded
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+            button.toolTip = label
         }
-    }
-
-    private func setUp(_ button: NSButton, symbol: String, label: String, _ action: Selector) {
-        button.bezelStyle = .texturedRounded
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
-        button.toolTip = label
-        button.target = self
-        button.action = action
     }
 
     private func setEnabled(_ enabled: Bool) {
         for control in [previousButton, playButton, nextButton] { control.isEnabled = enabled }
-        for bar in [slider, progress] { bar.isEnabled = enabled }
+        for bar in [slider, statusBar.seekBar] { bar.isEnabled = enabled }
     }
 
     private func apply(_ update: PlaybackUpdate) {
@@ -229,12 +195,11 @@ public final class NowPlayingBar: NSObject {
     private func show() {
         titleLabel.stringValue = model.title
         subtitleLabel.stringValue = model.subtitle
-        bylineLabel.stringValue = model.byline
-        bylineLabel.toolTip = model.byline
-        totalLabel.stringValue = model.totalTime
         formatLabel.stringValue = model.message ?? model.formatLine
         formatLabel.textColor = model.message == nil ? .secondaryLabelColor : .systemOrange
         formatLabel.toolTip = formatLabel.stringValue
+        statusBar.show(title: model.title, subtitle: model.subtitle)
+        statusBar.show(format: formatLabel.stringValue, color: formatLabel.textColor ?? .labelColor)
         let playing = model.isPlaying
         let title = AppCommands.title(of: playing ? .pause : .play)
         playButton.image = NSImage(
@@ -257,7 +222,7 @@ public final class NowPlayingBar: NSObject {
     private func showPosition() async {
         let position = await engine?.position()
         showTimes(model.times(positionSeconds: position))
-        guard pendingSeeks == 0, !slider.isTracking, !progress.isTracking else { return }
+        guard pendingSeeks == 0, !slider.isTracking, !statusBar.seekBar.isTracking else { return }
         let fraction =
             if let duration = model.state.durationSeconds, duration > 0, let position {
                 position / duration
@@ -265,22 +230,21 @@ public final class NowPlayingBar: NSObject {
                 0.0
             }
         slider.fraction = fraction
-        progress.fraction = fraction
+        statusBar.seekBar.fraction = fraction
     }
 
     private func showTimes(_ times: (elapsed: String, remaining: String)) {
         elapsedLabel.stringValue = times.elapsed
         remainingLabel.stringValue = times.remaining
-        centeredElapsedLabel.stringValue = times.elapsed
+        statusBar.showTimes(elapsed: times.elapsed, remaining: times.remaining)
     }
 
     private func loadArt() {
-        art.image = nil
-        art.toolTip = nil
+        showArt(nil)
         guard let track = model.track, let embedded = track.art else { return }
         let key = ArtworkKey(path: track.path, offset: embedded.offset)
         if let image = artwork.cached(key) {
-            art.image = NSImage(cgImage: image, size: .zero)
+            showArt(NSImage(cgImage: image, size: .zero))
             return
         }
         let artwork = artwork
@@ -292,11 +256,18 @@ public final class NowPlayingBar: NSObject {
             .value
             guard self.model.currentURL == url else { return }
             switch result {
-            case .success(let image): self.art.image = NSImage(cgImage: image, size: .zero)
+            case .success(let image): self.showArt(NSImage(cgImage: image, size: .zero))
             case .failure(let error):
                 logger.error("\(error)")
-                self.art.toolTip = "\(error)"
+                self.showArt(nil, toolTip: "\(error)")
             }
+        }
+    }
+
+    private func showArt(_ image: NSImage?, toolTip: String? = nil) {
+        for view in [art, statusBar.art] {
+            view.image = image
+            view.toolTip = toolTip
         }
     }
 
@@ -323,7 +294,7 @@ public final class NowPlayingBar: NSObject {
         guard let engine, let duration = model.state.durationSeconds else { return }
         let seconds = fraction * duration
         slider.fraction = fraction
-        progress.fraction = fraction
+        statusBar.seekBar.fraction = fraction
         showTimes(model.times(positionSeconds: seconds))
         guard done else { return }
         pendingSeeks += 1

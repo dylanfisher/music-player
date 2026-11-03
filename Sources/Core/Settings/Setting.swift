@@ -96,6 +96,19 @@ extension Setting where Value == [ToolbarItem] {
     }
 }
 
+extension Setting where Value == [StatusPart] {
+    /// The status bar's parts, left to right, each at most once, since each is one view.
+    init(_ key: String, title: String, parts defaultValue: [StatusPart], _ summary: String) {
+        self.init(key, title, defaultValue, summary, Value.kind) { parts in
+            var seen: Set<StatusPart> = []
+            for (index, part) in parts.enumerated() where !seen.insert(part).inserted {
+                return .invalid("item \(index): \(part.rawValue) is listed twice")
+            }
+            return nil
+        }
+    }
+}
+
 private func outside<Bound>(_ range: ClosedRange<Bound>, _ value: Bound) -> SettingProblem.Reason? {
     range.contains(value)
         ? nil : .outOfRange("\(value) is outside \(range.lowerBound)...\(range.upperBound)")

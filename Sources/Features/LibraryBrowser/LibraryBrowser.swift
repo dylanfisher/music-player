@@ -97,6 +97,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private let sidebarController: SidebarController
     private let split = NSSplitView()
     private let statusBar = NSStackView()
+    /// The parts the user chose, between the scan progress and the problems button.
+    private let statusParts = NSStackView()
+    private(set) var statusLayout = StatusBarLayout(parts: [.totals], style: .minimal)
+    /// The views of the playing track's parts, which the app gives.
+    private var statusPartViews: [StatusPart: NSView] = [:]
+    private var statusHeight: NSLayoutConstraint?
+    private var statusArtHeight: NSLayoutConstraint?
     /// The status bar on the table headers' material, which shows and hides with it.
     private(set) lazy var statusArea = headerBackground(around: statusBar)
     let statusLabel = NSTextField(labelWithString: "")
@@ -262,19 +269,25 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         problemsButton.action = #selector(showProblems)
         statusLabel.addGestureRecognizer(
             NSClickGestureRecognizer(target: self, action: #selector(showNextTotals)))
+        statusLabel.alignment = .center
         let bar = statusBar
         bar.detachesHiddenViews = true
-        bar.setViews([scanIndicator, scanLabel], in: .leading)
-        bar.setViews([statusLabel], in: .center)
-        bar.setViews([problemsButton], in: .trailing)
+        for view in [scanIndicator, scanLabel, statusParts, problemsButton] {
+            bar.addArrangedSubview(view)
+        }
+        bar.distribution = .fill
         bar.spacing = 10
         bar.alignment = .centerY
         bar.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
+        statusParts.detachesHiddenViews = true
+        statusParts.distribution = .fill
+        statusParts.spacing = 10
+        statusParts.alignment = .centerY
+        statusParts.setHuggingPriority(.init(1), for: .horizontal)
         problemsButton.font = TextCell.font
-        // As tall as the track table's header, read from it, so the bar matches the header
-        // on every macOS version.
-        let headerHeight = table.table.headerView?.frame.height ?? 0
-        statusArea.heightAnchor.constraint(equalToConstant: headerHeight).isActive = true
+        statusHeight = statusArea.heightAnchor.constraint(equalToConstant: 0)
+        statusHeight?.isActive = true
+        layOutStatusBar()
         for label in [statusLabel, scanLabel] {
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
@@ -605,6 +618,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             shown: statusTotals, missingCount: model.missingTracks,
             playCount: showsTimeline ? timelineModel.playCount : nil)
         statusLabel.toolTip = nil
+        statusLabel.isHidden = !statusLayout.showsTotals
         scanLabel.stringValue = status.scanText ?? ""
         scanLabel.isHidden = status.scanText == nil
         showScanProgress()
@@ -693,6 +707,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         messagesShown += 1
         statusLabel.stringValue = message
         statusLabel.toolTip = message
+        statusLabel.isHidden = false
     }
 
     @objc private func searchChanged() {
@@ -1325,6 +1340,46 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func showPlaying(path: String?) { table.playingPath = path }
 
     public var isStatusBarVisible: Bool { !statusArea.isHidden }
+
+    /// Lays the status bar out as `layout` says, with `views` for the playing track's parts.
+    public func setStatusBar(_ layout: StatusBarLayout, views: [StatusPart: NSView]) {
+        statusLayout = layout
+        statusPartViews = views
+        layOutStatusBar()
+        showStatus()
+    }
+
+    /// The views the status bar holds between the scan progress and the problems button, for
+    /// tests.
+    var statusPartsShown: [NSView] { statusParts.arrangedSubviews }
+
+    private func layOutStatusBar() {
+        for view in statusParts.arrangedSubviews { statusParts.removeArrangedSubview(view) }
+        for view in statusParts.subviews { view.removeFromSuperview() }
+        statusArtHeight?.isActive = false
+        // As tall as the track table's header in the minimal style, read from it, so the bar
+        // matches the header on every macOS version.
+        let header = table.table.headerView?.frame.height ?? 0
+        statusHeight?.constant = statusLayout.heightPoints(headerPoints: header)
+        for part in statusLayout.order {
+            guard let view = part == .totals ? statusLabel : statusPartViews[part] else {
+                continue
+            }
+            let flexible = part == statusLayout.flexible
+            view.setContentHuggingPriority(flexible ? .init(1) : .defaultHigh, for: .horizontal)
+            // A stack's hugging above its labels' compression resistance squeezes them to
+            // nothing, so a part's stack hugs just under it.
+            (view as? NSStackView)?.setHuggingPriority(
+                flexible ? .init(1) : .init(NSLayoutConstraint.Priority.defaultLow.rawValue - 1),
+                for: .horizontal)
+            statusParts.addArrangedSubview(view)
+        }
+        if let art = statusPartViews[.art], statusLayout.parts.contains(.art) {
+            statusArtHeight = art.heightAnchor.constraint(
+                equalToConstant: statusLayout.artPoints(headerPoints: header))
+            statusArtHeight?.isActive = true
+        }
+    }
 
     public func toggleStatusBar() {
         statusArea.isHidden.toggle()

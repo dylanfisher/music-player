@@ -21,6 +21,8 @@ public final class GeneralModel {
         case output
         /// The network renderer, which the output device's row lists and picks too.
         case renderer
+        /// A list of choices in an order: each choice with a checkbox, dragged to reorder.
+        case checklist([SettingKind.Choice])
         /// A kind with no control of its own: the value as the config file has it, edited there.
         case readOnly
     }
@@ -148,6 +150,7 @@ public final class GeneralModel {
             case .optional(.string): .text(optional: true)
             case .list(.watchedFolder): .folders
             case .optional(.syncFolder): .syncFolder
+            case .list(.choice(let choices)): .checklist(choices)
             default: .readOnly
             }
         return Row(
@@ -262,6 +265,31 @@ public final class GeneralModel {
         return URL(string: share)?.lastPathComponent ?? share
     }
 
+    /// A checklist's row: a choice and whether the list holds it.
+    struct ChecklistItem: Equatable {
+        var choice: SettingKind.Choice
+        var isOn: Bool
+    }
+
+    /// Every choice of a checklist: those the list holds, in its order, then the rest in the
+    /// schema's order.
+    func checklist(_ key: String) -> [ChecklistItem] {
+        guard let row = rows.first(where: { $0.key == key }),
+            case .checklist(let choices) = row.control
+        else { preconditionFailure("\(key) isn't a checklist") }
+        let held = value(key) as? [String] ?? []
+        let on = held.compactMap { raw in choices.first { $0.rawValue == raw } }
+        return on.map { ChecklistItem(choice: $0, isOn: true) }
+            + choices.filter { !held.contains($0.rawValue) }.map {
+                ChecklistItem(choice: $0, isOn: false)
+            }
+    }
+
+    /// Saves the choices that are on, in `items`' order.
+    func setChecklist(_ key: String, _ items: [ChecklistItem]) throws {
+        try set(key, items.filter(\.isOn).map(\.choice.rawValue))
+    }
+
     func clear(_ key: String) throws { try set(key, NSNull()) }
 
     func setOn(_ key: String, _ on: Bool) throws { try set(key, on) }
@@ -288,7 +316,7 @@ public final class GeneralModel {
             try set(key, number)
         case .text(let optional):
             try set(key, trimmed.isEmpty && optional ? NSNull() : trimmed)
-        case .checkbox, .popUp, .folders, .syncFolder, .output, .renderer, .readOnly:
+        case .checkbox, .popUp, .folders, .syncFolder, .output, .renderer, .checklist, .readOnly:
             preconditionFailure("\(key) isn't a text row")
         }
     }

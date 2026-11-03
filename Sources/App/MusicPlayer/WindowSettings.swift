@@ -18,6 +18,7 @@ struct WindowSettings {
     var browser: BrowserState
     var groupByAlbumArtist: Bool
     var tableAppearance: TableAppearance
+    var statusBar: StatusBarLayout
 
     @MainActor init(_ settings: ConfigStore<AppSettings>, state: StateStore<AppState>) {
         frame = state[\.windowFrame]
@@ -36,6 +37,16 @@ struct WindowSettings {
             artist: state[\.selectedArtist], album: state[\.selectedAlbum])
         groupByAlbumArtist = settings[\.groupByAlbumArtist]
         tableAppearance = TableAppearance(settings)
+        statusBar = StatusBarLayout(settings)
+    }
+}
+
+extension StatusBarLayout {
+    /// The settings' keys, whose change lays out the status bar again.
+    static let keys = [AppSettings().statusBarParts.key, AppSettings().statusBarStyle.key]
+
+    @MainActor init(_ settings: ConfigStore<AppSettings>) {
+        self.init(parts: settings[\.statusBarParts], style: settings[\.statusBarStyle])
     }
 }
 

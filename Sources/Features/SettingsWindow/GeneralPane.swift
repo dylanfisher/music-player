@@ -243,6 +243,13 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             popUp.menu?.delegate = self
             popUp.setAccessibilityLabel(row.title)
             return popUp
+        case .checklist:
+            let list = ChecklistView(title: row.title)
+            list.identifier = NSUserInterfaceItemIdentifier(row.key)
+            list.changed = { [weak self] items in
+                self?.attempt { try self?.model.setChecklist(row.key, items) }
+            }
+            return list
         case .folders:
             preconditionFailure("the Watched Folders pane lists \(row.key)")
         case .renderer:
@@ -284,6 +291,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             field.stringValue = model.text(row.key)
         case .output:
             (control as? NSPopUpButton).map(showOutputs)
+        case .checklist:
+            (control as? ChecklistView)?.items = model.checklist(row.key)
         case .folders:
             preconditionFailure("the Watched Folders pane lists \(row.key)")
         case .renderer:

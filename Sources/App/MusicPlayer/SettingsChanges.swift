@@ -102,6 +102,9 @@ extension AppDelegate {
         if !keys.isDisjoint(with: TableAppearance.keys) {
             browser?.setTableAppearance(TableAppearance(settings))
         }
+        if !keys.isDisjoint(with: StatusBarLayout.keys) {
+            applyStatusBar(StatusBarLayout(settings))
+        }
         if !keys.isDisjoint(with: [schema.receiverEnabled.key, schema.receiverAddress.key]) {
             applyReceiverSetting()
         }
@@ -114,6 +117,19 @@ extension AppDelegate {
         if keys.contains(schema.playedPercent.key) {
             playTracker?.playedFraction = playedFraction(settings)
         }
+    }
+
+    /// Lays out the status bar with the playing track's parts.
+    func applyStatusBar(_ layout: StatusBarLayout) {
+        guard let browser, let nowPlaying else { return }
+        nowPlaying.statusBar.apply(layout.style)
+        let parts = nowPlaying.statusBar
+        browser.setStatusBar(
+            layout,
+            views: Dictionary(
+                uniqueKeysWithValues: StatusPart.allCases.compactMap { part in
+                    parts.view(for: part).map { (part, $0) }
+                }))
     }
 
     /// The Settings window, made on first use.

@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import NowPlaying
 import Settings
 
 /// The main window's toolbar, which the user customizes with the standard sheet (ADR 0055).
@@ -12,6 +13,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     static let searchPoints = 220.0
     static let statusMinimumPoints = 280.0
     static let statusMaximumPoints = 10_000.0
+    static let volumePoints = 90.0
     let toolbar: NSToolbar
     /// The output picker's menu, which the app fills as it opens.
     let outputMenu = NSMenu(title: AppMenus.outputMenuTitle)
@@ -30,17 +32,14 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     /// The items to show once the toolbar is in a window.
     private let savedItems: [ToolbarItem]
 
-    /// `transport`, `status`, `centeredStatus` and `search` are the views those items show.
-    /// AppKit keeps the items of every toolbar with the same `identifier` the same.
+    /// `transport`, `status` and `search` are the views those items show. AppKit keeps the
+    /// items of every toolbar with the same `identifier` the same.
     init(
-        identifier: String, transport: NSView, status: NSView, centeredStatus: NSView,
-        search: NSView, dispatcher: CommandDispatcher, items: [ToolbarItem]
+        identifier: String, transport: NSView, status: NSView, search: NSView,
+        dispatcher: CommandDispatcher, items: [ToolbarItem]
     ) {
         toolbar = NSToolbar(identifier: identifier)
-        views = [
-            .transport: transport, .status: status, .centeredStatus: centeredStatus,
-            .search: search,
-        ]
+        views = [.transport: transport, .status: status, .search: search]
         self.dispatcher = dispatcher
         savedItems = items
         super.init()
@@ -87,11 +86,16 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
         guard let item = ToolbarItem(identifier) else { return nil }
-        // The customization sheet shows an image, not a second copy of a feature's view.
+        if !flag, let drawing = Self.drawing(of: item) {
+            let shown = NSToolbarItem(itemIdentifier: identifier)
+            shown.view = drawing
+            label(shown, item)
+            return shown
+        }
         if flag, let view = views[item] {
             let shown = NSToolbarItem(itemIdentifier: identifier)
             shown.view = view
-            if [.status, .centeredStatus].contains(item) {
+            if item == .status {
                 // The status takes the room the other items leave. The toolbar measures a view
                 // at its fitting size, so constraints can't widen it; `minSize` and `maxSize`,
                 // deprecated in macOS 12 with no replacement for a flexible width, can. KVC
@@ -112,16 +116,37 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         case .shuffle, .queue, .signalPath, .repeat:
             made = CommandItem(item, dispatcher: dispatcher)
         case .volume:
-            made = flag ? VolumeItem(toolbar: self) : NSToolbarItem(itemIdentifier: identifier)
+            made = VolumeItem(toolbar: self)
         case .output:
             let output = NSMenuToolbarItem(itemIdentifier: identifier)
             output.menu = outputMenu
             made = output
-        case .transport, .status, .centeredStatus, .search, .flexibleSpace, .space:
+        case .transport, .status, .search, .flexibleSpace, .space:
             made = NSToolbarItem(itemIdentifier: identifier)
         }
         label(made, item)
         return made
+    }
+
+    /// What the customization sheet shows for an item whose view is a feature's: a copy of the
+    /// view wired to nothing, so the sheet, the default set included, shows what the toolbar
+    /// will look like. A view can be in one place only, and AppKit's sheet drew no image for
+    /// these items on macOS 12.
+    static func drawing(of item: ToolbarItem) -> NSView? {
+        switch item {
+        case .transport: return NowPlayingBar.transportDrawing()
+        case .status: return NowPlayingBar.statusDrawing()
+        case .search:
+            let field = NSSearchField()
+            field.translatesAutoresizingMaskIntoConstraints = false
+            field.widthAnchor.constraint(equalToConstant: searchPoints).isActive = true
+            return field
+        case .volume:
+            let slider = VolumeItem.slider()
+            slider.doubleValue = volumeRangeDecibels.lowerBound / 3
+            return slider
+        default: return nil
+        }
     }
 
     func toolbarWillAddItem(_ notification: Notification) { reportChange() }
@@ -173,7 +198,6 @@ extension ToolbarItem {
         case .transport: "Playback Controls"
         case .volume: "Volume"
         case .status: "Now Playing"
-        case .centeredStatus: "Now Playing (Centered)"
         case .search: "Search"
         case .shuffle: AppCommands.title(of: .shuffle)
         case .repeat: AppMenus.repeatMenuTitle
@@ -191,7 +215,6 @@ extension ToolbarItem {
         case .transport: "playpause.fill"
         case .volume: "speaker.wave.2.fill"
         case .status: "music.note"
-        case .centeredStatus: "text.aligncenter"
         case .search: "magnifyingglass"
         case .shuffle: "shuffle"
         case .repeat: "repeat"
@@ -269,20 +292,26 @@ final class CommandItem: NSToolbarItem {
 @MainActor
 final class VolumeItem: NSToolbarItem {
     private weak var owner: MainToolbar?
-    private let slider = NSSlider(
-        value: 0, minValue: MainToolbar.volumeRangeDecibels.lowerBound,
-        maxValue: MainToolbar.volumeRangeDecibels.upperBound, target: nil, action: nil)
+    private let slider = VolumeItem.slider()
 
     init(toolbar: MainToolbar) {
         owner = toolbar
         super.init(itemIdentifier: ToolbarItem.volume.identifier)
-        slider.controlSize = .small
         slider.isContinuous = true
         slider.target = self
         slider.action = #selector(moved)
-        slider.translatesAutoresizingMaskIntoConstraints = false
-        slider.widthAnchor.constraint(equalToConstant: 90).isActive = true
         view = slider
+    }
+
+    /// The slider, for the item and for its drawing in the customization sheet.
+    static func slider() -> NSSlider {
+        let slider = NSSlider(
+            value: 0, minValue: MainToolbar.volumeRangeDecibels.lowerBound,
+            maxValue: MainToolbar.volumeRangeDecibels.upperBound, target: nil, action: nil)
+        slider.controlSize = .small
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        slider.widthAnchor.constraint(equalToConstant: MainToolbar.volumePoints).isActive = true
+        return slider
     }
 
     @objc private func moved() {
