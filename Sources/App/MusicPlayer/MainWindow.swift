@@ -25,6 +25,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
     /// What Distraction-Free Mode hid, while it's on.
     private var hidden: ChromeVisibility?
     private var toolbarObservation: NSKeyValueObservation?
+    private var savedToolbar: SavedVisibility
     private var glass: WindowGlass?
 
     init(
@@ -37,6 +38,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
         self.signalPath = signalPath
         self.browser = browser
         self.saver = saver
+        savedToolbar = SavedVisibility(settings.toolbarVisible)
         window = SilentEscapeWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
@@ -50,10 +52,13 @@ final class MainWindow: NSObject, NSWindowDelegate {
         window.toolbarStyle = .expanded
         toolbar.attach(to: window)
         toolbar.toolbar.isVisible = settings.toolbarVisible
-        // The toolbar's own context menu can hide it too.
-        toolbarObservation = toolbar.toolbar.observe(\.isVisible) { [weak self] toolbar, _ in
-            let visible = toolbar.isVisible
-            MainActor.assumeIsolated { self?.toolbarVisibilityChanged(visible) }
+        // The toolbar's own context menu can hide it too. `isVisible` reports changes to an
+        // observer only from macOS 14; before, the state is saved as the window closes and the
+        // app quits.
+        if #available(macOS 14, *) {
+            toolbarObservation = toolbar.toolbar.observe(\.isVisible) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.saveToolbarVisibility() }
+            }
         }
 
         split.sidebarWidthChanged = { saver.set(\.sidebarWidth, $0) }
@@ -109,11 +114,15 @@ final class MainWindow: NSObject, NSWindowDelegate {
 
     var isToolbarVisible: Bool { window.toolbar?.isVisible == true }
 
-    func toggleToolbar() { window.toolbar?.isVisible.toggle() }
+    func toggleToolbar() {
+        window.toolbar?.isVisible.toggle()
+        saveToolbarVisibility()
+    }
 
-    private func toolbarVisibilityChanged(_ visible: Bool) {
-        guard !restoring else { return }
-        saver.set(\.toolbarVisible, visible)
+    /// Saves whether the toolbar shows, when that changed since the last save.
+    func saveToolbarVisibility() {
+        guard !restoring, savedToolbar.change(to: isToolbarVisible) else { return }
+        saver.set(\.toolbarVisible, isToolbarVisible)
     }
 
     func toggleStatusBar() {
@@ -151,6 +160,8 @@ final class MainWindow: NSObject, NSWindowDelegate {
 
     func windowDidMove(_ notification: Notification) { saveFrame() }
 
+    func windowWillClose(_ notification: Notification) { saveToolbarVisibility() }
+
     func windowDidResize(_ notification: Notification) { saveFrame() }
 
     private func saveFrame() {
@@ -180,4 +191,19 @@ func restoredFrame(_ saved: WindowFrame?, screens: [NSRect]) -> NSRect? {
     guard let saved else { return nil }
     let frame = NSRect(x: saved.x, y: saved.y, width: saved.width, height: saved.height)
     return screens.contains { $0.intersects(frame) } ? frame : nil
+}
+
+/// A visibility saved only when it differs from the one saved last, so each of several places
+/// that save it can call it freely.
+struct SavedVisibility {
+    private(set) var saved: Bool
+
+    init(_ saved: Bool) { self.saved = saved }
+
+    /// Records `visible` and says whether it needs saving.
+    mutating func change(to visible: Bool) -> Bool {
+        guard visible != saved else { return false }
+        saved = visible
+        return true
+    }
 }

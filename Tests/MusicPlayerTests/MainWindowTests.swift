@@ -104,3 +104,9 @@ private final class RecordingWindow: SilentEscapeWindow {
     try press("\u{F704}", 122)
     #expect(window.unhandled == [#selector(NSResponder.keyDown(with:))])
 }
+
+@Test func aVisibilityIsSavedOnlyWhenItChanged() {
+    var saved = SavedVisibility(true)
+    let changes = [true, false, false, true].map { saved.change(to: $0) }
+    #expect(changes == [false, true, false, true])
+}

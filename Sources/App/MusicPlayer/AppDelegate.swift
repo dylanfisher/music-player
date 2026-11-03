@@ -367,6 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         volumeKeyTap?.stop()
         scriptServer?.stop()
         receiver?.stop()
+        window?.saveToolbarVisibility()
         saver?.flush()
         watcher?.stop()
         rendererOutput?.close()
