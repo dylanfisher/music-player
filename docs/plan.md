@@ -31,7 +31,7 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 ### Current run order
 
-Set by the owner on 2026-10-30 and 2026-10-31:
+Set by the owner on 2026-10-30, 2026-10-31 and 2026-11-02:
 
 1. Finish phase 5. Its 2015 MacBook Pro checkpoint stays pending.
 2. Phases 6, 7, 8, 11 and then 15, each through its gate.
@@ -43,7 +43,10 @@ Set by the owner on 2026-10-30 and 2026-10-31:
    pending.
 6. Phases 24 to 28 in order, each through its gate, their rows in parallel. Added by the owner
    on 2026-11-02.
-7. Skip 10, 12 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
+7. Phase 12 next, through its gate. Moved up by the owner on 2026-11-02. Its DSD to the Denon
+   is built against the simulated renderer only, like phase 9, and its Denon and ADI-2
+   checkpoints stay pending.
+8. Skip 10 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Phase gate
