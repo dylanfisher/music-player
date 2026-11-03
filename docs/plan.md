@@ -2763,15 +2763,15 @@ Plan (30b):
 Result: shipped as planned; `./scripts/check` passes. 30b.5: reproduced with a probe on macOS 12
 and 27: `NSFileViewer = com.apple.finder` in the argument domain makes AppKit send Finder an
 open-documents event, and Finder opens the track in Music. The override now applies only when
-the global key names another app, and uses an ID no app has, which AppKit answers with its own
-Finder reveal (ADR 0051 amended). The owner's config says Finder and Searcher isn't installed on
+the global key is set, to any app, Finder included, and uses an ID no app has, which AppKit
+answers with its own Finder reveal (ADR 0051 amended). The owner's config says Finder and Searcher isn't installed on
 the 2015 MacBook Pro, so both settings took that path. 30b.1: type-to-select, and a source, pane
 or search change that keeps the selection, center the row. 30b.2: Regular rows draw 12-point
 text and Large 13-point; Compact keeps 11 (ADR 0053 amended; the default table's text is a
 point larger). 30b.3: the table added row views above the hover, so lower albums' art covered
 it; each showing now moves the hover to the top, and its hot area ends at its album's last row
 (ADR 0065 amended). 30b.4: a plain click on a star sets the clicked track's rating; left of the
-stars, or the rating it has, clears it (ADR 0068). 30b.6: Show All Tracks is Show All Music, off
+stars, or the rating it has, clears it; a double-click only plays (ADR 0068). 30b.6: Show All Tracks is Show All Music, off
 and left out of ⌘K while the table lists the whole library, first in ⌘P otherwise. 30b.7: every
 grouping in Swinsian's menu, picked from each column's header menu; a grouping another column
 shows swaps places; columns and selections are saved as `browser.columns`, replacing
