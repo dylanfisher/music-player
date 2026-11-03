@@ -71,7 +71,7 @@ public struct AppSettings: SettingsSchema {
         "appearance.artSize", title: "Album Art", default: ArtSize.fit,
         "Art scaled to its album's rows, or always the column's width.")
     public let glass = Setting(
-        "appearance.glass", title: "Glass", default: false,
+        "appearance.glass", title: "Window Glass", default: false,
         "The sidebar's translucent material behind the whole window.")
     public let statusBarStyle = Setting(
         "appearance.statusBarStyle", title: "Status Bar", default: StatusBarStyle.minimal,
