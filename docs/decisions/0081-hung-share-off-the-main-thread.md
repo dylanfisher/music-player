@@ -24,9 +24,21 @@ folder finds what to watch there (`folderToWatch(at:)`, Library); Reveal in Find
 Searcher runs there. Paths the app keeps locally, the config file and a library file moved
 aside, still reveal on the main thread.
 
-Quitting waits at most 6 s for the output to close (`finishes(within:)`), longer than a
+Quitting waits at most 6 s for the outputs to close (`finishes(within:)`), longer than a
 device's format restore, which waits up to 3 s. Past that it logs and quits, and the device's
-restore record, written when the app took it, puts it back at the next launch.
+restore record, written when the app took it, puts it back at the next launch. The renderer
+output's `close()` can block too: it stops the HTTP server with `queue.sync`, and that queue
+also runs the `pread` of the file being served, so a hung share holds it. It closes in the same
+bounded wait, concurrently with the device output, so one constant bounds both.
+
+Choosing the sync folder more than once before the first check returns applies only the last
+pick; a counter drops an earlier check that comes back late.
+
+Get Info reads every selected file before the editor opens. Above 200 files it asks first,
+naming the count and saying the read may take minutes on a network share
+(`TagEditing.confirmReadAbove`). 32d measured 200 NAS tracks at 3.2 s, about 16 ms a file, so
+200 is the largest read measured to be a short wait; the fixture library reads in 0.06 ms a
+file locally, which makes a whole library 2.4 s here and minutes on the NAS.
 
 ## Alternatives considered
 

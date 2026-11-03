@@ -3416,6 +3416,18 @@ alternating runs), gaps 0 samples on both, soak 0 underruns on both. The palette
 measured 4.19 ms here and 4.22 ms on main against their 4 ms budget, as in 32c and 32d. The old-Mac
 figures are estimates until the 32f checkpoint, which adds the cold launch below.
 
+After review: the play-to-first-sample interval is begun by `DeviceOutput.load` and `seek`, so a
+renderer output, and a seek held for a resume, never open one. The control thread arms its end
+at the new segment's start byte when it processes the command, so the old track's audio can't
+end it early; a pause, stop, failed load, `cannotPlay`, lost device, close or a seek while paused
+cancels it without logging a time (`PendingInterval.cancel`), and a begin that replaces an open
+one cancels that one. A tick costs one optional check. Choosing the sync folder twice applies
+only the last pick. Quit closes the renderer output, whose HTTP server stop can wait on a hung
+share's read, together with the device output inside the same 6 s bound. Get Info on more than
+200 files asks first (ADR 0081). The interval's cancel paths and early end have tests on a
+`DeviceOutput` with its own interval; the sync-folder pick and the quit bound have no seam in
+`AppDelegate`, so they have none.
+
 #### 32f. Checkpoint and budgets
 
 - Run `./scripts/bench` three times. Tighten any new budget the code beats by more than 3x, as

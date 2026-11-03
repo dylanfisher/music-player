@@ -65,7 +65,9 @@ import Testing
     pending.cancel()
     pending.cancel()
     #expect(!pending.isOpen)
-    let spans = IntervalLog.shared.spans(from: before, to: .max).filter { $0.interval == .scanBatch }
+    let spans = IntervalLog.shared.spans(from: before, to: .max).filter {
+        $0.interval == .scanBatch
+    }
     #expect(spans.isEmpty)
 }
 
