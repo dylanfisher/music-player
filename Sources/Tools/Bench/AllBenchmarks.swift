@@ -5,5 +5,5 @@ let benchmarks =
     + moveBenchmarks + syncBenchmarks
     + healthBenchmarks + playlistBenchmarks + historyBenchmarks + windowBenchmarks
     + paletteBenchmarks
-    + playbackBenchmarks
+    + playbackBenchmarks + playLatencyBenchmarks
     + tagWriterBenchmarks

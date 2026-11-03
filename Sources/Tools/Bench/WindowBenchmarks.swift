@@ -107,7 +107,7 @@ let windowBenchmarks = [
 ]
 
 @MainActor
-private func loadedModel(_ databaseURL: URL) async throws -> BrowserModel {
+func loadedModel(_ databaseURL: URL) async throws -> BrowserModel {
     let model = BrowserModel(
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
         groupByAlbumArtist: true)
@@ -291,8 +291,7 @@ private func appExecutable() throws -> URL {
 
 /// Runs `body` on the main actor and waits for it, turning the main run loop meanwhile so the
 /// actor's work gets the main thread. Bench runs its benchmarks on the main thread.
-private func onMainActor<T: Sendable>(_ body: @escaping @MainActor () async throws -> T) throws -> T
-{
+func onMainActor<T: Sendable>(_ body: @escaping @MainActor () async throws -> T) throws -> T {
     try MainActor.assumeIsolated {
         let box = ResultBox<T>()
         Task { @MainActor in
