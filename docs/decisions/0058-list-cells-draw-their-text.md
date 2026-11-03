@@ -50,3 +50,7 @@ drawing is now most of a step's cost; making it cheaper means drawing fewer colu
 caching drawn text, neither of which this decision takes on. The benchmark flushes each step
 straight after the last, which adds a wait for the render server that a real drag spreads
 across frames, so its figure errs high.
+
+A constraint anywhere in the track table's view puts the window under Auto Layout, which gives
+every cell constraints to solve again. So views placed over the table, such as History's
+"Nothing played yet", are laid out by frame and autoresizing mask.

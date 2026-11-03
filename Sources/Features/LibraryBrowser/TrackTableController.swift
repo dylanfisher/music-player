@@ -68,10 +68,10 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         super.loadView()
         emptyLabel.textColor = .secondaryLabelColor
         emptyLabel.isHidden = true
-        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        // Centered by frame and mask: a constraint here gives every cell constraints to solve
+        // again (ADR 0058).
+        emptyLabel.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
         view.addSubview(emptyLabel)
-        emptyLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor).isActive = true
-        emptyLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor).isActive = true
     }
 
     private func configure(_ layout: TrackTableLayout) {
@@ -146,6 +146,11 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         typeSelect?.reset()
         table.reloadData()
         emptyLabel.stringValue = model.emptyText ?? ""
+        emptyLabel.sizeToFit()
+        emptyLabel.setFrameOrigin(
+            NSPoint(
+                x: (view.bounds.width - emptyLabel.frame.width) / 2,
+                y: (view.bounds.height - emptyLabel.frame.height) / 2))
         emptyLabel.isHidden = model.emptyText == nil
         let rows = model.rows(holding: selection)
         select(rows)
