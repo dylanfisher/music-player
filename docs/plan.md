@@ -2978,7 +2978,7 @@ Rules for the whole phase:
 
 The current benches measure the gap between tracks and the rate switch, but nothing measures
 from the user's action to the first sample.
-- [ ] **32a.1** **Bench:** on the null device (`Sources/Tools/Fixtures/NullDevice.swift`), time from the call
+- [x] **32a.1** **Bench:** on the null device (`Sources/Tools/Fixtures/NullDevice.swift`), time from the call
       to the first IO callback for each of these:
       - double-click (`setQueue` plus `play`) while a track is playing, same format
       - the same, at a different sample rate
@@ -2989,7 +2989,7 @@ from the user's action to the first sample.
 
       The null device has no close, hog or format-restore cost, so give it injectable delays for
       those HAL steps. Without them the bench can't show suspect 1.
-- [ ] **32a.2** **Suspect, likely the biggest win:** `PlaybackEngine.setQueue` (PlaybackEngine.swift:103) calls
+- [x] **32a.2** **Suspect, likely the biggest win:** `PlaybackEngine.setQueue` (PlaybackEngine.swift:103) calls
       `unload()`, which calls `output.stop()`. That closes the device (DeviceOutput.swift:253, 792;
       HALDevice.close at HALDevice.swift:161). Closing restores the old format and rate and waits up
       to 3 s for it, then releases hog mode. The following `play` reopens the device: it enumerates
@@ -2998,14 +2998,14 @@ from the user's action to the first sample.
       track has the same format. Next and media keys already take the `restart` path
       (DeviceOutput.swift:297) and keep the device open. Make a queue replacement followed by play
       take the same path. Stop should still close the device as it does today.
-- [ ] **32a.3** **Suspect:** `LibraryQueries.paths(ids:)` (LibraryQueries.swift:199) runs one
+- [x] **32a.3** **Suspect:** `LibraryQueries.paths(ids:)` (LibraryQueries.swift:199) runs one
       `SELECT ... WHERE id = ?` per ID. A double-click queues the whole visible list (`playOrder`),
       so that's 43k statements on the shared reader actor before playback starts. Use the file's
       existing `inChunks` IN-list pattern. Also consider resolving only the first track's path
       before starting playback and the rest afterwards.
-- [ ] **32a.4** **Suspect:** the seek in the last ~4 s reopens the file (`reusableTrack`,
+- [x] **32a.4** **Suspect:** the seek in the last ~4 s reopens the file (`reusableTrack`,
       DeviceOutput.swift:471), which costs a full open and header parse on the NAS.
-- [ ] **32a.5** **Suspect:** at track start the main actor does synchronous lookups by path:
+- [x] **32a.5** **Suspect:** at track start the main actor does synchronous lookups by path:
       `NowPlayingModel.lookUpTrack` (NowPlayingModel.swift:59), `countPlay`
       (PaletteCommands.swift:201) and the queue panel (QueueModel.swift:63). `MediaControls.loadArt`
       reads the file a second time for art. Signpost them and fix whatever shows up as a main-thread
@@ -3030,8 +3030,35 @@ Plan:
    and a queue set without play, still close it. Tests on both the bit-perfect and the
    converted path. ADR 0078.
 4. **32a.3, 32a.4, 32a.5:** measure each (the queue's completion time, the NAS seek, the
-   main-actor lookups at track start) and fix only what shows a cost.
+   main-actor lookups at track start) and fix only what shows a cost. 32a.4 became: a load or
+   a seek takes a track the output already has open on the same file, which also covers Next.
 5. Rerun the play benches, gapless, rate-switch and soak against main, the same day.
+
+Result: shipped as planned; `./scripts/check` passes. Measured on the build Mac on 2026-11-03,
+time from the call to the first IO cycle carrying sound, median of five, slow simulated NAS
+then local files, before (the bench commit, 15d3b89) and after. The null device's HAL steps
+are estimates (open 10 ms, a rate change 100 ms, hog mode release 5 ms; the device starts at
+48 kHz, which a close puts back), so the device share of every figure is a guess until the
+ADI-2 checkpoint. 32a.1: the five benches above, with budgets; NAS latency is the slow NAS's,
+23 ms per open and 10 ms per 1 MB block first read (ADR 0078). 32a.2: fixed. A double-click on
+a track of the same rate took 294 and 244 ms, now 48 and 10 ms; on another rate 297 and
+249 ms, now 169 and 107 ms, one rate change. Stop and a queue set without play still close the
+device. 32a.3: fixed though off the sound path: the clicked track already played first (ADR
+0070, 2.4 ms to its first frame on main and 2.6 ms here), and the whole library's queue was in
+place 166 ms after the click, now 67 to 73 ms. 32a.4: fixed. A seek after decoding moved on took
+57 and 5 ms, now 10 and 11 ms; Next, which also opened the file again, 57 and 11 ms, now 10 and
+5 ms. A seek while the track is decoded was 6 and 11 ms, now 7 and 5 ms, the spread of one
+11.6 ms IO cycle. 32a.5: dropped, no cost. A track lookup by path on the main connection, which
+Now Playing, the media controls and the play count each make at a track start, took 0.015 ms
+(median, 0.17 ms the slowest of 443); the queue panel looks up only rows it shows and caches
+them; the palette's visit count is saved on a timer; art reads already run on their own queue
+(32b.4). Against main (e7c8097) the same hour: gapless 0 samples and the converted join 0
+samples on both, rate switch 8.4 ms on main and 8.3 ms here (15.4 ms in one run, the null
+device's stop step), soak 0 underruns on both, CPU at 24/192 1.44% and 1.01%, converted 1.03%
+and 0.76%, double-click to first frame 2.4 and 2.6 ms, its main thread 0.77 and 0.89 ms. Not
+changed: `play(_ request:)` in AppDelegate (timeline, scripting) still stops before it plays.
+The old-Mac budgets are estimates until the 32f checkpoint, where the owner double-clicks
+tracks of the same and of other rates on the ADI-2.
 
 #### 32b. Scrolling with art
 
