@@ -1068,6 +1068,37 @@ command, not ⌘Z; the SMB fallbacks are untested until the checkpoint.
 - [ ] **Hardware checkpoint (owner):** DSD64, DSD128 and DSD256 on the ADI-2. Its DSD indicator
       lighting is the bit-perfect proof for the whole HAL path.
 
+Implementation plan (ADR 0064):
+
+1. **Metadata:** `DSF.swift` and `DSDIFF.swift` beside `AIFF.swift`, sharing a `DSDStream`
+   (rate, channels, where the bits are, block or byte interleaving, bit order) that the reader
+   in HALOutput uses too. DSF reads its ID3v2 tag at the header's metadata pointer, DSDIFF an
+   `ID3 ` chunk if present, both through `parseID3v2`. Every size and offset is checked against
+   the file; DST compression, unknown rates and more than 6 channels are typed `unsupported`
+   errors. `FileFormat` gains `.dsf` and `.dff`; `TrackAudio.Codec` gains `.dsd`. One label,
+   `sampleRateText`, names a DSD rate DSD64, DSD128 or DSD256 and any other in kHz. The tag
+   writer refuses both formats. Fuzz targets `dsf` and `dff`, threat model row 57.
+2. **Fixtures:** DSF and DFF writers, and six seeds (DSF and DFF at DSD64, 128 and 256) of 20 ms
+   of a 1-bit sine, DSF albums untagged more often than others, so the bench library stays
+   within the generator and scan budgets.
+3. **Library:** `.dsf` and `.dff` join `audioFileExtensions`, so a Swinsian miss in them now
+   matches on the next import and through Locate…; the rate column, the now-playing line and
+   `--play`'s list use the label. ADR 0059's text follows.
+4. **HALRender:** `HALRenderSamplesOpaque`, a sample kind the IO proc never scales, so DoP
+   stays at unity whatever the gain.
+5. **HALOutput:** `DSDReader`, a sibling of `FileDecoder` behind a `TrackDecoder` protocol,
+   packs DoP on the decode thread into the device's 24- or 32-bit integer format: markers
+   0x05/0xFA, oldest bit highest, DSF bytes reversed. A DSD stream gets the opaque kind and
+   no gain; every DSD segment and every discard starts on an even frame, padded with one frame
+   of DoP silence, so the markers stay continuous across gapless changes and seeks. A device
+   without the carrier rate or a 24-bit integer format is refused through `refuseUntakeable`,
+   so a DSD album there stops at `PlaybackEngine.failureLimit`.
+6. **Playback and NowPlaying:** `SignalFormat` codes for DSD and DoP, the verdict judging DoP
+   at the carrier, the panel's File, Decoder and Volume rows ("digital bypassed for DoP"), and
+   "DoP at 352.8 kHz on …" as the output in the now-playing line.
+7. **UPnPOutput:** DSF and DFF offered under the DSD types the renderer lists, against the fake
+   Denon and Sonos on loopback only.
+
 ### 13. Release readiness
 
 - [ ] Developer ID signing, hardened runtime and notarization in `scripts/bundle release`.
