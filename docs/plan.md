@@ -3432,15 +3432,36 @@ share's read, together with the device output inside the same 6 s bound. Get Inf
 
 - Run `./scripts/bench` three times. Tighten any new budget the code beats by more than 3x, as
   14e did.
-- [ ] **Hardware checkpoint (owner), pending:** on the 2015 MacBook Pro, from a universal release
-  build (its Xcode can't build Swift 6), run the full bench and send back the file. Then:
+- [x] **Hardware checkpoint (owner), bench part:** on the 2015 MacBook Pro, from a universal
+  release build (its Xcode can't build Swift 6), the full bench, a cold launch after
+  `sudo purge` (32e.7), the stall log and the mmap check. Done 2026-11-03; results below
+  ("Old Mac checkpoint") and the fixes queued as phase 33.
+- [ ] **Hands-on check (owner), later:** on the 2015 MacBook Pro, from the same build:
   - scroll the real library with the art column shown, by trackpad, while a track plays and a
     rescan runs
   - double-click tracks of the same rate and of different rates on the ADI-2, and say whether
-    the start feels instant
-  - a cold launch after `sudo purge` (32e.7)
+    the start feels instant (this replaces the null device's estimated HAL times)
+  - play a 44.1 kHz and a 96 kHz track to the AirPods; each plays and the signal path shows
+    Converted (31.4)
+  - try phases 30a–30c: the Settings layout, clicking stars, ⌘R reveal, the status bar's
+    now-playing parts, the toolbar and distraction-free toggles, the column browser's groupings
 
-  Give me the exact commands, tested under bash 3.2.
+Old Mac checkpoint (2026-11-03, MacBookPro12,1, macOS 12.7.6, real library for the launches):
+- Launch to first rows: warm 0.86 s, cold after `purge` 3.52 s. Memory 72–77 MB.
+- `MAX_MMAP_SIZE=1073741824`, so 32c's 256 MB mmap applies.
+- Stall log: every launch stalls 100–196 ms with no marked interval; one 100 ms stall on
+  `view.toggleSidebar`.
+- Bench: every budget passed except two, and four did not run:
+  - over: the second of two search keystrokes during a scan, p95 265 ms (slowest 365 ms)
+    against 150 ms; idle it is 20 ms
+  - over: idle CPU 0.11% of a core against 0.10% (wakeups 0.25 a second, fine)
+  - did not run: the four history benches, which need Bench inside a `.build` folder
+  - close: live resize 61 ms a frame against 70 ms
+  - tag editor on the slow simulated NAS: 129 ms a file's opens, so 32e's 200-file Get Info
+    prompt still allows about 26 s here
+- Within budget, for the record: double-click same rate 46 ms and another rate 152 ms on the
+  slow simulated NAS (estimated HAL), Next 9 ms, seeks 11 ms, trackpad scroll with art p95
+  8–11 ms, playback CPU 2.5% at 24/192 and 1.3% converted, gaps 0 samples, soak 0 underruns.
 
 Plan:
 
@@ -3572,6 +3593,40 @@ Orchestrator notes on 32e:
 Overlap: the play-latency change (ADR 0070, merged as b6d2a74) already starts the clicked track
 before the queue's paths are read, with a double-click bench, which covers most of 32a.3. 32a
 extends that bench rather than redoing it.
+
+### 33. Old Mac follow-ups
+
+**Queued, not started.** The owner starts it. From the 32f old Mac checkpoint on 2026-11-03.
+Phase 32's rules apply: bench first, the audio boundary stands, the NAS is simulated, and the old
+Mac's numbers come from its next checkpoint.
+
+- **33.1 History benches outside `.build`.** `buildDirectory()` in
+  `Sources/Tools/Bench/HistoryBenchmarks.swift` throws unless Bench runs inside a `.build`
+  folder, so the four history benches can't run from `~/music-player-smoke`. Put their scratch
+  database where the other fixtures live, in `~/Library/Caches/MusicPlayer`, defined once.
+- **33.2 Search during a scan on two cores.** The second of two keystrokes 50 ms apart during a
+  scan is p95 265 ms on the old Mac against 150 ms, and 20 ms idle. Find what the keystroke
+  waits on: CPU taken by the scan's readers and parsers, the SQLite write lock or checkpoint, or
+  the main actor. The concurrency limits derive from `ProcessInfo.activeProcessorCount`, so check
+  the floor they pick on 2 cores, 4 threads, and the scan's QoS against the search's. Fix it
+  without slowing the scan benches by more than 10%.
+- **33.3 Cold launch and launch stalls.** Cold launch is 3.52 s against 0.86 s warm, and every
+  launch logs a 100–196 ms main-thread stall with no marked interval. Mark the launch's steps
+  with the 32e signposts. Find what the cold launch reads from disk before the first rows: the
+  index's pages, the dylibs, the art or the config. Then move or shrink what runs on the main
+  actor. The bench's launch is from a warm cache, so add a check that drops the index's pages
+  from the cache before it, if one can without `sudo`. Otherwise say so and leave the cold number
+  to the checkpoint.
+- **33.4 Idle CPU.** 0.11% of a core against 0.10% on the old Mac, with 0.25 wakeups a second.
+  Find what still runs when idle, and fix it or set the budget from measurement with the reason.
+- **33.5 Get Info cutoff.** The old Mac's tag editor takes 129 ms a file on the slow simulated
+  NAS, so 32e's 200-file prompt allows about 26 s. Set the cutoff from the old Mac's number so
+  the editor opens within a few seconds before the prompt. Keep it defined once
+  (`TagEditing.confirmReadAbove`) and update ADR 0081.
+- **33.6 Stall on toggling the sidebar.** 100 ms on the old Mac. Profile it, and fix it if the
+  cause is contained.
+- [ ] **Hardware checkpoint (owner):** rerun the 32f block on the 2015 MacBook Pro and send back
+  the file.
 
 ## Later
 
