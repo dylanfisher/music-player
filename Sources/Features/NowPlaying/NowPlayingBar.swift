@@ -33,7 +33,8 @@ public final class NowPlayingBar: NSObject {
     private var engine: PlaybackEngine?
     private var updates: Task<Void, Never>?
     private var timer: Timer?
-    private var dragging = false
+    /// Seeks sent to the engine and not yet done, while which the bars keep the target.
+    private var pendingSeeks = 0
 
     private let art = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
@@ -41,7 +42,7 @@ public final class NowPlayingBar: NSObject {
     private let formatLabel = NSTextField(labelWithString: "")
     private let elapsedLabel = NSTextField(labelWithString: "")
     private let remainingLabel = NSTextField(labelWithString: "")
-    private let slider = NSSlider(value: 0, minValue: 0, maxValue: 1, target: nil, action: nil)
+    private let slider = SeekBar()
     private let previousButton = NSButton()
     private let playButton = NSButton()
     private let nextButton = NSButton()
@@ -50,7 +51,7 @@ public final class NowPlayingBar: NSObject {
     private let bylineLabel = NSTextField(labelWithString: "")
     private let centeredElapsedLabel = NSTextField(labelWithString: "")
     private let totalLabel = NSTextField(labelWithString: "")
-    private let progress = NSSlider(value: 0, minValue: 0, maxValue: 1, target: nil, action: nil)
+    private let progress = SeekBar()
 
     public init(model: NowPlayingModel, artwork: ArtworkLoader) {
         self.model = model
@@ -72,14 +73,8 @@ public final class NowPlayingBar: NSObject {
             label.translatesAutoresizingMaskIntoConstraints = false
             label.widthAnchor.constraint(equalToConstant: 52).isActive = true
         }
-        progress.cell = ThinBarCell()
         for bar in [slider, progress] {
-            bar.minValue = 0
-            bar.maxValue = 1
-            bar.target = self
-            bar.action = #selector(seek(_:))
-            bar.isContinuous = true
-            bar.controlSize = .small
+            bar.seek = { [weak self] fraction, done in self?.seek(to: fraction, done: done) }
         }
         buildDetailed()
         buildCentered()
@@ -171,7 +166,6 @@ public final class NowPlayingBar: NSObject {
         detailed.setClippingResistancePriority(.required, for: .vertical)
         // A stack view's own hugging is its huggingPriority, not its content hugging.
         middle.setHuggingPriority(.init(1), for: .horizontal)
-        slider.setContentHuggingPriority(.init(1), for: .horizontal)
         seek.distribution = .fill
         art.setContentHuggingPriority(.required, for: .horizontal)
     }
@@ -186,7 +180,6 @@ public final class NowPlayingBar: NSObject {
         let times = NSStackView(views: [centeredElapsedLabel, progress, totalLabel])
         times.spacing = 6
         times.edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
-        progress.setContentHuggingPriority(.init(1), for: .horizontal)
         let capsule = NSBox()
         capsule.boxType = .custom
         capsule.borderWidth = 0
@@ -215,9 +208,8 @@ public final class NowPlayingBar: NSObject {
     }
 
     private func setEnabled(_ enabled: Bool) {
-        for control in [previousButton, playButton, nextButton, slider, progress] as [NSControl] {
-            control.isEnabled = enabled
-        }
+        for control in [previousButton, playButton, nextButton] { control.isEnabled = enabled }
+        for bar in [slider, progress] { bar.isEnabled = enabled }
     }
 
     private func apply(_ update: PlaybackUpdate) {
@@ -265,15 +257,15 @@ public final class NowPlayingBar: NSObject {
     private func showPosition() async {
         let position = await engine?.position()
         showTimes(model.times(positionSeconds: position))
-        guard !dragging else { return }
+        guard pendingSeeks == 0, !slider.isTracking, !progress.isTracking else { return }
         let fraction =
             if let duration = model.state.durationSeconds, duration > 0, let position {
                 position / duration
             } else {
                 0.0
             }
-        slider.doubleValue = fraction
-        progress.doubleValue = fraction
+        slider.fraction = fraction
+        progress.fraction = fraction
     }
 
     private func showTimes(_ times: (elapsed: String, remaining: String)) {
@@ -325,34 +317,20 @@ public final class NowPlayingBar: NSObject {
         Task { await engine.next() }
     }
 
-    @objc private func seek(_ bar: NSSlider) {
+    /// Shows the times at `fraction` and both bars there; `done` seeks the engine, and the bars
+    /// hold the target until it has.
+    private func seek(to fraction: Double, done: Bool) {
         guard let engine, let duration = model.state.durationSeconds else { return }
-        let seconds = bar.doubleValue * duration
-        let ended = NSApp.currentEvent?.type == .leftMouseUp
-        dragging = !ended
+        let seconds = fraction * duration
+        slider.fraction = fraction
+        progress.fraction = fraction
         showTimes(model.times(positionSeconds: seconds))
-        // Seek once, when the drag ends, rather than on every step of it.
-        if ended { Task { await engine.seek(toSeconds: seconds) } }
-    }
-}
-
-/// A seek bar drawn as a thin line filled up to the position, with no knob.
-private final class ThinBarCell: NSSliderCell {
-    private static let barPoints = 3.0
-
-    override func drawKnob(_ knobRect: NSRect) {}
-
-    override func drawBar(inside rect: NSRect, flipped: Bool) {
-        let height = Self.barPoints
-        let radius = height / 2
-        let bar = NSRect(x: rect.minX, y: rect.midY - radius, width: rect.width, height: height)
-        NSColor.tertiaryLabelColor.setFill()
-        NSBezierPath(roundedRect: bar, xRadius: radius, yRadius: radius).fill()
-        let span = maxValue - minValue
-        guard span > 0 else { return }
-        var filled = bar
-        filled.size.width = bar.width * (doubleValue - minValue) / span
-        NSColor.secondaryLabelColor.setFill()
-        NSBezierPath(roundedRect: filled, xRadius: radius, yRadius: radius).fill()
+        guard done else { return }
+        pendingSeeks += 1
+        Task {
+            await engine.seek(toSeconds: seconds)
+            pendingSeeks -= 1
+            await showPosition()
+        }
     }
 }
