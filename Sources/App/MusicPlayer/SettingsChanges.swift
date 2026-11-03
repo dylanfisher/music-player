@@ -74,7 +74,7 @@ extension AppDelegate {
         }
     }
 
-    /// What follows each changed key: the shortcuts, the appearance and the now-playing style,
+    /// What follows each changed key: the shortcuts, the appearance,
     /// the watched folders and how they're scanned, the Artist pane's grouping, the track table's
     /// look, receiver control, and the output.
     func settingsChanged(_ keys: Set<String>) {
@@ -89,9 +89,6 @@ extension AppDelegate {
         }
         if let dispatcher { settingsWindow?.reload(bindings: dispatcher.bindings) }
         if keys.contains(schema.appearance.key) { applyAppearance(settings[\.appearance]) }
-        if keys.contains(schema.nowPlayingStyle.key) {
-            nowPlaying?.style = settings[\.nowPlayingStyle]
-        }
         let library = [
             schema.watchedFolders.key, schema.networkScanReaders.key,
             schema.pausePollingDuringPlayback.key, schema.syncFolder.key,

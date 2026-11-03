@@ -30,14 +30,17 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     /// The items to show once the toolbar is in a window.
     private let savedItems: [ToolbarItem]
 
-    /// `transport`, `status` and `search` are the views those items show. AppKit keeps the
-    /// items of every toolbar with the same `identifier` the same.
+    /// `transport`, `status`, `centeredStatus` and `search` are the views those items show.
+    /// AppKit keeps the items of every toolbar with the same `identifier` the same.
     init(
-        identifier: String, transport: NSView, status: NSView, search: NSView,
-        dispatcher: CommandDispatcher, items: [ToolbarItem]
+        identifier: String, transport: NSView, status: NSView, centeredStatus: NSView,
+        search: NSView, dispatcher: CommandDispatcher, items: [ToolbarItem]
     ) {
         toolbar = NSToolbar(identifier: identifier)
-        views = [.transport: transport, .status: status, .search: search]
+        views = [
+            .transport: transport, .status: status, .centeredStatus: centeredStatus,
+            .search: search,
+        ]
         self.dispatcher = dispatcher
         savedItems = items
         super.init()
@@ -88,7 +91,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         if flag, let view = views[item] {
             let shown = NSToolbarItem(itemIdentifier: identifier)
             shown.view = view
-            if item == .status {
+            if [.status, .centeredStatus].contains(item) {
                 // The status takes the room the other items leave. The toolbar measures a view
                 // at its fitting size, so constraints can't widen it; `minSize` and `maxSize`,
                 // deprecated in macOS 12 with no replacement for a flexible width, can. KVC
@@ -114,7 +117,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
             let output = NSMenuToolbarItem(itemIdentifier: identifier)
             output.menu = outputMenu
             made = output
-        case .transport, .status, .search, .flexibleSpace, .space:
+        case .transport, .status, .centeredStatus, .search, .flexibleSpace, .space:
             made = NSToolbarItem(itemIdentifier: identifier)
         }
         label(made, item)
@@ -170,6 +173,7 @@ extension ToolbarItem {
         case .transport: "Playback Controls"
         case .volume: "Volume"
         case .status: "Now Playing"
+        case .centeredStatus: "Now Playing (Centered)"
         case .search: "Search"
         case .shuffle: AppCommands.title(of: .shuffle)
         case .repeat: AppMenus.repeatMenuTitle
@@ -187,6 +191,7 @@ extension ToolbarItem {
         case .transport: "playpause.fill"
         case .volume: "speaker.wave.2.fill"
         case .status: "music.note"
+        case .centeredStatus: "text.aligncenter"
         case .search: "magnifyingglass"
         case .shuffle: "shuffle"
         case .repeat: "repeat"

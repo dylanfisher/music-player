@@ -345,7 +345,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
         schema.settings.map(\.key).filter { GeneralModel.Section(key: $0) == .appearance })
     #expect(appearanceKeys.contains(schema.rowHeight.key))
     #expect(appearanceKeys.contains(schema.appearance.key))
-    #expect(appearanceKeys.contains(schema.nowPlayingStyle.key))
+    #expect(appearanceKeys.contains(schema.artSize.key))
 
     controller.show(setting: schema.rowHeight.key)
     #expect(controller.window.title == "Appearance")

@@ -6,8 +6,8 @@ import Playback
 /// each path the output publishes.
 @MainActor
 public final class SignalPathPanel: NSViewController {
-    private let badge = NSBox()
-    private let badgeLabel = NSTextField(labelWithString: "")
+    let badge = BadgeBackground()
+    let badgeLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
     private let columns = NSStackView()
     /// Made again for each path: `NSGridView.removeRow` leaves the row's views in the grid,
@@ -21,9 +21,8 @@ public final class SignalPathPanel: NSViewController {
 
     override public func loadView() {
         badgeLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize - 1, weight: .semibold)
-        badge.boxType = .custom
-        badge.borderWidth = 0
-        badge.cornerRadius = 4
+        // A plain view under constraints: an `NSBox` sizes itself from its content view, not
+        // from constraints on a label added beside it, and cut the label off.
         badge.addSubview(badgeLabel)
         badgeLabel.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -70,7 +69,7 @@ public final class SignalPathPanel: NSViewController {
             case .neutral: .secondaryLabelColor
             }
         badgeLabel.textColor = color
-        badge.fillColor = color.withAlphaComponent(0.15)
+        badge.color = color.withAlphaComponent(0.15)
         detailLabel.stringValue = lines.detail
         detailLabel.isHidden = lines.detail.isEmpty
         grids = lines.columns.map(grid)
@@ -113,5 +112,29 @@ public final class SignalPathPanel: NSViewController {
         }
         if grid.numberOfColumns > 0 { grid.column(at: 0).xPlacement = .trailing }
         return grid
+    }
+}
+
+/// The verdict badge's rounded fill, in a color that follows the appearance.
+final class BadgeBackground: NSView {
+    var color = NSColor.clear {
+        didSet { needsDisplay = true }
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 4
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = color.cgColor
+        }
     }
 }

@@ -17,6 +17,7 @@ private func dispatcher() throws -> CommandDispatcher {
 private func toolbar(_ items: [ToolbarItem], _ dispatcher: CommandDispatcher) -> MainToolbar {
     let toolbar = MainToolbar(
         identifier: UUID().uuidString, transport: NSView(), status: NSView(),
+        centeredStatus: NSView(),
         search: NSSearchField(), dispatcher: dispatcher,
         items: items)
     let window = NSWindow(
@@ -121,4 +122,22 @@ private func nextTurn() async {
     slider.sendAction(slider.action, to: slider.target)
     #expect(set.count == 1)
     #expect(set.first?.0 == -12 && set.first?.1 == true)
+}
+
+@MainActor @Test func eachNowPlayingStyleIsAToolbarItemOfItsOwn() throws {
+    let detailed = NSView()
+    let centered = NSView()
+    let toolbar = MainToolbar(
+        identifier: UUID().uuidString, transport: NSView(), status: detailed,
+        centeredStatus: centered, search: NSSearchField(), dispatcher: try dispatcher(),
+        items: [.centeredStatus])
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 1200, height: 400), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    toolbar.attach(to: window)
+    #expect(toolbar.items == [.centeredStatus])
+    #expect(toolbar.toolbar.items.first?.view === centered)
+    toolbar.show([.status])
+    #expect(toolbar.toolbar.items.first?.view === detailed)
 }

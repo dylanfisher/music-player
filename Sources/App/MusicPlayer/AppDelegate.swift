@@ -194,13 +194,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
-        nowPlaying.style = settings[\.nowPlayingStyle]
         makeMediaControls(dispatcher, lookup: lookup)
         let queue = QueuePanel(model: QueueModel(lookup: lookup))
         let signalPath = SignalPathPanel()
         let toolbar = MainToolbar(
             identifier: String(describing: MainWindow.self), transport: nowPlaying.transport,
-            status: nowPlaying.status,
+            status: nowPlaying.status, centeredStatus: nowPlaying.centeredStatus,
             search: browser.searchField, dispatcher: dispatcher, items: state[\.toolbarItems])
         toolbar.itemsChanged = { items in
             saver.set(\.toolbarItems, items)

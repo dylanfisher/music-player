@@ -158,6 +158,20 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
     #expect(panel.view.fittingSize.height < line.fittingSize.height * 6)
 }
 
+@MainActor @Test func theBadgeShowsItsWholeLabel() {
+    let panel = SignalPathPanel()
+    panel.show(nil)
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 720, height: 100), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = panel.view
+    panel.view.layoutSubtreeIfNeeded()
+    let label = panel.badgeLabel.convert(panel.badgeLabel.bounds, to: panel.view)
+    #expect(label.height >= panel.badgeLabel.fittingSize.height)
+    #expect(panel.badge.convert(panel.badge.bounds, to: panel.view).contains(label))
+    #expect(panel.view.bounds.contains(label))
+}
+
 @Test func dsdShowsItsRateAndDoPWithTheDigitalVolumeBypassed() {
     let dsd = SignalFormat(
         formatID: dsdFormatID, sampleRateHz: 5_644_800, bitsPerChannel: 1, channels: 2,

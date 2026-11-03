@@ -1,7 +1,7 @@
 # 0055. The header is a toolbar the user customizes
 
 - **Date:** 2026-11-02
-- **Status:** accepted
+- **Status:** accepted; the status styles amended on 2026-11-02 (phase 29.2)
 
 ## Context
 
@@ -34,10 +34,14 @@ with the transport, the now-playing status, a queue button and the search field 
   at its minimum width; the property is deprecated since macOS 12 with nothing in its place for
   a flexible width, and KVC sets it without the deprecation warning, which the build treats as an
   error.
-- **Two status styles**, the config's `appearance.nowPlaying`: Detailed, the old status and
-  the default, and Centered, "Title by Artist from Album" centered in bold over a capsule with
-  the elapsed time, a thin bar without a knob, which seeks, and the total time. The detailed
-  layout sets the height in both styles, so switching doesn't resize the toolbar.
+- **Two status styles, each a toolbar item**, picked by customizing the toolbar as in
+  Swinsian: Now Playing (`status`, in the defaults), the old status, and Now Playing
+  (Centered) (`centeredStatus`), "Title by Artist from Album" centered in bold over a capsule
+  with the elapsed time, a thin bar without a knob, which seeks, and the total time. Each is its
+  own view, so the toolbar can hold either or both; the centered one is as tall as the art, the
+  detailed one's tallest view. Phase 29.2 moved the choice here from the config's
+  `appearance.nowPlaying`, which is gone: a config file that still sets it shows the banner
+  until the line is deleted.
 - **Liquid glass is the system's.** On macOS 26 AppKit draws toolbar items on glass; on 12 to
   15 the toolbar has the title bar's material. The app draws no backdrop of its own.
 

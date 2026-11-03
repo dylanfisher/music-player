@@ -9,8 +9,9 @@ import Settings
 private let logger = moduleLogger()
 
 /// The toolbar's playback items: the transport buttons, and the now-playing status with the
-/// current track, its times, a seek bar and the output format, in one of two styles. It reads
-/// the engine's updates and sends it the buttons; the model decides what to show.
+/// current track, its times, a seek bar and the output format, in two styles, each a toolbar
+/// item of its own. It reads the engine's updates and sends it the buttons; the model decides
+/// what to show.
 @MainActor
 public final class NowPlayingBar: NSObject {
     /// How often the position updates while playing. Nothing ticks while paused or stopped.
@@ -23,12 +24,11 @@ public final class NowPlayingBar: NSObject {
     public let model: NowPlayingModel
     /// The previous, play and next buttons.
     public let transport: NSView
-    /// The current track, its times and a seek bar.
+    /// Art, title, artist and album, the format line, and a seek bar with times.
     public let status = NSView()
-    /// Which of its two layouts `status` shows.
-    public var style = NowPlayingStyle.detailed {
-        didSet { showStyle() }
-    }
+    /// "Title by Artist from Album" centered in bold, over a capsule with the elapsed time, a
+    /// thin progress bar and the total time, as Swinsian's header draws it.
+    public let centeredStatus = NSView()
     private let artwork: ArtworkLoader
     private var engine: PlaybackEngine?
     private var updates: Task<Void, Never>?
@@ -83,20 +83,20 @@ public final class NowPlayingBar: NSObject {
         }
         buildDetailed()
         buildCentered()
-        for layout in [detailed, centered] {
+        for (layout, item) in [(detailed, status), (centered, centeredStatus)] {
             layout.translatesAutoresizingMaskIntoConstraints = false
-            status.addSubview(layout)
+            item.addSubview(layout)
             NSLayoutConstraint.activate([
-                layout.leadingAnchor.constraint(equalTo: status.leadingAnchor),
-                layout.trailingAnchor.constraint(equalTo: status.trailingAnchor),
-                layout.centerYAnchor.constraint(equalTo: status.centerYAnchor),
+                layout.leadingAnchor.constraint(equalTo: item.leadingAnchor),
+                layout.trailingAnchor.constraint(equalTo: item.trailingAnchor),
+                layout.centerYAnchor.constraint(equalTo: item.centerYAnchor),
             ])
         }
-        // The detailed layout, the taller, sets the height in both styles, so the toolbar
-        // keeps its height when the style changes.
         detailed.heightAnchor.constraint(equalTo: status.heightAnchor).isActive = true
+        // As tall as the art, the detailed layout's tallest view, so the toolbar keeps its
+        // height whichever style it holds.
+        centeredStatus.heightAnchor.constraint(equalToConstant: Self.artPoints).isActive = true
         setEnabled(false)
-        showStyle()
         show()
     }
 
@@ -204,11 +204,6 @@ public final class NowPlayingBar: NSObject {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: centered.widthAnchor).isActive = true
         }
-    }
-
-    private func showStyle() {
-        detailed.isHidden = style != .detailed
-        centered.isHidden = style != .centered
     }
 
     private func setUp(_ button: NSButton, symbol: String, label: String, _ action: Selector) {
