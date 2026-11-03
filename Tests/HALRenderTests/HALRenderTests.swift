@@ -174,3 +174,17 @@ private func values<T>(_ bytes: [UInt8], as: T.Type) -> [T] {
     fixture.write(bytes(samples))
     #expect(values(render(fixture.state), as: Int32.self) == samples)
 }
+
+@Test func opaqueBytesPassUnchangedWhateverTheGain() throws {
+    let fixture = try Fixture(samples: HALRenderSamplesOpaque)
+    HALRenderSetGain(fixture.state, 0.5)
+    // Two DoP frames: markers 0x05 and 0xFA over DSD bytes, 24 bits aligned high in 32.
+    let frames: [UInt8] = [
+        0, 0x69, 0x96, 0x05, 0, 0x69, 0x96, 0x05, 0, 0x12, 0x34, 0xFA, 0, 0x56, 0x78, 0xFA,
+    ]
+    fixture.write(frames)
+    #expect(render(fixture.state, bytes: 16) == frames)
+    HALRenderSetGain(fixture.state, 0)
+    fixture.write(frames)
+    #expect(render(fixture.state, bytes: 16) == frames)
+}

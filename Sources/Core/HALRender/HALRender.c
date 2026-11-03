@@ -174,6 +174,8 @@ static void applyGain(HALRenderSampleKind kind, uint8_t *bytes, size_t size, flo
             memcpy(sample, &value, 4);
             break;
         }
+        case HALRenderSamplesOpaque:
+            return;
         }
     }
 }
@@ -198,7 +200,9 @@ OSStatus HALRenderIOProc(AudioObjectID device, const AudioTimeStamp *now,
         size_t copied = i == 0 ? readSource(render, buffer->mData, size, &consumed) : 0;
         if (i == 0) {
             // At unity the samples pass through untouched, which is what keeps output bit-perfect.
-            if (gain != 1.0f || render->appliedGain != 1.0f) {
+            // Opaque bytes always do.
+            if (render->samples != HALRenderSamplesOpaque &&
+                (gain != 1.0f || render->appliedGain != 1.0f)) {
                 applyGain(render->samples, buffer->mData, copied, render->appliedGain, gain);
             }
             render->appliedGain = gain;

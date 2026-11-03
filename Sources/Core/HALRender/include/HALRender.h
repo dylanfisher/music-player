@@ -23,6 +23,9 @@ typedef enum {
     /// Also 24-bit samples aligned high in 4 bytes.
     HALRenderSamplesInt32,
     HALRenderSamplesFloat32,
+    /// Bytes the IO proc copies and never scales, whatever the gain: DoP, whose markers any
+    /// change breaks.
+    HALRenderSamplesOpaque,
 } HALRenderSampleKind;
 
 /// Does not take ownership of `source`, which must outlive the IO proc. The gain starts at 1, which
