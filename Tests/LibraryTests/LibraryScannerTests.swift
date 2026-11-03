@@ -562,3 +562,28 @@ private final class CountingReads: ScanFileAccess, @unchecked Sendable {
     #expect(counts == counts.indices.map { $0 / 3 * 3 })
     #expect(try library.index().knownFiles(under: library.root).count == counts.count)
 }
+
+@Test func dsdFilesAreIndexedAndOnesThatCantPlayAreStoredAsProblems() throws {
+    let library = try TestLibrary()
+    let folder = library.root + "/dsd"
+    try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+    let channels = (0..<2).map { dsdTone(samples: 8 * 4096, rateHz: 11_289_600, channel: $0) }
+    let files = [
+        ("a.dsf", dsfFile(rateHz: 11_289_600, channels: channels)),
+        ("b.dff", dffFile(rateHz: 11_289_600, channels: channels)),
+        ("c.dff", dffFile(rateHz: 2_822_400, channels: channels, compression: "DST ")),
+    ]
+    for (name, data) in files {
+        try data.write(to: URL(fileURLWithPath: folder + "/" + name, isDirectory: false))
+    }
+    _ = try library.scan()
+    let index = try library.index()
+    let ids = try index.trackIDs(atPaths: files.map { folder + "/" + $0.0 })
+    #expect(ids[2] == nil)
+    let rows = try index.rows(ids: ids.compactMap { $0 })
+    #expect(rows.map(\.sampleRateHz) == [11_289_600, 11_289_600])
+    #expect(rows.map(\.bitsPerSample) == [1, 1])
+    let issue = try index.fileIssues().first { $0.path == folder + "/c.dff" }
+    #expect(issue?.problem == .failure(.unsupported))
+    #expect(issue?.detail == "DST-compressed DSDIFF")
+}

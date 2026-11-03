@@ -11,8 +11,8 @@ public struct ImportPlan: Equatable, Sendable {
     /// Paths the index holds no track for, after the prefix, in the library's order, that the
     /// scanner would read.
     public var unmatched: [String] = []
-    /// Paths the index holds no track for in a format the scanner doesn't read, such as DSF
-    /// before phase 12, which no prefix or folder can match.
+    /// Paths the index holds no track for in a format the scanner doesn't read, such as Ogg,
+    /// which no prefix or folder can match.
     public var unreadFormat: [String] = []
     /// Source rows merged into another for the same track: the library's, plus paths that
     /// reached one track only after the prefix or the lookup in NFC.

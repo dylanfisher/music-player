@@ -96,7 +96,7 @@ private func problemsBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64])
     var plan = ImportPlan(
         library: PlayerLibrary(player: .swinsian, source: "/s/Library.sqlite"), prefix: nil)
     plan.unmatched = ["/Old/a.flac", "/Old/b.flac"]
-    plan.unreadFormat = ["/Old/c.dsf"]
+    plan.unreadFormat = ["/Old/c.ogg"]
     let rows = plan.problems
     #expect(rows.map(\.line) == plan.detailLines)
     #expect(rows[0].fix == .locate(path: "/Old/a.flac"))

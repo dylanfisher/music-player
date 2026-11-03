@@ -29,6 +29,18 @@ private func update(
     return PlaybackUpdate(state: state, event: event)
 }
 
+@MainActor @Test func aDSDTracksFormatLineNamesItsRateByItsMultiple() {
+    let model = NowPlayingModel { path in
+        var dsd = row(path)
+        dsd.codec = "dsd"
+        dsd.sampleRateHz = 5_644_800
+        dsd.bitsPerSample = 1
+        return dsd
+    }
+    model.apply(update(.trackStarted(index: 0), output: "DoP at 352.8 kHz on ADI-2 DAC"))
+    #expect(model.formatLine == "DSD128 → DoP at 352.8 kHz on ADI-2 DAC")
+}
+
 @MainActor @Test func showsTheCurrentTracksRowAndTheFormatLine() {
     var lookups: [String] = []
     let model = NowPlayingModel { path in

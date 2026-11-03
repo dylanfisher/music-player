@@ -14,13 +14,15 @@ check shown, the last import and the sync.
 
 The owner's case was a Swinsian import that listed a `.dsf` file under the watched `dsd` folder
 as not in the library. The cause wasn't the mount path, the share mapping (0028), NFC or a scan
-still to run: the scanner reads only `audioFileExtensions`, and DSF and DFF wait for phase 12,
-so no such file is ever in the index.
+still to run: the scanner read only `audioFileExtensions`, and DSF and DFF waited for phase
+12, so no such file was ever in the index. Phase 12 reads them ([0064](0064-dsd-over-dop.md)),
+so such a miss now matches on the next import or through Locate…
 
 ## Decision
 
 - **A miss in a format the scanner skips is listed apart**, as "not in the library, a format
-  this app doesn't read yet", and the preview counts it. No prefix or folder can match it, so
+  this app doesn't read yet", and the preview counts it. Since phase 12 that's a format such
+  as Ogg, APE or WavPack, never DSF or DSDIFF. No prefix or folder can match it, so
   it gets no Locate.
 - **The Problems window is a table**, a row a line, with Dismiss, Remove from Library,
   Restore and Locate… under it. ⌘C copies the rows selected. A button is on only when it applies to every

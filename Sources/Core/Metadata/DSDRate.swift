@@ -13,7 +13,10 @@ func dsdMultiplier(_ rateHz: Int) -> Int? {
     return nil
 }
 
+/// The extensions of DSF and DSDIFF files, lowercased.
+public let dsdFileExtensions: Set<String> = ["dsf", "dff"]
+
 /// How every view names a track's rate: "DSD128" for a DSD rate, otherwise "96 kHz".
-func sampleRateText(_ rateHz: Int) -> String {
+public func sampleRateText(_ rateHz: Int) -> String {
     dsdMultiplier(rateHz).map { "DSD\($0)" } ?? "\(kilohertz(Double(rateHz))) kHz"
 }

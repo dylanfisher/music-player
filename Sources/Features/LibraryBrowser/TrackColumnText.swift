@@ -1,6 +1,7 @@
 import DisplayText
 import Foundation
 import Library
+import Metadata
 import Settings
 
 extension TrackColumn {
@@ -72,7 +73,7 @@ extension TrackColumn {
         case .codec: row.codec.uppercased()
         case .fileType: row.fileType
         case .bitRate: row.bitRateKbps.map { "\(Int($0.rounded())) kbps" } ?? ""
-        case .sampleRate: "\(kilohertz(Double(row.sampleRateHz))) kHz"
+        case .sampleRate: sampleRateText(row.sampleRateHz)
         case .bitDepth: number(row.bitsPerSample)
         case .channels: String(row.channels)
         case .size:

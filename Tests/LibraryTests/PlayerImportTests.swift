@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import Fixtures
 @testable import Library
 
 /// A scanned test library, its index, and its tracks' rows sorted by path.
@@ -136,12 +137,71 @@ private func track(
 
 @Test func aMissInAFormatTheScannerSkipsIsListedApart() throws {
     let (library, index, _) = try scanned()
-    // The owner's Swinsian import missed a DSF file in a watched folder: the scanner never
-    // reads one, so no prefix or folder could match it.
-    let dsf = library.root + "/dsd/01-When It's Sleepy Time Down South.dsf"
+    // The scanner never reads an Ogg file, so no prefix or folder could match it.
+    let ogg = library.root + "/ogg/01-When It's Sleepy Time Down South.ogg"
     let gone = library.root + "/gone.flac"
-    let plan = try index.importPlan(player([track(dsf), track(gone)]), prefix: nil)
-    #expect(plan.unmatched == [gone] && plan.unreadFormat == [dsf])
+    let plan = try index.importPlan(player([track(ogg), track(gone)]), prefix: nil)
+    #expect(plan.unmatched == [gone] && plan.unreadFormat == [ogg])
+}
+
+/// The owner's watched `dsd` folder: a DSD128 DSF and a DSD64 DSDIFF, written under `root`.
+private func dsdAlbum(under root: String) throws -> [String] {
+    let folder = root + "/dsd/Armstrong, Louis - 1952 - Mack The Knife (2017 DSD 128)"
+    try FileManager.default.createDirectory(
+        atPath: folder, withIntermediateDirectories: true)
+    let files = [
+        (folder + "/01 Mack The Knife.dsf", 5_644_800, false),
+        (folder + "/02 Back O' Town Blues.dff", 2_822_400, true),
+    ]
+    for (path, rate, isDFF) in files {
+        let channels = (0..<2).map { dsdTone(samples: 8 * 4096, rateHz: rate, channel: $0) }
+        try
+            (isDFF
+            ? dffFile(rateHz: rate, channels: channels) : dsfFile(rateHz: rate, channels: channels))
+            .write(to: URL(fileURLWithPath: path, isDirectory: false))
+    }
+    return files.map(\.0)
+}
+
+/// A Swinsian database listing `paths`, each played `plays` times.
+private func swinsian(_ paths: [String], plays: Int) throws -> PlayerLibrary {
+    let rows = paths.enumerated().map { index, path in
+        "(\(index + 1), '\(path.replacingOccurrences(of: "'", with: "''"))', \(plays), NULL, NULL, NULL, 0)"
+    }
+    return try PlayerLibrary(
+        swinsianAt: try swinsianDatabase(rows.map { swinsianRows(0, $0) }.joined()),
+        now: 2_000_000_000)
+}
+
+@Test func aSwinsianMissInDSDMatchesOnceTheScannerReadsDSD() throws {
+    let library = try TestLibrary()
+    let paths = try dsdAlbum(under: library.root)
+    _ = try library.scan()
+    let index = try library.index()
+    let plan = try index.applyImport(try swinsian(paths, plays: 3), prefix: nil)
+    #expect(plan.matched == 2)
+    #expect(plan.unmatched.isEmpty && plan.unreadFormat.isEmpty)
+    let rows = try index.rows(ids: try index.trackIDs(atPaths: paths).compactMap { $0 })
+    #expect(rows.map(\.sampleRateHz) == [5_644_800, 2_822_400])
+    #expect(rows.map(\.codec) == ["dsd", "dsd"])
+    #expect(rows.map(\.playCount) == [3, 3])
+}
+
+@Test func aDSDMissUnderAnOldMountIsLocatedNotListedAsUnread() throws {
+    let library = try TestLibrary()
+    let paths = try dsdAlbum(under: library.root)
+    _ = try library.scan()
+    let index = try library.index()
+    let old = paths.map { "/Volumes/music" + $0.dropFirst(library.root.count) }
+    let plan = try index.applyImport(try swinsian(old, plays: 2), prefix: nil)
+    #expect(plan.unmatched == old && plan.unreadFormat.isEmpty)
+
+    let prefix = PathPrefix(locating: old[0], in: library.root + "/dsd")
+    #expect(prefix == PathPrefix(from: "/Volumes/music/dsd", to: library.root + "/dsd"))
+    let written = try index.applyImport(plan.misses(under: prefix.from), prefix: prefix)
+    #expect(written.matched == 2 && written.unmatched.isEmpty)
+    let ids = try index.trackIDs(atPaths: paths).compactMap { $0 }
+    #expect(try index.rows(ids: ids).map(\.playCount) == [2, 2])
 }
 
 @Test func locatingMapsTheFolderWithThePickedNameOrTheFilesOwn() {

@@ -34,6 +34,15 @@ import Testing
     #expect(TrackColumn.allCases.filter { !$0.isSortable } == [.rowNumber])
 }
 
+@MainActor @Test func aDSDRateShowsAsItsMultiple() {
+    var dsd = row
+    dsd.codec = "dsd"
+    dsd.sampleRateHz = 5_644_800
+    dsd.bitsPerSample = 1
+    #expect(TrackColumn.sampleRate.text(dsd, position: 0) == "DSD128")
+    #expect(TrackColumn.sampleRate.text(row, position: 0) == "44.1 kHz")
+}
+
 /// Album Art, Title, Artist, Album, Track of Total, Time, Year, Genre, Grouping, Catalog Number,
 /// Bit Rate, Sample Rate, Size, Play Count and Date Added, after the row number.
 @Test func theOwnersSixteenColumnsFitBesideTheSidebarAndQueueAt1440Points() {

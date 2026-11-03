@@ -2,6 +2,7 @@ import DisplayText
 import Foundation
 import Library
 import Log
+import Metadata
 import Playback
 
 private let logger = moduleLogger()
@@ -86,8 +87,12 @@ public final class NowPlayingModel {
     /// the file's format, then what the output is running, once it says.
     var formatLine: String {
         let source = track.map { track in
+            // A DSD rate's name says the format and the depth already.
+            guard track.codec != TrackAudio.Codec.dsd.rawValue else {
+                return sampleRateText(track.sampleRateHz)
+            }
             let bits = track.bitsPerSample.map { " " + bitDepth($0) } ?? ""
-            return "\(kilohertz(Double(track.sampleRateHz))) kHz\(bits) \(track.codec.uppercased())"
+            return "\(sampleRateText(track.sampleRateHz))\(bits) \(track.codec.uppercased())"
         }
         return [source, state.outputFormat].compactMap { $0 }.joined(separator: " → ")
     }

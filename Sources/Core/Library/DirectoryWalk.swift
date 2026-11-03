@@ -1,10 +1,11 @@
 import Foundation
+import Metadata
 
 /// The extensions the scanner reads, lowercased. Anything else is counted and skipped, so cover
 /// art, cue sheets and logs beside the music cost no reads.
-public let audioFileExtensions: Set<String> = [
+public let audioFileExtensions = Set([
     "flac", "m4a", "mp4", "mp3", "wav", "aif", "aiff", "aifc",
-]
+]).union(dsdFileExtensions)
 
 /// An audio file the walk found, with its size and dates from the directory listing.
 struct WalkedFile: Sendable {
