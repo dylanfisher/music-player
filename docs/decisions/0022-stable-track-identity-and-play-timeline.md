@@ -7,7 +7,7 @@
   stored in NFC, and a matched move deletes the stat-less row a scan added.
   [0028](0028-network-folders-by-share.md): a share's new mount point rewrites the paths.
   [0038](0038-sync-logs.md): other machines' events add rows, plays and history, and a
-  merged move deletes a path that had stats. [0056](0056-history-lists-recorded-plays.md):
+  merged move deletes a path that had stats. [0057](0057-history-lists-recorded-plays.md):
   History lists only tracks with a row in `history`.
 - **Supersedes:** "key stats by path" in [0008](0008-library-schema-identity-and-stats-by-path.md)
 - **Amends:** [0018](0018-playlists-and-stats.md)

@@ -1,4 +1,4 @@
-# 0056. History lists the tracks with a recorded play
+# 0057. History lists the tracks with a recorded play
 
 - **Date:** 2026-11-02
 - **Status:** accepted
