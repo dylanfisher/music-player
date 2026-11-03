@@ -3599,7 +3599,7 @@ extends that bench rather than redoing it.
 
 ### 33. Old Mac follow-ups
 
-**Queued, not started.** Runs after 34, alongside 35 and 36. From the 32f old Mac checkpoint on
+**Done; old Mac checkpoint pending.** Ran after 34, alongside 35 and 36. From the 32f old Mac checkpoint on
 2026-11-03.
 Phase 32's rules apply: bench first, the audio boundary stands, the NAS is simulated, and the old
 Mac's numbers come from its next checkpoint.
@@ -3656,6 +3656,18 @@ Plan:
 6. 33.6: time the sidebar toggle here, and fix the cause if it's contained.
 7. Benches: the named ones each item touches, against `main` measured the same session; the old
    Mac's numbers are pending its checkpoint.
+
+Result: shipped, measured on the build Mac against `main` in the same session. A keystroke
+during a scan waited behind the browser's refresh in the one reader; refreshes now use a second,
+read-only connection (second keystroke p95 23 ms against 24–97 ms). The launch stall and the
+empty-list sidebar toggle were AppKit drawing the default system background's alternating rows;
+the table now holds that color resolved for its appearance (launch 0.47 s against 0.60 s, toggle
+11–45 ms against 130–160 ms). That costs memory: after scrolling every row 111 MB against 81 MB,
+under the 120 MB budget, kept as a trade-off in ADR 0086. Glass now restores the color as set,
+not a resolved guess. The old Mac's idle budget is 0.15% from its checkpoint, and Get Info asks
+above 25 files. `./scripts/check` passes; one correctness review and a fix round. The 2015
+MacBook Pro checkpoint is pending: the 32f block, the stall log, the empty-list sidebar toggle
+and a cold launch after `purge`.
 
 ### 34. Config safety
 
