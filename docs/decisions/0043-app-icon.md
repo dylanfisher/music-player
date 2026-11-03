@@ -23,7 +23,9 @@ The bundle is put together by `scripts/bundle`, not Xcode, so there is no asset 
 Quick Look (`qlmanage -t`) render it once at 1024 px, scales that with `sips` to the ten sizes
 an `.iconset` holds, packs them with `iconutil` into `Contents/Resources/AppIcon.icns`, and
 `CFBundleIconFile` in `Info.plist` names it. All three tools ship with macOS. The script fails
-if Quick Look writes nothing.
+if Quick Look writes nothing. Quick Look draws on an opaque white square, which showed around the
+icon in the app switcher, so `scripts/icon-mask.swift` first cuts the master to the tile, the
+SVG's `tile` clip path, a pixel inside its edge so no white fringe is left (phase 30c.7).
 
 The SVG draws the tile at Apple's 824 px shape on a 1024 px canvas, so it lines up with other
 apps' icons. The paper is opaque, its tint mixed into its color, and is drawn straight over the

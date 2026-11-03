@@ -38,7 +38,7 @@ cp Support/Info.plist "$app/Contents/"
 # The icon is drawn once, as SVG, and rendered here, so no rendered copy is checked in (ADR 0043).
 # The name matches CFBundleIconFile in the plist. sips on macOS 12 reads SVG but writes nothing,
 # and the 2015 MacBook Pro builds through scripts/pull, so Quick Look renders one 1024 px master
-# on every Mac and sips scales it to each size iconutil needs.
+# on every Mac, cut to the tile, and sips scales it to each size iconutil needs.
 work=$(mktemp -d)
 iconset="$work/AppIcon.iconset"
 mkdir -p "$iconset" "$app/Contents/Resources"
@@ -47,6 +47,8 @@ master="$work/AppIcon.svg.png"
 if [ ! -s "$master" ]; then
   echo "Quick Look wrote no PNG from Support/AppIcon.svg." >&2; exit 1
 fi
+# Quick Look draws on white; the icon's corners must be transparent.
+swift scripts/icon-mask.swift Support/AppIcon.svg "$master"
 for size in 16 32 128 256 512; do
   for scale in 1 2; do
     px=$((size * scale))
