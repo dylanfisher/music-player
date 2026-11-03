@@ -3713,6 +3713,27 @@ path is budgeted.
   scan that adds tracks closes it, probably because the list reloads. Keep it open across a
   refresh as long as its track is still in the list.
 
+Implementation plan (ADR 0083; ADR 0072 amended for the seek bar):
+1. 35.1: `DeviceOutput.position()` and `RendererOutput.position()` report a posted seek's
+   target from the moment `seek` returns until the output has sought, so the bar's read after
+   the seek, its ticks and the system's Now Playing get the new time. The `Output` protocol
+   states it. Tests: a seek on the slow simulated NAS reads the target at once and never the
+   old time (HALOutputTests); the same for a renderer (UPnPOutputTests); a click on the
+   toolbar bar over a real `DeviceOutput` on a null device never draws the old time
+   (NowPlayingTests).
+2. 35.2 and 35.3: a `SeekBox` view in NowPlaying holds the elapsed time, the `SeekBar` and the
+   total in a rounded inset box, replacing the two stacks in `NowPlayingBar` and
+   `StatusBarParts`. `SeekBar` draws a rounded track with an accent fill, no playhead. Both
+   views return false from `mouseDownCanMoveWindow`, and the box takes clicks on its times.
+   Tests: the box's and bar's `mouseDownCanMoveWindow`, and a hit test on each place, in the
+   toolbar and in the status bar of a full-size content view window. Snapshots in both places,
+   light and dark, at 1440x900.
+3. 35.5: `TrackTableController` keeps the viewer's track ID; a reload closes the viewer only
+   when that track has left the list, and a redraw only when its row's art or album changed.
+   Test: a reload that keeps the track keeps the viewer; one that drops it closes it.
+4. 35.4: the buffering review in ADR 0083, from the code and from benches of seeks on the slow
+   simulated NAS. A change only if a bench shows it pays against the phase 32 budgets.
+
 ### 36. Window chrome and glass
 
 **Queued, not started.** Runs after 34, alongside 33 and 35.
