@@ -1,12 +1,18 @@
 import AppKit
 import Log
+import Metadata
 import Settings
 
 private let logger = moduleLogger()
 
 /// Shows the files at `paths` selected in `viewer`, or in Finder when no app has Searcher's
-/// bundle ID. It only reads: the files are never opened, moved or written.
+/// bundle ID. It only reads: the files are never opened, moved or written. Off the main thread,
+/// since a reveal looks at the files, which may be on a share that has stopped answering.
 public func reveal(_ paths: [String], in viewer: FileViewer) {
+    Task { await blockingFileWork { revealNow(paths, in: viewer) } }
+}
+
+private func revealNow(_ paths: [String], in viewer: FileViewer) {
     let urls = paths.map { URL(fileURLWithPath: $0, isDirectory: false) }
     let workspace = NSWorkspace.shared
     guard let searcher = searcherApp(viewer, find: workspace.urlForApplication) else {

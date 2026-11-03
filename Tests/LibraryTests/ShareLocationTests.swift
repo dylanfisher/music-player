@@ -332,3 +332,23 @@ private struct EjectingAccess: ScanFileAccess {
     #expect(locate(folder, among: twoHosts) == .ambiguous(["/Volumes/music", "/Volumes/music-1"]))
     #expect(locate(SyncFolder(path: "/tmp/sync"), among: []) == .found(canonicalPath("/tmp/sync")))
 }
+
+@Test func theSyncFolderOpensOnlyWhenAFolderIsThere() {
+    let folder = SyncFolder(path: "sync", share: "smb://nas.local/music")
+    let mounted = [share("smb://nas.local/music", at: "/Volumes/music")]
+    var asked: [String] = []
+    let isFolder = { (path: String) -> Bool in
+        asked.append(path)
+        return true
+    }
+    #expect(
+        existingSyncFolder(folder, among: mounted, isDirectory: isFolder)
+            == .success("/Volumes/music/sync"))
+    #expect(
+        existingSyncFolder(folder, among: mounted) { _ in false }
+            == .failure(SyncFolderMissing(place: .found("/Volumes/music/sync"))))
+    #expect(
+        existingSyncFolder(folder, among: [], isDirectory: isFolder)
+            == .failure(SyncFolderMissing(place: .unmounted)))
+    #expect(asked == ["/Volumes/music/sync"], "an unmounted share's folder isn't asked about")
+}

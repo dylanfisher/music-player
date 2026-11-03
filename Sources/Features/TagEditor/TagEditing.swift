@@ -58,12 +58,7 @@ public final class TagEditing {
         Task { [weak self] in
             let read = self?.effects.read
             guard let read else { return }
-            // Not on the cooperative pool, whose few threads the NAS's reads would hold.
-            let (tracks, problems) = await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    continuation.resume(returning: read(paths))
-                }
-            }
+            let (tracks, problems) = await blockingFileWork { read(paths) }
             guard let self, token == self.session, self.sheet == nil, !self.isBusy else { return }
             if !problems.isEmpty {
                 self.effects.alert(

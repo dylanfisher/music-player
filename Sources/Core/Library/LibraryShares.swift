@@ -185,6 +185,15 @@ func unfoundRoot(of folder: WatchedFolder) -> String {
     return folder.path.isEmpty ? share : share + "/" + folder.path
 }
 
+/// The folder to watch for the folder at `url`, by share when it's on one. Asks its volume
+/// whether it's local, so call it off the main thread.
+public func folderToWatch(at url: URL) throws -> WatchedFolder {
+    let local = try url.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal == true
+    return folderToWatch(
+        url.standardizedFileURL.path, isLocal: local,
+        among: local ? [] : try SystemShareMounts().mountedShares())
+}
+
 /// Where the sync folder is now.
 public enum SyncFolderPlace: Equatable, Sendable {
     /// Its path in canonical form: as configured, or under where its share is mounted.
@@ -193,6 +202,28 @@ public enum SyncFolderPlace: Equatable, Sendable {
     /// Its share's name is mounted at these mount points on other hosts, so which one is meant
     /// isn't known (ADR 0028).
     case ambiguous([String])
+}
+
+/// The sync folder's path when a folder is there now, else where it was looked for. Asks the
+/// volume through `isDirectory`, so call it off the main thread.
+public func existingSyncFolder(
+    _ folder: SyncFolder, among shares: [MountedShare], isDirectory: (String) -> Bool
+) -> Result<String, SyncFolderMissing> {
+    let place = locate(folder, among: shares)
+    if case .found(let path) = place, isDirectory(path) { return .success(path) }
+    return .failure(SyncFolderMissing(place: place))
+}
+
+/// Where a sync folder that isn't there was looked for.
+public struct SyncFolderMissing: Error, Equatable {
+    public var place: SyncFolderPlace
+}
+
+/// Whether a directory is at `path`. Asks the volume.
+public func isDirectory(_ path: String) -> Bool {
+    var isDirectory: ObjCBool = false
+    return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+        && isDirectory.boolValue
 }
 
 /// Where the sync folder is now, with its share looked up among `shares`.

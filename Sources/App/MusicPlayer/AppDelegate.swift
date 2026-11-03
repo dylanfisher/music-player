@@ -7,6 +7,7 @@ import Library
 import LibraryBrowser
 import LocalSocket
 import Log
+import Metadata
 import NowPlaying
 import Palette
 import Playback
@@ -39,6 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let snapshotOf: SnapshotTarget
     /// How long after the first rows the snapshot waits, for the scan and art to show.
     static let snapshotDelaySeconds = 4.0
+    /// How long quitting waits for the output to close: longer than a device takes to restore
+    /// its format, which it waits up to 3 s for.
+    static let closeWaitSeconds = 6.0
     private(set) var settings: ConfigStore<AppSettings>?
     let banner = ConfigBanner()
     private(set) var state: StateStore<AppState>?
@@ -373,8 +377,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         saver?.flush()
         watcher?.stop()
         rendererOutput?.close()
-        // Puts the device and the default outputs back the way they were.
-        output?.close()
+        // Puts the device and the default outputs back the way they were. The close waits on the
+        // output's control thread, which a read from a share that stopped answering holds; the
+        // device's restore record puts it back at the next launch instead.
+        if let output, !finishes(within: Self.closeWaitSeconds, { output.close() }) {
+            logger.error("the output didn't close within \(Self.closeWaitSeconds) s; quitting")
+        }
     }
 
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
@@ -694,20 +702,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func watch(_ url: URL, _ settings: ConfigStore<AppSettings>) {
-        let path = url.standardizedFileURL.path
-        var folders = settings[\.watchedFolders]
-        do {
+        Task {
             // FSEvents reports nothing on network volumes, so those are polled.
-            let local = try url.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal
-            let folder = folderToWatch(
-                path, isLocal: local == true,
-                among: local == true ? [] : try SystemShareMounts().mountedShares())
-            guard !folders.contains(where: { $0.path == folder.path && $0.share == folder.share })
-            else { return }
-            folders.append(folder)
-            try settings.set(\.watchedFolders, to: folders)
-        } catch {
-            fail("Couldn't add \(path)", error)
+            let found = await blockingFileWork { Result { try folderToWatch(at: url) } }
+            do {
+                let folder = try found.get()
+                var folders = settings[\.watchedFolders]
+                guard
+                    !folders.contains(where: {
+                        $0.path == folder.path && $0.share == folder.share
+                    })
+                else { return }
+                folders.append(folder)
+                try settings.set(\.watchedFolders, to: folders)
+            } catch {
+                fail("Couldn't add \(url.standardizedFileURL.path)", error)
+            }
         }
     }
 
@@ -724,16 +734,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             + " their stats through. The app writes only its own log there."
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            let path = url.standardizedFileURL.path
-            do {
-                let local = try url.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal
-                let folder = folderToWatch(
-                    path, isLocal: local == true,
-                    among: local == true ? [] : try SystemShareMounts().mountedShares())
-                try settings.set(
-                    \.syncFolder, to: SyncFolder(path: folder.path, share: folder.share))
-            } catch {
-                self?.fail("Couldn't sync through \(path)", error)
+            Task {
+                let found = await blockingFileWork { Result { try folderToWatch(at: url) } }
+                do {
+                    let folder = try found.get()
+                    try settings.set(
+                        \.syncFolder, to: SyncFolder(path: folder.path, share: folder.share))
+                } catch {
+                    self?.fail("Couldn't sync through \(url.standardizedFileURL.path)", error)
+                }
             }
         }
     }
@@ -742,29 +751,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// it can't.
     func openSyncFolder(over window: NSWindow) {
         guard let settings, let folder = settings[\.syncFolder] else { return NSSound.beep() }
-        let place: SyncFolderPlace
+        let shares: [MountedShare]
         do {
-            place = locate(
-                folder, among: folder.share == nil ? [] : try SystemShareMounts().mountedShares())
+            shares = folder.share == nil ? [] : try SystemShareMounts().mountedShares()
         } catch {
             return fail("Couldn't find the sync folder", error)
         }
-        var isDirectory: ObjCBool = false
-        if case .found(let path) = place,
-            FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
-            isDirectory.boolValue
-        {
-            if !NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: true)) {
-                logger.error("Finder didn't open the sync folder at \(path)")
-                NSSound.beep()
+        Task {
+            // The folder may be on a share that has stopped answering.
+            let found = await blockingFileWork {
+                existingSyncFolder(folder, among: shares, isDirectory: isDirectory)
             }
-            return
+            switch found {
+            case .success(let path):
+                let opened = await blockingFileWork {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: true))
+                }
+                if !opened {
+                    logger.error("Finder didn't open the sync folder at \(path)")
+                    NSSound.beep()
+                }
+            case .failure(let missing):
+                let (message, detail) = syncFolderProblem(
+                    missing.place, share: folder.share ?? folder.path)
+                let alert = NSAlert()
+                alert.messageText = message
+                alert.informativeText = detail
+                alert.beginSheetModal(for: window, completionHandler: nil)
+            }
         }
-        let (message, detail) = syncFolderProblem(place, share: folder.share ?? folder.path)
-        let alert = NSAlert()
-        alert.messageText = message
-        alert.informativeText = detail
-        alert.beginSheetModal(for: window)
     }
 
     /// Asks in a sheet over `window` to stop watching the folder at `position` in the setting.
