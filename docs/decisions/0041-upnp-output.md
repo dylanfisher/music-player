@@ -77,8 +77,8 @@ what it takes, and the queue moves on.
 - **Hi-res** FLAC and WAV, 24/96 and 24/192, are offered as they are, since no sink entry limits
   a rate. A renderer that can't play one says so by refusing the URI or by stopping without
   playing, and either is reported.
-- **DSD**: the library scans no DSF or DFF files, so there's nothing to send. The Denon's sink
-  lists the types for when it does.
+- **DSD**: DSF and DSDIFF go as they are under the first DSD type the sink lists, which the
+  Denon's lists all six of (0064).
 
 The DIDL-Lite carries the title (the file name when the file has none), artist, album,
 `protocolInfo`, duration, size, rate, depth and channels. Every tag is the file's own text:

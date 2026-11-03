@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import Testing
 
+@testable import Fixtures
 @testable import Metadata
 @testable import TagWriter
 
@@ -185,4 +186,19 @@ func aFieldCutAtANULEditsAndKeepsItsNeighbour(_ edited: TagEditField) throws {
             #expect(try ilstItem(url, edited == .title ? "\u{A9}ART" : "\u{A9}nam") == keptItem)
         }
     }
+}
+
+@Test(arguments: ["dsf", "dff"])
+func dsdFilesAreRefusedByTheWriterAndLeftUnchanged(fileExtension: String) throws {
+    let channels = [Data(repeating: 0x69, count: 64), Data(repeating: 0x69, count: 64)]
+    let bytes =
+        fileExtension == "dsf"
+        ? dsfFile(rateHz: 2_822_400, channels: channels)
+        : dffFile(rateHz: 2_822_400, channels: channels)
+    let url = scratchFolder().appendingPathComponent("track.\(fileExtension)")
+    try bytes.write(to: url)
+    let report = scratchWriter().write(titleEdit, to: [url.path])
+    #expect(report.failures.map(\.kind) == [.unsupported])
+    #expect(report.failures.first?.detail.contains("DSF and DSDIFF") == true)
+    #expect(try Data(contentsOf: url) == bytes)
 }

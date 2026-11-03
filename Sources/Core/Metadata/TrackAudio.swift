@@ -4,6 +4,8 @@ public struct TrackAudio: Equatable, Sendable {
         case flac, alac, aac, mp3
         /// Integer or floating-point PCM in WAV or AIFF.
         case pcm
+        /// 1-bit DSD in DSF or DSDIFF, with `bitsPerSample` 1 and `sampleRateHz` the bit rate.
+        case dsd
     }
 
     public var codec: Codec

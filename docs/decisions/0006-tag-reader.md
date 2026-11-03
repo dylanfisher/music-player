@@ -41,19 +41,20 @@ codec, rate, bit depth, channels, length in frames, and art as offset, length an
   ID3 wins over `LIST/INFO` field by field. RIFF INFO text that isn't UTF-8 is read as Latin-1,
   since INFO declares no encoding. The art is the front cover if there is one, else the first
   picture.
-- **ID3v2** reads from any byte range, so WAV, AIFF and later DSF reuse it. Whole-tag
+- **ID3v2** reads from any byte range, so WAV, AIFF, DSF and DSDIFF reuse it (0064). Whole-tag
   unsynchronisation (2.2, 2.3) decodes the tag in memory and maps offsets back to the file; art in
   an unsynchronised tag or frame is flagged so `readArt` removes the escapes.
 - **Length.** FLAC: STREAMINFO. MP4: `mdhd`, or `iTunSMPB` for AAC, which excludes priming and
   remainder frames. MP3: the Xing/Info or VBRI frame count, else the file size at the first
-  frame's bit rate. WAV: `data` size over block align. AIFF: `COMM` frames.
+  frame's bit rate. WAV: `data` size over block align. AIFF: `COMM` frames. DSF: the sample count, DSDIFF: the
+  `DSD ` chunk's size, both in 1-bit samples at the DSD rate.
 - **A truncated file whose damage is in the audio parses**: tag reading never looks at audio, so
   phase 4's decoder reports it. For WAV and AIFF that includes a form size or a `data`/`SSND`
   chunk running past the end of the file: the sizes are clamped to the file, the length counts the
   bytes present, and a `truncated` warning says so. A streamed size of `0xFFFFFFFF` reads to the
   end of the file without a warning.
 
-Not read: DSF (phase 12), Ogg, APE, WavPack, RF64; ID3v1 and APE tags at the end of an MP3, an
+Not read: DSDIFF `DIIN` text, Ogg, APE, WavPack, RF64; ID3v1 and APE tags at the end of an MP3, an
 ID3v2 tag in front of FLAC, a second ID3v2 tag in a row; AIFF `NAME`/`AUTH`/`ANNO`; RIFF `bext`;
 MP4 freeform items and ID3 `TXXX` frames the table below doesn't name; compressed or encrypted ID3 frames,
 which are skipped with a warning; MPEG Layer I and II; fragmented MP4. LAME's

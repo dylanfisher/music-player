@@ -33,7 +33,53 @@ private func longMediaHeader(duration: UInt64) -> Data {
     return atom("mdhd", body + Data(count: 4))
 }
 
+private let dsdChannels = (0..<2).map { dsdTone(samples: 8 * 4096, rateHz: 2_822_400, channel: $0) }
+private let dsf = dsfFile(rateHz: 2_822_400, channels: dsdChannels)
+private let dff = dffFile(rateHz: 2_822_400, channels: dsdChannels)
+
+/// `file` with the little-endian 32- or 64-bit field at `offset` set to `value`.
+private func patched(_ file: Data, at offset: Int, _ value: UInt64, bytes: Int = 8) -> Data {
+    var file = file
+    for index in 0..<bytes {
+        file[offset + index] = UInt8(truncatingIfNeeded: value >> (8 * index))
+    }
+    return file
+}
+
+/// `file` with the big-endian 64-bit field at `offset` set to `value`.
+private func patchedBE(_ file: Data, at offset: Int, _ value: UInt64) -> Data {
+    var file = file
+    for index in 0..<8 {
+        file[offset + index] = UInt8(truncatingIfNeeded: value >> (8 * (7 - index)))
+    }
+    return file
+}
+
 private let hostileFiles: [(String, Data, Outcome)] = [
+    // DSF
+    ("DSF header size of UInt64.max", patched(dsf, at: 4, .max), .fails(.malformed)),
+    ("DSF file size past the end", patched(dsf, at: 12, .max), .warns(.truncated)),
+    ("DSF metadata pointer past the end", patched(dsf, at: 20, .max), .warns(.truncated)),
+    ("DSF metadata pointer inside the header", patched(dsf, at: 20, 8), .fails(.malformed)),
+    ("DSF metadata pointer at audio, not a tag", patched(dsf, at: 20, 100), .fails(.malformed)),
+    ("DSF with no channels", patched(dsf, at: 52, 0, bytes: 4), .fails(.malformed)),
+    (
+        "DSF with 4 billion channels", patched(dsf, at: 52, 0xFFFF_FFFF, bytes: 4),
+        .fails(.unsupported)
+    ),
+    ("DSF at a PCM rate", patched(dsf, at: 56, 44_100, bytes: 4), .fails(.unsupported)),
+    ("DSF block size of 0", patched(dsf, at: 72, 0, bytes: 4), .fails(.malformed)),
+    ("DSF block size of 4 GB", patched(dsf, at: 72, 0xFFFF_FFFF, bytes: 4), .fails(.malformed)),
+    ("DSF sample count of UInt64.max", patched(dsf, at: 64, .max), .parses),
+    ("DSF data size of UInt64.max", patched(dsf, at: 84, .max), .warns(.truncated)),
+    ("DSF data size smaller than its header", patched(dsf, at: 84, 3), .fails(.malformed)),
+    ("DSF cut inside fmt", dsf.prefix(50), .fails(.malformed)),
+    // DSDIFF
+    ("DSDIFF form size of UInt64.max", patchedBE(dff, at: 4, .max), .warns(.truncated)),
+    ("DSDIFF FVER of UInt64.max", patchedBE(dff, at: 20, .max), .fails(.malformed)),
+    ("DSDIFF PROP property past PROP", patchedBE(dff, at: 52, 0x7FFF_FFFF), .fails(.malformed)),
+    ("DSDIFF cut inside a chunk header", dff.prefix(22), .fails(.malformed)),
+    ("DSDIFF audio past the end", dff.prefix(dff.count - 100), .warns(.truncated)),
     // MP4
     (
         "MP4 top-level atom of 4 GB",

@@ -66,6 +66,7 @@ package struct Bytes {
     package func uint32LE(_ offset: Int) throws(ParseFailure) -> UInt32 {
         UInt32(try littleEndian(offset, 4))
     }
+    func uint64LE(_ offset: Int) throws(ParseFailure) -> UInt64 { try littleEndian(offset, 8) }
 
     /// ID3v2's 28-bit integer, seven bits per byte. Nil when a byte has its top bit set.
     package func syncsafe(_ offset: Int) throws(ParseFailure) -> Int? {

@@ -14,6 +14,7 @@ enum TagFile {
         case .mp3: self = .id3(try ID3File(reader, container: .mp3))
         case .aiff: self = .id3(try ID3File(reader, container: .aiff))
         case .wav: self = .id3(try ID3File(reader, container: .wav))
+        case .dsf, .dff: throw .unsupported(at: nil, "writing tags in DSF and DSDIFF files")
         }
     }
 

@@ -1,8 +1,8 @@
 import Foundation
 
 /// Reads the tags, audio properties and art location of the file at `url`, without decoding
-/// audio or reading art. Reads FLAC, MP4 (ALAC and AAC), MP3, WAV and AIFF, choosing by content,
-/// not extension.
+/// audio or reading art. Reads FLAC, MP4 (ALAC and AAC), MP3, WAV, AIFF, DSF and DSDIFF, choosing
+/// by content, not extension.
 public func readMetadata(at url: URL, hints: ReadHints = .all) throws(MetadataError) -> ParsedFile {
     do throws(ParseFailure) {
         let started = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
@@ -53,6 +53,8 @@ package func parse(_ reader: ByteReader) throws(ParseFailure) -> ParsedFile {
     case .wav: metadata = try parseWAV(reader)
     case .aiff: metadata = try parseAIFF(reader)
     case .mp3: metadata = try parseMP3(reader)
+    case .dsf: metadata = try parseDSF(reader)
+    case .dff: metadata = try parseDFF(reader)
     }
     return ParsedFile(
         metadata: metadata, warnings: reader.keptWarnings, bytesRead: reader.bytesRead,
@@ -61,13 +63,13 @@ package func parse(_ reader: ByteReader) throws(ParseFailure) -> ParsedFile {
 
 /// The container a file's first bytes announce, which picks its parser and its tag writer.
 package enum FileFormat: String, Sendable {
-    case flac, mp4, mp3, wav, aiff
+    case flac, mp4, mp3, wav, aiff, dsf, dff
 
     package init(_ reader: ByteReader) throws(ParseFailure) {
         guard reader.size > 0 else {
             throw ParseFailure(kind: .unrecognizedFormat, offset: nil, detail: "the file is empty")
         }
-        let start = try reader.bytes(0..<min(12, reader.size))
+        let start = try reader.bytes(0..<min(16, reader.size))
         if start.matches(flacMarker, at: 0) {
             self = .flac
         } else if start.matches("ftyp", at: 4) {
@@ -78,12 +80,16 @@ package enum FileFormat: String, Sendable {
             start.matches(aiffFormType, at: 8) || start.matches(aifcFormType, at: 8)
         {
             self = .aiff
+        } else if start.matches(dsfHeaderID, at: 0) {
+            self = .dsf
+        } else if start.matches(dffFormID, at: 0), start.matches(dsfHeaderID, at: 12) {
+            self = .dff
         } else if start.matches(id3v2Identifier, at: 0) || MPEGFrameHeader(start, at: 0) != nil {
             self = .mp3
         } else {
             throw ParseFailure(
                 kind: .unrecognizedFormat, offset: 0,
-                detail: "doesn't start like a FLAC, MP4, MP3, WAV or AIFF file")
+                detail: "doesn't start like a FLAC, MP4, MP3, WAV, AIFF, DSF or DSDIFF file")
         }
     }
 }

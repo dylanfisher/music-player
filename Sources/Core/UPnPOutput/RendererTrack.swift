@@ -25,6 +25,9 @@ struct RendererTrack: Sendable {
         case .mp3: ["audio/mpeg", "audio/mp3"]
         case .wav: ["audio/wav", "audio/x-wav", "audio/wave"]
         case .aiff: ["audio/aiff", "audio/x-aiff"]
+        // The Denon lists all six, and a renderer may list only the general DSD type.
+        case .dsf: ["audio/dsf", "audio/x-dsf", "audio/dsd", "audio/x-dsd"]
+        case .dff: ["audio/dff", "audio/x-dff", "audio/dsd", "audio/x-dsd"]
         }
     }
 
@@ -78,6 +81,7 @@ struct RendererTrack: Sendable {
         case .aac: "aac "
         case .mp3: ".mp3"
         case .pcm: linearPCMFormatID
+        case .dsd: dsdFormatID
         }
     }
 }

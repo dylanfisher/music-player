@@ -76,6 +76,7 @@ let package = Package(
         ),
         .target(
             name: "Metadata",
+            dependencies: ["DisplayText"],
             path: "Sources/Core/Metadata",
             swiftSettings: strictSwift
         ),

@@ -54,6 +54,11 @@ private let audio: [String: URL] = {
         try! runAfconvert(arguments + [wav.path, url.path])
         files[name] = url
     }
+    let channels = (0..<2).map { dsdTone(samples: 2_822_400, rateHz: 2_822_400, channel: $0) }
+    files["dsf"] = folder.appendingPathComponent("tone.dsf", isDirectory: false)
+    try! dsfFile(rateHz: 2_822_400, channels: channels).write(to: files["dsf"]!)
+    files["dff"] = folder.appendingPathComponent("tone.dff", isDirectory: false)
+    try! dffFile(rateHz: 2_822_400, channels: channels).write(to: files["dff"]!)
     // One second, for tests that play a track to its end by the app's clock.
     let short = folder.appendingPathComponent("short.wav", isDirectory: false)
     try! writeWAV(at: short, sampleRateHz: 44_100, bitsPerSample: 16, frames: 44_100) { _, _ in 0 }
@@ -211,6 +216,24 @@ private func output(
         try RendererTrack.read(audio["aiff"]!, for: denon)
     } throws: { error in
         "\(error)".hasPrefix("Denon AVR-X1800H doesn't take AIFF (PCM) files; it takes audio/mpeg")
+    }
+}
+
+@Test func dsdGoesUnchangedUnderTheDSDTypeTheRendererListsAndIsRefusedElsewhere() async throws {
+    let denon = try await discovered(try await FakeRenderer.denon())
+    let dsf = try RendererTrack.read(audio["dsf"]!, for: denon)
+    #expect(dsf.contentType == "audio/dsf")
+    #expect(dsf.metadata.protocolInfo == "http-get:*:audio/dsf:*")
+    #expect(dsf.durationSeconds == 1)
+    #expect(dsf.signal.formatID == dsdFormatID && dsf.signal.sampleRateHz == 2_822_400)
+    #expect(try RendererTrack.read(audio["dff"]!, for: denon).contentType == "audio/dff")
+    let sonos = try await discovered(try await FakeRenderer.sonos())
+    #expect {
+        try RendererTrack.read(audio["dsf"]!, for: sonos)
+    } throws: { error in
+        "\(error)".hasPrefix(
+            "Test Room - Sonos Era 100 Media Renderer - RINCON_00005E00530101400 doesn't take DSF (DSD) files"
+        )
     }
 }
 
