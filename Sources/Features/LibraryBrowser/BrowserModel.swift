@@ -625,6 +625,11 @@ public final class BrowserModel {
             pendingVisit = .none
             missingTracks = missing
             let previousIDs = trackIDs
+            // A rescan that left every column's entries as they were leaves the panes alone.
+            let panesChanged =
+                first != nil
+                && (reason != .libraryChanged || entries != self.entries
+                    || columns != self.columns)
             filter = next
             pending = next
             sortColumn = sort.column
@@ -635,7 +640,7 @@ public final class BrowserModel {
             self.entries = entries
             trackIDs = ids
             applied += 1
-            changed(BrowserChange(reason: reason, panes: first != nil, previousIDs: previousIDs))
+            changed(BrowserChange(reason: reason, panes: panesChanged, previousIDs: previousIDs))
         } catch {
             guard mine == generation else { return }
             // What failed never showed, so the next change starts from what the views show.

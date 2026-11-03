@@ -393,10 +393,10 @@ import Testing
 /// A table over the browser library sorted by album, its Album Art column `artWidth` wide,
 /// loaded and drawn in a window.
 @MainActor
-private func artTable(artWidth: CGFloat, sortedBy sort: TrackColumn = .album) async throws -> (
-    TrackTableController, BrowserModel, [TrackRow]
-) {
-    let databaseURL = try browserLibrary.get().databaseURL
+private func artTable(
+    artWidth: CGFloat, sortedBy sort: TrackColumn = .album, databaseURL: URL? = nil
+) async throws -> (TrackTableController, BrowserModel, [TrackRow]) {
+    let databaseURL = try databaseURL ?? browserLibrary.get().databaseURL
     let model = BrowserModel(
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: sort, ascending: true,
         groupByAlbumArtist: false)
@@ -579,6 +579,41 @@ private func artTable(artWidth: CGFloat, sortedBy sort: TrackColumn = .album) as
     await model.setSort(.title, ascending: true)
     #expect(!viewer.window.isVisible)
     #expect(controller.artViewer == nil)
+}
+
+@MainActor @Test func aRescanThatKeepsTheTracksRedrawsOnlyTheirChangedRows() async throws {
+    let databaseURL = try writableBrowserDatabase()
+    let (controller, model, rows) = try await artTable(
+        artWidth: 3 * RowListController.rowHeight, databaseURL: databaseURL)
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = controller.view
+    defer { window.close() }
+    let table = controller.table
+    let art = table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
+    let title = table.column(withIdentifier: NSUserInterfaceItemIdentifier("title"))
+    let row = try #require(rows.indices.first { rows[$0].art != nil })
+    table.scrollRowToVisible(row)
+    let point = NSPoint(x: table.rect(ofColumn: art).midX, y: table.rect(ofRow: row).midY)
+    let deadline = Date().addingTimeInterval(10)
+    while controller.artHover.isHidden, Date() < deadline {
+        controller.showArtHover(at: point)
+        try await Task.sleep(nanoseconds: 20_000_000)
+    }
+    try #require(!controller.artHover.isHidden, "the art never loaded")
+    // A tag the table doesn't sort by changes, so the rows stay where they are.
+    let edited = row + 1
+    let index = try LibraryIndex(at: databaseURL)
+    try index.database.prepare("UPDATE tracks SET title = ? WHERE file_id = ?").run(
+        "Retitled", rows[edited].id)
+    await model.refresh()
+    #expect(model.trackIDs == rows.map(\.id))
+    // The rows stayed, so the art under the pointer stays shown.
+    #expect(!controller.artHover.isHidden)
+    let cell = table.view(atColumn: title, row: edited, makeIfNecessary: false) as? TextCell
+    #expect(cell?.text == "Retitled")
 }
 
 @MainActor @Test func anEmptyHistorySaysNothingPlayedYet() async throws {

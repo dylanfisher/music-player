@@ -178,6 +178,23 @@ private func loadedModel(
     #expect(Set(rows.map { model.trackIDs[$0] }) == picked)
 }
 
+@MainActor @Test func aRefreshReloadsThePanesOnlyWhenTheirEntriesChanged() async throws {
+    let databaseURL = try writableBrowserDatabase()
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: true,
+        groupByAlbumArtist: false)
+    await model.load(BrowserState(source: nil))
+    await model.setGrouping(.composers, ofColumn: 0)
+    var panes: [Bool] = []
+    model.changed = { panes.append($0.panes) }
+    await model.refresh()
+    let index = try LibraryIndex(at: databaseURL)
+    try index.database.prepare("UPDATE tracks SET composer = ? WHERE file_id = ?").run(
+        "Hildegard", model.trackIDs[0])
+    await model.refresh()
+    #expect(panes == [false, true])
+}
+
 @MainActor @Test func aDoubleClickQueuesTheVisibleListInTableOrder() async throws {
     let (model, index) = try await loadedModel()
     let request = try #require(try await model.playRequest(selected: [5], clicked: 5))

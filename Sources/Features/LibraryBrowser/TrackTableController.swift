@@ -195,6 +195,10 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     func reload(_ change: BrowserChange) {
         reportedFetchFailure = false
         ratingsSet = [:]
+        if change.reason == .libraryChanged, change.previousIDs == model.trackIDs {
+            redrawChangedRows()
+            return
+        }
         let selection = Set(
             table.selectedRowIndexes.compactMap {
                 change.previousIDs.indices.contains($0) ? change.previousIDs[$0] : nil
@@ -224,6 +228,19 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         } else if !model.trackIDs.isEmpty {
             table.scrollRowToVisible(0)
         }
+    }
+
+    /// Reads the rows again after a rescan that kept the same tracks in the same order, and
+    /// redraws only those on screen whose tags or stats changed. A scan refreshes every 2 s, and
+    /// reloading the whole table rebuilds every row on screen each time.
+    private func redrawChangedRows() {
+        let visible = visibleRows()
+        let shown = visible.map(trackRow)
+        cache.setIDs(model.trackIDs)
+        let changed = IndexSet(visible.filter { trackRow($0) != shown[$0 - visible.lowerBound] })
+        guard !changed.isEmpty else { return }
+        table.reloadData(
+            forRowIndexes: changed, columnIndexes: IndexSet(integersIn: 0..<table.numberOfColumns))
     }
 
     private func showSort() {
