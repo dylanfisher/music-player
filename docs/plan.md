@@ -3061,6 +3061,27 @@ Sorting is fine: 73 ms on the old Mac in 14e. Leave it alone unless a new bench 
       contradicts the comment at about LibraryQueries.swift:118. Confirm it on the fixture library
       and fix either the query or the comment.
 
+Plan:
+
+1. **Benches**, in Bench's own process on a copy of the scanned fixture index, through the
+   app's `LibraryReader` and `BrowserModel`: the list totals of every track right after a play
+   is recorded (32c.1), and the second of two search keystrokes 50 ms apart, from typed until
+   its rows and totals are read, idle and while a scan rewrites every file with the browser's
+   2 s refreshes (32c.3). Budgets in code and in the table, the old Mac's marked as estimates.
+2. Run them, and the sort, pane, search, smart playlist, history, palette, health and scan
+   benches, before any fix, the same day as main.
+3. **32c.1:** fix only if the totals after a play cost more than with no write between. A
+   play, skip, rating or opinion changes neither tracks nor files, so it keeps the sizes read.
+4. **32c.2:** run the benches above with each pragma on its own (`cache_size`, `temp_store`,
+   `mmap_size`, `journal_size_limit`) and after `ANALYZE` and `PRAGMA optimize`, against the
+   same build without it. Keep only what wins by more than the run-to-run spread, defined once
+   in `Database`. ADR for what is kept and dropped.
+5. **32c.3:** split the reader only if the keystroke during a scan waits on other queries
+   rather than on its own work.
+6. **32c.4:** EXPLAIN QUERY PLAN on the History query over the 1M-play bench index; time both
+   orders, keep the faster and make the comment say what the plan does.
+7. Rerun every bench touched against main, the same hour.
+
 #### 32d. Parallelism and priority
 
 - [ ] **32d.1** **Suspect:** palette ranking (PaletteModel.swift:73) starts a new `.userInitiated` detached
