@@ -3659,6 +3659,23 @@ A config that doesn't parse must never cost the library or the rest of the setti
   option: the folder is not rescanned on a timer, only by Rescan or by file events where those
   apply. Say in the ADR whether Never also skips the launch rescan.
 
+Implementation plan:
+- Settings: `ConfigFile.parse` returns the valid keys when its only problems are unknown keys,
+  each tagged with its key path (`ConfigProblem.obsoleteKey`); any other problem still applies
+  nothing. `ConfigStore` writes patches over such a file (they touch only their own key's text),
+  keeps which keys the file gave, and offers `fileValue(_:)` for a value only when the file or
+  the app set it, never a default.
+- App: the watcher starts only on `fileValue(\.watchedFolders)`; without one it stays off and
+  says so. A test in MusicPlayerTests launches that path over an indexed fixture library with a
+  stale key and with broken JSON, and checks no file is removed and the rows show.
+- Remove Obsolete Setting: `ConfigText.remove` also takes the comment lines directly above the
+  member, `ConfigStore.removeObsoleteKeys()` edits the file, and `ConfigBanner` gets the button
+  and wording for problems that don't block. Tests: comments around the key, key first, middle
+  and last, trailing commas, a nested key.
+- Never: `WatchedFolder.pollIntervalMinutes` becomes optional, null for never; `WatchState`
+  schedules no poll for it; the Rescans popup gets Never.
+- ADR 0082 for all four, and a note in ADR 0015 and 0060.
+
 ### 35. Seek, progress bar and buffering
 
 **Queued, not started.** Runs after 34, alongside 33 and 36.
