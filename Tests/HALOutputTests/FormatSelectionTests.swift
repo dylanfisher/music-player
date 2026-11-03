@@ -46,3 +46,16 @@ private let available = [
         bitPerfectFormat(in: available, sampleRateHz: 384_000, channels: 2, allowNonMixable: true)
             == nil)
 }
+
+@Test func dopTakesOnlyANonMixableFormatWideEnoughForItsWords() throws {
+    let narrow = [ranged(bits: 16, mixable: false), ranged(bits: 32, mixable: true)]
+    #expect(
+        bitPerfectFormat(
+            in: narrow, sampleRateHz: 176_400, channels: 2, minimumBits: 24, nonMixableOnly: true,
+            allowNonMixable: true) == nil)
+    let format = try #require(
+        bitPerfectFormat(
+            in: available, sampleRateHz: 176_400, channels: 2, minimumBits: 24,
+            nonMixableOnly: true, allowNonMixable: true))
+    #expect(format.mFormatFlags & kAudioFormatFlagIsNonMixable != 0)
+}

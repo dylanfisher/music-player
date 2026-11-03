@@ -17,9 +17,8 @@ enum DeviceOutputError: Error, CustomStringConvertible {
     case endedEarly(atSeconds: Double, ofSeconds: Double)
     /// No rate or format the device reported carries the track unchanged.
     case deviceCannotTake(device: String, sampleRateHz: Double, channels: UInt32, DeviceFormats)
-    /// A DSD track the device can't carry as DoP: it has no carrier rate, or no 24-bit
-    /// integer format at it.
-    case cannotPlayDSD(device: String, dsdRateHz: Int, carrierRateHz: Double, hasRate: Bool)
+    /// A DSD track the device can't carry as DoP unchanged.
+    case cannotPlayDSD(device: String, dsdRateHz: Int, carrierRateHz: Double, DoPRefusal)
     /// The device format the DoP reader was handed can't hold DoP words unchanged.
     case noDoPLayout(SignalFormat)
 
@@ -30,10 +29,18 @@ enum DeviceOutputError: Error, CustomStringConvertible {
             String(format: "the audio ends at %.1f s of %.1f s; the file is cut short", at, length)
         case .noVolumeForFormat(let format):
             "the digital volume can't scale samples in this device format: \(format)"
-        case .cannotPlayDSD(let device, let dsd, let carrier, let hasRate):
-            "\(device) can't play \(sampleRateText(dsd)): it has no "
-                + (hasRate ? "\(dopWordBits)-bit integer format at " : "")
-                + "\(kilohertz(carrier)) kHz \(hasRate ? "" : "rate ")for DoP"
+        case .cannotPlayDSD(let device, let dsd, let carrier, let refusal):
+            "\(device) can't play \(sampleRateText(dsd)): "
+                + {
+                    switch refusal {
+                    case .noRate: "it has no \(kilohertz(carrier)) kHz rate for DoP"
+                    case .noFormat:
+                        "it has no non-mixable \(dopWordBits)-bit integer format at"
+                            + " \(kilohertz(carrier)) kHz for DoP"
+                    case .noHogMode:
+                        "DoP needs exclusive access, and hog mode is off for this device"
+                    }
+                }()
         case .noDoPLayout(let format):
             "DoP needs a \(dopWordBits)-bit integer device format; this one is \(format.formatID)"
                 + " \(format.bitsPerChannel ?? 0)-bit\(format.isFloat ? " float" : "")"
@@ -42,6 +49,12 @@ enum DeviceOutputError: Error, CustomStringConvertible {
                 + " \(formats.sampleRatesHz.map(kilohertz).joined(separator: ", ")) kHz"
         }
     }
+}
+
+/// Why a device can't carry DSD as DoP. The macOS mixer and the system volume can rewrite the
+/// words of a mixable format, so DoP needs a non-mixable one, which needs hog mode.
+enum DoPRefusal: Sendable {
+    case noRate, noFormat, noHogMode
 }
 
 /// Plays tracks bit-perfect on the device a `PCMDeviceProvider` finds, as an `Output`.
@@ -326,17 +339,28 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// Throws for a track that no rate or format the device reported carries unchanged, before
     /// the device is touched for it.
     private func refuseUntakeable(_ track: Track) throws {
-        if track.isDoP, let knownFormats {
+        if track.isDoP {
             let rate = track.sampleRateHz
-            let hasRate = knownFormats.sampleRatesHz.contains { $0.contains(rate) }
-            let hasFormat = knownFormats.formats.contains {
-                $0.carries(sampleRateHz: rate, channels: track.channels)
-                    && $0.bitsPerChannel >= dopWordBits
+            let refusal: DoPRefusal?
+            if !provider.usesHogMode {
+                refusal = .noHogMode
+            } else if let knownFormats {
+                let hasFormat = knownFormats.formats.contains {
+                    $0.carries(sampleRateHz: rate, channels: track.channels)
+                        && $0.bitsPerChannel >= dopWordBits && !$0.isMixable
+                }
+                if !knownFormats.sampleRatesHz.contains(where: { $0.contains(rate) }) {
+                    refusal = .noRate
+                } else {
+                    refusal = hasFormat ? nil : .noFormat
+                }
+            } else {
+                refusal = nil
             }
-            guard hasRate, hasFormat else {
+            if let refusal {
                 throw DeviceOutputError.cannotPlayDSD(
                     device: provider.deviceName, dsdRateHz: Int(track.file.sampleRateHz),
-                    carrierRateHz: rate, hasRate: hasRate)
+                    carrierRateHz: rate, refusal)
             }
             return
         }
@@ -382,7 +406,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         guard let device else { preconditionFailure("configure needs an open device") }
         let format = try device.configure(
             sampleRateHz: track.sampleRateHz, channels: track.channels,
-            minimumBits: track.isDoP ? dopWordBits : 0)
+            forDoP: track.isDoP)
         // DoP is never scaled, so its stream gets no gain at all.
         let withGain = choice.digitalVolume && !track.isDoP
         let stream = try RenderStream(format: format, withGain: withGain, isDoP: track.isDoP)

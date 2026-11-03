@@ -100,9 +100,14 @@ func theOldestBitGoesHighestUnderAlternatingMarkers(fileExtension: String) throw
 
 @Test func theRefusalSaysWhatTheDeviceLacks() {
     #expect(
-        "\(DeviceOutputError.cannotPlayDSD(device: "ADI-2", dsdRateHz: 5_644_800, carrierRateHz: 352_800, hasRate: false))"
+        "\(DeviceOutputError.cannotPlayDSD(device: "ADI-2", dsdRateHz: 5_644_800, carrierRateHz: 352_800, .noRate))"
             == "ADI-2 can't play DSD128: it has no 352.8 kHz rate for DoP")
     #expect(
-        "\(DeviceOutputError.cannotPlayDSD(device: "Speakers", dsdRateHz: 2_822_400, carrierRateHz: 176_400, hasRate: true))"
-            == "Speakers can't play DSD64: it has no 24-bit integer format at 176.4 kHz for DoP")
+        "\(DeviceOutputError.cannotPlayDSD(device: "Speakers", dsdRateHz: 2_822_400, carrierRateHz: 176_400, .noFormat))"
+            == "Speakers can't play DSD64: it has no non-mixable 24-bit integer format at 176.4 kHz"
+            + " for DoP")
+    #expect(
+        "\(DeviceOutputError.cannotPlayDSD(device: "ADI-2", dsdRateHz: 2_822_400, carrierRateHz: 176_400, .noHogMode))"
+            == "ADI-2 can't play DSD64: DoP needs exclusive access, and hog mode is off for this device"
+    )
 }

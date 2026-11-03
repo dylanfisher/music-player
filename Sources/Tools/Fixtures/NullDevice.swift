@@ -14,6 +14,9 @@ import Playback
 public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     public let deviceName: String
     public var deviceUID: String { deviceName }
+    /// Set as the hog mode setting would be; off makes DSD refused.
+    public var usesHogMode: Bool { lock.withLock { hogModeSetting } }
+    private var hogModeSetting = true
     /// How many times faster than real time the IO proc runs.
     public let speed: Double
     public let ioFrames: Int
@@ -83,6 +86,9 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
         lock.withLock { nominalSampleRateHz = hertz }
         reportState()
     }
+
+    /// The owner turning hog mode off for this device, or back on.
+    func setHogModeSetting(_ on: Bool) { lock.withLock { hogModeSetting = on } }
 
     /// Another process taking exclusive access, or nil to give it back.
     func hogMode(heldBy pid: Int32?) {
@@ -244,8 +250,8 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
 
         init(_ device: NullDevice) { self.device = device }
 
-        /// Always 32-bit, so wider than any `minimumBits`.
-        func configure(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32) throws
+        /// Always 32-bit and non-mixable, so it carries DoP.
+        func configure(sampleRateHz: Double, channels: UInt32, forDoP: Bool) throws
             -> DeviceFormat
         {
             precondition(channels == 2, "the null device is stereo")

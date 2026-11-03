@@ -136,6 +136,11 @@ private func verdict(
         isFloat: false)
     let dac = device(rate: 352_800, physical: pcm(352_800, bits: 32))
     #expect(verdict(file: dsd128, decoded: dop, state: dac) == .bitPerfect)
+    // The mixer could rewrite the words, so a mixable format is never bit-perfect DoP.
+    let mixable = device(rate: 352_800, physical: pcm(352_800, bits: 32), mixable: true, hog: .free)
+    #expect(
+        verdict(file: dsd128, decoded: dop, state: mixable)
+            == .changed([.mixableFormat, .hogModeFree]))
     // A 16-bit device format would cut the marker off.
     let narrow = pcm(352_800, bits: 16)
     #expect(

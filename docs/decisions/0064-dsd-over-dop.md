@@ -60,11 +60,16 @@ panel's Volume row says "digital bypassed for DoP", and the path reports unity, 
 verdict stays bit-perfect when everything else is.
 
 **Carrier and refusal.** DSD64 plays at 176.4 kHz, DSD128 at 352.8 and DSD256 at 705.6 (and
-the 48 kHz family at 192, 384, 768), in a 24- or 32-bit integer format; the device is asked
-for at least 24 bits. A device whose reported rates or formats lack either is refused before
-it's touched, through `refuseUntakeable`, with one message: "ADI-2 can't play DSD128: it has no
-352.8 kHz rate for DoP". Nothing converts DSD to PCM. A refused track fails like any other, so
-a DSD album on such a device stops after `PlaybackEngine.failureLimit` tracks (0063).
+the 48 kHz family at 192, 384, 768). DoP needs a non-mixable integer format of at least 24
+bits at the carrier, and so hog mode: in a mixable format the macOS mixer and the system volume
+can rewrite the words. The device is asked for exactly that. A device whose reported rates or
+formats lack it, or one whose profile has hog mode off, is refused before it's touched,
+through `refuseUntakeable`, with one message naming the reason: "ADI-2 can't play DSD128: it
+has no 352.8 kHz rate for DoP", "…: it has no non-mixable 24-bit integer format at 352.8 kHz
+for DoP", or "…: DoP needs exclusive access, and hog mode is off for this device". Nothing
+converts DSD to PCM. A refused track fails like any other, so a DSD album on such a device
+stops after `PlaybackEngine.failureLimit` tracks (0063). The verdict never calls a mixable
+path bit-perfect.
 
 **Signal path.** A DSD file's `SignalFormat` has the code `DSD ` at its bit rate, and what the
 reader hands on has `DoP ` at the carrier rate and 24 bits; the verdict judges the device

@@ -47,9 +47,8 @@ final class StepClock {
 /// its own thread in tests and benchmarks. Used from one thread.
 public protocol PCMDevice: AnyObject {
     /// Switches the hardware to `sampleRateHz` with `channels`, passing samples through
-    /// unchanged, in an integer format at least `minimumBits` wide.
-    func configure(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32) throws
-        -> DeviceFormat
+    /// unchanged. `forDoP` asks for a non-mixable integer format that holds DoP's words.
+    func configure(sampleRateHz: Double, channels: UInt32, forDoP: Bool) throws -> DeviceFormat
     /// Starts calling `HALRenderIOProc` with `render` (a `HALRender *`).
     func start(_ render: OpaquePointer) throws
     /// Returns once the IO proc has stopped being called.
@@ -65,6 +64,9 @@ public protocol PCMDevice: AnyObject {
 public protocol PCMDeviceProvider: AnyObject, Sendable {
     var deviceName: String { get }
     var deviceUID: String { get }
+    /// Whether a session takes the device in hog mode, which a non-mixable format needs and DoP
+    /// with it (ADR 0064).
+    var usesHogMode: Bool { get }
     /// Nil when the device isn't connected.
     func open() throws -> (any PCMDevice)?
     func isConnected() -> Bool

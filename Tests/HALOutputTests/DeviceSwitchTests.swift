@@ -232,6 +232,7 @@ private func dacBackWhileSpeakersPlay() async throws -> TwoDevices {
 private final class LingeringProvider: PCMDeviceProvider, @unchecked Sendable {
     let deviceName = "Lingering"
     var deviceUID: String { deviceName }
+    let usesHogMode = true
     private let lock = NSLock()
     private var state: (@Sendable (DeviceState) -> Void)?
 

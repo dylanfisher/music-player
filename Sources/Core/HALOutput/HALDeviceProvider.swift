@@ -28,6 +28,7 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
     public let deviceUID: String
     public let deviceName: String
     private let hogMode: Bool
+    public var usesHogMode: Bool { hogMode }
     private let restoreRecordURL: URL
     private let queue = DispatchQueue(label: "\(bundleIdentifier).device-watch")
     private let lock = NSLock()
@@ -325,11 +326,8 @@ private final class RestoringDevice: PCMDevice {
         self.recordURL = recordURL
     }
 
-    func configure(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32) throws
-        -> DeviceFormat
-    {
-        try device.configure(
-            sampleRateHz: sampleRateHz, channels: channels, minimumBits: minimumBits)
+    func configure(sampleRateHz: Double, channels: UInt32, forDoP: Bool) throws -> DeviceFormat {
+        try device.configure(sampleRateHz: sampleRateHz, channels: channels, forDoP: forDoP)
     }
     func start(_ render: OpaquePointer) throws { try device.start(render) }
     func stop() throws { try device.stop() }

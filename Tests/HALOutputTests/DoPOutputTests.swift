@@ -164,3 +164,38 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
             == .failed(reason: "\(PlaybackEngine.failureLimit) tracks in a row couldn't play"))
     #expect(rig.device.captured.isEmpty)
 }
+
+@Test func dsdNeedsHogModeAndANonMixableFormatOrIsRefused() async throws {
+    let track = try dsdTrack("exclusive", bytes: 4096, seed: 9)
+    let noHog = try await Rig()
+    noHog.device.setHogModeSetting(false)
+    await noHog.engine.setQueue([track.url])
+    await noHog.engine.play()
+    try await noHog.wait { if case .trackFailed = $0.event { true } else { false } }
+    #expect(
+        noHog.events.contains(
+            .trackFailed(
+                track.url,
+                reason: "null device can't play DSD64: DoP needs exclusive access, and hog mode is"
+                    + " off for this device")))
+
+    let mixable = try await Rig()
+    mixable.device.report(
+        DeviceFormats(
+            sampleRatesHz: [44_100...768_000],
+            formats: [
+                PhysicalFormat(
+                    formatID: linearPCMFormatID, sampleRateHz: 44_100...768_000, bitsPerChannel: 32,
+                    channels: 2, isFloat: false, isMixable: true)
+            ]))
+    await mixable.engine.setQueue([track.url])
+    await mixable.engine.play()
+    try await mixable.wait { if case .trackFailed = $0.event { true } else { false } }
+    #expect(
+        mixable.events.contains(
+            .trackFailed(
+                track.url,
+                reason: "null device can't play DSD64: it has no non-mixable 24-bit integer format"
+                    + " at 176.4 kHz for DoP")))
+    #expect(noHog.device.captured.isEmpty && mixable.device.captured.isEmpty)
+}

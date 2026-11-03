@@ -19,7 +19,7 @@ enum HALDeviceError: Error, CustomStringConvertible {
             "another process (pid \(pid)) has exclusive access to the device"
         case .noOutputStream: "the device has no output stream"
         case .noBitPerfectFormat(let rate, let channels, let bits):
-            "the device has no \(channels)-channel integer format"
+            "the device has no \(bits > 0 ? "non-mixable " : "")\(channels)-channel integer format"
                 + (bits > 0 ? " of \(bits) bits or more" : "") + " at \(kilohertz(rate)) kHz"
         case .didNotSettle(let what): "the device didn't switch to \(what) within 3 seconds"
         }
@@ -79,15 +79,14 @@ final class HALDevice: PCMDevice {
             defaultSystemOutputUID: try defaultUID(kAudioHardwarePropertyDefaultSystemOutputDevice))
     }
 
-    func configure(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32) throws
-        -> DeviceFormat
-    {
+    func configure(sampleRateHz: Double, channels: UInt32, forDoP: Bool) throws -> DeviceFormat {
+        let minimumBits = forDoP ? dopWordBits : 0
         let available: [AudioStreamRangedDescription] = try readArray(
             stream, address(kAudioStreamPropertyAvailablePhysicalFormats))
         guard
             let format = bitPerfectFormat(
                 in: available, sampleRateHz: sampleRateHz, channels: channels,
-                minimumBits: minimumBits, allowNonMixable: hogMode)
+                minimumBits: minimumBits, nonMixableOnly: forDoP, allowNonMixable: hogMode)
         else {
             throw HALDeviceError.noBitPerfectFormat(
                 sampleRateHz: sampleRateHz, channels: channels, minimumBits: minimumBits)
