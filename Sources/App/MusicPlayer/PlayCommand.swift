@@ -32,9 +32,9 @@ private let keyHelp =
     + " -/+ volume, q quit"
 
 /// `MusicPlayer --play <file or folder>... [--device <part of name>]`: plays the files as a queue,
-/// bit-perfect, on the device from `--device` or Settings, with keyboard control. Restores the
-/// device, the default outputs and the terminal on q, Ctrl-C, SIGTERM, an error, or the end of the
-/// queue. Never returns.
+/// bit-perfect where the device allows it and converted where not (ADR 0071), on the device from
+/// `--device` or Settings, with keyboard control. Restores the device, the default outputs and the
+/// terminal on q, Ctrl-C, SIGTERM, an error, or the end of the queue. Never returns.
 @MainActor
 func playCommand(paths: [String], deviceName: String?) throws -> Never {
     guard !paths.isEmpty else { throw PlayCommandError.nothingToPlay }

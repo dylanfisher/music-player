@@ -1,8 +1,9 @@
 # music-player
 
 A native macOS player for large local hi-res and DSD libraries. It plays bit-perfect to a local
-DAC, switching sample rate and bit depth per track, and streams at full quality to UPnP/DLNA
-renderers such as a Denon AVR.
+DAC, switching sample rate and bit depth per track, converts for a device that can't take a track
+unchanged, such as Bluetooth headphones, and streams at full quality to UPnP/DLNA renderers such
+as a Denon AVR.
 
 Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machine.
 

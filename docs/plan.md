@@ -2879,11 +2879,11 @@ Bluetooth AirPods on the 2015 MacBook Pro offer only 2-channel 32-bit float at 4
 output only sends integer PCM at the track's own rate (ADR 0011), so every track fails with
 `noBitPerfectFormat`. The app must always be able to play to the chosen device.
 
-- [ ] **31.1 Converted output.** When a device has no bit-perfect format for a track, decode and
+- [x] **31.1 Converted output.** When a device has no bit-perfect format for a track, decode and
       convert to the device's best format (float, its sample rate, its channels) and play. Bit-perfect
       stays the first choice wherever the device allows it.
-- [ ] **31.2 Position, seek and gapless** stay right in the converted path.
-- [ ] **31.3 Signal path** says the output is converted and to what, not bit-perfect.
+- [x] **31.2 Position, seek and gapless** stay right in the converted path.
+- [x] **31.3 Signal path** says the output is converted and to what, not bit-perfect.
 - [ ] **31.4 Hardware checkpoint.** The owner plays a 44.1 kHz and a 96 kHz track to the AirPods
       on the 2015 MacBook Pro.
 
@@ -2911,6 +2911,18 @@ Plan:
    Tests: `SignalVerdictTests`, `SignalPathLinesTests`, the output's signal path.
 4. DSD on a device that can't take DoP still fails, clearly, as it does now (ADR 0071).
 5. ADR 0071; playback benches against main.
+
+Result: shipped up to the owner's checkpoint, 31.4, which is pending. A device with no format
+that carries a track unchanged now plays it converted to its best format: at least the track's
+channels, the nearest rate at or above the track's and never below 44.1 kHz when there's one
+above (so AirPods never drop to their 16 kHz call format), then float. A converter on the
+control thread runs on across same-rate tracks, so a gapless join is resampled as one signal;
+the IO proc is unchanged. Positions and seeks count the file's time. The panel badges such a
+track "Converted" and names the format, and the now-playing line says "converted for" the
+device. DSD on a device without DoP still fails with its reason; converting it needs a decimation
+filter of its own (ADR 0071). Benches on Apple Silicon against main the same day: playback CPU
+2.05, 1.89 and 1.28% of a core (main 1.69 and 1.59), no gap between same-format tracks on
+either, rate switch 14.7 and 13.2 ms (main 8.0 ms, the null device's stop step varying).
 
 ### 32. Speed hardening
 
