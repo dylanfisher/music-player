@@ -588,9 +588,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         refreshPending = false
         lastRefresh = Date()
         Task {
-            await model.refresh()
-            if showsTimeline { timelineModel.refresh() }
-            libraryRefreshed()
+            await signposted(.refresh) {
+                await model.refresh()
+                if showsTimeline { timelineModel.refresh() }
+                libraryRefreshed()
+            }
             await countIssues()
         }
     }

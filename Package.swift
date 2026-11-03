@@ -94,7 +94,7 @@ let package = Package(
         ),
         .target(
             name: "Artwork",
-            dependencies: ["Metadata"],
+            dependencies: ["Log", "Metadata"],
             path: "Sources/Core/Artwork",
             swiftSettings: strictSwift
         ),
@@ -145,7 +145,7 @@ let package = Package(
         ),
         .target(
             name: "Palette",
-            dependencies: ["DisplayText", "FuzzyMatch", "KeyChord", "Settings"],
+            dependencies: ["DisplayText", "FuzzyMatch", "KeyChord", "Log", "Settings"],
             path: "Sources/Features/Palette",
             swiftSettings: strictSwift
         ),

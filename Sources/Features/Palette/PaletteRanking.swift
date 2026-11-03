@@ -1,5 +1,6 @@
 import Foundation
 import FuzzyMatch
+import Log
 
 /// A listed item, with where its title matched.
 public struct RankedItem: Sendable {
@@ -18,6 +19,15 @@ public struct RankedItem: Sendable {
 public func rankPalette(
     _ items: [PaletteItem], query: String, frecency: [String: Double], limit: Int,
     byKind: Bool = false, emptyQueryKinds: Set<PaletteItem.Kind>? = nil
+) -> [RankedItem] {
+    signposted(.paletteRank) {
+        rank(items, query, frecency, limit, byKind, emptyQueryKinds)
+    }
+}
+
+private func rank(
+    _ items: [PaletteItem], _ query: String, _ frecency: [String: Double], _ limit: Int,
+    _ byKind: Bool, _ emptyQueryKinds: Set<PaletteItem.Kind>?
 ) -> [RankedItem] {
     let matcher = FuzzyMatcher(query)
     struct Entry {

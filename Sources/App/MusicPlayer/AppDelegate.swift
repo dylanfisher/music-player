@@ -117,6 +117,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var outputMenu: OutputMenu?
     var playlistMenus: [PlaylistMenu] = []
     private let artwork = ArtworkLoader(maxPixelSize: artPixels, capacity: artCacheImages)
+    /// Logs the main thread's stalls over 100 ms, for the field data the benches can't give.
+    private let stalls = StallDetector { NSApp.currentEvent.map { eventName($0.type) } }
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
     /// `reportingLaunch` prints a line once the first scan of each watched folder has ended.
@@ -143,6 +145,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             applyAppearance(settings[\.appearance])
             let dispatcher = CommandDispatcher(bindings: try keyBindings(settings.shortcuts))
+            stalls.start()
+            dispatcher.willRun = { [stalls] in stalls.noteCommand($0.rawValue) }
             let menu = MainMenu(dispatcher: dispatcher, appName: appName, settings: AppSettings())
             dispatcher.bindingsChanged = { [weak menu] in menu?.showChords() }
             NSApp.mainMenu = menu.bar

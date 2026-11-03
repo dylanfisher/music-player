@@ -1,5 +1,6 @@
 import DisplayText
 import Foundation
+import Log
 import Settings
 
 /// The library window's queries on a connection of their own, run off the main thread so a slow
@@ -27,15 +28,21 @@ public actor LibraryReader {
     public func trackIDs(_ filter: TrackFilter, sortedBy column: TrackColumn, ascending: Bool)
         throws -> [Int64]
     {
-        try index.trackIDs(filter, sortedBy: column, ascending: ascending)
+        try signposted(.query) {
+            try index.trackIDs(filter, sortedBy: column, ascending: ascending)
+        }
     }
 
-    public func trackTotals(ids: [Int64]) throws -> TrackTotals { try index.trackTotals(ids: ids) }
+    public func trackTotals(ids: [Int64]) throws -> TrackTotals {
+        try signposted(.query) { try index.trackTotals(ids: ids) }
+    }
 
     public func trackNames(_ filter: TrackFilter, sortedBy column: TrackColumn, ascending: Bool)
         throws -> [TrackName]
     {
-        try index.trackNames(filter, sortedBy: column, ascending: ascending)
+        try signposted(.query) {
+            try index.trackNames(filter, sortedBy: column, ascending: ascending)
+        }
     }
 
     public func genres(_ filter: TrackFilter) throws -> [BrowserEntry] {
@@ -53,7 +60,7 @@ public actor LibraryReader {
     public func columnEntries(
         _ grouping: BrowserGrouping, _ filter: TrackFilter, ignoring: Set<BrowserGrouping>
     ) throws -> [ColumnEntry] {
-        try index.columnEntries(grouping, filter, ignoring: ignoring)
+        try signposted(.query) { try index.columnEntries(grouping, filter, ignoring: ignoring) }
     }
 
     public func paths(ids: [Int64]) throws -> [Int64: String] {

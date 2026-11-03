@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import Log
 import Metadata
 
 /// Album art, decoded straight to a thumbnail at display size and kept in a cache of bounded
@@ -41,14 +42,17 @@ public final class ArtworkLoader: @unchecked Sendable {
     public func image(_ art: EmbeddedArt, path: String) throws -> CGImage {
         let key = ArtworkKey(path: path, art: art)
         if let image = cached(key) { return image }
-        let bytes: Data
-        do {
-            bytes = try read(art, path)
-        } catch {
-            throw ArtworkError.unreadable(path: path, reason: "\(error)")
-        }
-        guard let image = thumbnail(of: bytes, maxPixelSize: maxPixelSize) else {
-            throw ArtworkError.undecodable(path: path, mimeType: art.mimeType)
+        let image = try signposted(.artLoad) {
+            let bytes: Data
+            do {
+                bytes = try read(art, path)
+            } catch {
+                throw ArtworkError.unreadable(path: path, reason: "\(error)")
+            }
+            guard let image = thumbnail(of: bytes, maxPixelSize: maxPixelSize) else {
+                throw ArtworkError.undecodable(path: path, mimeType: art.mimeType)
+            }
+            return image
         }
         lock.withLock {
             if images.updateValue(image, forKey: key) == nil {

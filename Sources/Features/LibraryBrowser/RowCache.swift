@@ -1,4 +1,5 @@
 import Library
+import Log
 
 /// The track table's rows, fetched a page at a time as the table asks for them and kept for at
 /// most `capacityPages` pages, so the table holds a few thousand rows however long the library.
@@ -44,7 +45,7 @@ final class RowCache {
             return rows[ids[index]]
         }
         let range = (page * pageSize)..<min(ids.count, (page + 1) * pageSize)
-        let rows = try fetch(Array(ids[range]))
+        let rows = try signposted(.pageFetch) { try fetch(Array(ids[range])) }
         pages[page] = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
         recency.append(page)
         while recency.count > capacityPages { pages[recency.removeFirst()] = nil }

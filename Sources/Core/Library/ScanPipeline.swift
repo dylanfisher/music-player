@@ -1,4 +1,5 @@
 import Foundation
+import Log
 import Metadata
 
 /// Walks a folder and reads its new and changed files at the same time, storing the results in
@@ -335,7 +336,7 @@ final class ScanPipeline: @unchecked Sendable {
         storeLock.withLock {
             guard condition.withLock({ storeError == nil }) else { return }
             do {
-                try index.store(files)
+                try signposted(.scanBatch) { try index.store(files) }
             } catch {
                 condition.withLock {
                     storeError = error
