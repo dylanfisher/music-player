@@ -16,6 +16,8 @@ private let logger = moduleLogger()
 public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldDelegate {
     /// The longest the window waits between refreshes while a scan stores rows.
     static let refreshIntervalSeconds = 2.0
+    /// The space between the status bar's views and at its ends.
+    static let statusSpacingPoints: CGFloat = 10
 
     let model: BrowserModel
     public let sidebar: NSViewController
@@ -97,16 +99,23 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private let panes: PanesController
     private let sidebarController: SidebarController
     private let split = NSSplitView()
-    private let statusBar = NSStackView()
-    /// The parts the user chose, between the scan progress and the problems button.
+    /// The scan progress, the parts the user chose centered on the window, and the problems
+    /// button.
+    private let scanProgress = NSStackView()
     private let statusParts = NSStackView()
+    /// The problems button alone, in a stack so it takes no width while hidden.
+    private let statusTrailing = NSStackView()
+    private lazy var statusBar = CenteredRow(
+        leading: scanProgress, middle: statusParts, trailing: statusTrailing,
+        spacing: Self.statusSpacingPoints, inset: Self.statusSpacingPoints)
     private(set) var statusLayout = StatusBarLayout(parts: [.totals], style: .minimal)
     /// The views of the playing track's parts, which the app gives.
     private var statusPartViews: [StatusPart: NSView] = [:]
     private var statusHeight: NSLayoutConstraint?
     private var statusArtHeight: NSLayoutConstraint?
-    /// The status bar on the toolbar's material, which shows and hides with it.
-    private(set) lazy var statusArea = toolbarBackground(around: statusBar)
+    /// The status bar on glass, or the toolbar's material before macOS 26, laid over the bottom
+    /// of the track table and the timeline, and showing and hiding with them.
+    private(set) lazy var statusArea = statusBackground(around: statusBar)
     let statusLabel = NSTextField(labelWithString: "")
     private let scanIndicator = NSProgressIndicator()
     /// Whether the scan bar moves on its own, which only it does while the status bar shows.
@@ -279,20 +288,14 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusLabel.addGestureRecognizer(
             NSClickGestureRecognizer(target: self, action: #selector(showNextTotals)))
         statusLabel.alignment = .center
-        let bar = statusBar
-        bar.detachesHiddenViews = true
-        for view in [scanIndicator, scanLabel, statusParts, problemsButton] {
-            bar.addArrangedSubview(view)
+        for view in [scanIndicator, scanLabel] { scanProgress.addArrangedSubview(view) }
+        statusTrailing.addArrangedSubview(problemsButton)
+        for stack in [scanProgress, statusParts, statusTrailing] {
+            stack.detachesHiddenViews = true
+            stack.distribution = .fill
+            stack.spacing = Self.statusSpacingPoints
+            stack.alignment = .centerY
         }
-        bar.distribution = .fill
-        bar.spacing = 10
-        bar.alignment = .centerY
-        bar.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
-        statusParts.detachesHiddenViews = true
-        statusParts.distribution = .fill
-        statusParts.spacing = 10
-        statusParts.alignment = .centerY
-        statusParts.setHuggingPriority(.init(1), for: .horizontal)
         problemsButton.font = TextCell.font
         statusHeight = statusArea.heightAnchor.constraint(equalToConstant: 0)
         statusHeight?.isActive = true
@@ -302,17 +305,31 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
         for view in [scanIndicator, scanLabel, problemsButton] { view.isHidden = true }
         timeline.view.isHidden = true
-        let area = statusArea
-        let stack = NSStackView(views: [split, timeline.view, area])
+        let stack = NSStackView(views: [split, timeline.view])
         stack.orientation = .vertical
         stack.spacing = 0
         stack.alignment = .leading
         stack.detachesHiddenViews = true
-        for view in [split, timeline.view, area] {
+        for view in [split, timeline.view] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
-        return stack
+        // The bar lies over the lists' bottom, so their rows scroll under it.
+        let container = NSView()
+        for view in [stack, statusArea] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: container.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            statusArea.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            statusArea.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            statusArea.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        return container
     }
 
     /// Lays out the panes at their saved height. Call once the window has its size.
@@ -1427,16 +1444,29 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 for: .horizontal)
             statusParts.addArrangedSubview(view)
         }
+        statusBar.middleFills = statusLayout.parts.contains(statusLayout.flexible)
         if let art = statusPartViews[.art], statusLayout.parts.contains(.art) {
             statusArtHeight = art.heightAnchor.constraint(
                 equalToConstant: statusLayout.artPoints(headerPoints: header))
             statusArtHeight?.isActive = true
         }
+        insetListsUnderStatusBar()
     }
 
     public func toggleStatusBar() {
         statusArea.isHidden.toggle()
+        insetListsUnderStatusBar()
         showScanProgress()
+    }
+
+    /// Lets the track table and the timeline scroll their last rows clear of the bar.
+    private func insetListsUnderStatusBar() {
+        let bottom = statusArea.isHidden ? 0 : statusHeight?.constant ?? 0
+        for list in [table.view, timeline.view] {
+            guard let scroll = list as? NSScrollView else { continue }
+            scroll.automaticallyAdjustsContentInsets = false
+            scroll.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottom, right: 0)
+        }
     }
 
     /// Whether Show Current Track has something to show: the track playing, or else a selected
@@ -1609,15 +1639,24 @@ private func problemsUnreadable(_ error: any Error) -> String {
     "couldn't read the library's problems: \(error)"
 }
 
-/// `content` on the title bar's material, filling the view returned, so the status bar is the
-/// toolbar's gray (ADR 0072). Within the window it shows the window's background behind it,
-/// which looks flat; the window's glass makes it blend with what's behind the window.
+/// `content` on glass from macOS 26, and before on the title bar's material, the toolbar's gray
+/// (ADR 0072), filling the view returned. Either blends with the rows scrolled under it
+/// (ADR 0084).
 @MainActor
-private func toolbarBackground(around content: NSView) -> NSView {
-    let material = NSVisualEffectView()
-    material.material = .titlebar
-    material.blendingMode = .withinWindow
-    material.addSubview(content)
+private func statusBackground(around content: NSView) -> NSView {
+    let material: NSView
+    if #available(macOS 26, *) {
+        let glass = NSGlassEffectView()
+        glass.cornerRadius = 0
+        glass.contentView = content
+        material = glass
+    } else {
+        let effect = NSVisualEffectView()
+        effect.material = .titlebar
+        effect.blendingMode = .withinWindow
+        effect.addSubview(content)
+        material = effect
+    }
     content.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
         content.leadingAnchor.constraint(equalTo: material.leadingAnchor),

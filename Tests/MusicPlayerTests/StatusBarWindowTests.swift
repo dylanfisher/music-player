@@ -1,0 +1,91 @@
+import AppKit
+import Testing
+
+@testable import Library
+@testable import LibraryBrowser
+@testable import MusicPlayer
+@testable import Settings
+
+/// The status bar's middle, which holds the parts, its center in window coordinates and the
+/// window's center.
+@MainActor
+private func centers(_ fixture: MainWindowFixture) throws -> (middle: CGFloat, window: CGFloat) {
+    fixture.window.window.layoutIfNeeded()
+    let middle = try #require(fixture.browser.statusPartsShown.first?.superview)
+    let content = try #require(fixture.window.window.contentView)
+    return (middle.convert(middle.bounds, to: nil).midX, content.bounds.midX)
+}
+
+/// The middle stays on the window's center line, under the title, as the scan progress shows
+/// and the sidebar resizes, hides and shows (ADR 0084).
+@MainActor @Test(arguments: [[StatusPart.seek, .totals], [.art, .track, .format]])
+func theStatusBarsMiddleStaysCenteredOnTheWindow(_ parts: [StatusPart]) async throws {
+    let fixture = try await MainWindowFixture(parts: parts)
+    defer { fixture.close() }
+    var ancestor = fixture.browser.sidebar.view.superview
+    while let view = ancestor, !(view is NSSplitView) { ancestor = view.superview }
+    let sidebarSplit = try #require(ancestor as? NSSplitView)
+    let changes: [(String, () -> Void)] = [
+        ("as built", {}),
+        (
+            "scanning",
+            {
+                var progress = ScanProgress()
+                progress.found = 1234
+                fixture.browser.libraryChanged(.scanning(folder: "/music", progress))
+            }
+        ),
+        ("a wider sidebar", { sidebarSplit.setPosition(300, ofDividerAt: 0) }),
+        ("the sidebar hidden", { fixture.window.toggleSidebar() }),
+        ("the sidebar shown", { fixture.window.toggleSidebar() }),
+        ("the queue hidden", { fixture.window.toggleQueue() }),
+    ]
+    for (what, change) in changes {
+        change()
+        let (middle, window) = try centers(fixture)
+        #expect(abs(middle - window) <= 0.5, "\(what): \(middle) against \(window)")
+    }
+}
+
+/// No status bar part, alone or with the others, in either style, changes the window's frame or
+/// moves a split's divider. Before, Art alone left nothing in the bar that could stretch, and
+/// the bar's stacks held the window to the art's width.
+@MainActor @Test func noStatusBarPartResizesTheWindowOrItsSplits() async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    let layout = fixture.layout
+    let sets = StatusPart.allCases.map { [$0] } + [StatusPart.allCases, []]
+    for style in StatusBarStyle.allCases {
+        for parts in sets + sets.reversed() {
+            fixture.setParts(parts, style: style)
+            #expect(fixture.layout == layout, "\(parts) \(style)")
+        }
+    }
+    fixture.window.toggleStatusBar()
+    #expect(fixture.layout == layout, "hidden")
+    fixture.window.toggleStatusBar()
+    #expect(fixture.layout == layout, "shown")
+}
+
+/// The bar lies over the bottom of the track table, which scrolls its last rows clear of it,
+/// and gives the space back when hidden.
+@MainActor @Test func theTrackTableScrollsUnderTheStatusBar() async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    let browser = fixture.browser
+    let scroll = try #require(browser.table.view as? NSScrollView)
+    let area = browser.statusArea
+    #expect(area.frame.height > 0)
+    #expect(scroll.contentInsets.bottom == area.frame.height)
+    let bar = area.convert(area.bounds, to: nil)
+    let list = scroll.convert(scroll.bounds, to: nil)
+    #expect(bar.minY == list.minY, "the rows reach the window's bottom, under the bar")
+    if #available(macOS 26, *) { #expect(area is NSGlassEffectView) }
+    fixture.window.toggleStatusBar()
+    #expect(scroll.contentInsets.bottom == 0)
+    fixture.window.toggleStatusBar()
+    fixture.setParts([.art], style: .tall)
+    #expect(
+        Double(scroll.contentInsets.bottom) == StatusBarLayout.tallPoints,
+        "\(scroll.contentInsets) \(area.frame)")
+}

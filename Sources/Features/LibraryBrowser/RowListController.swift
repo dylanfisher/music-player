@@ -132,20 +132,26 @@ class RowListController: NSViewController {
     /// Scrolls `row` to the middle of the visible rows, as far as the list allows.
     func center(_ row: Int) {
         guard let clip else { return }
-        let visible = clip.bounds.height - clip.contentInsets.top
+        let visible = clip.bounds.height - clip.contentInsets.top - clip.contentInsets.bottom
         let y = table.rect(ofRow: row).midY - visible / 2 - clip.contentInsets.top
-        let bottom = table.bounds.height - clip.bounds.height
+        let bottom = lastScrollY(clip)
         clip.scroll(
             to: NSPoint(
                 x: clip.bounds.minX, y: max(-clip.contentInsets.top, min(y, max(0, bottom)))))
         table.enclosingScrollView?.reflectScrolledClipView(clip)
     }
 
+    /// How far down the clip can scroll: to the last row above the bottom inset, which the
+    /// status bar lies over.
+    private func lastScrollY(_ clip: NSClipView) -> CGFloat {
+        table.bounds.height - clip.bounds.height + clip.contentInsets.bottom
+    }
+
     /// Scrolls the list `rows` rows down, or up when negative, leaving the selection alone.
     func scroll(byRows rows: Int) {
         guard let clip else { return }
         let pitch = table.rowHeight + table.intercellSpacing.height
-        let bottom = max(-clip.contentInsets.top, table.bounds.height - clip.bounds.height)
+        let bottom = max(-clip.contentInsets.top, lastScrollY(clip))
         let y = min(max(clip.bounds.minY + CGFloat(rows) * pitch, -clip.contentInsets.top), bottom)
         clip.scroll(to: NSPoint(x: clip.bounds.minX, y: y))
         table.enclosingScrollView?.reflectScrolledClipView(clip)
@@ -177,10 +183,10 @@ class RowListController: NSViewController {
         anchor = selection.anchor
     }
 
-    /// Whole rows on screen below the header.
+    /// Whole rows on screen between the header and the status bar.
     private var pageRows: Int {
         guard let clip else { return 1 }
-        let height = clip.bounds.height - clip.contentInsets.top
+        let height = clip.bounds.height - clip.contentInsets.top - clip.contentInsets.bottom
         return max(1, Int(height / (table.rowHeight + table.intercellSpacing.height)))
     }
 

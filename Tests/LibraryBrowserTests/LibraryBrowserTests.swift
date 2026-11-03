@@ -113,7 +113,7 @@ import Testing
     window.contentView = browser.content.view
     window.layoutIfNeeded()
     browser.restoreSplit()
-    let split = try #require(browser.content.view.subviews.first as? NSSplitView)
+    let split = try #require(browser.content.view.subviews.first?.subviews.first as? NSSplitView)
     let panes = split.arrangedSubviews[0]
     #expect(abs(panes.frame.height - 150) <= 1)
 
@@ -266,7 +266,11 @@ import Testing
         backing: .buffered, defer: false)
     window.contentView = browser.content.view
     window.layoutIfNeeded()
-    #expect((browser.statusArea as? NSVisualEffectView)?.material == .titlebar)
+    if #available(macOS 26, *) {
+        #expect(browser.statusArea is NSGlassEffectView)
+    } else {
+        #expect((browser.statusArea as? NSVisualEffectView)?.material == .titlebar)
+    }
     let header = try #require(browser.table.table.headerView)
     #expect(header.frame.height > 0)
     #expect(browser.statusArea.frame.height == header.frame.height)
