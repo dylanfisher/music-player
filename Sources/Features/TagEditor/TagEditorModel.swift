@@ -4,7 +4,7 @@ import TagWriter
 
 /// A track as the editor opens it: its tags and art read from the file, not from the index, so
 /// the editor starts from what's really there.
-struct EditableTrack: Equatable, Sendable {
+package struct EditableTrack: Equatable, Sendable {
     var path: String
     var tags: TrackTags
     var art: Data?
@@ -138,23 +138,29 @@ public struct TagEditorModel: Equatable, Sendable {
     }
 }
 
-/// Reads each file's tags and art for the editor. A file that can't be read is reported and
-/// left out, so the rest can still be edited.
-func readEditableTracks(_ paths: [String]) -> (tracks: [EditableTrack], problems: [String]) {
+/// Reads each file's tags and art for the editor, through `read`. A file that can't be read is
+/// reported and left out, so the rest can still be edited.
+package func readEditableTracks(
+    _ paths: [String], read: (String) throws -> EditableTrack = readEditableTrack
+) -> (tracks: [EditableTrack], problems: [String]) {
     var tracks: [EditableTrack] = []
     var problems: [String] = []
     for path in paths {
-        let url = URL(fileURLWithPath: path, isDirectory: false)
         do {
-            let parsed = try readMetadata(at: url)
-            let art = try parsed.metadata.art.map { try readArt($0, at: url) }
-            tracks.append(
-                EditableTrack(
-                    path: path, tags: parsed.metadata.tags, art: art,
-                    multiValued: try multiValuedFields(at: url)))
+            tracks.append(try read(path))
         } catch {
             problems.append("\(error)")
         }
     }
     return (tracks, problems)
+}
+
+/// The tags, art and fields holding several values of the file at `path`.
+package func readEditableTrack(_ path: String) throws -> EditableTrack {
+    let url = URL(fileURLWithPath: path, isDirectory: false)
+    let parsed = try readMetadata(at: url)
+    let art = try parsed.metadata.art.map { try readArt($0, at: url) }
+    return EditableTrack(
+        path: path, tags: parsed.metadata.tags, art: art,
+        multiValued: try multiValuedFields(at: url))
 }

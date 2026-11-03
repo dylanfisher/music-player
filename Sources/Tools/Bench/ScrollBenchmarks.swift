@@ -64,7 +64,7 @@ let scrollBenchmarks = [
 
 /// An art read on the slow simulated NAS: opening, one read and closing, each an operation, and
 /// the median wait on its disks.
-private let nasArtReadSeconds =
+let nasArtReadSeconds =
     3 * slowNAS.operationSeconds + (slowNAS.fileDelay?.medianSeconds ?? 0)
 
 /// The table as it opens with the Album Art column added.

@@ -131,6 +131,9 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Record a play, 1M synthetic plays (p95) | < 1 ms | < 6 ms |
 | History table plus its index, 1M synthetic plays | < 40 MB | < 40 MB |
 | Build the library health report over every fixture track (p95); the old Mac figure is an estimate until its checkpoint | < 1 s | < 3 s |
+| Palette, Go to Item over every fixture track, the last of 8 keystrokes 50 ms apart to its results (median; phase 32d); the old Mac figure is an estimate until its checkpoint | < 15 ms | < 80 ms |
+| Tag editor, read 200 fixture files with each file's opens on the slow simulated NAS (phase 32d); the old Mac figure is an estimate until its checkpoint | < 5 s | < 15 s |
+| Launch to the first scan's start with a 1M-event sync merge pending (phase 32d); the old Mac figure is an estimate until its checkpoint | < 1 s | < 3 s |
 
 ## Phases
 

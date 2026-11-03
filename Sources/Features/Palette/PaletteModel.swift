@@ -53,7 +53,7 @@ public final class PaletteModel {
         await rank()
     }
 
-    func setQuery(_ text: String) async {
+    package func setQuery(_ text: String) async {
         query = text
         await rank()
     }
