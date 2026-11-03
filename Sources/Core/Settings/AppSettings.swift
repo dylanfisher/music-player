@@ -65,8 +65,8 @@ public struct AppSettings: SettingsSchema {
         "appearance.rowHeight", title: "Row Height", default: RowHeight.regular,
         "How tall the track table's rows are.")
     public let artSize = Setting(
-        "appearance.artSize", title: "Album Art", default: ArtSize.thumbnail,
-        "A thumbnail per row, or album art as wide as the column.")
+        "appearance.artSize", title: "Album Art", default: ArtSize.fit,
+        "Art scaled to its album's rows, or always the column's width.")
 
     public func conflicts(_ values: [String: any SettingValue]) -> [SettingConflict] {
         guard let sync = values[syncFolder.key] as? SyncFolder,

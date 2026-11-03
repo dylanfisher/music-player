@@ -84,7 +84,7 @@ private func request(_ offset: Int) -> ArtRequest {
     }
 }
 
-@Test func fullWidthArtSpansItsAlbumsFirstRowsOnly() {
+@Test func albumArtSpansItsAlbumsFirstRowsOnly() {
     // Rows 0 to 5 are album 1, 6 has no album, 7 and 8 are album 2.
     let albums: [Int64?] = [1, 1, 1, 1, 1, 1, nil, 2, 2]
     let starts = albums.indices.map { row in
@@ -97,4 +97,52 @@ private func request(_ offset: Int) -> ArtRequest {
         return albums[row]
     }
     #expect(looked == [2, 3, 4, 5])
+}
+
+@Test func anAlbumsRunCountsItsRowsUpToTheLimit() {
+    let albums: [Int64?] = [1, 1, 1, 1, 1, 1, nil, 2, 2]
+    let length = { (start: Int, limit: Int) in
+        ArtRun.length(from: start, limit: limit, rowCount: albums.count) { albums[$0] }
+    }
+    #expect(length(0, 3) == 3)
+    #expect(length(0, 10) == 6)
+    #expect(length(6, 3) == 1)
+    #expect(length(7, 3) == 2)
+}
+
+@Test func fitScalesArtIntoItsAlbumsRowsAndFullWidthFillsTheColumn() {
+    let square = CGSize(width: 500, height: 500)
+    // Two 18-point rows under a 100-point column: fit is 36 points, centered across.
+    #expect(
+        ArtFrame.rect(.fit, image: square, width: 100, runHeight: 36)
+            == CGRect(x: 32, y: 0, width: 36, height: 36))
+    #expect(
+        ArtFrame.rect(.fullWidth, image: square, width: 100, runHeight: 36)
+            == CGRect(x: 0, y: 0, width: 100, height: 100))
+    // A long album: fit fills the column too.
+    #expect(
+        ArtFrame.rect(.fit, image: square, width: 100, runHeight: 200)
+            == CGRect(x: 0, y: 0, width: 100, height: 100))
+    // Wide art fits the square, at its top.
+    #expect(
+        ArtFrame.whole(image: CGSize(width: 400, height: 200), width: 100)
+            == CGRect(x: 0, y: 0, width: 100, height: 50))
+    #expect(ArtFrame.whole(image: .zero, width: 100) == .zero)
+}
+
+@MainActor @Test func rowArtLoadsAtAPowerOfTwoForTheColumn() {
+    #expect(RowArt.pixels(columnWidth: 20) == 64)
+    #expect(RowArt.pixels(columnWidth: 34) == 128)
+    #expect(RowArt.pixels(columnWidth: 120) == 256)
+    #expect(RowArt.pixels(columnWidth: 2000) == RowArt.largestPixels)
+}
+
+@MainActor @Test func theViewerFitsArtAsLargeAsTheScreenAllowsCentered() {
+    let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
+    #expect(
+        ArtViewer.frame(of: CGSize(width: 300, height: 300), in: screen)
+            == CGRect(x: 282.5, y: 0, width: 875, height: 875))
+    #expect(
+        ArtViewer.frame(of: CGSize(width: 4000, height: 1000), in: screen)
+            == CGRect(x: 0, y: 257.5, width: 1440, height: 360))
 }

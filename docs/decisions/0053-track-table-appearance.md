@@ -1,7 +1,7 @@
 # 0053. The track table's appearance settings and full-width album art
 
 - **Date:** 2026-11-02
-- **Status:** accepted
+- **Status:** accepted; `artSize` amended by [0065](0065-album-art-fit-hover-and-viewer.md)
 - **Amends:** [0042](0042-window-layout-and-settings-sections.md) (Sections)
 
 ## Context

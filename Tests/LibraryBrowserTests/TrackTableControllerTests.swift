@@ -259,7 +259,7 @@ import Testing
     controller.apply(
         TableAppearance(
             columnLines: true, rowLines: true, alternatingRows: false, rowHeight: .compact,
-            artSize: .thumbnail))
+            artSize: .fit))
     #expect(
         controller.table.gridStyleMask == [
             .solidVerticalGridLineMask, .solidHorizontalGridLineMask,
@@ -269,12 +269,17 @@ import Testing
     controller.apply(
         TableAppearance(
             columnLines: true, rowLines: false, alternatingRows: true, rowHeight: .large,
-            artSize: .thumbnail))
+            artSize: .fit))
     #expect(controller.table.gridStyleMask == .solidVerticalGridLineMask)
     #expect(controller.table.rowHeight > RowListController.rowHeight)
 }
 
-@MainActor @Test func fullWidthArtDrawsEachAlbumOnceFromItsFirstRow() async throws {
+/// A table over the browser library sorted by album, its Album Art column `artWidth` wide,
+/// loaded and drawn in a window.
+@MainActor
+private func artTable(artWidth: CGFloat) async throws -> (
+    TrackTableController, BrowserModel, [TrackRow]
+) {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .album, ascending: true,
@@ -285,42 +290,79 @@ import Testing
         sort: { _, _ in },
         layoutChanged: { _ in },
         failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
-    // Art 3 rows tall, which with its inset above reaches into a fourth row.
-    let width = 2 * AlbumArtCell.inset + 3 * RowListController.rowHeight
     let controller = TrackTableController(
         model: model, cache: RowCache { try index.rows(ids: $0) },
         layout: TrackTableLayout(
             columns: [
-                ColumnLayout(column: .art, width: width), ColumnLayout(column: .title, width: 200),
+                ColumnLayout(column: .art, width: artWidth),
+                ColumnLayout(column: .title, width: 200),
             ],
             sortColumn: .album, sortAscending: true),
         actions: actions)
     controller.view.frame = NSRect(x: 0, y: 0, width: 400, height: 2000)
     model.changed = { controller.reload($0) }
     await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
-    let rows = try index.rows(ids: model.trackIDs)
-    let art = controller.table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
-    #expect(controller.table.view(atColumn: art, row: 0, makeIfNecessary: true) is NSTableCellView)
-    #expect(controller.artRow(5) == 5)
+    return (controller, model, try index.rows(ids: model.trackIDs))
+}
 
-    controller.apply(
-        TableAppearance(
-            columnLines: false, rowLines: false, alternatingRows: true, rowHeight: .regular,
-            artSize: .fullWidth))
-    var runStart = 0
-    var spanned = false
-    for row in 0..<min(rows.count, 60) {
-        if row > 0, rows[row].albumID == nil || rows[row].albumID != rows[row - 1].albumID {
-            runStart = row
+@MainActor @Test func albumArtDrawsEachAlbumOnceFromItsFirstRow() async throws {
+    let (controller, _, rows) = try await artTable(artWidth: 3 * RowListController.rowHeight)
+    let art = controller.table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
+    // Square art as wide as the column's rect, its spacing and padding included: 4 rows.
+    let tall = Int(
+        (controller.table.rect(ofColumn: art).width / RowListController.rowHeight).rounded(.up))
+    #expect(tall == 4)
+    for size in [ArtSize.fit, .fullWidth] {
+        controller.apply(
+            TableAppearance(
+                columnLines: false, rowLines: false, alternatingRows: true,
+                rowHeight: .regular, artSize: size))
+        var runStart = 0
+        var spanned = false
+        for row in 0..<min(rows.count, 60) {
+            if row > 0, rows[row].albumID == nil || rows[row].albumID != rows[row - 1].albumID {
+                runStart = row
+            }
+            let expected = row - runStart < tall ? runStart : nil
+            #expect(controller.artRow(row) == expected, "row \(row)")
+            if expected != nil, expected != row { spanned = true }
+            let cell = controller.table.view(atColumn: art, row: row, makeIfNecessary: true)
+            let artCell = try #require(cell as? AlbumArtCell, "row \(row)")
+            #expect(artCell.size == size)
+            // Edge to edge across the column, its spacing included.
+            #expect(artCell.frame.width == controller.table.rect(ofColumn: art).width)
+            if let expected { #expect(artCell.rowsDown == row - expected) }
         }
-        let expected = row - runStart < 4 ? runStart : nil
-        #expect(controller.artRow(row) == expected, "row \(row)")
-        if expected != nil, expected != row { spanned = true }
-        let cell = controller.table.view(atColumn: art, row: row, makeIfNecessary: true)
-        #expect(cell is AlbumArtCell, "row \(row)")
-        if let expected { #expect((cell as? AlbumArtCell)?.rowsDown == row - expected) }
+        #expect(spanned)
     }
-    #expect(spanned)
+}
+
+@MainActor @Test func hoveringArtShowsItWholeAtTheColumnsWidth() async throws {
+    let (controller, _, rows) = try await artTable(artWidth: 3 * RowListController.rowHeight)
+    let table = controller.table
+    let art = table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
+    let row = try #require(rows.indices.first { rows[$0].art != nil })
+    let column = table.rect(ofColumn: art)
+    let point = NSPoint(x: column.midX, y: table.rect(ofRow: row).midY)
+    // Asks for the art, which loads off the main thread.
+    controller.showArtHover(at: point)
+    let deadline = Date().addingTimeInterval(10)
+    while controller.artHover.isHidden, Date() < deadline {
+        try await Task.sleep(nanoseconds: 20_000_000)
+        controller.showArtHover(at: point)
+    }
+    try #require(!controller.artHover.isHidden, "the art never loaded")
+    let frame = controller.artHover.frame
+    #expect(controller.artHover.superview === table)
+    #expect(frame.minX >= column.minX && frame.maxX <= column.maxX + 0.5)
+    #expect(max(frame.width, frame.height) == column.width)
+    #expect(frame.minY == table.rect(ofRow: controller.artRow(row) ?? -1).minY)
+    // The pointer stays on it, then leaves the art.
+    controller.showArtHover(at: NSPoint(x: frame.midX, y: frame.maxY - 1))
+    #expect(!controller.artHover.isHidden)
+    let title = table.rect(ofColumn: table.column(withIdentifier: .init("title")))
+    controller.showArtHover(at: NSPoint(x: title.midX, y: point.y))
+    #expect(controller.artHover.isHidden)
 }
 
 @MainActor @Test func anEmptyHistorySaysNothingPlayedYet() async throws {
@@ -387,8 +429,7 @@ import Testing
         let cell = try #require(table.view(atColumn: number, row: 0, makeIfNecessary: false))
         #expect(([cell] + cell.subviews).allSatisfy { $0.constraints.isEmpty }, "\(column)")
         if column == .art {
-            #expect(
-                (cell as? NSTableCellView)?.imageView?.frame == cell.bounds.insetBy(dx: 1, dy: 1))
+            #expect(cell is AlbumArtCell && cell.subviews.isEmpty)
         } else {
             let text = try #require(cell as? TextCell, "\(column)")
             #expect(text.subviews.isEmpty)

@@ -1,11 +1,11 @@
-/// How the track table's Album Art column draws art: a thumbnail in each row, or the album's
-/// art as wide as the column, spanning the album's rows.
+/// How the track table's Album Art column draws an album's art across the album's rows: scaled
+/// down to fit them, or always as wide as the column and cut off at the album's last row.
 public enum ArtSize: String, SettingChoice {
-    case thumbnail, fullWidth
+    case fit, fullWidth
 
     public var title: String {
         switch self {
-        case .thumbnail: "Thumbnail"
+        case .fit: "Scaled to Fit"
         case .fullWidth: "Full Width"
         }
     }

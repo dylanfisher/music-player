@@ -3,6 +3,18 @@ import AppKit
 /// A table that offers each key press to `takeKey` before AppKit's own handling.
 final class KeyTableView: NSTableView {
     var takeKey: (NSEvent) -> Bool = { _ in false }
+    /// The column whose cells fill the column, the spacing and padding beside them included.
+    var edgeToEdgeColumn: NSUserInterfaceItemIdentifier?
+
+    override func frameOfCell(atColumn column: Int, row: Int) -> NSRect {
+        let frame = super.frameOfCell(atColumn: column, row: row)
+        guard let edgeToEdgeColumn, tableColumns.indices.contains(column),
+            tableColumns[column].identifier == edgeToEdgeColumn
+        else { return frame }
+        let columnRect = rect(ofColumn: column)
+        return NSRect(
+            x: columnRect.minX, y: frame.minY, width: columnRect.width, height: frame.height)
+    }
 
     override func keyDown(with event: NSEvent) {
         if !takeKey(event) { super.keyDown(with: event) }

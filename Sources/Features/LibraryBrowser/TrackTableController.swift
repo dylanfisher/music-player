@@ -25,10 +25,14 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// A row fetch failed; reported once until the next reload.
     private var reportedFetchFailure = false
     private var typeSelect: TypeSelect? = TypeSelect()
-    /// How the Album Art column draws, and the loader for that size, replaced when either
-    /// changes.
-    private var artSize = ArtSize.thumbnail
+    /// How the Album Art column draws, and the loader for the column's width, replaced when the
+    /// width needs other pixels.
+    private var artSize = ArtSize.fit
     private var art: RowArt
+    /// The art of the album under the pointer, whole and at the column's width, over the rows.
+    let artHover = ArtHover()
+    /// The art opened by a click on `artHover`, while it's open.
+    private(set) var artViewer: ArtViewer?
     /// The model's `emptyText`, centered over the table, hidden while it's nil.
     let emptyLabel = NSTextField(labelWithString: "")
     /// Called after every change of the selection, the keys' and a reload's too.
@@ -47,10 +51,14 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         self.model = model
         self.cache = cache
         self.actions = actions
-        art = RowArt(artSize, rowHeight: Self.rowHeight)
+        art = RowArt(
+            pixels: RowArt.pixels(
+                columnWidth: layout.columns.first { $0.column == .art }?.width
+                    ?? TrackColumn.art.defaultWidth))
         super.init(play: actions.play, playNext: actions.playNext)
         configure(layout)
         follow(art)
+        artHover.clicked = { [weak self] in self?.openHoveredArt() }
     }
 
     /// Points `art` at the rows on screen. A replaced loader wants nothing more and shows
@@ -74,6 +82,16 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         // again (ADR 0058).
         emptyLabel.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
         view.addSubview(emptyLabel)
+        // Laid out by frame, over the rows, so it scrolls with them (ADR 0058).
+        artHover.isHidden = true
+        table.addSubview(artHover)
+        table.addTrackingArea(
+            NSTrackingArea(
+                rect: .zero,
+                options: [
+                    .mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow,
+                    .inVisibleRect,
+                ], owner: self))
     }
 
     private func configure(_ layout: TrackTableLayout) {
@@ -83,6 +101,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         table.dataSource = self
         table.delegate = self
         table.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
+        table.edgeToEdgeColumn = columnIdentifier(.art)
         table.registerForDraggedTypes([trackIDsType])
         // Rows go only to the sidebar and to other rows, never to another app.
         table.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
@@ -124,9 +143,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         guard appearance.artSize != artSize || rowHeight != table.rowHeight else { return }
         table.rowHeight = rowHeight
         artSize = appearance.artSize
-        art = RowArt(artSize, rowHeight: rowHeight)
-        follow(art)
-        // The art column's cells change kind, and their images size.
+        hideArtHover()
+        // The art's rows and size change.
         table.reloadData()
     }
 
@@ -144,6 +162,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         let anchor =
             change.reason == .libraryChanged ? scrollAnchor(in: change.previousIDs) : nil
         cache.setIDs(model.trackIDs)
+        hideArtHover()
         showSort()
         typeSelect?.reset()
         table.reloadData()
@@ -231,20 +250,11 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         else { return nil }
         if column == .art {
             rowsDrawn()
-            switch artSize {
-            case .thumbnail:
-                let cell =
-                    tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
-                    as? NSTableCellView ?? makeImageCell(tableColumn.identifier)
-                cell.imageView?.image = image(ofArtIn: row)
-                return cell
-            case .fullWidth:
-                let cell =
-                    tableView.makeView(withIdentifier: fullWidthArtIdentifier, owner: nil)
-                    as? AlbumArtCell ?? makeFullWidthCell()
-                fill(cell, row: row)
-                return cell
-            }
+            let cell =
+                tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
+                as? AlbumArtCell ?? makeArtCell(tableColumn.identifier)
+            fill(cell, row: row)
+            return cell
         }
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
@@ -262,21 +272,21 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         return rows.location..<min(rows.location + rows.length, model.trackIDs.count)
     }
 
-    /// The row whose art `row` shows: its own, or at full width its album's first row's; nil
-    /// for a row below its album's art.
+    /// The row whose art `row` shows, its album's first row; nil for a row below its album's
+    /// art.
     func artRow(_ row: Int) -> Int? {
-        switch artSize {
-        case .thumbnail: return row
-        case .fullWidth:
-            guard let column = table.tableColumn(withIdentifier: columnIdentifier(.art)) else {
-                return nil
-            }
-            let side = AlbumArtCell.side(width: column.width)
-            let pitch = table.rowHeight + table.intercellSpacing.height
-            let rowsTall = Int(((AlbumArtCell.inset + side) / pitch).rounded(.up))
-            return ArtRun.start(of: row, rowsTall: max(1, rowsTall)) { trackRow($0)?.albumID }
-        }
+        ArtRun.start(of: row, rowsTall: artRowsTall) { trackRow($0)?.albumID }
     }
+
+    /// The most rows an album's art covers: as many as a square as wide as the column.
+    private var artRowsTall: Int {
+        let column = table.column(withIdentifier: columnIdentifier(.art))
+        guard column >= 0 else { return 1 }
+        // The cells fill the column's rect (`edgeToEdgeColumn`), so the art is that wide.
+        return max(1, Int((table.rect(ofColumn: column).width / rowPitch).rounded(.up)))
+    }
+
+    private var rowPitch: CGFloat { table.rowHeight + table.intercellSpacing.height }
 
     private func artKey(_ row: Int) -> ArtworkKey? {
         guard let shown = artRow(row), let track = trackRow(shown), let embedded = track.art
@@ -293,14 +303,18 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         }
     }
 
-    /// Sets a full-width cell to its part of its album's art.
+    /// Sets an art cell to its part of its album's art.
     private func fill(_ cell: AlbumArtCell, row: Int) {
-        cell.rowPitch = table.rowHeight + table.intercellSpacing.height
+        cell.rowPitch = rowPitch
+        cell.size = artSize
         guard let start = artRow(row) else {
             cell.art = nil
             return
         }
         cell.rowsDown = row - start
+        cell.runRows = ArtRun.length(
+            from: start, limit: artRowsTall, rowCount: model.trackIDs.count
+        ) { trackRow($0)?.albumID }
         cell.art = image(ofArtIn: start)
     }
 
@@ -309,23 +323,96 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         let column = table.column(withIdentifier: columnIdentifier(.art))
         guard column >= 0 else { return }
         for row in visibleRows() where artKey(row) == key {
-            let image = NSImage(cgImage: image, size: .zero)
-            switch table.view(atColumn: column, row: row, makeIfNecessary: false) {
-            case let cell as AlbumArtCell: cell.art = image
-            case let cell as NSTableCellView: cell.imageView?.image = image
-            default: break
-            }
+            let cell = table.view(atColumn: column, row: row, makeIfNecessary: false)
+            (cell as? AlbumArtCell)?.art = NSImage(cgImage: image, size: .zero)
         }
     }
 
-    /// Fits each full-width cell to the art column's new width, which moves where an album's
-    /// art ends.
+    /// Fits each art cell to the art column's new width, which moves where an album's art
+    /// ends, after loading art at other pixels if the width needs them.
     private func refitArt() {
         let column = table.column(withIdentifier: columnIdentifier(.art))
         guard column >= 0 else { return }
+        hideArtHover()
+        let pixels = RowArt.pixels(columnWidth: table.tableColumns[column].width)
+        if pixels != art.loader.maxPixelSize {
+            art = RowArt(pixels: pixels)
+            follow(art)
+        }
         table.enumerateAvailableRowViews { rowView, row in
             (rowView.view(atColumn: column) as? AlbumArtCell).map { fill($0, row: row) }
         }
+    }
+
+    // MARK: Hovering and opening art
+
+    override func mouseMoved(with event: NSEvent) {
+        showArtHover(at: table.convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) { hideArtHover() }
+
+    /// Shows the whole art of the album under `point`, in the table's coordinates, over the
+    /// rows, and hides it once the pointer leaves both.
+    func showArtHover(at point: NSPoint) {
+        if !artHover.isHidden, artHover.frame.contains(point) { return }
+        guard let hovered = hoveredArt(at: point) else {
+            hideArtHover()
+            return
+        }
+        hoveredRow = hovered.row
+        artHover.image = hovered.image
+        artHover.frame = hovered.frame
+        artHover.isHidden = false
+    }
+
+    func hideArtHover() {
+        artHover.isHidden = true
+        artHover.image = nil
+        hoveredRow = nil
+    }
+
+    /// The album's first row whose art `artHover` shows.
+    private var hoveredRow: Int?
+
+    /// The art drawn under `point`, with its album's first row and where the whole art goes:
+    /// as wide as the column, from the top of that row. Nil off the art, or before it loaded.
+    func hoveredArt(at point: NSPoint) -> (row: Int, frame: NSRect, image: NSImage)? {
+        let column = table.column(at: point)
+        let row = table.row(at: point)
+        guard column >= 0, row >= 0,
+            table.tableColumns[column].identifier == columnIdentifier(.art),
+            let start = artRow(row), let image = image(ofArtIn: start)
+        else { return nil }
+        // The cells fill the column's rect (`edgeToEdgeColumn`), so the art is that wide.
+        let left = table.rect(ofColumn: column).minX
+        let width = table.rect(ofColumn: column).width
+        let top = table.rect(ofRow: start).minY
+        let rows = ArtRun.length(from: start, limit: artRowsTall, rowCount: model.trackIDs.count) {
+            trackRow($0)?.albumID
+        }
+        let drawn = ArtFrame.rect(
+            artSize, image: image.size, width: width, runHeight: CGFloat(rows) * rowPitch)
+        guard drawn.offsetBy(dx: left, dy: top).contains(point) else { return nil }
+        return (
+            start, ArtFrame.whole(image: image.size, width: width).offsetBy(dx: left, dy: top),
+            image
+        )
+    }
+
+    /// Opens the hovered art over the screen, decoded at the screen's size.
+    func openHoveredArt() {
+        guard let row = hoveredRow, let image = artHover.image, let track = trackRow(row),
+            let embedded = track.art, let screen = table.window?.screen ?? NSScreen.main
+        else { return }
+        hideArtHover()
+        let viewer = ArtViewer(image: image, screen: screen)
+        viewer.closed = { [weak self, weak viewer] in
+            if self?.artViewer === viewer { self?.artViewer = nil }
+        }
+        artViewer = viewer
+        viewer.show()
+        viewer.load(embedded, path: track.path, failed: actions.failed)
     }
 
     private func trackRow(_ index: Int) -> TrackRow? {
@@ -385,7 +472,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     func tableViewColumnDidResize(_ notification: Notification) {
         if !applyingColumns { actions.layoutChanged(layout) }
         let resized = notification.userInfo?["NSTableColumn"] as? NSTableColumn
-        if artSize == .fullWidth, resized?.identifier == columnIdentifier(.art) { refitArt() }
+        if resized?.identifier == columnIdentifier(.art) { refitArt() }
     }
 
     /// Shows `layout`'s columns in its order and widths, and hides the others. The sort is the
@@ -511,29 +598,10 @@ private func columnIdentifier(_ column: TrackColumn) -> NSUserInterfaceItemIdent
     NSUserInterfaceItemIdentifier(column.rawValue)
 }
 
-/// The full-width art cells' identifier, apart from the thumbnails' so neither is reused as the
-/// other.
-private let fullWidthArtIdentifier = NSUserInterfaceItemIdentifier(
-    TrackColumn.art.rawValue + "." + ArtSize.fullWidth.rawValue)
-
+/// An art cell.
 @MainActor
-private func makeFullWidthCell() -> AlbumArtCell {
+private func makeArtCell(_ identifier: NSUserInterfaceItemIdentifier) -> AlbumArtCell {
     let cell = AlbumArtCell()
-    cell.identifier = fullWidthArtIdentifier
-    return cell
-}
-
-/// A cell of one image, scaled down to fit the row.
-@MainActor
-private func makeImageCell(_ identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
-    let cell = NSTableCellView(
-        frame: NSRect(x: 0, y: 0, width: 100, height: RowListController.rowHeight))
     cell.identifier = identifier
-    // Kept in place by the mask, not constraints, so reusing the cell needs no constraint pass.
-    let image = NSImageView(frame: cell.bounds.insetBy(dx: 1, dy: 1))
-    image.imageScaling = .scaleProportionallyDown
-    image.autoresizingMask = [.width, .height]
-    cell.addSubview(image)
-    cell.imageView = image
     return cell
 }

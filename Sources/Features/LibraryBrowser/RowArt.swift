@@ -2,7 +2,6 @@ import Artwork
 import CoreGraphics
 import Log
 import Metadata
-import Settings
 
 private let logger = moduleLogger()
 
@@ -38,12 +37,10 @@ struct ArtRequests {
 /// main thread. Art that fails to load is logged once and not asked for again.
 @MainActor
 final class RowArt {
-    /// Thumbnails kept: several screens of rows, at about 5 KB each at the regular row height.
-    static let cachedThumbnails = 300
-    /// Retina pixels for full-width art: sharp in a column up to 256 points wide.
-    static let fullWidthPixels = 512
-    /// Full-width images kept, at about 1 MB each: one per album on a few screens.
-    static let cachedFullWidth = 40
+    /// Images kept, at up to 4 MB each at the largest size: one per album on a few screens.
+    static let cachedImages = 40
+    /// The largest image loaded, sharp in a column up to 512 points wide.
+    static let largestPixels = 1024
     /// Failed art remembered, so a broken file isn't read on every redraw, and the most of them
     /// logged.
     static let rememberedFailures = 1000
@@ -57,20 +54,20 @@ final class RowArt {
     var isWanted: (ArtworkKey) -> Bool = { _ in false }
     var loaded: (ArtworkKey, CGImage) -> Void = { _, _ in }
 
-    /// Thumbnails at retina pixels for `rowHeight`-point rows, or full-width art.
-    init(_ size: ArtSize, rowHeight: CGFloat) {
-        loader =
-            switch size {
-            case .thumbnail:
-                ArtworkLoader(
-                    maxPixelSize: Int((rowHeight * 2).rounded(.up)),
-                    capacity: Self.cachedThumbnails)
-            case .fullWidth:
-                ArtworkLoader(maxPixelSize: Self.fullWidthPixels, capacity: Self.cachedFullWidth)
-            }
+    /// Images at most `pixels` on their longer side.
+    init(pixels: Int) {
+        loader = ArtworkLoader(maxPixelSize: pixels, capacity: Self.cachedImages)
     }
 
-    /// The cached thumbnail, or nil after asking for it to be loaded.
+    /// The pixels art needs to be sharp on a retina screen in a column `width` points wide,
+    /// rounded up to a power of two so resizing the column seldom changes it.
+    static func pixels(columnWidth width: CGFloat) -> Int {
+        var pixels = 64
+        while pixels < Int((width * 2).rounded(.up)), pixels < largestPixels { pixels *= 2 }
+        return pixels
+    }
+
+    /// The cached image, or nil after asking for it to be loaded.
     func image(_ art: EmbeddedArt, path: String) -> CGImage? {
         let key = ArtworkKey(path: path, offset: art.offset)
         if let image = loader.cached(key) { return image }

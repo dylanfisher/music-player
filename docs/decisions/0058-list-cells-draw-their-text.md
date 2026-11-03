@@ -21,7 +21,7 @@ new string), then a layer per text field to update and commit.
   keys. No text field, so no constraint pass and no layer per field. The play timeline uses it
   too, since the two lists made their cells with one function.
 - **The art thumbnail cell keeps its image view, placed by its autoresizing mask** instead of
-  four constraints.
+  four constraints. (0065 replaced the thumbnail with album art drawn by its cell.)
 - **Each track row draws into one layer** (`canDrawSubviewsIntoLayer` on the row view), so a
   row of cells costs one backing store, not one each.
 - **The scroll view is layer-backed explicitly,** which responsive scrolling needs, rather than

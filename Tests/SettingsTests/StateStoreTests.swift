@@ -227,7 +227,7 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(settings[\.rowLines] == false)
     #expect(settings[\.alternatingRows] == true)
     #expect(settings[\.rowHeight] == .regular)
-    #expect(settings[\.artSize] == .thumbnail)
+    #expect(settings[\.artSize] == .fit)
     let keys = AppSettings().settings.map(\.key).filter { $0.hasPrefix("appearance.") }
     #expect(
         keys == [
