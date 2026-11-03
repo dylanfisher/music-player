@@ -34,7 +34,17 @@ public final class Database {
         // synchronous=NORMAL is durable in WAL mode except across a power cut, which loses at
         // most the last transactions of a rescan.
         try execute("PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON")
+        // Reading pages through a mapping instead of a copy each, and sorting and grouping in
+        // memory instead of a temporary file, measured faster on the library benchmarks
+        // (ADR 0075). A build whose limit is lower maps less, or nothing.
+        try execute(
+            "PRAGMA mmap_size = \(Self.mappedBytes); PRAGMA temp_store = \(Self.memoryTempStore)")
     }
+
+    /// The most of the file a connection maps: several times a 43k-track library's.
+    static let mappedBytes = 256 << 20
+    /// `temp_store`'s value for temporary tables and indexes in memory.
+    static let memoryTempStore = 2
 
     /// Opens the file at `url` read-only, for another program's database copied aside. Its
     /// schema can't call functions as it's read, since a hostile file can declare views and

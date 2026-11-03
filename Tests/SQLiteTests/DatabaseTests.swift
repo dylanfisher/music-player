@@ -18,6 +18,15 @@ private func temporaryDatabase() throws -> Database {
     #expect(try database.prepare("PRAGMA foreign_keys").map { try $0.int(0) } == [1])
 }
 
+@Test func mapsTheFileAndSortsInMemory() throws {
+    let database = try temporaryDatabase()
+    #expect(
+        try database.prepare("PRAGMA mmap_size").map { try $0.int(0) } == [Database.mappedBytes])
+    #expect(
+        try database.prepare("PRAGMA temp_store").map { try $0.int(0) }
+            == [Database.memoryTempStore])
+}
+
 @Test func bindsAndReadsEveryType() throws {
     let database = try temporaryDatabase()
     try database.execute("CREATE TABLE t (i INTEGER, r REAL, s TEXT, b INTEGER, n TEXT)")
