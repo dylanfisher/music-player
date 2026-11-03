@@ -119,11 +119,11 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Track change that switches sample rate | < 500 ms | < 500 ms |
 | Double-click a row of the whole library (43k tracks) to the first frame in the output, null device; the old Mac figure is an estimate until its checkpoint | < 25 ms | < 100 ms |
 | Main thread busy over that double-click; the old Mac figure is an estimate until its checkpoint | < 4 ms | < 10 ms |
-| Double-click a track of the same rate while one plays, to the first IO cycle carrying it, null device with estimated HAL step times, slow simulated NAS (median of 5; phase 32a); the old Mac figure is an estimate until its checkpoint | < 500 ms | < 1000 ms |
-| The same, a track of another rate (phase 32a); the old Mac figure is an estimate until its checkpoint | < 500 ms | < 1000 ms |
-| The same, Next (phase 32a); the old Mac figure is an estimate until its checkpoint | < 500 ms | < 1000 ms |
-| The same, a seek while the track is decoded (phase 32a); the old Mac figure is an estimate until its checkpoint | < 500 ms | < 1000 ms |
-| The same, a seek in the last seconds after decoding moved on (phase 32a); the old Mac figure is an estimate until its checkpoint | < 500 ms | < 1000 ms |
+| Double-click a track of the same rate while one plays, to the first IO cycle carrying it, null device with estimated HAL step times, slow simulated NAS (median of 5; phase 32a); the old Mac figure is an estimate until its checkpoint | < 100 ms | < 200 ms |
+| The same, a track of another rate (phase 32a); the old Mac figure is an estimate until its checkpoint | < 250 ms | < 400 ms |
+| The same, Next (phase 32a); the old Mac figure is an estimate until its checkpoint | < 40 ms | < 80 ms |
+| The same, a seek while the track is decoded (phase 32a); the old Mac figure is an estimate until its checkpoint | < 40 ms | < 80 ms |
+| The same, a seek in the last seconds after decoding moved on (phase 32a); the old Mac figure is an estimate until its checkpoint | < 40 ms | < 80 ms |
 | CPU when idle, the library window open and nothing playing, over a minute after the app reports its launch rescan done (`--report-launch`) and a 5 s settle; the old Mac figure is an estimate until its checkpoint | < 0.1 percent of a core | < 0.1 percent of a core |
 | Idle wakeups in the same minute, as `top` counts them | < 1 wakeups a second | < 1 wakeups a second |
 | Load and validate settings, every key changed | < 2 ms | < 20 ms |

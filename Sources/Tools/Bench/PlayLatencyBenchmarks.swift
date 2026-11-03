@@ -239,11 +239,10 @@ private func timeToSound(_ action: SoundAction, budget: Budget) -> Benchmark {
 }
 
 let timeToSoundBenchmarks = [
-    timeToSound(.sameRate, budget: Budget(appleSilicon: 500, oldMac: 1000, unit: .milliseconds)),
-    timeToSound(.otherRate, budget: Budget(appleSilicon: 500, oldMac: 1000, unit: .milliseconds)),
-    timeToSound(.next, budget: Budget(appleSilicon: 500, oldMac: 1000, unit: .milliseconds)),
-    timeToSound(
-        .seekWhileFed, budget: Budget(appleSilicon: 500, oldMac: 1000, unit: .milliseconds)),
-    timeToSound(
-        .seekAfterFeed, budget: Budget(appleSilicon: 500, oldMac: 1000, unit: .milliseconds)),
+    timeToSound(.sameRate, budget: Budget(appleSilicon: 100, oldMac: 200, unit: .milliseconds)),
+    // One rate change is the device's own time, an estimated 100 ms here.
+    timeToSound(.otherRate, budget: Budget(appleSilicon: 250, oldMac: 400, unit: .milliseconds)),
+    timeToSound(.next, budget: Budget(appleSilicon: 40, oldMac: 80, unit: .milliseconds)),
+    timeToSound(.seekWhileFed, budget: Budget(appleSilicon: 40, oldMac: 80, unit: .milliseconds)),
+    timeToSound(.seekAfterFeed, budget: Budget(appleSilicon: 40, oldMac: 80, unit: .milliseconds)),
 ]
