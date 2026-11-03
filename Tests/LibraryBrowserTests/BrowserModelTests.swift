@@ -201,12 +201,17 @@ private func loadedModel(
     let model = BrowserModel(
         reader: reader, sortColumn: .title, ascending: true, groupByAlbumArtist: false)
     await model.load(BrowserState(source: nil))
-    // A write on the refresh connection waits for this lock, as for a scan's batch, and the
-    // refresh's queries queue behind it.
-    let scan = try Database(at: databaseURL)
-    try scan.execute("BEGIN IMMEDIATE")
-    let blocked = Task { try await reader.refreshes.dismissProblems(["held"]) }
-    try await Task.sleep(nanoseconds: 100_000_000)
+    // The refresh connection is held busy, as by a query under a scan, and the refresh's
+    // queries queue behind it.
+    let (entered, enter) = AsyncStream.makeStream(of: Void.self)
+    let release = DispatchSemaphore(value: 0)
+    let held = Task {
+        await reader.refreshes.run {
+            enter.yield()
+            _ = release.wait(timeout: .now() + 10)
+        }
+    }
+    for await _ in entered { break }
     var refreshed = false
     let refresh = Task {
         await model.refresh()
@@ -217,13 +222,22 @@ private func loadedModel(
     await model.setSearch("zzqx")
     let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
     let refreshedDuringSearch = refreshed
-    try scan.execute("COMMIT")
-    try await blocked.value
+    release.signal()
+    await held.value
     await refresh.value
     #expect(elapsedMs < 2500, "the search waited \(elapsedMs) ms")
     #expect(!refreshedDuringSearch)
     #expect(model.filter.search == "zzqx")
     #expect(model.trackIDs.isEmpty)
+}
+
+@MainActor @Test func theRefreshConnectionCantWrite() async throws {
+    let reader = try LibraryReader(databaseURL: try writableBrowserDatabase())
+    await #expect(throws: (any Error).self) {
+        try await reader.refreshes.dismissProblems(["written"])
+    }
+    try await reader.dismissProblems(["written"])
+    #expect(try await reader.refreshes.dismissedProblems() == ["written"])
 }
 
 @MainActor @Test func aDoubleClickQueuesTheVisibleListInTableOrder() async throws {

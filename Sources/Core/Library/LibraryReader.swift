@@ -17,11 +17,16 @@ public actor LibraryReader {
         refreshConnection = try LibraryReader(refreshing: databaseURL)
     }
 
+    /// Read-only, so nothing written on it can race the edits on the first connection.
     private init(refreshing databaseURL: URL) throws {
         index = try LibraryIndex(at: databaseURL)
+        try index.database.execute("PRAGMA query_only = ON")
         self.databaseURL = databaseURL
         refreshConnection = nil
     }
+
+    /// For tests, which hold the connection busy as a long query would.
+    func run(_ body: @Sendable () -> Void) { body() }
 
     /// The same queries on a second connection, for what a change to the library rereads. While
     /// a scan runs, those reads take hundreds of milliseconds on two cores, and a search typed
