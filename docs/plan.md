@@ -3034,7 +3034,10 @@ Orchestrator notes on 32e:
   backup weight argue for the cache folder. Record the choice in an ADR.
 - 32e.4: line numbers in AppDelegate moved with phase 30a's sync folder buttons, which added
   more `fileExists` and `locate` calls on the main actor; cover those too.
-- The old Mac has 2 cores, 4 threads and 16 GB. Size concurrency caps (32b.4, 32d.3) for that.
+- Concurrency limits (32b.4, 32d.3) scale with the Mac they run on: derive them from
+  `ProcessInfo.activeProcessorCount`, defined once, never a fixed number. The old Mac
+  (2 cores, 4 threads, 16 GB) is the floor that must stay smooth while playing, and benches
+  check both ends.
 
 Overlap: the play-latency change (ADR 0070, merged as b6d2a74) already starts the clicked track
 before the queue's paths are read, with a double-click bench, which covers most of 32a.3. 32a
