@@ -201,6 +201,11 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         let rowView = MarkedRowView.reused(in: tableView)
+        if !rowView.canDrawSubviewsIntoLayer {
+            // The row and its cells draw into one layer, not one each.
+            rowView.wantsLayer = true
+            rowView.canDrawSubviewsIntoLayer = true
+        }
         rowView.isMarked = isPlaying(row)
         return rowView
     }
@@ -236,8 +241,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         }
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
-            as? NSTableCellView ?? makeTextCell(tableColumn.identifier, numeric: column.isNumeric)
-        cell.textField?.stringValue = trackRow(row).map { column.text($0, position: row) } ?? ""
+            as? TextCell ?? TextCell(tableColumn.identifier, numeric: column.isNumeric)
+        cell.text = trackRow(row).map { column.text($0, position: row) } ?? ""
         rowsDrawn()
         return cell
     }
@@ -490,18 +495,14 @@ private func makeFullWidthCell() -> AlbumArtCell {
 /// A cell of one image, scaled down to fit the row.
 @MainActor
 private func makeImageCell(_ identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
-    let cell = NSTableCellView()
+    let cell = NSTableCellView(
+        frame: NSRect(x: 0, y: 0, width: 100, height: RowListController.rowHeight))
     cell.identifier = identifier
-    let image = NSImageView()
+    // Kept in place by the mask, not constraints, so reusing the cell needs no constraint pass.
+    let image = NSImageView(frame: cell.bounds.insetBy(dx: 1, dy: 1))
     image.imageScaling = .scaleProportionallyDown
-    image.translatesAutoresizingMaskIntoConstraints = false
+    image.autoresizingMask = [.width, .height]
     cell.addSubview(image)
     cell.imageView = image
-    NSLayoutConstraint.activate([
-        image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 1),
-        image.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -1),
-        image.topAnchor.constraint(equalTo: cell.topAnchor, constant: 1),
-        image.bottomAnchor.constraint(equalTo: cell.bottomAnchor, constant: -1),
-    ])
     return cell
 }

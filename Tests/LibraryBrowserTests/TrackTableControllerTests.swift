@@ -305,3 +305,67 @@ import Testing
     #expect(controller.table.numberOfRows > 0)
     #expect(controller.emptyLabel.isHidden)
 }
+
+/// Scrolling costs per row what reusing and drawing its cells costs, so no cell has a
+/// constraint to solve or a text field with a layer of its own, and the table is layer-backed,
+/// which responsive scrolling needs.
+@MainActor @Test func cellsDrawTheirTextWithoutConstraintsOrALayerPerField() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
+    let index = try LibraryIndex(at: databaseURL)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
+        layoutChanged: { _ in },
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    var layout = AppState().trackTable.defaultValue
+    layout.columns.insert(ColumnLayout(column: .art, width: TrackColumn.art.defaultWidth), at: 0)
+    let controller = TrackTableController(
+        model: model, cache: RowCache { try index.rows(ids: $0) }, layout: layout,
+        actions: actions)
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = controller.view
+    defer { window.close() }
+    model.changed = { controller.reload($0) }
+    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    window.displayIfNeeded()
+
+    let table = controller.table
+    #expect(table.enclosingScrollView?.wantsLayer == true)
+    #expect(KeyTableView.isCompatibleWithResponsiveScrolling)
+    #expect(!table.usesAutomaticRowHeights)
+    #expect(table.rowView(atRow: 0, makeIfNecessary: false)?.canDrawSubviewsIntoLayer == true)
+    let first = try #require(try index.rows(ids: [model.trackIDs[0]]).first)
+    for (number, tableColumn) in table.tableColumns.enumerated() where !tableColumn.isHidden {
+        let column = try #require(TrackColumn(rawValue: tableColumn.identifier.rawValue))
+        let cell = try #require(table.view(atColumn: number, row: 0, makeIfNecessary: false))
+        #expect(([cell] + cell.subviews).allSatisfy { $0.constraints.isEmpty }, "\(column)")
+        if column == .art {
+            #expect(
+                (cell as? NSTableCellView)?.imageView?.frame == cell.bounds.insetBy(dx: 1, dy: 1))
+        } else {
+            let text = try #require(cell as? TextCell, "\(column)")
+            #expect(text.subviews.isEmpty)
+            #expect(text.text == column.text(first, position: 0))
+        }
+    }
+    // The text stays centered in a taller row, and draws.
+    let cell = TextCell(NSUserInterfaceItemIdentifier("t"), numeric: true)
+    cell.frame = NSRect(x: 0, y: 0, width: 120, height: 40)
+    #expect(abs(cell.textRect.midY - 20) <= 1)
+    #expect(cell.textRect.width == 116)
+    cell.text = "12:34"
+    let bitmap = try #require(cell.bitmapImageRepForCachingDisplay(in: cell.bounds))
+    cell.cacheDisplay(in: cell.bounds, to: bitmap)
+    let drawn = (0..<bitmap.pixelsWide).contains { x in
+        (0..<bitmap.pixelsHigh).contains { y in
+            (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0
+        }
+    }
+    #expect(drawn)
+}

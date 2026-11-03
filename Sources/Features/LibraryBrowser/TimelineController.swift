@@ -95,8 +95,7 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
         let column = TrackColumn(rawValue: tableColumn.identifier.rawValue)
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
-            as? NSTableCellView
-            ?? makeTextCell(tableColumn.identifier, numeric: column?.isNumeric == true)
+            as? TextCell ?? TextCell(tableColumn.identifier, numeric: column?.isNumeric == true)
         let text: String
         switch (column, played?.track) {
         case (nil, _):
@@ -107,9 +106,9 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
         case (_, nil): text = ""
         case (let column?, let track?): text = column.text(track, position: row)
         }
-        cell.textField?.stringValue = text
+        cell.text = text
         let missing = played.map { $0.track == nil } ?? false
-        cell.textField?.textColor = missing ? .tertiaryLabelColor : .labelColor
+        cell.textColor = missing ? .tertiaryLabelColor : .labelColor
         cell.toolTip = missing ? played.map { "\(missingText): \($0.path)" } : nil
         return cell
     }

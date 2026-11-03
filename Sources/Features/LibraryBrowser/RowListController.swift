@@ -32,6 +32,9 @@ class RowListController: NSViewController {
 
     override func loadView() {
         let scroll = NSScrollView()
+        // Layer-backed, so the table scrolls responsively: AppKit moves the drawn rows and draws
+        // only the ones uncovered.
+        scroll.wantsLayer = true
         scroll.documentView = table
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
@@ -155,24 +158,4 @@ class RowListController: NSViewController {
         if !shift || anchor == nil { anchor = row }
         return true
     }
-}
-
-/// A cell of one text field in the lists' small font, numbers on the right.
-@MainActor
-func makeTextCell(_ identifier: NSUserInterfaceItemIdentifier, numeric: Bool) -> NSTableCellView {
-    let cell = NSTableCellView()
-    cell.identifier = identifier
-    let text = NSTextField(labelWithString: "")
-    text.lineBreakMode = .byTruncatingTail
-    text.alignment = numeric ? .right : .left
-    text.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-    text.translatesAutoresizingMaskIntoConstraints = false
-    cell.addSubview(text)
-    cell.textField = text
-    NSLayoutConstraint.activate([
-        text.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
-        text.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
-        text.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-    ])
-    return cell
 }
