@@ -1,4 +1,5 @@
 import AppKit
+import Commands
 import DisplayText
 import Foundation
 import Testing
@@ -148,7 +149,9 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
     let table = try #require(find(panel.view))
     panel.show(playing(0))
     window.displayIfNeeded()
-    table.selectRowIndexes([3], byExtendingSelection: false)
+    // Down from the first row, as the keys select: tracks 0 to 3.
+    for _ in 0..<4 { panel.move(.down, extending: false) }
+    #expect(table.selectedRowIndexes == [3])
     panel.show(playing(1))
     window.displayIfNeeded()
     #expect(table.numberOfRows == 5)
@@ -157,4 +160,7 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
     #expect((table.rowView(atRow: 0, makeIfNecessary: false) as? MarkedRowView)?.isMarked == true)
     let current = table.view(atColumn: 0, row: 0, makeIfNecessary: false) as? NSTableCellView
     #expect(current?.textField?.stringValue == "▶ 1")
+    // The keys move on from track 3 too: to track 4.
+    panel.move(.down, extending: false)
+    #expect(table.selectedRowIndexes == [3])
 }

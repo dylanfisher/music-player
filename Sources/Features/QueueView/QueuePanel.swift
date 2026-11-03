@@ -50,6 +50,9 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
         let rowsBefore = table.numberOfRows
         if let dropped = model.apply(state), dropped < rowsBefore {
             table.removeRows(at: IndexSet(integersIn: 0..<dropped), withAnimation: [])
+            // The keys move from the same tracks, now higher up.
+            cursor = cursor.map { $0 - dropped }.flatMap { $0 >= 0 ? $0 : nil }
+            anchor = anchor.map { $0 - dropped }.flatMap { $0 >= 0 ? $0 : nil }
             // Row 0 is the current track now, marked and bold.
             table.reloadData(forRowIndexes: [0], columnIndexes: [0])
             (table.rowView(atRow: 0, makeIfNecessary: false) as? MarkedRowView)?.isMarked = true

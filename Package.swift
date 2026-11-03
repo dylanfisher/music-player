@@ -367,7 +367,7 @@ let package = Package(
         ),
         .testTarget(
             name: "QueueViewTests",
-            dependencies: ["DisplayText", "Library", "Playback", "QueueView"],
+            dependencies: ["Commands", "DisplayText", "Library", "Playback", "QueueView"],
             swiftSettings: strictSwift
         ),
         .testTarget(
