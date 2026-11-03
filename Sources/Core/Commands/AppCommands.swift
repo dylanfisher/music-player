@@ -36,6 +36,8 @@ extension CommandID {
     public static let toggleSignalPath = CommandID("view.toggleSignalPath")
     public static let showCurrentTrack = CommandID("view.showCurrentTrack")
     public static let showAllTracks = CommandID("view.showAllTracks")
+    public static let scrollUp = CommandID("view.scrollUp")
+    public static let scrollDown = CommandID("view.scrollDown")
     public static let back = CommandID("go.back")
     public static let forward = CommandID("go.forward")
     public static let focusNextPane = CommandID("focus.nextPane")
@@ -175,6 +177,8 @@ public enum AppCommands {
                 .toggleSignalPath, state.signalPathVisible.title, [.init("s", [opt, cmd])]),
             Command(.showCurrentTrack, "Show Current Track", [.init("l", cmd)], links: true),
             Command(.showAllTracks, "Show All Tracks"),
+            Command(.scrollUp, "Scroll Up", [.init(.up, [ctrl, opt])]),
+            Command(.scrollDown, "Scroll Down", [.init(.down, [ctrl, opt])]),
             Command(.back, "Back", [.init("[", cmd)], links: true),
             Command(.forward, "Forward", [.init("]", cmd)], links: true),
             // The panes take ← and → for these themselves; everywhere else they skip tracks.

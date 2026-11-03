@@ -95,3 +95,22 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
     #expect(abs(table.rect(ofRow: row).midY - visible.midY) < 3 * table.rowHeight)
     #expect(window.firstResponder === table)
 }
+
+@MainActor @Test func scrollingByRowsKeepsTheSelection() async throws {
+    let (browser, _) = try await browser(selecting: [3])
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = browser.content.view
+    window.layoutIfNeeded()
+    let table = browser.table.table
+    let clip = try #require(table.enclosingScrollView?.contentView)
+    let top = clip.bounds.minY
+    browser.scrollTracks(byRows: 2)
+    #expect(clip.bounds.minY == top + 2 * table.rowHeight)
+    browser.scrollTracks(byRows: -1)
+    #expect(clip.bounds.minY == top + table.rowHeight)
+    browser.scrollTracks(byRows: -5)
+    #expect(clip.bounds.minY == top)
+    #expect(table.selectedRowIndexes == [3])
+}

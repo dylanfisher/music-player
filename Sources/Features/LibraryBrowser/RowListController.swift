@@ -135,6 +135,16 @@ class RowListController: NSViewController {
         table.enclosingScrollView?.reflectScrolledClipView(clip)
     }
 
+    /// Scrolls the list `rows` rows down, or up when negative, leaving the selection alone.
+    func scroll(byRows rows: Int) {
+        guard let clip else { return }
+        let pitch = table.rowHeight + table.intercellSpacing.height
+        let bottom = max(-clip.contentInsets.top, table.bounds.height - clip.bounds.height)
+        let y = min(max(clip.bounds.minY + CGFloat(rows) * pitch, -clip.contentInsets.top), bottom)
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: y))
+        table.enclosingScrollView?.reflectScrolledClipView(clip)
+    }
+
     /// Scrolls the first selected row to the middle, if a row is selected.
     func centerSelection() {
         if let first = table.selectedRowIndexes.first { center(first) }

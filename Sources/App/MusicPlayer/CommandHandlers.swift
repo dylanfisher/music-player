@@ -160,6 +160,12 @@ extension AppDelegate {
         dispatcher.handle(.showAllTracks, enabled: hasWindow) { [weak self] in
             self?.browser?.showAll()
         }
+        dispatcher.handle(.scrollUp, enabled: hasWindow) { [weak self] in
+            self?.browser?.scrollTracks(byRows: -1)
+        }
+        dispatcher.handle(.scrollDown, enabled: hasWindow) { [weak self] in
+            self?.browser?.scrollTracks(byRows: 1)
+        }
         dispatcher.handle(
             .back, enabled: { [weak self] in self?.browser?.canGoBack == true },
             run: {

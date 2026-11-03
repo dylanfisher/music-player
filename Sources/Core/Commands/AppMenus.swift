@@ -157,7 +157,8 @@ public enum AppMenus {
                             .command(.reverseSort),
                         ], showsChords: true),
                     .separator, .command(.back), .command(.forward), .command(.showCurrentTrack),
-                    .command(.showAllTracks), .separator, .setting(settings.appearance.key),
+                    .command(.showAllTracks), .command(.scrollUp), .command(.scrollDown),
+                    .separator, .setting(settings.appearance.key),
                     .submenu(
                         AppState().trackTable.title,
                         [

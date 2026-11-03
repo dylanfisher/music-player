@@ -1340,6 +1340,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         focusTracks()
     }
 
+    /// Scrolls the list the window shows `rows` rows down, or up when negative, keeping the
+    /// selection.
+    public func scrollTracks(byRows rows: Int) { shownList.scroll(byRows: rows) }
+
     /// The list the window shows: the timeline's or the track table.
     private var shownList: RowListController { showsTimeline ? timeline : table }
 
