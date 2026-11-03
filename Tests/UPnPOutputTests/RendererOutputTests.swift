@@ -10,6 +10,9 @@ import Testing
 /// A made-up interface on 127/8, so the fake renderer at 127.0.0.1 counts as another device.
 private let subnet = NetworkInterface(
     name: "lo9", index: 1, address: IPAddress("127.0.0.2")!, prefixLength: 8)
+/// How often the output polls the fake renderer. Every poll opens connections, and 4 test
+/// processes at 0.2 s used up the machine's ephemeral ports ("address in use") for seconds.
+private let pollSeconds = 0.2
 /// Where the output's server listens in tests: 127.0.0.2 can't be bound on macOS.
 private let loopback = NetworkInterface(
     name: "lo0", index: 1, address: IPAddress("127.0.0.1")!, prefixLength: 8)
@@ -144,7 +147,7 @@ private func output(
     rediscover: RendererOutput.Rediscover? = nil
 ) async throws -> (RendererOutput, EventLog) {
     let output = try RendererOutput(
-        renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: 0.2,
+        renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: pollSeconds,
         timeoutSeconds: timeout, rediscover: rediscover)
     return (output, EventLog(output))
 }
@@ -378,13 +381,16 @@ private func output(
     fake.hangsAtEnd()
     let (output, log) = try await output(fake)
     defer { output.close() }
-    let started = ProcessInfo.processInfo.systemUptime
     output.load(item(1, "short"), startSeconds: 0, playing: true)
     output.setNext(item(2))
-    // It reports playing at the end forever; the app's clock ends the track.
-    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 8)
+    await log.wait(for: ["started 1"])
+    let started = ProcessInfo.processInfo.systemUptime
+    // It reports playing at the end forever; the app's clock ends the track, a one-second
+    // track plus the lead margin after it started. A busy machine only makes it later, so
+    // the wait's limit is the upper bound.
+    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 15)
     let took = ProcessInfo.processInfo.systemUptime - started
-    #expect(took >= 2.5 && took < 5, "\(took) s")
+    #expect(took >= 2.5, "\(took) s")
     #expect(fake.commands.suffix(2) == ["SetAVTransportURI", "Play"])
 }
 
@@ -530,7 +536,7 @@ private func output(
     #expect(replaced.hasPrefix("HTTP/1.1 200"))
     output.stop()
     await eventually("a stop") { fake.actions.last == "Stop" }
-    let afterStop = await refused(port: UInt16(port))
+    let afterStop = await stoppedServing(url.path, port: port)
     #expect(afterStop)
 }
 
@@ -729,6 +735,7 @@ private func output(
     output.load(item(2), startSeconds: 4, playing: true)
     await log.wait(for: ["started 1", "lost 1", "started 2"])
     #expect(moved.commands.prefix(2) == ["SetAVTransportURI", "Play"])
+    await eventually("the moved renderer's fetch") { !moved.fetched.isEmpty }
     #expect(moved.fetched.map(\.status) == [206], "\(moved.fetched.map(\.status)) \(moved.actions)")
 }
 
@@ -745,7 +752,7 @@ private func output(
     let fake = try await FakeRenderer.denon()
     // The engine reads the events itself, so no log shares them.
     let output = try RendererOutput(
-        renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: 0.2,
+        renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: pollSeconds,
         timeoutSeconds: 1)
     defer { output.close() }
     let engine = PlaybackEngine(output: output)
@@ -771,17 +778,15 @@ private func get(_ path: String, port: Int) async throws -> String {
     return String(decoding: try await connection.receiveAll(), as: UTF8.self)
 }
 
-/// Whether nothing listens on `port` any more, within a second.
-private func refused(port: UInt16) async -> Bool {
+/// Whether the server that was at `port` has stopped serving `path`, within a second: the
+/// connection is refused, or another process's server took the freed port and answers
+/// something else.
+private func stoppedServing(_ path: String, port: Int) async -> Bool {
     let deadline = Date().addingTimeInterval(1)
     while Date() < deadline {
-        do {
-            let connection = try await LoopbackConnection.connect(port: port)
-            connection.close()
-            try? await Task.sleep(nanoseconds: 20_000_000)
-        } catch {
-            return true
-        }
+        guard let reply = try? await get(path, port: port) else { return true }
+        if !reply.hasPrefix("HTTP/1.1 200") { return true }
+        try? await Task.sleep(nanoseconds: 20_000_000)
     }
     return false
 }

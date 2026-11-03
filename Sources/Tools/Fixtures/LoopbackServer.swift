@@ -69,8 +69,23 @@ final class LoopbackConnection: @unchecked Sendable {
         receiveMore()
     }
 
-    /// A client connection to `port` on 127.0.0.1, ready.
+    /// A client connection to `port` on 127.0.0.1, ready. The system picks the client's own port
+    /// too, and can pick one a listener of another test or process holds; connecting fails with
+    /// "address in use" then, and a later try gets another port. Under load it can take a few
+    /// seconds.
     static func connect(port: UInt16) async throws -> LoopbackConnection {
+        var attempt = 1
+        while true {
+            do {
+                return try await connectOnce(port: port)
+            } catch NWError.posix(.EADDRINUSE) where attempt < 40 {
+                attempt += 1
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+    }
+
+    private static func connectOnce(port: UInt16) async throws -> LoopbackConnection {
         let connection = NWConnection(
             host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
         let ready = LoopbackOnce<Result<Void, any Error>>()
@@ -82,7 +97,12 @@ final class LoopbackConnection: @unchecked Sendable {
             }
         }
         let made = LoopbackConnection(connection)
-        try await ready.value(seconds: 5).get()
+        do {
+            try await ready.value(seconds: 5).get()
+        } catch {
+            made.close()
+            throw error
+        }
         return made
     }
 
