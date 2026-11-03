@@ -35,25 +35,32 @@ final class FileDecoder {
             slowFile = nil
             try throwIfError("ExtAudioFileOpenURL", ExtAudioFileOpenURL(url as CFURL, &file))
         }
-        self.file = file!
-
-        var format = AudioStreamBasicDescription()
-        var size = UInt32(MemoryLayout.size(ofValue: format))
-        try throwIfError(
-            "ExtAudioFileGetProperty(FileDataFormat)",
-            ExtAudioFileGetProperty(self.file, kExtAudioFileProperty_FileDataFormat, &size, &format)
-        )
-        fileFormat = format
-
-        var length: Int64 = 0
-        size = UInt32(MemoryLayout.size(ofValue: length))
-        try throwIfError(
-            "ExtAudioFileGetProperty(FileLengthFrames)",
-            ExtAudioFileGetProperty(
-                self.file, kExtAudioFileProperty_FileLengthFrames, &size, &length)
-        )
-        lengthFrames = length
-        channels = try ChannelReading(self.file, channels: Int(format.mChannelsPerFrame))
+        let opened = file!
+        self.file = opened
+        // `deinit` doesn't run for an init that throws from here, so close what's open.
+        do {
+            var format = AudioStreamBasicDescription()
+            var size = UInt32(MemoryLayout.size(ofValue: format))
+            try throwIfError(
+                "ExtAudioFileGetProperty(FileDataFormat)",
+                ExtAudioFileGetProperty(
+                    opened, kExtAudioFileProperty_FileDataFormat, &size, &format)
+            )
+            var length: Int64 = 0
+            size = UInt32(MemoryLayout.size(ofValue: length))
+            try throwIfError(
+                "ExtAudioFileGetProperty(FileLengthFrames)",
+                ExtAudioFileGetProperty(
+                    opened, kExtAudioFileProperty_FileLengthFrames, &size, &length)
+            )
+            channels = try ChannelReading(opened, channels: Int(format.mChannelsPerFrame))
+            fileFormat = format
+            lengthFrames = length
+        } catch {
+            ExtAudioFileDispose(opened)
+            slowFile?.close()
+            throw error
+        }
     }
 
     /// The order `read` hands the channels on in.
