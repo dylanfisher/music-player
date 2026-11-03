@@ -3632,6 +3632,31 @@ Mac's numbers come from its next checkpoint.
 - [ ] **Hardware checkpoint (owner):** rerun the 32f block on the 2015 MacBook Pro and send back
   the file.
 
+Plan:
+
+1. 33.1: one Bench function names a scratch folder beside the fixtures in
+   `~/Library/Caches/MusicPlayer` and empties it; the history benches and the four benches that
+   already build that path by hand use it, and `buildDirectory()` goes.
+2. 33.2: measure first, comparing against `main` in the same session. A keystroke that lands
+   during a refresh waits in `LibraryReader` behind the refresh's queries, which take hundreds
+   of milliseconds under a scan. Give the reader a second connection for what a library change
+   rereads (`refreshes`): `BrowserModel` runs a `.libraryChanged` reload there, and
+   `LibraryBrowser` reads that change's totals and the issue count there. Record the floors the
+   reader counts pick on 2 cores, 4 threads, and the scan's QoS, in ADR 0086. Test: a search
+   typed while the refresh connection is held finishes before the refresh. Check the scan
+   benches stay within 10%.
+3. 33.3: launch intervals in `Interval` for the steps before the first rows (settings and state,
+   the window, the services started after the first rows), so the stall log names them. Find
+   what the launch reads from a cold cache with `mincore` on a cloned index; make the launch
+   bench say how much of its index was resident, since APFS clones start uncached. Move or
+   shrink what the measurement shows on the main actor.
+4. 33.4: sample the idle app here, find what wakes, fix it or set the budget from measurement.
+5. 33.5: `TagEditing.confirmReadAbove` from the old Mac's 129 ms a file, so the editor opens
+   within about 3 s before it asks; update ADR 0081.
+6. 33.6: time the sidebar toggle here, and fix the cause if it's contained.
+7. Benches: the named ones each item touches, against `main` measured the same session; the old
+   Mac's numbers are pending its checkpoint.
+
 ### 34. Config safety
 
 **Done.** From the mbp2026 test run (Mac17,6, M5 Max, 18 cores, macOS 26.6.2, Xcode
