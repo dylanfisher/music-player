@@ -128,3 +128,20 @@ private func row(of playlist: Playlist, in sidebar: SidebarController) throws ->
     sidebar.outline.keyDown(with: event)
     #expect(sidebar.isRenaming)
 }
+
+@MainActor @Test func everyLibraryRowAndHeadingSaysWhatItIs() async throws {
+    let (_, sidebar, _, _, _) = try await browserWithPlaylists()
+    let outline = sidebar.outline
+    var tips: [String: String] = [:]
+    for row in 0..<outline.numberOfRows {
+        let cell = try #require(
+            outline.view(atColumn: 0, row: row, makeIfNecessary: true) as? NSTableCellView)
+        let name = try #require(cell.textField?.stringValue)
+        // Over the name as well as the rest of the row.
+        #expect(cell.textField?.toolTip == cell.toolTip, "\(name)")
+        tips[name] = cell.toolTip
+    }
+    for name in ["LIBRARY", "Music", "History", "Timeline", "Library Health", "PLAYLISTS"] {
+        #expect(tips[name]?.isEmpty == false, "\(name)")
+    }
+}

@@ -51,10 +51,19 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         self.selectSource = selectSource
         self.keyCommand = keyCommand
         let libraryGroup = SidebarNode(.group, title: "Library")
-        libraryGroup.children = [
-            library, SidebarNode(.history, title: "History"),
-            SidebarNode(.timeline, title: "Timeline"), health,
-        ]
+        let history = SidebarNode(.history, title: "History")
+        let timeline = SidebarNode(.timeline, title: "Timeline")
+        libraryGroup.children = [library, history, timeline, health]
+        libraryGroup.toolTip = "The whole library, what you've played, and its problems."
+        library.toolTip =
+            "Every track in the library. The columns above the tracks and the search narrow it."
+        history.toolTip = "Each track you've played, once, the latest played first."
+        timeline.toolTip = "Every play, one row each, the latest first."
+        health.toolTip =
+            "Checks the library for problems, such as missing files or tags. Opens into a list"
+            + " for each check."
+        playlistGroup.toolTip =
+            "Your playlists and smart playlists. Drop playlist files here to import them."
         health.children = HealthCheck.allCases.map { check in
             let node = SidebarNode(.check(check), title: check.title)
             node.toolTip = check.summary
@@ -237,7 +246,9 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         }
         // A row without a symbol gives its width to the name.
         (cell as? CountCell)?.imageWidth?.constant = node.symbol == nil ? 0 : 16
+        // On the name too, which covers most of the row.
         cell.toolTip = node.toolTip
+        cell.textField?.toolTip = node.toolTip
         (cell as? CountCell)?.count.stringValue = node.count ?? ""
         return cell
     }
