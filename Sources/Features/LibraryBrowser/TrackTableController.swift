@@ -27,6 +27,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// changes.
     private var artSize = ArtSize.thumbnail
     private var art: RowArt
+    /// The model's `emptyText`, centered over the table, hidden while it's nil.
+    let emptyLabel = NSTextField(labelWithString: "")
     /// Called after every change of the selection, the keys' and a reload's too.
     var selectionChanged: () -> Void = {}
     /// The file of the track playing, whose row is marked wherever the table shows it.
@@ -60,6 +62,16 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             guard let self, art === self.art else { return }
             show(image, for: key)
         }
+    }
+
+    override func loadView() {
+        super.loadView()
+        emptyLabel.textColor = .secondaryLabelColor
+        emptyLabel.isHidden = true
+        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(emptyLabel)
+        emptyLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor).isActive = true
+        emptyLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor).isActive = true
     }
 
     private func configure(_ layout: TrackTableLayout) {
@@ -133,6 +145,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         showSort()
         typeSelect?.reset()
         table.reloadData()
+        emptyLabel.stringValue = model.emptyText ?? ""
+        emptyLabel.isHidden = model.emptyText == nil
         let rows = model.rows(holding: selection)
         select(rows)
         if let anchor {

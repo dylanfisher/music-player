@@ -79,9 +79,15 @@ func writableModel(
     await model.setSource(.history)
     #expect(model.sortColumn == .lastPlayed && !model.ascending)
     #expect(model.trackIDs.isEmpty)
+    #expect(model.emptyText == "Nothing played yet")
     try await model.recordPlay(paths[0], at: 100)
+    #expect(model.emptyText == nil)
     try await model.recordPlay(paths[1], at: 200)
     #expect(model.trackIDs == [second, first])
+    // A search that finds none of the plays isn't History being empty.
+    await model.setSearch("no track is called this")
+    #expect(model.trackIDs.isEmpty && model.emptyText == nil)
+    await model.setSearch("")
     try await model.recordPlay(paths[0], at: 300)
     #expect(model.trackIDs == [first, second])
 

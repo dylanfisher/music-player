@@ -23,6 +23,10 @@ The query keeps starting from `plays_last_played`, as 0022 chose, and adds an `E
 `history_path` for each played track. The cost still follows the tracks played, not the length
 of the log.
 
+**An empty History says "Nothing played yet"**, centered over the track table in the secondary
+label color. A search that finds none of History's tracks leaves the table empty without it,
+since something has played.
+
 ## Alternatives considered
 
 - **`play_count > 0`** — rejected: imported plays add to the count, so an import still fills
@@ -31,6 +35,8 @@ of the log.
   is the cost 0022 avoided, and the order would disagree with the Last Played column.
 - **Leave imports out of Last Played** — rejected: Last Played is a column and a smart rule
   field, and the import's value is what the other player knew.
+- **"Nothing played yet" in the status bar** — rejected: the eye goes to the empty table, and
+  the bar's "0 tracks" already says the list is empty.
 
 ## Consequences
 

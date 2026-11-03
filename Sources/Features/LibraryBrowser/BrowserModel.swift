@@ -161,6 +161,13 @@ public final class BrowserModel {
         }
     }
 
+    /// What the table says in place of rows: History's before anything has played. Nil while
+    /// it lists rows, and while a search hides them.
+    var emptyText: String? {
+        filter.source == .history && trackIDs.isEmpty && filter.search.isEmpty
+            ? "Nothing played yet" : nil
+    }
+
     /// The playlist the sidebar shows, if it shows one.
     public var shownPlaylist: Playlist? {
         guard case .playlist(let id) = filter.source else { return nil }

@@ -281,3 +281,27 @@ import Testing
     }
     #expect(spanned)
 }
+
+@MainActor @Test func anEmptyHistorySaysNothingPlayedYet() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
+        layoutChanged: { _ in },
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { _ in [] }, layout: AppState().trackTable.defaultValue,
+        actions: actions)
+    _ = controller.view
+    model.changed = { controller.reload($0) }
+    await model.load(BrowserState(source: .history, genre: nil, artist: nil, album: nil))
+    #expect(controller.table.numberOfRows == 0)
+    #expect(!controller.emptyLabel.isHidden)
+    #expect(controller.emptyLabel.stringValue == "Nothing played yet")
+    await model.setSource(nil)
+    #expect(controller.table.numberOfRows > 0)
+    #expect(controller.emptyLabel.isHidden)
+}
