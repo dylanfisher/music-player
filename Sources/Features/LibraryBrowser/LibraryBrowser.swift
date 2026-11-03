@@ -27,6 +27,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Play these files as a new queue.
     public var play: (PlayRequest) -> Void = { _ in }
+    /// Play this track now, and the queue it comes with once that's read.
+    public var playStart: (PlayStart) -> Void = { _ in }
     /// Queue these files after the current track.
     public var playNext: ([URL]) -> Void = { _ in }
     /// Queue these files after the last track.
@@ -701,8 +703,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private func playRows(_ rows: IndexSet, clicked: Int) {
         Task {
             do {
-                if let request = try await model.playRequest(selected: rows, clicked: clicked) {
-                    play(request)
+                if let start = try await model.playStart(selected: rows, clicked: clicked) {
+                    playStart(start)
                 }
             } catch {
                 report("couldn't read the tracks to play: \(error)")

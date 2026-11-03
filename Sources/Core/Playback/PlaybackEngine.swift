@@ -32,6 +32,14 @@ public actor PlaybackEngine {
     static let failureLimit = 3
     /// The position `play()` starts from when nothing is loaded.
     private var cursor = 0
+    /// Changes whenever the queue is replaced or edited, so a late `play(starting:completing:)`
+    /// can tell the queue it was filling is gone.
+    private var queueGeneration = 0
+    /// Set from `play(starting:completing:)` until its queue arrives: the queue is the one track,
+    /// so the output reaching its end isn't the end of the queue.
+    private var completing = false
+    /// The item that finished while `completing`, handled once the queue is whole.
+    private var finishedEarly: OutputItem.ID?
     /// "Previous" within this many seconds of a track's start goes back a track; later, it
     /// restarts the track.
     private static let restartThresholdSeconds = 3.0
@@ -102,6 +110,9 @@ public actor PlaybackEngine {
     /// Stops playback and replaces the queue. `first` is the index `play()` starts at.
     public func setQueue(_ urls: [URL], first: Int = 0) {
         unload()
+        queueGeneration += 1
+        completing = false
+        finishedEarly = nil
         failuresInARow = 0
         cursor = queue.replace(with: urls, first: first, shuffled: shuffled) ?? 0
         state.queue = urls
@@ -109,6 +120,46 @@ public actor PlaybackEngine {
         state.currentIndex = urls.isEmpty ? nil : queue.entry(at: cursor)
         state.status = .stopped
         publish(.queueChanged)
+    }
+
+    /// Plays `url` now and fills in the rest of the queue as soon as `rest` returns it, so
+    /// resolving a queue as long as the library (`first` is the index of `url` in it) doesn't
+    /// delay the first sample. The returned task ends when the queue is whole, and throws when
+    /// `rest` does or no longer has `url` at `first`. A new queue, or an edit to this one, before
+    /// that leaves the task with nothing to do.
+    public func play(
+        starting url: URL,
+        completing rest: @escaping @Sendable () async throws -> (urls: [URL], first: Int)
+    ) -> Task<Void, any Error> {
+        setQueue([url])
+        completing = true
+        play()
+        let generation = queueGeneration
+        return Task {
+            let (urls, first) = try await rest()
+            try complete(generation, urls: urls, first: first, starting: url)
+        }
+    }
+
+    private func complete(_ generation: Int, urls: [URL], first: Int, starting url: URL) throws {
+        guard generation == queueGeneration else { return }
+        completing = false
+        guard urls.indices.contains(first), urls[first] == url else {
+            throw PlaybackError.startedTrackMissing(url)
+        }
+        let position = queue.replace(with: urls, first: first, shuffled: shuffled)!
+        if let current = currentItem { currentItem = (current.id, position) }
+        cursor = position
+        nextItem = nil
+        state.queue = urls
+        state.order = queue.order
+        state.currentIndex = queue.entry(at: position)
+        sendNext()
+        publish(.queueChanged)
+        if let finished = finishedEarly {
+            finishedEarly = nil
+            handle(.finished(finished))
+        }
     }
 
     public func play() {
@@ -254,6 +305,9 @@ public actor PlaybackEngine {
 
     /// Follows the current, next and starting tracks to their new positions after an edit.
     private func applyEdit(_ moved: [Int?]) {
+        queueGeneration += 1
+        completing = false
+        finishedEarly = nil
         state.queue = queue.entries
         state.order = queue.order
         if let nextItem {
@@ -398,6 +452,10 @@ public actor PlaybackEngine {
             if id == nextItem?.id { skip(after: failed) }
         case .finished(let id):
             guard let currentItem, id == currentItem.id else { return }
+            if completing {
+                finishedEarly = id
+                return
+            }
             if currentFailed {
                 self.nextItem = nil
                 skip(after: currentItem.position)

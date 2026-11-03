@@ -487,10 +487,37 @@ public final class BrowserModel {
     func playRequest(selected: IndexSet, clicked: Int) async throws -> PlayRequest? {
         let (rows, first) = playOrder(
             rowCount: trackIDs.count, selected: selected, clicked: clicked)
+        return try await Self.request(ids: rows.map { trackIDs[$0] }, first: first, reader: reader)
+    }
+
+    /// What a double-click plays, split so the clicked track starts before the queue behind it
+    /// is read: one file lookup now, and the rest, which is a lookup per row of the table, left
+    /// to `PlayStart.request`.
+    public func playStart(selected: IndexSet, clicked: Int) async throws -> PlayStart? {
+        let (rows, first) = playOrder(
+            rowCount: trackIDs.count, selected: selected, clicked: clicked)
         let ids = rows.map { trackIDs[$0] }
+        let reader = reader
+        guard let path = try await reader.paths(ids: [ids[first]])[ids[first]] else {
+            // The clicked track has gone from the index: the queue says where playback starts.
+            guard let request = try await Self.request(ids: ids, first: first, reader: reader)
+            else { return nil }
+            return PlayStart(url: request.urls[request.first]) { request }
+        }
+        return PlayStart(url: URL(fileURLWithPath: path, isDirectory: false)) {
+            guard let request = try await Self.request(ids: ids, first: first, reader: reader)
+            else { throw PlayStartError.noTracks }
+            return request
+        }
+    }
+
+    private nonisolated static func request(ids: [Int64], first: Int, reader: LibraryReader)
+        async throws -> PlayRequest?
+    {
         let paths = try await reader.paths(ids: ids)
         let firstID = ids[first]
         var urls: [URL] = []
+        urls.reserveCapacity(paths.count)
         var start = 0
         for id in ids {
             guard let path = paths[id] else { continue }
@@ -689,6 +716,19 @@ public struct BrowserState: Equatable, Sendable {
         self.artist = artist
         self.album = album
     }
+}
+
+/// A track to start playing at once, and the queue it belongs to, read after it starts.
+public struct PlayStart: Sendable {
+    public var url: URL
+    /// The whole queue, with `url` at its `first`. Runs off the main actor.
+    public var request: @Sendable () async throws -> PlayRequest
+}
+
+enum PlayStartError: Error, CustomStringConvertible {
+    case noTracks
+
+    var description: String { "none of the tracks to play are in the library any more" }
 }
 
 /// Files to play as a new queue, and the index in it to start at.

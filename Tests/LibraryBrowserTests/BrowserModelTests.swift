@@ -308,3 +308,12 @@ private func loadedModel(
             == "7 albums are named Hits, by A, no artist, C, D, E and 2 more; play a search of the"
             + " name and the artist instead")
 }
+
+@MainActor @Test func aDoubleClickStartsTheClickedTrackBeforeReadingTheQueue() async throws {
+    let (model, index) = try await loadedModel()
+    let start = try #require(try await model.playStart(selected: [], clicked: 7))
+    #expect(start.url.path == (try index.rows(ids: [model.trackIDs[7]]))[0].path)
+    let request = try await start.request()
+    #expect(request == (try #require(try await model.playRequest(selected: [], clicked: 7))))
+    #expect(request.urls[request.first] == start.url)
+}

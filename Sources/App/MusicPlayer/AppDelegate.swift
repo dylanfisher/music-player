@@ -224,6 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.window = window
 
         browser.play = { [weak self] request in self?.play(request) }
+        browser.playStart = { [weak self] start in self?.play(start) }
         browser.playNext = { [weak self] urls in
             guard let engine = self?.engine else { return }
             Task { await engine.playNext(urls) }
@@ -458,6 +459,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             })
         mediaControls = controls
         dockMenu = DockMenu(model: controls.model, dispatcher: dispatcher)
+    }
+
+    private func play(_ start: PlayStart) {
+        guard let engine else { return }
+        Task {
+            let filling = await engine.play(starting: start.url) {
+                let request = try await start.request()
+                return (request.urls, request.first)
+            }
+            do {
+                try await filling.value
+            } catch {
+                fail("Couldn't read the queue to play", error)
+            }
+        }
     }
 
     private func play(_ request: PlayRequest) {

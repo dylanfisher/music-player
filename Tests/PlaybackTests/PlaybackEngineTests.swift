@@ -1043,3 +1043,89 @@ private func eventually(_ what: String, _ check: @escaping @Sendable () async ->
     // Nothing is sent back to the output: it already plays as the engine now says.
     #expect(!output.takeCalls().contains { $0 == .play || $0 == .pause })
 }
+
+// MARK: Starting before the queue is read
+
+/// Lets a test hold back the rest of a queue until it chooses.
+private actor Gate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var open = false
+
+    func wait() async {
+        if open { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func release() {
+        open = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+@Test func startsTheClickedTrackBeforeTheRestOfTheQueueIsRead() async throws {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[1]) {
+        await gate.wait()
+        return (urls, 1)
+    }
+    let alone = await engine.state
+    #expect(alone.status == .playing)
+    #expect(alone.queue == [urls[1]])
+    guard case .load(_, let url, _, true)? = output.takeCalls().first else {
+        Issue.record("expected the clicked track to be loaded, playing")
+        return
+    }
+    #expect(url == urls[1])
+
+    await gate.release()
+    try await filling.value
+    let whole = await engine.state
+    #expect(whole.queue == urls)
+    #expect(whole.currentIndex == 1)
+    #expect(output.takeCalls() == [.setNext(2, urls[2])])
+}
+
+@Test func aQueueThatArrivesAfterANewQueueIsDropped() async throws {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        return (urls, 0)
+    }
+    let other = [URL(fileURLWithPath: "/music/other.flac")]
+    await engine.setQueue(other)
+    await gate.release()
+    try await filling.value
+    #expect(await engine.state.queue == other)
+}
+
+@Test func aTrackThatFailsBeforeTheQueueArrivesMovesOnOnceItDoes() async throws {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        return (urls, 0)
+    }
+    await engine.handle(.trackFailed(1, Broken()))
+    await engine.handle(.finished(1))
+    #expect(await engine.state.status == .playing)
+
+    await gate.release()
+    try await filling.value
+    let loads = output.takeCalls().compactMap { call -> URL? in
+        if case .load(_, let url, _, _) = call { url } else { nil }
+    }
+    #expect(loads == [urls[0], urls[1]])
+    #expect(await engine.state.status == .playing)
+}
+
+@Test func aQueueThatLacksTheStartedTrackIsReported() async {
+    let engine = PlaybackEngine(output: FakeOutput())
+    let filling = await engine.play(starting: urls[0]) { ([urls[1], urls[2]], 0) }
+    await #expect(throws: PlaybackError.self) { try await filling.value }
+}
