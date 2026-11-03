@@ -69,6 +69,13 @@ import Testing
     #expect(
         argumentProblem(["--measure-scroll", "scan", "--measure-window"])
             == "--measure-scroll can't go with --measure-window")
+    #expect(argumentProblem(["--measure-launch"]) == nil)
+    #expect(
+        argumentProblem(["--measure-launch", "--measure-scroll", "pages"])
+            == "--measure-scroll can't go with --measure-launch")
+    #expect(
+        argumentProblem(["--measure-launch", "--scan", "/m"])
+            == "--measure-launch is for the window, so it can't go with --scan")
     #expect(
         argumentProblem(["--art-delay-ms", "43"])
             == "--art-delay-ms only goes with --measure-scroll")

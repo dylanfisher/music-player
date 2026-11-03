@@ -11,7 +11,8 @@ import Settings
 //   MusicPlayer --play <file or folder>... [--device <part of name>]
 //   MusicPlayer --scan <folder> [--db <file>] [--readers <n>] [--scan-io-hints none|rdahead|all]
 // and the window:
-//   MusicPlayer [--measure-window | --measure-scroll trackpad|scan|pages [--art-delay-ms <ms>]]
+//   MusicPlayer [--measure-window | --measure-launch
+//     | --measure-scroll trackpad|scan|pages [--art-delay-ms <ms>]]
 //     [--report-launch] [--snapshot <png file> [--snapshot-of <window>]]
 // and in every mode [--home <folder>] [--settings <file>]:
 // --home keeps the config file, library, state file and device record in one folder instead of
@@ -22,6 +23,8 @@ import Settings
 // --capture-renderers writes what the UPnP renderers and the Denon receiver on the network send
 // (SSDP replies, descriptions, status lines) to the folder, for phase 9b to start from.
 // --measure-window prints the launch time and memory as JSON and quits, for Bench.
+// --measure-launch prints only the time from the process's start to the first rows, and the
+// memory then, and quits: for a cold launch after `sudo purge`, with the owner's own library.
 // --measure-scroll scrolls the track table in trackpad flicks, the second while hearing a
 // scan's progress, or the third a screenful at a time once each screen's art is in, prints the
 // times as JSON and quits, for Bench. --art-delay-ms adds a NAS's latency to each art read.
@@ -127,6 +130,8 @@ do {
 let measurement: MeasurementKind? =
     if given(.measureWindow) {
         .window
+    } else if given(.measureLaunch) {
+        .launch
     } else if let text = value(after: .measureScroll), let scrollCase = ScrollCase(rawValue: text) {
         .scroll(
             scrollCase,

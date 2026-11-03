@@ -16,6 +16,7 @@ enum Flag: String {
     case settings = "--settings"
     case home = "--home"
     case measureWindow = "--measure-window"
+    case measureLaunch = "--measure-launch"
     case measureScroll = "--measure-scroll"
     case artDelayMs = "--art-delay-ms"
     case reportLaunch = "--report-launch"
@@ -63,7 +64,8 @@ private let valueFlags: [(Flag, String)] = [
 private let modeFlags: [Flag] = [.listDevices, .scan, .play, .captureRenderers]
 /// Flags only the window uses.
 private let windowFlags: [Flag] = [
-    .measureWindow, .measureScroll, .artDelayMs, .reportLaunch, .snapshot, .snapshotOf,
+    .measureWindow, .measureLaunch, .measureScroll, .artDelayMs, .reportLaunch, .snapshot,
+    .snapshotOf,
 ]
 private let scanOnlyFlags: [Flag] = [.db, .readers, .scanIOHints]
 
@@ -90,8 +92,9 @@ func argumentProblem(_ arguments: [String]) -> String? {
     if let text = value(after: .measureScroll, in: arguments), ScrollCase(rawValue: text) == nil {
         return choiceProblem(.measureScroll, scrollChoices, text)
     }
-    if given(.measureScroll), given(.measureWindow) {
-        return "\(Flag.measureScroll.rawValue) can't go with \(Flag.measureWindow.rawValue)"
+    let measurements = [Flag.measureWindow, .measureLaunch, .measureScroll].filter(given)
+    if measurements.count > 1 {
+        return "\(measurements[1].rawValue) can't go with \(measurements[0].rawValue)"
     }
     if given(.artDelayMs), !given(.measureScroll) {
         return "\(Flag.artDelayMs.rawValue) only goes with \(Flag.measureScroll.rawValue)"

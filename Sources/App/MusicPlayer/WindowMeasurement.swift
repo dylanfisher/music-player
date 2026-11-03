@@ -9,6 +9,8 @@ import LibraryBrowser
 enum MeasurementKind {
     /// `--measure-window`.
     case window
+    /// `--measure-launch`.
+    case launch
     /// `--measure-scroll`, with `--art-delay-ms` added to each art read.
     case scroll(ScrollCase, artDelaySeconds: Double)
 }
@@ -23,6 +25,11 @@ enum WindowMeasurement {
     static func run(_ kind: MeasurementKind, browser: LibraryBrowser, artwork: ArtworkLoader) {
         switch kind {
         case .window: measureWindow(browser: browser, artwork: artwork)
+        case .launch:
+            printAndQuit(
+                LaunchReport(
+                    launchSeconds: Date().timeIntervalSince1970 - processStartSeconds(),
+                    memoryMB: footprintMB()))
         case .scroll(let scrollCase, let artDelaySeconds):
             Task {
                 printAndQuit(
@@ -53,6 +60,13 @@ enum WindowMeasurement {
                 launchSeconds: launchSeconds, loadedMB: loadedMB, scrolledMB: footprintMB(),
                 scrollStepsMs: scrollStepsMs, rows: rows, artImages: artImages,
                 artFailures: artFailures))
+    }
+
+    /// `--measure-launch`'s line, for the owner's cold launch on the 2015 MacBook Pro.
+    private struct LaunchReport: Encodable {
+        /// From the process's start to the first rows drawn.
+        var launchSeconds: Double
+        var memoryMB: Double
     }
 
     /// Prints `report` as one JSON line, which Bench reads, and quits.
