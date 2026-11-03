@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Library
 import LibraryBrowser
@@ -14,7 +15,7 @@ let windowBenchmarks = [
             value: launches.sorted()[launches.count / 2],
             notes: [
                 "each run: " + launches.map { String(format: "%.3f s", $0) }.joined(separator: ", ")
-                    + "; \(runs[0].rows) rows"
+                    + "; \(runs[0].rows) rows; the index uncached at each launch"
             ])
     },
     Benchmark(
@@ -121,14 +122,46 @@ private let windowRunCount = 3
 private let windowRunTimeoutSeconds = 300.0
 
 /// The app launched `windowRunCount` times against the fixture library, already indexed, each
-/// run in a fresh home folder holding a copy of the index.
+/// run in a fresh home folder holding a copy of the index. The copy is an APFS clone, which
+/// shares the blocks but none of the cached pages, so each launch reads the index from disk as
+/// after a restart; dropping a file's pages from the cache otherwise takes `sudo purge`.
 private let windowRuns = Result { () throws -> [WindowReport] in
     let app = try appExecutable()
     return try (0..<windowRunCount).map { _ in
         try withIndexedHome(artColumnWidth: TrackColumn.art.defaultWidth) { home in
-            try WindowReport.decode(try runMeasuring(app, home: home, ["--measure-window"]))
+            let index = libraryFileURL(in: AppPaths(home: home).dataDirectory)
+            let cached = try cachedFraction(of: index)
+            guard cached < maximumCachedIndexFraction else {
+                throw BenchError.expected(
+                    "the index copy to start uncached, not \(Int(cached * 100))% in the cache")
+            }
+            return try WindowReport.decode(try runMeasuring(app, home: home, ["--measure-window"]))
         }
     }
+}
+
+/// The most of a fresh index copy the cache may hold for its launch to count as cold.
+private let maximumCachedIndexFraction = 0.1
+
+/// The share of the file at `url` in the page cache, by `mincore` over a mapping of it.
+private func cachedFraction(of url: URL) throws -> Double {
+    let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW)
+    guard descriptor >= 0 else { throw BenchError.expected("to open \(url.path), not \(errno)") }
+    defer { close(descriptor) }
+    var info = stat()
+    guard fstat(descriptor, &info) == 0, info.st_size > 0 else {
+        throw BenchError.expected("\(url.path) to hold an index")
+    }
+    let size = Int(info.st_size)
+    guard let map = mmap(nil, size, PROT_READ, MAP_SHARED, descriptor, 0), map != MAP_FAILED
+    else { throw BenchError.expected("to map \(url.path), not \(errno)") }
+    defer { munmap(map, size) }
+    let pageSize = Int(getpagesize())
+    var pages = [CChar](repeating: 0, count: (size + pageSize - 1) / pageSize)
+    guard mincore(map, size, &pages) == 0 else {
+        throw BenchError.expected("mincore on \(url.path) to succeed, not \(errno)")
+    }
+    return Double(pages.filter { $0 & 1 != 0 }.count) / Double(pages.count)
 }
 
 /// Runs `body` with a fresh home folder whose settings watch the fixture library and which holds

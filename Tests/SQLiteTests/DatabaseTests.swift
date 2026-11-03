@@ -302,3 +302,53 @@ private final class LockedFailures: @unchecked Sendable {
     }
     #expect(!reader.isInTransaction)
 }
+
+/// The share of the file at `url` in the page cache, by `mincore` over a mapping of it.
+private func residentFraction(_ url: URL) throws -> Double {
+    let descriptor = open(url.path, O_RDONLY)
+    try #require(descriptor >= 0)
+    defer { close(descriptor) }
+    var info = stat()
+    try #require(fstat(descriptor, &info) == 0)
+    let size = Int(info.st_size)
+    let map = try #require(mmap(nil, size, PROT_READ, MAP_SHARED, descriptor, 0))
+    try #require(map != MAP_FAILED)
+    defer { munmap(map, size) }
+    let pageSize = Int(getpagesize())
+    var pages = [CChar](repeating: 0, count: (size + pageSize - 1) / pageSize)
+    try #require(mincore(map, size, &pages) == 0)
+    return Double(pages.filter { $0 & 1 != 0 }.count) / Double(pages.count)
+}
+
+@Test func readingAheadPutsAnUncachedCloneInTheCache() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("sqlite-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let source = directory.appendingPathComponent("source")
+    try Data(repeating: 7, count: 4 << 20).write(to: source)
+    // An APFS clone shares the blocks but none of the cached pages.
+    let clone = directory.appendingPathComponent("clone")
+    try #require(copyfile(source.path, clone.path, nil, copyfile_flags_t(COPYFILE_CLONE)) == 0)
+    try #require(try residentFraction(clone) < 0.5)
+    try Database.readAhead(at: clone)
+    // The kernel reads after the call returns.
+    let deadline = Date().addingTimeInterval(5)
+    var fraction = try residentFraction(clone)
+    while fraction < 1, Date() < deadline {
+        usleep(10_000)
+        fraction = try residentFraction(clone)
+    }
+    #expect(fraction == 1, "\(fraction) of the clone was cached after 5 s")
+}
+
+@Test func readingAheadAMissingFileDoesNothingAndALinkFails() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("sqlite-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try Database.readAhead(at: directory.appendingPathComponent("missing"))
+    let target = directory.appendingPathComponent("target")
+    try Data("x".utf8).write(to: target)
+    let link = directory.appendingPathComponent("link")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+    #expect(throws: POSIXError.self) { try Database.readAhead(at: link) }
+}

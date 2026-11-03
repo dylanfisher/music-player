@@ -141,6 +141,31 @@ public final class Database {
         }
     }
 
+    /// Asks the kernel to read the database file at `url` into its cache in the background, and
+    /// returns at once. A launch's first queries read most of the file through the mapping, a
+    /// page fault at a time, which from a cold cache is a random read per page; one sequential
+    /// read ahead of them is several times faster on an old SSD (ADR 0086). A file that
+    /// doesn't exist yet has nothing to read.
+    public static func readAhead(at url: URL) throws {
+        let descriptor = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else {
+            if errno == ENOENT { return }
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        defer { Darwin.close(descriptor) }
+        var info = stat()
+        guard fstat(descriptor, &info) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        guard info.st_mode & S_IFMT == S_IFREG else {
+            throw CocoaError(.fileReadUnknown, userInfo: [NSFilePathErrorKey: url.path])
+        }
+        var advice = radvisory(ra_offset: 0, ra_count: Int32(clamping: info.st_size))
+        guard fcntl(descriptor, F_RDADVISE, &advice) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+    }
+
     /// How many rows the last INSERT, UPDATE or DELETE on this connection changed.
     public var changes: Int { Int(sqlite3_changes(connection)) }
 

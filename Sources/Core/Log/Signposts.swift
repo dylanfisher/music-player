@@ -19,6 +19,12 @@ public enum Interval: CaseIterable, Sendable {
     case scanBatch
     /// From a play, Next or seek to the first sample of it the device takes.
     case playToFirstSample
+    /// At launch: reading the config file and the shortcuts.
+    case launchSettings
+    /// At launch: opening the index and the state file, and building and showing the window.
+    case launchWindow
+    /// At launch, once the first rows show: starting playback, scripting and the watcher.
+    case launchServices
 
     /// The signpost's name, which is also how the stall log names the interval.
     var name: StaticString {
@@ -30,6 +36,9 @@ public enum Interval: CaseIterable, Sendable {
         case .paletteRank: "palette rank"
         case .scanBatch: "scan batch"
         case .playToFirstSample: "play to first sample"
+        case .launchSettings: "launch settings"
+        case .launchWindow: "launch window"
+        case .launchServices: "launch services"
         }
     }
 }

@@ -14,6 +14,7 @@ import Playback
 import PlaylistEditor
 import QueueView
 import Receiver
+import SQLite
 import Scripting
 import Settings
 import SettingsWindow
@@ -144,9 +145,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
-            let settings = ConfigStore(
-                AppSettings(), fileURL: paths.configFile, check: try shortcutCheck(),
-                creating: true)
+            let settings = try signposted(.launchSettings) {
+                ConfigStore(
+                    AppSettings(), fileURL: paths.configFile, check: try shortcutCheck(),
+                    creating: true)
+            }
             self.settings = settings
             playTracker = PlayTracker(playedFraction: playedFraction(settings)) {
                 [weak self] in self?.record($0)
@@ -167,7 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.helpMenu = menu.helpMenu
             self.dispatcher = dispatcher
             self.menu = menu
-            try openWindow(settings, dispatcher)
+            try signposted(.launchWindow) { try openWindow(settings, dispatcher) }
             watchOutputs(menu)
             registerCommands(dispatcher)
             wireTrackMenu(menu)
@@ -205,6 +208,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.saver = saver
         let layout = WindowSettings(settings, state: state)
         let databaseURL = libraryFileURL(in: paths.dataDirectory)
+        do {
+            try Database.readAhead(at: databaseURL)
+        } catch {
+            // Only a hint: the queries read what they need either way.
+            logger.error("couldn't read the library file ahead: \(error)")
+        }
         // Rows for the table come from a connection of the main thread's own. It opens first,
         // so it alone may move an unreadable file aside, before any other connection opens.
         let index = try LibraryIndex(at: databaseURL, movingAsideIfUnreadable: true)
@@ -314,6 +323,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The first rows are on screen. Everything that can wait for that starts now.
     private func interactive() {
         guard let settings else { return }
+        signposted(.launchServices) { startServices(settings) }
+    }
+
+    private func startServices(_ settings: ConfigStore<AppSettings>) {
         startPlayback(settings)
         applyRendererSetting()
         thumbnails.trimInBackground()
