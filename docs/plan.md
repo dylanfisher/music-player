@@ -3192,6 +3192,19 @@ macOS 12 SQLite's mapping limit.
       Bench the first scroll step and first keystroke right after `--report-launch` reports
       interactive. Move whatever hitches off main.
 
+Plan:
+
+1. Measure each suspect first, in Bench where a fix needs a bench, otherwise with a temporary
+   timer that isn't committed: the palette's burst of keystrokes (32d.1) and the tag editor's
+   read on the slow simulated NAS (32d.2) in Bench's process; the time to the first scan with a
+   1M-event merge pending, through `LibraryWatcher` (32d.5); the health report beside a burst
+   of browser searches (32d.4); the soak under a local scan (32d.3); and the main actor's
+   launch steps (32d.6).
+2. Fix only what the numbers show, each in its own commit with a test that fails without it,
+   and a budget in code and in the table. Concurrency limits come from
+   `activeProcessorCount`, defined once.
+3. Rerun the changed benches and the existing ones they touch against main, the same day.
+
 #### 32e. Field data, the NAS, and the old Mac's hardware
 
 - [ ] **32e.1** **Signposts and a hang log.** Nothing in `Sources` uses `os_signpost`. Add intervals, defined
