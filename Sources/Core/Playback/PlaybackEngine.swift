@@ -146,6 +146,7 @@ public actor PlaybackEngine {
     ) -> Task<Void, any Error> {
         // The output isn't stopped: the load that follows replaces what it plays, so it keeps
         // the device open instead of closing and reopening it (ADR 0078).
+        PendingInterval.firstSound.begin()
         forgetLoaded()
         replaceQueue([url], first: 0)
         completing = true
@@ -265,6 +266,7 @@ public actor PlaybackEngine {
             stop()
             return
         }
+        if state.status == .playing { PendingInterval.firstSound.begin() }
         move(to: position)
     }
 
@@ -301,6 +303,7 @@ public actor PlaybackEngine {
 
     public func seek(toSeconds seconds: Double) {
         guard currentItem != nil else { return }
+        if state.status == .playing { PendingInterval.firstSound.begin() }
         let seconds = max(0, seconds)
         if resumeSeconds != nil {
             resumeSeconds = seconds

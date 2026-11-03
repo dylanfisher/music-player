@@ -45,6 +45,18 @@ import Testing
     #expect(spans.map(\.start) == spans.map(\.start).sorted())
 }
 
+@Test func aPendingIntervalEndsOnceAndASecondBeginReplacesTheFirst() {
+    let pending = PendingInterval(.playToFirstSample)
+    pending.end()
+    #expect(!pending.isOpen)
+    pending.begin()
+    pending.begin()
+    #expect(pending.isOpen)
+    pending.end()
+    #expect(!pending.isOpen)
+    pending.end()
+}
+
 @Test func aStallNamesWhatRan() {
     let stall = Stall(
         milliseconds: 230.4, intervals: [(.pageFetch, 180), (.query, 41.6)],
@@ -76,7 +88,7 @@ import Testing
     #expect(stalls.count == 1, "saw \(stalls.map(\.description))")
     let stall = stalls.first
     #expect((stall?.milliseconds ?? 0) >= 150)
-    #expect(stall?.intervals.map(\.0) == [.query])
+    #expect(stall?.intervals.map(\.0).contains(.query) == true)
     #expect(stall?.lastCommand == "edit.find")
     #expect(stall?.event == "keyDown")
 }

@@ -666,6 +666,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         if stream.isHalfEmpty { fill(stream) }
         announceBoundaries(stream)
         let consumed = HALRenderConsumedBytes(stream.render)
+        // The IO proc has taken a sample of what plays now; it can't end the interval itself.
+        if let segment = segments.first, consumed > segment.startByte {
+            PendingInterval.firstSound.end()
+        }
         if let frames = stream.newUnderrunFrames() { emit(.underrun(frames: frames)) }
         if running, feeding == nil, !stream.hasTailToWrite, stream.chunkIsEmpty,
             consumed >= stream.audioEndByte

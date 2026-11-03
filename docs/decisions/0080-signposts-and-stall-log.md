@@ -16,8 +16,14 @@ stacks without the operations around them, and nothing recorded a hitch when the
 refresh, a query a list waits for (sorted IDs, totals, pane entries, the palette's names), a
 palette ranking and a scan batch's store. `signposted(_:_:)` runs a closure inside an
 `OSSignposter` interval in the Points of Interest category, and notes it in `IntervalLog`,
-which holds the open intervals and the last 64 that ended. The time from a play action to the
-first sample is phase 32a's path; it gets its interval when 32a merges.
+which holds the open intervals and the last 64 that ended.
+
+The time from a play action to the first sample crosses threads, so it's a `PendingInterval`,
+one open at a time: the engine's `play(starting:)` begins it, and so do Next and a seek while
+playing. A second begin before the sound ends the first. The output's control thread ends it
+on its next pass after the IO proc's count of bytes taken passes the start of what plays now,
+where it already reads that count for the position. The IO proc itself stays C and marks
+nothing, so the end is late by up to a control tick, 10 ms while running.
 
 `StallDetector` puts one run-loop observer on the main loop for every activity in the common
 modes. Every activity is a mark, and the loop is busy from one mark to the next except from

@@ -17,6 +17,8 @@ public enum Interval: CaseIterable, Sendable {
     case paletteRank
     /// Storing a batch of scanned files.
     case scanBatch
+    /// From a play, Next or seek to the first sample of it the device takes.
+    case playToFirstSample
 
     /// The signpost's name, which is also how the stall log names the interval.
     var name: StaticString {
@@ -27,6 +29,7 @@ public enum Interval: CaseIterable, Sendable {
         case .query: "query"
         case .paletteRank: "palette rank"
         case .scanBatch: "scan batch"
+        case .playToFirstSample: "play to first sample"
         }
     }
 }
@@ -50,8 +53,41 @@ public func signposted<T>(
     return try await body()
 }
 
+/// An interval begun on one thread and ended on another, at most one open at a time: a play
+/// action starts it, and the output's control thread ends it once it sees the device take the
+/// first sample. Safe to use from any thread.
+public final class PendingInterval: @unchecked Sendable {
+    public static let firstSound = PendingInterval(.playToFirstSample)
+
+    private let interval: Interval
+    private let lock = NSLock()
+    private var open: OpenInterval?
+
+    init(_ interval: Interval) { self.interval = interval }
+
+    /// Starts the interval, ending one still open: a second play before the first's sound
+    /// replaces it.
+    public func begin() {
+        let replaced = lock.withLock {
+            defer { open = OpenInterval(interval) }
+            return open
+        }
+        replaced?.end()
+    }
+
+    /// Ends the interval if it's open.
+    public func end() {
+        lock.withLock {
+            defer { open = nil }
+            return open
+        }?.end()
+    }
+
+    var isOpen: Bool { lock.withLock { open != nil } }
+}
+
 /// One interval under way: its signpost, and its entry in `IntervalLog.shared`.
-private struct OpenInterval {
+private struct OpenInterval: Sendable {
     let interval: Interval
     let id: UInt64
     let state: OSSignpostIntervalState

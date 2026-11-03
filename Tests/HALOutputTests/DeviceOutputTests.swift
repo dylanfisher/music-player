@@ -3,6 +3,7 @@ import Testing
 
 @testable import Fixtures
 @testable import HALOutput
+@testable import Log
 @testable import Playback
 
 struct TimedOut: Error, CustomStringConvertible {
@@ -560,6 +561,22 @@ private func doubleClick(_ second: URL, after first: URL, on rig: Rig) async thr
     await rig.engine.setQueue([album.tracks[1]])
     try await waitUntil { rig.device.openSessionCount == 0 }
     #expect(rig.device.openedSessionCount == 2)
+}
+
+/// The play-to-first-sample interval a play opens is ended by the control thread once the
+/// device has taken a sample, never by the IO proc. Other tests play at once, so this looks for
+/// any such interval that ended after its own play.
+@Test func aPlaysFirstSampleEndsItsInterval() async throws {
+    let album = try album(44_100, 16)
+    let rig = try await Rig(speed: 1)
+    let start = DispatchTime.now().uptimeNanoseconds
+    _ = await rig.engine.play(starting: album.tracks[0]) { ([album.tracks[0]], 0) }
+    try await rig.wait(for: .trackStarted(index: 0))
+    try await waitUntil {
+        IntervalLog.shared.spans(from: start, to: .max).contains {
+            $0.interval == .playToFirstSample && $0.start >= start && $0.end != nil
+        }
+    }
 }
 
 /// Polls `condition` every 5 ms for up to 5 s.

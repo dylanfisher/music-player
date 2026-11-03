@@ -288,7 +288,7 @@ let package = Package(
         ),
         .testTarget(
             name: "HALOutputTests",
-            dependencies: ["Fixtures", "HALOutput", "Playback"],
+            dependencies: ["Fixtures", "HALOutput", "Log", "Playback"],
             swiftSettings: strictSwift
         ),
         .testTarget(
