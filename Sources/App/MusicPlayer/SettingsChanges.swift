@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import Library
 import LibraryBrowser
 import Settings
 import SettingsWindow
@@ -176,6 +177,29 @@ extension AppDelegate {
 @MainActor
 func playedFraction(_ settings: ConfigStore<AppSettings>) -> Double {
     Double(settings[\.playedPercent]) / 100
+}
+
+/// What the sync folder's Open button says when it can't open the folder: a title and the
+/// detail under it. `share` is the share the folder is on, or its path when it's on none.
+func syncFolderProblem(_ place: SyncFolderPlace, share: String) -> (String, String) {
+    switch place {
+    case .found(let path):
+        (
+            "The sync folder is missing: \(path)",
+            "It was moved or deleted, or its disk isn't connected. Choose it again with Change…."
+        )
+    case .unmounted:
+        (
+            "The sync folder's share isn't mounted",
+            "Connect to \(share) in Finder, then open it again."
+        )
+    case .ambiguous(let mountPoints):
+        (
+            "The sync folder's share is mounted more than once",
+            "\(share) could be the share at any of \(mountPoints.joined(separator: ", ")). Eject"
+                + " the ones that aren't it, then open it again."
+        )
+    }
 }
 
 /// Sets the whole app's appearance; nil follows the system as it changes.

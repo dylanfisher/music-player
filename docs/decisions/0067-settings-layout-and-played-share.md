@@ -37,8 +37,9 @@ track counts as played before its end, and for a setting, 75% by default.
   installed when the window is first made. Choosing either in ⌘K opens the config file.
 - **The sync folder's row** shows the folder's own name, truncated, with its full place as the
   tooltip, and Change… (Choose… when there's none), Open and Clear. Open finds the folder where
-  its share is mounted now, with the watcher's lookup, and opens it in Finder; a share that isn't
-  mounted says so in a sheet.
+  its share is mounted now, with the watcher's lookup, and opens it in Finder. A share that isn't
+  mounted, a share name mounted from more than one host, and a folder that isn't there each
+  say so in a sheet.
 - **A play counts at a set share.** `playback.playedPercent`, 1 to 100 and 75 by default, is
   the share of a track that has to play, not paused, for it to count. It replaces 0018's "half
   or 240 s, whichever is first", so a long track no longer counts after 4 minutes; 240 s stays

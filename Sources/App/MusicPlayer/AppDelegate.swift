@@ -707,29 +707,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Opens the sync folder in Finder where it is now, or says in a sheet over `window` that
-    /// its share isn't mounted.
+    /// Opens the sync folder in Finder where it is now, or says in a sheet over `window` why
+    /// it can't.
     func openSyncFolder(over window: NSWindow) {
         guard let settings, let folder = settings[\.syncFolder] else { return NSSound.beep() }
-        let path: String
+        let place: SyncFolderPlace
         do {
-            let shares = folder.share == nil ? [] : try SystemShareMounts().mountedShares()
-            guard let found = locate(folder, among: shares) else {
-                let alert = NSAlert()
-                alert.messageText = "The sync folder's share isn't mounted"
-                alert.informativeText =
-                    "Connect to \(folder.share ?? folder.path) in Finder, then open it again."
-                alert.beginSheetModal(for: window)
-                return
-            }
-            path = found
+            place = locate(
+                folder, among: folder.share == nil ? [] : try SystemShareMounts().mountedShares())
         } catch {
             return fail("Couldn't find the sync folder", error)
         }
-        if !NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: true)) {
-            logger.error("Finder didn't open the sync folder at \(path)")
-            NSSound.beep()
+        var isDirectory: ObjCBool = false
+        if case .found(let path) = place,
+            FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+            isDirectory.boolValue
+        {
+            if !NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: true)) {
+                logger.error("Finder didn't open the sync folder at \(path)")
+                NSSound.beep()
+            }
+            return
         }
+        let (message, detail) = syncFolderProblem(place, share: folder.share ?? folder.path)
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = detail
+        alert.beginSheetModal(for: window)
     }
 
     /// Asks in a sheet over `window` to stop watching the folder at `position` in the setting.

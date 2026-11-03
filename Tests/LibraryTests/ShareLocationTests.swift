@@ -318,3 +318,17 @@ private struct EjectingAccess: ScanFileAccess {
     #expect(try index.track(path: from)?.playCount == 1)
     #expect(try index.lostFiles().isEmpty)
 }
+
+@Test func theSyncFolderIsFoundUnmountedOrAmbiguous() {
+    let folder = SyncFolder(path: "sync", share: "smb://nas.local/music")
+    #expect(
+        locate(folder, among: [share("smb://nas.local/music", at: "/Volumes/music")])
+            == .found("/Volumes/music/sync"))
+    #expect(locate(folder, among: []) == .unmounted)
+    let twoHosts = [
+        share("smb://one.local/music", at: "/Volumes/music"),
+        share("smb://two.local/music", at: "/Volumes/music-1"),
+    ]
+    #expect(locate(folder, among: twoHosts) == .ambiguous(["/Volumes/music", "/Volumes/music-1"]))
+    #expect(locate(SyncFolder(path: "/tmp/sync"), among: []) == .found(canonicalPath("/tmp/sync")))
+}

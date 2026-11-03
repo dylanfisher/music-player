@@ -359,11 +359,17 @@ public final class LibraryWatcher: @unchecked Sendable {
         guard let syncFolder else { return false }
         let path: String
         do {
-            guard let found = try locate(syncFolder) else {
+            switch try locate(syncFolder) {
+            case .found(let found): path = found
+            case .unmounted:
                 logger.notice("the sync folder's share isn't mounted; changes wait in the library")
                 return false
+            case .ambiguous(let mountPoints):
+                logger.notice(
+                    "the sync folder's share could be any of \(mountPoints); changes wait in the library"
+                )
+                return false
             }
-            path = found
         } catch {
             events(.syncFailed(reason: "couldn't find the sync folder: \(error)"))
             return false
@@ -400,7 +406,7 @@ public final class LibraryWatcher: @unchecked Sendable {
         return true
     }
 
-    private func locate(_ folder: SyncFolder) throws -> String? {
+    private func locate(_ folder: SyncFolder) throws -> SyncFolderPlace {
         Library.locate(folder, among: folder.share == nil ? [] : try mounts.mountedShares())
     }
 

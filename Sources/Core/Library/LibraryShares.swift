@@ -185,13 +185,27 @@ func unfoundRoot(of folder: WatchedFolder) -> String {
     return folder.path.isEmpty ? share : share + "/" + folder.path
 }
 
-/// Where the sync folder is now, in canonical form: its path, or under where its share is
-/// mounted among `shares`; nil while the share isn't mounted, or could be more than one.
-public func locate(_ folder: SyncFolder, among shares: [MountedShare]) -> String? {
-    guard let share = folder.share else { return canonicalPath(folder.path) }
+/// Where the sync folder is now.
+public enum SyncFolderPlace: Equatable, Sendable {
+    /// Its path in canonical form: as configured, or under where its share is mounted.
+    case found(String)
+    case unmounted
+    /// Its share's name is mounted at these mount points on other hosts, so which one is meant
+    /// isn't known (ADR 0028).
+    case ambiguous([String])
+}
+
+/// Where the sync folder is now, with its share looked up among `shares`.
+public func locate(_ folder: SyncFolder, among shares: [MountedShare]) -> SyncFolderPlace {
+    guard let share = folder.share else { return .found(canonicalPath(folder.path)) }
     guard let url = ShareURL(share) else {
         preconditionFailure("\(share) passed the settings check")
     }
-    guard case .mounted(let mountPoint) = ShareLookup(url, among: shares) else { return nil }
-    return canonicalPath(folder.path.isEmpty ? mountPoint : mountPoint + "/" + folder.path)
+    switch ShareLookup(url, among: shares) {
+    case .mounted(let mountPoint):
+        return .found(
+            canonicalPath(folder.path.isEmpty ? mountPoint : mountPoint + "/" + folder.path))
+    case .unmounted: return .unmounted
+    case .ambiguous(let mountPoints): return .ambiguous(mountPoints)
+    }
 }
