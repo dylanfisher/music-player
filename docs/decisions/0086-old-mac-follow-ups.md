@@ -1,4 +1,4 @@
-# 0086. A refresh connection, our own table stripes and a read-ahead at launch
+# 0086. A refresh connection, a resolved table background and a read-ahead at launch
 
 - **Date:** 2026-11-03
 - **Status:** accepted
@@ -19,16 +19,18 @@ Measured on the build Mac:
   slowest keystroke was 363 ms against 23 ms with refreshes turned off. Neither the scan's
   reader count nor its priority changed the result: 30 readers instead of 10, and the scan at
   `.utility` instead of the bench's default, both measured within noise.
-- The launch stall is the window's first frame. AppKit's own alternating row stripes take
-  160–200 ms of main-thread drawing there. The cost grows with the table's area, and it goes
-  away with stripes off, or with `drawBackground(inClipRect:)` overridden, even by one that only
-  calls `super`.
+- The launch stall is the window's first frame, when the track table has no rows yet. AppKit
+  takes 130–200 ms to draw the alternating rows below the last row when the table's background
+  is a system color (`controlBackgroundColor`, the default), and does it again on every redraw:
+  each sidebar toggle over an empty list took 130–160 ms, against about 20 ms over a full one.
+  With the same color resolved to fixed components, the stripes look the same and the toggle
+  takes 11–45 ms. With stripes off it takes 8 ms.
 - A launch reads 88% of the 47 MB fixture index before the first rows, through the mapping, a
   page fault at a time. From a cold cache that is a random read per page.
 - Idle, the app uses 0.01% of a core with no idle wakeups here.
-- A sidebar toggle takes about 20 ms here. A trace shows it all in AppKit: the split view and
-  the table's column widths laid out again, the header view rebuilding its subviews, and every
-  visible cell drawn again.
+- A sidebar toggle over a full list takes about 20 ms here. A trace shows it all in AppKit: the
+  split view and the table's column widths laid out again, the header view rebuilding its
+  subviews, and every visible cell drawn again.
 
 ## Decision
 
@@ -39,9 +41,11 @@ refresh, and the refresh's late result is dropped by the generation check as bef
 on the first connection; a read on the second that starts after an edit commits sees it, since
 both read the same WAL file.
 
-`KeyTableView`, the track table and the panes, draws its alternating rows itself in
-`NSColor.alternatingContentBackgroundColors`, a filled rectangle a row, below the last row too.
-It looks the same as AppKit's.
+`KeyTableView` holds its background color resolved for its appearance, and resolves it again
+when the appearance changes; the track list sets `controlBackgroundColor` through it. A resolved
+color set back, as Glass puts back the color it replaced, counts as the system color it came
+from, so it goes on following the appearance. The launch stall is gone, and so is the cost of
+redrawing a short or empty list.
 
 At launch, before the first connection opens, `Database.readAhead(at:)` asks the kernel to read
 the whole index file into its cache (`F_RDADVISE`) and returns at once. The queries then find
@@ -59,8 +63,8 @@ so the old Mac's checkpoint keeps the true cold number.
 The old Mac's idle CPU budget is 0.15% of a core, set from its 0.11%. Nothing of the app's own
 wakes when idle here, and 0.25 wakeups a second is a quarter of the wakeup budget.
 
-The sidebar toggle is left alone. Its cost is AppKit's relayout and redraw of the window's
-content, like the live resize budget set in 32f.
+Past the empty list, the sidebar toggle is left alone: what's left is AppKit's relayout and
+redraw of the window's content, like the live resize budget set in 32f.
 
 The scan's readers stay at one per thread: 4 on the old Mac. The app scans at `.utility` and
 queries at `.userInitiated`, which already gives the scheduler the order the user wants. The
@@ -76,6 +80,11 @@ contention a little.
   running still holds the actor, and those take hundreds of milliseconds under a scan.
 - **Fewer scan readers on few cores** — rejected: it didn't change the keystroke here, and it
   would slow the old Mac's scan.
+- **Drawing the stripes ourselves in `drawBackground(inClipRect:)`** — rejected: it ended the
+  stall, but AppKit then gives the table a backing store of its own, and the memory after
+  scrolling every row went from 80 MB to 171 MB, over the 120 MB budget.
+- **Turning the stripes on only after the first rows** — rejected: it fixes the launch, but not
+  a short list's redraws.
 - **Row views that draw their own background** — rejected: no stripes below the last row, which
   AppKit's tables and Swinsian both draw.
 - **Reading the index ahead with a background `read` loop** — rejected: `F_RDADVISE` does the
@@ -87,5 +96,7 @@ contention a little.
 - A refresh and a keystroke can run their queries at once, on two cores.
 - The whole index enters the file cache at launch, the play history too, though the first rows
   don't need it. That memory is the system's cache, not the app's footprint.
-- If a later macOS changes the alternating colors, the table follows
-  `alternatingContentBackgroundColors`, which AppKit's stripes use too.
+- The memory after scrolling every row went from 80 MB to 110–115 MB here, within the 120 MB
+  budget but close to it. The old Mac's checkpoint will show its share.
+- Setting the resolved form of the last system color on purpose, such as white in the light
+  appearance after `controlBackgroundColor`, counts as that system color.

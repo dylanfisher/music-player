@@ -48,6 +48,8 @@ class RowListController: NSViewController {
         table.rowHeight = Self.rowHeight
         table.intercellSpacing = NSSize(width: 6, height: 0)
         table.usesAlternatingRowBackgroundColors = true
+        // Set, so KeyTableView resolves it.
+        table.backgroundColor = .controlBackgroundColor
         table.allowsMultipleSelection = true
         // Only the title column has the autoresizing mask, so it takes up a change of width.
         table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
