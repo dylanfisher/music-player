@@ -2980,6 +2980,26 @@ scrolling during a scan.
       `firstIndex` (QueuePanel.swift:35, QueueModel.swift:26). A 43k-track queue makes each track
       change cost a full pass.
 
+Plan:
+
+1. **32b.1** The app takes `--measure-scroll trackpad|scan` and `--art-delay-ms <ms>`. A timer
+   scrolls the track table 60 frames a second in trackpad flicks (a fling that decays to a
+   point a frame), and a run-loop observer times the main thread's busy time between frames.
+   After the last frame it times until every visible row shows its art. `scan` also sends the
+   browser a scan's progress every second, so it refreshes every 2 s as during a scan. Art reads
+   go through a closure the measurement wraps, which counts them and adds the delay. One JSON
+   line, `ScrollReport`. Bench gets four cases: the default layout, compact rows with a 256 pt art
+   column (fixture albums of 15 to 24 tracks span runs), the slow simulated NAS's per-file
+   latency on art reads, and the scan. Budgets in code and in the table. ADR 0073.
+2. Run each case on this branch before any fix, then measure each suspect (32b.2 to 32b.8) by
+   the case that shows it, with a counter or a timing where the frame times can't separate it.
+3. Fix only what the numbers show, each in its own commit with a test that fails without it:
+   per visible range album runs (32b.2), one wanted set per pick (32b.3), a bounded number of
+   art loads at once from `ProcessInfo.activeProcessorCount`, on a dispatch queue (32b.4), one
+   cache entry per album's cover (32b.5), thumbnails drawn at the drawn size (32b.6), skipping a
+   refresh that changes nothing (32b.7), and the queue panel's track-change cost (32b.8).
+4. Rerun every case, and the existing window benches against main, the same day.
+
 #### 32c. The database
 
 Sorting is fine: 73 ms on the old Mac in 14e. Leave it alone unless a new bench says otherwise.
