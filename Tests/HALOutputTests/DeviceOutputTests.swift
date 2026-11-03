@@ -601,6 +601,32 @@ private func doubleClick(_ second: URL, after first: URL, on rig: Rig) async thr
     try await waitUntil { !interval.isOpen }
 }
 
+/// A stop posted before a second play's begin doesn't cancel that play's interval. The first
+/// load's audio ending it is covered in `StallDetectorTests`: the null device takes its first
+/// buffer as soon as it starts, so a test can't hold that audio back.
+@Test func aNewerPlaysIntervalIsNotEndedOrCancelledByAnEarlierCommand() async throws {
+    let album = try album(44_100, 16)
+    // Slow enough that the first load's audio hasn't been taken when the second play begins.
+    let device = NullDevice(speed: 0.05)
+    let interval = PendingInterval(.playToFirstSample)
+    let output = try DeviceOutput(
+        DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil),
+        firstSound: interval)
+    defer { output.close() }
+    output.load(OutputItem(id: 1, url: album.tracks[0]), startSeconds: 0, playing: true)
+    try await Task.sleep(nanoseconds: 30_000_000)
+    interval.begin()
+    try await Task.sleep(nanoseconds: 100_000_000)
+    #expect(interval.isOpen)
+
+    // A stop posted before the begin that follows must not cancel it.
+    output.stop()
+    output.load(OutputItem(id: 2, url: album.tracks[1]), startSeconds: 0, playing: true)
+    try await Task.sleep(nanoseconds: 30_000_000)
+    #expect(interval.isOpen)
+    try await waitUntil { !interval.isOpen }
+}
+
 /// A load or seek that makes no sound cancels the interval, so a later play doesn't log the
 /// idle time.
 @Test func aPlayThatMakesNoSoundCancelsItsFirstSoundInterval() async throws {

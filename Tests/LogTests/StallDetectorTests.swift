@@ -71,6 +71,25 @@ import Testing
     #expect(spans.isEmpty)
 }
 
+@Test func anEarlierPlaysEndOrCancelLeavesALaterPlaysInterval() {
+    let pending = PendingInterval(.paletteRank)
+    let first = pending.begin()
+    let second = pending.begin()
+    #expect(second > first)
+    #expect(pending.generation == second)
+
+    pending.end(generation: first)
+    #expect(pending.isOpen)
+    pending.cancel(upTo: first)
+    #expect(pending.isOpen)
+
+    pending.end(generation: second)
+    #expect(!pending.isOpen)
+    let third = pending.begin()
+    pending.cancel(upTo: third)
+    #expect(!pending.isOpen)
+}
+
 @Test func aStallNamesWhatRan() {
     let stall = Stall(
         milliseconds: 230.4, intervals: [(.pageFetch, 180), (.query, 41.6)],

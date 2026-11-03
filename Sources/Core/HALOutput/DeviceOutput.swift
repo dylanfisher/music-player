@@ -83,7 +83,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private let returnContinuation: AsyncStream<String>.Continuation
     /// Guards `pending`, `published`, `isClosed` and `volumeOn`, and wakes the control thread.
     private let condition = NSCondition()
-    private var pending: [Command] = []
+    /// Each command with the interval generation current when it was posted.
+    private var pending: [(command: Command, generation: UInt64)] = []
     private var published: OutputPosition?
     private var isClosed = false
     private var volumeOn: Bool
@@ -141,7 +142,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// The consumed-bytes count the IO proc must pass for the interval to end: the start of the
     /// audio the last load or seek queued. Nil until the control thread has processed it, so
     /// audio from before it can't end the interval.
-    private var firstSoundTarget: UInt64?
+    private var firstSoundTarget: (generation: UInt64, byte: UInt64)?
+    /// The interval generation current when the command now running was posted, or when the
+    /// pass began; a cancel reaches no later interval than this.
+    private var passGeneration: UInt64 = 0
 
     /// `fileLatency` is for benchmarks: it makes PCM files read as from a NAS. `firstSound` is
     /// for tests.
@@ -166,8 +170,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 
     public func load(_ item: OutputItem, startSeconds: Double, playing: Bool) {
-        if playing { firstSound.begin() }
-        post(.load(item, startSeconds: startSeconds, playing: playing))
+        let generation = playing ? firstSound.begin() : nil
+        if !post(.load(item, startSeconds: startSeconds, playing: playing)), let generation {
+            firstSound.cancel(upTo: generation)
+        }
     }
     public func setNext(_ item: OutputItem?) { post(.setNext(item)) }
     /// `load` and `setNext` in one post, so the control thread has both before it first decodes.
@@ -180,8 +186,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     public func pause() { post(.pause) }
     public func stop() { post(.stop) }
     public func seek(toSeconds seconds: Double) {
-        firstSound.begin()
-        post(.seek(seconds))
+        let generation = firstSound.begin()
+        if !post(.seek(seconds)) { firstSound.cancel(upTo: generation) }
     }
     public func setVolume(_ gain: Double) { post(.volume(gain)) }
     public var hasVolume: Bool { condition.withLock { volumeOn } }
@@ -215,7 +221,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         condition.withLock {
             guard !isClosed else { return false }
             for command in commands { if case .close = command { isClosed = true } }
-            pending.append(contentsOf: commands)
+            let generation = firstSound.generation
+            pending.append(contentsOf: commands.map { ($0, generation) })
             condition.signal()
             return true
         }
@@ -235,7 +242,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             pending = []
             condition.unlock()
 
-            for command in batch {
+            for (command, generation) in batch {
+                passGeneration = generation
                 if case .close(let done) = command {
                     unload()
                     closeDevice()
@@ -250,6 +258,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                 }
                 perform(command)
             }
+            passGeneration = firstSound.generation
             service()
             if returnDue {
                 returnDue = false
@@ -314,12 +323,14 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             cancelFirstSound()
             return
         }
-        firstSoundTarget = first.startByte
+        // A newer play was begun since this command was posted: it arms its own.
+        guard firstSound.generation == passGeneration else { return }
+        firstSoundTarget = (passGeneration, first.startByte)
     }
 
     private func cancelFirstSound() {
         firstSoundTarget = nil
-        firstSound.cancel()
+        firstSound.cancel(upTo: passGeneration)
     }
 
     /// `announcing` false is for a track already playing, which a device switch reloads.
@@ -703,9 +714,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         let consumed = HALRenderConsumedBytes(stream.render)
         // The IO proc has taken a sample of what the last load or seek queued; it can't end the
         // interval itself.
-        if let target = firstSoundTarget, consumed > target {
+        if let target = firstSoundTarget, consumed > target.byte {
             firstSoundTarget = nil
-            firstSound.end()
+            firstSound.end(generation: target.generation)
         }
         if let frames = stream.newUnderrunFrames() { emit(.underrun(frames: frames)) }
         if running, feeding == nil, !stream.hasTailToWrite, stream.chunkIsEmpty,

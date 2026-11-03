@@ -61,18 +61,27 @@ public final class PendingInterval: @unchecked Sendable {
 
     private let interval: Interval
     private let lock = NSLock()
-    private var open: OpenInterval?
+    private var open: (generation: UInt64, interval: OpenInterval)?
+    private var began: UInt64 = 0
 
     public init(_ interval: Interval) { self.interval = interval }
 
+    /// The generation of the latest `begin()`, 0 before the first.
+    public var generation: UInt64 { lock.withLock { began } }
+
     /// Starts the interval, cancelling one still open: a second play before the first's sound
-    /// replaces it, and the first made no sound to time.
-    public func begin() {
-        let replaced = lock.withLock {
-            defer { open = OpenInterval(interval) }
-            return open
+    /// replaces it, and the first made no sound to time. Returns the new interval's generation,
+    /// which lets a thread acting on an earlier play leave this one alone.
+    @discardableResult
+    public func begin() -> UInt64 {
+        let (replaced, generation) = lock.withLock {
+            let replaced = open
+            began += 1
+            open = (began, OpenInterval(interval))
+            return (replaced, began)
         }
-        replaced?.cancel()
+        replaced?.interval.cancel()
+        return generation
     }
 
     /// Ends the interval if it's open.
@@ -80,16 +89,30 @@ public final class PendingInterval: @unchecked Sendable {
         lock.withLock {
             defer { open = nil }
             return open
-        }?.end()
+        }?.interval.end()
+    }
+
+    /// Ends the interval if it's open and is `generation`'s.
+    public func end(generation: UInt64) {
+        lock.withLock { () -> (generation: UInt64, interval: OpenInterval)? in
+            guard open?.generation == generation else { return nil }
+            defer { open = nil }
+            return open
+        }?.interval.end()
     }
 
     /// Closes the interval without recording a time, for a play that makes no sound: stopped,
     /// paused, failed or lost. Does nothing when it isn't open.
-    public func cancel() {
-        lock.withLock {
-            defer { open = nil }
-            return open
-        }?.cancel()
+    public func cancel() { cancel(upTo: .max) }
+
+    /// Cancels the interval if it's open and began at or before `generation`, so a stop or
+    /// failure from before a later play doesn't cancel that play's interval.
+    public func cancel(upTo generation: UInt64) {
+        lock.withLock { () -> (generation: UInt64, interval: OpenInterval)? in
+            guard let current = open, current.generation <= generation else { return nil }
+            open = nil
+            return current
+        }?.interval.cancel()
     }
 
     public var isOpen: Bool { lock.withLock { open != nil } }
