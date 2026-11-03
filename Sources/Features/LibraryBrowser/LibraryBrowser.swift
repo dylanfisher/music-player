@@ -882,7 +882,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Gives the keys to the track table, or to the timeline while it shows.
     public func focusTracks() {
-        let list = showsTimeline ? timeline.table : table.table
+        let list = shownList.table
         list.window?.makeFirstResponder(list)
     }
 
@@ -1322,6 +1322,26 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusArea.isHidden.toggle()
         showScanProgress()
     }
+
+    /// Whether Show Current Track has something to show: the track playing, or else a selected
+    /// row.
+    public func canShowCurrentTrack(playingPath: String?) -> Bool {
+        playingPath != nil || !shownList.table.selectedRowIndexes.isEmpty
+    }
+
+    /// Show Current Track: the track at `playingPath`, or with nothing playing the selected
+    /// rows, centered, with the keys.
+    public func showCurrentTrack(playingPath: String?) async {
+        if let playingPath {
+            await reveal(path: playingPath)
+            return
+        }
+        shownList.centerSelection()
+        focusTracks()
+    }
+
+    /// The list the window shows: the timeline's or the track table.
+    private var shownList: RowListController { showsTimeline ? timeline : table }
 
     /// Selects the track at `path` in the table, centered, showing the whole library first if
     /// the source, a pane or the search hides it.

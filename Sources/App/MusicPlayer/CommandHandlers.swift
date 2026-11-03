@@ -147,12 +147,15 @@ extension AppDelegate {
             isOn: { [weak self] in self?.window?.isSignalPathVisible == true },
             run: { [weak self] in self?.window?.toggleSignalPath() })
         dispatcher.handle(
-            .showCurrentTrack, enabled: { [weak self] in self?.currentTrackPath != nil },
+            .showCurrentTrack,
+            enabled: { [weak self] in
+                guard let self else { return false }
+                return browser?.canShowCurrentTrack(playingPath: currentTrackPath) == true
+            },
             run: { [weak self] in
-                guard let self, let path = self.currentTrackPath, let browser = self.browser else {
-                    return
-                }
-                Task { await browser.reveal(path: path) }
+                guard let self, let browser else { return }
+                let path = currentTrackPath
+                Task { await browser.showCurrentTrack(playingPath: path) }
             })
         dispatcher.handle(.showAllTracks, enabled: hasWindow) { [weak self] in
             self?.browser?.showAll()

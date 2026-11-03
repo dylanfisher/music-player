@@ -74,3 +74,24 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
     try await waitFor("the playlist") { browser.model.filter.source == .playlist(mix) }
     #expect(selectedTrack(browser) == track)
 }
+
+@MainActor @Test func showCurrentTrackWithNothingPlayingCentersTheSelection() async throws {
+    let (browser, _) = try await browser(selecting: [])
+    #expect(!browser.canShowCurrentTrack(playingPath: nil))
+    #expect(browser.canShowCurrentTrack(playingPath: "/somewhere/playing.flac"))
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = browser.content.view
+    window.layoutIfNeeded()
+    let table = browser.table.table
+    let row = min(80, table.numberOfRows - 1)
+    table.selectRowIndexes([row], byExtendingSelection: false)
+    table.scrollRowToVisible(0)
+    #expect(browser.canShowCurrentTrack(playingPath: nil))
+    await browser.showCurrentTrack(playingPath: nil)
+    #expect(table.selectedRowIndexes == [row])
+    let visible = table.visibleRect
+    #expect(abs(table.rect(ofRow: row).midY - visible.midY) < 3 * table.rowHeight)
+    #expect(window.firstResponder === table)
+}
