@@ -92,7 +92,16 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
                     .mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow,
                     .inVisibleRect,
                 ], owner: self))
+        // The overlay belongs to the rows that were under the pointer, so a scroll by the wheel
+        // or a key, which moves other rows under it without a mouse move, hides it.
+        let clip = (view as? NSScrollView)?.contentView
+        clip?.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(clipScrolled), name: NSView.boundsDidChangeNotification,
+            object: clip)
     }
+
+    @objc private func clipScrolled(_ notification: Notification) { hideArtHover() }
 
     private func configure(_ layout: TrackTableLayout) {
         configureRows()
@@ -367,6 +376,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     }
 
     func hideArtHover() {
+        guard !artHover.isHidden else { return }
         artHover.isHidden = true
         artHover.image = nil
         hoveredRow = nil
@@ -465,11 +475,13 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     }
 
     func tableViewColumnDidMove(_ notification: Notification) {
+        hideArtHover()
         if !applyingColumns { actions.layoutChanged(layout) }
         centerSelection()
     }
 
     func tableViewColumnDidResize(_ notification: Notification) {
+        hideArtHover()
         if !applyingColumns { actions.layoutChanged(layout) }
         let resized = notification.userInfo?["NSTableColumn"] as? NSTableColumn
         if resized?.identifier == columnIdentifier(.art) { refitArt() }

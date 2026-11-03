@@ -365,6 +365,32 @@ private func artTable(artWidth: CGFloat) async throws -> (
     #expect(controller.artHover.isHidden)
 }
 
+@MainActor @Test func scrollingOrMovingAColumnHidesTheArtHover() async throws {
+    let (controller, _, rows) = try await artTable(artWidth: 3 * RowListController.rowHeight)
+    controller.view.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
+    controller.view.layoutSubtreeIfNeeded()
+    let table = controller.table
+    let art = table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
+    let row = try #require(rows.indices.first { rows[$0].art != nil })
+    table.scrollRowToVisible(row)
+    let point = NSPoint(x: table.rect(ofColumn: art).midX, y: table.rect(ofRow: row).midY)
+    func hover() async throws {
+        let deadline = Date().addingTimeInterval(10)
+        repeat {
+            controller.showArtHover(at: point)
+            if !controller.artHover.isHidden { return }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        } while Date() < deadline
+        Issue.record("the art never loaded")
+    }
+    try await hover()
+    controller.scroll(byRows: 1)
+    #expect(controller.artHover.isHidden)
+    try await hover()
+    table.moveColumn(art, toColumn: art + 1)
+    #expect(controller.artHover.isHidden)
+}
+
 @MainActor @Test func anEmptyHistorySaysNothingPlayedYet() async throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
