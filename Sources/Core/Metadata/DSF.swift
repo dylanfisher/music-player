@@ -8,11 +8,20 @@ private let dsfDataOffset = 80
 private let maximumDSFBlockBytes = 65_536
 
 /// DSF: a "DSD " header, a "fmt " chunk and a "data" chunk, each with a 64-bit little-endian size
-/// that counts its own header, then the ID3v2 tag the header's metadata pointer locates.
+/// that counts its own header, then the ID3v2 tag the header's metadata pointer locates. The tag
+/// is apart from the audio, so one that can't be read is a warning and the file reads untagged.
 func parseDSF(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     let (stream, tagOffset) = try dsfLayout(reader)
-    let id3 = try tagOffset.map { (offset) throws(ParseFailure) in
-        try parseID3v2(reader, at: offset, end: reader.size, container: wholeFileName)
+    var id3: ID3v2Tag?
+    if let tagOffset {
+        do throws(ParseFailure) {
+            id3 = try parseID3v2(reader, at: tagOffset, end: reader.size, container: wholeFileName)
+        } catch {
+            reader.warn(
+                .unreadableField, at: error.offset ?? tagOffset,
+                "DSF tag at the metadata pointer can't be read (\(error.detail)); read without tags"
+            )
+        }
     }
     return TrackMetadata(tags: id3?.tags ?? TrackTags(), audio: stream.audio, art: id3?.art)
 }
@@ -83,8 +92,11 @@ func dsfLayout(_ reader: ByteReader) throws(ParseFailure) -> (stream: DSDStream,
         interleave: .blocks(blockBytes: blockBytes), lsbFirst: bits == 1)
 
     guard pointer != 0 else { return (stream, nil) }
-    guard pointer >= UInt64(dataStart) else {
-        throw .malformed(at: 20, "DSF metadata pointer \(pointer) is inside the header")
+    guard pointer >= UInt64(dataStart + present) else {
+        reader.warn(
+            .unreadableField, at: 20,
+            "DSF metadata pointer \(pointer) is inside the header or the audio; read without tags")
+        return (stream, nil)
     }
     guard pointer < UInt64(reader.size) else {
         warnTruncated(

@@ -86,3 +86,20 @@ func aDSFReadsItsRateLengthAndTheTagAtItsMetadataPointer(rate: Int) throws {
 func aDSDRateIsNamedByItsMultiple(rate: Int, text: String) {
     #expect(sampleRateText(rate) == text)
 }
+
+@Test func aDSFTagThatCantBeReadIsDroppedAndTheAudioKept() throws {
+    let file = dsfFile(rateHz: 2_822_400, channels: tone(2_822_400))
+    // The pointer aimed into the audio, then at bytes past it that aren't an ID3v2 tag.
+    var intoAudio = file
+    intoAudio.replaceSubrange(20..<28, with: [200, 0, 0, 0, 0, 0, 0, 0])
+    var garbage = file + Data(repeating: 0x41, count: 32)
+    let at = UInt64(file.count)
+    garbage.replaceSubrange(
+        20..<28, with: (0..<8).map { UInt8(truncatingIfNeeded: at >> (8 * $0)) })
+    for damaged in [intoAudio, garbage] {
+        let parsed = try parse(damaged)
+        #expect(parsed.warnings.map(\.kind) == [.unreadableField])
+        #expect(parsed.metadata.tags == TrackTags())
+        #expect(parsed.metadata.audio.lengthFrames == 9000 * 8)
+    }
+}

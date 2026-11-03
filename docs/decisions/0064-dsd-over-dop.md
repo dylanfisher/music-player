@@ -22,7 +22,10 @@ the frames as loud PCM noise.
 (DSF, 4096 bytes per channel) or byte (DSDIFF) interleaving, and the bit order (DSF stores each
 byte's oldest bit lowest). DSF's ID3v2 tag is read at the header's metadata pointer, and a
 DSDIFF `ID3 ` chunk, which taggers add, the same way; DSDIFF's `DIIN` title and artist aren't
-read. A file cut short reads what it holds, with a truncation warning, as WAV and AIFF do.
+read. A file cut short reads what it holds, with a truncation warning, as WAV and AIFF do. A DSF
+metadata pointer inside the header or the audio, or at bytes that aren't a readable ID3v2
+tag, is an `unreadableField` warning: the tags are dropped and the audio kept, since the tag
+sits apart from it.
 DST compression, a rate that isn't 64, 128, 256 or 512 times 44.1 or 48 kHz, more than 6
 channels and a DSF format other than raw DSD are typed `unsupported` errors, so the scan lists
 them as problems instead of dropping them. The tag writer refuses both formats.

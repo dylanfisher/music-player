@@ -60,8 +60,13 @@ private let hostileFiles: [(String, Data, Outcome)] = [
     ("DSF header size of UInt64.max", patched(dsf, at: 4, .max), .fails(.malformed)),
     ("DSF file size past the end", patched(dsf, at: 12, .max), .warns(.truncated)),
     ("DSF metadata pointer past the end", patched(dsf, at: 20, .max), .warns(.truncated)),
-    ("DSF metadata pointer inside the header", patched(dsf, at: 20, 8), .fails(.malformed)),
-    ("DSF metadata pointer at audio, not a tag", patched(dsf, at: 20, 100), .fails(.malformed)),
+    ("DSF metadata pointer inside the header", patched(dsf, at: 20, 8), .warns(.unreadableField)),
+    ("DSF metadata pointer inside the audio", patched(dsf, at: 20, 100), .warns(.unreadableField)),
+    (
+        "DSF metadata pointer at bytes that aren't a tag",
+        patched(dsf + Data(repeating: 0x41, count: 64), at: 20, UInt64(dsf.count)),
+        .warns(.unreadableField)
+    ),
     ("DSF with no channels", patched(dsf, at: 52, 0, bytes: 4), .fails(.malformed)),
     (
         "DSF with 4 billion channels", patched(dsf, at: 52, 0xFFFF_FFFF, bytes: 4),
