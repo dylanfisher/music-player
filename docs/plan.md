@@ -2761,6 +2761,172 @@ output only sends integer PCM at the track's own rate (ADR 0011), so every track
 - [ ] **31.4 Hardware checkpoint.** The owner plays a 44.1 kHz and a 96 kHz track to the AirPods
       on the 2015 MacBook Pro.
 
+### 32. Speed hardening
+
+The owner's brief from 2026-11-03.
+
+**Goal:** scrolling a 43k-track library is smooth on the 2015 MacBook Pro, and the time from a
+play action to sound is as short as the device allows. Phase 14e already profiled the hot paths
+and every budget passes, so this phase is about the paths 14e's benches don't exercise. An audit
+on 2026-11-03 (static reading plus EXPLAIN QUERY PLAN on a synthetic 43k-track, 1M-play
+database) found the suspects below. Treat each one as a hypothesis. Measure it first, fix it only
+if the number shows a cost, and record the before and after in the Result line. If a suspect
+turns out to cost nothing, say so and drop it. File and line references are from commit 9f49c19.
+
+Rules for the whole phase:
+- **Bench first.** Every fix comes with a bench in `Sources/Tools/Bench` and a budget in code
+  next to it, with a row added to the budget table. The bench has to show the problem before the
+  fix. The phase gate's 10% regression rule applies to every existing budget.
+- **The audio boundary stands.** Nothing reachable from the IO proc changes language or
+  allocates. Gapless stays at 0 samples, and the rate-switch and soak benches still pass.
+- **Single source of truth, smallest change.** No new dependencies. A new pragma, constant or
+  limit is defined once.
+- **Simulate the NAS.** Reuse the scan benches' latency-injected file access (about 2 ms and
+  60 ms per operation), because the real library is on SMB. Never touch the real library or the
+  NAS.
+- **Old Mac numbers come from the checkpoint.** Every new bench gets an old-Mac budget marked
+  "estimate until its checkpoint".
+
+#### 32a. Time to sound
+
+The current benches measure the gap between tracks and the rate switch, but nothing measures
+from the user's action to the first sample.
+- [ ] **32a.1** **Bench:** on the null device (`Sources/Tools/Fixtures/NullDevice.swift`), time from the call
+      to the first IO callback for each of these:
+      - double-click (`setQueue` plus `play`) while a track is playing, same format
+      - the same, at a different sample rate
+      - Next, same format
+      - a seek while the current track is still being fed
+      - a seek in a track's last ~4 s, after the feed has moved on to the next track
+      - each case with local files and with simulated NAS latency
+
+      The null device has no close, hog or format-restore cost, so give it injectable delays for
+      those HAL steps. Without them the bench can't show suspect 1.
+- [ ] **32a.2** **Suspect, likely the biggest win:** `PlaybackEngine.setQueue` (PlaybackEngine.swift:103) calls
+      `unload()`, which calls `output.stop()`. That closes the device (DeviceOutput.swift:253, 792;
+      HALDevice.close at HALDevice.swift:161). Closing restores the old format and rate and waits up
+      to 3 s for it, then releases hog mode. The following `play` reopens the device: it enumerates
+      devices, writes the restore record, takes hog mode, then sets the rate and format again. So
+      every double-click while playing tears the device down and rebuilds it, even when the new
+      track has the same format. Next and media keys already take the `restart` path
+      (DeviceOutput.swift:297) and keep the device open. Make a queue replacement followed by play
+      take the same path. Stop should still close the device as it does today.
+- [ ] **32a.3** **Suspect:** `LibraryQueries.paths(ids:)` (LibraryQueries.swift:199) runs one
+      `SELECT ... WHERE id = ?` per ID. A double-click queues the whole visible list (`playOrder`),
+      so that's 43k statements on the shared reader actor before playback starts. Use the file's
+      existing `inChunks` IN-list pattern. Also consider resolving only the first track's path
+      before starting playback and the rest afterwards.
+- [ ] **32a.4** **Suspect:** the seek in the last ~4 s reopens the file (`reusableTrack`,
+      DeviceOutput.swift:471), which costs a full open and header parse on the NAS.
+- [ ] **32a.5** **Suspect:** at track start the main actor does synchronous lookups by path:
+      `NowPlayingModel.lookUpTrack` (NowPlayingModel.swift:59), `countPlay`
+      (PaletteCommands.swift:201) and the queue panel (QueueModel.swift:63). `MediaControls.loadArt`
+      reads the file a second time for art. Signpost them and fix whatever shows up as a main-thread
+      hitch at track change.
+
+#### 32b. Scrolling with art
+
+The scroll-bar-drag bench jumps a screenful at a time over local files. It never sees
+continuous trackpad scrolling, long albums with a wide art column, art over the NAS, or
+scrolling during a scan.
+- [ ] **32b.1** **Bench:** extend the window benches with these scroll cases, each reporting the p95 frame
+      time and the worst frame:
+      - continuous small-delta scrolling, like a trackpad
+      - the smallest row height with a wide art column, on fixture albums of 15 or more tracks
+      - art read through simulated NAS latency, also timing when the last visible cover arrives
+      - a library refresh during a scan, every 2 s
+- [ ] **32b.2** **Suspect:** each art cell's `artRow` and `ArtRun.length` walk up to `artRowsTall` rows in
+      each direction through `RowCache.row` (TrackTableController.swift:252-295, ArtRun.swift).
+      `RowCache` moves the page to the front of its recency list with an O(30) remove and append
+      whenever the lookup leaves the last-used page (RowCache.swift:37-44). The walk can also fetch
+      off-screen pages synchronously. Compute the album runs once per visible range instead.
+- [ ] **32b.3** **Suspect:** `isWanted` (TrackTableController.swift:63) recomputes the visible rows and their
+      art keys for each queued request, up to 200, every time an image arrives (RowArt.swift:34).
+      Build the wanted set once per `next`.
+- [ ] **32b.4** **Suspect:** art loads one file at a time (`loading` flag, RowArt.swift:79). Each load is a
+      blocking read inside the cooperative pool. Load a bounded few at once (3–4, to suit the old
+      Mac's 4 pool threads), on a queue that isn't the cooperative pool. ArtViewer, NowPlayingBar
+      and MediaControls block the pool the same way.
+- [ ] **32b.5** **Suspect:** the art key is the path of each run's first track (TrackTableController.swift:
+      276), so an album longer than one run reads and decodes the same cover once per run, and each
+      copy takes a cache slot. Key the cache by album and art offset, or by content.
+- [ ] **32b.6** **Suspect:** `AlbumArtCell` draws the whole image with `.high` interpolation into every row
+      slice (AlbumArtCell.swift:46). That is likely costly on the Intel GPU. Size the thumbnail to
+      the drawn pixels, or draw the art once per run.
+- [ ] **32b.7** **Suspect:** `refreshNow` (LibraryBrowser.swift:528-569) reloads the panes and the table every
+      2 s during a scan, even when nothing changed. That costs a `reloadData`, a cleared row cache,
+      synchronous page refetches on the main thread, `readTotals`, and an O(n) `rows(holding:)`.
+      Skip the reload when the IDs are unchanged, and otherwise reload only the rows that changed.
+- [ ] **32b.8** **Suspect:** the queue panel reloads completely on every track start, with an O(queue)
+      `firstIndex` (QueuePanel.swift:35, QueueModel.swift:26). A 43k-track queue makes each track
+      change cost a full pass.
+
+#### 32c. The database
+
+Sorting is fine: 73 ms on the old Mac in 14e. Leave it alone unless a new bench says otherwise.
+- [ ] **32c.1** **Suspect:** `trackTotals` (LibraryQueries.swift:23) reads 43k rows into a dictionary again
+      whenever `changeStamp` moves. `recordPlay` and `setRating` move it too, so every track change
+      costs a full rebuild. Key the cache to changes in `tracks` and `files` only, or use a SQL
+      aggregate for the whole-library case. Bench: totals right after a recorded play.
+- [ ] **32c.2** **Suspect:** the connection setup (Database.swift:25-44) sets only WAL, synchronous, foreign
+      keys and query_only. `cache_size`, `temp_store`, `mmap_size` and `journal_size_limit` are
+      left at their defaults, and nothing ever runs `ANALYZE` or `PRAGMA optimize`. Measure each
+      setting against the sort, pane, smart-playlist, history and scan benches. Keep only the ones
+      that win, and check `mmap_size` on macOS 12. Run `PRAGMA optimize` after a scan or on close.
+- [ ] **32c.3** **Suspect:** one `LibraryReader` actor (LibraryReader.swift:8) runs every query in turn: the
+      sorted IDs, pane lists, totals, `fileIssues`, the palette's `trackNames`, and play, rating
+      and playlist writes. A slow query delays the next keystroke's search and the play write. The
+      health report already has its own connection. Bench: two keystrokes 50 ms apart, then the
+      p95 of the second, with and without a scan running. If the bench shows contention, split the
+      work by kind: visible-result queries, background queries and writes.
+- [ ] **32c.4** **Check:** the History sort uses a temp B-tree even though `plays_last_played` exists, which
+      contradicts the comment at about LibraryQueries.swift:118. Confirm it on the fixture library
+      and fix either the query or the comment.
+
+#### 32d. Parallelism and priority
+
+- [ ] **32d.1** **Suspect:** palette ranking (PaletteModel.swift:73) starts a new `.userInitiated` detached
+      task on every keystroke and never cancels the old ones, and `rankPalette` never checks
+      cancellation. Bench: 8 keystrokes 50 ms apart; measure time to the last result and the CPU
+      used.
+- [ ] **32d.2** **Suspect:** the tag editor reads each selected file three times, one file after another
+      (TagEditorModel.swift:143-160). On the NAS, 500 tracks is about 1,500 serial opens before the
+      sheet opens. Parse each file once and read a bounded few files at a time. Bench on simulated
+      NAS latency.
+- [ ] **32d.3** **Suspect:** local scans use every core while playing (LibraryScanner.swift:17); the playback
+      pause applies only to network scans. Cap the readers while playing. On the old Mac that is 4
+      reader threads sharing 2 cores with decode. The soak-under-scan bench must stay at 0
+      underruns.
+- [ ] **32d.4** **Suspect:** the health report runs as a default-priority detached task doing blocking SQLite
+      work (LibraryReader.swift:21), and it reruns after every changed scan, removal or sync. Run it
+      at utility priority, off the cooperative pool.
+- [ ] **32d.5** **Suspect:** a pending sync merge runs before the launch scan on the same serial queue
+      (LibraryWatcher.swift:92, ~255, ~345), and locating the sync folder can stall on a hung
+      share. Bench the time to the first scan's start with a large merge pending.
+- [ ] **32d.6** **Suspect:** after the first frame, `startPlayback` (AppDelegate.swift:283, 508-552) and
+      `watchOutputs` (OutputPicker.swift:24) enumerate HAL devices synchronously on the main actor.
+      Bench the first scroll step and first keystroke right after `--report-launch` reports
+      interactive. Move whatever hitches off main.
+
+#### 32e. Checkpoint and budgets
+
+- Run `./scripts/bench` three times. Tighten any new budget the code beats by more than 3x, as
+  14e did.
+- [ ] **Hardware checkpoint (owner), pending:** on the 2015 MacBook Pro, from a universal release
+  build (its Xcode can't build Swift 6), run the full bench and send back the file. Then:
+  - scroll the real library with the art column shown, by trackpad, while a track plays and a
+    rescan runs
+  - double-click tracks of the same rate and of different rates on the ADI-2, and say whether
+    the start feels instant
+
+  Give me the exact commands, tested under bash 3.2.
+
+When the phase is done, the Result line gives before and after for every suspect: the ones
+fixed, the ones that measured as no cost and were dropped, and the old-Mac rows still pending.
+
+Overlap: branch `perf/play-latency` (ADR 0070) already starts the clicked track before the queue's paths are read, which covers most of 32a.3; 32a measures it rather than redoing it.
+
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
