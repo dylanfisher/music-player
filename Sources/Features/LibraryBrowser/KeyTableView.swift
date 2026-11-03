@@ -37,20 +37,31 @@ final class KeyTableView: NSTableView, ResolvedBackgroundTable {
     /// which are opaque, would hide it: the text's color, faint, so it darkens in light mode and
     /// lightens in dark.
     static let translucentRowColor = NSColor.labelColor.withAlphaComponent(0.05)
-    /// Draws every other row in `translucentRowColor`, in place of AppKit's alternating rows.
+    /// Gives every other row `translucentRowColor`, in place of AppKit's alternating rows. The
+    /// row views draw it: a table that overrides `drawBackground(inClipRect:)` scrolls several
+    /// times slower (ADR 0084).
     var drawsTranslucentRows = false {
-        didSet { if drawsTranslucentRows != oldValue { needsDisplay = true } }
+        didSet {
+            guard drawsTranslucentRows != oldValue else { return }
+            enumerateAvailableRowViews { rowView, row in
+                if drawsTranslucentRows {
+                    tint(rowView, row: row)
+                } else {
+                    // As AppKit colors a row it adds.
+                    let colors = NSColor.alternatingContentBackgroundColors
+                    rowView.backgroundColor =
+                        usesAlternatingRowBackgroundColors
+                        ? colors[row % colors.count] : backgroundColor
+                }
+            }
+        }
     }
 
-    override func drawBackground(inClipRect clipRect: NSRect) {
-        super.drawBackground(inClipRect: clipRect)
+    /// Gives `rowView` its translucent tint, when the table draws one, as AppKit adds it.
+    func tint(_ rowView: NSTableRowView, row: Int) {
         guard drawsTranslucentRows else { return }
-        Self.translucentRowColor.setFill()
-        let rows = rows(in: clipRect)
         // Odd rows, as AppKit's second alternating color.
-        for row in rows.location..<rows.location + rows.length where row % 2 == 1 {
-            rect(ofRow: row).intersection(clipRect).fill(using: .sourceOver)
-        }
+        rowView.backgroundColor = row % 2 == 1 ? Self.translucentRowColor : backgroundColor
     }
 
     override func frameOfCell(atColumn column: Int, row: Int) -> NSRect {

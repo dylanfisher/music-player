@@ -57,6 +57,12 @@ class RowListController: NSViewController {
         table.doubleAction = #selector(playClicked)
     }
 
+    /// The table's delegate method, for both lists: the translucent rows on glass.
+    @objc(tableView:didAddRowView:forRow:)
+    func tableView(_ tableView: NSTableView, didAdd rowView: NSTableRowView, forRow row: Int) {
+        table.tint(rowView, row: row)
+    }
+
     /// Reports the first rows drawn, after this pass draws, so the measurement includes the
     /// first frame.
     func rowsDrawn() {

@@ -903,20 +903,23 @@ private func hoveredRescanTable() async throws -> (
     controller.apply(appearance(alternating: true, glass: false))
     #expect(!table.drawsTranslucentRows && table.usesAlternatingRowBackgroundColors)
 
-    // Drawn on a clear background, as the glass leaves it: even rows stay clear, odd rows get
-    // the faint tint.
-    controller.apply(appearance(alternating: true, glass: true))
+    // In a window, the rows AppKit adds get the tint, every other one, and lose it with it.
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = controller.view
+    defer { window.close() }
     table.backgroundColor = .clear
-    let bounds = NSRect(x: 0, y: 0, width: 400, height: 4 * table.rowHeight)
-    let bitmap = try #require(table.bitmapImageRepForCachingDisplay(in: bounds))
-    table.cacheDisplay(in: bounds, to: bitmap)
-    func alpha(_ row: Int) throws -> CGFloat {
-        let scale = CGFloat(bitmap.pixelsHigh) / bounds.height
-        let y = Int(table.rect(ofRow: row).midY * scale)
-        // Past the columns, clear of any text.
-        return try #require(bitmap.colorAt(x: Int(380 * scale), y: y)).alphaComponent
+    controller.apply(appearance(alternating: true, glass: true))
+    window.displayIfNeeded()
+    func colors() throws -> [NSColor] {
+        try (0..<3).map {
+            try #require(table.rowView(atRow: $0, makeIfNecessary: true)).backgroundColor
+        }
     }
-    let alphas = try (0..<3).map(alpha)
-    #expect(alphas[0] == 0 && alphas[2] == 0, "\(alphas)")
-    #expect(alphas[1] > 0 && alphas[1] < 0.2, "\(alphas)")
+    #expect(try colors() == [.clear, KeyTableView.translucentRowColor, .clear])
+    controller.apply(appearance(alternating: true, glass: false))
+    let alternating = NSColor.alternatingContentBackgroundColors
+    #expect(try colors() == [alternating[0], alternating[1], alternating[0]])
 }
