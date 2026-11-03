@@ -160,6 +160,8 @@ public final class Database {
         guard info.st_mode & S_IFMT == S_IFREG else {
             throw CocoaError(.fileReadUnknown, userInfo: [NSFilePathErrorKey: url.path])
         }
+        // The advice's length is an Int32, so a file over 2 GB is read ahead only to there; a
+        // 43k-track library is under 100 MB.
         var advice = radvisory(ra_offset: 0, ra_count: Int32(clamping: info.st_size))
         guard fcntl(descriptor, F_RDADVISE, &advice) == 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
