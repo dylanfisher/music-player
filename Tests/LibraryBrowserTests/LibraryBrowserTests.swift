@@ -47,7 +47,7 @@ import Testing
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
         layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
-    let state = BrowserState(source: nil, genre: nil, artist: nil, album: nil)
+    let state = BrowserState(source: nil)
     await browser.load(state)
     #expect(browser.status.notices.map { $0.hasSuffix("first") } == [true])
     #expect(try index.discards().isEmpty)
@@ -86,7 +86,7 @@ import Testing
         browserHeight: 100, groupByAlbumArtist: false)
     let sidebar = try #require(browser.sidebar as? SidebarController)
     _ = sidebar.view
-    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await browser.load(BrowserState(source: nil))
     let outline = sidebar.outline
     // The library's group and the playlists'; the watched folders are in Settings.
     #expect(outline.numberOfChildren(ofItem: nil) == 2)
@@ -135,22 +135,22 @@ import Testing
         layout: AppState().trackTable.defaultValue, browserHeight: 150, groupByAlbumArtist: false)
     var states: [BrowserState] = []
     browser.stateChanged = { states.append($0) }
-    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await browser.load(BrowserState(source: nil))
     let genre = try #require(try index.genres().first)
     await browser.showOnly(.genre, id: genre.id)
-    #expect(states.last?.genre != nil)
+    #expect(states.last?.columns[0].selection != nil)
     browser.toggleBrowser()
     let deadline = Date().addingTimeInterval(10)
-    while states.last?.genre != nil, Date() < deadline {
+    while states.last?.columns[0].selection != nil, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
-    #expect(states.last?.genre == nil)
+    #expect(states.last?.columns[0].selection == nil)
     browser.selectAllTracks()
     #expect(try await browser.selectedPaths().count == (try index.trackCount()))
     // Shown again, they start at All.
     browser.toggleBrowser()
     #expect(browser.isBrowserVisible)
-    #expect(states.last?.genre == nil)
+    #expect(states.last?.columns[0].selection == nil)
 }
 
 @MainActor @Test func theScanBarAnimatesOnlyWhileTheStatusBarShows() async throws {
@@ -158,7 +158,7 @@ import Testing
         reader: try LibraryReader(databaseURL: try browserLibrary.get().databaseURL),
         index: try LibraryIndex(at: try browserLibrary.get().databaseURL),
         layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
-    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await browser.load(BrowserState(source: nil))
     browser.libraryChanged(.scanning(folder: "/music", ScanProgress()))
     #expect(browser.scanIndicatorAnimates)
     browser.toggleStatusBar()
@@ -221,7 +221,7 @@ import Testing
         browserHeight: 100, groupByAlbumArtist: false)
     var reported: [StatusTotals] = []
     browser.statusTotalsChanged = { reported.append($0) }
-    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await browser.load(BrowserState(source: nil))
     // The totals are read off the main thread, after the rows show.
     try await waitFor("the list's totals") {
         browser.listTotals.count == browser.model.trackIDs.count
@@ -276,7 +276,7 @@ import Testing
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
         browserHeight: 100, groupByAlbumArtist: false)
-    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await browser.load(BrowserState(source: nil))
     let all = browser.model.trackIDs.count
     // Out of any window, as when the user takes Search out of the toolbar.
     #expect(!browser.isSearchShown)
@@ -294,7 +294,7 @@ import Testing
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
         browserHeight: 100, groupByAlbumArtist: false)
-    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await browser.load(BrowserState(source: nil))
     #expect(browser.showsAllMusic)
     await browser.model.setSource(.history)
     #expect(!browser.showsAllMusic)

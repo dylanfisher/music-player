@@ -96,7 +96,7 @@ private func report(_ id: Int64) -> HealthReport {
     let sidebar = try #require(browser.sidebar as? SidebarController)
     _ = sidebar.view
     await browser.load(
-        BrowserState(source: .health(.noAlbumArtist), genre: nil, artist: nil, album: nil))
+        BrowserState(source: .health(.noAlbumArtist)))
     #expect(sidebar.selectedSource == .health(.noAlbumArtist))
     try await waitFor("the report's tracks") {
         browser.selectAllTracks()
@@ -125,7 +125,7 @@ private func report(_ id: Int64) -> HealthReport {
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
         layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
     _ = browser.sidebar.view
-    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await browser.load(BrowserState(source: nil))
     browser.checkHealth()
     try await waitFor("the first report") { browser.health.report?[.missingEntries].count == 1 }
     browser.deletePlaylist(playlist)

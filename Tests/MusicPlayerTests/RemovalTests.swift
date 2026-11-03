@@ -35,7 +35,7 @@ import Testing
         contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled],
         backing: .buffered, defer: true)
     window.contentView = browser.content.view
-    await browser.load(BrowserState(source: .timeline, genre: nil, artist: nil, album: nil))
+    await browser.load(BrowserState(source: .timeline))
     let deadline = Date().addingTimeInterval(10)
     while browser.rowID(at: 0) == nil, Date() < deadline {
         try await Task.sleep(nanoseconds: 10_000_000)

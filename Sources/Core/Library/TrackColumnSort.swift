@@ -44,7 +44,7 @@ extension TrackColumn {
         case .bitDepth: "t.bits_per_sample"
         case .channels: "t.channels"
         case .size: "f.size_bytes"
-        case .fileName: fileNameSQL + " COLLATE NOCASE"
+        case .fileName: fileNameSQL + nocase
         case .path: "f.path"
         case .dateAdded: "pa.added_seconds"
         case .dateCreated: "f.created_seconds"

@@ -50,6 +50,12 @@ public actor LibraryReader {
         try index.albums(filter)
     }
 
+    public func columnEntries(
+        _ grouping: BrowserGrouping, _ filter: TrackFilter, ignoring: Set<BrowserGrouping>
+    ) throws -> [ColumnEntry] {
+        try index.columnEntries(grouping, filter, ignoring: ignoring)
+    }
+
     public func paths(ids: [Int64]) throws -> [Int64: String] {
         try index.paths(ids: ids)
     }

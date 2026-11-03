@@ -20,7 +20,7 @@ public struct BrowserEntry: Equatable, Sendable {
 /// The Album pane's text for `albums`: each title, with its artist beside it wherever another
 /// album listed has the same title. A compilation without an album artist is Various Artists';
 /// any other album without an artist shows its title alone.
-public func albumTitles(_ albums: [BrowserEntry]) -> [String] {
+func albumTitles(_ albums: [BrowserEntry]) -> [String] {
     let counts = Dictionary(albums.map { ($0.name, 1) }, uniquingKeysWith: +)
     return albums.map { album in
         guard counts[album.name, default: 0] > 1,

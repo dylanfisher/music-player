@@ -109,6 +109,24 @@ extension Setting where Value == [StatusPart] {
     }
 }
 
+extension Setting where Value == [BrowserColumn] {
+    /// The browser's columns, left to right: `BrowserColumn.count` of them, each grouping by
+    /// something the others don't.
+    init(_ key: String, title: String, columns defaultValue: [BrowserColumn], _ summary: String) {
+        self.init(key, title, defaultValue, summary, Value.kind) { columns in
+            guard columns.count == BrowserColumn.count else {
+                return .invalid("\(columns.count) columns; the browser has \(BrowserColumn.count)")
+            }
+            var seen: Set<BrowserGrouping> = []
+            for (index, column) in columns.enumerated()
+            where !seen.insert(column.grouping).inserted {
+                return .invalid("column \(index): \(column.grouping.rawValue) is listed twice")
+            }
+            return nil
+        }
+    }
+}
+
 private func outside<Bound>(_ range: ClosedRange<Bound>, _ value: Bound) -> SettingProblem.Reason? {
     range.contains(value)
         ? nil : .outOfRange("\(value) is outside \(range.lowerBound)...\(range.upperBound)")

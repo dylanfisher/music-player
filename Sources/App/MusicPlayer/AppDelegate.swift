@@ -241,9 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         browser.stateChanged = { state in
             saver.set(\.source, state.source)
-            saver.set(\.selectedGenre, state.genre)
-            saver.set(\.selectedArtist, state.artist)
-            saver.set(\.selectedAlbum, state.album)
+            saver.set(\.browserColumns, state.columns)
         }
         makeGoToListings(browser)
         browser.libraryRefreshed = { [weak self] in

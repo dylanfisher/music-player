@@ -111,7 +111,7 @@ func loadedModel(_ databaseURL: URL) async throws -> BrowserModel {
     let model = BrowserModel(
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
         groupByAlbumArtist: true)
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     return model
 }
 

@@ -10,7 +10,7 @@ import Testing
 /// stats to.
 @MainActor
 func writableModel(
-    _ saved: BrowserState = BrowserState(source: nil, genre: nil, artist: nil, album: nil)
+    _ saved: BrowserState = BrowserState(source: nil)
 ) async throws -> (
     BrowserModel, LibraryIndex
 ) {
@@ -130,7 +130,7 @@ func writableModel(
 
 @MainActor @Test func aSavedPlaylistThatsGoneLoadsTheLibrary() async throws {
     let (model, index) = try await writableModel(
-        BrowserState(source: .playlist(999), genre: nil, artist: nil, album: nil))
+        BrowserState(source: .playlist(999)))
     #expect(model.filter.source == nil)
     #expect(model.trackIDs.count == (try index.trackCount()))
 }

@@ -181,7 +181,12 @@ extension AppDelegate {
         case .genre, .artist, .album:
             guard let (pane, id) = paletteEntries[item.key] else { return }
             if filters || item.kind == .genre {
-                Task { await browser.showOnly(pane, id: id) }
+                Task {
+                    // With no column to narrow, the palette goes to the first track instead.
+                    if await !browser.showOnly(pane, id: id) {
+                        await browser.showFirstTrack(of: pane, id: id)
+                    }
+                }
             } else {
                 Task { await browser.showFirstTrack(of: pane, id: id) }
             }

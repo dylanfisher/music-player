@@ -17,11 +17,11 @@ public struct AppState: SettingsSchema {
     public let browserHeight = Setting(
         "window.browserHeight", title: "Browser Height", default: 160,
         range: browserHeightRange,
-        "Height of the genre, artist and album panes above the track table, in points. 0 hides"
+        "Height of the browser's columns above the track table, in points. 0 hides"
             + " them.")
     public let browserVisible = Setting(
         "window.browserVisible", title: "Show Browser", default: true,
-        "Show the genre, artist and album panes above the track table.")
+        "Show the browser's columns above the track table.")
     public let sidebarVisible = Setting(
         "window.sidebarVisible", title: "Show Sidebar", default: true,
         "Show the sidebar beside the browser.")
@@ -69,15 +69,10 @@ public struct AppState: SettingsSchema {
         "browser.source", title: "Source", default: nil,
         "The folder, playlist, History, timeline or health check the sidebar shows. Null shows"
             + " the whole library.")
-    public let selectedGenre = Setting<String?>(
-        "browser.genre", title: "Genre", default: nil,
-        "The genre selected in the browser. Null is All.")
-    public let selectedArtist = Setting<String?>(
-        "browser.artist", title: "Artist", default: nil,
-        "The artist selected in the browser. Null is All.")
-    public let selectedAlbum = Setting<String?>(
-        "browser.album", title: "Album", default: nil,
-        "The album selected in the browser. Null is All.")
+    public let browserColumns = Setting(
+        "browser.columns", title: "Browser Columns", columns: BrowserColumn.defaults,
+        "The browser's three columns, left to right: what each groups by, and the entry"
+            + " selected in it by name. A null selection is All.")
     public let palettePlace = Setting<PalettePlace?>(
         "palette.place", title: "Palette Place", default: nil,
         "Where the palette was dragged. Null opens it centered near the top of the screen.")

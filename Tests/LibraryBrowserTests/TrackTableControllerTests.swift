@@ -22,7 +22,7 @@ import Testing
         layout: AppState().trackTable.defaultValue, actions: actions)
     _ = controller.view
     model.changed = { controller.reload($0) }
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
 
     controller.table.selectRowIndexes([2, 7], byExtendingSelection: false)
     let picked = Set([2, 7].map { model.trackIDs[$0] })
@@ -48,7 +48,7 @@ import Testing
         layout: AppState().trackTable.defaultValue, actions: actions)
     controller.view.frame = NSRect(x: 0, y: 0, width: 800, height: 300)
     model.changed = { controller.reload($0) }
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     #expect(model.trackIDs.count > 100)
     let table = controller.table
     /// How far the selected row's middle is from the visible rows' middle, in rows.
@@ -105,7 +105,7 @@ import Testing
         layout: AppState().trackTable.defaultValue, actions: actions)
     controller.view.frame = NSRect(x: 0, y: 0, width: 800, height: 300)
     model.changed = { controller.reload($0) }
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     let table = controller.table
     func offCenter() throws -> CGFloat {
         let clip = try #require(controller.clip)
@@ -183,7 +183,7 @@ import Testing
         layout: AppState().trackTable.defaultValue, actions: actions)
     _ = controller.view
     model.changed = { controller.reload($0) }
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
 
     controller.move(.down, extending: false)
     #expect(controller.table.selectedRowIndexes == [0])
@@ -199,7 +199,7 @@ import Testing
     let model = BrowserModel(
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: false,
         groupByAlbumArtist: false)
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     let names = try await model.trackNames()
     #expect(names.map(\.id) == model.trackIDs)
 }
@@ -227,7 +227,7 @@ import Testing
     let model = BrowserModel(
         reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .title, ascending: false,
         groupByAlbumArtist: false)
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     async let sorted: Void = model.setSort(.artist, ascending: true)
     async let read = { @MainActor in (try await model.trackNames(), model.trackIDs) }()
     let (names, shown) = try await read
@@ -249,7 +249,7 @@ import Testing
         actions: actions)
     _ = controller.view
     model.changed = { controller.reload($0) }
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     let table = controller.table
     table.selectRowIndexes([1, 3], byExtendingSelection: false)
     #expect(table.prepareMenu(at: 3))
@@ -277,7 +277,7 @@ import Testing
         layout: AppState().trackTable.defaultValue, actions: actions)
     _ = controller.view
     model.changed = { controller.reload($0) }
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     func marked() -> [Int] {
         (0..<model.trackIDs.count).filter {
             (controller.tableView(controller.table, rowViewForRow: $0) as? MarkedRowView)?
@@ -373,7 +373,7 @@ import Testing
         layout: AppState().trackTable.defaultValue, actions: actions)
     controller.view.frame = NSRect(x: 0, y: 0, width: 800, height: 300)
     model.changed = { controller.reload($0) }
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     let table = controller.table
     let title = table.column(withIdentifier: NSUserInterfaceItemIdentifier("title"))
     var sizes: [CGFloat] = []
@@ -417,7 +417,7 @@ private func artTable(artWidth: CGFloat, sortedBy sort: TrackColumn = .album) as
         actions: actions)
     controller.view.frame = NSRect(x: 0, y: 0, width: 400, height: 2000)
     model.changed = { controller.reload($0) }
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     return (controller, model, try index.rows(ids: model.trackIDs))
 }
 
@@ -596,7 +596,7 @@ private func artTable(artWidth: CGFloat, sortedBy sort: TrackColumn = .album) as
         actions: actions)
     _ = controller.view
     model.changed = { controller.reload($0) }
-    await model.load(BrowserState(source: .history, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: .history))
     #expect(controller.table.numberOfRows == 0)
     #expect(!controller.emptyLabel.isHidden)
     #expect(controller.emptyLabel.stringValue == "Nothing played yet")
@@ -631,7 +631,7 @@ private func artTable(artWidth: CGFloat, sortedBy sort: TrackColumn = .album) as
     window.contentView = controller.view
     defer { window.close() }
     model.changed = { controller.reload($0) }
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     window.displayIfNeeded()
 
     let table = controller.table
@@ -696,7 +696,7 @@ private func artTable(artWidth: CGFloat, sortedBy sort: TrackColumn = .album) as
         actions: actions)
     controller.view.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
     model.changed = { controller.reload($0) }
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     var rated: [(Int64, Int)] = []
     controller.rateClicked = { rated.append(($0, $1)) }
     let table = controller.table

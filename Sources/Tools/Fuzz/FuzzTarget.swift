@@ -198,7 +198,9 @@ private let state = FuzzTarget(
         let store = try StateStore(AppState(), fileURL: url)
         try store.set(\.sidebarWidth, to: 200)
         try store.set(\.source, to: .playlist(3))
-        try store.set(\.selectedGenre, to: "Seed Genre")
+        var columns = BrowserColumn.defaults
+        columns[0].selection = "Seed Genre"
+        try store.set(\.browserColumns, to: columns)
         try store.set(\.queueVisible, to: true)
         return [Array("{}".utf8), try [UInt8](Data(contentsOf: url))]
     },

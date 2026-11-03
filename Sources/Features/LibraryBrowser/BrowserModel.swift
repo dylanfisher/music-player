@@ -5,26 +5,35 @@ import Settings
 
 private let logger = moduleLogger()
 
-/// The browser's logic, apart from AppKit: the sidebar's source, the three panes, the search and
-/// the sort decide which track IDs the table shows, and in what order.
+/// The browser's logic, apart from AppKit: the sidebar's source, the three columns, the search
+/// and the sort decide which track IDs the table shows, and in what order.
 ///
 /// Every query runs on the `LibraryReader`, off the main thread. A change that a newer one
 /// overtakes while its queries run is dropped, so the last keystroke or click wins.
 @MainActor
 public final class BrowserModel {
-    /// The panes, left to right. Each narrows the ones after it.
-    public enum Pane: Int, CaseIterable, Comparable, Sendable {
+    /// The genres, artists and albums the palette lists and `PlayQuery` names, each shown by a
+    /// browser column grouping as `groupings` says.
+    public enum Pane: Int, CaseIterable, Sendable {
         case genre, artist, album
 
-        public static func < (a: Pane, b: Pane) -> Bool { a.rawValue < b.rawValue }
+        /// The groupings whose column selects one of these by ID, the first when no column
+        /// shows one.
+        var groupings: [BrowserGrouping] {
+            switch self {
+            case .genre: [.genres]
+            case .artist: [.artists]
+            case .album: [.albums, .albumsByYear]
+            }
+        }
     }
 
     public private(set) var filter = TrackFilter()
-    public private(set) var genres: [BrowserEntry] = []
-    public private(set) var artists: [BrowserEntry] = []
-    public private(set) var albums: [BrowserEntry] = []
-    /// What the Album pane shows for each of `albums`.
-    private(set) var albumTitles: [String] = []
+    /// What each browser column groups by, left to right.
+    public private(set) var columns = BrowserColumn.defaults.map(\.grouping)
+    /// Each column's entries.
+    public private(set) var entries: [[ColumnEntry]] = Array(
+        repeating: [], count: BrowserColumn.count)
     public private(set) var trackIDs: [Int64] = []
     public private(set) var sortColumn: TrackColumn
     public private(set) var ascending: Bool
@@ -42,9 +51,10 @@ public final class BrowserModel {
     /// these, so one that overtakes another carries it along instead of losing it.
     private var pending = TrackFilter()
     private var pendingSort: (column: TrackColumn, ascending: Bool)
-    /// The leftmost pane a change not yet applied reloads from, and the saved selections a load
-    /// not yet applied restores.
-    private var pendingPanes: Pane?
+    private var pendingColumns = BrowserColumn.defaults.map(\.grouping)
+    /// The leftmost column a change not yet applied reloads from, and the saved selections a
+    /// load not yet applied restores.
+    private var pendingPanes: Int?
     private var pendingSaved: BrowserState?
     /// Counts applied changes, so names read for one list aren't used for the next.
     private var applied = 0
@@ -84,14 +94,19 @@ public final class BrowserModel {
     public func setGroupByAlbumArtist(_ on: Bool) async {
         guard on != pending.groupByAlbumArtist else { return }
         pending.groupByAlbumArtist = on
-        await reload(panesFrom: .artist, reason: .user)
+        await reload(panesFrom: 0, reason: .user)
     }
 
-    /// The selections the window saves, by name.
+    /// The source and columns the window saves, each selection by name.
     public var state: BrowserState {
         BrowserState(
-            source: filter.source, genre: name(filter.genre, in: genres),
-            artist: name(filter.artist, in: artists), album: name(filter.album, in: albums))
+            source: filter.source,
+            columns: zip(columns, entries).map { grouping, entries in
+                let value = filter.selections[grouping]
+                return BrowserColumn(
+                    grouping: grouping,
+                    selection: entries.first { $0.value == value }?.savedName)
+            })
     }
 
     /// Loads the playlists, panes and tracks, selecting what `saved` names where it still
@@ -113,28 +128,40 @@ public final class BrowserModel {
         pending = TrackFilter(
             source: saved.source, search: pending.search,
             groupByAlbumArtist: pending.groupByAlbumArtist)
-        await reload(panesFrom: .genre, saved: saved, reason: .loaded)
+        pendingColumns = saved.columns.map(\.grouping)
+        await reload(panesFrom: 0, saved: saved, reason: .loaded)
     }
 
-    /// Selects an entry of `pane` by ID, or All for nil. The panes to its right are narrowed, and
-    /// lose a selection they no longer list.
-    func select(_ pane: Pane, id: Int64?) async {
-        switch pane {
-        case .genre: pending.genre = id
-        case .artist: pending.artist = id
-        case .album: pending.album = id
+    /// Selects an entry of the column at `column`, or All for nil. The columns to its right are
+    /// narrowed, and lose a selection they no longer list.
+    func select(column: Int, _ value: BrowserValue?) async {
+        pending.selections[pendingColumns[column]] = value
+        let next = column + 1
+        await reload(panesFrom: next < BrowserColumn.count ? next : nil, reason: .user)
+    }
+
+    /// Has the column at `column` group by `grouping`, at All. A grouping another column shows
+    /// trades places with the column's own, so no two columns show the same.
+    func setGrouping(_ grouping: BrowserGrouping, ofColumn column: Int) async {
+        let current = pendingColumns[column]
+        guard grouping != current else { return }
+        var first = column
+        if let other = pendingColumns.firstIndex(of: grouping) {
+            pendingColumns[other] = current
+            first = min(first, other)
         }
-        await reload(panesFrom: Pane(rawValue: pane.rawValue + 1), reason: .user)
+        pendingColumns[column] = grouping
+        pending.selections[current] = nil
+        pending.selections[grouping] = nil
+        await reload(panesFrom: first, reason: .user)
     }
 
-    /// Selects All in every pane, for hiding them, so nothing hidden narrows the table. Panes
-    /// already at All run no query and redraw nothing.
+    /// Selects All in every column, for hiding them, so nothing hidden narrows the table.
+    /// Columns already at All run no query and redraw nothing.
     func clearPanes() async {
-        guard pending.genre != nil || pending.artist != nil || pending.album != nil else { return }
-        pending.genre = nil
-        pending.artist = nil
-        pending.album = nil
-        await reload(panesFrom: .genre, reason: .user)
+        guard !pending.selections.isEmpty else { return }
+        pending.selections = [:]
+        await reload(panesFrom: 0, reason: .user)
     }
 
     /// Shows the whole library with no pane or search narrowing it, as a step Back can undo.
@@ -142,7 +169,7 @@ public final class BrowserModel {
     func showAll() async -> Bool {
         guard pending != everything else { return false }
         showEverything()
-        await reload(panesFrom: .genre, reason: .user)
+        await reload(panesFrom: 0, reason: .user)
         return true
     }
 
@@ -329,7 +356,7 @@ public final class BrowserModel {
     private func showSource(_ source: BrowserSource?) async {
         changeSort(from: pending.source, to: source)
         pending.source = source
-        await reload(panesFrom: .genre, reason: .user)
+        await reload(panesFrom: 0, reason: .user)
     }
 
     private func changeSort(from old: BrowserSource?, to new: BrowserSource?) {
@@ -364,16 +391,24 @@ public final class BrowserModel {
     public func reveal(_ id: Int64) async -> Int? {
         if let row = trackIDs.firstIndex(of: id) { return row }
         showEverything()
-        await reload(panesFrom: .genre, reason: .user)
+        await reload(panesFrom: 0, reason: .user)
         return trackIDs.firstIndex(of: id)
     }
 
     /// Shows the whole library narrowed to one genre, artist or album, as the palette chooses
-    /// one: the other panes are All and the search is cleared.
-    public func showOnly(_ pane: Pane, id: Int64) async {
+    /// one: the other columns are All and the search is cleared. False, changing nothing, when
+    /// no column shows that kind of entry.
+    public func showOnly(_ pane: Pane, id: Int64) async -> Bool {
+        guard let grouping = shownGrouping(pane) else { return false }
         showEverything()
-        narrow(&pending, pane, to: id)
-        await reload(panesFrom: .genre, reason: .user)
+        pending.selections[grouping] = .id(id)
+        await reload(panesFrom: 0, reason: .user)
+        return true
+    }
+
+    /// The grouping of the column that shows `pane`'s entries, if one does.
+    private func shownGrouping(_ pane: Pane) -> BrowserGrouping? {
+        pendingColumns.first { pane.groupings.contains($0) }
     }
 
     /// Shows the whole library, as `showAll` does, and returns the row of the first track it
@@ -382,7 +417,7 @@ public final class BrowserModel {
     func showFirstTrack(of pane: Pane, id: Int64) async throws -> Int? {
         if pending != everything {
             showEverything()
-            await reload(panesFrom: .genre, reason: .user)
+            await reload(panesFrom: 0, reason: .user)
         }
         var entry = everything
         narrow(&entry, pane, to: id)
@@ -409,7 +444,7 @@ public final class BrowserModel {
             showEverything()
             narrow(&pending, pane, to: entry.id)
         }
-        await reload(panesFrom: .genre, reason: .user)
+        await reload(panesFrom: 0, reason: .user)
         guard !trackIDs.isEmpty, let request = try await playRequest(selected: [], clicked: 0)
         else { throw PlayQueryError.nothingMatches(query) }
         return request
@@ -422,12 +457,10 @@ public final class BrowserModel {
         pending = everything
     }
 
+    /// Narrows `filter` to one entry of `pane`, in the column that shows that kind, or else
+    /// in none.
     private func narrow(_ filter: inout TrackFilter, _ pane: Pane, to id: Int64) {
-        switch pane {
-        case .genre: filter.genre = id
-        case .artist: filter.artist = id
-        case .album: filter.album = id
-        }
+        filter.selections[shownGrouping(pane) ?? pane.groupings[0]] = .id(id)
     }
 
     /// Every genre, artist and album in the library, for the palette.
@@ -483,7 +516,7 @@ public final class BrowserModel {
     /// Runs every query again after the library changed, keeping each selection that's still
     /// there.
     func refresh() async {
-        await reload(panesFrom: .genre, reason: .libraryChanged)
+        await reload(panesFrom: 0, reason: .libraryChanged)
     }
 
     /// The queue a double-click plays, as file URLs, and where in it to start. Rows whose track
@@ -548,7 +581,7 @@ public final class BrowserModel {
     /// Runs the queries for the pending filter and sort, reloading the panes from the leftmost
     /// one any pending change needs, and applies the results unless a newer change started.
     private func reload(
-        panesFrom pane: Pane?, saved: BrowserState? = nil, reason: BrowserChange.Reason
+        panesFrom pane: Int?, saved: BrowserState? = nil, reason: BrowserChange.Reason
     ) async {
         generation += 1
         let mine = generation
@@ -557,24 +590,22 @@ public final class BrowserModel {
         let first = pendingPanes
         let saved = pendingSaved
         let sort = pendingSort
+        let columns = pendingColumns
         var next = pending
-        var genres = self.genres
-        var artists = self.artists
-        var albums = self.albums
+        var entries = self.entries
         do {
             // The timeline lists plays, which its own model pages through.
             let tracks = next.source != .timeline
-            if first == .genre {
-                genres = tracks ? try await reader.genres(next) : []
-                next.genre = resolve(next.genre, saved?.genre, in: genres, "genre")
-            }
-            if let first, first <= .artist {
-                artists = tracks ? try await reader.artists(next) : []
-                next.artist = resolve(next.artist, saved?.artist, in: artists, "artist")
-            }
-            if first != nil {
-                albums = tracks ? try await reader.albums(next) : []
-                next.album = resolve(next.album, saved?.album, in: albums, "album")
+            for column in (first ?? BrowserColumn.count)..<BrowserColumn.count {
+                let grouping = columns[column]
+                // The selections of this column and those to its right don't narrow it.
+                entries[column] =
+                    tracks
+                    ? try await reader.columnEntries(
+                        grouping, next, ignoring: Set(columns[column...])) : []
+                next.selections[grouping] = resolve(
+                    next.selections[grouping], saved?.columns[column].selection,
+                    in: entries[column], grouping)
             }
             let ids =
                 tracks
@@ -597,10 +628,8 @@ public final class BrowserModel {
             ascending = sort.ascending
             pendingPanes = nil
             pendingSaved = nil
-            self.genres = genres
-            self.artists = artists
-            self.albums = albums
-            albumTitles = Library.albumTitles(albums)
+            self.columns = columns
+            self.entries = entries
             trackIDs = ids
             applied += 1
             changed(BrowserChange(reason: reason, panes: first != nil, previousIDs: previousIDs))
@@ -609,6 +638,7 @@ public final class BrowserModel {
             // What failed never showed, so the next change starts from what the views show.
             pending = filter
             pendingSort = (sortColumn, ascending)
+            pendingColumns = self.columns
             pendingPanes = nil
             pendingSaved = nil
             pendingVisit = .none
@@ -617,24 +647,23 @@ public final class BrowserModel {
         }
     }
 
-    /// The selection to keep in a pane that now lists `entries`: the saved name's entry when
-    /// loading, otherwise `id` if it's still listed, otherwise All.
+    /// The selection to keep in a column that now lists `entries`: the saved name's entry when
+    /// loading, otherwise `value` if it's still listed, otherwise All.
     private func resolve(
-        _ id: Int64?, _ savedName: String?, in entries: [BrowserEntry], _ pane: String
-    ) -> Int64? {
+        _ value: BrowserValue?, _ savedName: String?, in entries: [ColumnEntry],
+        _ grouping: BrowserGrouping
+    ) -> BrowserValue? {
         if let savedName {
-            guard let entry = entries.first(where: { $0.name == savedName }) else {
-                logger.notice("the saved \(pane) \"\(savedName)\" is gone; showing all")
+            guard let entry = entries.first(where: { $0.savedName == savedName }) else {
+                logger.notice(
+                    "the saved \(grouping.header.lowercased()) \"\(savedName)\" is gone; showing all"
+                )
                 return nil
             }
-            return entry.id
+            return entry.value
         }
-        guard let id, entries.contains(where: { $0.id == id }) else { return nil }
-        return id
-    }
-
-    private func name(_ id: Int64?, in entries: [BrowserEntry]) -> String? {
-        id.flatMap { id in entries.first { $0.id == id }?.name }
+        guard let value, entries.contains(where: { $0.value == value }) else { return nil }
+        return value
     }
 }
 
@@ -705,19 +734,15 @@ public struct BrowserChange: Equatable, Sendable {
     var previousIDs: [Int64]
 }
 
-/// The selections the window saves: the sidebar's source, and each pane's entry by name, since
-/// IDs change when the index is rebuilt. Nil is the whole library, or All.
+/// What the window saves of the browser: the sidebar's source, nil for the whole library, and
+/// the columns with their selections.
 public struct BrowserState: Equatable, Sendable {
     public var source: BrowserSource?
-    public var genre: String?
-    public var artist: String?
-    public var album: String?
+    public var columns: [BrowserColumn]
 
-    public init(source: BrowserSource?, genre: String?, artist: String?, album: String?) {
+    public init(source: BrowserSource?, columns: [BrowserColumn] = BrowserColumn.defaults) {
         self.source = source
-        self.genre = genre
-        self.artist = artist
-        self.album = album
+        self.columns = columns
     }
 }
 

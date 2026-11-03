@@ -26,7 +26,7 @@ private func browserWithPlaylists() async throws -> (
         contentRect: NSRect(x: 0, y: 0, width: 200, height: 400), styleMask: [.titled],
         backing: .buffered, defer: false)
     window.contentView = sidebar.view
-    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await browser.load(BrowserState(source: nil))
     window.layoutIfNeeded()
     return (
         browser, sidebar, window, try index.playlist(manual), try index.playlist(smart)

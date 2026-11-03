@@ -72,7 +72,7 @@ private func removalBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64]) 
         contentRect: NSRect(x: 0, y: 0, width: 900, height: 600), styleMask: [.titled],
         backing: .buffered, defer: false)
     window.contentView = NSStackView(views: [browser.sidebar.view, browser.content.view])
-    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await browser.load(BrowserState(source: nil))
     try await waitFor("the tracks") { browser.rowID(at: 0) != nil }
     browser.focusTracks()
     browser.selectAllTracks()

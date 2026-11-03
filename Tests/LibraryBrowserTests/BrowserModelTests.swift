@@ -1,15 +1,15 @@
+import AppKit
 import Foundation
-import Library
 import SQLite
 import Settings
 import Testing
 
+@testable import Library
 @testable import LibraryBrowser
 
 @MainActor
 private func loadedModel(
-    _ saved: BrowserState = BrowserState(
-        source: nil, genre: nil, artist: nil, album: nil)
+    _ saved: BrowserState = BrowserState(source: nil)
 ) async throws -> (BrowserModel, LibraryIndex) {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
@@ -146,8 +146,7 @@ private func loadedModel(
     let artist = try #require(first.artists.first)
     await first.select(.artist, id: artist.id)
     let saved = first.state
-    #expect(saved.genre == genre.name)
-    #expect(saved.artist == artist.name)
+    #expect(saved.columns.map(\.selection) == [genre.name, artist.name, nil])
 
     let (restored, _) = try await loadedModel(saved)
     #expect(restored.filter.genre == genre.id)
@@ -155,7 +154,13 @@ private func loadedModel(
     #expect(restored.trackIDs == first.trackIDs)
 
     let (gone, index) = try await loadedModel(
-        BrowserState(source: nil, genre: "No Such Genre", artist: nil, album: "Nor Album"))
+        BrowserState(
+            source: nil,
+            columns: [
+                BrowserColumn(grouping: .genres, selection: "No Such Genre"),
+                BrowserColumn(grouping: .artists, selection: nil),
+                BrowserColumn(grouping: .albums, selection: "Nor Album"),
+            ]))
     #expect(gone.filter.genre == nil)
     #expect(gone.filter.album == nil)
     #expect(gone.trackIDs.count == (try index.trackCount()))
@@ -215,7 +220,7 @@ private func loadedModel(
         groupByAlbumArtist: false)
     var failures: [String] = []
     model.failed = { failures.append($0) }
-    await model.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await model.load(BrowserState(source: nil))
     #expect(failures.isEmpty)
     let breaker = try SQLite.Database(at: databaseURL)
     try breaker.execute("DROP TABLE tracks")
@@ -242,7 +247,7 @@ private func loadedModel(
             == (try index.trackIDs(
                 TrackFilter(artist: kept.id, groupByAlbumArtist: true), sortedBy: .artist)))
     // Showing the whole library, as the palette does, keeps the grouping.
-    await model.showOnly(.genre, id: try #require(model.genres.first).id)
+    #expect(await model.showOnly(.genre, id: try #require(model.genres.first).id))
     #expect(model.filter.groupByAlbumArtist)
 }
 
@@ -326,4 +331,108 @@ private func loadedModel(
         try await BrowserModel.request(ids: [a, b, a], first: 0, reader: reader))
     #expect(request.first == 0)
     #expect(request.urls.count == 3)
+}
+
+@Test func everyGroupingsEntriesEachSelectTheirOwnTracks() throws {
+    let index = try LibraryIndex(at: try browserLibrary.get().databaseURL)
+    let all = try index.trackIDs(sortedBy: .title)
+    var listed: [BrowserGrouping] = []
+    for grouping in BrowserGrouping.allCases {
+        let entries = try index.columnEntries(grouping, TrackFilter(), ignoring: [])
+        #expect(Set(entries.map(\.value)).count == entries.count, "\(grouping)")
+        guard let entry = entries.last else { continue }
+        listed.append(grouping)
+        var filter = TrackFilter()
+        filter.selections[grouping] = entry.value
+        let tracks = try index.trackIDs(filter, sortedBy: .title)
+        #expect(!tracks.isEmpty && tracks.count < all.count || entries.count == 1, "\(grouping)")
+        #expect(Set(tracks).isSubset(of: all), "\(grouping)")
+        // Narrowed by its own selection, a column lists just that entry.
+        let narrowed = try index.columnEntries(grouping, filter, ignoring: [])
+        #expect(narrowed.map(\.value) == [entry.value], "\(grouping)")
+    }
+    // The fixture has no composers, publishers and the like; these it has.
+    for grouping in [
+        BrowserGrouping.artists, .albumArtists, .albums, .albumsByYear, .years, .genres,
+        .audioQuality, .channels, .fileTypes, .fileNames, .folders, .ratings,
+    ] {
+        #expect(listed.contains(grouping), "\(grouping)")
+    }
+}
+
+@Test func valueEntriesReadAsTheColumnShowsThem() {
+    #expect(BrowserGrouping.ratings.displayName("0") == "Unrated")
+    #expect(BrowserGrouping.ratings.displayName("3") == "★★★")
+    #expect(BrowserGrouping.channels.displayName("2") == "Stereo")
+    #expect(BrowserGrouping.channels.displayName("6") == "6 Channels")
+    #expect(BrowserGrouping.years.displayName("1999") == "1999")
+    #expect(BrowserGrouping.years.allTitle(1) == "All (1 Year)")
+    #expect(BrowserGrouping.genres.allTitle(12) == "All (12 Genres)")
+}
+
+@MainActor @Test func aColumnsGroupingChangesTradesPlacesAndIsSaved() async throws {
+    let (model, index) = try await loadedModel()
+    let genre = try #require(
+        try model.genres.first { genre in
+            try !index.columnEntries(.years, TrackFilter(genre: genre.id), ignoring: []).isEmpty
+        })
+    await model.select(.genre, id: genre.id)
+    // Years in the third column, at All; the Albums column's selection goes with it.
+    await model.setGrouping(.years, ofColumn: 2)
+    #expect(model.columns == [.genres, .artists, .years])
+    #expect(model.filter.genre == genre.id)
+    let years = try index.columnEntries(
+        .years, TrackFilter(genre: genre.id), ignoring: [.years])
+    #expect(model.entries[2] == years)
+    let year = try #require(years.last)
+    await model.select(column: 2, year.value)
+    #expect(model.state.columns.map(\.grouping) == [.genres, .artists, .years])
+    #expect(model.state.columns[2].selection == year.savedName)
+
+    // A grouping another column shows trades places with this one's, both at All.
+    await model.setGrouping(.genres, ofColumn: 1)
+    #expect(model.columns == [.artists, .genres, .years])
+    #expect(model.filter.genre == nil)
+    #expect(model.filter.selections[.years] == year.value)
+
+    // Saved and loaded again, the columns and the year come back.
+    let (restored, _) = try await loadedModel(model.state)
+    #expect(restored.columns == [.artists, .genres, .years])
+    #expect(restored.filter.selections[.years] == year.value)
+    #expect(restored.trackIDs == model.trackIDs)
+}
+
+@MainActor @Test func goingToAnEntryNoColumnShowsChangesNothing() async throws {
+    let (model, _) = try await loadedModel()
+    let genre = try #require(model.genres.first)
+    await model.setGrouping(.composers, ofColumn: 0)
+    let shown = model.trackIDs
+    #expect(await !model.showOnly(.genre, id: genre.id))
+    #expect(model.trackIDs == shown)
+    #expect(model.filter.selections.isEmpty)
+}
+
+@MainActor @Test func aColumnsHeaderMenuPicksWhatItGroupsBy() async throws {
+    let (model, _) = try await loadedModel()
+    var chosen: [(BrowserGrouping, Int)] = []
+    let panes = PanesController(
+        model: model, select: { _, _ in }, setGrouping: { chosen.append(($0, $1)) },
+        keyCommand: { _ in .unbound }, focusPane: { _ in })
+    _ = panes.view
+    #expect(panes.tables.count == BrowserColumn.count)
+    #expect(panes.tables.allSatisfy { $0.headerView?.menu != nil })
+    let menu = NSMenu()
+    panes.fill(menu, column: 1)
+    #expect(menu.items.map(\.title) == BrowserGrouping.allCases.map(\.title))
+    #expect(menu.items.filter { $0.state == .on }.map(\.title) == ["Artists"])
+    let years = try #require(menu.items.firstIndex { $0.title == "Years" })
+    menu.performActionForItem(at: years)
+    #expect(chosen.map(\.0) == [.years])
+    #expect(chosen.map(\.1) == [1])
+
+    // The header follows the model.
+    await model.setGrouping(.years, ofColumn: 1)
+    panes.reload()
+    #expect(panes.tables[1].tableColumns.first?.title == "Year")
+    #expect(panes.tables[1].numberOfRows == model.entries[1].count + 1)
 }

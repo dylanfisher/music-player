@@ -4,6 +4,7 @@ import Testing
 
 @testable import Fixtures
 @testable import Library
+@testable import LibraryBrowser
 
 /// A small fixture library scanned into a database of its own, once per test run. Tests only
 /// read it.
@@ -45,5 +46,34 @@ func waitFor(_ what: String, _ condition: () async throws -> Bool) async throws 
             return
         }
         try await Task.sleep(nanoseconds: 10_000_000)
+    }
+}
+
+/// The default columns' entries and selections by kind, as the tests read them.
+@MainActor
+extension BrowserModel {
+    var genres: [BrowserEntry] { entries(.genres) }
+    var artists: [BrowserEntry] { entries(.artists) }
+    var albums: [BrowserEntry] { entries(.albums) }
+
+    /// The entries of the column grouping by `grouping` as the library lists them, or none when
+    /// no column does.
+    private func entries(_ grouping: BrowserGrouping) -> [BrowserEntry] {
+        guard let column = columns.firstIndex(of: grouping) else { return [] }
+        return entries[column].map { entry in
+            guard case .id(let id) = entry.value else {
+                preconditionFailure("\(grouping) lists IDs")
+            }
+            return BrowserEntry(id: id, name: entry.savedName)
+        }
+    }
+
+    /// Selects the entry `id` of `pane`'s kind in the column that shows that kind.
+    func select(_ pane: Pane, id: Int64?) async {
+        guard let column = columns.firstIndex(where: pane.groupings.contains) else {
+            Issue.record("no column shows \(pane)")
+            return
+        }
+        await select(column: column, id.map(BrowserValue.id))
     }
 }

@@ -34,9 +34,7 @@ struct WindowSettings {
         signalPathVisible = state[\.signalPathVisible]
         queueWidth = state[\.queueWidth]
         trackTable = state[\.trackTable]
-        browser = BrowserState(
-            source: state[\.source], genre: state[\.selectedGenre],
-            artist: state[\.selectedArtist], album: state[\.selectedAlbum])
+        browser = BrowserState(source: state[\.source], columns: state[\.browserColumns])
         groupByAlbumArtist = settings[\.groupByAlbumArtist]
         tableAppearance = TableAppearance(settings)
         statusBar = StatusBarLayout(settings)

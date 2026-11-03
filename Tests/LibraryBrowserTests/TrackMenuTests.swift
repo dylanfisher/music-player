@@ -15,7 +15,7 @@ private func browser(selecting selected: IndexSet) async throws -> (LibraryBrows
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL), index: index,
         layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false)
-    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    await browser.load(BrowserState(source: nil))
     browser.table.table.selectRowIndexes(selected, byExtendingSelection: false)
     return (browser, index)
 }

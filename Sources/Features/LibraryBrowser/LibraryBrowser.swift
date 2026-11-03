@@ -8,7 +8,7 @@ import Settings
 
 private let logger = moduleLogger()
 
-/// The library half of the window: the sidebar, the genre, artist and album panes over the track
+/// The library half of the window: the sidebar, the browser's three columns over the track
 /// table, the search field, and the status line. The app places the views and handles what they
 /// report; the logic is in `BrowserModel`.
 @MainActor
@@ -190,7 +190,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound },
             failed: { message in owner?.show(failure: message) })
         panes = PanesController(
-            model: model, select: { pane, id in Task { await model.select(pane, id: id) } },
+            model: model,
+            select: { column, value in Task { await model.select(column: column, value) } },
+            setGrouping: { grouping, column in
+                Task { await model.setGrouping(grouping, ofColumn: column) }
+            },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound },
             focusPane: { forward in owner?.focusPane(forward: forward) })
         sidebarController = SidebarController(
@@ -859,7 +863,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// The list that has the keys.
     private enum List: Equatable {
         case tracks
-        case pane(BrowserModel.Pane)
+        /// A browser column, by its place.
+        case pane(Int)
         case timeline
     }
 
@@ -867,23 +872,22 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         let responder = table.table.window?.firstResponder
         if responder === table.table { return .tracks }
         if responder === timeline.table { return .timeline }
-        return panes.tables.first { $0.value === responder }.map { .pane($0.key) }
+        return panes.tables.firstIndex { $0 === responder }.map { .pane($0) }
     }
 
     /// The browser's lists in the order Tab moves through them: the sidebar, the panes, the
     /// track table.
     public var focusAreas: [NSView] {
         if showsTimeline { return [sidebarController.outline, timeline.table] }
-        let shownPanes = isBrowserVisible ? BrowserModel.Pane.allCases : []
-        return [sidebarController.outline] + shownPanes.compactMap { panes.tables[$0] }
-            + [table.table]
+        let shownPanes = isBrowserVisible ? panes.tables : []
+        return [sidebarController.outline] + shownPanes + [table.table]
     }
 
     /// Moves the selection of the list with the keys; false when none of them has the keys.
     public func moveSelection(_ move: RowMove, extending: Bool) -> Bool {
         switch focusedList {
         case .tracks: table.move(move, extending: extending)
-        case .pane(let pane): panes.move(move, in: pane)
+        case .pane(let column): panes.move(move, in: column)
         case .timeline: timeline.move(move, extending: extending)
         case nil: return false
         }
@@ -897,12 +901,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             focusTracks()
             return
         }
-        let order: [List] = BrowserModel.Pane.allCases.map { .pane($0) } + [.tracks]
+        let order: [List] = panes.tables.indices.map { .pane($0) } + [.tracks]
         let index = focusedList.flatMap { order.firstIndex(of: $0) } ?? (order.count - 1)
         let next = order[(index + (forward ? 1 : order.count - 1)) % order.count]
         switch next {
         case .tracks, .timeline: focusTracks()
-        case .pane(let pane): table.table.window?.makeFirstResponder(panes.tables[pane])
+        case .pane(let column): table.table.window?.makeFirstResponder(panes.tables[column])
         }
     }
 
@@ -1017,7 +1021,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
         guard let entry else { return beep() }
         Task {
-            await showOnly(pane, id: entry)
+            // With no column showing that kind of entry, the track is shown in the library.
+            guard await showOnly(pane, id: entry) else { return await reveal(trackID: track) }
             if let row = model.trackIDs.firstIndex(of: track) { showRow(row) }
         }
     }
@@ -1326,7 +1331,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     public var isBrowserVisible: Bool { !panes.view.isHidden }
 
-    /// Hides or shows the genre, artist and album panes; they come back at their saved height.
+    /// Hides or shows the browser's columns; they come back at their saved height.
     /// Hiding them selects All in each first, since a hidden selection would narrow the table
     /// with nothing on screen saying why.
     public func toggleBrowser() {
@@ -1474,12 +1479,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
-    /// Shows the library narrowed to one entry, as the palette chooses it.
-    public func showOnly(_ pane: BrowserModel.Pane, id: Int64) async {
+    /// Shows the library narrowed to one entry, as the palette chooses it. False, changing
+    /// nothing, when no browser column shows that kind of entry.
+    @discardableResult
+    public func showOnly(_ pane: BrowserModel.Pane, id: Int64) async -> Bool {
+        guard await model.showOnly(pane, id: id) else { return false }
         searchField.stringValue = ""
-        await model.showOnly(pane, id: id)
         showSource()
         focusTracks()
+        return true
     }
 
     /// Shows the whole library with the first track of one genre, artist or album selected,

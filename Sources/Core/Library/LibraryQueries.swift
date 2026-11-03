@@ -79,8 +79,10 @@ extension LibraryIndex {
         _ columns: String, _ filter: TrackFilter, _ column: TrackColumn, _ ascending: Bool,
         _ read: (Row) throws -> T
     ) throws -> [T] {
+        let selected = BrowserGrouping.allCases.filter { filter.selections[$0] != nil }
         let (conditions, values) = try trackConditions(
-            filter, panes: [.source, .genre, .artist, .album, .search], playsJoined: true)
+            filter, panes: [.source] + selected.map(FilterPart.selection) + [.search],
+            playsJoined: true)
         // Playlist order is the shown playlist's; anywhere else it's null, which leaves the
         // album order below.
         var entries = ""
@@ -127,27 +129,63 @@ extension LibraryIndex {
 
     /// The genres of the tracks in `filter`'s source.
     public func genres(_ filter: TrackFilter = TrackFilter()) throws -> [BrowserEntry] {
-        try pane("SELECT id, name FROM genres", "genre_id", "sort_name", filter, [.source])
+        try entries(.genres, filter, [.source])
     }
 
     /// The artists of the tracks in `filter`'s source and genre: their album artists when it
     /// groups by album artist.
     public func artists(_ filter: TrackFilter = TrackFilter()) throws -> [BrowserEntry] {
-        try pane(
-            "SELECT id, name FROM artists", artistColumn(filter), "sort_name", filter,
-            [.source, .genre])
+        try entries(.artists, filter, [.source, .selection(.genres)])
     }
 
     /// The albums of the tracks in `filter`'s source, genre and artist.
     public func albums(_ filter: TrackFilter = TrackFilter()) throws -> [BrowserEntry] {
-        try pane(
-            """
-            SELECT id, title, (SELECT name FROM artists WHERE id = albums.artist_id),
-                albums.artist_id IS NULL AND EXISTS (SELECT 1 FROM tracks
-                    WHERE album_id = albums.id AND compilation = 1)
-            FROM albums
-            """,
-            "album_id", "sort_title", filter, [.source, .genre, .artist], row: albumEntry)
+        try entries(.albums, filter, [.source, .selection(.genres), .selection(.artists)])
+    }
+
+    /// The entries of a browser column grouping by `grouping`, from the tracks in `filter`'s
+    /// source and its selections but those of `ignoring`: the column's own and the ones to its
+    /// right.
+    public func columnEntries(
+        _ grouping: BrowserGrouping, _ filter: TrackFilter, ignoring: Set<BrowserGrouping>
+    ) throws -> [ColumnEntry] {
+        let panes =
+            [FilterPart.source]
+            + BrowserGrouping.allCases.filter {
+                filter.selections[$0] != nil && !ignoring.contains($0)
+            }.map(FilterPart.selection)
+        let sql = grouping.sql(filter)
+        switch sql {
+        case .table(_, _, _, let albums):
+            let entries = try self.entries(grouping, filter, panes)
+            let names = albums ? albumTitles(entries) : entries.map(\.name)
+            return zip(entries, names).map { entry, name in
+                ColumnEntry(value: .id(entry.id), name: name, savedName: entry.name)
+            }
+        case .value(let value, let order, _):
+            let (conditions, values) = try trackConditions(filter, panes: panes)
+            let collate = sql.collation
+            let statement = try self.statement(
+                """
+                SELECT v FROM (SELECT \(value) AS v, \(order) AS o FROM tracks t \(trackJoins)
+                \(whereClause(conditions))) WHERE v IS NOT NULL AND v <> ''
+                GROUP BY v\(collate) ORDER BY min(o)\(collate), v
+                """)
+            return try statement.map(binding: values) { row in
+                let text = try row.text(0)
+                return ColumnEntry(
+                    value: .text(text), name: grouping.displayName(text), savedName: text)
+            }
+        }
+    }
+
+    /// The rows of a grouping read from a table, as `pane` lists them.
+    private func entries(
+        _ grouping: BrowserGrouping, _ filter: TrackFilter, _ panes: [FilterPart]
+    ) throws -> [BrowserEntry] {
+        guard case .table(let rows, let column, let order, let albums) = grouping.sql(filter)
+        else { preconditionFailure("\(grouping) isn't read from a table") }
+        return try pane(rows, column, order, filter, panes, row: albums ? albumEntry : entry)
     }
 
     /// The Artist and Album pane entries that list track `id`, by `filter`'s grouping; nil for
@@ -237,10 +275,9 @@ extension LibraryIndex {
         _ panes: [FilterPart], row read: (Row) throws -> BrowserEntry = entry
     ) throws -> [BrowserEntry] {
         let (conditions, values) = try trackConditions(filter, panes: panes)
-        // Joined to files only when a source needs it, since the join costs a lookup per track.
-        let files = filter.source == nil ? "" : " JOIN files f ON f.id = t.file_id"
+        // SQLite leaves out the joins no condition uses.
         let sql =
-            "\(rowSQL) WHERE id IN (SELECT t.\(column) FROM tracks t\(files)"
+            "\(rowSQL) WHERE id IN (SELECT t.\(column) FROM tracks t \(trackJoins)"
             + "\(whereClause(conditions).isEmpty ? "" : " " + whereClause(conditions)))"
             + " ORDER BY \(order), id"
         return try statement(sql).map(binding: values, row: read)
@@ -256,7 +293,9 @@ func failureIssue(_ row: Row) throws -> FileIssue {
 
 /// The parts of a `TrackFilter`, so each query names the ones it applies.
 private enum FilterPart {
-    case source, genre, artist, album, search
+    case source
+    case selection(BrowserGrouping)
+    case search
 }
 
 extension LibraryIndex {
@@ -276,18 +315,10 @@ extension LibraryIndex {
                     source, playsJoined: playsJoined)
                 conditions.append(condition)
                 values += sourceValues
-            case .genre:
-                guard let genre = filter.genre else { continue }
-                conditions.append("t.genre_id = ?")
-                values.append(genre)
-            case .artist:
-                guard let artist = filter.artist else { continue }
-                conditions.append("t.\(artistColumn(filter)) = ?")
-                values.append(artist)
-            case .album:
-                guard let album = filter.album else { continue }
-                conditions.append("t.album_id = ?")
-                values.append(album)
+            case .selection(let grouping):
+                guard let value = filter.selections[grouping] else { continue }
+                conditions.append(grouping.condition(filter))
+                values.append(value.sqlValue)
             case .search:
                 guard let search = ftsQuery(filter.search) else { continue }
                 conditions.append(
@@ -333,11 +364,6 @@ extension LibraryIndex {
             throw LibraryError.playsNotTracks
         }
     }
-}
-
-/// The column of tracks the Artist pane lists and its selection matches.
-private func artistColumn(_ filter: TrackFilter) -> String {
-    filter.groupByAlbumArtist ? "group_artist_id" : "artist_id"
 }
 
 private func whereClause(_ conditions: [String]) -> String {
