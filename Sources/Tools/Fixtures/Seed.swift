@@ -4,6 +4,7 @@ import Foundation
 enum SeedKind: String, CaseIterable, Sendable {
     case flac16, flac24x96, flac24x192, alac16, alac24x96, aac, wav16, wav24x96, aiff16
     case aiff24Mono, mp3
+    case dsf64, dsf128, dsf256, dff64, dff128, dff256
 
     var container: FixtureFile.Container {
         switch self {
@@ -12,6 +13,8 @@ enum SeedKind: String, CaseIterable, Sendable {
         case .wav16, .wav24x96: .wav
         case .aiff16, .aiff24Mono: .aiff
         case .mp3: .mp3
+        case .dsf64, .dsf128, .dsf256: .dsf
+        case .dff64, .dff128, .dff256: .dff
         }
     }
 
@@ -22,6 +25,8 @@ enum SeedKind: String, CaseIterable, Sendable {
         case .mp3: "mp3"
         case .wav: "wav"
         case .aiff: "aiff"
+        case .dsf: "dsf"
+        case .dff: "dff"
         }
     }
 
@@ -40,14 +45,22 @@ enum SeedKind: String, CaseIterable, Sendable {
             case .aiff16: (.pcm, 44_100, 16, 2)
             case .aiff24Mono: (.pcm, 48_000, 24, 1)
             case .mp3: (.mp3, 44_100, nil, 2)
+            case .dsf64, .dff64: (.dsd, 2_822_400, 1, 2)
+            case .dsf128, .dff128: (.dsd, 5_644_800, 1, 2)
+            case .dsf256, .dff256: (.dsd, 11_289_600, 1, 2)
             }
-        let length = self == .mp3 ? mp3FrameCount * mp3SamplesPerFrame : rate / 10
+        // 14,112 bytes a channel of DSD at any rate (40 ms of DSD64), so the full library's few
+        // hundred cost little to write and scan, and the audio ends past the reader's first 16 KiB
+        // read, as a real file's does.
+        let length =
+            self == .mp3
+            ? mp3FrameCount * mp3SamplesPerFrame : codec == .dsd ? dsdSeedSamples : rate / 10
         return AudioProperties(
             codec: codec, sampleRateHz: rate, bitsPerSample: bits, channels: channels,
             lengthFrames: length)
     }
 
-    /// Nil for MP3, which macOS can't encode.
+    /// Nil for MP3 and DSD, which macOS can't encode.
     var afconvertArguments: [String]? {
         switch self {
         // FLAC writes no audio when the file is shorter than one packet, and its default packet
@@ -59,7 +72,7 @@ enum SeedKind: String, CaseIterable, Sendable {
         case .wav24x96: ["--no-filler", "-f", "WAVE", "-d", "LEI24"]
         case .aiff16: ["--no-filler", "-f", "AIFF", "-d", "BEI16"]
         case .aiff24Mono: ["--no-filler", "-f", "AIFF", "-d", "BEI24"]
-        case .mp3: nil
+        case .mp3, .dsf64, .dsf128, .dsf256, .dff64, .dff128, .dff256: nil
         }
     }
 }
@@ -72,6 +85,8 @@ enum Seed: Sendable {
     /// Every chunk except tags, each with its header and pad byte.
     case wav(chunks: Data)
     case aiff(chunks: Data)
+    /// Each channel's DSD bytes, oldest bit highest.
+    case dsd(channels: [Data])
 }
 
 /// Encodes every seed with afconvert in `directory` and splits it into parts.
@@ -88,7 +103,11 @@ func makeSeeds(in directory: URL) throws -> [SeedKind: Seed] {
 private func makeSeed(_ kind: SeedKind, in directory: URL) throws -> Seed {
     let audio = kind.audio
     guard let arguments = kind.afconvertArguments else {
-        return .mp3(frames: silentMP3Frames())
+        guard audio.codec == .dsd else { return .mp3(frames: silentMP3Frames()) }
+        return .dsd(
+            channels: (0..<audio.channels).map {
+                dsdTone(samples: audio.lengthFrames, rateHz: audio.sampleRateHz, channel: $0)
+            })
     }
     let source = directory.appendingPathComponent("\(kind.rawValue)-source.wav")
     let encoded = directory.appendingPathComponent("\(kind.rawValue).\(kind.fileExtension)")
@@ -104,7 +123,7 @@ private func makeSeed(_ kind: SeedKind, in directory: URL) throws -> Seed {
     case .aiff:
         return .aiff(
             chunks: try riffChunks(data, form: "FORM", type: "AIFF", keep: ["COMM", "SSND"]))
-    case .mp3: preconditionFailure("MP3 seeds are built without afconvert")
+    case .mp3, .dsf, .dff: preconditionFailure("MP3 and DSD seeds are built without afconvert")
     }
 }
 
@@ -154,6 +173,7 @@ private func toneWAV(_ audio: AudioProperties) -> Data {
 }
 
 let mp3FrameCount = 10
+let dsdSeedSamples = 14_112 * 8
 let mp3SamplesPerFrame = 1152
 
 /// MPEG-1 Layer III frames of digital silence: a header, then side info and main data that are

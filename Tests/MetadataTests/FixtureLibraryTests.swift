@@ -117,5 +117,10 @@ private func expectedFailure(_ malformation: Malformation) -> MetadataError.Kind
         #expect(Int64(parsed.lengthFrames) == frames, "\(file.path)")
         compared += 1
     }
-    #expect(compared >= manifest.files.count { $0.malformation == nil })
+    // AudioToolbox doesn't open DSD.
+    #expect(
+        compared
+            >= manifest.files.count {
+                $0.malformation == nil && $0.container != .dsf && $0.container != .dff
+            })
 }

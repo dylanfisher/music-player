@@ -33,6 +33,8 @@ struct FuzzTarget: Sendable {
         parser(.mp3, "ID3v1 and ID3v2 tags and MPEG audio frames"),
         parser(.wav, "RIFF chunks, INFO lists and ID3 chunks"),
         parser(.aiff, "AIFF and AIFF-C chunks and ID3 chunks"),
+        parser(.dsf, "DSF headers and the ID3 tag at the metadata pointer"),
+        parser(.dff, "DSDIFF chunks, PROP properties and ID3 chunks"),
         vorbis, config, state, journal, rules, playlistFile, syncLog, swinsian, swinsianPredicate,
         swinsianColumns, iTunesXML, tagWriter, receiverLine, deviceDescription, soapReply,
         avTransportReply, serviceDescription, httpRequest, didlLite, chunkedBody,

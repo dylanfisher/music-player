@@ -70,9 +70,12 @@ format.
 its `x-` form, `audio/dsd` and `audio/x-dsd` that the renderer's sink lists; the Denon lists all
 six. A renderer that lists none refuses it the way it refuses any other container.
 
-**Fixtures.** The generator writes DSF and DSDIFF at DSD64, 128 and 256: 20 ms of a 1-bit sine
-from a first-order modulator, DSF albums untagged three times in ten. They're short so the bench
-library keeps its generator and scan budgets.
+**Fixtures.** The generator writes DSF and DSDIFF at DSD64, 128 and 256: 14,112 bytes a channel
+(40 ms of DSD64) of a 1-bit sine from a first-order modulator, with ID3 tags of the versions
+MP3s get, and DSF albums untagged three times in ten. Every 12th album is DSD, the six kinds in
+turn, so every other album's random picks stay as they were. They're short so the bench library keeps
+its generator and scan budgets, and long enough that the audio ends past the reader's first
+16 KiB read, as a real file's does.
 
 ## Alternatives considered
 

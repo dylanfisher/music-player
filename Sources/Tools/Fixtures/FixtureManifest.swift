@@ -11,8 +11,8 @@ public struct FixtureManifest: Codable, Equatable, Sendable {
 }
 
 public struct FixtureFile: Codable, Equatable, Sendable {
-    public enum Container: String, Codable, Sendable { case flac, mp4, mp3, wav, aiff }
-    enum Codec: String, Codable, Sendable { case flac, alac, aac, mp3, pcm }
+    public enum Container: String, Codable, Sendable { case flac, mp4, mp3, wav, aiff, dsf, dff }
+    enum Codec: String, Codable, Sendable { case flac, alac, aac, mp3, pcm, dsd }
     public enum TagFormat: String, Codable, Sendable {
         case vorbisComment, mp4, id3v22, id3v23, id3v24, riffInfo
     }

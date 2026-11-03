@@ -133,6 +133,17 @@ private struct Renderer: Sendable {
                 expected = id3Subset(tags, style.version)
             }
             data = riffForm("AIFF", chunks: all, .big)
+        case (.dsd(let channels), .id3(let style)):
+            let tag = file.tags.map { id3Tag($0, art: art, style: style) }
+            let rate = file.seed.audio.sampleRateHz
+            data =
+                file.seed.container == .dsf
+                ? dsfFile(rateHz: rate, channels: channels, tag: tag)
+                : dffFile(rateHz: rate, channels: channels, tag: tag)
+            if let tags = file.tags {
+                formats = [style.version.tagFormat]
+                expected = id3Subset(tags, style.version)
+            }
         case (.wav(let chunks), .wav(let info, let id3)):
             var all = chunks
             if let tags = file.tags {

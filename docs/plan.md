@@ -1078,9 +1078,9 @@ Implementation plan (ADR 0064):
    errors. `FileFormat` gains `.dsf` and `.dff`; `TrackAudio.Codec` gains `.dsd`. One label,
    `sampleRateText`, names a DSD rate DSD64, DSD128 or DSD256 and any other in kHz. The tag
    writer refuses both formats. Fuzz targets `dsf` and `dff`, threat model row 57.
-2. **Fixtures:** DSF and DFF writers, and six seeds (DSF and DFF at DSD64, 128 and 256) of 20 ms
-   of a 1-bit sine, DSF albums untagged more often than others, so the bench library stays
-   within the generator and scan budgets.
+2. **Fixtures:** DSF and DFF writers, and six seeds (DSF and DFF at DSD64, 128 and 256) of 14,112
+   bytes a channel of a 1-bit sine, DSF albums untagged more often than others, so the bench
+   library stays within the generator and scan budgets.
 3. **Library:** `.dsf` and `.dff` join `audioFileExtensions`, so a Swinsian miss in them now
    matches on the next import and through Locate…; the rate column, the now-playing line and
    `--play`'s list use the label. ADR 0059's text follows.

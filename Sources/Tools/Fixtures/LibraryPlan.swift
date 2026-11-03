@@ -15,7 +15,7 @@ struct PlannedFile: Sendable {
 enum TagLayout: Sendable {
     case vorbis(VorbisStyle)
     case mp4(genreAsIndex: Bool)
-    /// MP3 and AIFF.
+    /// MP3 and AIFF, DSF at its metadata pointer, and DSDIFF in an `ID3 ` chunk.
     case id3(ID3Style)
     /// A `LIST/INFO` chunk, an `id3 ` chunk, or both.
     case wav(info: Bool, id3: ID3Style?)
@@ -34,6 +34,9 @@ extension Malformation {
         }
     }
 }
+
+private let dsdSeeds: [SeedKind] = [.dsf64, .dsf128, .dsf256, .dff64, .dff128, .dff256]
+private let otherSeeds = SeedKind.allCases.filter { !dsdSeeds.contains($0) }
 
 /// Lays out `count` files as artists, albums and discs. The same count always gives the same
 /// plan, so a rerun can tell whether the files on disk are current.
@@ -61,10 +64,14 @@ func planLibrary(count: Int) -> [PlannedFile] {
                 (compilation ? "Compilations" : fileName(artist)) + "/\(fileName(album)) (\(year))"
             while usedDirectories.contains(directory) { directory += " +" }
             usedDirectories.insert(directory)
+            // Every 12th album is a DSD one, in turn, which keeps every other album's random
+            // picks as they were before DSD.
+            let index = albumDirectories.count
+            let dsdSeed = index % 12 == 0 ? dsdSeeds[index / 12 % dsdSeeds.count] : nil
             albumDirectories.append(directory)
             files += planAlbum(
                 album, in: directory, artist: compilation ? nil : artist, year: year,
-                trackArtists: artists, limit: validCount - files.count, &random)
+                trackArtists: artists, dsdSeed: dsdSeed, limit: validCount - files.count, &random)
         }
     }
 
@@ -101,7 +108,7 @@ private func brokenLayout(_ malformation: Malformation) -> TagLayout {
 /// A Various Artists album when `artist` is nil, with each track by one of `trackArtists`.
 private func planAlbum(
     _ album: String, in directory: String, artist: String?, year: Int, trackArtists: [String],
-    limit: Int, _ random: inout SplitMix64
+    dsdSeed: SeedKind?, limit: Int, _ random: inout SplitMix64
 ) -> [PlannedFile] {
     let month = Int.random(in: 1...12, using: &random)
     let day = Int.random(in: 1...28, using: &random)
@@ -112,15 +119,19 @@ private func planAlbum(
     let discFolders = discs > 1 && random.chance(0.5)
     let trackRange = random.pick(weighted: [(3...6, 15), (8...14, 70), (15...24, 15)])
     let tracksPerDisc = Int.random(in: trackRange, using: &random)
-    let albumSeed = random.pick(weighted: [
+    let pickedSeed = random.pick(weighted: [
         (SeedKind.flac16, 30), (.flac24x96, 8), (.flac24x192, 3), (.alac16, 8), (.alac24x96, 3),
         (.aac, 12), (.mp3, 22), (.wav16, 4), (.wav24x96, 2), (.aiff16, 4), (.aiff24Mono, 1),
     ])
-    let mixedFormats = random.chance(0.03)
+    let albumSeed = dsdSeed ?? pickedSeed
+    // Drawn for a DSD album too, so the draws after it stay where they were.
+    let mixed = random.chance(0.03)
+    let mixedFormats = dsdSeed == nil && mixed
     let art = random.chance(0.35) ? Int.random(in: 0..<3, using: &random) : nil
     let withTrackTotal = random.chance(0.75)
     let discNumberOnSingle = random.chance(0.2)
-    let untagged = random.chance(0.01)
+    // DSF files often come untagged, so the tag reader meets both kinds.
+    let untagged = random.chance(albumSeed.container == .dsf ? 0.3 : 0.01)
     let vorbis = VorbisStyle(
         lowercaseKeys: random.chance(0.1), combinedTrackNumber: random.chance(0.3),
         paddingBytes: random.pick([0, 1024, 4096]))
@@ -138,7 +149,7 @@ private func planAlbum(
     for disc in 1...discs {
         for track in 1...tracksPerDisc {
             guard files.count < limit else { return files }
-            let seed = mixedFormats ? random.pick(SeedKind.allCases) : albumSeed
+            let seed = mixedFormats ? random.pick(otherSeeds) : albumSeed
             let title = trackTitle(&random)
             let tags = FixtureTags(
                 title: title,
@@ -156,10 +167,10 @@ private func planAlbum(
                 switch seed.container {
                 case .flac: .vorbis(vorbis)
                 case .mp4: .mp4(genreAsIndex: genreAsIndex)
-                case .mp3, .aiff:
+                case .mp3, .aiff, .dsf, .dff:
                     .id3(
                         ID3Style(
-                            version: seed.container == .mp3 ? mp3Version : aiffVersion,
+                            version: seed.container == .aiff ? aiffVersion : mp3Version,
                             preferUTF16: preferUTF16, genreAsReference: genreAsReference,
                             paddingBytes: id3Padding))
                 case .wav:

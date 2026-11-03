@@ -110,8 +110,10 @@ private func audioToolboxTags(_ url: URL) throws -> (info: [String: Any], artByt
 @Test func coversEverySeedTagFormatAndMalformation() throws {
     let (_, manifest) = try library.get()
     let audio = Set(
-        manifest.files.compactMap(\.audio).map { "\($0.codec) \($0.sampleRateHz) \($0.channels)" })
-    #expect(audio.count == SeedKind.allCases.count - 1)  // the two 44.1 kHz PCM seeds look alike
+        manifest.files.compactMap { file in
+            file.audio.map { "\(file.container) \($0.codec) \($0.sampleRateHz) \($0.channels)" }
+        })
+    #expect(audio.count == SeedKind.allCases.count)
     #expect(
         Set(manifest.files.flatMap(\.tagFormats))
             == [.vorbisComment, .mp4, .id3v22, .id3v23, .id3v24, .riffInfo])
@@ -124,7 +126,8 @@ private func audioToolboxTags(_ url: URL) throws -> (info: [String: Any], artByt
 @Test func everyValidFileDecodesToItsSeedsAudio() throws {
     let (root, manifest) = try library.get()
     var audioBySeed: [String: [Int32]] = [:]
-    for file in manifest.files {
+    // AudioToolbox doesn't read DSD; the DoP reader's tests do.
+    for file in manifest.files where !isDSD(file) {
         guard let expected = file.audio else { continue }
         let decoded = try decode(root.appendingPathComponent(file.path))
         #expect(decoded.format.mSampleRate == Double(expected.sampleRateHz), "\(file.path)")
@@ -143,7 +146,7 @@ private func audioToolboxTags(_ url: URL) throws -> (info: [String: Any], artByt
 
 @Test func audioToolboxReadsTheTagsBack() throws {
     let (root, manifest) = try library.get()
-    for file in manifest.files where file.malformation == nil {
+    for file in manifest.files where file.malformation == nil && !isDSD(file) {
         let (info, artBytes) = try audioToolboxTags(root.appendingPathComponent(file.path))
         // AudioToolbox reads INFO text as Latin-1; the generator writes UTF-8, as most taggers do.
         let readsTitles =
@@ -217,3 +220,5 @@ private func audioToolboxTags(_ url: URL) throws -> (info: [String: Any], artByt
     data.appendSyncsafe(257)
     #expect(data == Data([0x7F, 0x7F, 0x7F, 0x7F, 0x00, 0x00, 0x02, 0x01]))
 }
+
+private func isDSD(_ file: FixtureFile) -> Bool { file.container == .dsf || file.container == .dff }
