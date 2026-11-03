@@ -36,9 +36,13 @@ plays and nothing else, since its rows are plays without one file each.
 leading edge and the problems button at the trailing edge, so they're centered while neither
 shows and move aside when one does rather than overlapping it.
 
-**Glass.** The bar sits on an `NSGlassEffectView` from macOS 26, square-cornered since it spans
-the window's width, and on an `NSVisualEffectView` with the title bar's material before that.
-The glass is what shows and hides with View ▸ Show Status Bar.
+**Material.** The bar sits on an `NSVisualEffectView` with the `headerView` material, the one
+AppKit names for table headers, on every macOS version, so it is the same translucent gray as
+the track table's header. It is as tall as that header, read from the header view rather than
+written down, so it follows the header's height on macOS 12 and 26 alike, and its text is the
+lists' 11-point font, centered top to bottom. The material view is what shows and hides with
+View ▸ Show Status Bar. (Phase 29.3 replaced the macOS 26 glass and the title bar's material,
+which the owner found didn't match the headers.)
 
 A failure shown in the bar stays until the next update of the bar, and a change of the
 selection is one now. Totals that arrive after a message showed are kept for the next update

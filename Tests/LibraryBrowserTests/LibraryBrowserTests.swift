@@ -245,18 +245,26 @@ import Testing
     #expect(reported == [.list, .selection, .listAndSelection])
 }
 
-@MainActor @Test func theStatusBarIsOnGlassAndHidesWithIt() throws {
+@MainActor @Test func theStatusBarMatchesTheTableHeaderAndHidesWithIt() throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
         index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
         browserHeight: 100, groupByAlbumArtist: false)
-    _ = browser.content.view
-    if #available(macOS 26, *) {
-        #expect(browser.statusArea is NSGlassEffectView)
-    } else {
-        #expect(browser.statusArea is NSVisualEffectView)
-    }
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = browser.content.view
+    window.layoutIfNeeded()
+    #expect((browser.statusArea as? NSVisualEffectView)?.material == .headerView)
+    let header = try #require(browser.table.table.headerView)
+    #expect(header.frame.height > 0)
+    #expect(browser.statusArea.frame.height == header.frame.height)
+    // The lists' font, centered top to bottom.
+    let label = browser.statusLabel
+    #expect(label.font == TextCell.font)
+    let middle = label.convert(label.bounds, to: browser.statusArea).midY
+    #expect(abs(middle - browser.statusArea.bounds.midY) <= 1)
     #expect(browser.statusArea.superview != nil)
     browser.toggleStatusBar()
     #expect(browser.statusArea.isHidden && !browser.isStatusBarVisible)

@@ -95,9 +95,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private let sidebarController: SidebarController
     private let split = NSSplitView()
     private let statusBar = NSStackView()
-    /// The status bar on its glass, which shows and hides with it.
-    private(set) lazy var statusArea = glassBackground(around: statusBar)
-    private let statusLabel = NSTextField(labelWithString: "")
+    /// The status bar on the table headers' material, which shows and hides with it.
+    private(set) lazy var statusArea = headerBackground(around: statusBar)
+    let statusLabel = NSTextField(labelWithString: "")
     private let scanIndicator = NSProgressIndicator()
     /// Whether the scan bar moves on its own, which only it does while the status bar shows.
     private(set) var scanIndicatorAnimates = false
@@ -241,10 +241,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         split.addArrangedSubview(table.view)
         split.setHoldingPriority(.defaultLow, forSubviewAt: 1)
 
-        // The window's normal text size, so the counts read at a glance, as Swinsian's do.
-        statusLabel.font = .systemFont(ofSize: NSFont.systemFontSize)
+        // The lists' font, so the bar reads as part of the tables, as Swinsian's does.
+        statusLabel.font = TextCell.font
         statusLabel.lineBreakMode = .byTruncatingTail
-        scanLabel.font = .systemFont(ofSize: NSFont.systemFontSize)
+        scanLabel.font = TextCell.font
         scanLabel.textColor = .secondaryLabelColor
         scanLabel.lineBreakMode = .byTruncatingTail
         scanIndicator.style = .bar
@@ -266,7 +266,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         bar.setViews([statusLabel], in: .center)
         bar.setViews([problemsButton], in: .trailing)
         bar.spacing = 10
-        bar.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
+        bar.alignment = .centerY
+        bar.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
+        problemsButton.font = TextCell.font
+        // As tall as the track table's header, read from it, so the bar matches the header
+        // on every macOS version.
+        let headerHeight = table.table.headerView?.frame.height ?? 0
+        statusArea.heightAnchor.constraint(equalToConstant: headerHeight).isActive = true
         for label in [statusLabel, scanLabel] {
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
@@ -1490,27 +1496,18 @@ private func problemsUnreadable(_ error: any Error) -> String {
 /// `content` on liquid glass from macOS 26, and on the title bar's material before it, filling
 /// the view returned.
 @MainActor
-private func glassBackground(around content: NSView) -> NSView {
-    let background: NSView
-    if #available(macOS 26, *) {
-        let glass = NSGlassEffectView()
-        // A bar across the window's width, so square like the window's edge.
-        glass.cornerRadius = 0
-        glass.contentView = content
-        background = glass
-    } else {
-        let material = NSVisualEffectView()
-        material.material = .titlebar
-        material.blendingMode = .withinWindow
-        material.addSubview(content)
-        background = material
-    }
+private func headerBackground(around content: NSView) -> NSView {
+    let material = NSVisualEffectView()
+    // The material AppKit gives a table's header, so the bar is the same translucent gray.
+    material.material = .headerView
+    material.blendingMode = .withinWindow
+    material.addSubview(content)
     content.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-        content.leadingAnchor.constraint(equalTo: background.leadingAnchor),
-        content.trailingAnchor.constraint(equalTo: background.trailingAnchor),
-        content.topAnchor.constraint(equalTo: background.topAnchor),
-        content.bottomAnchor.constraint(equalTo: background.bottomAnchor),
+        content.leadingAnchor.constraint(equalTo: material.leadingAnchor),
+        content.trailingAnchor.constraint(equalTo: material.trailingAnchor),
+        content.topAnchor.constraint(equalTo: material.topAnchor),
+        content.bottomAnchor.constraint(equalTo: material.bottomAnchor),
     ])
-    return background
+    return material
 }
