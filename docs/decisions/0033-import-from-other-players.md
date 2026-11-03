@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-01
 - **Status:** accepted
+- **Amended by:** [0056](0056-history-lists-recorded-plays.md): History leaves out imported
+  plays, which add no history rows.
 - **Amends:** [0018](0018-playlists-and-stats.md), [0022](0022-stable-track-identity-and-play-timeline.md),
   [0025](0025-threat-model.md), [0032](0032-playlist-files.md)
 

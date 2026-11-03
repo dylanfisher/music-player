@@ -77,14 +77,13 @@ import Testing
     #expect(try index.timeline(before: nil, limit: 1).map(\.playedSeconds) == [1234])
 }
 
-@Test func historyListsTracksPlayedFromTheirCountsNotTheLog() throws {
+@Test func historyLeavesOutATrackOnlySkipped() throws {
     let library = try TestLibrary()
     _ = try library.scan()
     let index = try library.index()
     let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
     try index.recordSkip(rows[0].path)
     try index.recordPlay(rows[1].path, at: 10)
-    try index.database.execute("DELETE FROM history")
     #expect(
         try index.trackIDs(TrackFilter(source: .history), sortedBy: .lastPlayed) == [rows[1].id])
 }

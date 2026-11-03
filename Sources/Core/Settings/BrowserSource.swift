@@ -4,7 +4,7 @@
 public enum BrowserSource: SettingValue, Hashable {
     /// A playlist's ID, which an index rebuild keeps (ADR 0018).
     case playlist(Int64)
-    /// Every track played, most recent first.
+    /// Every track with a recorded play, most recent first.
     case history
     /// Every play, newest first, a track as often as it was played (ADR 0022).
     case timeline

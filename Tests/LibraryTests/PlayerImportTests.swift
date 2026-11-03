@@ -75,6 +75,22 @@ private func track(
     #expect(try index.loggedPlayCount() == 1)
 }
 
+@Test func historyListsOnlyTracksWithARecordedPlay() throws {
+    let (_, index, rows) = try scanned()
+    _ = try index.applyImport(
+        player([track(rows[0].path, plays: 5, played: 2_000), track(rows[1].path, plays: 1)]),
+        prefix: nil)
+    let history = TrackFilter(source: .history)
+    #expect(try index.trackIDs(history, sortedBy: .lastPlayed, ascending: false).isEmpty)
+    #expect(try index.artists(history).isEmpty)
+    try index.recordPlay(rows[0].path, at: 3_000)
+    try index.recordPlay(rows[2].path, at: 4_000)
+    #expect(
+        try index.trackIDs(history, sortedBy: .lastPlayed, ascending: false)
+            == [rows[2].id, rows[0].id])
+    #expect(!(try index.artists(history).isEmpty))
+}
+
 @Test func anImportedLoveLeavesADislikedTrackDisliked() throws {
     let (_, index, rows) = try scanned()
     try index.toggle(.disliked, trackIDs: [rows[0].id])
