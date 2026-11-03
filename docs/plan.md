@@ -3308,40 +3308,40 @@ estimates until the 32f checkpoint.
 
 #### 32e. Field data, the NAS, and the old Mac's hardware
 
-- [ ] **32e.1** **Signposts and a hang log.** Nothing in `Sources` uses `os_signpost`. Add intervals, defined
+- [x] **32e.1** **Signposts and a hang log.** Nothing in `Sources` uses `os_signpost`. Add intervals, defined
       once, to the paths in 32a to 32d: play to first sample, art load, page fetch, refresh, query,
       palette rank and scan batch. Then a Time Profiler or os_signpost trace from the old Mac lines
       up with the code. Add a main-thread stall detector: when the main run loop is blocked over
       ~100 ms, it logs the duration and what was running to the app's existing log. It must cost
       nothing when idle (the idle-wakeup budget). That way the checkpoint brings back real hitches
       from the real library, not only bench numbers.
-- [ ] **32e.2** **A persistent thumbnail cache.** Art is cached only in memory: 64 images in `ArtworkLoader`
+- [x] **32e.2** **A persistent thumbnail cache.** Art is cached only in memory: 64 images in `ArtworkLoader`
       and 40 in `RowArt`. Every launch, and every scroll back past the cache, reads embedded art
       from the NAS again and decodes it again. Weigh a thumbnail table in the index, keyed by album
       and art offset or by content hash, and checked against the file's stored stats so a tag
       edit's new art replaces it. Weigh it against the database size budget. Bench: scroll the
       whole art column once after a fresh launch, on simulated NAS latency.
-- [ ] **32e.3** **Large embedded art.** Fixture art may be smaller than the real library's: covers of 3000
+- [x] **32e.3** **Large embedded art.** Fixture art may be smaller than the real library's: covers of 3000
       px or more, and PNGs, where ImageIO's thumbnail call still decodes the whole image. Add
       fixture covers of that size and bench the decode on Intel.
-- [ ] **32e.4** **A hung or dropped share.** Unplug the NAS mid-playback, in simulation. The control thread
+- [x] **32e.4** **A hung or dropped share.** Unplug the NAS mid-playback, in simulation. The control thread
       blocks in a read, and the main thread must never wait on it. Check every file-system call
       reachable from the main actor, for example the sync folder's `resourceValues` and
       `fileExists` (AppDelegate.swift:670, 698, 723) and Reveal in Finder. Move the ones that can
       block onto a background queue. Test with file access that never returns.
-- [ ] **32e.5** **The discrete GPU.** `Support/Info.plist` has no `NSSupportsAutomaticGraphicsSwitching`. If
+- [x] **32e.5** **The discrete GPU.** `Support/Info.plist` has no `NSSupportsAutomaticGraphicsSwitching`. If
       the 2015 MacBook Pro has two GPUs, the app may keep the AMD one on, which costs heat,
       battery and fan noise. Checked 2026-11-03: the 2015 MacBook Pro is a MacBookPro12,1 (13-inch,
       Intel Iris 6100 only), so it has no second GPU. Add the key anyway, since dual-GPU Macs
       need it; no checkpoint step.
-- [ ] **32e.6** **Hidden windows.** No code watches window occlusion. While the window is hidden, minimized
+- [x] **32e.6** **Hidden windows.** No code watches window occlusion. While the window is hidden, minimized
       or under a locked screen, the 0.5 s position timer and table updates keep running during
       playback. Pause UI updates while the window is occluded. Bench: CPU and wakeups while playing
       with the window hidden, against the 3% playback budget.
-- [ ] **32e.7** **Cold launch.** ADR 0007 measures warm. After a reboot the old Mac launches from a cold
+- [x] **32e.7** **Cold launch.** ADR 0007 measures warm. After a reboot the old Mac launches from a cold
       page cache, and that is the launch you actually wait for. Measure it at the checkpoint
       (`sudo purge`, then launch) and fix what the trace shows.
-- [ ] **32e.8** **Big selections and live resize.** Bench ⌘A over 43k tracks, then Play Next, Add to
+- [x] **32e.8** **Big selections and live resize.** Bench ⌘A over 43k tracks, then Play Next, Add to
       Playlist and Get Info. Also bench live window resize, column resize and a row height change
       with the art column shown (art runs depend on the column width).
 
@@ -3351,7 +3351,7 @@ Plan:
 2. **32e.1:** the intervals are one enum in Log, each with its `OSSignposter` name, and a
    recorder of the intervals open and just ended. They go on an art load, a row page fetch, a
    browser refresh, the reader's list, totals, pane and palette queries, a palette ranking and
-   a scan batch. The play-to-first-sample interval is 32a's path and joins at the merge. A
+   a scan batch. After 32a merged, a play to its first sample too. A
    main-thread stall detector in Log: run-loop observers note each pass's marks, and a pass
    over 100 ms logs its length, the intervals that ran in it, the last command run and the
    event type being handled. No timer, so an idle app pays nothing. ADR 0080.
@@ -3374,6 +3374,47 @@ Plan:
 8. **32e.7:** `--measure-launch` prints the launch time to the first rows and quits, and the
    steps for the owner's cold launch at 32f, tested under bash 3.2.
 9. Rerun the touched benches against main, the same day.
+
+Result: shipped as planned; `./scripts/check` and `./scripts/bundle release` pass. Measured on
+the build Mac on 2026-11-03, before (a bench commit or a temporary harness) and after, and against
+main (591ff4d) the same hour. 32e.1: done, no before. `Interval` in Log defines each signpost once
+(art load, page fetch, refresh, query, palette rank, scan batch, play to first sample), in
+Instruments' Points of Interest. The play interval begins at `play(starting:)`, and at Next or a
+seek while playing, and the output's control thread ends it once the IO proc's count of bytes
+passes the new audio's start; the IO proc marks nothing. A run-loop observer logs each main-thread
+stall over 100 ms with the intervals that overlapped it, the last command and the event type, and
+has no timer: idle wakeups 0.00 a second against 0.02 on main, idle CPU 0.02% on both. Each launch
+here logs one 160 ms stall before the first rows, with no marked interval (ADR 0080). 32e.2:
+fixed. Paging 30 screens by title on the slow simulated NAS after a relaunch waited 2.87 s with 292
+art reads before, the same as the first launch; after, 0.57 to 0.60 s with 2 reads, about one 60 Hz
+tick a screen. Thumbnails are files in `~/Library/Caches/MusicPlayer/Thumbnails`, not a table in the
+index, capped at 100 MB and 20,000 files (ADR 0079). 32e.3: measured, fixed by 32e.2. A 3000 px
+cover decodes to a 256 px thumbnail in 21.6 ms as a 3.5 MB JPEG and 123 ms as a 12 MB PNG here;
+the store decodes each once. 32e.4: fixed. Open Sync Folder's `fileExists` and Finder open, the
+volume check when a watched folder or the sync folder is chosen, and Reveal in Finder ran on the
+main actor; they run on a dispatch queue now, and tests hold a file access that never returns.
+Quitting waited without a bound on the output's close, which a read stuck on a share holds; it
+now gives up after 6 s and leaves the device to the restore record (ADR 0081). 32e.5: done; no
+checkpoint step. 32e.6: fixed. With the position ticking and nothing playing, the app used 0.43 to
+0.62% of a core with the window shown or covered, against 0.00% without the ticks; AppKit draws a
+covered window, so the bar now stops while the window's occlusion state isn't visible. This Mac's
+display sleeps, so no occlusion change reached the app here; the unit test covers the switch and
+the checkpoint the effect. 32e.7: `--measure-launch` prints the launch time and memory and quits;
+the owner's cold launch is a 32f step. Here, warm in a scratch home: 0.41 s. 32e.8: Play Next with
+every fixture track selected reads the files to queue in 85 ms and Add to Playlist takes 105 ms,
+both off the main thread: dropped, no cost. Get Info reads every selected file before the editor
+opens, 0.06 ms a file here, 2.4 s for the library, but minutes on the NAS: not fixed, since
+capping the editor's selection is the owner's call. Live resize of the window and the art column
+measured 29.5 ms a frame (p95), over its 16 ms budget: 26 ms with the column fixed, 15.6 ms with
+the window fixed, so mostly the window's relayout; not narrowed further, so its budget stays
+missed until a trace from 32e.1 places it. A row height change's frame takes 30 ms. Against
+main, the same hour: launch 0.57 s and 0.59 s, memory 78.0 MB and 79.6 MB, scroll-bar drag 13.1 ms
+and 12.9 ms, trackpad frames 8.4, 10.8 and 9.0 ms against 7.9, 10.2 and 8.3 ms, a refresh's frame
+8.7 ms and 8.3 ms, last cover 123 to 129 ms and 107 to 127 ms, search 8.9 ms and 8.8 ms, re-sort
+41.5 ms and 39.5 ms, scan 2.06 s and 2.05 s, playback CPU 1.93 to 2.09% and 1.50 to 1.97% (24/192,
+alternating runs), gaps 0 samples on both, soak 0 underruns on both. The palette's opening rows
+measured 4.19 ms here and 4.22 ms on main against their 4 ms budget, as in 32c and 32d. The old-Mac
+figures are estimates until the 32f checkpoint, which adds the cold launch below.
 
 #### 32f. Checkpoint and budgets
 
