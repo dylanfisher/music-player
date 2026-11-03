@@ -2665,6 +2665,31 @@ customization sheet. The three batches run in parallel worktrees.
 - [ ] **30a.5 Played threshold.** A track counts as played once a set share of it has played,
       not only at the end. A setting, default 75%. Check what counts as played today first.
 
+Plan:
+
+1. **30a.5** Today a play counts after half the track or 240 s, whichever is first (ADR 0018),
+   so long tracks count after 4 minutes and nothing waits for the end. A new
+   `playback.playedPercent` (1 to 100, default 75) replaces both: a track counts once that share
+   of its length has played, not paused; a track of unknown length still needs 240 s. A track
+   that reached its end counts with a second's slack, so 100% works. `PlayCounter` takes the
+   fraction, `PlayTracker` takes changes and reschedules its wake; the app sets it at launch
+   and on every change. Tests: `PlayCounterTests`, `PlayTrackerTests`.
+2. **30a.2, 30a.4** `GeneralModel` keeps some settings to the config file: Network Scan
+   Readers always, File Viewer unless Searcher is installed (the app passes whether it is).
+   Choosing one in ⌘K opens the config file. Tests: `GeneralModelTests`.
+3. **30a.1** Sections become titled boxes with one label column for the whole pane. A checkbox
+   carries its setting's title to its right, with the summary under the title; only pop-ups and
+   fields have a label on the left. Sections: Playback (`output.`, `playback.`), Library,
+   Sync, Receiver, and Network Folders, whose two settings move to a box under the Watched
+   Folders list, as in Swinsian. Receiver Control comes first in its box, and the receiver's
+   other rows are disabled while it's off. Tests: sections, dependent rows, the label column
+   holding the longest title, the network folder settings in the Folders pane.
+4. **30a.3** The sync folder row shows the folder's name, truncated, with its full place as a
+   tooltip, and Change…, Open and Clear. Open finds the folder where its share is mounted now
+   (the watcher's lookup, made public in Library) and opens it in Finder, or says the share
+   isn't mounted. Tests: the name, the buttons' actions.
+5. ADR 0067; README; snapshot of each pane at 1440x900.
+
 #### 30b. Track table, browser and navigation
 
 - [ ] **30b.1 Centered landing.** Type-to-select centers the found row, as ⌘L does. Every action
