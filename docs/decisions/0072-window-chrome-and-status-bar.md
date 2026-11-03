@@ -1,4 +1,4 @@
-# 0067. Window chrome: the status bar's parts and material, glass, distraction-free mode
+# 0072. Window chrome: the status bar's parts and material, glass, distraction-free mode
 
 - **Date:** 2026-11-03
 - **Status:** accepted

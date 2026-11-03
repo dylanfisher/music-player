@@ -1551,7 +1551,7 @@ private func problemsUnreadable(_ error: any Error) -> String {
 }
 
 /// `content` on the title bar's material, filling the view returned, so the status bar is the
-/// toolbar's gray (ADR 0067). Within the window it shows the window's background behind it,
+/// toolbar's gray (ADR 0072). Within the window it shows the window's background behind it,
 /// which looks flat; the window's glass makes it blend with what's behind the window.
 @MainActor
 private func toolbarBackground(around content: NSView) -> NSView {

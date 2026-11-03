@@ -1,7 +1,7 @@
 # 0054. The status bar's totals, as Swinsian shows them
 
 - **Date:** 2026-11-02
-- **Status:** accepted; the material amended by [0067](0067-window-chrome-and-status-bar.md) (phase 30c.4)
+- **Status:** accepted; the material amended by [0072](0072-window-chrome-and-status-bar.md) (phase 30c.4)
 - **Amends:** [0044](0044-status-bar-playlist-rename-playing-row.md)
 
 ## Context

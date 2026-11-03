@@ -1,6 +1,6 @@
 import AppKit
 
-/// The main window's glass, `appearance.glass` (ADR 0067): the sidebar's translucent material
+/// The main window's glass, `appearance.glass` (ADR 0072): the sidebar's translucent material
 /// under the whole window, the toolbar transparent over it, the lists drawing no background of
 /// their own, and the bars' materials blending with what's behind the window instead of what's
 /// in it. Off, the window is as AppKit draws it.

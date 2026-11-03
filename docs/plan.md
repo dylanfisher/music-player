@@ -2771,7 +2771,7 @@ Plan:
    Record why the material looks solid on macOS 12 (nothing in the window behind it).
 6. **30c.5** `appearance.glass`: the window's content sits on a behind-window material, the
    toolbar is transparent over it, and the lists, headers and status bar stop drawing their
-   backgrounds. ADR 0067.
+   backgrounds. ADR 0072.
 7. **30c.6** View ▸ Show Toolbar (⌥⌘T) saved as `window.toolbarVisible`, and Distraction-Free Mode
    (⇧⌘F) hiding the toolbar, sidebar and status bar and restoring what showed. Tests on the
    mode's logic (`ChromeVisibility`).
@@ -2792,7 +2792,7 @@ playhead at once and seeks, the playhead is a 2-point line, and the bar holds th
 the engine has sought. 30c.4: the status bar uses the title bar's material, the toolbar's gray.
 The glass "missing" on macOS 12 is how materials work there: within the window they show only
 what's behind them in it, and AppKit draws table headers opaque; the translucency the owner
-means is the sidebar's, behind the window, which 30c.5 adds (ADR 0067). 30c.5:
+means is the sidebar's, behind the window, which 30c.5 adds (ADR 0072). 30c.5:
 `appearance.glass` (off by default) puts the sidebar's material under the whole window, the
 toolbar transparent over it, lists and header cells without backgrounds, alternating rows off,
 and the status bar blending behind the window; off puts everything back. AppKit then lines the
