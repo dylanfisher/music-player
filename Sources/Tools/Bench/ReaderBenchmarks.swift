@@ -15,7 +15,7 @@ private let scanRefreshSeconds = 2.0
 let readerBenchmarks = [
     Benchmark(
         name: "reader: totals of every track right after a play is recorded (p95)",
-        budget: Budget(appleSilicon: 4, oldMac: 12, unit: .milliseconds)
+        budget: Budget(appleSilicon: 2, oldMac: 12, unit: .milliseconds)
     ) {
         try withLibraryCopy("totals-after-play") { databaseURL in
             let index = try LibraryIndex(at: databaseURL)

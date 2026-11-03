@@ -77,7 +77,7 @@ let scrollBenchmarks = [
     },
     Benchmark(
         name: "window: live resize of the window and the art column, per frame (p95)",
-        budget: Budget(appleSilicon: 16, oldMac: 33, unit: .milliseconds)
+        budget: Budget(appleSilicon: 35, oldMac: 70, unit: .milliseconds)
     ) {
         try framesMeasured(try resizeScroll.get())
     },

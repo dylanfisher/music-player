@@ -20,7 +20,7 @@ let selectionBenchmarks = [
     },
     Benchmark(
         name: "selection: every fixture track selected, Add to Playlist",
-        budget: Budget(appleSilicon: 500, oldMac: 1500, unit: .milliseconds)
+        budget: Budget(appleSilicon: 200, oldMac: 1500, unit: .milliseconds)
     ) {
         try selectionMeasured(
             prepare: { try LibraryIndex(at: $0).createPlaylist(named: "Everything") }
@@ -30,7 +30,7 @@ let selectionBenchmarks = [
     },
     Benchmark(
         name: "selection: every fixture track selected, Get Info's read per file",
-        budget: Budget(appleSilicon: 1, oldMac: 4, unit: .milliseconds)
+        budget: Budget(appleSilicon: 0.12, oldMac: 4, unit: .milliseconds)
     ) {
         let index = try LibraryIndex(at: try scannedLibrary.get().databaseURL)
         let paths = try index.paths(ids: try index.trackIDs(sortedBy: .artist))
