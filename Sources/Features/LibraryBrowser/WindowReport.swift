@@ -8,24 +8,28 @@ public struct WindowReport: Codable, Equatable, Sendable {
     public var loadedMB: Double
     /// Physical footprint after scrolling through every row with each album's art decoded.
     public var scrolledMB: Double
+    /// Each screenful's time to scroll and draw while scrolling through every row as a
+    /// scroll-bar drag does, in milliseconds.
+    public var scrollStepsMs: [Double]
     public var rows: Int
     public var artImages: Int
     public var artFailures: Int
 
     public init(
-        launchSeconds: Double, loadedMB: Double, scrolledMB: Double, rows: Int, artImages: Int,
-        artFailures: Int
+        launchSeconds: Double, loadedMB: Double, scrolledMB: Double, scrollStepsMs: [Double],
+        rows: Int, artImages: Int, artFailures: Int
     ) {
         self.launchSeconds = launchSeconds
         self.loadedMB = loadedMB
         self.scrolledMB = scrolledMB
+        self.scrollStepsMs = scrollStepsMs
         self.rows = rows
         self.artImages = artImages
         self.artFailures = artFailures
     }
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
-        case launchSeconds, loadedMB, scrolledMB, rows, artImages, artFailures
+        case launchSeconds, loadedMB, scrolledMB, scrollStepsMs, rows, artImages, artFailures
     }
 
     /// Decodes one report, rejecting a key it doesn't know, so a renamed field fails instead of

@@ -7,8 +7,8 @@ import LibraryBrowser
 
 /// `--measure-window`: what Bench's window benchmarks read. Once the table first draws rows it
 /// records the time since the process started and the memory in use, then scrolls through
-/// every row with album art loaded for each album, records memory again, prints one JSON line
-/// and quits.
+/// every row as a scroll-bar drag does, timing each screenful, with album art loaded for each
+/// album, records memory again, prints one JSON line and quits.
 @MainActor
 enum WindowMeasurement {
     static func run(browser: LibraryBrowser, artwork: ArtworkLoader) {
@@ -18,7 +18,7 @@ enum WindowMeasurement {
         var albums: Set<Int64> = []
         var artImages = 0
         var artFailures = 0
-        browser.scrollThroughEveryRow { row in
+        let scrollStepsMs = browser.scrollThroughEveryRow { row in
             rows += 1
             guard let art = row.art, albums.insert(row.albumID ?? -row.id).inserted else { return }
             do {
@@ -30,7 +30,8 @@ enum WindowMeasurement {
         }
         let report = WindowReport(
             launchSeconds: launchSeconds, loadedMB: loadedMB, scrolledMB: footprintMB(),
-            rows: rows, artImages: artImages, artFailures: artFailures)
+            scrollStepsMs: scrollStepsMs, rows: rows, artImages: artImages, artFailures: artFailures
+        )
         do {
             FileHandle.standardOutput.write(try JSONEncoder().encode(report) + Data("\n".utf8))
         } catch {

@@ -167,19 +167,32 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     }
 
     /// Scrolls through every row a screenful at a time, drawing each, and passes each row to
-    /// `visit`. For measuring memory after the whole table has been seen.
-    func scrollThroughEveryRow(_ visit: (TrackRow) -> Void) {
-        let perScreen = max(1, Int(table.visibleRect.height / table.rowHeight))
-        var first = 0
-        while first < model.trackIDs.count {
-            let last = min(model.trackIDs.count - 1, first + perScreen - 1)
-            table.scrollRowToVisible(last)
-            table.displayIfNeeded()
-            for index in first...last {
+    /// `visit`. Each step moves the clip view as dragging the scroll bar's knob does, which on a
+    /// long list jumps about a screenful for each point the knob moves. Returns how long each
+    /// step took to scroll and draw, in milliseconds, `visit` left out. For measuring scrolling,
+    /// and memory after the whole table has been seen.
+    func scrollThroughEveryRow(_ visit: (TrackRow) -> Void) -> [Double] {
+        guard let clip, let scrollView = table.enclosingScrollView else { return [] }
+        var steps: [Double] = []
+        var next = 0
+        while next < model.trackIDs.count {
+            let start = DispatchTime.now().uptimeNanoseconds
+            let bottom = table.bounds.height - clip.bounds.height
+            let y = max(
+                -clip.contentInsets.top,
+                min(table.rect(ofRow: next).minY - clip.contentInsets.top, bottom))
+            clip.scroll(to: NSPoint(x: clip.bounds.minX, y: y))
+            scrollView.reflectScrolledClipView(clip)
+            table.window?.displayIfNeeded()
+            CATransaction.flush()
+            steps.append(Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6)
+            let end = max(next + 1, visibleRows().upperBound)
+            for index in next..<end {
                 if let row = trackRow(index) { visit(row) }
             }
-            first = last + 1
+            next = end
         }
+        return steps
     }
 
     // MARK: Data source and delegate

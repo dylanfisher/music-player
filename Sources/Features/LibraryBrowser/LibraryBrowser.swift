@@ -302,9 +302,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         await countIssues()
     }
 
-    /// Scrolls the table through every row, drawing each screenful, and passes each row to
-    /// `visit`. For measuring memory once the whole library has been on screen.
-    public func scrollThroughEveryRow(_ visit: (TrackRow) -> Void) {
+    /// Scrolls the table through every row as a scroll-bar drag does, drawing each screenful,
+    /// and passes each row to `visit`. Returns each screenful's time to scroll and draw, in
+    /// milliseconds. For measuring scrolling, and memory once the whole library has been on
+    /// screen.
+    public func scrollThroughEveryRow(_ visit: (TrackRow) -> Void) -> [Double] {
         table.scrollThroughEveryRow(visit)
     }
 

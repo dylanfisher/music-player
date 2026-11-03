@@ -32,6 +32,21 @@ let windowBenchmarks = [
             ])
     },
     Benchmark(
+        name: "window: scroll every row by scroll-bar drag, a screenful a step, with art (p95)",
+        budget: Budget(appleSilicon: 16, oldMac: 33, unit: .milliseconds)
+    ) {
+        let runs = try windowRuns.get()
+        let p95s = runs.map { p95($0.scrollStepsMs) }
+        let all = runs.flatMap(\.scrollStepsMs)
+        return Measured(
+            value: p95s.sorted()[p95s.count / 2],
+            notes: [
+                "median of \(runs.count) runs, each "
+                    + p95s.map { String(format: "%.2f ms", $0) }.joined(separator: ", ")
+                    + "; \(runs[0].scrollStepsMs.count) steps; " + slowestNote(all)
+            ])
+    },
+    Benchmark(
         name: "window: CPU when idle, library open and not playing",
         budget: Budget(appleSilicon: 0.1, oldMac: 0.1, unit: .percentOfCore)
     ) {

@@ -77,12 +77,14 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
 
 @Test func aWindowReportRoundTripsAndRejectsUnknownKeys() throws {
     let report = WindowReport(
-        launchSeconds: 0.4, loadedMB: 80, scrolledMB: 95, rows: 10, artImages: 2, artFailures: 0)
+        launchSeconds: 0.4, loadedMB: 80, scrolledMB: 95, scrollStepsMs: [3.5, 4], rows: 10,
+        artImages: 2, artFailures: 0)
     #expect(try WindowReport.decode(try JSONEncoder().encode(report)) == report)
     #expect(throws: DecodingError.self) {
         try WindowReport.decode(
             Data(
-                (#"{"launchSeconds": 1, "loadedMB": 1, "scrolledMB": 1, "rows": 1,"#
+                (#"{"launchSeconds": 1, "loadedMB": 1, "scrolledMB": 1, "scrollStepsMs": [1],"#
+                    + #" "rows": 1,"#
                     + #" "artImages": 1, "artFailures": 0, "extra": 1}"#).utf8))
     }
 }
