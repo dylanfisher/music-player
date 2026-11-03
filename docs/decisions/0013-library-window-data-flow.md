@@ -2,6 +2,8 @@
 
 - **Date:** 2026-10-30
 - **Status:** accepted
+- **Amended by:** [0056](0056-queue-shows-what-plays-next.md): the queue panel lists from the
+  current track on, and Add to Playback Queue goes after the queued tracks.
 
 ## Context
 
