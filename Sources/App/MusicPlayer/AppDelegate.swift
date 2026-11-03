@@ -199,7 +199,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             identifier: String(describing: MainWindow.self), transport: nowPlaying.transport,
             status: nowPlaying.status,
             search: browser.searchField, dispatcher: dispatcher, items: state[\.toolbarItems])
-        toolbar.itemsChanged = { saver.set(\.toolbarItems, $0) }
+        toolbar.itemsChanged = { items in
+            saver.set(\.toolbarItems, items)
+            if !items.contains(.search) { browser.clearSearch() }
+        }
         toolbar.volumeDecibels = { [weak self] in
             guard let self, canSetVolume else { return nil }
             return volumeDecibels

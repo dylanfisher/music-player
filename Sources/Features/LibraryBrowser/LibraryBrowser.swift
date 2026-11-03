@@ -753,6 +753,18 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         sidebarController.outline.window?.makeFirstResponder(sidebarController.outline)
     }
 
+    /// Whether the search field is in the window, which it isn't once the user takes it out
+    /// of the toolbar.
+    public var isSearchShown: Bool { searchField.window != nil }
+
+    /// Empties the search field and shows what it hid, so a search can't stay on once its
+    /// field is out of the window.
+    public func clearSearch() {
+        guard !searchField.stringValue.isEmpty else { return }
+        searchField.stringValue = ""
+        searchChanged()
+    }
+
     /// Focuses the search field with its text selected.
     public func focusSearch() {
         searchField.window?.makeFirstResponder(searchField)

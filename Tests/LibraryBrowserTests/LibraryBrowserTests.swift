@@ -261,3 +261,21 @@ import Testing
     browser.toggleStatusBar()
     #expect(browser.statusArea.isHidden && !browser.isStatusBarVisible)
 }
+
+@MainActor @Test func clearingTheSearchShowsWhatItHid() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, groupByAlbumArtist: false)
+    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    let all = browser.model.trackIDs.count
+    // Out of any window, as when the user takes Search out of the toolbar.
+    #expect(!browser.isSearchShown)
+    browser.searchField.stringValue = "zzqx"
+    browser.searchField.sendAction(browser.searchField.action, to: browser.searchField.target)
+    try await waitFor("the search") { browser.model.trackIDs.isEmpty }
+    browser.clearSearch()
+    #expect(browser.searchField.stringValue.isEmpty)
+    try await waitFor("every track") { browser.model.trackIDs.count == all }
+}

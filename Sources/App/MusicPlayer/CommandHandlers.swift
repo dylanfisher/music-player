@@ -97,7 +97,9 @@ extension AppDelegate {
     }
 
     private func registerViewCommands(_ dispatcher: CommandDispatcher) {
-        dispatcher.handle(.find, enabled: hasWindow) { [weak self] in self?.browser?.focusSearch() }
+        dispatcher.handle(.find, enabled: { [weak self] in self?.browser?.isSearchShown == true }) {
+            [weak self] in self?.browser?.focusSearch()
+        }
         let sorts: [(CommandID, TrackColumn)] = [
             (.sortByTitle, .title), (.sortByArtist, .artist), (.sortByAlbum, .album),
             (.sortByDateAdded, .dateAdded),
