@@ -154,6 +154,12 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         post(.load(item, startSeconds: startSeconds, playing: playing))
     }
     public func setNext(_ item: OutputItem?) { post(.setNext(item)) }
+    /// `load` and `setNext` in one post, so the control thread has both before it first decodes.
+    /// Two posts leave a gap in which it may decode a short first track to its end, and the next
+    /// track then lands in a ring buffer that has nothing of it decoded.
+    func load(_ item: OutputItem, next: OutputItem, startSeconds: Double, playing: Bool) {
+        post(.load(item, startSeconds: startSeconds, playing: playing), .setNext(next))
+    }
     public func play() { post(.play) }
     public func pause() { post(.pause) }
     public func stop() { post(.stop) }
@@ -186,11 +192,11 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     /// Returns false once the output is closed.
     @discardableResult
-    private func post(_ command: Command) -> Bool {
+    private func post(_ commands: Command...) -> Bool {
         condition.withLock {
             guard !isClosed else { return false }
-            if case .close = command { isClosed = true }
-            pending.append(command)
+            for command in commands { if case .close = command { isClosed = true } }
+            pending.append(contentsOf: commands)
             condition.signal()
             return true
         }

@@ -356,10 +356,10 @@ private func waitFor(
     while !matches(try await events.next()) {}
 }
 
-@Test func replacingAConvertedNextTrackKeepsAllOfTheCurrentOne() async throws {
-    // The ring buffer holds a power of two of bytes: 2^22 for 8 s of 48 kHz stereo float. The
-    // first track ends a few frames past that, inside what the converter holds back, so when
-    // it's full the current track's last frames are still in the decode chunk.
+/// The first track ends 26 frames past the ring buffer's capacity, in the 53 frames the converter
+/// holds back: when the ring buffer is full, the track's last frames are in the converter or the
+/// decode chunk, not the ring buffer. 2^22 bytes of 48 kHz stereo float is 8 s.
+private func slightlyOverFullAlbum() throws -> (album: SineAlbum, capacity: Int, join: Int) {
     let capacity = 1 << 22 / 8
     let firstFrames = Int((Double(capacity + 26) * 44_100 / deviceRateHz).rounded(.down))
     let album = try sineAlbum(
@@ -367,15 +367,22 @@ private func waitFor(
         in: try defaultPlaybackFixturesDirectory())
     let join = joinFrame(album)
     try #require(join > capacity && join - capacity < 50)
+    return (album, capacity, join)
+}
 
+@Test func replacingAConvertedNextTrackKeepsAllOfTheCurrentOne() async throws {
+    let (album, _, join) = try slightlyOverFullAlbum()
     let device = NullDevice(speed: 8, keepsSamples: true)
     device.report(NullDevice.float48k)
     let (output, events) = try directOutput(device)
     defer { output.close() }
-    let first = OutputItem(id: 0, url: album.tracks[0])
-    output.load(first, startSeconds: 0, playing: false)
-    output.setNext(OutputItem(id: 1, url: album.tracks[1]))
-    // Stopped, it decodes until the ring buffer is full, and the second track is fed.
+    // Named together with the load, the second track is fed into the converter while the first
+    // is decoded, so when the ring buffer is full the first track's last frames are in the
+    // decode chunk, decoded with the second track's start after them.
+    output.load(
+        OutputItem(id: 0, url: album.tracks[0]), next: OutputItem(id: 1, url: album.tracks[1]),
+        startSeconds: 0, playing: false)
+    // Stopped, it decodes until the ring buffer is full.
     try await Task.sleep(nanoseconds: 3_000_000_000)
     output.setNext(OutputItem(id: 2, url: album.tracks[0]))
     output.play()
@@ -388,6 +395,37 @@ private func waitFor(
         largestError(
             played, album, from: join, atSeconds: 0, (join + edgeFrames)..<(2 * join - edgeFrames)
         ) < tolerance)
+    #expect(!events.returned.contains { if case .trackStarted(1, _) = $0 { true } else { false } })
+}
+
+@Test func replacingANextTrackNamedAfterTheDecodeEndedFlushesTheConverter() async throws {
+    let (album, _, join) = try slightlyOverFullAlbum()
+    let device = NullDevice(speed: 8, keepsSamples: true)
+    device.report(NullDevice.float48k)
+    let (output, events) = try directOutput(device)
+    defer { output.close() }
+    output.load(OutputItem(id: 0, url: album.tracks[0]), startSeconds: 0, playing: false)
+    // Stopped, it decodes the whole first track, and the converter holds back its last frames.
+    // Fed a second track then, nothing of it is decoded until the ring buffer drains, so the
+    // replacement flushes the converter: the first track ends in a few frames' ring and a frame
+    // short of where the join was counted.
+    try await Task.sleep(nanoseconds: 3_000_000_000)
+    output.setNext(OutputItem(id: 1, url: album.tracks[1]))
+    output.setNext(OutputItem(id: 2, url: album.tracks[0]))
+    output.play()
+    try await waitFor(events) { if case .finished(2) = $0 { true } else { false } }
+
+    let played = frames(device.captured[0])
+    try #require(played.count > 2 * join - 2)
+    #expect(
+        largestError(played, album, from: 0, atSeconds: 0, edgeFrames..<(join - edgeFrames))
+            < tolerance)
+    let best = (-1...0).map { offset in
+        largestError(
+            played, album, from: join + offset, atSeconds: 0,
+            (join + edgeFrames)..<(2 * join - edgeFrames - 1))
+    }.min()!
+    #expect(best < tolerance)
     #expect(!events.returned.contains { if case .trackStarted(1, _) = $0 { true } else { false } })
 }
 

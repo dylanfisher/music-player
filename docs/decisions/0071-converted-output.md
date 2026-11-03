@@ -97,7 +97,9 @@ track of another rate drains and reconfigures, as on a DAC: a converted stream d
 44.1 kHz and a 96 kHz track without a gap.
 
 Replacing a next track already queued keeps all of the current one: what the decode chunk holds
-before the boundary goes in, and what the converter still holds of it is flushed out first. A
+before the boundary goes in, and what the converter still holds of it is flushed out first. When
+nothing of the next track is decoded yet, the flush is all there is: the first track ends a frame
+short of where the join was counted, with a few frames' ring, and the replacement follows it. A
 next track named in the last half second, after the flush, starts a new converter, with a seam
 but no gap. Decoding a next track's start ahead of a switch is skipped when either stream
 converts, since the switch couldn't use it and would decode it again.
