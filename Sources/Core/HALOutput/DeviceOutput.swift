@@ -135,11 +135,23 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// Streams whose IO proc may still be called because stopping it failed. They are never freed.
     private var retired: [RenderStream] = []
     private let fileLatency: FileLatency?
+    /// The play-to-first-sample interval: begun when a load or seek is posted, ended here once
+    /// the device has taken a sample of the new audio, cancelled when none will follow.
+    private let firstSound: PendingInterval
+    /// The consumed-bytes count the IO proc must pass for the interval to end: the start of the
+    /// audio the last load or seek queued. Nil until the control thread has processed it, so
+    /// audio from before it can't end the interval.
+    private var firstSoundTarget: UInt64?
 
-    /// `fileLatency` is for benchmarks: it makes PCM files read as from a NAS.
-    public init(_ choice: DeviceChoice, fileLatency: FileLatency? = nil) throws {
+    /// `fileLatency` is for benchmarks: it makes PCM files read as from a NAS. `firstSound` is
+    /// for tests.
+    public init(
+        _ choice: DeviceChoice, fileLatency: FileLatency? = nil,
+        firstSound: PendingInterval = .firstSound
+    ) throws {
         self.choice = choice
         self.fileLatency = fileLatency
+        self.firstSound = firstSound
         volumeOn = choice.digitalVolume
         gain = choice.gain
         knownFormats = choice.formats
@@ -154,6 +166,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 
     public func load(_ item: OutputItem, startSeconds: Double, playing: Bool) {
+        if playing { firstSound.begin() }
         post(.load(item, startSeconds: startSeconds, playing: playing))
     }
     public func setNext(_ item: OutputItem?) { post(.setNext(item)) }
@@ -166,7 +179,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     public func play() { post(.play) }
     public func pause() { post(.pause) }
     public func stop() { post(.stop) }
-    public func seek(toSeconds seconds: Double) { post(.seek(seconds)) }
+    public func seek(toSeconds seconds: Double) {
+        firstSound.begin()
+        post(.seek(seconds))
+    }
     public func setVolume(_ gain: Double) { post(.volume(gain)) }
     public var hasVolume: Bool { condition.withLock { volumeOn } }
     /// Plays on `choice` from now on: the track playing carries on there from where it is. For the
@@ -253,19 +269,23 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         switch command {
         case .load(let item, let startSeconds, let playing):
             loadTrack(item, startSeconds: startSeconds, playing: playing)
+            armFirstSound()
         case .setNext(let item): replaceNext(item)
         case .play:
             playing = true
             startIfReady()
         case .pause:
             playing = false
+            cancelFirstSound()
             stopIO()
             returnDue = true
         case .stop:
             unload()
             closeDevice()
             returnDue = true
-        case .seek(let seconds): seekTrack(toSeconds: seconds)
+        case .seek(let seconds):
+            seekTrack(toSeconds: seconds)
+            armFirstSound()
         case .volume(let gain):
             self.gain = gain
             signalDirty = true
@@ -286,6 +306,21 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 
     // MARK: Loading and seeking
+
+    /// Waits for the sound of what the load or seek just processed queued, or cancels the
+    /// interval when nothing plays.
+    private func armFirstSound() {
+        guard playing, stream != nil, let first = segments.first else {
+            cancelFirstSound()
+            return
+        }
+        firstSoundTarget = first.startByte
+    }
+
+    private func cancelFirstSound() {
+        firstSoundTarget = nil
+        firstSound.cancel()
+    }
 
     /// `announcing` false is for a track already playing, which a device switch reloads.
     private func loadTrack(
@@ -666,9 +701,11 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         if stream.isHalfEmpty { fill(stream) }
         announceBoundaries(stream)
         let consumed = HALRenderConsumedBytes(stream.render)
-        // The IO proc has taken a sample of what plays now; it can't end the interval itself.
-        if let segment = segments.first, consumed > segment.startByte {
-            PendingInterval.firstSound.end()
+        // The IO proc has taken a sample of what the last load or seek queued; it can't end the
+        // interval itself.
+        if let target = firstSoundTarget, consumed > target {
+            firstSoundTarget = nil
+            firstSound.end()
         }
         if let frames = stream.newUnderrunFrames() { emit(.underrun(frames: frames)) }
         if running, feeding == nil, !stream.hasTailToWrite, stream.chunkIsEmpty,
@@ -832,6 +869,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 
     private func unload() {
+        firstSoundTarget = nil
         segments = []
         feeding = nil
         next = nil
@@ -840,6 +878,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 
     private func closeDevice() {
+        cancelFirstSound()
         guard let device else {
             stream = nil
             return
@@ -950,6 +989,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         running = false
         stream = nil
         unload()
+        cancelFirstSound()
         deviceMissing = true
         emit(.deviceLost(item, positionSeconds: seconds))
     }

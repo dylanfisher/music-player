@@ -579,6 +579,54 @@ private func doubleClick(_ second: URL, after first: URL, on rig: Rig) async thr
     }
 }
 
+/// An interval begun while audio from an earlier load plays isn't ended by that audio: only the
+/// start of what the load queues, once the control thread has processed it, can end it.
+@Test func audioFromBeforeALoadDoesNotEndItsFirstSoundInterval() async throws {
+    let album = try album(44_100, 16)
+    let device = NullDevice(speed: 1)
+    let interval = PendingInterval(.playToFirstSample)
+    let output = try DeviceOutput(
+        DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil),
+        firstSound: interval)
+    defer { output.close() }
+    output.load(OutputItem(id: 1, url: album.tracks[0]), startSeconds: 0, playing: true)
+    try await waitUntil { !interval.isOpen }
+
+    // A begin whose load the control thread hasn't processed yet, while track 1 plays on.
+    interval.begin()
+    try await Task.sleep(nanoseconds: 200_000_000)
+    #expect(interval.isOpen)
+
+    output.load(OutputItem(id: 2, url: album.tracks[1]), startSeconds: 0, playing: true)
+    try await waitUntil { !interval.isOpen }
+}
+
+/// A load or seek that makes no sound cancels the interval, so a later play doesn't log the
+/// idle time.
+@Test func aPlayThatMakesNoSoundCancelsItsFirstSoundInterval() async throws {
+    let album = try album(44_100, 16)
+    let device = NullDevice(speed: 1)
+    let interval = PendingInterval(.playToFirstSample)
+    let output = try DeviceOutput(
+        DeviceChoice(provider: device, digitalVolume: false, gain: 1, formats: nil),
+        firstSound: interval)
+    defer { output.close() }
+    let missing = FileManager.default.temporaryDirectory.appendingPathComponent("no-\(UUID()).flac")
+
+    output.load(OutputItem(id: 1, url: missing), startSeconds: 0, playing: true)
+    try await waitUntil { !interval.isOpen }
+
+    output.load(OutputItem(id: 2, url: album.tracks[0]), startSeconds: 0, playing: true)
+    try await waitUntil { !interval.isOpen }
+    output.load(OutputItem(id: 3, url: album.tracks[1]), startSeconds: 0, playing: true)
+    output.pause()
+    try await waitUntil { !interval.isOpen }
+
+    device.unplug()
+    output.load(OutputItem(id: 4, url: album.tracks[0]), startSeconds: 0, playing: true)
+    try await waitUntil { !interval.isOpen }
+}
+
 /// Polls `condition` every 5 ms for up to 5 s.
 private func waitUntil(_ condition: () -> Bool) async throws {
     let deadline = Date().addingTimeInterval(5)

@@ -55,7 +55,7 @@ public func signposted<T>(
 
 /// An interval begun on one thread and ended on another, at most one open at a time: a play
 /// action starts it, and the output's control thread ends it once it sees the device take the
-/// first sample. Safe to use from any thread.
+/// first sample, or cancels it when no sound will follow. Safe to use from any thread.
 public final class PendingInterval: @unchecked Sendable {
     public static let firstSound = PendingInterval(.playToFirstSample)
 
@@ -63,16 +63,16 @@ public final class PendingInterval: @unchecked Sendable {
     private let lock = NSLock()
     private var open: OpenInterval?
 
-    init(_ interval: Interval) { self.interval = interval }
+    public init(_ interval: Interval) { self.interval = interval }
 
-    /// Starts the interval, ending one still open: a second play before the first's sound
-    /// replaces it.
+    /// Starts the interval, cancelling one still open: a second play before the first's sound
+    /// replaces it, and the first made no sound to time.
     public func begin() {
         let replaced = lock.withLock {
             defer { open = OpenInterval(interval) }
             return open
         }
-        replaced?.end()
+        replaced?.cancel()
     }
 
     /// Ends the interval if it's open.
@@ -83,7 +83,16 @@ public final class PendingInterval: @unchecked Sendable {
         }?.end()
     }
 
-    var isOpen: Bool { lock.withLock { open != nil } }
+    /// Closes the interval without recording a time, for a play that makes no sound: stopped,
+    /// paused, failed or lost. Does nothing when it isn't open.
+    public func cancel() {
+        lock.withLock {
+            defer { open = nil }
+            return open
+        }?.cancel()
+    }
+
+    public var isOpen: Bool { lock.withLock { open != nil } }
 }
 
 /// One interval under way: its signpost, and its entry in `IntervalLog.shared`.
@@ -101,6 +110,11 @@ private struct OpenInterval: Sendable {
     func end() {
         signposter.endInterval(interval.name, state)
         IntervalLog.shared.end(id, at: DispatchTime.now().uptimeNanoseconds)
+    }
+
+    func cancel() {
+        signposter.endInterval(interval.name, state)
+        IntervalLog.shared.discard(id)
     }
 }
 
@@ -131,6 +145,11 @@ final class IntervalLog: @unchecked Sendable {
             open[nextID] = IntervalSpan(interval: interval, start: now)
             return nextID
         }
+    }
+
+    /// Forgets an open interval without recording that it ended.
+    func discard(_ id: UInt64) {
+        lock.withLock { _ = open.removeValue(forKey: id) }
     }
 
     func end(_ id: UInt64, at now: UInt64) {

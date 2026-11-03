@@ -57,6 +57,18 @@ import Testing
     pending.end()
 }
 
+@Test func aCancelledIntervalRecordsNoTime() {
+    let before = DispatchTime.now().uptimeNanoseconds
+    let pending = PendingInterval(.scanBatch)
+    pending.begin()
+    pending.begin()
+    pending.cancel()
+    pending.cancel()
+    #expect(!pending.isOpen)
+    let spans = IntervalLog.shared.spans(from: before, to: .max).filter { $0.interval == .scanBatch }
+    #expect(spans.isEmpty)
+}
+
 @Test func aStallNamesWhatRan() {
     let stall = Stall(
         milliseconds: 230.4, intervals: [(.pageFetch, 180), (.query, 41.6)],
