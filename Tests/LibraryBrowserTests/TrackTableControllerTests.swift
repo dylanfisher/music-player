@@ -65,11 +65,27 @@ import Testing
     await model.setSort(.title, ascending: false)
     #expect(try offCenter() < 1)
 
+    // A layout with columns to move recenters once, at its end.
     table.scrollRowToVisible(0)
     controller.showColumns(
         TrackTableLayout(
-            columns: [ColumnLayout(column: .artist, width: 150)], sortColumn: .title,
-            sortAscending: false))
+            columns: [
+                ColumnLayout(column: .genre, width: 80), ColumnLayout(column: .album, width: 100),
+                ColumnLayout(column: .artist, width: 150),
+            ], sortColumn: .title, sortAscending: false))
+    #expect(try offCenter() < 1)
+
+    // A drag leaves a selection on screen where it is, and brings one off screen back.
+    let clip = try #require(controller.clip)
+    let row = try #require(table.selectedRowIndexes.first)
+    // On screen near the top, not centered.
+    clip.scroll(to: NSPoint(x: 0, y: table.rect(ofRow: row).minY - 2 * table.rowHeight))
+    #expect(try offCenter() > 2)
+    let shown = clip.bounds.origin
+    table.moveColumn(0, toColumn: 1)
+    #expect(clip.bounds.origin == shown)
+    table.scrollRowToVisible(0)
+    table.moveColumn(0, toColumn: 1)
     #expect(try offCenter() < 1)
 }
 

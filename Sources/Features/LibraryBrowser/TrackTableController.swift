@@ -478,8 +478,11 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     func tableViewColumnDidMove(_ notification: Notification) {
         hideArtHover()
-        if !applyingColumns { actions.layoutChanged(layout) }
-        centerSelection()
+        guard !applyingColumns else { return }
+        actions.layoutChanged(layout)
+        // A drag moves the column a place at a time; the selection is centered once it's off
+        // screen, not at every place.
+        centerSelectionIfHidden()
     }
 
     func tableViewColumnDidResize(_ notification: Notification) {

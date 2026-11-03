@@ -150,6 +150,14 @@ class RowListController: NSViewController {
         if let first = table.selectedRowIndexes.first { center(first) }
     }
 
+    /// Scrolls the first selected row to the middle if it isn't on screen.
+    func centerSelectionIfHidden() {
+        guard let first = table.selectedRowIndexes.first,
+            !table.visibleRect.contains(table.rect(ofRow: first))
+        else { return }
+        center(first)
+    }
+
     /// Selects `rows` alone, with the first as cursor and anchor, as after a reload.
     func select(_ rows: IndexSet) {
         select(ListSelection(rows: rows, cursor: rows.first, anchor: rows.first))
