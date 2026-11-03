@@ -25,11 +25,14 @@ the file, which on the NAS can take far longer, already runs on the output's own
   change all of them for a copy that costs about 1 ms.
 - Seen from outside, the queue is one track for roughly the time a lookup of 43k rows takes, then
   the whole list, announced by a second `queueChanged`.
-- A new queue or any queue edit (Play Next, Add to Queue, move, remove) before the full one
-  arrives wins, and the late queue is dropped: the user's choice is not overwritten.
+- A new queue before the full one arrives wins, and the late queue is dropped. Play Next, Add to
+  Queue, Next and Previous are held and applied, in order, to the whole queue once it is there
+  (Next or Previous stands in for the track's end). A move or removal counts positions in the
+  one-track queue the user saw, so it is applied at once and the late queue is dropped.
 - If the track ends or fails before the queue arrives, the end is held until it does, so a failed
-  first track still moves on to the next one. If the queue no longer has the track where it
-  started (a rescan removed it), the engine keeps playing and reports the error.
+  first track still moves on to the next one. If the queue can't be read, or no longer has the
+  track where it started (a rescan removed it), the engine reports the error, carries on with
+  the one track and replays what it held, so a held end still ends playback.
 - Play requests built elsewhere (the timeline, scripting) still hand over a whole queue; they are
   small or already off the click's path.
 
@@ -37,4 +40,4 @@ the file, which on the NAS can take far longer, already runs on the output's own
 
 - Double-click to first frame on the build Mac went from 223 ms to 7.6 ms, and main-thread time
   from 45 ms to 0.95 ms (`playback: double-click to first frame…` in `scripts/bench`).
-- For a short time after the click, Next and the queue panel see a one-track queue.
+- For a short time after the click, the queue panel shows a one-track queue.

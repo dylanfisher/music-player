@@ -317,3 +317,13 @@ private func loadedModel(
     #expect(request == (try #require(try await model.playRequest(selected: [], clicked: 7))))
     #expect(request.urls[request.first] == start.url)
 }
+
+@MainActor @Test func theQueueStartsAtTheClickedRowEvenWhenATrackRepeats() async throws {
+    let (model, _) = try await loadedModel()
+    let reader = try LibraryReader(databaseURL: try browserLibrary.get().databaseURL)
+    let (a, b) = (model.trackIDs[0], model.trackIDs[1])
+    let request = try #require(
+        try await BrowserModel.request(ids: [a, b, a], first: 0, reader: reader))
+    #expect(request.first == 0)
+    #expect(request.urls.count == 3)
+}

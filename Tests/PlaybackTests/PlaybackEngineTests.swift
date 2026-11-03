@@ -1129,3 +1129,130 @@ private actor Gate {
     let filling = await engine.play(starting: urls[0]) { ([urls[1], urls[2]], 0) }
     await #expect(throws: PlaybackError.self) { try await filling.value }
 }
+
+private struct NoQueue: Error {}
+
+/// The engine's updates, from now on, kept for the test to read.
+private final class Updates: @unchecked Sendable {
+    private let lock = NSLock()
+    private var seen: [PlaybackEvent] = []
+
+    init(_ engine: PlaybackEngine) async {
+        let stream = await engine.updates()
+        Task {
+            for await update in stream {
+                if let event = update.event { lock.withLock { seen.append(event) } }
+            }
+        }
+    }
+
+    var events: [PlaybackEvent] { lock.withLock { seen } }
+}
+
+/// Waits, bounded, until `condition` holds.
+private func eventually(_ condition: () -> Bool) async -> Bool {
+    for _ in 0..<200 {
+        if condition() { return true }
+        try? await Task.sleep(nanoseconds: 10_000_000)
+    }
+    return condition()
+}
+
+@Test func aQueueThatCouldntBeReadLeavesTheTrackToEndNormally() async throws {
+    let engine = PlaybackEngine(output: FakeOutput())
+    let updates = await Updates(engine)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        throw NoQueue()
+    }
+    await engine.handle(.finished(1))
+    await gate.release()
+    await #expect(throws: NoQueue.self) { try await filling.value }
+    #expect(await engine.state.status == .stopped)
+    #expect(await eventually { updates.events.contains(.finished) })
+}
+
+@Test func aQueueWithoutTheStartedTrackLeavesItToEndNormally() async throws {
+    let engine = PlaybackEngine(output: FakeOutput())
+    let updates = await Updates(engine)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        return ([urls[1], urls[2]], 0)
+    }
+    await engine.handle(.finished(1))
+    await gate.release()
+    await #expect(throws: PlaybackError.self) { try await filling.value }
+    #expect(await engine.state.status == .stopped)
+    #expect(await eventually { updates.events.contains(.finished) })
+}
+
+@Test func nextBeforeTheQueueArrivesMovesOnInTheWholeQueue() async throws {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        return (urls, 0)
+    }
+    await engine.next()
+    #expect(await engine.state.status == .playing)
+    await gate.release()
+    try await filling.value
+    let loads = output.takeCalls().compactMap { call -> URL? in
+        if case .load(_, let url, _, _) = call { url } else { nil }
+    }
+    #expect(loads == [urls[0], urls[1]])
+}
+
+@Test func previousBeforeTheQueueArrivesMovesBackInTheWholeQueue() async throws {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[1]) {
+        await gate.wait()
+        return (urls, 1)
+    }
+    await engine.previous()
+    #expect(await engine.state.status == .playing)
+    await gate.release()
+    try await filling.value
+    let loads = output.takeCalls().compactMap { call -> URL? in
+        if case .load(_, let url, _, _) = call { url } else { nil }
+    }
+    #expect(loads == [urls[1], urls[0]])
+}
+
+@Test func tracksQueuedBeforeTheQueueArrivesJoinTheWholeOne() async throws {
+    let engine = PlaybackEngine(output: FakeOutput())
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        return (urls, 0)
+    }
+    let extra = URL(fileURLWithPath: "/music/extra.flac")
+    await engine.addToQueue([extra])
+    await gate.release()
+    try await filling.value
+    let state = await engine.state
+    #expect(state.queue.count == urls.count + 1)
+    #expect(state.queue[state.order[1]] == extra)
+}
+
+@Test func theStartedTrackStaysTheNextOneWhenTheWholeQueueWantsItNext() async throws {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    await engine.setRepeat(.all)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        return ([urls[0]], 0)
+    }
+    _ = output.takeCalls()
+    await gate.release()
+    try await filling.value
+    #expect(output.takeCalls().isEmpty)
+    await engine.handle(.trackStarted(2, info))
+    #expect(output.takeCalls() == [.setNext(3, urls[0])])
+}

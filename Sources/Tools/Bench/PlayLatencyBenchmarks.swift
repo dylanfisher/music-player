@@ -96,6 +96,9 @@ private let playLatency = Result { () throws -> PlayLatency in
         let cpu = threadCPUSeconds() - cpuBefore
         try await filling.value
         let queued = await engine.state.queue.count
+        guard queued == model.trackIDs.count else {
+            throw BenchError.expected("\(model.trackIDs.count) tracks queued, not \(queued)")
+        }
         return PlayLatency(
             firstFrameMilliseconds: Double(end - start) / 1e6, mainThreadMilliseconds: cpu * 1000,
             queued: queued)

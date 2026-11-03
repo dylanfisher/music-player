@@ -40,6 +40,12 @@ public actor PlaybackEngine {
     private var completing = false
     /// The item that finished while `completing`, handled once the queue is whole.
     private var finishedEarly: OutputItem.ID?
+    /// Next or Previous pressed while `completing`, applied to the whole queue.
+    private var heldSkip: Skip?
+    /// Play Next and Add to Queue called while `completing`, applied in order to the whole queue.
+    private var heldEdits: [() -> Void] = []
+
+    private enum Skip { case next, previous }
     /// "Previous" within this many seconds of a track's start goes back a track; later, it
     /// restarts the track.
     private static let restartThresholdSeconds = 3.0
@@ -111,8 +117,13 @@ public actor PlaybackEngine {
     public func setQueue(_ urls: [URL], first: Int = 0) {
         unload()
         queueGeneration += 1
-        completing = false
-        finishedEarly = nil
+        if completing {
+            // A move or removal counts positions in the one-track queue the user saw.
+            completing = false
+            releaseHeld(skipping: false)
+        }
+        heldSkip = nil
+        heldEdits = []
         failuresInARow = 0
         cursor = queue.replace(with: urls, first: first, shuffled: shuffled) ?? 0
         state.queue = urls
@@ -136,28 +147,69 @@ public actor PlaybackEngine {
         play()
         let generation = queueGeneration
         return Task {
-            let (urls, first) = try await rest()
+            let (urls, first): ([URL], Int)
+            do {
+                (urls, first) = try await rest()
+            } catch {
+                abandon(generation)
+                throw error
+            }
             try complete(generation, urls: urls, first: first, starting: url)
         }
     }
 
     private func complete(_ generation: Int, urls: [URL], first: Int, starting url: URL) throws {
         guard generation == queueGeneration else { return }
-        completing = false
         guard urls.indices.contains(first), urls[first] == url else {
+            abandon(generation)
             throw PlaybackError.startedTrackMissing(url)
         }
+        completing = false
         let position = queue.replace(with: urls, first: first, shuffled: shuffled)!
         if let current = currentItem { currentItem = (current.id, position) }
         cursor = position
-        nextItem = nil
+        // The output may hold the started track as its next (repeat modes). Keep it when the
+        // whole queue wants the same track next, so its start isn't taken for a stale item.
+        if let stale = nextItem {
+            nextItem = nil
+            let wanted = queue.position(after: position, natural: true)
+            if let wanted, queue.url(at: wanted) == url {
+                nextItem = (stale.id, wanted, queue.entry(at: wanted))
+            } else if wanted == nil {
+                output.setNext(nil)
+            }
+        }
         state.queue = urls
         state.order = queue.order
         state.currentIndex = queue.entry(at: position)
         sendNext()
         publish(.queueChanged)
-        if let finished = finishedEarly {
-            finishedEarly = nil
+        releaseHeld(skipping: true)
+    }
+
+    /// The queue isn't coming: carry on with the one track, and what happened meanwhile.
+    private func abandon(_ generation: Int) {
+        guard generation == queueGeneration, completing else { return }
+        completing = false
+        releaseHeld(skipping: false)
+    }
+
+    /// Replays what was held while the queue was being read: edits in order, then a Next or
+    /// Previous if one was pressed (which stands in for the track's end), else the end.
+    private func releaseHeld(skipping: Bool) {
+        let edits = heldEdits
+        heldEdits = []
+        for edit in edits { edit() }
+        let skip = heldSkip
+        heldSkip = nil
+        let finished = finishedEarly
+        finishedEarly = nil
+        if skipping, let skip {
+            switch skip {
+            case .next: next()
+            case .previous: previous()
+            }
+        } else if let finished {
             handle(.finished(finished))
         }
     }
@@ -196,6 +248,10 @@ public actor PlaybackEngine {
     }
 
     public func next() {
+        if completing {
+            heldSkip = .next
+            return
+        }
         guard let from = currentItem?.position ?? (queue.order.isEmpty ? nil : cursor) else {
             return
         }
@@ -207,6 +263,10 @@ public actor PlaybackEngine {
     }
 
     public func previous() {
+        if completing, (position() ?? 0) <= Self.restartThresholdSeconds {
+            heldSkip = .previous
+            return
+        }
         guard let from = currentItem?.position ?? (queue.order.isEmpty ? nil : cursor) else {
             return
         }
@@ -278,6 +338,10 @@ public actor PlaybackEngine {
     /// Queues `urls` to play straight after the current track, or after the one `play()` would
     /// start with.
     public func playNext(_ urls: [URL]) {
+        if completing {
+            heldEdits.append { [self] in playNext(urls) }
+            return
+        }
         guard !urls.isEmpty else { return }
         let after = queue.order.isEmpty ? -1 : (currentItem?.position ?? cursor)
         applyEdit(queue.insert(urls, at: after + 1))
@@ -286,6 +350,10 @@ public actor PlaybackEngine {
     /// Queues `urls` after the current track and the tracks already queued after it, before the
     /// rest of the list playback started in.
     public func addToQueue(_ urls: [URL]) {
+        if completing {
+            heldEdits.append { [self] in addToQueue(urls) }
+            return
+        }
         guard !urls.isEmpty else { return }
         let after = queue.order.isEmpty ? -1 : (currentItem?.position ?? cursor)
         applyEdit(queue.insert(urls, at: queue.endOfQueued(after: after)))

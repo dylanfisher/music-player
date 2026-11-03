@@ -511,17 +511,16 @@ public final class BrowserModel {
         }
     }
 
-    private nonisolated static func request(ids: [Int64], first: Int, reader: LibraryReader)
+    nonisolated static func request(ids: [Int64], first: Int, reader: LibraryReader)
         async throws -> PlayRequest?
     {
         let paths = try await reader.paths(ids: ids)
-        let firstID = ids[first]
         var urls: [URL] = []
         urls.reserveCapacity(paths.count)
         var start = 0
-        for id in ids {
+        for (row, id) in ids.enumerated() {
+            if row == first { start = urls.count }
             guard let path = paths[id] else { continue }
-            if id == firstID { start = urls.count }
             urls.append(URL(fileURLWithPath: path, isDirectory: false))
         }
         return urls.isEmpty ? nil : PlayRequest(urls: urls, first: start)
