@@ -659,6 +659,10 @@ private func output(
     await eventually("the seek sent") { fake.actions.contains("Seek") }
     try await Task.sleep(nanoseconds: 300_000_000)
     #expect(output.position()?.seconds == 8)
+    // The file is ten seconds long; the seek goes to just short of its end, and so does the
+    // position reported meanwhile.
+    output.seek(toSeconds: 500)
+    #expect(output.position()?.seconds == 9)
 }
 
 @Test func aSeekPastTheEndLandsJustShortOfIt() async throws {

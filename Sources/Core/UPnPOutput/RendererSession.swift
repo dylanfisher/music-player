@@ -285,9 +285,13 @@ actor RendererSession {
         setPosition(current, target, advancing: current.playing && current.started)
     }
 
-    /// `seconds` within the track, short of its very end.
     private func seekTarget(_ seconds: Double, in loaded: Loaded) -> Double {
-        min(max(0, seconds), max(0, loaded.track.durationSeconds - Self.seekEndMarginSeconds))
+        Self.seekTarget(seconds, durationSeconds: loaded.track.durationSeconds)
+    }
+
+    /// `seconds` within a track `durationSeconds` long, short of its very end.
+    static func seekTarget(_ seconds: Double, durationSeconds: Double) -> Double {
+        min(max(0, seconds), max(0, durationSeconds - seekEndMarginSeconds))
     }
 
     /// A renderer that doesn't answer a Stop isn't reported lost: nothing is playing to lose.

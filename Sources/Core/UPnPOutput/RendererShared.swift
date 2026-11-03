@@ -90,10 +90,14 @@ final class RendererShared: @unchecked Sendable {
     func position(at now: Double) -> OutputPosition? {
         lock.withLock {
             guard let anchor else { return nil }
-            var seconds =
-                seekTarget?.seconds
-                ?? anchor.seconds + (anchor.advancing ? max(0, now - anchor.at) : 0)
+            var seconds = anchor.seconds + (anchor.advancing ? max(0, now - anchor.at) : 0)
             if let duration { seconds = min(seconds, duration) }
+            // Where the session will send the seek, not past its end margin.
+            if let target = seekTarget?.seconds {
+                seconds =
+                    duration.map { RendererSession.seekTarget(target, durationSeconds: $0) }
+                    ?? max(0, target)
+            }
             return OutputPosition(item: anchor.item, seconds: seconds)
         }
     }
