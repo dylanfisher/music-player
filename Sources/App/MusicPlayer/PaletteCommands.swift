@@ -55,7 +55,8 @@ extension AppDelegate {
         }
         let session = palette.show(
             mode,
-            items: commandItems() + outputItems(outputOptionsNow(), current: currentOutput)
+            items: paletteCommands(commandItems(), showsAllMusic: browser.showsAllMusic)
+                + outputItems(outputOptionsNow(), current: currentOutput)
                 + playlistItems(browser.playlists),
             over: window, place: state[\.palettePlace])
         let panes = listedPanes(.commands)
@@ -81,8 +82,11 @@ extension AppDelegate {
         let entries = goToEntries.value
         let tracks = goToTracks.value
         if let entries { paletteEntries = entries.shown }
+        let showAll = paletteCommands(commandItems(), showsAllMusic: browser.showsAllMusic)
+            .filter { $0.key == showAllMusicKey }
         let session = palette.show(
-            .goToItem, items: (entries?.items ?? []) + (tracks ?? []), over: window, place: place)
+            .goToItem, items: showAll + (entries?.items ?? []) + (tracks ?? []), over: window,
+            place: place)
         if entries == nil {
             Task {
                 do {
@@ -214,6 +218,16 @@ extension AppDelegate {
             logger.error("couldn't count the play of \(path): \(error)")
         }
     }
+}
+
+/// The palette key of Show All Music.
+let showAllMusicKey = "command:\(CommandID.showAllTracks)"
+
+/// ⌘K's commands, without Show All Music while the table already lists the whole library:
+/// it's there to get back to the library from a playlist, a pane or a search. ⌘P lists it
+/// first from these.
+func paletteCommands(_ items: [PaletteItem], showsAllMusic: Bool) -> [PaletteItem] {
+    showsAllMusic ? items.filter { $0.key != showAllMusicKey } : items
 }
 
 /// A listing read from the library: built the first time it's asked for, then kept until the

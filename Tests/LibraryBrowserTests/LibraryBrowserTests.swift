@@ -287,3 +287,24 @@ import Testing
     #expect(browser.searchField.stringValue.isEmpty)
     try await waitFor("every track") { browser.model.trackIDs.count == all }
 }
+
+@MainActor @Test func showsAllMusicOnlyWhileNothingNarrowsTheTable() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, groupByAlbumArtist: false)
+    await browser.load(BrowserState(source: nil, genre: nil, artist: nil, album: nil))
+    #expect(browser.showsAllMusic)
+    await browser.model.setSource(.history)
+    #expect(!browser.showsAllMusic)
+    await browser.model.setSource(nil)
+    #expect(browser.showsAllMusic)
+    await browser.model.setSearch("a")
+    #expect(!browser.showsAllMusic)
+    _ = await browser.model.showAll()
+    #expect(browser.showsAllMusic)
+    let genre = try #require(browser.model.genres.first)
+    await browser.model.select(.genre, id: genre.id)
+    #expect(!browser.showsAllMusic)
+}

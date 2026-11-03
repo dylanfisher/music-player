@@ -75,6 +75,10 @@ public final class BrowserModel {
         TrackFilter(groupByAlbumArtist: pending.groupByAlbumArtist)
     }
 
+    /// Whether the table shows, or is about to show, every track: no source, pane or search
+    /// narrows it.
+    var showsEverything: Bool { pending == everything }
+
     /// Follows a change of `library.groupByAlbumArtist`: the Artist pane lists the other kind
     /// of artist, keeping its selection where the same artist is listed.
     public func setGroupByAlbumArtist(_ on: Bool) async {

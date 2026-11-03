@@ -95,3 +95,13 @@ import Testing
     #expect(try await listing?.current() == 3)
     #expect(listing?.value == 3)
 }
+
+@Test func showAllMusicIsListedOnlyWhenItWouldChangeTheTable() {
+    let items = [
+        PaletteItem(kind: .command, key: showAllMusicKey, title: "Show All Music"),
+        PaletteItem(kind: .command, key: "command:view.other", title: "Other"),
+    ]
+    #expect(paletteCommands(items, showsAllMusic: false).map(\.key) == items.map(\.key))
+    #expect(paletteCommands(items, showsAllMusic: true).map(\.key) == ["command:view.other"])
+    #expect(showAllMusicKey == "command:view.showAllTracks")
+}

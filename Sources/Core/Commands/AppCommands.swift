@@ -181,7 +181,7 @@ public enum AppCommands {
             Command(
                 .toggleSignalPath, state.signalPathVisible.title, [.init("s", [opt, cmd])]),
             Command(.showCurrentTrack, "Show Current Track", [.init("l", cmd)], links: true),
-            Command(.showAllTracks, "Show All Tracks"),
+            Command(.showAllTracks, "Show All Music"),
             Command(.scrollUp, "Scroll Up", [.init(.up, [ctrl, opt])]),
             Command(.scrollDown, "Scroll Down", [.init(.down, [ctrl, opt])]),
             Command(.back, "Back", [.init("[", cmd)], links: true),

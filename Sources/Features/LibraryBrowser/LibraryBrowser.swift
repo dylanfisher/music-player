@@ -1461,6 +1461,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         return "Playing \(tracks(request.urls.count))"
     }
 
+    /// Whether Show All Music would change nothing: the table lists the whole library.
+    public var showsAllMusic: Bool { model.showsEverything }
+
     /// Shows every track: the library, every pane at All and no search. A browser already
     /// showing that is left as it is.
     public func showAll() {
