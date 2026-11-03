@@ -22,6 +22,10 @@ private func temporaryDatabase() throws -> Database {
     let database = try temporaryDatabase()
     #expect(
         try database.prepare("PRAGMA mmap_size").map { try $0.int(0) } == [Database.mappedBytes])
+    // A lower limit than asked needs a SQLite built with one, or `sqlite3_config` before the
+    // library initializes, which is global to the test process; so only the read-back is
+    // checked here.
+    #expect(database.mappedBytesInEffect == Database.mappedBytes)
     #expect(
         try database.prepare("PRAGMA temp_store").map { try $0.int(0) }
             == [Database.memoryTempStore])

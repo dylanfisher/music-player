@@ -47,6 +47,7 @@ The rest moved within the spread either way.
   system can drop; the window's memory benchmark measures the footprint, which leaves it out.
 - An I/O error on a mapped page raises SIGBUS instead of returning an error. The index lives on
   the internal disk, in Application Support, so this is the same risk as any mapped file there.
-- A build of SQLite with a lower mapping limit maps less, or nothing; the macOS 12 limit is
-  checked at the 32f checkpoint.
+- A build of SQLite with a lower mapping limit maps less, or nothing, without an error. Each
+  library connection reads the size back and logs an error with both sizes when it is lower,
+  then carries on. The macOS 12 limit is checked at the 32f checkpoint.
 - Large sorts and `GROUP BY`s use memory instead of a temporary file: at 43k tracks a few MB.

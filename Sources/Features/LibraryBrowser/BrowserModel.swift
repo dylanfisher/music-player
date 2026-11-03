@@ -518,7 +518,7 @@ public final class BrowserModel {
 
     /// Runs every query again after the library changed, keeping each selection that's still
     /// there.
-    public func refresh() async {
+    package func refresh() async {
         await reload(panesFrom: 0, reason: .libraryChanged)
     }
 

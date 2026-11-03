@@ -36,13 +36,29 @@ public final class Database {
         try execute("PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON")
         // Reading pages through a mapping instead of a copy each, and sorting and grouping in
         // memory instead of a temporary file, measured faster on the library benchmarks
-        // (ADR 0075). A build whose limit is lower maps less, or nothing.
+        // (ADR 0075).
         try execute(
             "PRAGMA mmap_size = \(Self.mappedBytes); PRAGMA temp_store = \(Self.memoryTempStore)")
+        // SQLite lowers the size to its build's limit without an error.
+        mappedBytesInEffect = try integer("PRAGMA mmap_size")
+    }
+
+    /// The integer in the first column of the first row `sql` gives.
+    private func integer(_ sql: String) throws(SQLiteError) -> Int {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(connection, sql, -1, &statement, nil) == SQLITE_OK,
+            let statement
+        else { throw SQLiteError(connection, sql: sql) }
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { throw SQLiteError(connection, sql: sql) }
+        return Int(sqlite3_column_int64(statement, 0))
     }
 
     /// The most of the file a connection maps: several times a 43k-track library's.
-    static let mappedBytes = 256 << 20
+    public static let mappedBytes = 256 << 20
+    /// What this connection maps at most: `mappedBytes`, unless the SQLite build's limit is
+    /// lower. Zero for a read-only connection, which maps nothing.
+    public private(set) var mappedBytesInEffect = 0
     /// `temp_store`'s value for temporary tables and indexes in memory.
     static let memoryTempStore = 2
 

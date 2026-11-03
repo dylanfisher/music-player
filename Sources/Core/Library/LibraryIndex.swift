@@ -53,6 +53,12 @@ public final class LibraryIndex {
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let detail: String?
         (database, movedAside, detail) = try Self.open(url, movingAside: movingAsideIfUnreadable)
+        if database.mappedBytesInEffect != Database.mappedBytes {
+            // Still correct, only slower: pages are read by copy past what is mapped (ADR 0075).
+            logger.error(
+                "SQLite maps \(self.database.mappedBytesInEffect) bytes of the library, not the \(Database.mappedBytes) asked for"
+            )
+        }
         try prepareSchema()
         if let detail { try recordDiscard(detail) }
     }
