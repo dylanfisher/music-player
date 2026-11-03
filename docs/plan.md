@@ -3055,9 +3055,10 @@ them; the palette's visit count is saved on a timer; art reads already run on th
 (32b.4). Against main (e7c8097) the same hour: gapless 0 samples and the converted join 0
 samples on both, rate switch 8.4 ms on main and 8.3 ms here (15.4 ms in one run, the null
 device's stop step), soak 0 underruns on both, CPU at 24/192 1.44% and 1.01%, converted 1.03%
-and 0.76%, double-click to first frame 2.4 and 2.6 ms, its main thread 0.77 and 0.89 ms. Not
-changed: `play(_ request:)` in AppDelegate (timeline, scripting) still stops before it plays.
-The old-Mac budgets are estimates until the 32f checkpoint, where the owner double-clicks
+and 0.76%, double-click to first frame 2.4 and 2.6 ms, its main thread 0.77 and 0.89 ms. After
+review: the timeline and scripting's `play(_ request:)` also goes through `play(starting:)`,
+ADR 0078 records the accepted one-cycle blip and what a stale SMB handle does to a reused
+decoder, and the bench decoder closes its file when its init throws. The old-Mac budgets are estimates until the 32f checkpoint, where the owner double-clicks
 tracks of the same and of other rates on the ADI-2.
 
 #### 32b. Scrolling with art

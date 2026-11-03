@@ -36,8 +36,8 @@ double-click, forgets what the output has loaded and lets the output's `load` re
 output already handles that load as it does Next's: the open stream restarts when the track
 fits it, and the open device is reconfigured when it doesn't. Stop, and `setQueue` on its own,
 still close the device, so the device isn't held in hog mode while nothing plays.
-`play(_ request: PlayRequest)` in `AppDelegate` (the timeline and scripting) still goes through
-`setQueue` and `play`; it is off the double-click's path.
+`play(_ request: PlayRequest)` in `AppDelegate` (the timeline and scripting) takes the same
+path.
 
 **A queue's paths are read in `IN` lists.** `paths(ids:)` ran one statement per ID; it now uses
 `inChunks`, as `rows(ids:)` does. The clicked track already plays before the queue is read
@@ -68,3 +68,17 @@ and after, the same day:
 - What's left of a double-click on another rate is one rate change: the device's own time.
 - A double-click on the NAS still opens the new file. That is the first block's round trips.
 - The before and after rest on estimated HAL times; the ADI-2 checkpoint says how it feels.
+- On a double-click, Next or a seek, the old track can still play for up to one IO cycle
+  (11.6 ms at 44.1 kHz) until the IO proc's next cycle applies the discard. That is accepted,
+  as it already was for Next and seeks.
+- A reused decoder reads the file it opened. A tag edit replaces a file by writing a temporary
+  file and renaming it over the original (0020), so a decoder opened before the edit keeps
+  reading the old inode: the same audio, which on a local disk reads to the end. On SMB, 0020
+  flags a rename over an open file as a risk, and the handle may go stale. A read that then
+  fails is caught where every decode error is: the track is reported as failed
+  (`trackFailed`, with the error) and playback moves on to the next track after what is
+  already buffered. A read that returns nothing early is reported as cut short. A seek on a
+  reused decoder that fails is reported as the track failing; when a load's rewind of an
+  open track fails, the file is opened again instead. So a stale handle surfaces as a
+  playback error, not as silence or a crash. No test simulates a stale SMB handle; the
+  read-error path is the one a NAS dropping mid-track takes, which the cut-short test covers.
