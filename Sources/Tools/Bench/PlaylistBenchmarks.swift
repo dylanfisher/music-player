@@ -8,17 +8,8 @@ let playlistBenchmarks = [
         name: "playlists: list a smart playlist of six rules over every fixture track (p95)",
         budget: Budget(appleSilicon: 50, oldMac: 150, unit: .milliseconds)
     ) {
-        let source = try scannedLibrary.get().databaseURL
-        return try withScratchDirectory("smart-playlist") { directory in
-            // A copy, so the plays and ratings written here don't reach the other benchmarks.
-            try FileManager.default.createDirectory(
-                at: directory, withIntermediateDirectories: true)
-            let databaseURL = libraryFileURL(in: directory)
-            for suffix in ["", Database.walSuffix]
-            where FileManager.default.fileExists(atPath: source.path + suffix) {
-                try FileManager.default.copyItem(
-                    atPath: source.path + suffix, toPath: databaseURL.path + suffix)
-            }
+        // A copy, so the plays and ratings written here don't reach the other benchmarks.
+        try withLibraryCopy("smart-playlist") { databaseURL in
             let index = try LibraryIndex(at: databaseURL)
             let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
             let paths = rows.map(\.path)
