@@ -1,4 +1,4 @@
-# 0056. List cells draw their own text
+# 0058. List cells draw their own text
 
 - **Date:** 2026-11-02
 - **Status:** accepted

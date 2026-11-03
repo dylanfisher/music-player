@@ -3,7 +3,7 @@ import AppKit
 /// A list cell of one line of text in the lists' small font, cut off at its end, numbers on the
 /// right. It draws the text itself: a text field per cell has a layer of its own and a layout
 /// pass each time the table reuses the cell, which were most of what scrolling cost per row
-/// (ADR 0056).
+/// (ADR 0058).
 final class TextCell: NSTableCellView {
     static let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
     /// The space between the text and the column's edges.
