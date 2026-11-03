@@ -44,6 +44,11 @@ status bar or the table headers, so on macOS 12 to 15 both look solid; that is w
 saw, and AppKit draws the table headers opaque on those versions in any case. The translucency
 he means, the sidebar's, blends with what's behind the window, which is the glass option below.
 
+Amended 2026-11-03 (phase 36, [0084](0084-status-bar-on-glass.md)). The bar now lies over the
+bottom of the track table and the timeline, so rows scroll under it: on macOS 26 it is an
+`NSGlassEffectView`, and on 12 to 15 this material, blending with those rows. Its middle is
+centered on the window.
+
 **Glass**, `appearance.glass`, off by default. The window's content sits on the sidebar's
 material blending behind the window; the window gets a full-size content view and a
 transparent title bar, so the toolbar is drawn over the same material, and the content is laid
@@ -51,7 +56,8 @@ out from the window's content layout guide, under the toolbar. Every table but t
 outline draws no background, its scroll view none either, and its alternating rows are off,
 since their colors are opaque. Table header cells are swapped for ones that draw the title, the
 sort indicator and a separator but no background. Materials that blend within the window, the
-status bar's, blend behind it instead. Off, each of these is put back as it was, and the track
+status bar's, blend behind it instead. (Amended in phase 36, 0084: no longer; the bar's material blends with the rows under
+it, and turning glass on or off puts the window's frame and split dividers back as they were.) Off, each of these is put back as it was, and the track
 table's alternating rows follow `appearance.alternatingRows` again. With the full-size content
 view, AppKit lines the toolbar's items up with the sidebar's edge.
 

@@ -45,13 +45,17 @@ row highlight beside it, the whole art on hover, and the art large on a click.
   its frame over the album's own rows, not the whole frame: the pointer on the next album's rows,
   under the hover, hovers that album at once instead of keeping the first until the pointer
   leaves the art column.
+
+  Amended 2026-11-03 (phase 36, [0084](0084-status-bar-on-glass.md)). The pointer anywhere in
+  an album's art cells shows the hover, not only over the drawn image.
 - **A click on the hovered art opens `ArtViewer`**: a borderless window over the screen, the art
   centered over a dimmed backdrop, as large as the screen's visible area allows, upscaled if it
   must be. It shows the art it had at once and replaces it with the art decoded off the main
   thread at the screen's longer side in pixels. A click anywhere or Esc closes it, and so do the
   main window closing, the app resigning active and a reload of the rows, since it floats over
   every window. A decode that fails is reported as the browser's other failures are, and the
-  first art stays; one that ends after the viewer closed is dropped.
+  first art stays; one that ends after the viewer closed is dropped. A click on the status bar's art
+  opens the playing track's art in the same viewer (phase 36).
 
 ## Alternatives considered
 
