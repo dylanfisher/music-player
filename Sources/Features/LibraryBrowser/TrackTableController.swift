@@ -368,16 +368,21 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     override func mouseExited(with event: NSEvent) { hideArtHover() }
 
     /// Shows the whole art of the album under `point`, in the table's coordinates, over the
-    /// rows, and hides it once the pointer leaves both.
+    /// rows, and hides it once the pointer leaves the album's rows under it.
     func showArtHover(at point: NSPoint) {
-        if !artHover.isHidden, artHover.frame.contains(point) { return }
+        if !artHover.isHidden, hoverArea.contains(point) { return }
         guard let hovered = hoveredArt(at: point) else {
             hideArtHover()
             return
         }
         hoveredRow = hovered.row
+        hoverArea = hovered.area
         artHover.image = hovered.image
         artHover.frame = hovered.frame
+        // Row views AppKit adds after the hover's last showing go above it.
+        if table.subviews.last !== artHover {
+            table.addSubview(artHover, positioned: .above, relativeTo: nil)
+        }
         artHover.isHidden = false
     }
 
@@ -386,14 +391,21 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         artHover.isHidden = true
         artHover.image = nil
         hoveredRow = nil
+        hoverArea = .zero
     }
 
     /// The album's first row whose art `artHover` shows.
     private var hoveredRow: Int?
+    /// Where the pointer keeps `artHover` showing: its frame over its own album's rows, so the
+    /// next album's rows under it hover that album.
+    private(set) var hoverArea = NSRect.zero
 
-    /// The art drawn under `point`, with its album's first row and where the whole art goes:
-    /// as wide as the column, from the top of that row. Nil off the art, or before it loaded.
-    func hoveredArt(at point: NSPoint) -> (row: Int, frame: NSRect, image: NSImage)? {
+    /// The art drawn under `point`, with its album's first row, where the whole art goes (as
+    /// wide as the column, from the top of that row) and the part of that over the album's
+    /// rows. Nil off the art, or before it loaded.
+    func hoveredArt(at point: NSPoint) -> (
+        row: Int, frame: NSRect, area: NSRect, image: NSImage
+    )? {
         let column = table.column(at: point)
         let row = table.row(at: point)
         guard column >= 0, row >= 0,
@@ -404,16 +416,19 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         let left = table.rect(ofColumn: column).minX
         let width = table.rect(ofColumn: column).width
         let top = table.rect(ofRow: start).minY
-        let rows = ArtRun.length(from: start, limit: artRowsTall, rowCount: model.trackIDs.count) {
-            trackRow($0)?.albumID
-        }
+        let albumID = { (row: Int) in self.trackRow(row)?.albumID }
+        let rows = ArtRun.length(
+            from: start, limit: artRowsTall, rowCount: model.trackIDs.count, album: albumID)
         let drawn = ArtFrame.rect(
             artSize, image: image.size, width: width, runHeight: CGFloat(rows) * rowPitch)
         guard drawn.offsetBy(dx: left, dy: top).contains(point) else { return nil }
-        return (
-            start, ArtFrame.whole(image: image.size, width: width).offsetBy(dx: left, dy: top),
-            image
-        )
+        let frame = ArtFrame.whole(image: image.size, width: width).offsetBy(dx: left, dy: top)
+        let albumRows = ArtRun.length(
+            from: start, limit: max(1, Int((frame.height / rowPitch).rounded(.up))),
+            rowCount: model.trackIDs.count, album: albumID)
+        let area = frame.intersection(
+            table.rect(ofRow: start).union(table.rect(ofRow: start + albumRows - 1)))
+        return (start, frame, area, image)
     }
 
     /// Opens the hovered art over the screen, decoded at the screen's size.

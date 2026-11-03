@@ -38,6 +38,13 @@ row highlight beside it, the whole art on hover, and the art large on a click.
   rows and adds no constraints (0058). A tracking area on the table moves it; it hides when the
   pointer leaves the art and the overlay, and on a reload, a resize of the column or a change of
   the setting. Scrolling carries it with its rows until the pointer next moves.
+
+  Amended 2026-11-03 (phase 30b). The table adds row views as it draws them, above the hover,
+  so the art cells of rows below an album drew over its hover; only the lowest album's hover
+  showed whole. Each showing moves the hover to the top of the table's subviews. Its hot area is
+  its frame over the album's own rows, not the whole frame: the pointer on the next album's rows,
+  under the hover, hovers that album at once instead of keeping the first until the pointer
+  leaves the art column.
 - **A click on the hovered art opens `ArtViewer`**: a borderless window over the screen, the art
   centered over a dimmed backdrop, as large as the screen's visible area allows, upscaled if it
   must be. It shows the art it had at once and replaces it with the art decoded off the main

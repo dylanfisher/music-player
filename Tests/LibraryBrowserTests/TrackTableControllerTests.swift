@@ -393,12 +393,12 @@ import Testing
 /// A table over the browser library sorted by album, its Album Art column `artWidth` wide,
 /// loaded and drawn in a window.
 @MainActor
-private func artTable(artWidth: CGFloat) async throws -> (
+private func artTable(artWidth: CGFloat, sortedBy sort: TrackColumn = .album) async throws -> (
     TrackTableController, BrowserModel, [TrackRow]
 ) {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(
-        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .album, ascending: true,
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: sort, ascending: true,
         groupByAlbumArtist: false)
     let index = try LibraryIndex(at: databaseURL)
     let actions = BrowserActions(
@@ -413,7 +413,7 @@ private func artTable(artWidth: CGFloat) async throws -> (
                 ColumnLayout(column: .art, width: artWidth),
                 ColumnLayout(column: .title, width: 200),
             ],
-            sortColumn: .album, sortAscending: true),
+            sortColumn: sort, sortAscending: true),
         actions: actions)
     controller.view.frame = NSRect(x: 0, y: 0, width: 400, height: 2000)
     model.changed = { controller.reload($0) }
@@ -479,6 +479,54 @@ private func artTable(artWidth: CGFloat) async throws -> (
     let title = table.rect(ofColumn: table.column(withIdentifier: .init("title")))
     controller.showArtHover(at: NSPoint(x: title.midX, y: point.y))
     #expect(controller.artHover.isHidden)
+}
+
+@MainActor @Test func theArtHoverDrawsOnTopAndEndsAtItsAlbumsLastRow() async throws {
+    // By title, the fixture's albums are runs of a row or two, shorter than the art's 6 rows.
+    let (controller, _, rows) = try await artTable(
+        artWidth: 5 * RowListController.rowHeight, sortedBy: .title)
+    // In a window, layer-backed and drawn, as the app shows it.
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 400, height: 600), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = controller.view
+    defer { window.close() }
+    window.displayIfNeeded()
+    let table = controller.table
+    let art = table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
+    let column = table.rect(ofColumn: art)
+    // An album with art whose next album, starting under its art, has art too.
+    let starts = rows.indices.filter { $0 == 0 || rows[$0].albumID != rows[$0 - 1].albumID }
+    let pair = try #require(
+        zip(starts, starts.dropFirst()).first { first, next in
+            rows[first].art != nil && rows[next].art != nil && rows[first].albumID != nil
+                && next - first < 5
+        }, "no short album with art before another")
+    func hover(_ row: Int) async throws {
+        let point = NSPoint(x: column.midX, y: table.rect(ofRow: row).midY)
+        let deadline = Date().addingTimeInterval(10)
+        repeat {
+            controller.showArtHover(at: point)
+            if !controller.artHover.isHidden,
+                controller.artHover.frame.minY == table.rect(ofRow: row).minY
+            {
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        } while Date() < deadline
+        Issue.record("row \(row)'s art never hovered")
+    }
+    table.scrollRowToVisible(pair.0)
+    window.displayIfNeeded()
+    try await hover(pair.0)
+    // Above the rows AppKit made after the hover was added.
+    #expect(table.subviews.last === controller.artHover)
+    #expect(controller.artHover.frame.maxY > table.rect(ofRow: pair.1).midY)
+    #expect(controller.hoverArea.maxY == table.rect(ofRow: pair.1 - 1).maxY)
+    // The next album's rows, though under this hover, hover the next album's art.
+    try await hover(pair.1)
+    #expect(table.subviews.last === controller.artHover)
 }
 
 @MainActor @Test func scrollingOrMovingAColumnHidesTheArtHover() async throws {
