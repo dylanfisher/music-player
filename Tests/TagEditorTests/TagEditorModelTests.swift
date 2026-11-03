@@ -90,15 +90,17 @@ private func track(_ name: String, album: String?, number: Int?, art: Data? = ni
     #expect(problems.count == 2)
 }
 
-/// The most reads running at once.
+/// The reads made, and the most running at once.
 private final class ReadCount: @unchecked Sendable {
     // Every field is guarded by `lock`.
     private let lock = NSLock()
     private var running = 0
     private(set) var most = 0
+    private(set) var reads = 0
 
     func read(_ path: String) throws -> EditableTrack {
         lock.withLock {
+            reads += 1
             running += 1
             most = max(most, running)
         }
@@ -110,14 +112,32 @@ private final class ReadCount: @unchecked Sendable {
     }
 }
 
-@Test func filesAreReadAFewAtOnceAndKeepTheirOrder() {
+// Dispatch runs one thread at a time on a single core, so only the order shows there.
+@Test(.enabled(if: ProcessInfo.processInfo.activeProcessorCount > 1))
+func filesAreReadAFewAtOnceAndKeepTheirOrder() {
     let paths = (0..<(filesReadAtOnce * 3)).map { $0 == 4 ? "\($0) bad" : "\($0)" }
     let count = ReadCount()
     let (tracks, problems) = readEditableTracks(paths) { try count.read($0) }
-    // Several at once, never more than the limit; a busy machine may start fewer.
-    #expect(count.most > 1 && count.most <= filesReadAtOnce, "\(count.most) at once")
+    #expect(count.most == min(filesReadAtOnce, paths.count))
     #expect(tracks.map(\.tags.title) == paths.filter { !$0.hasSuffix("bad") })
     #expect(problems.count == 1)
+}
+
+@Test func fewerFilesThanTheLimitAreEachReadOnce() {
+    let paths = ["a", "b bad"]
+    let count = ReadCount()
+    let (tracks, problems) = readEditableTracks(paths) { try count.read($0) }
+    #expect(count.most <= paths.count)
+    #expect(count.reads == paths.count)
+    #expect(tracks.map(\.tags.title) == ["a"])
+    #expect(problems.count == 1)
+}
+
+@Test func noFilesReadNothing() {
+    let count = ReadCount()
+    let (tracks, problems) = readEditableTracks([]) { try count.read($0) }
+    #expect(count.reads == 0)
+    #expect(tracks.isEmpty && problems.isEmpty)
 }
 
 @Test func editingAFieldWithSeveralValuesSaysOnlyOneIsKept() {
