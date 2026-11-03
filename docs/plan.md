@@ -3442,6 +3442,115 @@ share's read, together with the device output inside the same 6 s bound. Get Inf
 
   Give me the exact commands, tested under bash 3.2.
 
+Plan:
+
+1. Profile the two benches over budget, live resize and the palette's opening rows, with
+   `sample` on the app or Bench during the bench, and fix what's contained.
+2. `./scripts/bench` three times; tighten each phase 32 budget beaten by more than 3x to about
+   2x the worst of the three runs, as 14e did, in code and in the table.
+3. The owner's checkpoint steps, tested under `/bin/bash` 3.2 with a scratch `--home` and
+   `purge` skipped.
+
+**Checkpoint steps for the owner.** Copy two files from the build Mac's
+`.build/out/Products/Release/` after `./scripts/bundle release`: `MusicPlayer.app` to
+`~/music-player-smoke/MusicPlayer.app` and `Bench` to `~/music-player-smoke/Bench` on the 2015
+MacBook Pro. Both are universal. Bench is its own executable, not part of the bundle; it launches
+the app for the window benchmarks from `MusicPlayer.app/Contents/MacOS/MusicPlayer` beside
+itself, and builds its fixture library (under 1 GB) in `~/Library/Caches/MusicPlayer`.
+
+First, with the app open as usual:
+
+1. Scroll the real library with the art column shown, by trackpad, while a track plays and a
+   rescan runs.
+2. Double-click tracks of the same rate, then of a different rate, on the ADI-2, and say whether
+   the start feels instant.
+3. The AirPods test from 31.4: play a 44.1 kHz and a 96 kHz track, and check the signal path
+   shows Converted for each.
+
+Then paste this into Terminal. It quits the app, asks for your password once for `purge`, and
+writes everything to `~/music-player-smoke/checkpoint-results.txt`, which is the file to send
+back. The stall log covers the steps above. The full bench takes about 10 minutes on the build
+Mac, so expect longer there.
+
+```bash
+dir=~/music-player-smoke
+app="$dir/MusicPlayer.app/Contents/MacOS/MusicPlayer"
+out="$dir/checkpoint-results.txt"
+cd "$dir" || exit 1
+{ date; sw_vers; sysctl -n hw.model; /usr/bin/file "$app" "$dir/Bench"; df -h ~ | tail -1; } > "$out"
+# A second copy of the app waits on the index's lock, so quit the one that's open.
+if pgrep -x MusicPlayer >/dev/null; then
+  osascript -e 'tell application id "com.dylanfisher.MusicPlayer" to quit'
+  while pgrep -x MusicPlayer >/dev/null; do sleep 1; done
+fi
+echo "== warm launch" >> "$out"
+"$app" --measure-launch >> "$out" 2>&1
+sudo purge
+echo "== cold launch after purge" >> "$out"
+"$app" --measure-launch >> "$out" 2>&1
+echo "== SQLite mmap limit (needs MAX_MMAP_SIZE >= 268435456)" >> "$out"
+/usr/bin/sqlite3 :memory: 'PRAGMA compile_options;' | grep -i mmap >> "$out"
+echo "== main-thread stalls, last 7 days" >> "$out"
+/usr/bin/log show --last 7d --style compact \
+  --predicate 'subsystem == "com.dylanfisher.MusicPlayer" AND eventMessage CONTAINS "stalled"' >> "$out"
+echo "== bench" >> "$out"
+"$dir/Bench" >> "$out"
+echo "bench exit $?" >> "$out"
+echo "Done. Send $out"
+```
+
+The warm launch comes first so the cold one, right after `purge`, doesn't also pay for a first
+launch of this build on the owner's index. Bench exits 1 when a budget is missed; the file says
+which.
+
+Result: the build-Mac part is done; `./scripts/check` and `./scripts/bundle release` pass, and the
+bundle and Bench are universal (arm64 and x86_64, macOS 12). Measured on the build Mac on
+2026-11-03, three full runs of `./scripts/bench` from 08:32 to 09:01, about 10 minutes each.
+
+Live resize: a contained fix wasn't there, so its budget is now set from measurement. The three
+runs measured 27.7, 27.6 and 27.5 ms a frame (p95) against 16 ms. A `sample` of the app during
+the bench put the main thread's busy time per frame at: 55% Core Animation's commit, drawing
+every visible row's layer again (the rows draw their cells into one layer each, for scrolling, so
+a row redraws as a whole when any cell moves), a tenth of it waiting on the window server; 31% the
+window's `setFrame` layout pass, mostly NSTableView updating each row view's cell widths and, for
+every width change, building the header's cell views and tearing them down again; and 11% the art
+column's width change, the same row updates. The app's own code is about 6%: `refitArt` 2%,
+`KeyTableView.frameOfCell` 3%, and `AlbumArtCell.setFrameSize` 1%. No constraint of the app's and
+no status bar part showed up. Only the Title column autoresizes with the window. Cutting the
+redraw would mean giving up each row's single layer, which the rows have for scrolling (trackpad
+frames are 9 ms here), so it stays. The budget is 35 ms here and an estimated 70 ms on the old Mac, about 1.25x
+the worst run (32e measured 29.5 ms).
+
+The palette's opening rows: fixed. A `sample` put about 40% in the frecency lookups and most of
+the rest in binding each `PaletteItem` in the empty query's loop, which retains its key, title,
+detail, chord and fuzzy candidate. The loop now reads the kind and key by index: 4.13 ms before,
+2.05 to 2.11 ms after, and 2.05 to 2.06 ms in the three runs, against 4 ms. Checking a full
+list's last entry without copying the list in `offer` saved only 0.25 ms more, so it was left out.
+
+Also over in all three runs: the palette's last of 8 keystrokes 50 ms apart, 21.1, 22.8 and
+20.7 ms against 15 ms, and 20.1 and 21.1 ms with main's ranking code, so not this branch's change.
+32d measured 4.9 ms on this Mac earlier the same day. Each of the eight rankings takes 2 to 5 ms
+when run back to back, but 13 to 29 ms when run alone after a 50 ms sleep, on the main thread or
+detached alike; the signpost around the ranking isn't it either (20.4 ms without). So this Mac now
+runs a ranking after a short idle several times slower than when busy, which looks like its clock
+or core choice, not the code. The budget stays at 15 ms, so it shows if this persists or appears on
+the old Mac.
+
+Tightened to about 2x the worst of three runs, each beaten by more than 3x; the old-Mac figures
+stay estimates until this checkpoint:
+
+| Benchmark | Runs | Before | After |
+|---|---|---|---|
+| Totals right after a play is recorded (32c) | 0.85, 0.85, 0.85 ms | < 4 ms | < 2 ms |
+| Add to Playlist with every track selected (32e) | 102, 103, 102 ms | < 500 ms | < 200 ms |
+| Get Info's read of a file (32e) | 0.06, 0.06, 0.06 ms | < 1 ms | < 0.12 ms |
+| Next to its first sound (32a) | 11.0, 9.4, 10.0 ms | < 40 ms | < 25 ms |
+| A seek while decoded to its first sound (32a) | 10.6, 10.0, 11.9 ms | < 40 ms | < 25 ms |
+| A seek after decoding moved on to its first sound (32a) | 11.0, 11.9, 8.0 ms | < 40 ms | < 25 ms |
+
+The other phase 32 budgets are within 3x of their worst run. Every other benchmark passed in all
+three runs.
+
 Orchestrator notes on 32e:
 - 32e.1: a run-loop watchdog can't sample the main thread's stack cheaply. Have it log the
   open signpost intervals and the last command or event dispatched, which is enough to place
