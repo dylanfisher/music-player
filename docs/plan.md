@@ -3172,25 +3172,25 @@ macOS 12 SQLite's mapping limit.
 
 #### 32d. Parallelism and priority
 
-- [ ] **32d.1** **Suspect:** palette ranking (PaletteModel.swift:73) starts a new `.userInitiated` detached
+- [x] **32d.1** **Suspect:** palette ranking (PaletteModel.swift:73) starts a new `.userInitiated` detached
       task on every keystroke and never cancels the old ones, and `rankPalette` never checks
       cancellation. Bench: 8 keystrokes 50 ms apart; measure time to the last result and the CPU
       used.
-- [ ] **32d.2** **Suspect:** the tag editor reads each selected file three times, one file after another
+- [x] **32d.2** **Suspect:** the tag editor reads each selected file three times, one file after another
       (TagEditorModel.swift:143-160). On the NAS, 500 tracks is about 1,500 serial opens before the
       sheet opens. Parse each file once and read a bounded few files at a time. Bench on simulated
       NAS latency.
-- [ ] **32d.3** **Suspect:** local scans use every core while playing (LibraryScanner.swift:17); the playback
+- [x] **32d.3** **Suspect:** local scans use every core while playing (LibraryScanner.swift:17); the playback
       pause applies only to network scans. Cap the readers while playing. On the old Mac that is 4
       reader threads sharing 2 cores with decode. The soak-under-scan bench must stay at 0
       underruns.
-- [ ] **32d.4** **Suspect:** the health report runs as a default-priority detached task doing blocking SQLite
+- [x] **32d.4** **Suspect:** the health report runs as a default-priority detached task doing blocking SQLite
       work (LibraryReader.swift:21), and it reruns after every changed scan, removal or sync. Run it
       at utility priority, off the cooperative pool.
-- [ ] **32d.5** **Suspect:** a pending sync merge runs before the launch scan on the same serial queue
+- [x] **32d.5** **Suspect:** a pending sync merge runs before the launch scan on the same serial queue
       (LibraryWatcher.swift:92, ~255, ~345), and locating the sync folder can stall on a hung
       share. Bench the time to the first scan's start with a large merge pending.
-- [ ] **32d.6** **Suspect:** after the first frame, `startPlayback` (AppDelegate.swift:283, 508-552) and
+- [x] **32d.6** **Suspect:** after the first frame, `startPlayback` (AppDelegate.swift:283, 508-552) and
       `watchOutputs` (OutputPicker.swift:24) enumerate HAL devices synchronously on the main actor.
       Bench the first scroll step and first keystroke right after `--report-launch` reports
       interactive. Move whatever hitches off main.
@@ -3205,8 +3205,42 @@ Plan:
    launch steps (32d.6).
 2. Fix only what the numbers show, each in its own commit with a test that fails without it,
    and a budget in code and in the table. Concurrency limits come from
-   `activeProcessorCount`, defined once.
+   `activeProcessorCount`, defined once: the art column's limit moves to Metadata as
+   `filesReadAtOnce`, and the tag editor reads by it (ADR 0077). The launch scans run before
+   the first sync (ADR 0076). The output picker lists devices off the main thread.
 3. Rerun the changed benches and the existing ones they touch against main, the same day.
+
+Result: shipped as planned; `./scripts/check` passes. Measured on the build Mac on 2026-11-03,
+before (the bench commit, 3212117, or a temporary timer) and after, the same hour. 32d.1:
+dropped, no cost. The last of 8 keystrokes 50 ms apart reached its results in 4.9 ms
+(median of 6 bursts, 2.1 to 5.8 ms), the same as one ranking, and a burst used 26 to 48 ms of
+CPU: no ranking here takes over 8 ms, so none overlaps the next keystroke. Typed 3 ms apart, so
+that all 8 overlap, the last took 8.6 ms. The old Mac searched about 2x slower than this Mac in
+14e, so its rankings should still end before the next keystroke; the bench stays, with an
+estimated old-Mac budget, so the checkpoint shows it. 32d.2: fixed. 200 fixture files, each
+file's three opens costing what they do on the slow simulated NAS (129 ms), took 27.6 s to
+read before, 3.2 s after, 9 at once (3 on the old Mac), on a dispatch queue instead of the
+cooperative pool. One open per file isn't done: the bench charges every open the same, so it
+can't show what it would save (ADR 0077). 32d.3: dropped, no cost here. The soak under a full
+local scan with 10 readers had 0 underruns. The decode thread runs at user-interactive QoS and
+the scan's readers at utility, so the scheduler serves the decode first on any core count;
+this Mac can't reproduce the old Mac's 4 threads, so the checkpoint's soak decides. 32d.4:
+dropped, no cost. The browser's search keystroke p95 was 12.0 ms without and 9.6 ms with health
+reports built back to back beside it (a report takes 0.25 to 0.30 s), and 9.3 ms and 9.4 ms with
+`LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`. 32d.5: fixed. With another machine's 1M plays pending,
+the launch scan's first progress came 4.9 s after start, behind the 4.6 s merge; now 0.61 to
+0.63 s, and the merge follows the scan. 32d.6: fixed, not the suspect named: `startPlayback`
+took 1.7 to 1.9 ms on the main thread before and after, so it stays. The output picker's first
+device list and its watch, the run's first CoreAudio calls, took 24 to 26 ms on the main thread
+before the first rows; now 0.04 ms. Launch to the first rows, median of 3: main 0.63 s, this
+branch 0.60 s. The existing benches against main (bf9624f), same hour: memory 77.0 MB and
+79.9 MB, scroll-bar drag 13.6 ms and 13.3 ms, idle CPU 0.03% and 0.02%, search 8.8 ms both,
+re-sort 42.2 ms and 41.5 ms, trackpad frames (second runs) 8.8 and 8.9 ms, 10.5 and 10.7 ms,
+9.2 and 9.3 ms, a refresh's frame 8.1 and 8.4 ms, sync merge 14.3 s and 12.7 s. The palette's
+opening rows measured 4.07 ms on main and 4.20 ms here against a 4 ms budget, with other
+worktrees building; nothing here touches it. No `./scripts/bundle release`: Package.swift
+changed only Bench's dependencies, and there's no new `#available`. The old-Mac figures are
+estimates until the 32f checkpoint.
 
 #### 32e. Field data, the NAS, and the old Mac's hardware
 
