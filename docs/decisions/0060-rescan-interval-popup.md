@@ -2,6 +2,7 @@
 
 - **Date:** 2026-11-02
 - **Status:** accepted
+- **Amended by:** [0082](0082-config-safety.md): the popup ends with Never, `null`.
 
 ## Context
 
