@@ -27,9 +27,6 @@ final class ArtViewer {
         view.close = { [weak self] in self?.close() }
     }
 
-    /// The image shown, the opening art until the sharp one arrives.
-    var image: NSImage? { view.image }
-
     func show() {
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(view)
