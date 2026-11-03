@@ -1,7 +1,9 @@
 import AppKit
 
 /// A list of choices, each with a checkbox, that the user drags into order: the status bar's
-/// parts, left to right from the top.
+/// parts, left to right from the top. The ticked ones come first, in the setting's order, and
+/// only they can be dragged, among themselves, so the order shown is the order kept; the rest
+/// follow in the schema's order.
 @MainActor
 final class ChecklistView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     static let rowPoints = 22.0
@@ -71,11 +73,13 @@ final class ChecklistView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         self.changed(changed)
     }
 
-    /// Moves the item at `from` to before the item at `to`, as a drop in the gap above row
-    /// `to` asks, and reports the new order.
+    /// How many items are ticked, which are the first ones.
+    private var tickedCount: Int { items.prefix { $0.isOn }.count }
+
+    /// Moves the ticked item at `from` to before the item at `to`, as a drop in the gap above
+    /// row `to` asks, and reports the new order. `to` is at most just after the last ticked one.
     func move(from: Int, to: Int) {
-        guard items.indices.contains(from), (0...items.count).contains(to), to != from,
-            to != from + 1
+        guard from < tickedCount, (0...tickedCount).contains(to), to != from, to != from + 1
         else { return }
         var moved = items
         let item = moved.remove(at: from)
@@ -86,6 +90,7 @@ final class ChecklistView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int)
         -> (any NSPasteboardWriting)?
     {
+        guard row < tickedCount else { return nil }
         let item = NSPasteboardItem()
         item.setString(String(row), forType: Self.rowType)
         return item
@@ -95,7 +100,7 @@ final class ChecklistView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         _ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int,
         proposedDropOperation dropOperation: NSTableView.DropOperation
     ) -> NSDragOperation {
-        guard info.draggingSource as? NSTableView === table else { return [] }
+        guard info.draggingSource as? NSTableView === table, row <= tickedCount else { return [] }
         tableView.setDropRow(row, dropOperation: .above)
         return .move
     }

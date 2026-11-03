@@ -48,6 +48,11 @@ private func model(_ parts: [String]) -> (GeneralModel, () -> [String: Any]) {
     // Dropped where it already is.
     list.move(from: 1, to: 1)
     list.move(from: 1, to: 2)
+    // Past the ticked ones, or an unticked one: refused, so nothing moves.
+    list.move(from: 0, to: 4)
+    list.move(from: 3, to: 0)
+    #expect(list.tableView(list.table, pasteboardWriterForRow: 3) == nil)
+    #expect(list.tableView(list.table, pasteboardWriterForRow: 2) != nil)
     #expect(
         reported == [
             ["track", "seek", "art", "format", "totals"],
