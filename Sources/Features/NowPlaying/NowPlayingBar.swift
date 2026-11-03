@@ -14,7 +14,8 @@ private let logger = moduleLogger()
 /// what to show.
 @MainActor
 public final class NowPlayingBar: NSObject {
-    /// How often the position updates while playing. Nothing ticks while paused or stopped.
+    /// How often the position updates while playing. Nothing ticks while paused or stopped, or
+    /// while the window doesn't show.
     static let positionIntervalSeconds = 0.5
     /// The art's size in points.
     public static let artPoints = 48.0
@@ -34,6 +35,10 @@ public final class NowPlayingBar: NSObject {
     private var pendingSeeks = 0
     /// Whether the engine is connected and an output opened.
     private var connected = false
+    /// Whether any of the window shows. AppKit draws a window that's covered, so the bar stops
+    /// its updates itself.
+    private var windowShows = true
+    private var occlusion: NSObjectProtocol?
 
     private let art = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
@@ -85,6 +90,28 @@ public final class NowPlayingBar: NSObject {
         setEnabled(false)
         show()
     }
+
+    /// Updates the position only while `window`, which holds the bar, shows: not while it's
+    /// minimized, hidden, covered or behind a locked screen. It counts as showing until the
+    /// first change, since a window not yet on screen reports itself hidden.
+    public func follow(_ window: NSWindow) {
+        occlusion = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+        ) { [weak self, weak window] _ in
+            MainActor.assumeIsolated {
+                self?.windowShowsChanged(window?.occlusionState.contains(.visible) == true)
+            }
+        }
+    }
+
+    func windowShowsChanged(_ shows: Bool) {
+        windowShows = shows
+        tickWhilePlaying()
+        if shows { Task { await showPosition() } }
+    }
+
+    /// Whether the position is updating.
+    var ticks: Bool { timer != nil }
 
     /// Follows `engine` from now on.
     public func connect(_ engine: PlaybackEngine) {
@@ -196,12 +223,16 @@ public final class NowPlayingBar: NSObject {
             for bar in [slider, statusBar.seekBar] { bar.cancelTracking() }
         }
         show()
-        if model.isPlaying {
+        tickWhilePlaying()
+        if !model.isPlaying { Task { await showPosition() } }
+    }
+
+    private func tickWhilePlaying() {
+        if model.isPlaying, windowShows {
             startTimer()
         } else {
             timer?.invalidate()
             timer = nil
-            Task { await showPosition() }
         }
     }
 

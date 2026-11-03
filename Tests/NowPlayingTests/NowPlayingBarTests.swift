@@ -67,3 +67,23 @@ private func bar() -> NowPlayingBar {
     seekBar.release()
     #expect(seeks == [true, false])
 }
+
+/// AppKit draws a covered window, so the bar stops its own updates while the window doesn't
+/// show, through track changes too, and starts them again when it shows.
+@MainActor @Test func thePositionUpdatesOnlyWhileTheWindowShows() {
+    let bar = bar()
+    bar.apply(update(.trackStarted(index: 0), duration: 100))
+    #expect(bar.ticks)
+    bar.windowShowsChanged(false)
+    #expect(!bar.ticks)
+    bar.apply(update(.trackStarted(index: 1), current: 1, duration: 100))
+    #expect(!bar.ticks)
+    bar.windowShowsChanged(true)
+    #expect(bar.ticks)
+    var paused = update(nil, current: 1, duration: 100)
+    paused.state.status = .paused
+    bar.apply(paused)
+    #expect(!bar.ticks)
+    bar.windowShowsChanged(true)
+    #expect(!bar.ticks)
+}
