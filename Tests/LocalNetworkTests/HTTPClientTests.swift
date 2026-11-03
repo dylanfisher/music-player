@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Testing
 
 @testable import Fixtures
@@ -179,4 +180,52 @@ private func get(
     fetch.cancel()
     #expect(await fetch.value == .failure(.cancelled))
     #expect(Date().timeIntervalSince(started) < 1)
+}
+
+/// A GET whose connection binds its own end to `port`, so the connect fails with "address in
+/// use" while a listener holds that port.
+private func getFrom(localPort port: UInt16, _ url: LocalURL) async -> Result<
+    String, LocalNetworkError
+> {
+    let parameters = directTCP()
+    parameters.requiredLocalEndpoint = .hostPort(
+        host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: port)!)
+    do throws(LocalNetworkError) {
+        let body = try await LocalHTTPClient.exchange(
+            url, request: LocalHTTPClient.request("GET", url, fields: [], body: []),
+            cap: LocalHTTPClient.bodyCap, timeoutSeconds: 2, keepingRefusals: false,
+            parameters: parameters)
+        return .success(String(decoding: body, as: UTF8.self))
+    } catch {
+        return .failure(error)
+    }
+}
+
+@Test func aConnectThatFindsItsOwnPortInUseTriesAgain() async throws {
+    let device = try await device { _ in "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" }
+    defer { device.stop() }
+    let holder = try await LoopbackServer { _ in }
+    // Held for the first try or two, then free.
+    let release = Task {
+        try? await Task.sleep(nanoseconds: UInt64(LocalHTTPClient.addressInUseRetrySeconds * 1.5e9))
+        holder.stop()
+    }
+    #expect(await getFrom(localPort: holder.port, try url(device)) == .success("ok"))
+    await release.value
+}
+
+@Test func aPortThatStaysInUseFailsAfterTheTriesAreUsed() async throws {
+    let device = try await device { _ in "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" }
+    defer { device.stop() }
+    let holder = try await LoopbackServer { _ in }
+    defer { holder.stop() }
+    let started = Date()
+    let outcome = await getFrom(localPort: holder.port, try url(device))
+    guard case .failure(.refused(let why)) = outcome else {
+        Issue.record("a port in use wasn't reported: \(outcome)")
+        return
+    }
+    #expect(why.contains("in use"), "\(why)")
+    #expect(Date().timeIntervalSince(started) < 2)
+    #expect(device.connectionCount == 0)
 }

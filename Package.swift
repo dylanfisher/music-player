@@ -203,7 +203,7 @@ let package = Package(
         ),
         .target(
             name: "Fixtures",
-            dependencies: ["HALOutput", "HALRender", "Library", "Log", "Metadata"],
+            dependencies: ["HALOutput", "HALRender", "Library", "LocalNetwork", "Log", "Metadata"],
             path: "Sources/Tools/Fixtures",
             swiftSettings: strictSwift
         ),

@@ -11,6 +11,13 @@ public enum LocalHTTPClient {
     public static let timeoutSeconds = 5.0
     /// Most bytes a reply's head may have.
     static let headCap = 64 * 1024
+    /// Tries a connect gets when it fails with "address in use", and the pause between them. The
+    /// system picks the client's own port, and under heavy local connection churn it can pick
+    /// one a listener holds; the next try gets another. The system hands out ports in order, so
+    /// a run of listeners on consecutive ports (a test process has dozens) fails several tries
+    /// in a row; the count covers such a run. Any other failure is final.
+    public static let addressInUseTries = 50
+    public static let addressInUseRetrySeconds = 0.01
 
     public static func get(
         _ url: LocalURL, cap: Int = bodyCap, timeoutSeconds: Double = timeoutSeconds,
@@ -49,18 +56,34 @@ public enum LocalHTTPClient {
         return Array((lines.joined(separator: "\r\n") + "\r\n\r\n").utf8) + body
     }
 
-    private static func exchange(
-        _ url: LocalURL, request: [UInt8], cap: Int, timeoutSeconds: Double, keepingRefusals: Bool
+    /// `parameters` is the connection's; tests give it a local endpoint to make a connect fail
+    /// with "address in use".
+    static func exchange(
+        _ url: LocalURL, request: [UInt8], cap: Int, timeoutSeconds: Double, keepingRefusals: Bool,
+        parameters: NWParameters = directTCP()
     ) async throws(LocalNetworkError) -> [UInt8] {
-        let exchange = Exchange(url: url, cap: cap, keepingRefusals: keepingRefusals)
-        let outcome = await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                exchange.start(request, timeoutSeconds: timeoutSeconds, continuation: continuation)
+        var attempt = 1
+        while true {
+            let exchange = Exchange(
+                url: url, cap: cap, keepingRefusals: keepingRefusals, parameters: parameters)
+            let outcome = await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    exchange.start(
+                        request, timeoutSeconds: timeoutSeconds, continuation: continuation)
+                }
+            } onCancel: {
+                exchange.cancel()
             }
-        } onCancel: {
-            exchange.cancel()
+            guard exchange.addressWasInUse, attempt < addressInUseTries else {
+                return try outcome.get()
+            }
+            attempt += 1
+            do {
+                try await Task.sleep(nanoseconds: UInt64(addressInUseRetrySeconds * 1e9))
+            } catch {
+                throw .cancelled
+            }
         }
-        return try outcome.get()
     }
 }
 
@@ -79,12 +102,14 @@ private final class Exchange: @unchecked Sendable {
     private var head: (head: HTTPHead, length: Int)?
 
     private var isCancelled = false
+    /// Whether the connect failed with "address in use". Set before the exchange finishes.
+    private(set) var addressWasInUse = false
 
-    init(url: LocalURL, cap: Int, keepingRefusals: Bool) {
+    init(url: LocalURL, cap: Int, keepingRefusals: Bool, parameters: NWParameters) {
         self.keepingRefusals = keepingRefusals
         connection = NWConnection(
             host: url.host.endpointHost, port: NWEndpoint.Port(rawValue: url.port)!,
-            using: directTCP())
+            using: parameters)
         self.cap = cap
     }
 
@@ -117,10 +142,14 @@ private final class Exchange: @unchecked Sendable {
                         if let error { finish(.failure(.failed("\(error)"))) }
                     })
                 receive()
-            case .waiting(let error): finish(.failure(.refused("\(error)")))
+            case .waiting(let error):
+                addressWasInUse = error == .posix(.EADDRINUSE)
+                finish(.failure(.refused("\(error)")))
             case .failed(let error) where error == .posix(.ECONNREFUSED):
                 finish(.failure(.refused("\(error)")))
-            case .failed(let error): finish(.failure(.failed("\(error)")))
+            case .failed(let error):
+                addressWasInUse = error == .posix(.EADDRINUSE)
+                finish(.failure(.failed("\(error)")))
             default: break
             }
         }

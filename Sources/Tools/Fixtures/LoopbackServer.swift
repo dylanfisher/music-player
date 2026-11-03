@@ -1,4 +1,5 @@
 import Foundation
+import LocalNetwork
 import Network
 
 /// A TCP server on 127.0.0.1 that plays a device, or a client's far end, in network tests, so
@@ -69,18 +70,17 @@ final class LoopbackConnection: @unchecked Sendable {
         receiveMore()
     }
 
-    /// A client connection to `port` on 127.0.0.1, ready. The system picks the client's own port
-    /// too, and can pick one a listener of another test or process holds; connecting fails with
-    /// "address in use" then, and a later try gets another port. Under load it can take a few
-    /// seconds.
+    /// A client connection to `port` on 127.0.0.1, ready. Retries "address in use" as
+    /// `LocalHTTPClient` does.
     static func connect(port: UInt16) async throws -> LoopbackConnection {
         var attempt = 1
         while true {
             do {
                 return try await connectOnce(port: port)
-            } catch NWError.posix(.EADDRINUSE) where attempt < 40 {
+            } catch NWError.posix(.EADDRINUSE) where attempt < LocalHTTPClient.addressInUseTries {
                 attempt += 1
-                try await Task.sleep(nanoseconds: 50_000_000)
+                try await Task.sleep(
+                    nanoseconds: UInt64(LocalHTTPClient.addressInUseRetrySeconds * 1e9))
             }
         }
     }

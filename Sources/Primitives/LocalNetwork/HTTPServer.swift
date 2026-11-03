@@ -32,6 +32,7 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
     static var connectionCap: Int { 8 }
     static var idleSeconds: Double { 30 }
     static var headSeconds: Double { 10 }
+    static var listenSeconds: Double { 5 }
     static var tokenLifetimeSeconds: Double { 24 * 60 * 60 }
     static var chunkBytes: Int { 64 * 1024 }
 
@@ -103,19 +104,31 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
             listener.stateUpdateHandler = { [self] state in
                 switch state {
                 case .ready:
-                    guard let port = listener.port?.rawValue else { return }
+                    guard let port = listener.port?.rawValue else {
+                        listener.cancel()
+                        return endListening(
+                            .failure(.failed("can't listen on \(interface.address): no port")))
+                    }
                     boundPort = port
                     endListening(.success(()))
                 case .failed(let error), .waiting(let error):
                     listener.cancel()
                     endListening(
                         .failure(.failed("can't listen on \(interface.address): \(error)")))
+                case .cancelled:
+                    endListening(.failure(.cancelled))
                 default:
                     break
                 }
             }
             listener.newConnectionHandler = { [self] connection in accept(connection) }
             listener.start(queue: queue)
+            // Without a bound, a listener that never reports a state leaves the caller waiting.
+            queue.asyncAfter(deadline: .now() + Self.listenSeconds) { [self] in
+                guard listening != nil else { return }
+                listener.cancel()
+                endListening(.failure(.timedOut))
+            }
         }
         try outcome.get()
     }
