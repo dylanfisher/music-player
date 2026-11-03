@@ -18,6 +18,8 @@
 	<string>With Receiver Control on, the app finds your receiver on the local network and controls its volume, sound mode, input and power.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>
