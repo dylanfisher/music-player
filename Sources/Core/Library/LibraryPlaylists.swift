@@ -235,10 +235,16 @@ extension LibraryIndex {
                     last_played_seconds = excluded.last_played_seconds
                 """
             ).run(id, seconds)
-            try statement(insertHistorySQL).run(
-                id, Int(seconds.rounded(.down)))
+            try addHistory(id, at: seconds)
             try logSync(pathID: id, try syncRoots()) { .play(path: $0, at: seconds) }
         }
+    }
+
+    /// Logs a play of the path `id` in the history, and marks the path recorded for History.
+    /// Call inside a transaction.
+    func addHistory(_ id: Int64, at seconds: Double) throws {
+        try statement(insertHistorySQL).run(id, Int(seconds.rounded(.down)))
+        try statement("INSERT OR IGNORE INTO \(recordedTable) (path_id) VALUES (?)").run(id)
     }
 
     public func recordSkip(_ path: String) throws {

@@ -125,6 +125,7 @@ private let playedLibrary = Result { () throws -> PlayedLibrary in
             INSERT INTO plays (path_id, play_count, skip_count, last_played_seconds)
             SELECT path_id, count(*), 0, max(played_at) FROM history GROUP BY path_id
             """)
+        try database.execute(fillRecordedSQL)
     }
     try index.checkpoint()
     return PlayedLibrary(index: index, database: database, paths: rows.map(\.path))

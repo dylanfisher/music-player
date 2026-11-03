@@ -355,6 +355,21 @@ private func record(_ seq: Int64, _ event: SyncEvent) -> String {
     #expect(rows.map(\.1) == [2])
 }
 
+@Test func aMoveOntoAPlayedPathKeepsItsPlaysInHistory() throws {
+    let (sync, index) = try folder(with: [
+        record(1, .move(from: "music/library/a.flac", to: "music/library/b.flac"))
+    ])
+    let root = sync.deletingLastPathComponent().path + "/music/library/"
+    try index.recordSkip(root + "a.flac")
+    try index.recordPlay(root + "b.flac", at: 1_700_000_000)
+    let report = try index.sync(folder: "sync", at: sync.path)
+    #expect(report.problems.isEmpty, "\(report.problems)")
+    let recorded = try index.database.prepare(
+        "SELECT pa.path FROM \(recordedTable) r JOIN paths pa ON pa.id = r.path_id"
+    ).map { try $0.text(0) }
+    #expect(recorded == [root + "b.flac"])
+}
+
 @Test func aMoveCantTakeTheRowOfAFileThisMacStillHas() throws {
     let (sync, index) = try folder(with: [
         record(1, .move(from: "music/library/a.flac", to: "music/library/b.flac"))

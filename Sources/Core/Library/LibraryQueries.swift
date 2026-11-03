@@ -304,9 +304,9 @@ extension LibraryIndex {
         switch source {
         case .history:
             // A play this app or a synced Mac recorded has a history row. An import sets only
-            // Last Played (ADR 0057). On the joined plays the condition lets SQLite start from
-            // plays_last_played, and history_path answers the rest a track at a time.
-            let recorded = "EXISTS (SELECT 1 FROM history h WHERE h.path_id = t.file_id)"
+            // Last Played (ADR 0057). SQLite starts from the recorded paths and sorts them, which
+            // costs less than a lookup per row of plays_last_played.
+            let recorded = "t.file_id IN (SELECT path_id FROM \(recordedTable))"
             if playsJoined { return ("p.last_played_seconds IS NOT NULL AND \(recorded)", []) }
             return (recorded, [])
         case .playlist(let id):

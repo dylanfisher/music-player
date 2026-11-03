@@ -63,6 +63,24 @@ private func ratingPaths(_ index: LibraryIndex) throws -> [String] {
     #expect(try library.index().discards().count == 1)
 }
 
+@Test func theRecordedPathsRefillFromHistoryAndDiscardNothing() throws {
+    let library = try TestLibrary()
+    let index = try library.index()
+    try index.recordPlay("/x.flac", at: 100)
+    try index.database.execute(
+        """
+        DELETE FROM \(recordedTable);
+        UPDATE schema_identity SET sql = 'older' WHERE part = 'recorded'
+        """)
+
+    let rebuilt = try library.index()
+    #expect(try rebuilt.discards().isEmpty)
+    #expect(
+        try rebuilt.database.prepare(
+            "SELECT pa.path FROM \(recordedTable) r JOIN paths pa ON pa.id = r.path_id"
+        ).map { try $0.text(0) } == ["/x.flac"])
+}
+
 @Test func idsAndDateAddedSurviveAnIndexRebuild() throws {
     let library = try TestLibrary()
     _ = try library.scan()

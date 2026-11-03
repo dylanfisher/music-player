@@ -29,6 +29,9 @@ enum SchemaPart: String, CaseIterable {
     /// The paths the user removed from the library, which scans skip (ADR 0050). Keyed by path
     /// ID, and a part of its own for the same reason as `loved`.
     case removed
+    /// The paths with a row in `history`, which History lists (ADR 0057). Derived from
+    /// `history`, so building the part fills it from there, and rebuilding it discards nothing.
+    case recorded
 
     var sql: String {
         switch self {
@@ -40,6 +43,7 @@ enum SchemaPart: String, CaseIterable {
         case .sync: syncSchema
         case .scans: scansSchema
         case .removed: removedSchema
+        case .recorded: recordedSchema
         }
     }
 
@@ -54,6 +58,7 @@ enum SchemaPart: String, CaseIterable {
         case .sync: syncTables
         case .scans: [scannedFoldersTable]
         case .removed: [removedTable]
+        case .recorded: [recordedTable]
         }
     }
 }
@@ -74,6 +79,7 @@ let lovedTable = "loved"
 let dislikedTable = "disliked"
 let scannedFoldersTable = "scanned_folders"
 let removedTable = "removed"
+let recordedTable = "recorded_paths"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let syncStateTable = "sync_state"
@@ -275,6 +281,19 @@ private let removedSchema = """
         path_id INTEGER PRIMARY KEY REFERENCES paths (id)
     );
     """
+
+private let recordedSchema = """
+    -- A row for each path with a row in history. History tests this instead of history_path,
+    -- whose million rows cost a slow lookup per played track.
+    CREATE TABLE \(recordedTable) (
+        path_id INTEGER PRIMARY KEY REFERENCES paths (id)
+    );
+    \(fillRecordedSQL);
+    """
+
+/// Adds the paths with a row in `history` to `recordedTable`, for a fill from scratch.
+package let fillRecordedSQL =
+    "INSERT OR IGNORE INTO \(recordedTable) (path_id) SELECT DISTINCT path_id FROM history"
 
 private let lovedSchema = """
     -- A row for each loved path; none means not loved.

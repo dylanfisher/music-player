@@ -38,7 +38,7 @@ extension LibraryIndex {
         case .play(let path, let at):
             guard let id = try mergedPathID(path, seenAt: at, &merge) else { return nil }
             try addCounts(id, plays: 1, skips: 0, lastPlayed: at)
-            try statement(insertHistorySQL).run(id, Int(at.rounded(.down)))
+            try addHistory(id, at: at)
         case .skip(let path):
             guard let id = try mergedPathID(path, seenAt: seconds, &merge) else { return nil }
             try addCounts(id, plays: 0, skips: 1, lastPlayed: nil)
@@ -250,6 +250,9 @@ extension LibraryIndex {
             try statement("DELETE FROM plays WHERE path_id = ?").run(gone)
         }
         try statement("UPDATE history SET path_id = ? WHERE path_id = ?").run(kept, gone)
+        // Replacing `kept`'s own row, when it has one, leaves it marked once.
+        try statement("UPDATE OR REPLACE \(recordedTable) SET path_id = ? WHERE path_id = ?").run(
+            kept, gone)
         let rating = try statement("SELECT rating FROM ratings WHERE path_id = ?")
         let ratings: [Int?] = try [gone, kept].map { id in
             try rating.map(id, row: { try $0.int(0) }).first

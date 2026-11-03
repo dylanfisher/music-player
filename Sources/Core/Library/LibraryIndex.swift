@@ -156,9 +156,9 @@ public final class LibraryIndex {
                 logger.notice("the \(part.rawValue) tables don't match this build; rebuilding them")
             }
             // The sync part's rows are where reading the logs got to, which the next sync
-            // reads again, not the owner's stats.
+            // reads again, not the owner's stats. The recorded part refills itself from history.
             let discarded = rebuilt.filter {
-                stored[$0.rawValue] != nil && $0 != .sync && $0 != .scans
+                stored[$0.rawValue] != nil && ![.sync, .scans, .recorded].contains($0)
             }
             .compactMap(\.tables).reduce(into: Set<String>()) { $0.formUnion($1) }
             if !discarded.isEmpty { try recordDiscardedStats(discarded) }
