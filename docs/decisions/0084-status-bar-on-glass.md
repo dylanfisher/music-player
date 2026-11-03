@@ -56,9 +56,9 @@ which always alternates, does the same. Drawing the tint in the table's
 `drawBackground(inClipRect:)` was tried: the override alone, with nothing drawn, made trackpad
 scrolling cost 64 to 69 ms a frame against 8 to 13.
 
-**The bar's art opens the viewer** that row art opens, on the playing track's art. A refresh
-that redraws rows in place leaves it open, since it belongs to no rows; a reload of the list
-closes it, as it closes every viewer. **The art hover shows from anywhere in an
+**The bar's art opens the viewer** that row art opens, on the playing track's art. Like row
+art's, it stays open across a refresh while that track is listed with the same art and album
+(phase 35). **The art hover shows from anywhere in an
 album's art cells**, the space beside a scaled-down image included.
 
 **Settings describes glass** as turning the whole player into translucent glass.
@@ -80,7 +80,8 @@ album's art cells**, the space beside a scaled-down image included.
 ## Consequences
 
 - With glass on, AppKit centers the title over the area beside the sidebar, so the bar's middle,
-  centered on the whole window, sits left of the title by half the sidebar's width.
+  centered on the whole window, sits left of the title by half the sidebar's width. A known
+  limitation, for phase 37's builder to address.
 - The window and live resize benches run with the bar over the rows.
 - The 2015 MacBook Pro shows the material fallback; that it blends with the rows under it is an
   owner check there.
