@@ -59,6 +59,8 @@ private struct PlayLatency: Sendable {
     var firstFrameMilliseconds: Double
     var mainThreadMilliseconds: Double
     var queued: Int
+    /// From the click until the whole queue had replaced the clicked track alone.
+    var wholeQueueMilliseconds: Double
 }
 
 /// Clicks a row in the middle of the whole library, as the app does, and times it until the
@@ -95,13 +97,14 @@ private let playLatency = Result { () throws -> PlayLatency in
         let end = try frame.wait()
         let cpu = threadCPUSeconds() - cpuBefore
         try await filling.value
+        let whole = DispatchTime.now().uptimeNanoseconds
         let queued = await engine.state.queue.count
         guard queued == model.trackIDs.count else {
             throw BenchError.expected("\(model.trackIDs.count) tracks queued, not \(queued)")
         }
         return PlayLatency(
             firstFrameMilliseconds: Double(end - start) / 1e6, mainThreadMilliseconds: cpu * 1000,
-            queued: queued)
+            queued: queued, wholeQueueMilliseconds: Double(whole - start) / 1e6)
     }
 }
 
@@ -114,7 +117,10 @@ let playLatencyBenchmarks = [
         return Measured(
             value: latency.firstFrameMilliseconds,
             notes: [
-                "\(latency.queued) tracks in the queue, null device, a 44.1 kHz 16-bit FLAC first"
+                "\(latency.queued) tracks in the queue, null device, a 44.1 kHz 16-bit FLAC first",
+                String(
+                    format: "the whole queue in place %.1f ms after the click",
+                    latency.wholeQueueMilliseconds),
             ])
     },
     Benchmark(

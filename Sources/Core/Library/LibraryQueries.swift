@@ -248,12 +248,11 @@ extension LibraryIndex {
 
     /// The path of each of `ids` that is still in the index.
     public func paths(ids: [Int64]) throws -> [Int64: String] {
-        let select = try statement("SELECT path FROM files WHERE id = ?")
-        var paths: [Int64: String] = [:]
-        for id in ids {
-            if let path = try select.map(id, row: { try $0.text(0) }).first { paths[id] = path }
-        }
-        return paths
+        let found = try inChunks(
+            ids, { "SELECT id, path FROM files WHERE id IN (\($0))" },
+            { (Int64(try $0.int(0)), try $0.text(1)) })
+        // An ID asked for in two chunks comes back from both.
+        return Dictionary(found, uniquingKeysWith: { first, _ in first })
     }
 
     public func trackCount() throws -> Int {
