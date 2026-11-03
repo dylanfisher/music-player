@@ -31,5 +31,8 @@ its first progress 0.63 s after launch with the same merge pending, against 4.9 
 
 - At launch, another machine's plays, ratings and playlist edits show after the launch scan
   instead of before it. On a new index the merge then finds the tracks the scan just added.
+- When a launch scan is a network folder's first whole scan, which takes many minutes on the
+  NAS, the first sync and any push wait for it, as every sync already waited for a running
+  scan.
 - A sync that hangs on a dropped share still holds the scan queue; phase 32e.4 covers file
   access that never returns.
