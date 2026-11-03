@@ -176,3 +176,20 @@ private func request(_ offset: Int) -> ArtRequest {
         #expect(closed == 1, "\(close)")
     }
 }
+
+@MainActor @Test func aDecodeFinishingAfterTheViewerClosedIsDropped() async throws {
+    let screen = try #require(NSScreen.main)
+    let viewer = ArtViewer(image: NSImage(size: NSSize(width: 10, height: 10)), screen: screen)
+    var failures: [String] = []
+    viewer.show()
+    let art = EmbeddedArt(offset: 0, byteCount: 10, mimeType: "image/png", unsynchronised: false)
+    let late = viewer.load(art, path: "/nonexistent/art.flac") { failures.append($0) }
+    viewer.close()
+    await late.value
+    #expect(failures.isEmpty)
+    // While open, the same failure is reported.
+    viewer.show()
+    await viewer.load(art, path: "/nonexistent/art.flac") { failures.append($0) }.value
+    #expect(failures.count == 1)
+    viewer.close()
+}

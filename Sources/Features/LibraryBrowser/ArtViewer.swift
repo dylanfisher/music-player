@@ -12,6 +12,9 @@ final class ArtViewer {
     private let view: ArtViewerView
     /// Called once the viewer has closed.
     var closed: () -> Void = {}
+    /// Counts each showing and closing, so a decode finishing after the opening it was for
+    /// ended is dropped.
+    private var session = 0
 
     init(image: NSImage, screen: NSScreen) {
         window = ArtViewerWindow(
@@ -28,18 +31,24 @@ final class ArtViewer {
     }
 
     func show() {
+        session += 1
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(view)
     }
 
     /// Decodes `art` from the file at `path` at the screen's pixels and shows it. `failed` gets
     /// what went wrong, and the opening art stays.
-    func load(_ art: EmbeddedArt, path: String, failed: @escaping (String) -> Void) {
+    @discardableResult
+    func load(_ art: EmbeddedArt, path: String, failed: @escaping (String) -> Void) -> Task<
+        Void, Never
+    > {
         let side = max(window.frame.width, window.frame.height) * window.backingScaleFactor
         let loader = ArtworkLoader(maxPixelSize: Int(side.rounded(.up)), capacity: 1)
-        Task {
+        let opening = session
+        return Task {
             let result = await Task.detached { Result { try loader.image(art, path: path) } }
                 .value
+            guard opening == session, window.isVisible else { return }
             switch result {
             case .success(let image): view.image = NSImage(cgImage: image, size: .zero)
             case .failure(let error): failed("couldn't open the art of \(path): \(error)")
@@ -49,6 +58,7 @@ final class ArtViewer {
 
     func close() {
         guard window.isVisible else { return }
+        session += 1
         window.orderOut(nil)
         closed()
     }
