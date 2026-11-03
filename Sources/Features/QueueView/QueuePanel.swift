@@ -5,8 +5,7 @@ import KeyChord
 import Log
 import Playback
 
-/// The queue beside the track table: the tracks in play order, with the current one's row
-/// marked.
+/// The queue beside the track table: the current track, marked, then what plays after it.
 /// Drag to reorder, Delete to remove, double-click to play one. Edits go to the engine, and the
 /// panel redraws from its next update.
 @MainActor
@@ -114,13 +113,13 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
         let cell =
             tableView.makeView(withIdentifier: QueueCell.identifier, owner: nil) as? QueueCell
             ?? QueueCell()
-        cell.show(model.item(at: row), current: row == model.currentPosition)
+        cell.show(model.item(at: row), current: row == model.currentRow)
         return cell
     }
 
     public func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         let rowView = MarkedRowView.reused(in: tableView)
-        rowView.isMarked = row == model.currentPosition
+        rowView.isMarked = row == model.currentRow
         return rowView
     }
 
@@ -152,7 +151,9 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
                 $0.string(forType: Self.rowType).flatMap(Int.init)
             })
         guard let engine, !rows.isEmpty else { return false }
-        Task { await engine.moveQueueItems(rows, to: row) }
+        let positions = model.positions(ofRows: rows)
+        let destination = model.position(ofRow: row)
+        Task { await engine.moveQueueItems(positions, to: destination) }
         return true
     }
 
@@ -161,7 +162,8 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
     @objc private func playClicked() {
         let row = table.clickedRow >= 0 ? table.clickedRow : table.selectedRow
         guard let engine, row >= 0 else { return }
-        Task { await engine.play(at: row) }
+        let position = model.position(ofRow: row)
+        Task { await engine.play(at: position) }
     }
 
     @objc private func removeClicked() {
@@ -197,13 +199,15 @@ public final class QueuePanel: NSViewController, NSTableViewDataSource, NSTableV
     /// Plays the first selected track.
     public func playSelection() {
         guard let engine, let row = table.selectedRowIndexes.first else { return }
-        Task { await engine.play(at: row) }
+        let position = model.position(ofRow: row)
+        Task { await engine.play(at: position) }
     }
 
     private func remove(_ rows: IndexSet) {
         guard let engine, !rows.isEmpty else { return }
         table.deselectAll(nil)
-        Task { await engine.removeQueueItems(rows) }
+        let positions = model.positions(ofRows: rows)
+        Task { await engine.removeQueueItems(positions) }
     }
 }
 

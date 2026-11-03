@@ -5,7 +5,9 @@ import Playback
 
 private let logger = moduleLogger()
 
-/// The queue panel's rows: the engine's queue in play order, each described from the library.
+/// The queue panel's rows: the engine's queue in play order from the current track on, each
+/// described from the library. Played tracks stay in the engine's queue, for Previous and repeat
+/// all, but aren't listed. Row 0 is the current track, when there is one.
 @MainActor
 public final class QueueModel {
     /// The most rows whose library lookups are kept. A queue can hold the whole library, but the
@@ -30,16 +32,28 @@ public final class QueueModel {
         described = [:]
     }
 
-    public var count: Int { state.order.count }
+    public var count: Int { state.order.count - firstPosition }
 
     /// Where the current track is in play order.
     var currentPosition: Int? {
         state.currentIndex.flatMap { state.order.firstIndex(of: $0) }
     }
 
-    /// The track at `position` in play order.
-    public func item(at position: Int) -> QueueItem {
-        let url = state.queue[state.order[position]]
+    private var firstPosition: Int { currentPosition ?? 0 }
+
+    /// The current track's row.
+    var currentRow: Int? { currentPosition.map { _ in 0 } }
+
+    /// The engine's position in play order of the track at `row`.
+    func position(ofRow row: Int) -> Int { row + firstPosition }
+
+    func positions(ofRows rows: IndexSet) -> IndexSet {
+        IndexSet(rows.map(position(ofRow:)))
+    }
+
+    /// The track at `row`.
+    public func item(at row: Int) -> QueueItem {
+        let url = state.queue[state.order[position(ofRow: row)]]
         if let item = described[url.path] { return item }
         if described.count >= Self.lookupCapacity { described = [:] }
         let item: QueueItem

@@ -17,7 +17,7 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
     return state
 }
 
-@MainActor @Test func listsThePlayOrderAndMarksTheCurrentTrack() {
+@MainActor @Test func listsThePlayOrderFromTheCurrentTrackOn() {
     var lookups = 0
     let model = QueueModel { path in
         lookups += 1
@@ -28,18 +28,34 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
             codec: "flac", sampleRateHz: 44100, bitsPerSample: 16, durationSeconds: 61,
             addedSeconds: 0, art: nil)
     }
+    // Track 2 has played, so it isn't listed.
     model.apply(state(order: [2, 1, 0], current: 1))
-    #expect(model.count == 3)
-    #expect(model.currentPosition == 1)
-    #expect(model.item(at: 1) == model.item(at: 1))
-    #expect(model.item(at: 1).title == "Song")
-    #expect(model.item(at: 1).detail == "Band — Record")
-    #expect(model.item(at: 0).title == "2")
-    #expect(model.item(at: 0).detail == "/m")
+    #expect(model.count == 2)
+    #expect(model.currentRow == 0)
+    #expect(model.item(at: 0) == model.item(at: 0))
+    #expect(model.item(at: 0).title == "Song")
+    #expect(model.item(at: 0).detail == "Band — Record")
+    #expect(model.item(at: 1).title == "0")
+    #expect(model.item(at: 1).detail == "/m")
     #expect(lookups == 2)
-    #expect(model.summary == "3 tracks")
+    #expect(model.summary == "2 tracks")
+    model.apply(state(order: [2, 1, 0], current: nil))
+    #expect(model.count == 3)
+    #expect(model.item(at: 0).title == "2")
     model.apply(state(order: [], current: nil))
-    #expect(model.currentPosition == nil)
+    #expect(model.currentRow == nil)
+    #expect(model.count == 0)
+}
+
+@MainActor @Test func rowsMapToPositionsInPlayOrder() {
+    let model = QueueModel { _ in nil }
+    model.apply(state(order: [2, 1, 0], current: 1))
+    #expect(model.position(ofRow: 0) == 1)
+    #expect(model.positions(ofRows: [0, 1]) == [1, 2])
+    // A drop below the last row goes to the end.
+    #expect(model.position(ofRow: model.count) == 3)
+    model.apply(state(order: [2, 1, 0], current: nil))
+    #expect(model.position(ofRow: 1) == 1)
 }
 
 @MainActor @Test func aFailedLookupStillListsTheFile() {
@@ -77,11 +93,12 @@ private func state(order: [Int], current: Int?) -> PlaybackState {
         }
     }
     model.apply(state(order: [2, 1, 0], current: 1))
-    #expect(marked() == [1])
+    #expect(marked() == [0])
     // An identifier lets the table reuse the row view.
     #expect(panel.tableView(table, rowViewForRow: 0)?.identifier != nil)
     model.apply(state(order: [2, 1, 0], current: 0))
-    #expect(marked() == [2])
+    #expect(marked() == [0])
+    #expect(model.count == 1)
     model.apply(state(order: [2, 1, 0], current: nil))
     #expect(marked().isEmpty)
 }
