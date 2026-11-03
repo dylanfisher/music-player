@@ -49,6 +49,8 @@ Set by the owner on 2026-10-30, 2026-10-31 and 2026-11-02:
 8. Phase 29 after phase 12, through its gate. Added by the owner on 2026-11-02.
 9. Skip 10 and 13 for now. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
+10. Phase 34 first, alone, because it guards the library. Then 33, 35 and 36 in parallel, and
+    37 after 36. Added by the owner on 2026-11-03.
 
 ## Phase gate
 
@@ -3596,7 +3598,8 @@ extends that bench rather than redoing it.
 
 ### 33. Old Mac follow-ups
 
-**Queued, not started.** The owner starts it. From the 32f old Mac checkpoint on 2026-11-03.
+**Queued, not started.** Runs after 34, alongside 35 and 36. From the 32f old Mac checkpoint on
+2026-11-03.
 Phase 32's rules apply: bench first, the audio boundary stands, the NAS is simulated, and the old
 Mac's numbers come from its next checkpoint.
 
@@ -3627,6 +3630,117 @@ Mac's numbers come from its next checkpoint.
   cause is contained.
 - [ ] **Hardware checkpoint (owner):** rerun the 32f block on the 2015 MacBook Pro and send back
   the file.
+
+### 34. Config safety
+
+**In progress.** From the mbp2026 test run (Mac17,6, M5 Max, 18 cores, macOS 26.6.2, Xcode
+27.2) on 2026-11-03: the owner's feedback on the release build at c4c8c65, like phases 35 to 37.
+A config that doesn't parse must never cost the library or the rest of the settings.
+
+- **34.1 A bad config never empties the library.** At launch, a config that fails to parse leaves
+  every setting at its default, and `library.watchedFolders` defaults to `[]`. That empty list
+  reaches `LibraryWatcher.start` (`Sources/Core/Library/LibraryWatcher.swift:109`), where
+  `removeFiles(outside: [])` treats every file in the index as outside and deletes it. On mbp2026
+  a stale `appearance.nowPlaying` line (the key was removed in 4d0a177) failed the parse. The
+  owner then saw no music in the track list, but the index still had all 43,382 tracks, 11,169
+  plays and 149 ratings. Find out why nothing was deleted and why the list was empty. Then make
+  both impossible: write a test that launches with a broken config and an indexed library and
+  checks that no file is removed and the rows show. Don't start the watcher on, or remove files
+  for, folders that come from defaults while the config has problems. Record the decision in an ADR.
+- **34.2 An unknown key doesn't block the rest.** A key the app doesn't know, such as an obsolete
+  one, is reported in the banner and skipped, and every other valid setting still applies and
+  saves. Real errors (bad JSON, a bad value for a known key) keep today's behavior, unless 34.1's
+  ADR decides to apply the valid keys there too.
+- **34.3 The banner fixes it.** For an unknown or obsolete key, the banner offers "Remove
+  Obsolete Setting". It deletes that key's line and the comment lines above it, and leaves the
+  rest of the file byte-for-byte, including comments and the trailing comma rules. Test it on a
+  file with comments around the key and with the key last.
+- **34.4 "Never" for watched-folder rescans.** The rescan interval popup (ADR 0060) gets a Never
+  option: the folder is not rescanned on a timer, only by Rescan or by file events where those
+  apply. Say in the ADR whether Never also skips the launch rescan.
+
+### 35. Seek, progress bar and buffering
+
+**Queued, not started.** Runs after 34, alongside 33 and 36.
+
+- **35.1 Optimistic seek.** A click on the bar jumps there, then jumps back to the old position
+  for about a second, then comes back. The audio is right; only the playhead lags. ADR 0072 says
+  the bar keeps the target until the engine reports the seek done, so find where that breaks
+  (a position tick arriving before the seek's report, or a second view drawing the old time),
+  and add a test that clicks and asserts the drawn position never goes back to the old time.
+- **35.2 A standard progress bar.** Draw the bar like the owner's reference: elapsed time on the
+  left, total on the right, a rounded track with an accent-colored fill for the part played, in
+  a rounded inset box. No vertical-line playhead.
+- **35.3 Dragging the bar never moves the window.** In the toolbar and in the status bar, a
+  mouse down on the seek bar must not start a window drag (`mouseDownCanMoveWindow` false, and
+  check the full-size content view in glass mode). Test it with both locations.
+- **35.4 Buffering review.** Write up how a track is read and decoded today: read sizes, how far
+  decoding runs ahead, what's kept, when the next track starts reading, and what happens on a
+  seek, for local files and the slow simulated NAS. Compare with reading the whole file into
+  memory, reading the next track ahead near the end, and keeping recently played or seeked
+  regions. Weigh memory on the 2015 Mac, NAS load while browsing, gapless, and seek latency
+  when scrubbing quickly. Recommend, record an ADR, and bench any change against the 32 budgets
+  (time to sound, seek to first sound, soak memory).
+- **35.5 The art viewer stays open during a scan.** Clicking album art opens the viewer, and a
+  scan that adds tracks closes it, probably because the list reloads. Keep it open across a
+  refresh as long as its track is still in the list.
+
+### 36. Window chrome and glass
+
+**Queued, not started.** Runs after 34, alongside 33 and 35.
+
+- **36.1 The status bar centered on the window.** Its middle content stays centered on the
+  window's full width, lined up with the window title. It doesn't move when the scan progress
+  appears or changes width, or when the sidebar shows, hides or resizes. If that's simpler with
+  the status bar spanning the whole window, sidebar included, do that.
+- **36.2 Liquid glass on the status bar.** The owner has asked for this several times. ADR 0072
+  explains why it looks solid: it uses the title bar material, and nothing scrolls behind it. Fix
+  that: on macOS 26 use `NSGlassEffectView`, with the bar laid over the bottom of the table so
+  rows scroll under it (the scroll view's bottom inset matching the bar's height), and keep a
+  material fallback on 12 to 15. Say in an ADR how this fits with 36.1's full-width option.
+- **36.3 Status bar art is clickable** and opens the same viewer as row art.
+- **36.4 Toggling a status bar part never resizes the window.** With only Art ticked, toggling it
+  shrinks the window and changes the sidebar's width. No status bar change may change the
+  window's frame or the split view's positions. Test it for each part alone and together.
+- **36.5 Art-column hover covers the whole cell.** Hovering anywhere in a row's art cell enlarges
+  that row's art, not only over the image (ADR 0065).
+- **36.6 Glass mode's wording.** In Settings it describes turning the whole player into
+  translucent glass, not "the sidebar's material".
+- **36.7 Alternating rows in glass mode.** Draw them with translucent tints so they work over
+  the material, instead of turning them off.
+- **36.8 Grid lines left behind by glass.** After turning glass on and off, every row has faint
+  lines between it and the next; Row Lines only makes them darker, and turning glass off makes
+  them fainter without removing them. Glass must put back exactly what it changed. Add a test
+  that toggles glass on and off and compares the tables' grid, background and row settings with
+  a fresh window.
+
+### 37. Toolbar and status bar builders
+
+**Queued, not started.** Builds on 36. Reverses ADR 0072's rejected "free-form status bar
+editor" and "now-playing parts as toolbar items", so it needs a new ADR that supersedes those
+parts.
+
+- **37.1 Status bar builder.** The status bar is built from columns the owner adds: fixed or
+  flexible width, each with its own alignment (leading, center, trailing), like flexbox. Parts
+  go into columns. The goal is a middle column that stays centered on the window (36.1), with
+  the left and right columns aligned however the owner likes. The builder opens in its own
+  window or popover from Settings ▸ Appearance, with drag and drop and a live preview.
+- **37.2 Tall mode stacks.** In the tall style, a column can stack parts vertically (title over
+  artist over format, say), and the bar grows to fit, within a maximum height.
+- **37.3 Header status builder.** The same builder, as its own instance, lays out the header's
+  now-playing status: art, text lines and seek bar in columns and stacks. It can rebuild today's
+  detailed layout exactly, and that layout is the default.
+- **37.4 A modular toolbar like Swinsian's.** Customize Toolbar offers separate items: Controls
+  (previous, play/pause, next), Volume, Status (the 37.3 layout), Search, Shuffle, Repeat, Mini
+  Window when it exists, Output (AirPlay/UPnP), Flexible Space and Space. Its default set is
+  Controls, flexible space, Volume, flexible space, Status, flexible space, Shuffle, flexible
+  space, Search. It replaces the single pre-made now-playing item.
+- [ ] **Owner check:** build the current header and a centered-status layout with each builder
+  on mbp2026 and on the 2015 MacBook Pro.
+
+Still open from the mbp2026 test run, for later: the manual checklist (scrolling with art during
+a rescan, start time at the same and another rate, built-in and Bluetooth output, the UI pass,
+Get Info over 200), the `sudo purge` cold launch, and the stall log.
 
 ## Later
 
