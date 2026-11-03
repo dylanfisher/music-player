@@ -104,8 +104,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var statusPartViews: [StatusPart: NSView] = [:]
     private var statusHeight: NSLayoutConstraint?
     private var statusArtHeight: NSLayoutConstraint?
-    /// The status bar on the table headers' material, which shows and hides with it.
-    private(set) lazy var statusArea = headerBackground(around: statusBar)
+    /// The status bar on the toolbar's material, which shows and hides with it.
+    private(set) lazy var statusArea = toolbarBackground(around: statusBar)
     let statusLabel = NSTextField(labelWithString: "")
     private let scanIndicator = NSProgressIndicator()
     /// Whether the scan bar moves on its own, which only it does while the status bar shows.
@@ -1550,13 +1550,13 @@ private func problemsUnreadable(_ error: any Error) -> String {
     "couldn't read the library's problems: \(error)"
 }
 
-/// `content` on liquid glass from macOS 26, and on the title bar's material before it, filling
-/// the view returned.
+/// `content` on the title bar's material, filling the view returned, so the status bar is the
+/// toolbar's gray (ADR 0067). Within the window it shows the window's background behind it,
+/// which looks flat; the window's glass makes it blend with what's behind the window.
 @MainActor
-private func headerBackground(around content: NSView) -> NSView {
+private func toolbarBackground(around content: NSView) -> NSView {
     let material = NSVisualEffectView()
-    // The material AppKit gives a table's header, so the bar is the same translucent gray.
-    material.material = .headerView
+    material.material = .titlebar
     material.blendingMode = .withinWindow
     material.addSubview(content)
     content.translatesAutoresizingMaskIntoConstraints = false

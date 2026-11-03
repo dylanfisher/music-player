@@ -256,7 +256,7 @@ import Testing
         backing: .buffered, defer: false)
     window.contentView = browser.content.view
     window.layoutIfNeeded()
-    #expect((browser.statusArea as? NSVisualEffectView)?.material == .headerView)
+    #expect((browser.statusArea as? NSVisualEffectView)?.material == .titlebar)
     let header = try #require(browser.table.table.headerView)
     #expect(header.frame.height > 0)
     #expect(browser.statusArea.frame.height == header.frame.height)
