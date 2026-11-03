@@ -131,3 +131,23 @@ private func indexedTags(_ library: TestLibrary) -> [(path: String, tags: Fixtur
     try library.index().removeFromLibrary(trackIDs: [ids[1]])
     #expect(try index.trackTotals(ids: [ids[1]]).count == 0)
 }
+
+@Test func trackTotalsKeepTheirSizesThroughAPlayOrARating() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let ids = try index.trackIDs(sortedBy: .title)
+    let path = try #require(try index.paths(ids: [ids[0]])[ids[0]])
+    _ = try index.trackTotals(ids: ids)
+    // A size no file has, which only the kept sizes give.
+    index.trackSizes[ids[0]] = TrackSize(bytes: -1, seconds: 0)
+    try index.recordPlay(path, at: 1000)
+    try index.recordSkip(path)
+    try index.setRating(3, trackIDs: [ids[0]])
+    try index.toggle(.liked, trackIDs: [ids[0]])
+    #expect(try index.trackTotals(ids: [ids[0]]).sizeBytes == -1)
+    // Another connection's write, between this one's write and the next read, reads them again.
+    try index.recordPlay(path, at: 2000)
+    try library.index().recordPlay(path, at: 3000)
+    #expect(try index.trackTotals(ids: [ids[0]]).sizeBytes > 0)
+}

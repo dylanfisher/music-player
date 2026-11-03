@@ -225,7 +225,7 @@ extension LibraryIndex {
     /// Counts a play of the file at `path`, at `seconds` since 1970, and logs it in the history.
     /// A path the index never held gets an ID here, so a file played from elsewhere is counted.
     public func recordPlay(_ path: String, at seconds: Double) throws {
-        try database.transaction {
+        try statsTransaction {
             let id = try pathID(path, seenAt: seconds)
             try statement(
                 """
@@ -248,7 +248,7 @@ extension LibraryIndex {
     }
 
     public func recordSkip(_ path: String) throws {
-        try database.transaction {
+        try statsTransaction {
             let id = try pathID(path, seenAt: Date().timeIntervalSince1970)
             try statement(
                 """
@@ -264,7 +264,7 @@ extension LibraryIndex {
     public func setRating(_ stars: Int, trackIDs ids: [Int64]) throws {
         precondition(
             (0...SmartField.maxRating).contains(stars), "a rating of \(stars) stars")
-        try database.transaction {
+        try statsTransaction {
             let write =
                 stars == 0
                 ? try statement(deleteRatingSQL) : try statement(setRatingSQL)
@@ -279,7 +279,7 @@ extension LibraryIndex {
     /// Gives the tracks `ids` `opinion`, or clears it when every one of them has it already.
     /// Liking a disliked track drops the dislike, and the other way round.
     public func toggle(_ opinion: TrackOpinion, trackIDs ids: [Int64]) throws {
-        try database.transaction {
+        try statsTransaction {
             let all = try ids.allSatisfy { try self.opinion(of: $0) == opinion }
             let new = all ? nil : opinion
             let roots = try syncRoots()

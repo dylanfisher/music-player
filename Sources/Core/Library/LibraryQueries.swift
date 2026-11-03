@@ -50,10 +50,24 @@ extension LibraryIndex {
     /// Changes whenever a connection commits a change to the index: another connection through
     /// `data_version`, this one through `total_changes()`.
     private func changeStamp() throws -> [Int] {
-        [
-            try statement("PRAGMA data_version").map { try $0.int(0) }[0],
-            try statement("SELECT total_changes()").map { try $0.int(0) }[0],
-        ]
+        [try statement("PRAGMA data_version").map { try $0.int(0) }[0], try totalChanges()]
+    }
+
+    private func totalChanges() throws -> Int {
+        try statement("SELECT total_changes()").map { try $0.int(0) }[0]
+    }
+
+    /// Runs `body` in a transaction that changes neither tracks nor files, such as a play or a
+    /// rating, so the sizes `trackTotals` read stay current instead of being read again.
+    func statsTransaction<T>(_ body: () throws -> T) throws -> T {
+        let before = try changeStamp()
+        let result = try database.transaction(body)
+        if before == trackSizesStamp {
+            // `data_version` as it was before, so a commit by another connection meanwhile, or
+            // since, still has them read again.
+            trackSizesStamp = [before[0], try totalChanges()]
+        }
+        return result
     }
 
     /// The names of the tracks `trackIDs` gives, in the same order, for Go to Item and
