@@ -2378,17 +2378,17 @@ every column; rows about 17 pt with small type; light alternating rows off. Liqu
 macOS 26's `NSGlassEffectView`, behind `#available(macOS 26, *)`, with an `NSVisualEffectView`
 fallback for macOS 12 to 15.
 
-- [ ] **27.1 Appearance settings section.** A new Appearance section in the settings window and
+- [x] **27.1 Appearance settings section.** A new Appearance section in the settings window and
       the config file: vertical column lines, horizontal row lines, alternating rows, row
       height (compact, regular, large), and the art column's art size. The Album Art column, when
       shown, draws the art at the column's full width (minus a small inset), square, spanning the
       album's rows, and resizes with the column. Defaults stay as today's look.
-- [ ] **27.2 Status bar like Swinsian's.** Stats centered in the status bar, as "43400 tracks,
+- [x] **27.2 Status bar like Swinsian's.** Stats centered in the status bar, as "43400 tracks,
       1048.1 GiB, 185 days 17 hours 29 minutes 26 seconds", with the selection appended as
       "(1 track selected, 303.5 MiB, 1 hour 2 minutes 2 seconds)". Clicking the stats cycles
       through: all with selection, all only, selection only (falling back to all when nothing is
       selected). The choice persists. The bar uses liquid glass.
-- [ ] **27.3 Customizable header toolbar.** The header becomes an `NSToolbar` the user customizes
+- [x] **27.3 Customizable header toolbar.** The header becomes an `NSToolbar` the user customizes
       with the standard sheet (Customize Toolbar… in View and the toolbar's context menu): items
       for transport controls, volume, the now-playing status, search, shuffle, repeat, the
       queue toggle, the output picker, the signal path, flexible space and space. Every item can
@@ -2396,11 +2396,36 @@ fallback for macOS 12 to 15.
       header: "Title by Artist from Album" centered in bold, under it a rounded capsule with
       elapsed time, a thin progress bar and total time, no art. Today's style stays as the
       default "Detailed". The header uses liquid glass.
-- [ ] **27.4 Compact signal path panel.** The bit-perfect panel uses the window's width: the
+- [x] **27.4 Compact signal path panel.** The bit-perfect panel uses the window's width: the
       verdict and the rows laid out in two or three columns (File, Decoder, Device on one side;
       Takes, Hog mode, Volume on the other), so it's about half as tall. Tidy its spacing,
       alignment and type to match the rest of the header; the verdict reads as a small colored
       badge.
+
+Result: shipped as planned; `./scripts/check` passes. The owner's screenshots weren't available and
+nobody ran the app, so the look is checked only by unit tests and off-screen renders. 27.1: five
+settings (`appearance.columnLines`, `rowLines`, `alternatingRows`, `rowHeight`, `artSize`) in a
+new Appearance pane and a View ▸ Track Table submenu; Full Width art is drawn once per album,
+square, as one slice per row (`AlbumArtCell`, `ArtRun`); defaults keep today's table; "art size" is
+read as thumbnail or full width, not points (ADR 0053). 27.2: centered totals in the status bar
+with the selection appended, a click cycles the three choices, saved as `window.statusTotals`;
+glass on macOS 26 with a title bar material fallback (ADR 0054). The totals come from a size and
+length map the index keeps and are added up after the rows show. 27.3: the header is an
+`NSToolbar` with eleven items, saved as `window.toolbarItems`, Customize Toolbar… in View and the
+context menu, and a Centered now-playing style (`appearance.nowPlaying`); the glass is the system's
+own toolbar glass on macOS 26 and the title bar material on 12 to 15, not a backdrop of ours
+(ADR 0055). 27.4: the signal path panel is two columns with a colored verdict badge, about 77 pt
+tall at 720 pt wide against about 124 pt. Bench on Apple Silicon, main to branch: search keystroke
+p95 6.1 to 5.9 ms, sort p95 27.7 to 25.7 ms, re-sort 28.7 to 26.2 ms, launch to first rows 0.37
+to 0.40 s, memory at first rows 46 to 45 MB. The gate also fixed a memory growth after scrolling
+every row (about 1.8 GB to 62 MB; the track table and queue now reuse row views), a state file
+listing a toolbar item twice crashing at launch, and Find with Search removed from the toolbar.
+For 26.4: Swinsian keeps its table columns in `~/Library/Preferences/com.swinsian.Swinsian.plist`
+(key `MainTableColumns-Ver1`), not in `Library.sqlite`; row 26.4 is not part of this phase. Not
+done: scrolling with the art column is left to row 28.3. Pending the owner: the by-hand checks of
+27.1 to 27.4, on macOS 26 and on the 2015 MacBook Pro (glass, Full Width art, Customize Toolbar…
+drag, the Centered style, the signal path panel in light and dark), and `./scripts/bench` on the
+2015 MacBook Pro.
 
 ### 28. Queue, history and scrolling
 
