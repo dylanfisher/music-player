@@ -126,3 +126,29 @@ private func verdict(
         verdict(state: .notConnected, gain: 0.5)
             == .changed([.digitalVolume(gain: 0.5), .deviceNotConnected]))
 }
+
+@Test func dsdAsDoPAtItsCarrierIsBitPerfectOnlyWhenTheDeviceHoldsTheWords() {
+    let dsd128 = SignalFormat(
+        formatID: dsdFormatID, sampleRateHz: 5_644_800, bitsPerChannel: 1, channels: 2,
+        isFloat: false)
+    let dop = SignalFormat(
+        formatID: dopFormatID, sampleRateHz: 352_800, bitsPerChannel: 24, channels: 2,
+        isFloat: false)
+    let dac = device(rate: 352_800, physical: pcm(352_800, bits: 32))
+    #expect(verdict(file: dsd128, decoded: dop, state: dac) == .bitPerfect)
+    // A 16-bit device format would cut the marker off.
+    let narrow = pcm(352_800, bits: 16)
+    #expect(
+        verdict(file: dsd128, decoded: dop, state: device(rate: 352_800, physical: narrow))
+            == .changed([.deviceLosesPrecision(narrow)]))
+    // DoP at the wrong carrier is no longer the file's bits.
+    let wrong = SignalFormat(
+        formatID: dopFormatID, sampleRateHz: 176_400, bitsPerChannel: 24, channels: 2,
+        isFloat: false)
+    #expect(
+        verdict(file: dsd128, decoded: wrong, state: dac)
+            == .changed([
+                .decoderResamples(fromHz: 5_644_800, toHz: 176_400),
+                .deviceResamples(fromHz: 176_400, toHz: 352_800),
+            ]))
+}

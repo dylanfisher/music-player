@@ -10,7 +10,7 @@ private let logger = moduleLogger()
 enum HALDeviceError: Error, CustomStringConvertible {
     case hogModeHeld(by: pid_t)
     case noOutputStream
-    case noBitPerfectFormat(sampleRateHz: Double, channels: UInt32)
+    case noBitPerfectFormat(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32)
     case didNotSettle(String)
 
     var description: String {
@@ -18,8 +18,9 @@ enum HALDeviceError: Error, CustomStringConvertible {
         case .hogModeHeld(let pid):
             "another process (pid \(pid)) has exclusive access to the device"
         case .noOutputStream: "the device has no output stream"
-        case .noBitPerfectFormat(let rate, let channels):
-            "the device has no \(channels)-channel integer format at \(kilohertz(rate)) kHz"
+        case .noBitPerfectFormat(let rate, let channels, let bits):
+            "the device has no \(channels)-channel integer format"
+                + (bits > 0 ? " of \(bits) bits or more" : "") + " at \(kilohertz(rate)) kHz"
         case .didNotSettle(let what): "the device didn't switch to \(what) within 3 seconds"
         }
     }
@@ -78,15 +79,18 @@ final class HALDevice: PCMDevice {
             defaultSystemOutputUID: try defaultUID(kAudioHardwarePropertyDefaultSystemOutputDevice))
     }
 
-    func configure(sampleRateHz: Double, channels: UInt32) throws -> DeviceFormat {
+    func configure(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32) throws
+        -> DeviceFormat
+    {
         let available: [AudioStreamRangedDescription] = try readArray(
             stream, address(kAudioStreamPropertyAvailablePhysicalFormats))
         guard
             let format = bitPerfectFormat(
                 in: available, sampleRateHz: sampleRateHz, channels: channels,
-                allowNonMixable: hogMode)
+                minimumBits: minimumBits, allowNonMixable: hogMode)
         else {
-            throw HALDeviceError.noBitPerfectFormat(sampleRateHz: sampleRateHz, channels: channels)
+            throw HALDeviceError.noBitPerfectFormat(
+                sampleRateHz: sampleRateHz, channels: channels, minimumBits: minimumBits)
         }
 
         let clock = StepClock()

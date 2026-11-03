@@ -2,7 +2,7 @@ import CoreAudio
 import Playback
 
 /// Picks the physical format that passes `channels` of samples at `sampleRateHz` through
-/// unchanged, or nil if the device has none.
+/// unchanged, at least `minimumBits` wide, or nil if the device has none.
 ///
 /// Integer only: a float format means the HAL converts. Non-mixable wins over mixable, so the mixer
 /// and system volume can't touch the samples, but only when `allowNonMixable`: without hog mode a
@@ -10,12 +10,12 @@ import Playback
 /// 16 or 24 bits into 32 is exact.
 func bitPerfectFormat(
     in available: [AudioStreamRangedDescription], sampleRateHz: Double, channels: UInt32,
-    allowNonMixable: Bool
+    minimumBits: UInt32 = 0, allowNonMixable: Bool
 ) -> AudioStreamBasicDescription? {
     let candidates = available.filter { ranged in
         let format = PhysicalFormat(ranged)
         return format.carries(sampleRateHz: sampleRateHz, channels: channels)
-            && (allowNonMixable || format.isMixable)
+            && format.bitsPerChannel >= minimumBits && (allowNonMixable || format.isMixable)
     }
     func rank(_ ranged: AudioStreamRangedDescription) -> (Int, UInt32) {
         let nonMixable = ranged.mFormat.mFormatFlags & kAudioFormatFlagIsNonMixable != 0

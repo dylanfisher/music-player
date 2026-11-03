@@ -1089,8 +1089,9 @@ Implementation plan (ADR 0064):
 5. **HALOutput:** `DSDReader`, a sibling of `FileDecoder` behind a `TrackDecoder` protocol,
    packs DoP on the decode thread into the device's 24- or 32-bit integer format: markers
    0x05/0xFA, oldest bit highest, DSF bytes reversed. A DSD stream gets the opaque kind and
-   no gain; every DSD segment and every discard starts on an even frame, padded with one frame
-   of DoP silence, so the markers stay continuous across gapless changes and seeks. A device
+   no gain; DoP goes into the ring buffer in pairs of frames, the reader's length rounded up
+   with DoP silence, so every track and discard starts on an even frame and the markers stay
+   continuous across gapless changes and seeks. A device
    without the carrier rate or a 24-bit integer format is refused through `refuseUntakeable`,
    so a DSD album there stops at `PlaybackEngine.failureLimit`.
 6. **Playback and NowPlaying:** `SignalFormat` codes for DSD and DoP, the verdict judging DoP

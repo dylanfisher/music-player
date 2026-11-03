@@ -244,7 +244,10 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
 
         init(_ device: NullDevice) { self.device = device }
 
-        func configure(sampleRateHz: Double, channels: UInt32) throws -> DeviceFormat {
+        /// Always 32-bit, so wider than any `minimumBits`.
+        func configure(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32) throws
+            -> DeviceFormat
+        {
             precondition(channels == 2, "the null device is stereo")
             try device.perform(.configure)
             self.sampleRateHz = sampleRateHz

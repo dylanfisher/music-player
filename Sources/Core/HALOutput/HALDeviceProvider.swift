@@ -325,8 +325,11 @@ private final class RestoringDevice: PCMDevice {
         self.recordURL = recordURL
     }
 
-    func configure(sampleRateHz: Double, channels: UInt32) throws -> DeviceFormat {
-        try device.configure(sampleRateHz: sampleRateHz, channels: channels)
+    func configure(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32) throws
+        -> DeviceFormat
+    {
+        try device.configure(
+            sampleRateHz: sampleRateHz, channels: channels, minimumBits: minimumBits)
     }
     func start(_ render: OpaquePointer) throws { try device.start(render) }
     func stop() throws { try device.stop() }

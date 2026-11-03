@@ -47,7 +47,10 @@ public func signalVerdict(_ path: SignalPath) -> SignalVerdict {
 private func decoderChanges(_ track: TrackSignal) -> [SignalChange] {
     let (file, decoded) = (track.file, track.decoded)
     var changes: [SignalChange] = []
-    if decoded.sampleRateHz != file.sampleRateHz {
+    // DoP carries a DSD file's bits unchanged at a sixteenth of its rate.
+    let isDoP = file.formatID == dsdFormatID && decoded.formatID == dopFormatID
+    let rateHz = isDoP ? file.sampleRateHz / Double(dopDSDBitsPerFrame) : file.sampleRateHz
+    if decoded.sampleRateHz != rateHz {
         changes.append(.decoderResamples(fromHz: file.sampleRateHz, toHz: decoded.sampleRateHz))
     }
     if decoded.channels != file.channels {
@@ -95,9 +98,12 @@ private struct Precision {
     var isFloat: Bool
 }
 
-/// The file's own precision, or for a lossy codec, which has none, the decoder's output.
+/// The file's own precision, or for a lossy codec, which has none, the decoder's output. For
+/// DSD it's the DoP words', which the device must carry whole.
 private func sourcePrecision(_ track: TrackSignal) -> Precision {
-    let format = track.file.bitsPerChannel == nil ? track.decoded : track.file
+    let format =
+        track.file.bitsPerChannel == nil || track.file.formatID == dsdFormatID
+        ? track.decoded : track.file
     return Precision(bits: format.bitsPerChannel ?? 0, isFloat: format.isFloat)
 }
 

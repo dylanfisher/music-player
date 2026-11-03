@@ -74,6 +74,14 @@ package final class FileSource: ByteSource {
         return data
     }
 
+    /// `read` into memory the caller holds, for audio read over and over.
+    package func read(_ range: Range<Int>, into raw: UnsafeMutableRawBufferPointer)
+        throws(ParseFailure)
+    {
+        precondition(raw.count >= range.count, "the buffer is smaller than the range")
+        if let failure = fill(raw, from: range) { throw failure }
+    }
+
     /// Reads `range` into `raw`, returning what went wrong, if anything.
     private func fill(_ raw: UnsafeMutableRawBufferPointer, from range: Range<Int>)
         -> ParseFailure?

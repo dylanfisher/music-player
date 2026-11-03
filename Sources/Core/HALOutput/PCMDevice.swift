@@ -47,8 +47,9 @@ final class StepClock {
 /// its own thread in tests and benchmarks. Used from one thread.
 public protocol PCMDevice: AnyObject {
     /// Switches the hardware to `sampleRateHz` with `channels`, passing samples through
-    /// unchanged.
-    func configure(sampleRateHz: Double, channels: UInt32) throws -> DeviceFormat
+    /// unchanged, in an integer format at least `minimumBits` wide.
+    func configure(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32) throws
+        -> DeviceFormat
     /// Starts calling `HALRenderIOProc` with `render` (a `HALRender *`).
     func start(_ render: OpaquePointer) throws
     /// Returns once the IO proc has stopped being called.

@@ -38,13 +38,16 @@ own integer format: 24-bit packed, or 32-bit with the 24 DoP bits aligned high a
 The oldest bit is the word's highest, below the marker. A last frame with one byte gets the
 idle pattern 0x69 for the other. The IO proc still copies bytes and knows nothing of DoP.
 
-**Continuous markers.** The reader alternates the marker from 0x05 at each frame it makes
-after opening or a seek. Every DSD track's first frame in the ring buffer, and every discard's
-ends, are put on an even frame by writing one frame of DoP silence (0x69 0x69 under the next
-marker) when needed. A gapless DSD to DSD change, a next track replaced while queued, and a
-seek therefore never put two frames with the same marker side by side. This relies on the IO
-proc taking an even number of frames each cycle, which every HAL buffer size is in practice; a
-shortfall the IO proc pads breaks DoP for that cycle whatever the markers.
+**Continuous markers.** A frame's marker is set by its place in the track: 0x05 on even
+frames, 0xFA on odd. The reader rounds a track's length up to a pair of frames with DoP silence
+(0x69 under the markers), seeks only to even frames, and the ring buffer takes DoP in pairs of
+frames, so every track starts on an even frame of the ring and every discard skips an even
+number. A gapless DSD to DSD change and a next track replaced while queued then never put two
+frames with the same marker side by side, and neither does a seek, given that the IO proc takes
+an even number of frames each cycle, as every HAL buffer size is in practice. A seek while
+playing can still leave the IO proc a cycle with nothing new to play, which it pads with zeros,
+as it does for PCM; the DAC drops out of DoP for those few milliseconds, and the markers carry
+on alternating across them.
 
 **Unity.** A DSD stream's render state is created with `HALRenderSamplesOpaque`, a sample
 kind the IO proc never scales, and the control thread never sets a gain on it. The kind is
@@ -83,9 +86,11 @@ its generator and scan budgets, and long enough that the audio ends past the rea
   what the ADI-2 and most USB DACs take on a Mac.
 - **Packing in the IO proc.** It would put file layout and bit reversal on the real-time
   thread, which stays a byte copy.
-- **The marker from the absolute frame count instead of padding.** The reader would need the
-  ring buffer's count for every chunk and every decode ahead of a switch; a frame of silence
-  at a track start costs 6 µs of audio and keeps the reader ignorant of the ring.
+- **The marker from the ring buffer's frame count.** The reader would need the ring's count for
+  every chunk and every decode ahead of a switch; pairs of frames keep it ignorant of the ring.
+- **A frame of DoP silence written before each track that starts on an odd frame.** The ring is
+  often full when a track is queued or a seek posts its discard, so there may be no room to
+  write it then.
 - **Turning the volume command off while DSD plays.** The gain is the output's setting, not the
   track's, and a held key would stop working mid-album; it's kept for the next PCM track and
   the panel says it's bypassed.

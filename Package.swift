@@ -70,7 +70,7 @@ let package = Package(
         ),
         .target(
             name: "Playback",
-            dependencies: ["Log"],
+            dependencies: ["DisplayText", "Log"],
             path: "Sources/Core/Playback",
             swiftSettings: strictSwift
         ),

@@ -1,0 +1,166 @@
+import Foundation
+import Testing
+
+@testable import Fixtures
+@testable import HALOutput
+@testable import Playback
+
+/// A DSD track's file, and each channel's bytes as they should arrive, oldest bit highest,
+/// padded with idle to whole pairs of frames.
+private struct DSDTrack {
+    let url: URL
+    let expected: [[UInt8]]
+}
+
+private let folder: URL = {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("dop-\(UUID().uuidString)", isDirectory: true)
+    try! FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
+}()
+
+private func dsdTrack(
+    _ name: String, rateHz: Int = 2_822_400, bytes: Int, seed: Int, dff: Bool = false
+) throws -> DSDTrack {
+    let channels = (0..<2).map { channel in
+        (0..<bytes).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ channel &* 77 &+ seed) }
+    }
+    let url = folder.appendingPathComponent(name + (dff ? ".dff" : ".dsf"), isDirectory: false)
+    let data = channels.map { Data($0) }
+    try (dff ? dffFile(rateHz: rateHz, channels: data) : dsfFile(rateHz: rateHz, channels: data))
+        .write(to: url)
+    let padded = (bytes + 3) / 4 * 4
+    return DSDTrack(
+        url: url,
+        expected: channels.map { $0 + Array(repeating: dsdIdleByte, count: padded - bytes) })
+}
+
+/// What a DoP stream in 32-bit samples carried: each channel's DSD bytes, oldest first, from
+/// the first DoP frame to the last. Fails on a frame between them that isn't DoP, a marker
+/// that doesn't alternate, channels with different markers, or a low byte that isn't zero.
+/// `allowingGaps` lets through the zeros the IO proc pads with when a seek's discard finds the
+/// new audio not yet written; the markers must still alternate across them.
+private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[UInt8]] {
+    func marker(_ sample: Int32) -> UInt8 {
+        UInt8(truncatingIfNeeded: UInt32(bitPattern: sample) >> 24)
+    }
+    let frames = samples.count / 2
+    let isDoP = { (frame: Int) in dopMarkers.contains(marker(samples[2 * frame])) }
+    let first = try #require((0..<frames).first(where: isDoP), "no DoP frame")
+    let last = (0..<frames).last(where: isDoP)!
+    var channels: [[UInt8]] = [[], []]
+    var previous: UInt8?
+    for frame in first...last {
+        let words = [samples[2 * frame], samples[2 * frame + 1]].map { UInt32(bitPattern: $0) }
+        let mark = marker(samples[2 * frame])
+        if allowingGaps, words == [0, 0] { continue }
+        try #require(dopMarkers.contains(mark), "frame \(frame) of \(first)...\(last) isn't DoP")
+        try #require(marker(samples[2 * frame + 1]) == mark, "frame \(frame)'s channels differ")
+        try #require(mark != previous, "frame \(frame) repeats marker \(mark)")
+        previous = mark
+        for (channel, word) in words.enumerated() {
+            try #require(word & 0xFF == 0, "frame \(frame) has a low byte")
+            channels[channel] += [UInt8(word >> 16 & 0xFF), UInt8(word >> 8 & 0xFF)]
+        }
+    }
+    return channels
+}
+
+@Test func aGaplessDSDAlbumKeepsItsMarkersAndBitsAcrossTheChange() async throws {
+    // An odd byte count, so the first track ends on a half frame and an odd frame, both padded.
+    let one = try dsdTrack("one", bytes: 70_001, seed: 1)
+    let two = try dsdTrack("two", bytes: 40_000, seed: 2, dff: true)
+    let rig = try await Rig()
+    await rig.engine.setQueue([one.url, two.url])
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+
+    let runs = rig.device.captured
+    #expect(runs.map(\.sampleRateHz) == [176_400])
+    let carried = try unpack(runs[0].samples)
+    #expect(carried == [0, 1].map { one.expected[$0] + two.expected[$0] })
+    #expect(rig.events.contains(.trackStarted(index: 1)))
+    #expect(!rig.events.contains { if case .underrun = $0 { true } else { false } })
+    let output = try #require(rig.seen.last { $0.state.outputFormat != nil }?.state.outputFormat)
+    #expect(output.hasPrefix("DoP at 176.4 kHz on null device: "))
+}
+
+@Test func aSeekWhilePlayingKeepsTheMarkersAlternating() async throws {
+    // Two seconds: DSD64 is 352,800 bytes a second a channel.
+    let track = try dsdTrack("long", bytes: 2 * 352_800, seed: 3)
+    let rig = try await Rig(speed: 2)
+    await rig.engine.setQueue([track.url])
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    await rig.engine.seek(toSeconds: 1.5)
+    try await rig.wait(for: .finished)
+
+    let carried = try unpack(rig.device.captured[0].samples, allowingGaps: true)
+    // From 1.5 s, 264,600 frames in, to the end.
+    let tail = track.expected[0].suffix(from: 2 * 264_600)
+    #expect(carried[0].suffix(tail.count).elementsEqual(tail))
+    #expect(carried[0].count < track.expected[0].count)
+}
+
+@Test func theVolumeNeverReachesDoP() async throws {
+    let track = try dsdTrack("loud", bytes: 60_000, seed: 4)
+    let rig = try await Rig(digitalVolume: true)
+    let paths = Collected(rig.output.signalPaths)
+    try await rig.engine.setVolume(0.5)
+    await rig.engine.setQueue([track.url])
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    try await rig.engine.setVolume(0.25)
+    try await rig.wait(for: .finished)
+
+    #expect(try unpack(rig.device.captured[0].samples) == track.expected)
+    // The path the panel shows while it played: unity, so bit-perfect.
+    var dop: SignalPath?
+    while dop == nil {
+        let path = try await paths.next()
+        if path.track?.decoded.formatID == dopFormatID, signalVerdict(path) == .bitPerfect {
+            dop = path
+        }
+    }
+    guard case .device(let sink) = dop?.sink else {
+        throw TimedOut(seen: "\(String(describing: dop))")
+    }
+    #expect(sink.gain == 1)
+    #expect(
+        dop?.track?.file
+            == SignalFormat(
+                formatID: dsdFormatID, sampleRateHz: 2_822_400, bitsPerChannel: 1, channels: 2,
+                isFloat: false))
+}
+
+@Test func aDSDAlbumOnADeviceWithoutTheCarrierStopsAtTheFailureLimit() async throws {
+    let album = try (0..<5).map {
+        try dsdTrack("dsd128-\($0)", rateHz: 5_644_800, bytes: 4096, seed: $0)
+    }
+    let rig = try await Rig()
+    rig.device.report(
+        DeviceFormats(
+            sampleRatesHz: [44_100...192_000],
+            formats: [
+                PhysicalFormat(
+                    formatID: linearPCMFormatID, sampleRateHz: 44_100...768_000, bitsPerChannel: 32,
+                    channels: 2, isFloat: false, isMixable: false)
+            ]))
+    await rig.engine.setQueue(album.map(\.url))
+    await rig.engine.play()
+    try await rig.wait { if case .failed = $0.event { true } else { false } }
+
+    let refused = rig.events.compactMap { event -> (URL, String)? in
+        guard case .trackFailed(let url, let reason) = event else { return nil }
+        return (url, reason)
+    }
+    #expect(refused.map(\.0) == album.prefix(PlaybackEngine.failureLimit).map(\.url))
+    #expect(
+        refused.allSatisfy {
+            $0.1.contains("null device can't play DSD128: it has no 352.8 kHz rate for DoP")
+        })
+    #expect(
+        rig.events.last
+            == .failed(reason: "\(PlaybackEngine.failureLimit) tracks in a row couldn't play"))
+    #expect(rig.device.captured.isEmpty)
+}
