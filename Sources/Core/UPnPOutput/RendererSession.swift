@@ -147,7 +147,9 @@ actor RendererSession {
     func signalPath() -> SignalPath {
         SignalPath(
             track: current.map {
-                TrackSignal(file: $0.track.signal, decoded: $0.track.signal, isConverted: false)
+                TrackSignal(
+                    file: $0.track.signal, decoded: $0.track.signal, isConverted: false,
+                    channelOrderAssumed: false)
             },
             sink: .renderer(
                 RendererSink(

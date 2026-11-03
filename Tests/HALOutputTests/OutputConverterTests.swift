@@ -4,18 +4,20 @@ import Testing
 
 @testable import HALOutput
 
-/// A decoder of stereo float frames from memory, which can fail once it has handed over
+/// A decoder of float frames of `channels` from memory, which can fail once it has handed over
 /// `failsAfter` frames.
 private final class MemoryDecoder: TrackDecoder {
     let frames: [Float]
+    let channels: Int
     var failsAfter: Int64?
     private(set) var nextFrame: Int64 = 0
-    var lengthFrames: Int64 { Int64(frames.count / 2) }
+    var lengthFrames: Int64 { Int64(frames.count / channels) }
 
     struct Failed: Error {}
 
-    init(_ frames: [Float], failsAfter: Int64? = nil) {
+    init(_ frames: [Float], channels: Int = 2, failsAfter: Int64? = nil) {
         self.frames = frames
+        self.channels = channels
         self.failsAfter = failsAfter
     }
 
@@ -28,7 +30,7 @@ private final class MemoryDecoder: TrackDecoder {
         let read = Int(end - nextFrame)
         frames.withUnsafeBufferPointer {
             buffer.copyMemory(
-                from: $0.baseAddress! + Int(nextFrame) * 2, byteCount: read * 2 * 4)
+                from: $0.baseAddress! + Int(nextFrame) * channels, byteCount: read * channels * 4)
         }
         nextFrame = end
         return UInt32(read)
@@ -41,6 +43,8 @@ private func sine(_ frames: Int, rate: Double) -> [Float] {
         return [value, value]
     }
 }
+
+private let stereo = ChannelOrder(defaultFor: 2, isAssumed: false)
 
 private let float48k = AudioStreamBasicDescription(
     mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
@@ -68,7 +72,7 @@ private func drain(
 
 @Test func aFlushGivesUpTheTailAndTheOutputLengthIsTheInputsAtTheNewRate() throws {
     let converter = try OutputConverter(
-        from: 44_100, channels: 2, to: float48k, dither: false)
+        from: 44_100, channels: stereo, to: float48k, dither: false)
     let decoder = MemoryDecoder(sine(44_223, rate: 44_100))
     let unflushed = try drain(converter, decoder, flushing: false).count / 8
     #expect(converter.nextTrackStartFrame == converter.outputFrame(atInput: 44_223))
@@ -91,9 +95,9 @@ private func drain(
 @Test func aResetStartsTheSignalAgainAsAFreshConverterWould() throws {
     let input = sine(10_000, rate: 44_100)
     let fresh = try drain(
-        try OutputConverter(from: 44_100, channels: 2, to: float48k, dither: false),
+        try OutputConverter(from: 44_100, channels: stereo, to: float48k, dither: false),
         MemoryDecoder(input))
-    let reused = try OutputConverter(from: 44_100, channels: 2, to: float48k, dither: false)
+    let reused = try OutputConverter(from: 44_100, channels: stereo, to: float48k, dither: false)
     _ = try drain(reused, MemoryDecoder(sine(5_000, rate: 22_050)), flushing: false)
     try reused.reset()
     #expect(reused.nextTrackStartFrame == nil)
@@ -102,7 +106,7 @@ private func drain(
 
 @Test func aFailedReadThrowsTheDecodersErrorAndTheNextTrackCarriesOn() throws {
     let converter = try OutputConverter(
-        from: 44_100, channels: 2, to: float48k, dither: false)
+        from: 44_100, channels: stereo, to: float48k, dither: false)
     let failing = MemoryDecoder(sine(20_000, rate: 44_100), failsAfter: 10_000)
     #expect(throws: MemoryDecoder.Failed.self) {
         _ = try drain(converter, failing, flushing: false)
@@ -124,7 +128,7 @@ private func drain(
     let input = [Float](repeating: level, count: 2 * 9_600)
     func values(dither: Bool) throws -> Set<Int16> {
         let converter = try OutputConverter(
-            from: 48_000, channels: 2, to: int16, dither: dither)
+            from: 48_000, channels: stereo, to: int16, dither: dither)
         let data = try drain(converter, MemoryDecoder(input), format: int16)
         let samples = data.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) }
         // The middle, away from where the steady level starts and stops.
@@ -132,4 +136,57 @@ private func drain(
     }
     #expect(try values(dither: false) == [1000])
     #expect(try values(dither: true).count > 1)
+}
+
+@Test func aDownmixPastFullScaleClipsAtAnIntegerOutput() throws {
+    var int16 = float48k
+    int16.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked
+    int16.mBitsPerChannel = 16
+    int16.mBytesPerFrame = 4
+    int16.mBytesPerPacket = 4
+    // Full scale on every channel but the LFE, then its negative: each side sums to 1.41 after
+    // the headroom, which clips rather than wrapping round.
+    let full: [Float] = [1, 1, 1, 0, 1, 1]
+    let input =
+        Array((0..<2_400).map { _ in full }.joined())
+        + Array((0..<2_400).map { _ in full.map { -$0 } }.joined())
+    let converter = try OutputConverter(
+        from: 48_000, channels: ChannelOrder(defaultFor: 6, isAssumed: false), to: int16,
+        dither: false)
+    let data = try drain(converter, MemoryDecoder(input, channels: 6), format: int16)
+    let samples = data.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) }
+    try #require(samples.count == 2 * 4_800)
+    #expect(samples[..<(2 * 2_400)].allSatisfy { $0 == .max })
+    #expect(samples[(2 * 2_400)...].allSatisfy { $0 == .min })
+}
+
+@Test func onlyStereoAndMonoGetADownmix() throws {
+    for (inputs, outputs) in [(8, 6), (6, 4), (6, 3)] {
+        #expect(throws: DeviceOutputError.self) {
+            try OutputConverter(
+                from: 48_000, channels: ChannelOrder(defaultFor: inputs, isAssumed: false),
+                to: outputFormat(channels: UInt32(outputs)), dither: false)
+        }
+        do {
+            _ = try channelMix(
+                from: ChannelOrder(defaultFor: inputs, isAssumed: false).roles,
+                to: UInt32(outputs))
+            Issue.record("\(inputs) to \(outputs) channels mixed")
+        } catch DeviceOutputError.noChannelMix(let from, let to) {
+            #expect((from, to) == (UInt32(inputs), UInt32(outputs)))
+        }
+    }
+    #expect(throws: Never.self) {
+        try OutputConverter(
+            from: 48_000, channels: ChannelOrder(defaultFor: 8, isAssumed: false),
+            to: outputFormat(channels: 1), dither: false)
+    }
+}
+
+private func outputFormat(channels: UInt32) -> AudioStreamBasicDescription {
+    var format = float48k
+    format.mChannelsPerFrame = channels
+    format.mBytesPerFrame = 4 * channels
+    format.mBytesPerPacket = 4 * channels
+    return format
 }

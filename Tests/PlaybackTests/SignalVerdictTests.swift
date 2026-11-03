@@ -30,7 +30,9 @@ private func verdict(
 ) -> SignalVerdict {
     signalVerdict(
         SignalPath(
-            track: TrackSignal(file: file, decoded: decoded, isConverted: false),
+            track: TrackSignal(
+                file: file, decoded: decoded, isConverted: false,
+                channelOrderAssumed: false),
             sink: .device(DeviceSink(name: "DAC", uid: "DAC", state: state, gain: gain))))
 }
 
@@ -162,7 +164,9 @@ private func verdict(
     // AirPods: 2 ch 32-bit float at 48 kHz, mixable, no hog mode.
     let float48 = pcm(48_000, bits: 32, float: true)
     let path = SignalPath(
-        track: TrackSignal(file: pcm(44_100, bits: 16), decoded: float48, isConverted: true),
+        track: TrackSignal(
+            file: pcm(44_100, bits: 16), decoded: float48, isConverted: true,
+            channelOrderAssumed: false),
         sink: .device(
             DeviceSink(
                 name: "AirPods", uid: "AirPods",
@@ -174,4 +178,23 @@ private func verdict(
                 .converted(to: float48), .decoderResamples(fromHz: 44_100, toHz: 48_000),
                 .mixableFormat, .hogModeFree,
             ]))
+}
+
+@Test func anAssumedChannelOrderIsAReasonOnlyWhenTheTrackIsDownmixed() {
+    let wav = pcm(96_000, bits: 24, channels: 6)
+    func changes(decodedChannels: UInt32) -> SignalVerdict {
+        let decoded = pcm(96_000, bits: 32, channels: decodedChannels)
+        return signalVerdict(
+            SignalPath(
+                track: TrackSignal(
+                    file: wav, decoded: decoded, isConverted: false, channelOrderAssumed: true),
+                sink: .device(
+                    DeviceSink(
+                        name: "DAC", uid: "DAC", state: device(physical: decoded), gain: 1))))
+    }
+    #expect(
+        changes(decodedChannels: 2)
+            == .changed([.decoderRemixes(fromChannels: 6, toChannels: 2), .channelOrderAssumed]))
+    // Each channel to its own: the order changes nothing.
+    #expect(changes(decodedChannels: 6) == .bitPerfect)
 }

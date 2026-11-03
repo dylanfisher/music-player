@@ -152,13 +152,30 @@ private func audioFrames(_ run: NullDevice.CapturedRun) -> [(Double, Double)] {
     )
 }
 
-/// The stereo levels a `levelTrack` of `channels` downmixes to.
-private func downmixedLevels(_ channels: Int) -> (Double, Double) {
-    let mix = channelMix(from: UInt32(channels), to: 2)
+/// The stereo levels channels holding `levels`, in the WAV and FLAC default order, downmix to.
+private func downmixedLevels(_ levels: [Double]) throws -> (Double, Double) {
+    let mix = try channelMix(
+        from: ChannelOrder(defaultFor: levels.count, isAssumed: false).roles, to: 2)
     func side(_ output: Int) -> Double {
-        (0..<channels).reduce(0) { $0 + Double(mix[output * channels + $1]) * levelOf($1) }
+        levels.indices.reduce(0) { $0 + Double(mix[output * levels.count + $1]) * levels[$1] }
     }
     return (side(0), side(1))
+}
+
+/// The stereo levels a `levelTrack` of `channels` downmixes to.
+private func downmixedLevels(_ channels: Int) throws -> (Double, Double) {
+    try downmixedLevels((0..<channels).map(levelOf))
+}
+
+/// The stereo levels the float-only device plays `track` at, once steady.
+private func playedLevels(_ track: URL) async throws -> [(Double, Double)] {
+    let rig = try await Rig(formats: NullDevice.float48k)
+    await rig.engine.setQueue([track])
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    let played = audioFrames(rig.device.captured[0])
+    try #require(played.count > 20_000)
+    return Array(middle(played))
 }
 
 @Test func aFivePointOneTrackIsDownmixedForAStereoDevice() async throws {
@@ -168,7 +185,7 @@ private func downmixedLevels(_ channels: Int) -> (Double, Double) {
     await rig.engine.setQueue([track])
     await rig.engine.play()
     try await rig.wait(for: .finished)
-    let (left, right) = downmixedLevels(6)
+    let (left, right) = try downmixedLevels(6)
     // The centre, the surrounds and none of the LFE: more than front left and right alone.
     #expect(left > levelOf(0) && right > levelOf(1))
     let played = audioFrames(rig.device.captured[0])
@@ -180,8 +197,72 @@ private func downmixedLevels(_ channels: Int) -> (Double, Double) {
         guard let signal = path.track else { continue }
         if case .changed(let changes) = signalVerdict(path) {
             downmixed = changes.contains(.decoderRemixes(fromChannels: 6, toChannels: 2))
+            // FLAC states its order.
+            #expect(!changes.contains(.channelOrderAssumed))
         }
         #expect(signal.decoded.channels == 2)
+    }
+}
+
+/// afconvert's arguments for a 5.1 file in `codec`, which stores C L R Ls Rs LFE, from levels in
+/// the WAV order.
+private func fivePointOne(_ codec: String, layout: String) -> [String] {
+    ["-f", "m4af", "-d", codec, "-l", "MPEG_5_1_A", "-l", layout]
+}
+
+@Test(arguments: [("alac", "MPEG_5_1_D", 1e-4), ("aac", "AAC_5_1", 2e-3)])
+func anALACOrAACFivePointOneTrackIsDownmixedFromItsOwnChannelOrder(
+    codec: String, layout: String, tolerance: Double
+) async throws {
+    let directory = try defaultPlaybackFixturesDirectory()
+    // Only the centre: it lands on both sides equally, not on the left alone.
+    let centre = try levelTrack(
+        named: "centre-\(codec)-6ch.m4a", levels: [0, 0, 0.5, 0, 0, 0],
+        afconvert: fivePointOne(codec, layout: layout), in: directory)
+    let (centreLeft, centreRight) = try downmixedLevels([0, 0, 0.5, 0, 0, 0])
+    #expect(centreLeft == centreRight && centreLeft > 0.2)
+    #expect(
+        try await playedLevels(centre).allSatisfy {
+            abs($0.0 - centreLeft) < tolerance && abs($0.1 - centreRight) < tolerance
+        })
+    // Every channel where its role puts it.
+    let levels = (0..<6).map(levelOf)
+    let all = try levelTrack(
+        named: "\(codec)-6ch.m4a", levels: levels,
+        afconvert: fivePointOne(codec, layout: layout), in: directory)
+    let (left, right) = try downmixedLevels(levels)
+    #expect(
+        try await playedLevels(all).allSatisfy {
+            abs($0.0 - left) < tolerance && abs($0.1 - right) < tolerance
+        })
+}
+
+@Test func aWAVWithoutAChannelMaskIsDownmixedInTheDefaultOrderAndSaysSo() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "converted-output-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let wav = directory.appendingPathComponent("levels-6ch.wav")
+    try writeWAV(at: wav, sampleRateHz: 44_100, bitsPerSample: 24, channels: 6, frames: 22_050) {
+        _, channel in Int32((levelOf(channel) * Double(1 << 23)).rounded())
+    }
+    let rig = try await Rig(formats: NullDevice.float48k)
+    let paths = Collected(rig.output.signalPaths)
+    await rig.engine.setQueue([wav])
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+    let (left, right) = try downmixedLevels(6)
+    let played = audioFrames(rig.device.captured[0])
+    try #require(played.count > 20_000)
+    #expect(middle(played).allSatisfy { abs($0.0 - left) < 1e-4 && abs($0.1 - right) < 1e-4 })
+    while true {
+        let path = try await paths.next()
+        guard let signal = path.track, case .changed(let changes) = signalVerdict(path) else {
+            continue
+        }
+        #expect(signal.channelOrderAssumed)
+        #expect(changes.contains(.channelOrderAssumed))
+        return
     }
 }
 
@@ -204,7 +285,7 @@ private func downmixedLevels(_ channels: Int) -> (Double, Double) {
     try await rig.wait(for: .finished)
     let run = rig.device.captured[0]
     #expect(run.sampleRateHz == 44_100)
-    let (left, right) = downmixedLevels(6)
+    let (left, right) = try downmixedLevels(6)
     let scale = Double(1 << 31)
     var played = stride(from: 0, to: run.samples.count - 1, by: 2).map {
         (Double(run.samples[$0]) / scale, Double(run.samples[$0 + 1]) / scale)

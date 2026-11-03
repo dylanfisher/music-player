@@ -15,6 +15,9 @@ public enum SignalChange: Sendable, Equatable {
     case converted(to: SignalFormat)
     case decoderResamples(fromHz: Double, toHz: Double)
     case decoderRemixes(fromChannels: UInt32, toChannels: UInt32)
+    /// The downmix takes the channels in the WAV and FLAC default order, as the file doesn't
+    /// name them.
+    case channelOrderAssumed
     /// The decoder's output can't hold every value the file's samples can take.
     case decoderLosesPrecision(SignalFormat)
     /// The device runs at another rate than the samples written to it, so the HAL resamples.
@@ -39,7 +42,8 @@ public func signalVerdict(_ path: SignalPath) -> SignalVerdict {
     var changes = decoderChanges(track)
     switch path.sink {
     case .device(let sink):
-        changes += deviceChanges(sink, decoded: track.decoded, source: sourcePrecision(track))
+        let source = Precision(file: track.file, decodedAs: Precision(track.decoded))
+        changes += deviceChanges(sink, decoded: track.decoded, source: source)
     case .renderer:
         return .unverifiable
     }
@@ -57,8 +61,13 @@ private func decoderChanges(_ track: TrackSignal) -> [SignalChange] {
     }
     if decoded.channels != file.channels {
         changes.append(.decoderRemixes(fromChannels: file.channels, toChannels: decoded.channels))
+        if decoded.channels < file.channels && track.channelOrderAssumed {
+            changes.append(.channelOrderAssumed)
+        }
     }
-    if !decoded.holds(sourcePrecision(track)) { changes.append(.decoderLosesPrecision(decoded)) }
+    if !decoded.holds(Precision(file: file, decodedAs: Precision(decoded))) {
+        changes.append(.decoderLosesPrecision(decoded))
+    }
     return changes
 }
 
@@ -95,28 +104,40 @@ private func deviceChanges(_ sink: DeviceSink, decoded: SignalFormat, source: Pr
 }
 
 /// The values a sample can take: integers of some width, or floats of some width.
-private struct Precision {
-    var bits: UInt32
-    var isFloat: Bool
-}
+public struct Precision: Sendable, Equatable {
+    public var bits: UInt32
+    public var isFloat: Bool
 
-/// The file's own precision, or for a lossy codec, which has none, the decoder's output. For
-/// DSD it's the DoP words', which the device must carry whole.
-private func sourcePrecision(_ track: TrackSignal) -> Precision {
-    let format =
-        track.file.bitsPerChannel == nil || track.file.formatID == dsdFormatID
-        ? track.decoded : track.file
-    return Precision(bits: format.bitsPerChannel ?? 0, isFloat: format.isFloat)
+    public init(bits: UInt32, isFloat: Bool) {
+        self.bits = bits
+        self.isFloat = isFloat
+    }
+
+    /// The precision a file's samples must keep: the file's own, or for a lossy codec, which has
+    /// none, the decoder's output, `decoded`. For DSD it's the DoP words', which the device must
+    /// carry whole.
+    public init(file: SignalFormat, decodedAs decoded: Precision) {
+        guard file.bitsPerChannel != nil, file.formatID != dsdFormatID else {
+            self = decoded
+            return
+        }
+        self.init(file)
+    }
+
+    init(_ format: SignalFormat) {
+        self.init(bits: format.bitsPerChannel ?? 0, isFloat: format.isFloat)
+    }
 }
 
 extension PhysicalFormat {
-    /// Whether every sample of `track` has an exact value in this format, by the verdict's rule.
-    /// A lossy track, whose samples have no depth until decoded, counts as 24-bit.
-    public func holdsSamples(of track: SignalFormat) -> Bool {
+    public var precision: Precision { Precision(bits: bitsPerChannel, isFloat: isFloat) }
+
+    /// Whether every sample of `source` has an exact value in this format, by the verdict's rule.
+    public func holdsSamples(_ source: Precision) -> Bool {
         SignalFormat(
-            formatID: formatID, sampleRateHz: track.sampleRateHz, bitsPerChannel: bitsPerChannel,
-            channels: channels, isFloat: isFloat
-        ).holds(Precision(bits: track.bitsPerChannel ?? 24, isFloat: track.isFloat))
+            formatID: formatID, sampleRateHz: sampleRateHz.lowerBound,
+            bitsPerChannel: bitsPerChannel, channels: channels, isFloat: isFloat
+        ).holds(source)
     }
 }
 

@@ -32,14 +32,15 @@ func bitPerfectFormat(
 /// The format a PCM `track` is converted to when no format carries it unchanged, and the rate to
 /// run it at, or nil when the device has no PCM format allowed.
 ///
-/// A format that loses nothing wins: at least the track's channels, and every sample's value
-/// (float holds integers up to 24 bits). Failing that, one that keeps the depth, since a stereo
-/// DAC's extra 16-bit multichannel format would cost resolution to keep channels a downmix keeps
-/// audible; then one with enough channels. Then the rate nearest the track's, at or above it
-/// before below it, and never below 44.1 kHz when there's one at or above: AirPods offer 16 kHz
-/// mono for calls beside 48 kHz stereo, and a low-rate track mustn't switch them to it. Then the
-/// track's own channel count, else the fewest above it, else the most below it. Then float, then
-/// the widest.
+/// A format the track's channels can be mixed into comes first: only stereo and mono get a
+/// downmix. Then never a rate below 44.1 kHz when there's one at or above: AirPods offer 16 kHz
+/// mono for calls beside 48 kHz stereo, and a low-rate track mustn't switch them to it, however
+/// much deeper the call format. Then a format that loses nothing: at least the track's channels,
+/// and every sample's value as the verdict judges it (float holds integers up to 24 bits).
+/// Failing that, one that keeps the depth, since a stereo DAC's extra 16-bit multichannel format
+/// would cost resolution to keep channels a downmix keeps audible; then one with enough channels.
+/// Then the rate nearest the track's, at or above it before below it. Then the track's own
+/// channel count, else the fewest above it, else the most below it. Then float, then the widest.
 public func convertedFormat(
     in formats: [PhysicalFormat], for track: SignalFormat, allowNonMixable: Bool
 ) -> (index: Int, sampleRateHz: Double)? {
@@ -51,11 +52,15 @@ public func convertedFormat(
         let rate = rate(format)
         let count = Int(format.channels)
         let enough = format.channels >= track.channels
-        let deep = format.holdsSamples(of: track)
+        let deep = format.holdsSamples(Precision(file: track, decodedAs: format.precision))
         // Losing nothing, then keeping the depth, then the channels.
         let loss = (enough && deep ? 4 : 0) + (deep ? 2 : 0) + (enough ? 1 : 0)
+        // A channel mix, then the rate floor.
+        let usable =
+            (hasChannelMix(from: track.channels, to: format.channels) ? 2 : 0)
+            + (rate >= lowest ? 1 : 0)
         return (
-            loss, rate >= lowest ? 1 : 0,
+            usable, loss,
             rate >= lowest ? -rate : rate,
             format.channels == track.channels ? Int.max : enough ? -count : count,
             format.isFloat ? 1 : 0, format.bitsPerChannel

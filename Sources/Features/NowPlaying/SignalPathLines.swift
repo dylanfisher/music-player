@@ -54,7 +54,8 @@ func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
     case .device(let sink):
         if let track = path.track {
             let (from, to) = (track.file.channels, track.decoded.channels)
-            let mix = to < from ? ", \(downmixed(from, to))" : ""
+            let assumed = track.channelOrderAssumed ? ", channel order assumed" : ""
+            let mix = to < from ? ", \(downmixed(from, to))\(assumed)" : ""
             lines.rows.append(.init(label: "Decoder", value: describe(track.decoded) + mix))
         }
         lines.rows += deviceRows(sink, isDoP: path.track?.decoded.formatID == dopFormatID)
@@ -146,6 +147,8 @@ private func describe(_ change: SignalChange) -> String {
         to < from
             ? "the decoder \(downmixed(from, to))"
             : "the decoder copies \(from) channels into \(to)"
+    case .channelOrderAssumed:
+        "the file doesn't name its channels, so the downmix assumes the WAV default order"
     case .decoderLosesPrecision(let format):
         "the decoder rounds the samples to \(sampleType(format))"
     case .deviceResamples(let from, let to):

@@ -18,16 +18,21 @@ always to play to the chosen device, bit-perfect wherever the device allows it.
 **Bit-perfect first.** `bitPerfectFormat` is asked first, as before. Only when it finds nothing
 for a PCM track does `convertedFormat` pick the device's best format, ranked in this order:
 
-1. A format that loses nothing: at least the track's channels, and every sample's value
-   (`PhysicalFormat.holdsSamples`, the verdict's rule; float holds integers up to 24 bits).
-   Failing that, one that keeps the depth, then one that keeps the channels. Depth comes before
-   channels: the ADI-2 offers 2 ch 32-bit beside 8 ch 16-bit, and a 24-bit 5.1 track is better
-   downmixed at 32 bits than cut to 16 bits on outputs a stereo DAC doesn't connect.
-2. The rate nearest the track's, at or above it before below it, and never below 44.1 kHz
-   when the device has a rate at or above that. Without the floor a 22.05 kHz track would
-   switch AirPods to their 16 kHz call format.
-3. The track's own channel count, else the fewest above it, else the most below it.
-4. Float, then the widest.
+1. A format the track's channels can be mixed into: as many or more, or stereo or mono.
+2. Never a rate below 44.1 kHz when the device has a rate at or above that. Without the floor
+   a 22.05 kHz track would switch AirPods to their 16 kHz call format, and it outranks the
+   next step, so a deeper call format can't win either.
+3. A format that loses nothing: at least the track's channels, and every sample's value
+   (`PhysicalFormat.holdsSamples`, given the `Precision` the verdict judges by; float holds
+   integers up to 24 bits). Failing that, one that keeps the depth, then one that keeps the
+   channels. Depth comes before channels: the ADI-2 offers 2 ch 32-bit beside 8 ch 16-bit, and
+   a 24-bit 5.1 track is better downmixed at 32 bits than cut to 16 bits on outputs a stereo DAC
+   doesn't connect. A lossy track's precision is what it's decoded to, as in the verdict, so
+   every format holds it: a lossy 5.1 track keeps its channels at 16 bits on the ADI-2, and is
+   never dithered.
+4. The rate nearest the track's, at or above it before below it.
+5. The track's own channel count, else the fewest above it, else the most below it.
+6. Float, then the widest.
 
 `HALDevice.configure` and the null device fall back to it, and `DeviceFormat.isConverted` says
 so. PCM tracks are no longer refused up front against the reported formats:
@@ -47,12 +52,31 @@ about 0.5% of an M1 core in all (a budget of 3%, and 6% on the old Mac until its
 **Channels** are mixed by `channelMix`, in Swift before AudioConverter sees the samples:
 AudioConverter's own mix map (`kAudioConverterPropertyChannelMixMap`) carries no availability, so
 it may not exist on macOS 12, and left alone AudioConverter keeps the first channels and drops
-the rest. Fewer outputs get an ITU-R BS.775 downmix to stereo: centre and surrounds at -3 dB into
-their side, the LFE left out, each side scaled so its gains sum to 1 so a full-scale track can't
-clip; mono takes the average of that, so (L+R)/2 for a stereo track. Channels are read in the
-WAV and FLAC default order (L R C LFE, then the surrounds). More outputs get each channel on its
-own, and a mono track on both of the first two. The panel says "downmixed 6→2 channels" in the
+the rest. Fewer outputs, if they're two or one, get an ITU-R BS.775 downmix to stereo: centre
+and surrounds at -3 dB into their side, a back centre at -9 dB into each side, the LFE left
+out; mono takes the average of that, so (L+R)/2 for a stereo track. A mix of more than left and
+right is scaled by a fixed headroom of 1/(1+0.707), -4.6 dB. Scaling each side so its gains sum
+to 1, as at first, put a 5.1 track's fronts 7.7 dB down; with the fixed headroom, full scale on
+a front, the centre and a surround at once reaches 1.41, which an integer output clips
+(AudioConverter saturates; it doesn't wrap). More outputs get each channel on its own, and a mono
+track on both of the first two. Any other count, such as 8 channels to 6, has no mix:
+`convertedFormat` ranks such a format last, and if it's all a device has, the converter refuses
+it with `noChannelMix`, naming both counts. The panel says "downmixed 6→2 channels" in the
 verdict and on the decoder's row.
+
+**Channel order.** Formats store channels in different orders: WAV and FLAC in the WAV mask's
+order (L R C LFE Ls Rs), ALAC and AAC as C L R Ls Rs LFE. `FileDecoder` reads the layout the file
+states (a tag, a bitmap or channel descriptions, expanded to labels by AudioToolbox) and, when
+every label has a role in the downmix, sets ExtAudioFile's client layout to the same labels
+sorted by number, which is the WAV mask's order, so ExtAudioFile reorders them as it decodes.
+The downmix then takes each channel's role from its label, so a 4-channel L R C Cs file mixes
+as that, not as quad. A centre-left or centre-right channel goes to its side whole. A file of
+more than two channels that names no layout, as a WAV without a channel mask, or one with a
+label no role fits, such as a height channel, is taken in the WAV and FLAC default order for
+its count, which is what those formats specify, and a downmix of it says "channel order
+assumed" on the decoder's row and among the verdict's reasons. The reorder applies on the
+bit-perfect path too, so a multichannel DAC gets ALAC in the WAV order. A stream carries on
+into the next track only if its channels come in the same order, since the mix would differ.
 
 **Depth.** AudioConverter rounds to an integer format and doesn't dither unless asked
 (`kAudioConverterPropertyDithering` is 0 by default). A converted integer format narrower than
@@ -105,5 +129,11 @@ files are a watched folder of their own, so they're easy to leave out of a queue
 - Tests run a null device that offers only 2 ch float at 48 kHz: a 44.1 kHz 16-bit and a 96 kHz
   24-bit two-track sine album play as one signal within 1e-3 across the join, a seek lands on
   the file's time, the next track starts on its first converted frame, a replaced or late next
-  track neither cuts nor gaps, mono and 5.1 tracks play mixed as above, and the signal path
-  names the conversion. Benches cover converted playback's CPU and its join.
+  track neither cuts nor gaps, mono and 5.1 tracks play mixed as above, ALAC and AAC 5.1
+  files put their centre in both sides equally, and the signal path names the conversion.
+  Benches cover converted playback's CPU and its join.
+- Known gap, not fixed: `bitPerfectFormat` doesn't check depth, so a 24-bit track on a device
+  whose only format with its rate and channels is 16-bit integer, as the ADI-2's 8 ch format is
+  for a 24-bit 8-channel track, is cut to 16 bits without dither and isn't shown as converted,
+  though the verdict still says the samples are rounded. Closing it means sending such a track
+  down the converted path, which dithers.

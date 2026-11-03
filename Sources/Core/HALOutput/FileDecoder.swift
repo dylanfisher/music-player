@@ -9,6 +9,7 @@ final class FileDecoder {
     /// Frames at the file's own rate.
     let lengthFrames: Int64
     private let file: ExtAudioFileRef
+    private let channels: ChannelReading
     private var bytesPerFrame: UInt32 = 0
     /// The frame the next `read` starts at. The client format keeps the file's rate, so a frame
     /// read is a frame of the file.
@@ -35,11 +36,15 @@ final class FileDecoder {
                 self.file, kExtAudioFileProperty_FileLengthFrames, &size, &length)
         )
         lengthFrames = length
+        channels = try ChannelReading(self.file, channels: Int(format.mChannelsPerFrame))
     }
+
+    /// The order `read` hands the channels on in.
+    var channelOrder: ChannelOrder { channels.order }
 
     deinit { ExtAudioFileDispose(file) }
 
-    /// Sets the format `read` produces. Must be interleaved PCM.
+    /// Sets the format `read` produces. Must be interleaved PCM with the file's channel count.
     func setOutputFormat(_ format: AudioStreamBasicDescription) throws {
         var format = format
         try throwIfError(
@@ -47,6 +52,7 @@ final class FileDecoder {
             ExtAudioFileSetProperty(
                 file, kExtAudioFileProperty_ClientDataFormat,
                 UInt32(MemoryLayout.size(ofValue: format)), &format))
+        try channels.apply(to: file)
         bytesPerFrame = format.mBytesPerFrame
     }
 

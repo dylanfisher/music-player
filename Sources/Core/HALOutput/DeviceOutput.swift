@@ -19,6 +19,9 @@ enum DeviceOutputError: Error, CustomStringConvertible {
     case cannotPlayDSD(device: String, dsdRateHz: Int, carrierRateHz: Double, DoPRefusal)
     /// The device format the DoP reader was handed can't hold DoP words unchanged.
     case noDoPLayout(SignalFormat)
+    /// The device's format has fewer channels than the track but more than two, and only stereo
+    /// and mono get a downmix.
+    case noChannelMix(fromChannels: UInt32, toChannels: UInt32)
 
     var description: String {
         switch self {
@@ -42,6 +45,9 @@ enum DeviceOutputError: Error, CustomStringConvertible {
         case .noDoPLayout(let format):
             "DoP needs a \(dopWordBits)-bit integer device format; this one is \(format.formatID)"
                 + " \(format.bitsPerChannel ?? 0)-bit\(format.isFloat ? " float" : "")"
+        case .noChannelMix(let from, let to):
+            "the device's format has \(to) channels for this \(from)-channel track, and only"
+                + " stereo and mono get a downmix"
         }
     }
 }
@@ -986,6 +992,8 @@ private struct Track {
     /// runs at it unless the output converts.
     let sampleRateHz: Double
     let channels: UInt32
+    /// The order the decoder hands the channels on in.
+    let channelOrder: ChannelOrder
     /// The format the file holds, for the signal path.
     let file: SignalFormat
     /// Set for a DSD file, which plays as DoP at unity (ADR 0064).
@@ -1009,6 +1017,8 @@ private struct Track {
                 formatID: dsdFormatID, sampleRateHz: Double(reader.stream.rateHz),
                 bitsPerChannel: 1, channels: channels, isFloat: false)
             isDoP = true
+            // DoP is never converted, so its channels are never mixed.
+            channelOrder = ChannelOrder(defaultFor: Int(channels), isAssumed: false)
             // A file cut short is a truncation warning from the scan; the reader plays the bits
             // present.
             checkedLengthFrames = nil
@@ -1018,6 +1028,7 @@ private struct Track {
         self.decoder = decoder
         sampleRateHz = decoder.fileFormat.mSampleRate
         channels = decoder.fileFormat.mChannelsPerFrame
+        channelOrder = decoder.channelOrder
         file = SignalFormat(decoder.fileFormat)
         isDoP = false
         if decoder.fileFormat.mFormatID == kAudioFormatMPEGLayer3 {
@@ -1050,7 +1061,9 @@ private struct Track {
                 formatID: dopFormatID, sampleRateHz: sampleRateHz, bitsPerChannel: dopWordBits,
                 channels: channels, isFloat: false)
             : SignalFormat(stream.writtenFormat)
-        return TrackSignal(file: file, decoded: decoded, isConverted: stream.format.isConverted)
+        return TrackSignal(
+            file: file, decoded: decoded, isConverted: stream.format.isConverted,
+            channelOrderAssumed: channelOrder.isAssumed)
     }
 
     /// Why decoding stopped short, once it has: nil unless it's more than
@@ -1119,10 +1132,10 @@ private final class RenderStream {
     /// How DoP sits in the device's samples, for the tail; nil for PCM or a format DoP can't use,
     /// which the reader refuses.
     private let dopLayout: DoPLayout?
-    /// The rate and channel count of the tracks it was configured for, which the device runs at
+    /// The rate and channels of the tracks it was configured for, which the device runs at
     /// unless it converts.
     private let trackRateHz: Double
-    private let trackChannels: UInt32
+    private let trackChannels: ChannelOrder
     /// Set when the device converts to another rate or channel count, or to integers too narrow
     /// for the track, which it dithers. A conversion that loses nothing, such as integer to float,
     /// the decoder does itself.
@@ -1138,7 +1151,7 @@ private final class RenderStream {
         let samples: HALRenderSampleKind
         isDoP = track.isDoP
         trackRateHz = track.sampleRateHz
-        trackChannels = track.channels
+        trackChannels = track.channelOrder
         if isDoP {
             samples = HALRenderSamplesOpaque
         } else if let kind = renderSampleKind(stream) {
@@ -1154,10 +1167,12 @@ private final class RenderStream {
         dopLayout = isDoP ? DoPLayout(stream, channels: Int(stream.mChannelsPerFrame)) : nil
         var written = stream
         written.mFormatFlags &= ~kAudioFormatFlagIsNonMixable
-        let narrows = !PhysicalFormat(written).holdsSamples(of: track.file)
+        let physical = PhysicalFormat(written)
+        let narrows = !physical.holdsSamples(
+            Precision(file: track.file, decodedAs: physical.precision))
         converter =
             format.isConverted
-                && (stream.mSampleRate != trackRateHz || stream.mChannelsPerFrame != trackChannels
+                && (stream.mSampleRate != trackRateHz || stream.mChannelsPerFrame != track.channels
                     || narrows)
             ? try OutputConverter(
                 from: trackRateHz, channels: trackChannels, to: written,
@@ -1197,9 +1212,9 @@ private final class RenderStream {
     var decoderFormat: AudioStreamBasicDescription { converter?.inputFormat ?? writtenFormat }
 
     /// Whether `track` plays on in this stream: it has the rate and channels the stream was
-    /// configured for, so a converter carries on its signal too.
+    /// configured for, in the same order, so a converter carries on its signal and mix too.
     func fits(_ track: Track) -> Bool {
-        track.sampleRateHz == trackRateHz && track.channels == trackChannels
+        track.sampleRateHz == trackRateHz && track.channelOrder == trackChannels
             && track.isDoP == isDoP
     }
 
@@ -1285,6 +1300,9 @@ private final class RenderStream {
             if queued >= missing {
                 chunkBytes = chunkOffset + missing
             } else if let converter {
+                precondition(
+                    missing <= Self.chunkFrames * bytesPerFrame,
+                    "a converter holds back less than the decode chunk")
                 memmove(chunk, chunk + chunkOffset, queued)
                 (chunkOffset, chunkBytes) = (0, queued)
                 while chunkBytes < missing {

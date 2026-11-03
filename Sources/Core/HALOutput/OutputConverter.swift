@@ -27,13 +27,16 @@ final class OutputConverter {
     /// `dither` adds TPDF dither at the output's depth, for an integer output narrower than the
     /// track's samples. AudioConverter doesn't dither unless asked: it rounds.
     init(
-        from rateHz: Double, channels: UInt32, to output: AudioStreamBasicDescription,
+        from rateHz: Double, channels order: ChannelOrder, to output: AudioStreamBasicDescription,
         dither: Bool
     ) throws {
+        let channels = UInt32(order.roles.count)
         inputFormat = floatFormat(rateHz: rateHz, channels: channels)
         outputFormat = output
         let outputChannels = output.mChannelsPerFrame
-        mix = channels == outputChannels ? nil : channelMix(from: channels, to: outputChannels)
+        mix =
+            channels == outputChannels
+            ? nil : try channelMix(from: order.roles, to: outputChannels)
         var from = floatFormat(rateHz: rateHz, channels: outputChannels)
         var to = output
         var converter: AudioConverterRef?
@@ -198,22 +201,33 @@ private func floatFormat(rateHz: Double, channels: UInt32) -> AudioStreamBasicDe
         mChannelsPerFrame: channels, mBitsPerChannel: 32, mReserved: 0)
 }
 
-/// The gains from `inputs` channels to `outputs`, row-major by output, for a track whose channels
-/// are in the WAV and FLAC default order (L R C LFE, then the surrounds).
+/// Whether `channelMix` has a mix from `inputs` channels to `outputs`: to as many or more, or a
+/// downmix to stereo or mono.
+func hasChannelMix(from inputs: UInt32, to outputs: UInt32) -> Bool {
+    outputs >= inputs || outputs <= 2
+}
+
+/// The gains from channels of `roles` to `outputs` channels, row-major by output.
 ///
 /// Fewer outputs: an ITU-R BS.775 downmix to stereo in the first two, centre and surrounds at
-/// -3 dB into their side and the LFE left out, each output scaled so its gains sum to 1, so a
-/// full-scale track can't clip; a mono output takes the stereo mix's average, so (L+R)/2 for a
-/// stereo track. More outputs: each channel to its own, and a mono track to both of the first two.
-func channelMix(from inputs: UInt32, to outputs: UInt32) -> [Float] {
-    let (inCount, outCount) = (Int(inputs), Int(outputs))
+/// -3 dB into their side and the LFE left out; a mono output takes the stereo mix's average, so
+/// (L+R)/2 for a stereo track. A mix of more than left and right is scaled by a fixed headroom
+/// of 1/(1+0.707), -4.6 dB, rather than by its sum of gains, which put a 5.1 track's fronts
+/// 7.7 dB down; full scale on several channels at once can then pass 1, which an integer output
+/// clips. More outputs: each channel to its own, and a mono track to both of the first two.
+/// Other downmixes, such as 8 channels to 6, aren't made.
+func channelMix(from roles: [ChannelRole], to outputs: UInt32) throws -> [Float] {
+    let (inCount, outCount) = (roles.count, Int(outputs))
+    guard hasChannelMix(from: UInt32(inCount), to: outputs) else {
+        throw DeviceOutputError.noChannelMix(fromChannels: UInt32(inCount), toChannels: outputs)
+    }
     var gains = [Float](repeating: 0, count: inCount * outCount)
     if inCount < outCount {
         for channel in 0..<inCount { gains[channel * inCount + channel] = 1 }
         if inCount == 1 { gains[1] = 1 }
         return gains
     }
-    let stereo = stereoMix(inCount)
+    let stereo = stereoMix(roles)
     if outCount == 1 {
         for channel in 0..<inCount {
             gains[channel] = (stereo[0][channel] + stereo[1][channel]) / 2
@@ -226,27 +240,11 @@ func channelMix(from inputs: UInt32, to outputs: UInt32) -> [Float] {
     return gains
 }
 
-/// Left and right gains for each of `count` input channels, two or more, each side summing to 1.
-private func stereoMix(_ count: Int) -> [[Float]] {
-    enum Role { case left, right, centre, lfe, leftSurround, rightSurround, backCentre }
-    let roles: [Role] =
-        switch count {
-        case 2: [.left, .right]
-        case 3: [.left, .right, .centre]
-        case 4: [.left, .right, .leftSurround, .rightSurround]
-        case 5: [.left, .right, .centre, .leftSurround, .rightSurround]
-        case 6: [.left, .right, .centre, .lfe, .leftSurround, .rightSurround]
-        case 7: [.left, .right, .centre, .lfe, .backCentre, .leftSurround, .rightSurround]
-        default:
-            [
-                .left, .right, .centre, .lfe, .leftSurround, .rightSurround, .leftSurround,
-                .rightSurround,
-            ]
-                + Array(repeating: .lfe, count: max(0, count - 8))
-        }
+/// Left and right gains for each channel of `roles`.
+private func stereoMix(_ roles: [ChannelRole]) -> [[Float]] {
     let minus3dB = Float(0.5.squareRoot())
-    var sides = [[Float]](repeating: [Float](repeating: 0, count: count), count: 2)
-    for (channel, role) in roles.prefix(count).enumerated() {
+    var sides = [[Float]](repeating: [Float](repeating: 0, count: roles.count), count: 2)
+    for (channel, role) in roles.enumerated() {
         let (left, right): (Float, Float) =
             switch role {
             case .left: (1, 0)
@@ -260,10 +258,11 @@ private func stereoMix(_ count: Int) -> [[Float]] {
         sides[0][channel] = left
         sides[1][channel] = right
     }
-    return sides.map { side in
-        let total = side.reduce(0, +)
-        return side.map { total > 0 ? $0 / total : 0 }
+    let mixesMore = zip(roles, zip(sides[0], sides[1])).contains { role, gains in
+        role != .left && role != .right && gains != (0, 0)
     }
+    let headroom = mixesMore ? 1 / (1 + minus3dB) : 1
+    return sides.map { side in side.map { $0 * headroom } }
 }
 
 /// Returned with no frames when the decoder has ended, so the converter hands back what it has

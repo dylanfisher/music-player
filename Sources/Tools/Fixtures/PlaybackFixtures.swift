@@ -46,7 +46,7 @@ public func rampAlbum(sampleRateHz: Int, bitsPerSample: Int, in directory: URL) 
         let url = directory.appendingPathComponent(
             "ramp-\(sampleRateHz)-\(bitsPerSample)-\(index + 1).flac")
         let first = start
-        try makeFLAC(
+        try makeEncoded(
             at: url, sampleRateHz: sampleRateHz, bitsPerSample: bitsPerSample, frames: count
         ) { frame, channel in
             rampSample(first + frame, channel: channel, bits: bitsPerSample)
@@ -93,7 +93,7 @@ public func sineAlbum(
         let url = directory.appendingPathComponent(
             "sine-\(sampleRateHz)-\(bitsPerSample)-\(frames[0])-\(index + 1).flac")
         let first = start
-        try makeFLAC(
+        try makeEncoded(
             at: url, sampleRateHz: sampleRateHz, bitsPerSample: bitsPerSample, frames: count
         ) { frame, channel in
             let seconds = Double(first + frame) / Double(sampleRateHz)
@@ -109,9 +109,24 @@ public func sineAlbum(
 /// `levelOf(channel)`, so a channel mix shows as plain arithmetic on the levels.
 func levelTrack(channels: Int, in directory: URL) throws -> URL {
     let url = directory.appendingPathComponent("levels-44100-24-\(channels)ch.flac")
-    try makeFLAC(
+    try makeEncoded(
         at: url, sampleRateHz: 44_100, bitsPerSample: 24, channels: channels, frames: 22_050
     ) { _, channel in Int32((levelOf(channel) * Double(1 << 23)).rounded()) }
+    return url
+}
+
+/// Like `levelTrack`, with `levels` on the channels in the WAV and FLAC default order, encoded
+/// with afconvert's `arguments`, which name the layout the levels are in and the one the file
+/// stores, as `-l MPEG_5_1_A -l MPEG_5_1_D` does for ALAC's C L R Ls Rs LFE. `name` makes the
+/// file's name.
+func levelTrack(
+    named name: String, levels: [Double], afconvert arguments: [String], in directory: URL
+) throws -> URL {
+    let url = directory.appendingPathComponent("levels-\(name)")
+    try makeEncoded(
+        at: url, sampleRateHz: 44_100, bitsPerSample: 24, channels: levels.count, frames: 22_050,
+        afconvert: arguments
+    ) { _, channel in Int32((levels[channel] * Double(1 << 23)).rounded()) }
     return url
 }
 
@@ -135,7 +150,7 @@ public func sineNoiseTrack(
         "sine-noise-\(rate)-\(bits)-\(channels)ch-\(seconds)s.flac")
     var noise = SplitMix64(seed: UInt64(rate / 1000))
     let noiseBits = bits / 2
-    try makeFLAC(
+    try makeEncoded(
         at: url, sampleRateHz: rate, bitsPerSample: bits, channels: channels,
         frames: rate * seconds
     ) { frame, channel in
@@ -147,11 +162,12 @@ public func sineNoiseTrack(
     return url
 }
 
-/// Writes PCM from `sample` as WAV, then encodes it, unless `url` already exists. Works in
-/// a scratch directory and renames the result into place, so a test running at the same time
-/// never sees half a file.
-private func makeFLAC(
+/// Writes PCM from `sample` as WAV, then encodes it with afconvert's `arguments`, FLAC unless
+/// given others, unless `url` already exists. Works in a scratch directory and renames the result
+/// into place, so a test running at the same time never sees half a file.
+private func makeEncoded(
     at url: URL, sampleRateHz: Int, bitsPerSample: Int, channels: Int = 2, frames: Int,
+    afconvert arguments: [String] = ["-f", "flac", "-d", "flac"],
     sample: (_ frame: Int, _ channel: Int) -> Int32
 ) throws {
     let manager = FileManager.default
@@ -163,15 +179,15 @@ private func makeFLAC(
     try manager.createDirectory(at: scratch, withIntermediateDirectories: true)
     let made = Result {
         let wav = scratch.appendingPathComponent("source.wav")
-        let flac = scratch.appendingPathComponent("encoded.flac")
+        let encoded = scratch.appendingPathComponent("encoded.\(url.pathExtension)")
         try writeWAV(
             at: wav, sampleRateHz: sampleRateHz, bitsPerSample: bitsPerSample, channels: channels,
             frames: frames,
             sample: sample)
-        try runAfconvert(["-f", "flac", "-d", "flac", wav.path, flac.path])
-        guard rename(flac.path, url.path) == 0 else {
+        try runAfconvert(arguments + [wav.path, encoded.path])
+        guard rename(encoded.path, url.path) == 0 else {
             throw FixtureError.unexpectedSeed(
-                "couldn't move \(flac.path) into place: errno \(errno)")
+                "couldn't move \(encoded.path) into place: errno \(errno)")
         }
     }
     try manager.removeItem(at: scratch)

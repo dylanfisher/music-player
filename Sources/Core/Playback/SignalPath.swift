@@ -26,11 +26,17 @@ public struct TrackSignal: Sendable, Equatable {
     /// The device can't take the file's format, so the output converts it to `decoded`, the
     /// device's best (ADR 0071).
     public var isConverted: Bool
+    /// The file doesn't name the order of its more than two channels, so a downmix takes them
+    /// in the WAV and FLAC default order (ADR 0071).
+    public var channelOrderAssumed: Bool
 
-    public init(file: SignalFormat, decoded: SignalFormat, isConverted: Bool) {
+    public init(
+        file: SignalFormat, decoded: SignalFormat, isConverted: Bool, channelOrderAssumed: Bool
+    ) {
         self.file = file
         self.decoded = decoded
         self.isConverted = isConverted
+        self.channelOrderAssumed = channelOrderAssumed
     }
 }
 
