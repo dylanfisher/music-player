@@ -19,8 +19,12 @@ final class MainWindow: NSObject, NSWindowDelegate {
     let window: NSWindow
     private let split: MainSplit
     private let signalPath: SignalPathPanel
+    private let browser: LibraryBrowser
     private let saver: LayoutSaver
     private var restoring = true
+    /// What Distraction-Free Mode hid, while it's on.
+    private var hidden: ChromeVisibility?
+    private var toolbarObservation: NSKeyValueObservation?
 
     init(
         settings: WindowSettings, banner: NSView, browser: LibraryBrowser, toolbar: MainToolbar,
@@ -30,6 +34,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
             sidebar: browser.sidebar, content: browser.content, queue: queue,
             sidebarWidth: settings.sidebarWidth, queueWidth: settings.queueWidth)
         self.signalPath = signalPath
+        self.browser = browser
         self.saver = saver
         window = SilentEscapeWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultSize),
@@ -43,6 +48,12 @@ final class MainWindow: NSObject, NSWindowDelegate {
         // Under the title, where the toolbar grows to the now-playing status's height.
         window.toolbarStyle = .expanded
         toolbar.attach(to: window)
+        toolbar.toolbar.isVisible = settings.toolbarVisible
+        // The toolbar's own context menu can hide it too.
+        toolbarObservation = toolbar.toolbar.observe(\.isVisible) { [weak self] toolbar, _ in
+            let visible = toolbar.isVisible
+            MainActor.assumeIsolated { self?.toolbarVisibilityChanged(visible) }
+        }
 
         split.sidebarWidthChanged = { saver.set(\.sidebarWidth, $0) }
         split.queueWidthChanged = { saver.set(\.queueWidth, $0) }
@@ -92,6 +103,38 @@ final class MainWindow: NSObject, NSWindowDelegate {
     func toggleQueue() {
         split.toggleQueue()
         saver.set(\.queueVisible, isQueueVisible)
+    }
+
+    var isToolbarVisible: Bool { window.toolbar?.isVisible == true }
+
+    func toggleToolbar() { window.toolbar?.isVisible.toggle() }
+
+    private func toolbarVisibilityChanged(_ visible: Bool) {
+        guard !restoring else { return }
+        saver.set(\.toolbarVisible, visible)
+    }
+
+    func toggleStatusBar() {
+        browser.toggleStatusBar()
+        saver.set(\.statusBarVisible, browser.isStatusBarVisible)
+    }
+
+    /// Whether the toolbar, the sidebar and the status bar are all hidden.
+    var isDistractionFree: Bool { chrome == .hidden }
+
+    private var chrome: ChromeVisibility {
+        ChromeVisibility(
+            toolbar: isToolbarVisible, sidebar: isSidebarVisible,
+            statusBar: browser.isStatusBarVisible)
+    }
+
+    /// Hides the toolbar, the sidebar and the status bar, or shows what it hid.
+    func toggleDistractionFree() {
+        let current = chrome
+        let next = current.toggled(hid: &hidden)
+        if next.toolbar != current.toolbar { toggleToolbar() }
+        if next.sidebar != current.sidebar { toggleSidebar() }
+        if next.statusBar != current.statusBar { toggleStatusBar() }
     }
 
     func toggleSignalPath() {

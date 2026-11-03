@@ -118,6 +118,14 @@ extension AppDelegate {
             .toggleSidebar, enabled: hasWindow,
             isOn: { [weak self] in self?.window?.isSidebarVisible == true },
             run: { [weak self] in self?.window?.toggleSidebar() })
+        dispatcher.handle(
+            .toggleToolbar, enabled: hasWindow,
+            isOn: { [weak self] in self?.window?.isToolbarVisible == true },
+            run: { [weak self] in self?.window?.toggleToolbar() })
+        dispatcher.handle(
+            .distractionFree, enabled: hasWindow,
+            isOn: { [weak self] in self?.window?.isDistractionFree == true },
+            run: { [weak self] in self?.window?.toggleDistractionFree() })
         dispatcher.handle(.focusSidebar, enabled: hasWindow) { [weak self] in
             self?.window?.showSidebar()
             self?.browser?.focusSidebar()
@@ -126,9 +134,7 @@ extension AppDelegate {
             .toggleStatusBar, enabled: hasWindow,
             isOn: { [weak self] in self?.browser?.isStatusBarVisible == true },
             run: { [weak self] in
-                guard let browser = self?.browser else { return }
-                browser.toggleStatusBar()
-                self?.saver?.set(\.statusBarVisible, browser.isStatusBarVisible)
+                self?.window?.toggleStatusBar()
             })
         dispatcher.handle(
             .toggleBrowser, enabled: hasWindow,

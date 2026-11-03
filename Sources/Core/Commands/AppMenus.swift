@@ -145,8 +145,9 @@ public enum AppMenus {
                 title: "View", role: .plain,
                 entries: [
                     .command(.showPalette), .command(.goToItem), .separator,
-                    .command(.toggleSidebar), .command(.toggleBrowser), .command(.toggleStatusBar),
-                    .command(.toggleQueue), .command(.toggleSignalPath),
+                    .command(.toggleToolbar), .command(.toggleSidebar), .command(.toggleBrowser),
+                    .command(.toggleStatusBar), .command(.toggleQueue), .command(.toggleSignalPath),
+                    .command(.distractionFree),
                     .separator, .command(.focusSidebar), .command(.focusNextPane),
                     .command(.focusPreviousPane), .command(.focusNextArea), .separator,
                     .submenu(

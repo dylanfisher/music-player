@@ -25,6 +25,9 @@ public struct AppState: SettingsSchema {
     public let sidebarVisible = Setting(
         "window.sidebarVisible", title: "Show Sidebar", default: true,
         "Show the sidebar beside the browser.")
+    public let toolbarVisible = Setting(
+        "window.toolbarVisible", title: "Show Toolbar", default: true,
+        "Show the toolbar above the browser.")
     public let statusBarVisible = Setting(
         "window.statusBarVisible", title: "Show Status Bar", default: true,
         "Show the status line under the track table.")
