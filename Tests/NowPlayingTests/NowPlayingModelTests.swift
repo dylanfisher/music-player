@@ -79,8 +79,8 @@ private func update(
 @MainActor @Test func timesCountUpAndDown() {
     let model = NowPlayingModel { row($0) }
     model.apply(update(.trackStarted(index: 0)))
-    #expect(model.times(positionSeconds: 62) == ("1:02", "-3:17"))
-    #expect(model.times(positionSeconds: 400) == ("4:19", "-0:00"))
+    #expect(model.times(positionSeconds: 62) == ("1:02", "4:19"))
+    #expect(model.times(positionSeconds: 400) == ("4:19", "4:19"))
     #expect(model.times(positionSeconds: nil) == ("", ""))
 }
 

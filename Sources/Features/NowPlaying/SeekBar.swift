@@ -1,15 +1,14 @@
 import AppKit
 
-/// A seek bar: a thin line filled up to the position, with the playhead a thin vertical bar. A
-/// click moves the playhead there at once and seeks, with no animation; a drag moves it with the
-/// pointer and seeks where it's let go.
+/// A seek bar: a rounded track filled in the accent color up to the position. A click moves the
+/// position there at once and seeks, with no animation; a drag moves it with the pointer and
+/// seeks where it's let go.
 @MainActor
 final class SeekBar: NSView {
-    static let linePoints = 3.0
-    static let playheadPoints = 2.0
+    static let trackPoints = 4.0
     static let heightPoints = 12.0
 
-    /// Where the playhead is, from 0 to 1.
+    /// The position, from 0 to 1.
     var fraction = 0.0 {
         didSet { needsDisplay = true }
     }
@@ -22,7 +21,7 @@ final class SeekBar: NSView {
     /// Called with the fraction under the pointer: `done` is false while a drag goes on, and
     /// true on a click and where a drag ends, where the track should seek to.
     var seek: (_ fraction: Double, _ done: Bool) -> Void = { _, _ in }
-    /// Whether the pointer holds the playhead, so the position shown leaves it alone.
+    /// Whether the pointer holds the position, so the position shown leaves it alone.
     private(set) var isTracking = false
     private var moved = false
 
@@ -41,6 +40,7 @@ final class SeekBar: NSView {
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var mouseDownCanMoveWindow: Bool { false }
 
     /// The fraction under `x`, in a bar `width` points wide, held between 0 and 1.
     nonisolated static func fraction(atX x: Double, width: Double) -> Double {
@@ -63,7 +63,7 @@ final class SeekBar: NSView {
         seek(fraction, false)
     }
 
-    /// Lets go of the playhead without seeking, as when the track changes under a drag.
+    /// Lets go of the position without seeking, as when the track changes under a drag.
     func cancelTracking() {
         isTracking = false
         moved = false
@@ -93,21 +93,17 @@ final class SeekBar: NSView {
     override func mouseUp(with event: NSEvent) { release() }
 
     override func draw(_ dirtyRect: NSRect) {
-        let radius = Self.linePoints / 2
-        let line = NSRect(
-            x: bounds.minX, y: bounds.midY - radius, width: bounds.width, height: Self.linePoints)
+        let radius = Self.trackPoints / 2
+        let track = NSRect(
+            x: bounds.minX, y: bounds.midY - radius, width: bounds.width, height: Self.trackPoints)
         NSColor.tertiaryLabelColor.setFill()
-        NSBezierPath(roundedRect: line, xRadius: radius, yRadius: radius).fill()
-        guard isEnabled else { return }
-        var filled = line
-        filled.size.width = line.width * fraction
-        NSColor.secondaryLabelColor.setFill()
-        NSBezierPath(roundedRect: filled, xRadius: radius, yRadius: radius).fill()
-        let x = min(
-            max(line.minX + filled.width - Self.playheadPoints / 2, bounds.minX),
-            bounds.maxX - Self.playheadPoints)
-        NSColor.labelColor.setFill()
-        NSRect(x: x, y: bounds.minY, width: Self.playheadPoints, height: bounds.height).fill()
+        NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius).fill()
+        guard isEnabled, fraction > 0 else { return }
+        var played = track
+        // At least a round end's width, so the start of a track still shows as played.
+        played.size.width = max(track.width * fraction, Self.trackPoints)
+        NSColor.controlAccentColor.setFill()
+        NSBezierPath(roundedRect: played, xRadius: radius, yRadius: radius).fill()
     }
 
     override func accessibilityValue() -> Any? { fraction }

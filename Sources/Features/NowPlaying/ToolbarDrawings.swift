@@ -31,21 +31,22 @@ extension NowPlayingBar {
         let subtitle = NSTextField(labelWithString: "Artist — Album")
         subtitle.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         subtitle.textColor = .secondaryLabelColor
-        let bar = SeekBar()
-        bar.fraction = 0.35
-        let text = NSStackView(views: [title, subtitle, bar])
+        let seek = SeekBox()
+        seek.bar.fraction = 0.35
+        seek.showTimes(elapsed: "1:10", total: "3:20")
+        let text = NSStackView(views: [title, subtitle, seek])
         text.orientation = .vertical
         text.alignment = .leading
         text.spacing = 1
         let drawing = NSStackView(views: [art, text])
         drawing.spacing = 8
-        for view in [art, bar, drawing] as [NSView] {
+        for view in [art, seek, drawing] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
         }
         NSLayoutConstraint.activate([
             art.widthAnchor.constraint(equalToConstant: drawingArtPoints),
             art.heightAnchor.constraint(equalToConstant: drawingArtPoints),
-            bar.widthAnchor.constraint(equalTo: text.widthAnchor),
+            seek.widthAnchor.constraint(equalTo: text.widthAnchor),
             drawing.widthAnchor.constraint(equalToConstant: drawingWidthPoints),
         ])
         return drawing

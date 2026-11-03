@@ -44,9 +44,7 @@ public final class NowPlayingBar: NSObject {
     private let titleLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let formatLabel = NSTextField(labelWithString: "")
-    private let elapsedLabel = NSTextField(labelWithString: "")
-    private let remainingLabel = NSTextField(labelWithString: "")
-    let slider = SeekBar()
+    let seekBox = SeekBox()
     private let previousButton = NSButton()
     private let playButton = NSButton()
     private let nextButton = NSButton()
@@ -67,15 +65,7 @@ public final class NowPlayingBar: NSObject {
             button.action = action
         }
         Self.setUpTransport(previousButton, playButton, nextButton)
-        for label in [elapsedLabel, remainingLabel] {
-            label.font = .monospacedDigitSystemFont(
-                ofSize: NSFont.smallSystemFontSize, weight: .regular)
-            label.textColor = .secondaryLabelColor
-            label.alignment = label == elapsedLabel ? .right : .left
-            label.translatesAutoresizingMaskIntoConstraints = false
-            label.widthAnchor.constraint(equalToConstant: 52).isActive = true
-        }
-        for bar in [slider, statusBar.seekBar] {
+        for bar in seekBars {
             bar.seek = { [weak self] fraction, done in self?.seek(to: fraction, done: done) }
         }
         buildDetailed()
@@ -160,13 +150,11 @@ public final class NowPlayingBar: NSObject {
         text.orientation = .vertical
         text.alignment = .leading
         text.spacing = 1
-        let seek = NSStackView(views: [elapsedLabel, slider, remainingLabel])
-        seek.spacing = 4
-        let middle = NSStackView(views: [text, seek])
+        let middle = NSStackView(views: [text, seekBox])
         middle.orientation = .vertical
         middle.alignment = .leading
         middle.spacing = 2
-        for view in [text, seek] {
+        for view in [text, seekBox] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: middle.widthAnchor).isActive = true
         }
@@ -185,7 +173,6 @@ public final class NowPlayingBar: NSObject {
         detailed.setClippingResistancePriority(.required, for: .vertical)
         // A stack view's own hugging is its huggingPriority, not its content hugging.
         middle.setHuggingPriority(.init(1), for: .horizontal)
-        seek.distribution = .fill
         art.setContentHuggingPriority(.required, for: .horizontal)
     }
 
@@ -211,7 +198,7 @@ public final class NowPlayingBar: NSObject {
     /// The bars seek only in a track of known length, with the engine connected.
     private func enableSeekBars() {
         let seekable = connected && (model.state.durationSeconds ?? 0) > 0
-        for bar in [slider, statusBar.seekBar] { bar.isEnabled = seekable }
+        for bar in seekBars { bar.isEnabled = seekable }
     }
 
     func apply(_ update: PlaybackUpdate) {
@@ -220,7 +207,7 @@ public final class NowPlayingBar: NSObject {
         if model.currentURL != before {
             loadArt()
             // A drag over the last track mustn't seek this one.
-            for bar in [slider, statusBar.seekBar] { bar.cancelTracking() }
+            for bar in seekBars { bar.cancelTracking() }
         }
         show()
         tickWhilePlaying()
@@ -267,7 +254,7 @@ public final class NowPlayingBar: NSObject {
     private func showPosition() async {
         let position = await engine?.position()
         // While the pointer holds a bar, the times follow it instead.
-        guard pendingSeeks == 0, !slider.isTracking, !statusBar.seekBar.isTracking else { return }
+        guard pendingSeeks == 0, !seekBars.contains(where: \.isTracking) else { return }
         showTimes(model.times(positionSeconds: position))
         let fraction =
             if let duration = model.state.durationSeconds, duration > 0, let position {
@@ -275,15 +262,17 @@ public final class NowPlayingBar: NSObject {
             } else {
                 0.0
             }
-        slider.fraction = fraction
-        statusBar.seekBar.fraction = fraction
+        for bar in seekBars { bar.fraction = fraction }
     }
 
-    private func showTimes(_ times: (elapsed: String, remaining: String)) {
-        elapsedLabel.stringValue = times.elapsed
-        remainingLabel.stringValue = times.remaining
-        statusBar.showTimes(elapsed: times.elapsed, remaining: times.remaining)
+    private func showTimes(_ times: (elapsed: String, total: String)) {
+        for box in [seekBox, statusBar.seekBox] {
+            box.showTimes(elapsed: times.elapsed, total: times.total)
+        }
     }
+
+    /// The toolbar's and the status bar's.
+    private var seekBars: [SeekBar] { [seekBox.bar, statusBar.seekBox.bar] }
 
     private func loadArt() {
         showArt(nil)
@@ -335,12 +324,11 @@ public final class NowPlayingBar: NSObject {
     /// hold the target until it has.
     private func seek(to fraction: Double, done: Bool) {
         guard let engine, let duration = model.state.durationSeconds, duration > 0 else {
-            for bar in [slider, statusBar.seekBar] { bar.fraction = 0 }
+            for bar in seekBars { bar.fraction = 0 }
             return
         }
         let seconds = fraction * duration
-        slider.fraction = fraction
-        statusBar.seekBar.fraction = fraction
+        for bar in seekBars { bar.fraction = fraction }
         showTimes(model.times(positionSeconds: seconds))
         guard done else { return }
         pendingSeeks += 1

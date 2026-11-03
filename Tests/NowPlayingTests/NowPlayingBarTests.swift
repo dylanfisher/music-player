@@ -35,7 +35,7 @@ private func bar() -> NowPlayingBar {
     }
     let bar = NowPlayingBar(model: model, artwork: ArtworkLoader(maxPixelSize: 8, capacity: 1))
     bar.setEnabled(true)
-    for seekBar in [bar.slider, bar.statusBar.seekBar] {
+    for seekBar in [bar.seekBox.bar, bar.statusBar.seekBox.bar] {
         seekBar.frame = NSRect(x: 0, y: 0, width: 100, height: SeekBar.heightPoints)
     }
     return bar
@@ -44,21 +44,21 @@ private func bar() -> NowPlayingBar {
 @MainActor @Test func theSeekBarsAreOffWithoutALength() {
     let bar = bar()
     bar.apply(update(.trackStarted(index: 0), duration: nil))
-    #expect(!bar.slider.isEnabled && !bar.statusBar.seekBar.isEnabled)
-    bar.statusBar.seekBar.press(atX: 50)
-    #expect(bar.statusBar.seekBar.fraction == 0)
+    #expect(!bar.seekBox.bar.isEnabled && !bar.statusBar.seekBox.bar.isEnabled)
+    bar.statusBar.seekBox.bar.press(atX: 50)
+    #expect(bar.statusBar.seekBox.bar.fraction == 0)
     bar.apply(update(.trackStarted(index: 0), duration: 0))
-    #expect(!bar.slider.isEnabled)
+    #expect(!bar.seekBox.bar.isEnabled)
     bar.apply(update(.trackStarted(index: 0), duration: 100))
-    #expect(bar.slider.isEnabled && bar.statusBar.seekBar.isEnabled)
+    #expect(bar.seekBox.bar.isEnabled && bar.statusBar.seekBox.bar.isEnabled)
     bar.setEnabled(false)
-    #expect(!bar.slider.isEnabled)
+    #expect(!bar.seekBox.bar.isEnabled)
 }
 
 @MainActor @Test func aTrackChangeLetsGoOfADragWithoutSeeking() {
     let bar = bar()
     bar.apply(update(.trackStarted(index: 0), duration: 100))
-    let seekBar = bar.statusBar.seekBar
+    let seekBar = bar.statusBar.seekBox.bar
     var seeks: [Bool] = []
     seekBar.seek = { _, done in seeks.append(done) }
     seekBar.press(atX: 20)
@@ -106,17 +106,58 @@ private func bar() -> NowPlayingBar {
     let started = Date().addingTimeInterval(10)
     while Date() < started {
         let position = await engine.position() ?? 0
-        if bar.slider.isEnabled, position >= 0.2 { break }
+        if bar.seekBox.bar.isEnabled, position >= 0.2 { break }
         try await Task.sleep(nanoseconds: 10_000_000)
     }
-    try #require(bar.slider.isEnabled)
-    bar.slider.press(atX: 50)
-    bar.slider.release()
+    try #require(bar.seekBox.bar.isEnabled)
+    bar.seekBox.bar.press(atX: 50)
+    bar.seekBox.bar.release()
     var drawn: [Double] = []
+    var times: Set<String> = []
     let deadline = Date().addingTimeInterval(1.5)
     while Date() < deadline {
-        drawn += [bar.slider.fraction, bar.statusBar.seekBar.fraction]
+        drawn += [bar.seekBox.bar.fraction, bar.statusBar.seekBox.bar.fraction]
+        times.formUnion([bar.seekBox.times.elapsed, bar.statusBar.seekBox.times.elapsed])
         try await Task.sleep(nanoseconds: 5_000_000)
     }
     #expect(drawn.allSatisfy { $0 >= 0.5 }, "drawn after the click: \(drawn.filter { $0 < 0.5 })")
+    #expect(times.isSubset(of: ["1:00", "1:01"]), "times drawn after the click: \(times)")
+}
+
+/// Where `box` is in `view`, laid out at `size`: a point on the elapsed time, one on the bar,
+/// one on the total, and one on the box's own edge.
+@MainActor
+private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
+    view.layoutSubtreeIfNeeded()
+    let frame = box.convert(box.bounds, to: view)
+    let bar = box.bar.convert(box.bar.bounds, to: view)
+    return [
+        NSPoint(x: frame.minX + 1, y: frame.midY), NSPoint(x: bar.minX - 10, y: frame.midY),
+        NSPoint(x: bar.midX, y: bar.midY), NSPoint(x: bar.maxX + 10, y: frame.midY),
+    ]
+}
+
+/// The toolbar's status and the status bar both sit where a mouse down on a view that allows
+/// it drags the window: the title bar, and with glass a full-size content view.
+@MainActor @Test func aMouseDownOnEitherSeekBoxNeverMovesTheWindow() throws {
+    let bar = bar()
+    bar.status.frame = NSRect(x: 0, y: 0, width: 400, height: NowPlayingBar.artPoints)
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 600, height: 300),
+        styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    let content = try #require(window.contentView)
+    let statusSeek = try #require(bar.statusBar.view(for: .seek))
+    statusSeek.frame = NSRect(x: 100, y: 0, width: 300, height: SeekBox.heightPoints)
+    content.addSubview(statusSeek)
+    for (box, view) in [(bar.seekBox, bar.status), (bar.statusBar.seekBox, content)] {
+        let frame = try #require(content.superview)
+        for point in points(of: box, in: view) {
+            let inWindow = view === content ? content.convert(point, to: frame) : point
+            let hit = try #require((view === content ? frame : view).hitTest(inWindow))
+            #expect(hit === box || hit === box.bar, "\(point) hit \(hit)")
+            #expect(!hit.mouseDownCanMoveWindow, "\(point) hit \(hit)")
+        }
+    }
 }

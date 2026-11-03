@@ -63,9 +63,15 @@ remembering which showed; pressed with all three hidden it shows what it hid, or
 it hid nothing, as after a relaunch with everything hidden. Each part saves its visibility as
 its own toggle does, so a relaunch keeps what showed.
 
-**The seek bar** is a view of the app's own: a mouse down moves the playhead there at once and
-seeks, a drag seeks where it ends, and the playhead is a 2-point vertical line. `NSSlider`
-animated the knob to a clicked point and drew a round knob. The bars keep the target until the
+**The seek bar** is a view of the app's own: a mouse down moves the position there at once and
+seeks, and a drag seeks where it ends. `NSSlider` animated the knob to a clicked point and drew
+a round knob. Since phase 35 it draws as the owner's reference: a `SeekBox`, a rounded inset
+box, holds the elapsed time on the left, the track's length on the right, and between them a
+rounded track filled in the accent color for the part played, with no playhead; the toolbar,
+the status bar and the customization sheet's drawing use the same box. Neither the box nor the
+bar lets a mouse down move the window (`mouseDownCanMoveWindow`), and the box takes clicks on
+its times itself: the toolbar is a window drag area, and so is a full-size content view with
+glass, where a drag on the bar moved the window before. The bars keep the target until the
 engine's `seek` returns. They're off while the track has no known length, and a track change, or the bar leaving its window, lets go of a
 drag without seeking.
 

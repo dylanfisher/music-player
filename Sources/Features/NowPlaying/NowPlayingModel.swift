@@ -86,12 +86,11 @@ public final class NowPlayingModel {
         return [source, state.outputFormat].compactMap { $0 }.joined(separator: " → ")
     }
 
-    /// Elapsed and remaining time for the bar, as "1:02" and "-3:40".
-    func times(positionSeconds: Double?) -> (elapsed: String, remaining: String) {
+    /// Elapsed time and the track's length for the bar, as "1:02" and "4:42".
+    func times(positionSeconds: Double?) -> (elapsed: String, total: String) {
         guard let duration = state.durationSeconds, let position = positionSeconds else {
             return ("", "")
         }
-        let elapsed = min(max(0, position), duration)
-        return (clock(elapsed), "-" + clock(duration - elapsed))
+        return (clock(min(max(0, position), duration)), clock(duration))
     }
 }
