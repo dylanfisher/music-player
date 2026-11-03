@@ -172,6 +172,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             change.reason == .libraryChanged ? scrollAnchor(in: change.previousIDs) : nil
         cache.setIDs(model.trackIDs)
         hideArtHover()
+        // Its album may no longer be among the rows.
+        artViewer?.close()
         showSort()
         typeSelect?.reset()
         table.reloadData()
@@ -416,7 +418,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             let embedded = track.art, let screen = table.window?.screen ?? NSScreen.main
         else { return }
         hideArtHover()
-        let viewer = ArtViewer(image: image, screen: screen)
+        let viewer = ArtViewer(image: image, screen: screen, owner: table.window)
         viewer.closed = { [weak self, weak viewer] in
             if self?.artViewer === viewer { self?.artViewer = nil }
         }

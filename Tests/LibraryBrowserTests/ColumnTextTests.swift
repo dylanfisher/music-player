@@ -151,7 +151,8 @@ private func request(_ offset: Int) -> ArtRequest {
 @MainActor @Test func theViewerClosesOnEscOrAClick() throws {
     let screen = try #require(NSScreen.main)
     for close in ["esc", "click"] {
-        let viewer = ArtViewer(image: NSImage(size: NSSize(width: 10, height: 10)), screen: screen)
+        let viewer = ArtViewer(
+            image: NSImage(size: NSSize(width: 10, height: 10)), screen: screen, owner: nil)
         var closed = 0
         viewer.closed = { closed += 1 }
         viewer.show()
@@ -179,7 +180,8 @@ private func request(_ offset: Int) -> ArtRequest {
 
 @MainActor @Test func aDecodeFinishingAfterTheViewerClosedIsDropped() async throws {
     let screen = try #require(NSScreen.main)
-    let viewer = ArtViewer(image: NSImage(size: NSSize(width: 10, height: 10)), screen: screen)
+    let viewer = ArtViewer(
+        image: NSImage(size: NSSize(width: 10, height: 10)), screen: screen, owner: nil)
     var failures: [String] = []
     viewer.show()
     let art = EmbeddedArt(offset: 0, byteCount: 10, mimeType: "image/png", unsynchronised: false)
@@ -192,4 +194,20 @@ private func request(_ offset: Int) -> ArtRequest {
     await viewer.load(art, path: "/nonexistent/art.flac") { failures.append($0) }.value
     #expect(failures.count == 1)
     viewer.close()
+}
+
+@MainActor @Test func theViewerClosesWithItsWindowOrWhenTheAppResignsActive() throws {
+    let screen = try #require(NSScreen.main)
+    let owner = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    owner.isReleasedWhenClosed = false
+    for event in [NSWindow.willCloseNotification, NSApplication.didResignActiveNotification] {
+        let viewer = ArtViewer(
+            image: NSImage(size: NSSize(width: 10, height: 10)), screen: screen, owner: owner)
+        viewer.show()
+        NotificationCenter.default.post(
+            name: event, object: event == NSWindow.willCloseNotification ? owner : NSApp)
+        #expect(!viewer.window.isVisible, "\(event.rawValue)")
+    }
 }

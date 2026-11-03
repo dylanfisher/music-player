@@ -41,8 +41,10 @@ row highlight beside it, the whole art on hover, and the art large on a click.
 - **A click on the hovered art opens `ArtViewer`**: a borderless window over the screen, the art
   centered over a dimmed backdrop, as large as the screen's visible area allows, upscaled if it
   must be. It shows the art it had at once and replaces it with the art decoded off the main
-  thread at the screen's longer side in pixels. A click anywhere or Esc closes it. A decode that
-  fails is reported as the browser's other failures are, and the first art stays.
+  thread at the screen's longer side in pixels. A click anywhere or Esc closes it, and so do the
+  main window closing, the app resigning active and a reload of the rows, since it floats over
+  every window. A decode that fails is reported as the browser's other failures are, and the
+  first art stays; one that ends after the viewer closed is dropped.
 
 ## Alternatives considered
 

@@ -391,6 +391,32 @@ private func artTable(artWidth: CGFloat) async throws -> (
     #expect(controller.artHover.isHidden)
 }
 
+@MainActor @Test func aReloadClosesTheArtViewer() async throws {
+    let (controller, model, rows) = try await artTable(artWidth: 3 * RowListController.rowHeight)
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = controller.view
+    defer { window.close() }
+    let table = controller.table
+    let art = table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
+    let row = try #require(rows.indices.first { rows[$0].art != nil })
+    table.scrollRowToVisible(row)
+    let point = NSPoint(x: table.rect(ofColumn: art).midX, y: table.rect(ofRow: row).midY)
+    let deadline = Date().addingTimeInterval(10)
+    while controller.artHover.isHidden, Date() < deadline {
+        controller.showArtHover(at: point)
+        try await Task.sleep(nanoseconds: 20_000_000)
+    }
+    controller.openHoveredArt()
+    let viewer = try #require(controller.artViewer)
+    #expect(viewer.window.isVisible)
+    await model.setSort(.title, ascending: true)
+    #expect(!viewer.window.isVisible)
+    #expect(controller.artViewer == nil)
+}
+
 @MainActor @Test func anEmptyHistorySaysNothingPlayedYet() async throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(

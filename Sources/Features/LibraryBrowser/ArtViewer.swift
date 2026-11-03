@@ -5,7 +5,9 @@ import Metadata
 
 /// An album's art opened over the whole screen, centered and as large as the screen allows,
 /// over a dimmed backdrop. It shows the art it opened with at once and replaces it with the art
-/// decoded off the main thread at the screen's pixels. A click anywhere or Esc closes it.
+/// decoded off the main thread at the screen's pixels. A click anywhere or Esc closes it, and so
+/// does the window it opened from closing or the app going to the background, since it floats
+/// above every window.
 @MainActor
 final class ArtViewer {
     let window: NSWindow
@@ -15,8 +17,10 @@ final class ArtViewer {
     /// Counts each showing and closing, so a decode finishing after the opening it was for
     /// ended is dropped.
     private var session = 0
+    private var observers: [NSObjectProtocol] = []
 
-    init(image: NSImage, screen: NSScreen) {
+    /// `owner` is the window the art was opened from.
+    init(image: NSImage, screen: NSScreen, owner: NSWindow?) {
         window = ArtViewerWindow(
             contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         view = ArtViewerView(frame: NSRect(origin: .zero, size: screen.frame.size))
@@ -28,6 +32,21 @@ final class ArtViewer {
         window.contentView = view
         window.setFrame(screen.frame, display: false)
         view.close = { [weak self] in self?.close() }
+        let center = NotificationCenter.default
+        let closeOnMain: @Sendable (Notification) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated { self?.close() }
+        }
+        observers = [
+            center.addObserver(
+                forName: NSApplication.didResignActiveNotification, object: nil, queue: .main,
+                using: closeOnMain)
+        ]
+        if let owner {
+            observers.append(
+                center.addObserver(
+                    forName: NSWindow.willCloseNotification, object: owner, queue: .main,
+                    using: closeOnMain))
+        }
     }
 
     func show() {
@@ -59,6 +78,8 @@ final class ArtViewer {
     func close() {
         guard window.isVisible else { return }
         session += 1
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+        observers = []
         window.orderOut(nil)
         closed()
     }
