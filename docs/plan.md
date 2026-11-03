@@ -3337,6 +3337,36 @@ estimates until the 32f checkpoint.
       Playlist and Get Info. Also bench live window resize, column resize and a row height change
       with the art column shown (art runs depend on the column width).
 
+Plan:
+
+1. **32e.5:** `NSSupportsAutomaticGraphicsSwitching` in `Support/Info.plist`.
+2. **32e.1:** the intervals are one enum in Log, each with its `OSSignposter` name, and a
+   recorder of the intervals open and just ended. They go on an art load, a row page fetch, a
+   browser refresh, the reader's list, totals, pane and palette queries, a palette ranking and
+   a scan batch. The play-to-first-sample interval is 32a's path and joins at the merge. A
+   main-thread stall detector in Log: run-loop observers note each pass's marks, and a pass
+   over 100 ms logs its length, the intervals that ran in it, the last command run and the
+   event type being handled. No timer, so an idle app pays nothing. ADR 0080.
+3. **32e.4:** the main actor's file-system calls that can block on a hung share go to a
+   queue: the sync folder's `fileExists` and Finder open, the volume checks when a folder or
+   the sync folder is chosen, and every Reveal in Finder. Tests hold a file access that never
+   returns and check the main actor carries on. Quitting waits on the output's close, which
+   waits on the control thread, so the wait gets a bound. ADR 0081.
+4. **32e.3:** fixture covers of 3000 px, JPEG and PNG, made in Bench, and a bench of their
+   decode to the art column's thumbnail.
+5. **32e.2:** a bench pages through the art column sorted by title on the slow simulated NAS
+   after a fresh launch, then again after a second launch. If the second costs what the first
+   did, a thumbnail cache in `~/Library/Caches/MusicPlayer`, keyed by the file's path, size
+   and modification time and the art's place and size, capped by bytes. ADR 0079.
+6. **32e.6:** measure the CPU and wakeups the now-playing bar costs while playing, the window
+   shown and hidden, with a temporary harness. Pause on occlusion only if it costs.
+7. **32e.8:** benches for ⌘A over the fixture library then Play Next, Add to Playlist and Get
+   Info up to the editor's read, and live window resize, column resize and a row height change
+   with the art column. Fix only what they show.
+8. **32e.7:** `--measure-launch` prints the launch time to the first rows and quits, and the
+   steps for the owner's cold launch at 32f, tested under bash 3.2.
+9. Rerun the touched benches against main, the same day.
+
 #### 32f. Checkpoint and budgets
 
 - Run `./scripts/bench` three times. Tighten any new budget the code beats by more than 3x, as
