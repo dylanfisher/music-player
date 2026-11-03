@@ -21,13 +21,20 @@ extension AppDelegate {
         menu.liveMenus[AppMenus.outputMenuTitle]?.delegate = outputMenu
         toolbar?.outputMenu.delegate = outputMenu
         self.outputMenu = outputMenu
-        readDevices()
+        // The first CoreAudio call in a run takes about 25 ms, which held up the window's first
+        // rows, so the first list is read off the main thread before the watch is set up.
+        readDevices { [weak self] in self?.followDevices() }
+    }
+
+    /// Follows the device list, and reads it again for a device that came or went before.
+    private func followDevices() {
         do {
             deviceListWatch = try DeviceListWatch { [weak self] in self?.readDevices() }
         } catch {
             logger.error("can't follow the device list for the output picker: \(error)")
             browser?.report("The output picker won't follow devices as they come and go: \(error)")
         }
+        readDevices()
     }
 
     /// The output the config names now.
@@ -73,17 +80,30 @@ extension AppDelegate {
         }
     }
 
-    private func readDevices() {
-        do {
-            foundDevices = try AudioDevice.outputDevices().map {
-                FoundOutput(id: $0.uid, name: $0.name)
+    /// Lists the devices off the main thread, then calls `then`. Reads run in order on a serial
+    /// queue, so the last list read is the one kept.
+    private func readDevices(then: @escaping @MainActor () -> Void = {}) {
+        Self.deviceReads.async { [weak self] in
+            let read = Result {
+                try AudioDevice.outputDevices().map { FoundOutput(id: $0.uid, name: $0.name) }
             }
-        } catch {
-            logger.error("can't list the output devices: \(error)")
-            browser?.report("Couldn't list the output devices: \(error)")
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    switch read {
+                    case .success(let devices): self?.foundDevices = devices
+                    case .failure(let error):
+                        logger.error("can't list the output devices: \(error)")
+                        self?.browser?.report("Couldn't list the output devices: \(error)")
+                    }
+                    self?.outputsChanged()
+                    then()
+                }
+            }
         }
-        outputsChanged()
     }
+
+    private static let deviceReads = DispatchQueue(
+        label: "\(bundleIdentifier).device-list", qos: .userInitiated)
 
     private func outputsChanged() {
         outputMenu?.refresh()
