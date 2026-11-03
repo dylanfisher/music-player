@@ -23,7 +23,8 @@ Album"), or Tall, 44 points with larger art and the title over the artist and al
 defaults are today's bar: the totals alone, minimal. The seek bar takes the width the other
 parts leave, or else the totals do, their text centered. Settings ▸ Appearance shows the parts
 as a list with a checkbox each, dragged to reorder; any setting that is a list of choices gets
-that control. The style is also in the View menu, as the other appearance choices are. The
+that control. Only ticked parts are dragged, among themselves, and they always come first, so the
+order the list shows is the order the setting keeps. The style is also in the View menu, as the other appearance choices are. The
 playing track's parts are NowPlaying's views and the totals the browser's; the browser lays
 them out and the app hands it the views. With the totals left out, their label still shows a
 failure, so hiding them never hides an error. Now Playing (Centered) is gone; a state file that
@@ -54,8 +55,10 @@ status bar's, blend behind it instead. Off, each of these is put back as it was,
 table's alternating rows follow `appearance.alternatingRows` again. With the full-size content
 view, AppKit lines the toolbar's items up with the sidebar's edge.
 
-**Show Toolbar** (⌥⌘T) is saved as `window.toolbarVisible`, also when the toolbar's own menu
-hides it. **Distraction-Free Mode** (⇧⌘F) hides the toolbar, the sidebar and the status bar,
+**Show Toolbar** (⌥⌘T) is saved as `window.toolbarVisible` as it changes. The toolbar's own
+menu can hide it too; `NSToolbar.isVisible` reports that to an observer only from macOS 14, so
+before it the state is also saved as the window closes and the app quits. A save happens only
+when the value changed. **Distraction-Free Mode** (⇧⌘F) hides the toolbar, the sidebar and the status bar,
 remembering which showed; pressed with all three hidden it shows what it hid, or all three when
 it hid nothing, as after a relaunch with everything hidden. Each part saves its visibility as
 its own toggle does, so a relaunch keeps what showed.
@@ -63,7 +66,9 @@ its own toggle does, so a relaunch keeps what showed.
 **The seek bar** is a view of the app's own: a mouse down moves the playhead there at once and
 seeks, a drag seeks where it ends, and the playhead is a 2-point vertical line. `NSSlider`
 animated the knob to a clicked point and drew a round knob. The bars keep the target until the
-engine reports the seek done, so the playhead doesn't jump back for one tick.
+engine reports the seek done, so the playhead doesn't jump back for one tick. They're off while
+the track has no known length, and a track change, or the bar leaving its window, lets go of a
+drag without seeking.
 
 ## Alternatives considered
 

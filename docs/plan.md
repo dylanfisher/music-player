@@ -2776,10 +2776,8 @@ Plan:
    (⇧⌘F) hiding the toolbar, sidebar and status bar and restoring what showed. Tests on the
    mode's logic (`ChromeVisibility`).
 
-Result: shipped as planned; `./scripts/check` passes apart from the UPnP renderer timing tests
-(`aRendererStuckAtTheEndIsMovedOnByTheApp`, `aRendererThatMovedIsFoundAgainByItsUDN`), which
-failed only under the load of three worktrees building at once and pass alone; this phase
-doesn't touch UPnP. `./scripts/bundle release` builds universal. 30c.1: the customization sheet
+Result: shipped as planned; `./scripts/check` passes. `./scripts/bundle release` builds
+universal. 30c.1: the customization sheet
 shows a drawing of the transport, volume, Now Playing and search (a copy of each control wired
 to nothing), so the default set reads as the toolbar; on macOS 12 the sheet drew no image for
 items that had an image and no view. 30c.2: Now Playing (Centered) is gone. The status bar is
@@ -2802,8 +2800,13 @@ Look's render, which is always on white, to the SVG's tile with transparent corn
 (`scripts/icon-mask.swift`, ADR 0043 amended). Benchmarks, with other worktrees building (load
 average 6 to 10), branch then main in the same hour: launch to first rows 0.68 s (main 0.87 s),
 scroll-bar drag p95 13.35 ms (main 16.97 ms), memory after scrolling 78.3 MB, idle CPU 0.01%
-and 0 wakeups a second; single runs swung from 13 to 47 ms. Not done: glass on a table column
-added while it's on keeps AppKit's opaque header cell until glass is toggled. Pending the owner,
+and 0 wakeups a second; single runs swung from 13 to 47 ms. The review fixed: the toolbar's visibility
+never saving on macOS 12 (`NSToolbar.isVisible` is observable only from macOS 14), a click on
+a seek bar with no track length leaving the playhead there, a release after an automatic track
+change seeking the new track, the times flickering during a drag, the seek bar shrinking to
+nothing (now at least 60 points; checked at the window's 720-point minimum), and the checklist
+snapping back when an unticked part was dragged. Not done: glass on a table column added while
+it's on keeps AppKit's opaque header cell until glass is toggled. Pending the owner,
 on the 2015 MacBook Pro: Customize Toolbar… drawings; Settings ▸ Appearance status bar items
 and both styles while playing; clicking and dragging the seek bars; the status bar's gray
 against the toolbar in light and dark; Glass on and off; ⌥⌘T and ⇧⌘F; the app switcher icon.
