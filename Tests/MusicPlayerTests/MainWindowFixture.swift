@@ -109,7 +109,8 @@ struct MainWindowFixture {
                 looks.append(
                     [
                         "\(type(of: table)) grid \(table.gridStyleMask.rawValue)",
-                        "\(table.gridColor) \(table.backgroundColor)",
+                        // As set: the track list holds it resolved for the appearance (ADR 0086).
+                        "\(table.gridColor) \(background(table))",
                         "alternating \(table.usesAlternatingRowBackgroundColors)",
                         "translucent \((table as? KeyTableView)?.drawsTranslucentRows == true)",
                         "rows \(table.rowHeight) \(table.intercellSpacing) \(table.style.rawValue)",
@@ -121,6 +122,10 @@ struct MainWindowFixture {
         }
         window.window.contentView.map(walk)
         return looks
+    }
+
+    private func background(_ table: NSTableView) -> NSColor {
+        (table as? ResolvedBackgroundTable)?.backgroundAsSet ?? table.backgroundColor
     }
 
     func close() {

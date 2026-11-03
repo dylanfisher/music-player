@@ -102,7 +102,9 @@ private func resolved(_ color: NSColor, in appearance: NSAppearance.Name) throws
         toggled.window.window.layoutIfNeeded()
         #expect(toggled.layout == fresh.layout, "glass \(on)")
     }
-    #expect(toggled.tableLooks == fresh.tableLooks)
+    #expect(
+        toggled.tableLooks == fresh.tableLooks,
+        "\(zip(toggled.tableLooks, fresh.tableLooks).filter { $0 != $1 })")
     #expect(toggled.window.window.styleMask == fresh.window.window.styleMask)
     #expect(!toggled.window.window.titlebarAppearsTransparent)
 }
