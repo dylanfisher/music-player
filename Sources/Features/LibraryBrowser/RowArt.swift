@@ -1,5 +1,6 @@
 import Artwork
 import CoreGraphics
+import Foundation
 import Log
 import Metadata
 
@@ -32,7 +33,7 @@ struct ArtRequests {
     }
 }
 
-/// Loads the Album Art column's images one at a time off the main thread, through an
+/// Loads the Album Art column's images off the main thread, `loadsAtOnce` at a time, through an
 /// `ArtworkLoader` whose images are the size the column draws, and hands each to `loaded` on the
 /// main thread. Art that fails to load is logged once and not asked for again.
 @MainActor
@@ -45,10 +46,15 @@ final class RowArt {
     /// logged.
     static let rememberedFailures = 1000
     static let loggedFailures = 100
+    /// Art read at once, so a screen's covers on a NAS arrive together instead of one after
+    /// another. One short of the threads the cores run, which leaves the 2015 MacBook Pro's 4
+    /// threads one for the main thread and playback.
+    static let loadsAtOnce = max(2, ProcessInfo.processInfo.activeProcessorCount - 1)
 
     let loader: ArtworkLoader
     private var requests = ArtRequests()
-    private var loading = false
+    /// The art being read.
+    private var loading: Set<ArtworkKey> = []
     private var failed: Set<ArtworkKey> = []
     /// Whether a row on screen still shows the art `key` names.
     var isWanted: (ArtworkKey) -> Bool = { _ in false }
@@ -74,21 +80,23 @@ final class RowArt {
     func image(_ art: EmbeddedArt, path: String) -> CGImage? {
         let key = ArtworkKey(path: path, offset: art.offset)
         if let image = loader.cached(key) { return image }
-        guard !failed.contains(key) else { return nil }
+        guard !failed.contains(key), !loading.contains(key) else { return nil }
         requests.add(ArtRequest(key: key, art: art))
         loadNext()
         return nil
     }
 
     private func loadNext() {
-        guard !loading, let request = requests.next(isWanted: isWanted) else { return }
-        loading = true
-        let loader = loader
+        while loading.count < Self.loadsAtOnce, let request = requests.next(isWanted: isWanted) {
+            load(request)
+        }
+    }
+
+    private func load(_ request: ArtRequest) {
+        loading.insert(request.key)
         Task {
-            let result = await Task.detached {
-                Result { try loader.image(request.art, path: request.key.path) }
-            }.value
-            loading = false
+            let result = await loader.load(request.art, path: request.key.path)
+            loading.remove(request.key)
             switch result {
             case .success(let image): loaded(request.key, image)
             case .failure(let error):

@@ -61,6 +61,21 @@ public final class ArtworkLoader: @unchecked Sendable {
         return image
     }
 
+    /// `image(_:path:)` on a queue of the loaders' own instead of the cooperative pool. The pool
+    /// has a thread per core, 4 on the 2015 MacBook Pro, and a read that waits on a slow NAS
+    /// would hold one, stalling every other task meanwhile.
+    public func load(_ art: EmbeddedArt, path: String) async -> Result<CGImage, any Error> {
+        await withCheckedContinuation { continuation in
+            Self.reads.async {
+                continuation.resume(returning: Result { try self.image(art, path: path) })
+            }
+        }
+    }
+
+    /// Where `load` reads. Concurrent: each caller bounds its own loads.
+    private static let reads = DispatchQueue(
+        label: "ArtworkLoader", qos: .userInitiated, attributes: .concurrent)
+
     /// Marks `key` most recently used. Runs under `lock`.
     private func touch(_ key: ArtworkKey) {
         guard let index = recency.firstIndex(of: key) else { return }

@@ -159,10 +159,7 @@ public final class MediaControls {
         let artwork = artwork
         let url = model.currentURL
         artLoad = Task {
-            let result = await Task.detached {
-                Result { try artwork.image(embedded, path: track.path) }
-            }
-            .value
+            let result = await artwork.load(embedded, path: track.path)
             guard !Task.isCancelled, model.currentURL == url else { return }
             switch result {
             case .success(let image):

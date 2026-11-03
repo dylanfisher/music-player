@@ -65,8 +65,7 @@ final class ArtViewer {
         let loader = ArtworkLoader(maxPixelSize: Int(side.rounded(.up)), capacity: 1)
         let opening = session
         return Task {
-            let result = await Task.detached { Result { try loader.image(art, path: path) } }
-                .value
+            let result = await loader.load(art, path: path)
             guard opening == session, window.isVisible else { return }
             switch result {
             case .success(let image): view.image = NSImage(cgImage: image, size: .zero)
