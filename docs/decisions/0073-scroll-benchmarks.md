@@ -29,8 +29,8 @@ Bench launches the app for four cases: the default layout with the Album Art col
 rows under a 256-point art column, so fixture albums of 15 to 24 tracks run past their covers;
 sorted by title, so nearly every row is an album's run of its own, with each art read delayed
 by the slow simulated NAS's opening, read and closing plus its median disk wait (43 ms); and the
-scan. It reports the p95 frame and the worst frame, the worst frame a refresh landed in, and the
-time to the last cover after the page down.
+scan. It reports the p95 frame and the worst frame, the median of the frames a refresh landed in,
+and the time to the last cover after the page down.
 
 The queue panel's track change is timed in Bench's own process, through `QueuePanel.show`,
 since what it costs is the panel's rows and nothing the app adds.

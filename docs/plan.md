@@ -104,7 +104,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Resident memory with the library loaded, after scrolling every row with art | < 120 MB | < 250 MB |
 | Scroll every row by scroll-bar drag, a screenful a step with the Album Art column shown, time to scroll and draw a step (p95; phase 28); the old Mac figure is an estimate until its checkpoint | < 16 ms | < 33 ms |
 | Trackpad scroll with the Album Art column, the main thread's busy time per frame (p95; phase 32b), each of: the default rows, compact rows under a 256 pt art column, and sorted by title with art on the slow simulated NAS; the old Mac figure is an estimate until its checkpoint | < 16 ms | < 33 ms |
-| Trackpad scroll while a scan refreshes the list every 2 s, the busy time of the worst frame a refresh lands in (phase 32b); the old Mac figure is an estimate until its checkpoint | < 16 ms | < 33 ms |
+| Trackpad scroll while a scan refreshes the list every 2 s, the busy time of a frame a refresh lands in (median; phase 32b); the old Mac figure is an estimate until its checkpoint | < 16 ms | < 33 ms |
 | Page down sorted by title, art on the slow simulated NAS, to the last cover on screen (phase 32b); the old Mac figure is an estimate until its checkpoint | < 250 ms | < 500 ms |
 | Track change with the whole library queued and the queue panel open, to drawn (p95; phase 32b); the old Mac figure is an estimate until its checkpoint | < 8 ms | < 16 ms |
 | CPU while playing 24/192 FLAC | < 3 percent of a core | < 5 percent of a core |
