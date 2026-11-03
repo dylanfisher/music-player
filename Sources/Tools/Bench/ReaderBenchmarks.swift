@@ -105,11 +105,11 @@ private func typeKeystrokes(_ databaseURL: URL, scanning: Bool) throws -> [Doubl
         let refreshing = Task { @MainActor in
             while scanning, !Task.isCancelled {
                 try await Task.sleep(nanoseconds: UInt64(scanRefreshSeconds * 1e9))
-                // What `LibraryBrowser.refreshNow` reads.
+                // What `LibraryBrowser.refreshNow` reads, on the connection it reads them on.
                 await model.refresh()
-                _ = try await reader.trackTotals(ids: model.trackIDs)
-                _ = try await reader.dismissedProblems()
-                _ = try await reader.fileIssues()
+                _ = try await reader.refreshes.trackTotals(ids: model.trackIDs)
+                _ = try await reader.refreshes.dismissedProblems()
+                _ = try await reader.refreshes.fileIssues()
             }
         }
         func keystroke(_ text: String) async throws {

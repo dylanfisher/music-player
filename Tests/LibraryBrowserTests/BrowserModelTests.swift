@@ -195,6 +195,37 @@ private func loadedModel(
     #expect(panes == [false, true])
 }
 
+@MainActor @Test func aSearchTypedDuringARefreshDoesNotWaitForItsQueries() async throws {
+    let databaseURL = try writableBrowserDatabase()
+    let reader = try LibraryReader(databaseURL: databaseURL)
+    let model = BrowserModel(
+        reader: reader, sortColumn: .title, ascending: true, groupByAlbumArtist: false)
+    await model.load(BrowserState(source: nil))
+    // A write on the refresh connection waits for this lock, as for a scan's batch, and the
+    // refresh's queries queue behind it.
+    let scan = try Database(at: databaseURL)
+    try scan.execute("BEGIN IMMEDIATE")
+    let blocked = Task { try await reader.refreshes.dismissProblems(["held"]) }
+    try await Task.sleep(nanoseconds: 100_000_000)
+    var refreshed = false
+    let refresh = Task {
+        await model.refresh()
+        refreshed = true
+    }
+    await Task.yield()
+    let start = DispatchTime.now().uptimeNanoseconds
+    await model.setSearch("zzqx")
+    let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
+    let refreshedDuringSearch = refreshed
+    try scan.execute("COMMIT")
+    try await blocked.value
+    await refresh.value
+    #expect(elapsedMs < 2500, "the search waited \(elapsedMs) ms")
+    #expect(!refreshedDuringSearch)
+    #expect(model.filter.search == "zzqx")
+    #expect(model.trackIDs.isEmpty)
+}
+
 @MainActor @Test func aDoubleClickQueuesTheVisibleListInTableOrder() async throws {
     let (model, index) = try await loadedModel()
     let request = try #require(try await model.playRequest(selected: [5], clicked: 5))

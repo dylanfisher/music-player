@@ -596,6 +596,8 @@ public final class BrowserModel {
         let columns = pendingColumns
         var next = pending
         var entries = self.entries
+        // A newer change, such as a keystroke, doesn't wait behind a refresh's queries.
+        let reader = reason == .libraryChanged ? reader.refreshes : reader
         do {
             // The timeline lists plays, which its own model pages through.
             let tracks = next.source != .timeline

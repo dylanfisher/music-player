@@ -9,11 +9,24 @@ import Settings
 public actor LibraryReader {
     private let index: LibraryIndex
     private let databaseURL: URL
+    private let refreshConnection: LibraryReader?
 
     public init(databaseURL: URL) throws {
         index = try LibraryIndex(at: databaseURL)
         self.databaseURL = databaseURL
+        refreshConnection = try LibraryReader(refreshing: databaseURL)
     }
+
+    private init(refreshing databaseURL: URL) throws {
+        index = try LibraryIndex(at: databaseURL)
+        self.databaseURL = databaseURL
+        refreshConnection = nil
+    }
+
+    /// The same queries on a second connection, for what a change to the library rereads. While
+    /// a scan runs, those reads take hundreds of milliseconds on two cores, and a search typed
+    /// meanwhile would wait for them in this actor (ADR 0086).
+    public nonisolated var refreshes: LibraryReader { refreshConnection ?? self }
 
     /// Builds the health report on a connection of its own, so the window's queries don't wait
     /// for it.

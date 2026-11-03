@@ -605,7 +605,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
+    /// On the refresh connection, since a refresh is what most often asks.
     private func countIssues() async {
+        let reader = reader.refreshes
         do {
             status.dismissed = try await reader.dismissedProblems()
             let issues = try await reader.fileIssues().filter {
@@ -623,7 +625,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         table.reload(change)
         showTimelineIfItIsTheSource()
         runHealthIfShownFirst()
-        readTotals(of: model.trackIDs, into: \.listTotals)
+        readTotals(
+            of: model.trackIDs, into: \.listTotals,
+            on: change.reason == .libraryChanged ? reader.refreshes : reader)
         showStatus()
         stateChanged(model.state)
     }
@@ -673,14 +677,17 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     private func readSelectionTotals() {
-        readTotals(of: model.ids(ofRows: table.table.selectedRowIndexes), into: \.selectionTotals)
+        readTotals(
+            of: model.ids(ofRows: table.table.selectedRowIndexes), into: \.selectionTotals,
+            on: reader)
     }
 
     /// Adds up `ids` on the reader, after the rows show rather than before, then shows the
     /// totals unless a message showed meanwhile. A newer read of the same totals replaces one
     /// under way.
     private func readTotals(
-        of ids: [Int64], into totals: ReferenceWritableKeyPath<LibraryBrowser, TrackTotals>
+        of ids: [Int64], into totals: ReferenceWritableKeyPath<LibraryBrowser, TrackTotals>,
+        on reader: LibraryReader
     ) {
         totalsReads[totals]?.cancel()
         guard !ids.isEmpty else {
