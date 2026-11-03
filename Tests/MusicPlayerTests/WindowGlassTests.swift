@@ -32,7 +32,8 @@ import Testing
     #expect(table.backgroundColor == .clear)
     #expect(!table.usesAlternatingRowBackgroundColors)
     #expect(!scroll.drawsBackground)
-    #expect(bar.blendingMode == .behindWindow)
+    // Rows scroll under the status bar, which blends with them (ADR 0084).
+    #expect(bar.blendingMode == .withinWindow)
     #expect(column.headerCell is ClearHeaderCell)
     #expect(column.headerCell.stringValue == "Title")
     // The sidebar's outline is left on its own material.
@@ -81,4 +82,27 @@ private func resolved(_ color: NSColor, in appearance: NSAppearance.Name) throws
             == (try resolved(.controlBackgroundColor, in: .accessibilityHighContrastDarkAqua)))
     window.appearance = NSAppearance(named: .aqua)
     #expect(browser.backgroundColor == (try resolved(.controlBackgroundColor, in: .aqua)))
+}
+
+/// Glass turned on and off leaves the window as a fresh one draws it (ADR 0084). Before, the
+/// style mask changed with it: the frame shrank by the toolbar and grew back, and the splits
+/// shared that out, moving their dividers off the pixel grid.
+@MainActor @Test func glassOnThenOffLeavesTheWindowAsAFreshOne() async throws {
+    let fresh = try await MainWindowFixture()
+    defer { fresh.close() }
+    let toggled = try await MainWindowFixture()
+    defer { toggled.close() }
+    #expect(toggled.layout == fresh.layout)
+    for on in [true, false, true, false] {
+        toggled.window.setGlass(on)
+        toggled.browser.setTableAppearance(
+            TableAppearance(
+                columnLines: false, rowLines: false, alternatingRows: true, rowHeight: .regular,
+                artSize: .fit, glass: on))
+        toggled.window.window.layoutIfNeeded()
+        #expect(toggled.layout == fresh.layout, "glass \(on)")
+    }
+    #expect(toggled.tableLooks == fresh.tableLooks)
+    #expect(toggled.window.window.styleMask == fresh.window.window.styleMask)
+    #expect(!toggled.window.window.titlebarAppearsTransparent)
 }

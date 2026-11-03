@@ -2,17 +2,16 @@ import AppKit
 import LibraryBrowser
 
 /// The main window's glass, `appearance.glass` (ADR 0072): the sidebar's translucent material
-/// under the whole window, the toolbar transparent over it, the lists drawing no background of
-/// their own, and the bars' materials blending with what's behind the window instead of what's
-/// in it. Off, the window is as AppKit draws it.
+/// under the whole window, the toolbar transparent over it, and the lists drawing no background
+/// of their own. The status bar's material already blends with the rows under it (ADR 0084).
+/// Off, the window is as AppKit draws it.
 @MainActor
 final class WindowGlass {
     private let window: NSWindow
     private let backdrop = NSVisualEffectView()
-    /// What each list and material had before the glass, to put back.
+    /// What each list had before the glass, to put back.
     private var tables: [(NSTableView, NSColor, Bool)] = []
     private var scrolls: [NSScrollView] = []
-    private var materials: [NSVisualEffectView] = []
     private var headerCells: [(NSTableColumn, NSTableHeaderCell)] = []
     private(set) var isOn = false
 
@@ -50,6 +49,11 @@ final class WindowGlass {
         isOn = on
         backdrop.isHidden = !on
         window.titlebarAppearsTransparent = on
+        // A change of the style mask keeps the content's size, so the frame shrinks or grows by
+        // the toolbar, and the splits share that out, a fraction of a point to each pane. Both
+        // are put back as they were (ADR 0084).
+        let frame = window.frame
+        let dividers = window.contentView.map(DividerPositions.init) ?? DividerPositions()
         if on {
             window.styleMask.insert(.fullSizeContentView)
             clear(in: window.contentView)
@@ -57,10 +61,12 @@ final class WindowGlass {
             window.styleMask.remove(.fullSizeContentView)
             restore()
         }
+        window.setFrame(frame, display: false)
+        window.contentView?.layoutSubtreeIfNeeded()
+        dividers.restore()
     }
 
-    /// Makes every list under `view` transparent, and every material that blends with the
-    /// window's content blend with what's behind the window, remembering what each had.
+    /// Makes every list under `view` transparent, remembering what each had.
     private func clear(in view: NSView?) {
         guard let view, view !== backdrop else { return }
         // The sidebar's outline already sits on its own material.
@@ -83,10 +89,6 @@ final class WindowGlass {
                 scroll.drawsBackground = false
             }
         }
-        if let material = view as? NSVisualEffectView, material.blendingMode == .withinWindow {
-            materials.append(material)
-            material.blendingMode = .behindWindow
-        }
         for subview in view.subviews { clear(in: subview) }
     }
 
@@ -100,11 +102,36 @@ final class WindowGlass {
             column.tableView?.headerView?.needsDisplay = true
         }
         for scroll in scrolls { scroll.drawsBackground = true }
-        for material in materials { material.blendingMode = .withinWindow }
         tables = []
         scrolls = []
-        materials = []
         headerCells = []
+    }
+}
+
+/// Where every split view's dividers are under a view, to put back after a change of the window
+/// moved them. A divider beside a collapsed pane is left to AppKit.
+@MainActor
+struct DividerPositions {
+    private var positions: [(NSSplitView, Int, CGFloat)] = []
+
+    init() {}
+
+    init(_ view: NSView) {
+        if let split = view as? NSSplitView {
+            let panes = split.arrangedSubviews
+            for (index, pane) in panes.dropLast().enumerated()
+            where !split.isSubviewCollapsed(pane) && !split.isSubviewCollapsed(panes[index + 1]) {
+                positions.append(
+                    (split, index, split.isVertical ? pane.frame.maxX : pane.frame.maxY))
+            }
+        }
+        for subview in view.subviews { positions += DividerPositions(subview).positions }
+    }
+
+    func restore() {
+        for (split, index, position) in positions {
+            split.setPosition(position, ofDividerAt: index)
+        }
     }
 }
 
