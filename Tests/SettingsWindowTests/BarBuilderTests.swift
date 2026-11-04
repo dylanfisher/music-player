@@ -207,6 +207,35 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
     #expect(try saved(values()).center.parts == [.seek, .art])
 }
 
+/// While a part is dragged, the others move aside to show where it will land, before anything
+/// is saved; a place that would make a problem moves nothing.
+@MainActor @Test func aDragMovesTheOtherPartsAsideBeforeTheDrop() throws {
+    let (builder, values) = try builder(
+        BarLayout(
+            leading: [
+                BarColumn(parts: [.format], width: .flexible, alignment: .leading, stacks: true)
+            ],
+            center: BarColumn(parts: [.track, .seek], width: .flexible, alignment: .center)))
+    let view = BarBuilderView(model: builder)
+    view.frame = NSRect(x: 0, y: 0, width: 760, height: view.intrinsicContentSize.height)
+    let track = try #require(view.chips.first { $0.part == "track" }).frame
+    let point = NSPoint(x: track.minX + 1, y: track.midY)
+    view.drag("seek", to: point)
+    let moved = try #require(view.chips.first { $0.part == "track" }).frame
+    #expect(moved.minX > track.minX, "track moves right to make room: \(track) \(moved)")
+    #expect(view.shown.center.parts == ["seek", "track"])
+    #expect(builder.layout.center.parts == ["track", "seek"], "nothing changes before the drop")
+    #expect(try saved(values()).center.parts == [.track, .seek])
+
+    // The art can't stack with the format, so dragging it there moves nothing.
+    let format = try #require(view.chips.first { $0.part == "format" }).frame
+    view.drag("art", to: NSPoint(x: format.midX, y: format.maxY - 1))
+    #expect(view.shown == builder.layout)
+
+    view.drop("seek", at: point)
+    #expect(try saved(values()).center.parts == [.seek, .track])
+}
+
 /// The preview takes the settings window's colors: the bar is a section's faint box over the
 /// window's background, not an opaque gray, and a part is a light field like the shortcut
 /// recorder's.

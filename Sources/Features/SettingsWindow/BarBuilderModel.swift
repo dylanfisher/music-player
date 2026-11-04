@@ -97,7 +97,10 @@ final class BarBuilderModel {
     func title(of part: String) -> String { choices.first { $0.rawValue == part }?.title ?? part }
 
     /// The parts no column holds, in the bar's order of choices.
-    var unusedParts: [String] {
+    var unusedParts: [String] { unusedParts(in: layout) }
+
+    /// The parts no column of `layout` holds, in the bar's order of choices.
+    func unusedParts(in layout: BarLayout<String>) -> [String] {
         let used = Set(layout.columns.flatMap(\.column.parts))
         return choices.map(\.rawValue).filter { !used.contains($0) }
     }
@@ -155,15 +158,7 @@ final class BarBuilderModel {
     func setStacks(_ stacks: Bool) { editColumn { $0.stacks = stacks } }
 
     private func editColumn(_ change: (inout BarColumn<String>) -> Void) {
-        edit { update(selection.place, change) }
-    }
-
-    private func update(_ place: BarPlace, _ edit: (inout BarColumn<String>) -> Void) {
-        switch place {
-        case .leading(let index): edit(&layout.leading[index])
-        case .center: edit(&layout.center)
-        case .trailing(let index): edit(&layout.trailing[index])
-        }
+        edit { layout.update(selection.place, change) }
     }
 
     /// Whether the layout is the setting's default, which Reset to Default would leave as it is.
@@ -188,29 +183,37 @@ final class BarBuilderModel {
         changed()
     }
 
-    /// Puts `part` at `index` in the column at `place`, from wherever it was, an unused part
-    /// included, and selects it there.
+    /// Puts `part` at `index` among the other parts of the column at `place`, from wherever it
+    /// was, an unused part included, and selects it there.
     func place(_ part: String, in place: BarPlace, at index: Int) {
         guard choices.contains(where: { $0.rawValue == part }), layout[place] != nil else { return }
         edit {
-            var target = index
-            if let from = location(of: part) {
-                if from.place == place, from.index < index { target -= 1 }
-                update(from.place) { $0.parts.remove(at: from.index) }
-            }
-            update(place) { column in
-                target = min(max(target, 0), column.parts.count)
-                column.parts.insert(part, at: target)
-            }
-            selection = Selection(place: place, part: target)
+            layout = placing(part, in: place, at: index)
+            selection = Selection(place: place, part: layout[place]?.parts.firstIndex(of: part))
         }
+    }
+
+    /// The layout as `place(_:in:at:)` would make it, which a drag shows before the drop.
+    func placing(_ part: String, in place: BarPlace, at index: Int) -> BarLayout<String> {
+        var layout = removing(part)
+        layout.update(place) { $0.parts.insert(part, at: min(max(index, 0), $0.parts.count)) }
+        return layout
+    }
+
+    /// The layout with `part` out of whichever column holds it.
+    func removing(_ part: String) -> BarLayout<String> {
+        var layout = layout
+        if let from = location(of: part) {
+            layout.update(from.place) { $0.parts.remove(at: from.index) }
+        }
+        return layout
     }
 
     /// Takes `part` out of its column, back to the unused ones.
     func remove(_ part: String) {
         guard let from = location(of: part) else { return }
         edit {
-            update(from.place) { $0.parts.remove(at: from.index) }
+            layout = removing(part)
             let left = layout[from.place]?.parts.count ?? 0
             selection = Selection(
                 place: from.place, part: left == 0 ? nil : min(from.index, left - 1))
@@ -257,7 +260,7 @@ final class BarBuilderModel {
         let part = column.parts[index]
         let next = index + (forward ? 1 : -1)
         if column.parts.indices.contains(next) {
-            return place(part, in: selection.place, at: forward ? next + 1 : next)
+            return place(part, in: selection.place, at: next)
         }
         let places = layout.columns.map(\.place)
         guard let here = places.firstIndex(of: selection.place),
@@ -316,5 +319,16 @@ final class BarBuilderModel {
             }
         }
         changed()
+    }
+}
+
+extension BarLayout<String> {
+    /// Changes the column at `place`.
+    fileprivate mutating func update(_ place: BarPlace, _ edit: (inout BarColumn<String>) -> Void) {
+        switch place {
+        case .leading(let index): edit(&leading[index])
+        case .center: edit(&center)
+        case .trailing(let index): edit(&trailing[index])
+        }
     }
 }

@@ -4,7 +4,8 @@ import Settings
 
 /// The bar builder's preview: the bar's columns drawn across the view, each part a chip, and
 /// under them a tray of the parts the bar doesn't show. Chips drag between columns and to and
-/// from the tray; a click selects a part or a column. With the keys, ← and → select, ⌘← and
+/// from the tray, the others moving aside as the drag goes to show where it will land; a click
+/// selects a part or a column. With the keys, ← and → select, ⌘← and
 /// ⌘→ move the selected part, and Delete takes it out of the bar (ADR 0085).
 @MainActor
 final class BarBuilderView: NSView {
@@ -28,6 +29,12 @@ final class BarBuilderView: NSView {
         var part: String
         var frame: NSRect
         var place: BarPlace?
+    }
+
+    /// Where a dragged part lands: at an index among a column's other parts, or in the tray.
+    enum Landing: Equatable {
+        case column(BarPlace, Int)
+        case tray
     }
 
     init(model: BarBuilderModel) {
@@ -73,9 +80,23 @@ final class BarBuilderView: NSView {
         return content + 2 * Self.columnPadding
     }
 
-    /// Every column's frame in the bar, by place.
-    var columnFrames: [BarPlace: NSRect] {
-        let layout = model.layout
+    /// The layout drawn: the model's, or while a part is dragged, the layout it would make if
+    /// let go here, unless that layout has a problem.
+    var shown: BarLayout<String> {
+        guard let pressed, let dragPoint, let landing = landing(of: pressed, at: dragPoint)
+        else { return model.layout }
+        let layout =
+            switch landing {
+            case .tray: model.removing(pressed)
+            case .column(let place, let index): model.placing(pressed, in: place, at: index)
+            }
+        return model.problem(in: layout) == nil ? layout : model.layout
+    }
+
+    /// Every column's frame in the bar as drawn, by place.
+    var columnFrames: [BarPlace: NSRect] { columnFrames(of: shown) }
+
+    private func columnFrames(of layout: BarLayout<String>) -> [BarPlace: NSRect] {
         let spans = preview.columns(of: layout, width: bounds.width) { place in
             layout[place].map(natural) ?? 0
         }
@@ -88,16 +109,18 @@ final class BarBuilderView: NSView {
         NSRect(x: 0, y: barHeight, width: bounds.width, height: Self.trayPoints)
     }
 
-    /// Every chip, in its column or in the tray.
-    var chips: [Chip] {
+    /// Every chip as drawn, in its column or in the tray.
+    var chips: [Chip] { chips(of: shown) }
+
+    private func chips(of layout: BarLayout<String>) -> [Chip] {
         var chips: [Chip] = []
-        let frames = columnFrames
-        for (place, column) in model.layout.columns {
+        let frames = columnFrames(of: layout)
+        for (place, column) in layout.columns {
             guard let frame = frames[place] else { continue }
             chips += self.chips(column, in: frame).map { Chip(part: $0, frame: $1, place: place) }
         }
         var x = preview.inset
-        for part in model.unusedParts {
+        for part in model.unusedParts(in: layout) {
             let width = chipWidth(part)
             let y = trayFrame.midY - Self.chipPoints / 2
             chips.append(
@@ -148,8 +171,9 @@ final class BarBuilderView: NSView {
         box.fill()
         NSColor.separatorColor.setStroke()
         box.stroke()
-        let frames = columnFrames
-        for (place, column) in model.layout.columns {
+        let layout = shown
+        let frames = columnFrames(of: layout)
+        for (place, column) in layout.columns {
             guard let frame = frames[place] else { continue }
             let path = NSBezierPath(
                 roundedRect: frame.insetBy(dx: 1, dy: 2), xRadius: 5, yRadius: 5)
@@ -162,16 +186,27 @@ final class BarBuilderView: NSView {
                 drawText(Self.emptyText, in: frame, color: .secondaryLabelColor)
             }
         }
-        if model.unusedParts.isEmpty {
+        if model.unusedParts(in: layout).isEmpty {
             drawText("Every part is in the bar", in: trayFrame, color: .secondaryLabelColor)
         }
-        for chip in chips where !(chip.part == pressed && dragPoint != nil) {
+        let selected = model.selection.part.flatMap { model.selectedColumn?.parts[$0] }
+        for chip in chips(of: layout) {
             // A stack taller than the bar's cap is clipped, as the bar clips it.
             NSGraphicsContext.saveGraphicsState()
             if chip.place != nil {
                 NSRect(x: 0, y: 0, width: bounds.width, height: barHeight).clip()
             }
-            drawChip(chip.part, in: chip.frame, selected: isSelected(chip))
+            if chip.part == pressed, dragPoint != nil {
+                // The room the dragged part will take.
+                let hole = NSBezierPath(
+                    roundedRect: chip.frame.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
+                hole.setLineDash([3, 2], count: 2, phase: 0)
+                NSColor.separatorColor.setStroke()
+                hole.stroke()
+            } else {
+                drawChip(
+                    chip.part, in: chip.frame, selected: chip.place != nil && chip.part == selected)
+            }
             NSGraphicsContext.restoreGraphicsState()
         }
         if let pressed, let dragPoint {
@@ -182,11 +217,6 @@ final class BarBuilderView: NSView {
                     x: dragPoint.x - width / 2, y: dragPoint.y - Self.chipPoints / 2, width: width,
                     height: Self.chipPoints), selected: true)
         }
-    }
-
-    private func isSelected(_ chip: Chip) -> Bool {
-        guard let place = chip.place, let index = model.selection.part else { return false }
-        return place == model.selection.place && model.layout[place]?.parts[index] == chip.part
     }
 
     private func drawChip(_ part: String, in frame: NSRect, selected: Bool) {
@@ -227,8 +257,14 @@ final class BarBuilderView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard pressed != nil else { return }
-        dragPoint = convert(event.locationInWindow, from: nil)
+        guard let pressed else { return }
+        drag(pressed, to: convert(event.locationInWindow, from: nil))
+    }
+
+    /// Shows `part` dragged to `point`, the others moved aside for it.
+    func drag(_ part: String, to point: NSPoint) {
+        pressed = part
+        dragPoint = point
         needsDisplay = true
     }
 
@@ -242,19 +278,30 @@ final class BarBuilderView: NSView {
         drop(part, at: convert(event.locationInWindow, from: nil))
     }
 
-    /// Puts `part` where a drag let go of it at `point`: in the column there, before the first
-    /// chip whose middle is past the point, or back in the tray.
+    /// Puts `part` where a drag let go of it at `point`.
     func drop(_ part: String, at point: NSPoint) {
-        if trayFrame.contains(point) { return model.remove(part) }
-        guard let (place, _) = columnFrames.first(where: { $0.value.contains(point) }),
-            let column = model.layout[place]
-        else { return }
-        let others = chips.filter { $0.place == place }
+        switch landing(of: part, at: point) {
+        case .tray: model.remove(part)
+        case .column(let place, let index): model.place(part, in: place, at: index)
+        case nil: break
+        }
+    }
+
+    /// Where `part` lands let go at `point`: in the column there, before the first of its
+    /// other chips whose middle is past the point, or in the tray. It's measured on the layout
+    /// without the part, which stays still while the drag moves the others aside.
+    func landing(of part: String, at point: NSPoint) -> Landing? {
+        if trayFrame.contains(point) { return .tray }
+        let without = model.removing(part)
+        guard let (place, _) = columnFrames(of: without).first(where: { $0.value.contains(point) }),
+            let column = without[place]
+        else { return nil }
+        let others = chips(of: without).filter { $0.place == place }
         let index =
             others.firstIndex { chip in
                 column.stacks ? chip.frame.midY > point.y : chip.frame.midX > point.x
             } ?? others.count
-        model.place(part, in: place, at: index)
+        return .column(place, index)
     }
 
     // MARK: Keys
