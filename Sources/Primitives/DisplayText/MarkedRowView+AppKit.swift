@@ -39,23 +39,27 @@ public final class MarkedRowView: NSTableRowView {
     }
 
     override public func drawBackground(in dirtyRect: NSRect) {
-        super.drawBackground(in: dirtyRect)
         let plain = plainRect
-        if let bottomLine {
-            bottomLine.setFill()
-            NSRect(x: 0, y: isFlipped ? bounds.maxY - 1 : 0, width: bounds.width, height: 1)
-                .fill(using: .sourceOver)
+        // The plain column is left out of the shade rather than painted over it: on the
+        // window's glass the table's background is clear, and only nothing drawn shows the
+        // glass.
+        outside(plain) {
+            super.drawBackground(in: dirtyRect)
+            if let bottomLine {
+                bottomLine.setFill()
+                NSRect(x: 0, y: isFlipped ? bounds.maxY - 1 : 0, width: bounds.width, height: 1)
+                    .fill(using: .sourceOver)
+            }
+            if isMarked {
+                Self.tint.setFill()
+                bounds.fill(using: .sourceOver)
+            }
         }
         if let plain, let table = superview as? NSTableView {
             table.backgroundColor.setFill()
-            // A clear background, on the window's glass, clears the shade under it too.
-            plain.fill(using: .copy)
+            plain.fill(using: .sourceOver)
         }
         guard isMarked else { return }
-        outside(plain) {
-            Self.tint.setFill()
-            bounds.fill(using: .sourceOver)
-        }
         drawBar(.controlAccentColor)
     }
 

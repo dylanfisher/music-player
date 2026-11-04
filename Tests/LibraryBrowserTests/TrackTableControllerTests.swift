@@ -549,6 +549,17 @@ private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throw
     #expect(selected.isSelected)
     #expect(isWhite(try backgroundPixel(selected, at: NSPoint(x: art.midX, y: middle))))
     #expect(!isWhite(try backgroundPixel(selected, at: NSPoint(x: title.midX, y: middle))))
+    // On the glass the table's background is clear: the art column draws nothing, where the
+    // rest of the shaded row has its tint.
+    table.backgroundColor = .clear
+    controller.apply(
+        TableAppearance(
+            columnLines: false, rowLines: true, albumLines: false, rowLineColor: albumRed,
+            albumLineColor: nil, alternatingRows: true, rowHeight: .regular, artSize: .fit,
+            glass: true))
+    #expect(try backgroundPixel(shaded, at: NSPoint(x: art.midX, y: middle)).alphaComponent < 0.01)
+    #expect(try backgroundPixel(shaded, at: NSPoint(x: art.midX, y: bottom)).alphaComponent < 0.01)
+    #expect(try backgroundPixel(shaded, at: NSPoint(x: title.midX, y: middle)).alphaComponent > 0)
 }
 
 @MainActor @Test func hoveringArtShowsItWholeAtTheColumnsWidth() async throws {

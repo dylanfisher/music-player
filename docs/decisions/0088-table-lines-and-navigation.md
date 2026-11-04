@@ -30,9 +30,9 @@ all music. Several of these left choices open.
   untagged tracks doesn't get a heavy line under each one. The art column still gives each of
   those rows a run of its own.
 - **The plain art column is the table's own background**: white in light mode, the table's dark
-  background in dark mode, and clear on the window's glass. The row view paints the column in it
-  after the alternating shade and clips the playing tint and the selection out of it, so neither
-  shows there. The playing row's bar still draws at the row's leading edge. The row view finds
+  background in dark mode, and clear on the window's glass. The row view clips the column out of
+  the alternating shade, the line, the playing tint and the selection, then fills it with that
+  background. Erasing the shade with a clear fill instead drew the column black on glass. The playing row's bar still draws at the row's leading edge. The row view finds
   the column by identifier when it draws, so a moved or resized column is followed.
 - **⇧⌘L is Show Selected Track** (`view.showSelectedTrack`), the same step ⌘L takes with nothing
   playing. No link may run it, since it needs a selection only the window has.
