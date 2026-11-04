@@ -122,6 +122,7 @@ final class BarBuilderWindow: NSObject {
     private func show() {
         preview.invalidateIntrinsicContentSize()
         preview.needsDisplay = true
+        preview.window?.invalidateCursorRects(for: preview)
         let column = model.selectedColumn
         let editable = !model.isBlocked
         removeColumn.isEnabled = editable && model.canRemoveColumn
@@ -155,7 +156,8 @@ final class BarBuilderWindow: NSObject {
             : "The config file has a problem. \(ConfigBanner.blockedText)"
         message.stringValue =
             problem
-            ?? "Drag parts between columns and the tray. With the preview selected, ← and →"
+            ?? "Drag parts between columns and the tray, and a side column by the handle at its"
+            + " top. With the preview selected, ← and →"
             + " select, ⌘← and ⌘→ move a part, and Delete removes it. The selected column is"
             + " outlined. " + model.bar.centerHelp
         message.textColor = problem == nil ? .secondaryLabelColor : .systemRed

@@ -5,7 +5,8 @@ import Settings
 /// The bar builder's preview: the bar's columns drawn across the view, each part a chip, and
 /// under them a tray of the parts the bar doesn't show. Chips drag between columns and to and
 /// from the tray, the others moving aside as the drag goes to show where it will land; a click
-/// selects a part or a column. With the keys, ← and → select, ⌘← and
+/// selects a part or a column. A side column drags by the handle at its top to another place,
+/// the others moving aside as well; the center column stays where it is. With the keys, ← and → select, ⌘← and
 /// ⌘→ move the selected part, and Delete takes it out of the bar (ADR 0085).
 @MainActor
 final class BarBuilderView: NSView {
@@ -14,6 +15,9 @@ final class BarBuilderView: NSView {
     private static let chipPadding = 8.0
     private static let chipSpacing = 4.0
     private static let columnPadding = 4.0
+    /// The strip at the top of the bar that holds the side columns' handles.
+    static let handlePoints = 10.0
+    private static let handleWidth = 24.0
     private static let emptyColumnPoints = 90.0
     private static let emptyText = "Drop a part here"
     private static let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
@@ -22,6 +26,8 @@ final class BarBuilderView: NSView {
     private let preview = BarPreview(spacing: 10, inset: 10)
     /// The chip being dragged, and where the pointer is, once it has moved.
     private var pressed: String?
+    /// The column whose handle is being dragged.
+    private var pressedColumn: BarPlace?
     private var dragPoint: NSPoint?
 
     /// A chip as drawn: its part, its frame, and its column, or nil in the tray.
@@ -52,13 +58,13 @@ final class BarBuilderView: NSView {
     override var focusRingMaskBounds: NSRect { bounds }
     override func drawFocusRingMask() { bounds.fill() }
 
-    /// The bar's height: one row of chips, or the tallest stacked column, up to the bar's own
-    /// cap.
+    /// The bar's height: the handles' strip over one row of chips, or the tallest stacked
+    /// column, up to the bar's own cap.
     var barHeight: Double {
         let tallest = model.layout.columns.filter(\.column.stacks).map(\.column.parts.count).max()
         let stacked = Double(tallest ?? 0) * (Self.chipPoints + Self.chipSpacing)
         let height = max(StatusBarStyle.tallPoints, stacked + 2 * Self.columnPadding)
-        return model.bar.stackCapPoints.map { min(height, $0) } ?? height
+        return (model.bar.stackCapPoints.map { min(height, $0) } ?? height) + Self.handlePoints
     }
 
     override var intrinsicContentSize: NSSize {
@@ -83,6 +89,9 @@ final class BarBuilderView: NSView {
     /// The layout drawn: the model's, or while a part is dragged, the layout it would make if
     /// let go here, unless that layout has a problem.
     var shown: BarLayout<String> {
+        if let pressedColumn, let dragPoint {
+            return model.moving(pressedColumn, to: landing(of: pressedColumn, atX: dragPoint.x))
+        }
         guard let pressed, let dragPoint, let landing = landing(of: pressed, at: dragPoint)
         else { return model.layout }
         let layout =
@@ -131,7 +140,9 @@ final class BarBuilderView: NSView {
     }
 
     private func chips(_ column: BarColumn<String>, in frame: NSRect) -> [(String, NSRect)] {
-        let inner = frame.insetBy(dx: Self.columnPadding, dy: Self.columnPadding)
+        var inner = frame.insetBy(dx: Self.columnPadding, dy: Self.columnPadding)
+        inner.origin.y += Self.handlePoints
+        inner.size.height -= Self.handlePoints
         let widths = column.parts.map(chipWidth)
         func x(_ width: Double) -> Double {
             switch column.alignment {
@@ -173,11 +184,17 @@ final class BarBuilderView: NSView {
         box.stroke()
         let layout = shown
         let frames = columnFrames(of: layout)
+        // Where a dragged column is drawn, outlined as selected.
+        let draggedColumn = pressedColumn.flatMap { column in
+            dragPoint.map { landing(of: column, atX: $0.x) }
+        }
         for (place, column) in layout.columns {
             guard let frame = frames[place] else { continue }
             let path = NSBezierPath(
                 roundedRect: frame.insetBy(dx: 1, dy: 2), xRadius: 5, yRadius: 5)
-            let selected = model.selection.place == place && model.selection.part == nil
+            let selected =
+                draggedColumn.map { $0 == place }
+                ?? (model.selection.place == place && model.selection.part == nil)
             (selected ? NSColor.controlAccentColor : NSColor.separatorColor).setStroke()
             path.lineWidth = selected ? 2 : 1
             if place == .center { path.setLineDash([4, 2], count: 2, phase: 0) }
@@ -185,6 +202,7 @@ final class BarBuilderView: NSView {
             if column.parts.isEmpty {
                 drawText(Self.emptyText, in: frame, color: .secondaryLabelColor)
             }
+            if place != .center { drawHandle(in: handleFrame(frame)) }
         }
         if model.unusedParts(in: layout).isEmpty {
             drawText("Every part is in the bar", in: trayFrame, color: .secondaryLabelColor)
@@ -219,6 +237,34 @@ final class BarBuilderView: NSView {
         }
     }
 
+    /// Three short lines, as a grab handle.
+    private func drawHandle(in frame: NSRect) {
+        NSColor.secondaryLabelColor.setFill()
+        for line in 0..<3 {
+            NSRect(
+                x: frame.minX + 4, y: frame.minY + 2 + Double(line) * 2.5, width: frame.width - 8,
+                height: 1
+            )
+            .fill()
+        }
+    }
+
+    /// The handle at the top of a side column's frame.
+    private func handleFrame(_ column: NSRect) -> NSRect {
+        NSRect(
+            x: column.midX - Self.handleWidth / 2, y: 2, width: Self.handleWidth,
+            height: Self.handlePoints)
+    }
+
+    /// Each side column's handle, by place.
+    var handleFrames: [BarPlace: NSRect] {
+        columnFrames.filter { $0.key != .center }.mapValues(handleFrame)
+    }
+
+    override func resetCursorRects() {
+        for frame in handleFrames.values { addCursorRect(frame, cursor: .openHand) }
+    }
+
     private func drawChip(_ part: String, in frame: NSRect, selected: Bool) {
         let path = NSBezierPath(
             roundedRect: frame.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
@@ -247,8 +293,13 @@ final class BarBuilderView: NSView {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
         dragPoint = nil
-        pressed = chips.first { $0.frame.contains(point) }?.part
-        if let chip = chips.first(where: { $0.frame.contains(point) }), let place = chip.place {
+        pressedColumn = handleFrames.first { $0.value.contains(point) }?.key
+        pressed = pressedColumn == nil ? chips.first { $0.frame.contains(point) }?.part : nil
+        if let pressedColumn {
+            model.select(.init(place: pressedColumn))
+        } else if let chip = chips.first(where: { $0.frame.contains(point) }),
+            let place = chip.place
+        {
             model.select(
                 .init(place: place, part: model.layout[place]?.parts.firstIndex(of: chip.part)))
         } else if let place = columnFrames.first(where: { $0.value.contains(point) })?.key {
@@ -257,8 +308,17 @@ final class BarBuilderView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if let pressedColumn { return dragColumn(pressedColumn, to: point) }
         guard let pressed else { return }
-        drag(pressed, to: convert(event.locationInWindow, from: nil))
+        drag(pressed, to: point)
+    }
+
+    /// Shows the column at `place` dragged to `point`, the others moved aside for it.
+    func dragColumn(_ place: BarPlace, to point: NSPoint) {
+        pressedColumn = place
+        dragPoint = point
+        needsDisplay = true
     }
 
     /// Shows `part` dragged to `point`, the others moved aside for it.
@@ -271,11 +331,35 @@ final class BarBuilderView: NSView {
     override func mouseUp(with event: NSEvent) {
         defer {
             pressed = nil
+            pressedColumn = nil
             dragPoint = nil
             needsDisplay = true
         }
-        guard let part = pressed, dragPoint != nil else { return }
-        drop(part, at: convert(event.locationInWindow, from: nil))
+        guard dragPoint != nil else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        if let pressedColumn {
+            model.moveColumn(pressedColumn, to: landing(of: pressedColumn, atX: point.x))
+        } else if let pressed {
+            drop(pressed, at: point)
+        }
+    }
+
+    /// Where the side column at `place` lands let go at `x`: left of the center column's middle
+    /// among the leading columns, right of it among the trailing ones, after each column of
+    /// that side whose middle is left of `x`. It's measured on the layout without the column.
+    func landing(of place: BarPlace, atX x: Double) -> BarPlace {
+        var without = model.layout
+        switch place {
+        case .center: return place
+        case .leading(let index): without.leading.remove(at: index)
+        case .trailing(let index): without.trailing.remove(at: index)
+        }
+        let frames = columnFrames(of: without)
+        let before = { (place: BarPlace) in (frames[place]?.midX ?? 0) < x }
+        if x < frames[.center]?.midX ?? 0 {
+            return .leading(without.leading.indices.map(BarPlace.leading).filter(before).count)
+        }
+        return .trailing(without.trailing.indices.map(BarPlace.trailing).filter(before).count)
     }
 
     /// Puts `part` where a drag let go of it at `point`.

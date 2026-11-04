@@ -151,6 +151,35 @@ final class BarBuilderModel {
         }
     }
 
+    /// Moves the side column at `place` to `target`, its place among the side columns once
+    /// it's out of its own, and selects it there. The center column stays where it is.
+    func moveColumn(_ place: BarPlace, to target: BarPlace) {
+        guard place != .center, target != .center else { return }
+        edit {
+            layout = moving(place, to: target)
+            selection = Selection(place: target)
+        }
+    }
+
+    /// The layout as `moveColumn(_:to:)` would make it, which a drag shows before the drop.
+    func moving(_ place: BarPlace, to target: BarPlace) -> BarLayout<String> {
+        var layout = layout
+        let column: BarColumn<String>
+        switch place {
+        case .center: return layout
+        case .leading(let index): column = layout.leading.remove(at: index)
+        case .trailing(let index): column = layout.trailing.remove(at: index)
+        }
+        switch target {
+        case .center: return self.layout
+        case .leading(let index):
+            layout.leading.insert(column, at: min(max(index, 0), layout.leading.count))
+        case .trailing(let index):
+            layout.trailing.insert(column, at: min(max(index, 0), layout.trailing.count))
+        }
+        return layout
+    }
+
     func setWidth(_ width: BarWidth) { editColumn { $0.width = width } }
 
     func setAlignment(_ alignment: BarAlignment) { editColumn { $0.alignment = alignment } }

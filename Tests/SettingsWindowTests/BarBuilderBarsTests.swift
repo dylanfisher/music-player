@@ -28,7 +28,8 @@ private func window<Part: BarPart>(
             parts: [.track, .format, .seek, .totals], width: .flexible, alignment: .center,
             stacks: true))
     let status = try window(AppSettings().statusBarLayout, stacked)
-    #expect(status.preview.barHeight == StatusBarStyle.tallMaxPoints)
+    #expect(
+        status.preview.barHeight == StatusBarStyle.tallMaxPoints + BarBuilderView.handlePoints)
 }
 
 @MainActor @Test func eachBarSaysWhatItsStackingAndCenterDo() throws {

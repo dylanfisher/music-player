@@ -236,6 +236,38 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
     #expect(try saved(values()).center.parts == [.seek, .track])
 }
 
+/// A side column drags by its handle, parts and settings together, the others moving aside
+/// before the drop; dragged past the center column's middle it goes to the other side. The
+/// center column has no handle.
+@MainActor @Test func aColumnDragsByItsHandle() throws {
+    let (builder, values) = try builder(
+        BarLayout(
+            leading: [
+                BarColumn(parts: [.art], width: .fixed(60), alignment: .leading),
+                BarColumn(parts: [.track], width: .flexible, alignment: .center),
+            ],
+            center: BarColumn(parts: [.seek], width: .fixed(200), alignment: .center),
+            trailing: [BarColumn(parts: [.format], width: .flexible, alignment: .trailing)]))
+    let view = BarBuilderView(model: builder)
+    view.frame = NSRect(x: 0, y: 0, width: 760, height: view.intrinsicContentSize.height)
+    #expect(view.handleFrames[.center] == nil)
+    #expect(view.handleFrames.keys.count == 3)
+    let track = try #require(view.columnFrames[.leading(1)])
+    view.dragColumn(.leading(0), to: NSPoint(x: track.midX + 1, y: 5))
+    #expect(view.shown.leading.map(\.parts) == [["track"], ["art"]])
+    #expect(builder.layout.leading.map(\.parts) == [["art"], ["track"]], "not before the drop")
+
+    let format = try #require(view.columnFrames[.trailing(0)])
+    view.dragColumn(.leading(0), to: NSPoint(x: format.midX + 1, y: 5))
+    #expect(view.shown.leading.map(\.parts) == [["track"]])
+    #expect(view.shown.trailing.map(\.parts) == [["format"], ["art"]])
+    builder.moveColumn(.leading(0), to: .trailing(1))
+    let layout = try saved(values())
+    #expect(layout.trailing.map(\.parts) == [[.format], [.art]])
+    #expect(layout.trailing[1].width == .fixed(60), "its settings go with it")
+    #expect(builder.selection == .init(place: .trailing(1)))
+}
+
 /// The preview takes the settings window's colors: the bar is a section's faint box over the
 /// window's background, not an opaque gray, and a part is a light field like the shortcut
 /// recorder's.
