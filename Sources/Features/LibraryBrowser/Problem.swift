@@ -24,9 +24,10 @@ struct Problem: Equatable, Sendable {
     }
 }
 
-/// What the Problems window's buttons do to the rows selected.
+/// What the Problems window's buttons do to the rows selected, or for Dismiss All to every row.
 enum ProblemAction: CaseIterable, Sendable {
     case dismiss
+    case dismissAll
     case remove
     case restore
     case locate
@@ -34,19 +35,26 @@ enum ProblemAction: CaseIterable, Sendable {
     var title: String {
         switch self {
         case .dismiss: "Dismiss"
+        case .dismissAll: "Dismiss All"
         case .remove: "Remove from Library"
         case .restore: "Restore"
         case .locate: "Locate…"
         }
     }
 
-    /// Whether the action applies to `selected`: Dismiss to any rows, Locate… to one, and the
-    /// others only when every row selected has their fix, so one click never does two
-    /// different things.
+    /// The rows the action acts on: every row for Dismiss All, selected or not, and the rows
+    /// selected for the others.
+    func rows(selected: [Problem], all: [Problem]) -> [Problem] {
+        self == .dismissAll ? all : selected
+    }
+
+    /// Whether the action applies to `selected`, the rows it acts on: Dismiss and Dismiss All to
+    /// any, Locate… to one, and the others only when every row has their fix, so one click
+    /// never does two different things.
     func applies(to selected: [Problem]) -> Bool {
         guard !selected.isEmpty else { return false }
         switch self {
-        case .dismiss: return true
+        case .dismiss, .dismissAll: return true
         case .remove, .restore: return pathIDs(of: selected) != nil
         case .locate: return missingPath(of: selected) != nil
         }

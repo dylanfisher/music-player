@@ -79,7 +79,8 @@ private func problemsBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64])
     let rows = [Problem("plain"), Problem("lost", fix: .remove(pathID: 7))]
     window.show(rows)
     defer { window.window.close() }
-    #expect(window.buttons.values.allSatisfy { !$0.isEnabled })
+    // Only Dismiss All acts with no row selected.
+    #expect(window.buttons.filter { $0.value.isEnabled }.map(\.key) == [.dismissAll])
     window.table.selectRowIndexes([1], byExtendingSelection: false)
     #expect(window.buttons[.remove]?.isEnabled == true)
     #expect(window.buttons[.restore]?.isEnabled == false)
@@ -91,6 +92,36 @@ private func problemsBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64])
     // A refresh keeps the rows still listed selected.
     window.refresh([rows[1]])
     #expect(window.selected == [rows[1]])
+}
+
+/// Dismiss All acts on every row, whether none, some or all are selected, and only while the
+/// window lists any.
+@MainActor @Test func dismissAllActsOnEveryRowSelectedOrNot() throws {
+    let window = ProblemsWindow()
+    var acted: [(ProblemAction, [Problem])] = []
+    window.act = { acted.append(($0, $1)) }
+    let rows = [Problem("plain"), Problem("lost", fix: .remove(pathID: 7)), Problem("other")]
+    window.show(rows)
+    defer { window.window.close() }
+    #expect(window.buttons[.dismissAll]?.title == "Dismiss All")
+    for selection in [IndexSet(), [1], [0, 1, 2]] {
+        window.table.selectRowIndexes(selection, byExtendingSelection: false)
+        #expect(window.buttons[.dismissAll]?.isEnabled == true)
+        window.buttons[.dismissAll]?.performClick(nil)
+        #expect(acted.last?.0 == .dismissAll && acted.last?.1 == rows, "\(Array(selection))")
+    }
+    window.refresh([])
+    #expect(window.buttons[.dismissAll]?.isEnabled == false)
+    window.buttons[.dismissAll]?.performClick(nil)
+    #expect(acted.count == 3)
+}
+
+@MainActor @Test func dismissingAllKeepsEveryLineInTheLibrary() async throws {
+    let (browser, index, _) = try problemsBrowser()
+    let lines = ["/M/a.flac: warning tag: cut short", "/M: the scan failed: gone"]
+    await browser.fix(lines.map { Problem($0) }, by: .dismissAll)
+    #expect(try index.dismissedProblems() == Set(lines))
+    #expect(browser.status.dismissed == Set(lines))
 }
 
 @Test func anImportsListedMissesOfferLocateAndOnlyOneAtATime() {

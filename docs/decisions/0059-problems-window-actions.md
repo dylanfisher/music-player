@@ -26,7 +26,8 @@ so such a miss now matches on the next import or through Locate…
   it gets no Locate.
 - **The Problems window is a table**, a row a line, with Dismiss, Remove from Library,
   Restore and Locate… under it. ⌘C copies the rows selected. A button is on only when it applies to every
-  row selected, so one click never does two different things.
+  row selected, so one click never does two different things. Dismiss All (phase 38a)
+  dismisses every row listed, selected or not, as Dismiss does.
 - **Dismiss** stores the line, as the window shows it, in a table of its own schema part,
   `dismissed_problems`, so it stays dismissed after a relaunch and when a later scan or report
   finds the same problem. A dismissed line leaves the list and the problems button's counts.

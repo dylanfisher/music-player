@@ -857,11 +857,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         return window
     }
 
-    /// Does `action` to the problems `selected`. Remove and Restore run the health report, which
-    /// lists the problems again when it ends.
+    /// Does `action` to the problems `selected`, the rows its button acts on. Remove and Restore
+    /// run the health report, which lists the problems again when it ends.
     func fix(_ selected: [Problem], by action: ProblemAction) async {
         switch action {
-        case .dismiss:
+        case .dismiss, .dismissAll:
             do {
                 try await reader.dismissProblems(selected.map(\.line))
             } catch {

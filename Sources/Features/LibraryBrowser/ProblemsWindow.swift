@@ -2,10 +2,11 @@ import AppKit
 
 /// Every folder the watcher couldn't scan, every file with a stored warning or failure, and
 /// what the health check shown and the last import found, a row each, with buttons for what
-/// can be done about the rows selected (ADR 0059). ⌘C copies them as text.
+/// can be done about the rows selected, or all of them (ADR 0059). ⌘C copies them as text.
 @MainActor
 final class ProblemsWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
-    /// Called with a button's action and the rows selected when it was clicked.
+    /// Called with a button's action and the rows it acts on: those selected when it was
+    /// clicked, or every row for Dismiss All.
     var act: (ProblemAction, [Problem]) -> Void = { _, _ in }
 
     let window: NSPanel
@@ -84,14 +85,16 @@ final class ProblemsWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate
     var selected: [Problem] { table.selectedRowIndexes.map { rows[$0] } }
 
     private func enableButtons() {
-        for (action, button) in buttons { button.isEnabled = action.applies(to: selected) }
+        for (action, button) in buttons {
+            button.isEnabled = action.applies(to: action.rows(selected: selected, all: rows))
+        }
     }
 
     @objc private func clicked(_ sender: NSButton) {
         let action = ProblemAction.allCases[sender.tag]
-        let selected = selected
-        guard action.applies(to: selected) else { return }
-        act(action, selected)
+        let acted = action.rows(selected: selected, all: rows)
+        guard action.applies(to: acted) else { return }
+        act(action, acted)
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
