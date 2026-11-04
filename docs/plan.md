@@ -3920,6 +3920,37 @@ value in any setting; all fixed and tested, and a re-review's two leftovers fixe
 `./scripts/check` and `./scripts/bundle release` pass; live resize p95 30.5 ms against 35 ms.
 Part 37b (37.3, 37.4) and the owner check follow.
 
+
+Implementation plan, part 37b (37.3 and 37.4; ADR 0085 amended, superseding 0072's rejected
+"now-playing parts as toolbar items"):
+- BarView, a new Core module (AppKit and Settings): `CenteredRow` and `StatusColumn` move out
+  of LibraryBrowser, with `BarColumns`, which lays a `BarLayout`'s columns into a row (side
+  columns, the center, flexible columns' equal widths, the fills, each part's hugging and its
+  text giving way). The status bar keeps its views and constraints; its tests stay as they are.
+  The row gains two choices the header needs: a flexible middle that fills the width the sides
+  leave before it centers, and no clearance beside an empty side.
+- Settings: `HeaderPart` (art, title, artist and album, format, seek bar) and
+  `appearance.headerStatusLayout`, a `BarLayout<HeaderPart>`, whose default is today's
+  detailed header: the 48-point art in a fixed leading column, and the three lines over the
+  seek bar stacked in a flexible center column, aligned leading. Its row in Settings ▸
+  Appearance opens the builder, unchanged.
+- NowPlaying: `HeaderStatus` lays out the header's art, labels and `SeekBox` by that layout in
+  its own `BarColumns` and row, stacks always stacking, at the tallest column's height; the
+  status keeps its window-drag and seek-hold behavior. The sheet's drawing of the status is a
+  `HeaderStatus` of the current layout with placeholder text.
+- App: Customize Toolbar offers Controls (today's transport item, renamed), Volume, Status,
+  Search, Shuffle, Repeat, Output, the queue and signal path toggles, Flexible Space and Space;
+  the default set is Controls, flexible space, Volume, flexible space, Status, flexible space,
+  Shuffle, flexible space, Search. The items stay in `state.json`'s `window.toolbarItems`
+  (ADR 0055) with their raw values, so no saved item goes away. A layout change sets the
+  status item's height again. `--snapshot-of headerStatus` and `toolbarSheet`.
+- Tests: the header default's frames match today's detailed layout (art, each line, the seek
+  bar, the height); a centered layout centers on the item; a fixed center column centers; no
+  window drag and the seek hold still pass; the setting's default and decoding; the toolbar's
+  default set, labels, every item's drawing, a saved toolbar from before; a layout change
+  resizes the item. `--snapshot` at 1440x900 short and tall, glass on and off, the sheet and
+  the builder; the live resize bench by name; `./scripts/bundle release`.
+
 Still open from the mbp2026 test run, for later: the manual checklist (scrolling with art during
 a rescan, start time at the same and another rate, built-in and Bluetooth output, the UI pass,
 Get Info over 200), the `sudo purge` cold launch, and the stall log.
