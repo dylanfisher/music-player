@@ -1468,7 +1468,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 statusLayout.stretching(at: place).flatMap(view)
             )
         }
-        if let art = statusPartViews[.art], art.gestureRecognizers.isEmpty {
+        // An image view can already hold a recognizer of AppKit's own, so only ours counts.
+        if let art = statusPartViews[.art],
+            !art.gestureRecognizers.contains(where: { $0 is NSClickGestureRecognizer })
+        {
             art.addGestureRecognizer(
                 NSClickGestureRecognizer(target: self, action: #selector(openPlayingArt)))
         }

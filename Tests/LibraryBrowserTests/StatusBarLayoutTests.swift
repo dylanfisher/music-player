@@ -129,7 +129,10 @@ private func column(
     let art = NSImageView(image: NSImage(size: NSSize(width: 8, height: 8)))
     let layout = BarLayout(center: column([.art]))
     browser.setStatusBar(StatusBarLayout(columns: layout, style: .minimal), views: [.art: art])
-    let click = try #require(art.gestureRecognizers.first as? NSClickGestureRecognizer)
+    func clicks() -> [NSClickGestureRecognizer] {
+        art.gestureRecognizers.compactMap { $0 as? NSClickGestureRecognizer }
+    }
+    let click = try #require(clicks().first)
     #expect(click.target === browser)
 
     // Nothing playing: nothing to open.
@@ -142,5 +145,5 @@ private func column(
     viewer.close()
     // Laid out again, the art keeps its one click.
     browser.setStatusBar(StatusBarLayout(columns: layout, style: .tall), views: [.art: art])
-    #expect(art.gestureRecognizers.count == 1)
+    #expect(clicks().count == 1)
 }
