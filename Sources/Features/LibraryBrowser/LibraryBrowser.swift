@@ -1721,8 +1721,8 @@ private func problemsUnreadable(_ error: any Error) -> String {
 /// rows scrolled under it (ADR 0084).
 @MainActor
 private func statusBackground(around content: NSView, border: NSBox) -> NSView {
-    // The bar and its border, the material's one content view. The border lies over the bar's
-    // top point, as the header's line lies in the header's last.
+    // The bar and its border, the material's one content view. The border takes the bar's top
+    // point, as the header's line takes the header's last, and the parts lie below it.
     let bordered = NSView()
     border.boxType = .custom
     border.borderWidth = 0
@@ -1755,12 +1755,12 @@ private func statusBackground(around content: NSView, border: NSBox) -> NSView {
         bordered.bottomAnchor.constraint(equalTo: material.bottomAnchor),
         content.leadingAnchor.constraint(equalTo: bordered.leadingAnchor),
         content.trailingAnchor.constraint(equalTo: bordered.trailingAnchor),
-        content.topAnchor.constraint(equalTo: bordered.topAnchor),
+        content.topAnchor.constraint(equalTo: border.bottomAnchor),
         content.bottomAnchor.constraint(equalTo: bordered.bottomAnchor),
         border.leadingAnchor.constraint(equalTo: bordered.leadingAnchor),
         border.trailingAnchor.constraint(equalTo: bordered.trailingAnchor),
         border.topAnchor.constraint(equalTo: bordered.topAnchor),
-        border.heightAnchor.constraint(equalToConstant: 1),
+        border.heightAnchor.constraint(equalToConstant: StatusBarLayout.borderPoints),
     ])
     return material
 }

@@ -7,6 +7,9 @@ import Settings
 public struct StatusBarLayout: Equatable, Sendable {
     /// The space above and below the art and the stacks, in points.
     static let artInsetPoints = 3.0
+    /// The height of the line along the bar's top, inside the bar's height, which the parts lie
+    /// below.
+    static let borderPoints = 1.0
 
     public var columns: BarLayout<StatusPart>
     public var style: StatusBarStyle
@@ -40,11 +43,16 @@ public struct StatusBarLayout: Equatable, Sendable {
     /// the tallest stacked column's, which the tall style grows to fit up to `StatusBarStyle.tallMaxPoints`.
     func heightPoints(headerPoints: Double, stackPoints: Double = 0) -> Double {
         guard style == .tall else { return headerPoints }
-        let stacks = min(stackPoints + 2 * Self.artInsetPoints, StatusBarStyle.tallMaxPoints)
+        let stacks = min(
+            stackPoints + Self.borderPoints + 2 * Self.artInsetPoints, StatusBarStyle.tallMaxPoints)
         return max(StatusBarStyle.tallPoints, headerPoints, stacks)
     }
 
-    func artPoints(heightPoints: Double) -> Double { heightPoints - 2 * Self.artInsetPoints }
+    /// The art's height in a bar `heightPoints` tall: its inset above, under the border, and
+    /// below.
+    func artPoints(heightPoints: Double) -> Double {
+        heightPoints - Self.borderPoints - 2 * Self.artInsetPoints
+    }
 
     /// Whether the art is the first thing at the bar's leading edge: the first part of the first
     /// leading column, at that column's leading edge, with no scan progress before it. The bar

@@ -35,8 +35,8 @@ func theBarHasALineAlongItsTop(glass: Bool, style: StatusBarStyle) async throws 
     if style == .minimal { #expect(area.height == header) }
 }
 
-/// Art that starts the bar has as much space on its left as above and below it, in both
-/// styles; a scan's progress before it takes the usual spacing back.
+/// Art that starts the bar has as much space on its left as below it and above it, under the
+/// bar's top line, in both styles; a scan's progress before it takes the usual spacing back.
 @MainActor @Test(arguments: [StatusBarStyle.minimal, .tall])
 func artAtTheBarsStartHasEqualMargins(style: StatusBarStyle) async throws {
     let fixture = try await MainWindowFixture()
@@ -49,7 +49,9 @@ func artAtTheBarsStartHasEqualMargins(style: StatusBarStyle) async throws {
     let browser = fixture.browser
     let area = try frame(browser.statusArea)
     let art = try frame(fixture.nowPlaying.statusBar.view(for: .art))
-    #expect(abs(area.maxY - art.maxY - StatusBarLayout.artInsetPoints) < 0.01, "\(art) in \(area)")
+    let border = try frame(browser.statusBorder)
+    #expect(
+        abs(border.minY - art.maxY - StatusBarLayout.artInsetPoints) < 0.01, "\(art) in \(area)")
     #expect(abs(art.minY - area.minY - StatusBarLayout.artInsetPoints) < 0.01, "\(art) in \(area)")
     #expect(abs(art.minX - area.minX - StatusBarLayout.artInsetPoints) < 0.01, "\(art) in \(area)")
     browser.libraryChanged(.scanning(folder: "/music", ScanProgress()))
@@ -143,7 +145,11 @@ func artAtTheBarsStartHasEqualMargins(style: StatusBarStyle) async throws {
     // The seek bar takes the column's width, and the art the bar's height.
     #expect(frames[2].width == 300)
     let art = try #require(fixture.nowPlaying.statusBar.view(for: .art))
-    #expect(abs(art.frame.height - (height - 2 * StatusBarLayout.artInsetPoints)) < 0.01)
+    #expect(
+        abs(
+            art.frame.height
+                - StatusBarLayout(columns: layout, style: .tall).artPoints(heightPoints: height))
+            < 0.01)
     let scroll = try #require(browser.table.view as? NSScrollView)
     #expect(scroll.contentInsets.bottom == height)
 }
@@ -181,7 +187,8 @@ func artAtTheBarsStartHasEqualMargins(style: StatusBarStyle) async throws {
     let browser = fixture.browser
     let stack = try #require(browser.statusColumn(at: .center)?.stack)
     #expect(
-        stack.fittingSize.height + 2 * StatusBarLayout.artInsetPoints > StatusBarStyle.tallMaxPoints
+        stack.fittingSize.height + StatusBarLayout.borderPoints + 2 * StatusBarLayout.artInsetPoints
+            > StatusBarStyle.tallMaxPoints
     )
     #expect(abs(browser.statusArea.frame.height - StatusBarStyle.tallMaxPoints) < 0.01)
     if #available(macOS 14, *) { #expect(browser.statusArea.clipsToBounds) }

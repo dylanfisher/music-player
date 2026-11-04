@@ -37,12 +37,12 @@ private func column(
     let minimal = StatusBarLayout(columns: stacked, style: .minimal)
     #expect(!minimal.stacks(at: .center))
     #expect(minimal.heightPoints(headerPoints: 24, stackPoints: 60) == 24)
-    #expect(minimal.artPoints(heightPoints: 24) == 24 - 2 * StatusBarLayout.artInsetPoints)
+    #expect(minimal.artPoints(heightPoints: 24) == 24 - 1 - 2 * StatusBarLayout.artInsetPoints)
     let tall = StatusBarLayout(columns: stacked, style: .tall)
     #expect(tall.stacks(at: .center))
     #expect(tall.heightPoints(headerPoints: 24) == StatusBarStyle.tallPoints)
     #expect(tall.heightPoints(headerPoints: 60) == 60)
-    #expect(tall.heightPoints(headerPoints: 24, stackPoints: 50) == 50 + 6)
+    #expect(tall.heightPoints(headerPoints: 24, stackPoints: 50) == 50 + 1 + 6)
     #expect(tall.heightPoints(headerPoints: 24, stackPoints: 500) == StatusBarStyle.tallMaxPoints)
 }
 
