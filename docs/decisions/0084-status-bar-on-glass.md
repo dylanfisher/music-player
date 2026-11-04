@@ -88,6 +88,14 @@ album's art cells**, the space beside a scaled-down image included.
 - With glass on, AppKit centers the title over the area beside the sidebar, so the bar's middle,
   centered on the whole window, sits left of the title by half the sidebar's width. A known
   limitation, for phase 37's builder to address.
-- The window and live resize benches run with the bar over the rows.
+- The window and live resize benches run with the bar over the rows, glass off, so on macOS 26
+  and later the bar is an `NSGlassEffectView` over them. The bar over the rows costs the scroll
+  benches no more than the bar below them: measured one after the other on the build Mac, the
+  scroll-bar drag's p95 was 13.65 and 13.44 ms with the bar over the rows, 13.01 and 13.01 ms
+  with it below as before, 13.39 ms over them on the title bar material and 13.40 ms without the
+  window centering; compact rows were 10.91 and 10.81 ms against 10.78 and 10.69 ms. The
+  phase's final code measured 13.38 and 10.84 ms. These
+  benches swing with the machine's load: a run while other processes kept 8 of the 10 cores busy
+  measured 25.5 ms for the drag, so compare them only one after the other on an idle Mac.
 - The 2015 MacBook Pro shows the material fallback; that it blends with the rows under it is an
   owner check there.
