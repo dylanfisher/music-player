@@ -39,9 +39,10 @@ set and four buttons on its left, plain and with the glass's full-size content v
 the identifier the status sat 110 points left of center in the owner's layout and 20 in the
 default set; with either property it was on the window's center to the point, the same on
 both, while it fit there at its width. When it doesn't, at about 1000 points with Search alone
-on the right and 560 points of status, AppKit moves it as little as it can. The toolbar's
-center is the window's, glass or not, though on glass the title and the status bar's middle
-center beside the sidebar (0085).
+on the right and 560 points of status, AppKit moves it as little as it can. On glass, where
+the toolbar starts beside the sidebar, the `--snapshot` at 1440 by 900 shows the status centered
+on that area instead, under the title, as the status bar's middle is (0085); the probe's
+windows had no sidebar.
 
 **`appearance.windowTitle` is a template.** `TitleToken` lists the fields a template can name,
 with a help line each: title, artist, album, album artist, composer, genre, year, track and
