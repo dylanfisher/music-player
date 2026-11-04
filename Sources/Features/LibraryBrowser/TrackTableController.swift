@@ -724,7 +724,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     func tableViewColumnDidMove(_ notification: Notification) {
         hideArtHover()
-        table.enumerateAvailableRowViews { rowView, _ in rowView.needsDisplay = true }
+        redrawRowViews()
         guard !applyingColumns else { return }
         actions.layoutChanged(layout)
         // A drag moves the column a place at a time; the selection is centered once it's off
@@ -737,7 +737,12 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         if !applyingColumns { actions.layoutChanged(layout) }
         let resized = notification.userInfo?["NSTableColumn"] as? NSTableColumn
         if resized?.identifier == columnIdentifier(.art) { refitArt() }
-        // The rows paint the art column plain where it is now.
+        redrawRowViews()
+    }
+
+    /// Has the rows draw again after the columns moved, resized, showed or hid: each paints
+    /// the art column plain, and draws the column lines, where the columns are now.
+    private func redrawRowViews() {
         table.enumerateAvailableRowViews { rowView, _ in rowView.needsDisplay = true }
     }
 
@@ -758,6 +763,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             table.tableColumns[index].width = entry.width
             if index != place { table.moveColumn(index, toColumn: place) }
         }
+        redrawRowViews()
         centerSelection()
     }
 
@@ -803,6 +809,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             let tableColumn = table.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier(raw))
         else { return }
         tableColumn.isHidden.toggle()
+        redrawRowViews()
         actions.layoutChanged(layout)
         centerSelection()
     }
