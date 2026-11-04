@@ -43,10 +43,10 @@ struct WindowSettings {
 
 extension StatusBarLayout {
     /// The settings' keys, whose change lays out the status bar again.
-    static let keys = [AppSettings().statusBarParts.key, AppSettings().statusBarStyle.key]
+    static let keys = [AppSettings().statusBarLayout.key, AppSettings().statusBarStyle.key]
 
     @MainActor init(_ settings: ConfigStore<AppSettings>) {
-        self.init(parts: settings[\.statusBarParts], style: settings[\.statusBarStyle])
+        self.init(columns: settings[\.statusBarLayout], style: settings[\.statusBarStyle])
     }
 }
 

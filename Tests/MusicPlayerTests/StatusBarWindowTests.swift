@@ -11,7 +11,7 @@ import Testing
 @MainActor
 private func centers(_ fixture: MainWindowFixture) throws -> (middle: CGFloat, window: CGFloat) {
     fixture.window.window.layoutIfNeeded()
-    let middle = try #require(fixture.browser.statusPartsShown.first?.superview)
+    let middle = try #require(fixture.browser.statusColumn(at: .center)?.stack)
     let content = try #require(fixture.window.window.contentView)
     return (middle.convert(middle.bounds, to: nil).midX, content.bounds.midX)
 }
@@ -20,7 +20,7 @@ private func centers(_ fixture: MainWindowFixture) throws -> (middle: CGFloat, w
 /// and the sidebar resizes, hides and shows (ADR 0084).
 @MainActor @Test(arguments: [[StatusPart.seek, .totals], [.art, .track, .format]])
 func theStatusBarsMiddleStaysCenteredOnTheWindow(_ parts: [StatusPart]) async throws {
-    let fixture = try await MainWindowFixture(parts: parts)
+    let fixture = try await MainWindowFixture(statusBar: .centered(parts))
     defer { fixture.close() }
     var ancestor = fixture.browser.sidebar.view.superview
     while let view = ancestor, !(view is NSSplitView) { ancestor = view.superview }
@@ -83,6 +83,29 @@ func noStatusBarPartResizesTheWindowOrItsSplits(_ size: NSSize?) async throws {
             #expect(
                 fixture.layout == layout,
                 "\(parts) \(style): \(zip(fixture.layout, layout).filter { $0 != $1 })")
+        }
+    }
+    // Columns too: the widest fixed ones, flexible ones beside a fixed center, stacks.
+    let columns = [
+        BarLayout<StatusPart>(
+            leading: [BarColumn(parts: [.art, .track], width: .fixed(1200), alignment: .leading)],
+            center: BarColumn(parts: [.seek], width: .fixed(1200), alignment: .center),
+            trailing: [BarColumn(parts: [.format], width: .fixed(1200), alignment: .trailing)]),
+        BarLayout(
+            leading: [BarColumn(parts: [.seek], width: .flexible, alignment: .leading)],
+            center: BarColumn(parts: [.art], width: .fixed(16), alignment: .center),
+            trailing: [
+                BarColumn(
+                    parts: [.track, .format, .totals], width: .flexible, alignment: .trailing,
+                    stacks: true)
+            ]),
+    ]
+    for style in StatusBarStyle.allCases {
+        for statusBar in columns {
+            fixture.setLayout(statusBar, style: style)
+            #expect(
+                fixture.layout == layout,
+                "\(statusBar) \(style): \(zip(fixture.layout, layout).filter { $0 != $1 })")
         }
     }
     fixture.window.toggleStatusBar()

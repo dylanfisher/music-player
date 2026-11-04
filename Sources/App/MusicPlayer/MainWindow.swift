@@ -76,6 +76,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
         }
         glass = WindowGlass(window: window, content: stack)
         glass?.set(settings.tableAppearance.glass)
+        centerStatusBarUnderTitle()
 
         if let frame = restoredFrame(
             settings.frame, screens: NSScreen.screens.map(\.visibleFrame))
@@ -154,12 +155,20 @@ final class MainWindow: NSObject, NSWindowDelegate {
         restoring = true
         glass?.set(on)
         restoring = false
+        centerStatusBarUnderTitle()
+    }
+
+    /// With a full-size content view AppKit centers the title over the area beside the sidebar,
+    /// so the status bar's middle centers there too (ADR 0085).
+    private func centerStatusBarUnderTitle() {
+        browser.centerStatusBar(besideSidebar: window.styleMask.contains(.fullSizeContentView))
     }
 
     func windowDidExitFullScreen(_ notification: Notification) {
         restoring = true
         glass?.matchStyleMask()
         restoring = false
+        centerStatusBarUnderTitle()
     }
 
     func toggleSignalPath() {

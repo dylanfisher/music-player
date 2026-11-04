@@ -1,8 +1,8 @@
 import AppKit
 
 /// Three views in a row: `leading` and `trailing` at the row's edges, and `middle` centered on
-/// its window's content view, so it lines up with the window's title wherever the row sits and
-/// whatever the edges hold (ADR 0084). Every constraint that places or sizes the middle is below
+/// its window's content view, or on the part of it from `centersFrom` on, so it lines up with
+/// the window's title wherever the row sits and whatever the edges hold (ADR 0084, 0085). Every constraint that places or sizes the middle is below
 /// the priority at which a split view's pane keeps its width, and so below the window's: no
 /// content can move a divider or resize the window. When the middle can't be centered without
 /// overlapping an edge view it moves aside instead, and only when nothing fits at all does it
@@ -30,7 +30,20 @@ final class CenteredRow: NSView {
         fill.priority = Self.fillPriority
         return fill
     }()
+    /// The edge views' pulls toward the middle, under the centering, so they take the width
+    /// beside it without moving it.
+    private lazy var leadingFill = edgeFill(leading.trailingAnchor, middle.leadingAnchor)
+    private lazy var trailingFill = edgeFill(middle.trailingAnchor, trailing.leadingAnchor)
+    private let spacing: CGFloat
     private var windowCentering: NSLayoutConstraint?
+    /// The span of the content view the middle centers on when `centersFrom` is set.
+    private var centeringGuide: NSLayoutGuide?
+
+    /// A view whose leading edge starts the part of the window the middle centers on, such as
+    /// the pane beside the sidebar, where AppKit centers the title; nil centers on the whole window.
+    var centersFrom: NSView? {
+        didSet { if centersFrom !== oldValue { center() } }
+    }
 
     /// Whether the middle takes all the width it can while staying centered, rather than its
     /// fitting width.
@@ -39,10 +52,31 @@ final class CenteredRow: NSView {
         set { fill.isActive = newValue }
     }
 
+    /// Whether the leading view reaches to the middle, rather than taking its fitting width.
+    var leadingFills: Bool {
+        get { leadingFill.isActive }
+        set { leadingFill.isActive = newValue }
+    }
+
+    /// Whether the trailing view reaches to the middle.
+    var trailingFills: Bool {
+        get { trailingFill.isActive }
+        set { trailingFill.isActive = newValue }
+    }
+
+    private func edgeFill(_ left: NSLayoutXAxisAnchor, _ right: NSLayoutXAxisAnchor)
+        -> NSLayoutConstraint
+    {
+        let fill = right.constraint(equalTo: left, constant: spacing)
+        fill.priority = Self.fillPriority
+        return fill
+    }
+
     init(leading: NSView, middle: NSView, trailing: NSView, spacing: CGFloat, inset: CGFloat) {
         self.leading = leading
         self.middle = middle
         self.trailing = trailing
+        self.spacing = spacing
         super.init(frame: .zero)
         for view in [leading, middle, trailing] {
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -71,10 +105,27 @@ final class CenteredRow: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        center()
+    }
+
+    private func center() {
         windowCentering?.isActive = false
         windowCentering = nil
+        centeringGuide.map { $0.owningView?.removeLayoutGuide($0) }
+        centeringGuide = nil
         guard let content = window?.contentView, isDescendant(of: content) else { return }
-        let centering = middle.centerXAnchor.constraint(equalTo: content.centerXAnchor)
+        var anchor = content.centerXAnchor
+        if let start = centersFrom, start.isDescendant(of: content) {
+            let guide = NSLayoutGuide()
+            content.addLayoutGuide(guide)
+            NSLayoutConstraint.activate([
+                guide.leadingAnchor.constraint(equalTo: start.leadingAnchor),
+                guide.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            ])
+            centeringGuide = guide
+            anchor = guide.centerXAnchor
+        }
+        let centering = middle.centerXAnchor.constraint(equalTo: anchor)
         centering.priority = Self.centeringPriority
         centering.isActive = true
         windowCentering = centering

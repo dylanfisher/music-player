@@ -44,6 +44,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private var copiedGeneration = 0
     private var syncFolderLabel: NSTextField?
     private var syncFolderButtons: (change: NSButton, open: NSButton, clear: NSButton)?
+    /// The bar builders opened from this pane, by key, kept so a reopen shows the same one.
+    private(set) var barBuilders: [String: BarBuilderWindow] = [:]
 
     init(
         model: GeneralModel, configPath: String?, actions: SettingsActions,
@@ -243,17 +245,15 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             popUp.menu?.delegate = self
             popUp.setAccessibilityLabel(row.title)
             return popUp
-        case .checklist:
-            let list = ChecklistView(title: row.title)
-            list.identifier = NSUserInterfaceItemIdentifier(row.key)
-            list.changed = { [weak self] items in
-                self?.attempt { try self?.model.setChecklist(row.key, items) }
-            }
-            return list
         case .folders:
             preconditionFailure("the Watched Folders pane lists \(row.key)")
         case .renderer:
             preconditionFailure("the output device's row lists \(row.key)")
+        case .barLayout:
+            let edit = button("Edit Layout…", #selector(editBarLayout(_:)))
+            edit.identifier = NSUserInterfaceItemIdentifier(row.key)
+            edit.setAccessibilityLabel(row.title)
+            return edit
         case .readOnly:
             let list = NSTextField(wrappingLabelWithString: "")
             list.identifier = NSUserInterfaceItemIdentifier(row.key)
@@ -291,8 +291,6 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             field.stringValue = model.text(row.key)
         case .output:
             (control as? NSPopUpButton).map(showOutputs)
-        case .checklist:
-            (control as? ChecklistView)?.items = model.checklist(row.key)
         case .folders:
             preconditionFailure("the Watched Folders pane lists \(row.key)")
         case .renderer:
@@ -304,6 +302,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             syncFolderButtons?.change.title = name == nil ? "Choose…" : "Change…"
             syncFolderButtons?.open.isEnabled = name != nil
             syncFolderButtons?.clear.isEnabled = name != nil
+        case .barLayout:
+            barBuilders[row.key]?.reload()
         case .readOnly:
             (control as? NSTextField)?.stringValue =
                 model.text(row.key) + " (edit in the config file)"
@@ -351,6 +351,20 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     @objc private func chooseSyncFolder() { actions.chooseSyncFolder() }
+
+    @objc private func editBarLayout(_ sender: NSButton) {
+        sender.identifier.map { showBarBuilder($0.rawValue) }
+    }
+
+    /// Opens the bar builder on the bar layout setting `key`, made on first use.
+    func showBarBuilder(_ key: String) {
+        if let builder = barBuilders[key] { return builder.showWindow() }
+        attempt {
+            let builder = BarBuilderWindow(model: try model.barBuilder(key))
+            barBuilders[key] = builder
+            builder.showWindow()
+        }
+    }
 
     @objc private func openSyncFolder() { actions.openSyncFolder() }
 

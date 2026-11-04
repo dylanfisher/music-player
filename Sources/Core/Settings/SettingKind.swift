@@ -10,6 +10,8 @@ public indirect enum SettingKind: Sendable, Equatable {
     /// The value or null.
     case optional(SettingKind)
     case list(SettingKind)
+    /// Columns of these parts, which the settings window's bar builder edits.
+    case barLayout([Choice])
     case watchedFolder
     case syncFolder
     /// Window layout the app saves as it changes; the settings window shows no control for it.

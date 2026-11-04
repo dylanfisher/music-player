@@ -96,19 +96,6 @@ extension Setting where Value == [ToolbarItem] {
     }
 }
 
-extension Setting where Value == [StatusPart] {
-    /// The status bar's parts, left to right, each at most once, since each is one view.
-    init(_ key: String, title: String, parts defaultValue: [StatusPart], _ summary: String) {
-        self.init(key, title, defaultValue, summary, Value.kind) { parts in
-            var seen: Set<StatusPart> = []
-            for (index, part) in parts.enumerated() where !seen.insert(part).inserted {
-                return .invalid("item \(index): \(part.rawValue) is listed twice")
-            }
-            return nil
-        }
-    }
-}
-
 extension Setting where Value == [BrowserColumn] {
     /// The browser's columns, left to right: `BrowserColumn.count` of them, each grouping by
     /// something the others don't.

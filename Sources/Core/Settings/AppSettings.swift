@@ -76,9 +76,10 @@ public struct AppSettings: SettingsSchema {
     public let statusBarStyle = Setting(
         "appearance.statusBarStyle", title: "Status Bar", default: StatusBarStyle.minimal,
         "One line at the header's height, or two with larger art.")
-    public let statusBarParts = Setting(
-        "appearance.statusBarParts", title: "Status Bar Items", parts: [StatusPart.totals],
-        "What the status bar shows, left to right; drag to reorder.")
+    public let statusBarLayout = Setting(
+        "appearance.statusBarLayout", title: "Status Bar Layout",
+        default: BarLayout.defaultStatusBar,
+        "What the status bar shows, in columns around its centered middle.")
 
     public func conflicts(_ values: [String: any SettingValue]) -> [SettingConflict] {
         guard let sync = values[syncFolder.key] as? SyncFolder,

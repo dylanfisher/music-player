@@ -6,27 +6,47 @@ import Testing
 @testable import Library
 @testable import LibraryBrowser
 
-@Test func theSeekBarOrElseTheTotalsTakeTheFreeWidth() {
-    let seek = StatusBarLayout(parts: [.art, .seek, .totals], style: .minimal)
-    #expect(seek.flexible == .seek)
-    #expect(seek.order == [.art, .seek, .totals])
-    let track = StatusBarLayout(parts: [.track, .format], style: .minimal)
-    #expect(track.flexible == .totals)
-    // The totals' label still has a place, for a failure.
-    #expect(track.order == [.track, .format, .totals])
-    #expect(!track.showsTotals)
+private func column(
+    _ parts: [StatusPart], _ alignment: BarAlignment = .center, stacks: Bool = false
+) -> BarColumn<StatusPart> {
+    BarColumn(parts: parts, width: .flexible, alignment: alignment, stacks: stacks)
 }
 
-@Test func theMinimalBarMatchesTheHeaderAndTheTallOneIsTaller() {
-    let minimal = StatusBarLayout(parts: [.art], style: .minimal)
-    #expect(minimal.heightPoints(headerPoints: 24) == 24)
-    #expect(minimal.artPoints(headerPoints: 24) == 24 - 2 * StatusBarLayout.artInsetPoints)
-    let tall = StatusBarLayout(parts: [.art], style: .tall)
+@Test func theSeekBarOrElseTheTotalsTakeTheFreeWidthOfTheirColumn() {
+    let layout = StatusBarLayout(
+        columns: BarLayout(
+            leading: [column([.art, .seek, .totals])], center: column([.track, .format]),
+            trailing: [column([.format])]),
+        style: .minimal)
+    #expect(layout.stretching(at: .leading(0)) == .seek)
+    // The totals' label still has a place in the center, for a failure.
+    #expect(layout.parts(at: .center) == [.track, .format])
+    #expect(layout.stretching(at: .center) == nil)
+    #expect(layout.showsTotals)
+    let noTotals = StatusBarLayout(
+        columns: BarLayout(center: column([.track]), trailing: [column([.seek])]),
+        style: .minimal)
+    #expect(!noTotals.showsTotals)
+    #expect(noTotals.parts(at: .center) == [.track, .totals])
+    #expect(noTotals.stretching(at: .center) == .totals)
+    #expect(noTotals.parts(at: .trailing(0)) == [.seek])
+}
+
+@Test func theMinimalBarMatchesTheHeaderAndTheTallOneGrowsToItsStacks() {
+    let stacked = BarLayout(center: column([.track, .format], stacks: true))
+    let minimal = StatusBarLayout(columns: stacked, style: .minimal)
+    #expect(!minimal.stacks(at: .center))
+    #expect(minimal.heightPoints(headerPoints: 24, stackPoints: 60) == 24)
+    #expect(minimal.artPoints(heightPoints: 24) == 24 - 2 * StatusBarLayout.artInsetPoints)
+    let tall = StatusBarLayout(columns: stacked, style: .tall)
+    #expect(tall.stacks(at: .center))
     #expect(tall.heightPoints(headerPoints: 24) == StatusBarLayout.tallPoints)
     #expect(tall.heightPoints(headerPoints: 60) == 60)
+    #expect(tall.heightPoints(headerPoints: 24, stackPoints: 50) == 50 + 6)
+    #expect(tall.heightPoints(headerPoints: 24, stackPoints: 500) == StatusBarLayout.tallMaxPoints)
 }
 
-@MainActor @Test func theBarHoldsThePartsInTheirOrderAndShowsAFailureWithoutTotals() throws {
+@MainActor @Test func theColumnsHoldTheirPartsAndAFailureShowsWithoutTotals() throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let browser = LibraryBrowser(
         reader: try LibraryReader(databaseURL: databaseURL),
@@ -36,14 +56,30 @@ import Testing
     _ = browser.content.view
     let art = NSView()
     let seek = NSView()
+    let track = NSView()
     browser.setStatusBar(
-        StatusBarLayout(parts: [.seek, .totals, .art], style: .tall),
-        views: [.art: art, .seek: seek, .track: NSView()])
-    #expect(browser.statusPartsShown == [seek, browser.statusLabel, art])
+        StatusBarLayout(
+            columns: BarLayout(
+                leading: [column([.art])], center: column([.seek, .totals], .trailing),
+                trailing: [column([.track])]),
+            style: .tall),
+        views: [.art: art, .seek: seek, .track: track])
+    #expect(browser.statusColumn(at: .leading(0))?.stack.arrangedSubviews == [art])
+    #expect(
+        browser.statusColumn(at: .center)?.stack.arrangedSubviews == [seek, browser.statusLabel])
+    #expect(browser.statusColumn(at: .trailing(0))?.stack.arrangedSubviews == [track])
+    #expect(browser.statusColumn(at: .trailing(1)) == nil)
+    #expect(browser.statusLabel.alignment == .right)
     #expect(!browser.statusLabel.isHidden)
 
-    browser.setStatusBar(StatusBarLayout(parts: [.art], style: .minimal), views: [.art: art])
-    #expect(browser.statusPartsShown == [art, browser.statusLabel])
+    browser.setStatusBar(
+        StatusBarLayout(columns: BarLayout(center: column([.art])), style: .minimal),
+        views: [.art: art])
+    #expect(
+        browser.statusColumn(at: .center)?.stack.arrangedSubviews == [art, browser.statusLabel])
+    #expect(browser.statusColumn(at: .leading(0)) == nil)
+    // The side columns let go of their parts.
+    #expect(track.superview == nil)
     #expect(browser.statusLabel.isHidden)
     browser.report("the disk went away")
     #expect(!browser.statusLabel.isHidden)
@@ -69,7 +105,8 @@ import Testing
     let rows = try index.rows(ids: browser.model.trackIDs)
     let playing = try #require(rows.first { $0.art != nil })
     let art = NSImageView(image: NSImage(size: NSSize(width: 8, height: 8)))
-    browser.setStatusBar(StatusBarLayout(parts: [.art], style: .minimal), views: [.art: art])
+    let layout = BarLayout(center: column([.art]))
+    browser.setStatusBar(StatusBarLayout(columns: layout, style: .minimal), views: [.art: art])
     let click = try #require(art.gestureRecognizers.first as? NSClickGestureRecognizer)
     #expect(click.target === browser)
 
@@ -82,6 +119,6 @@ import Testing
     #expect(viewer.window.isVisible)
     viewer.close()
     // Laid out again, the art keeps its one click.
-    browser.setStatusBar(StatusBarLayout(parts: [.art], style: .tall), views: [.art: art])
+    browser.setStatusBar(StatusBarLayout(columns: layout, style: .tall), views: [.art: art])
     #expect(art.gestureRecognizers.count == 1)
 }

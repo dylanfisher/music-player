@@ -104,6 +104,14 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         }
     }
 
+    /// Opens the bar builder on the bar layout setting `key`, from Settings ▸ Appearance.
+    public func showBarBuilder(_ key: String) { appearance.showBarBuilder(key) }
+
+    /// The bar builder's window for `key`, once opened.
+    public func barBuilderWindow(_ key: String) -> NSWindow? {
+        appearance.barBuilders[key]?.window
+    }
+
     /// Shows the settings and shortcuts as they are now, after any change.
     public func reload(bindings: KeyBindings) {
         general.reload()

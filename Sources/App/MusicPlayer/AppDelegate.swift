@@ -357,6 +357,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .tags: { [weak self] in self?.tagEditing.sheet?.window }
             case .settings, .playback, .appearance, .folders, .shortcuts:
                 { [weak self] in self?.settingsWindow?.window }
+            case .statusBar:
+                { [weak self] in
+                    self?.settingsWindow?.barBuilderWindow(AppSettings().statusBarLayout.key)
+                }
             }
         // The palette lists its items, and the tag editor reads its files, first.
         let wait = snapshotOf == .main ? 0 : snapshotOf == .tags ? 3.0 : 1.0
@@ -372,6 +376,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .appearance: settingsWindowController()?.show(.appearance)
         case .folders: settingsWindowController()?.show(.folders)
         case .shortcuts: settingsWindowController()?.show(.shortcuts)
+        case .statusBar:
+            settingsWindowController()?.showBarBuilder(AppSettings().statusBarLayout.key)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
             do {

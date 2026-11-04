@@ -99,18 +99,22 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private let panes: PanesController
     private let sidebarController: SidebarController
     private let split = NSSplitView()
-    /// The scan progress, the parts the user chose centered on the window, and the problems
-    /// button.
-    private let scanProgress = NSStackView()
-    private let statusParts = NSStackView()
-    /// The problems button alone, in a stack so it takes no width while hidden.
+    /// The scan progress and the leading columns, the center column centered on the window,
+    /// and the trailing columns and the problems button, each edge in a stack so what's hidden
+    /// takes no width.
+    private let statusLeading = NSStackView()
+    private let statusCenter = StatusColumn()
     private let statusTrailing = NSStackView()
     private lazy var statusBar = CenteredRow(
-        leading: scanProgress, middle: statusParts, trailing: statusTrailing,
+        leading: statusLeading, middle: statusCenter, trailing: statusTrailing,
         spacing: Self.statusSpacingPoints, inset: Self.statusSpacingPoints)
-    private(set) var statusLayout = StatusBarLayout(parts: [.totals], style: .minimal)
+    private(set) var statusLayout = StatusBarLayout(columns: .defaultStatusBar, style: .minimal)
     /// The views of the playing track's parts, which the app gives.
     private var statusPartViews: [StatusPart: NSView] = [:]
+    /// The leading and trailing columns, made for each layout.
+    private var statusSideColumns: [StatusColumn] = []
+    /// Keeps the flexible columns' widths equal.
+    private var statusEqualWidths: [NSLayoutConstraint] = []
     private var statusHeight: NSLayoutConstraint?
     private var statusArtHeight: NSLayoutConstraint?
     /// The status bar on glass, or the toolbar's material before macOS 26, laid over the bottom
@@ -288,13 +292,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusLabel.addGestureRecognizer(
             NSClickGestureRecognizer(target: self, action: #selector(showNextTotals)))
         statusLabel.alignment = .center
-        for view in [scanIndicator, scanLabel] { scanProgress.addArrangedSubview(view) }
+        for view in [scanIndicator, scanLabel] { statusLeading.addArrangedSubview(view) }
         statusTrailing.addArrangedSubview(problemsButton)
-        for stack in [scanProgress, statusParts, statusTrailing] {
+        for stack in [statusLeading, statusTrailing] {
             stack.detachesHiddenViews = true
             stack.distribution = .fill
             stack.spacing = Self.statusSpacingPoints
             stack.alignment = .centerY
+            // Only a flexible column in it stretches it, toward the center.
+            stack.setHuggingPriority(.init(1), for: .horizontal)
         }
         problemsButton.font = TextCell.font
         statusHeight = statusArea.heightAnchor.constraint(equalToConstant: 0)
@@ -1415,6 +1421,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     public var isStatusBarVisible: Bool { !statusArea.isHidden }
 
+    /// Centers the status bar's middle on the window beside the sidebar, where the title is
+    /// with a full-size content view, or on the whole window.
+    public func centerStatusBar(besideSidebar: Bool) {
+        statusBar.centersFrom = besideSidebar ? content.view : nil
+    }
+
     /// Lays the status bar out as `layout` says, with `views` for the playing track's parts.
     public func setStatusBar(_ layout: StatusBarLayout, views: [StatusPart: NSView]) {
         statusLayout = layout
@@ -1423,45 +1435,95 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         showStatus()
     }
 
-    /// The views the status bar holds between the scan progress and the problems button, for
-    /// tests.
-    var statusPartsShown: [NSView] { statusParts.arrangedSubviews }
+    /// The status bar's column at `place`, for tests.
+    func statusColumn(at place: BarPlace) -> StatusColumn? {
+        let leading = statusLayout.columns.leading.count
+        return switch place {
+        case .center: statusCenter
+        case .leading(let index): index < leading ? statusSideColumns[index] : nil
+        case .trailing(let index): statusSideColumns.dropFirst(leading + index).first
+        }
+    }
 
     private func layOutStatusBar() {
-        for view in statusParts.arrangedSubviews { statusParts.removeArrangedSubview(view) }
-        for view in statusParts.subviews { view.removeFromSuperview() }
+        for column in statusSideColumns {
+            for view in column.stack.arrangedSubviews { view.removeFromSuperview() }
+            column.removeFromSuperview()
+        }
+        statusSideColumns = []
+        NSLayoutConstraint.deactivate(statusEqualWidths)
         statusArtHeight?.isActive = false
+        var flexible: [StatusColumn] = []
+        var stackPoints = 0.0
+        for (place, column) in statusLayout.columns.columns {
+            let view = place == .center ? statusCenter : StatusColumn()
+            let stretching = statusLayout.stretching(at: place)
+            let views = statusLayout.parts(at: place).compactMap { part in
+                statusPartView(part, stretches: part == stretching, alignment: column.alignment)
+            }
+            let stacks = statusLayout.stacks(at: place)
+            view.show(
+                views,
+                stretching: stretching.flatMap { part in
+                    part == .totals ? statusLabel : statusPartViews[part]
+                },
+                alignment: column.alignment, stacks: stacks, width: column.width,
+                spacing: Self.statusSpacingPoints)
+            if stacks { stackPoints = max(stackPoints, view.stack.fittingSize.height) }
+            if column.width == .flexible { flexible.append(view) }
+            switch place {
+            case .leading:
+                statusSideColumns.append(view)
+                statusLeading.addArrangedSubview(view)
+            case .trailing:
+                statusSideColumns.append(view)
+                statusTrailing.insertArrangedSubview(
+                    view, at: statusTrailing.arrangedSubviews.count - 1)
+            case .center: break
+            }
+        }
+        statusEqualWidths = flexible.dropFirst().map { column in
+            let equal = column.widthAnchor.constraint(equalTo: flexible[0].widthAnchor)
+            equal.priority = StatusColumn.equalPriority
+            return equal
+        }
+        NSLayoutConstraint.activate(statusEqualWidths)
+        statusBar.middleFills = statusLayout.columns.center.width == .flexible
+        statusBar.leadingFills = statusLayout.columns.leading.contains { $0.width == .flexible }
+        statusBar.trailingFills = statusLayout.columns.trailing.contains { $0.width == .flexible }
         // As tall as the track table's header in the minimal style, read from it, so the bar
         // matches the header on every macOS version.
         let header = table.table.headerView?.frame.height ?? 0
-        statusHeight?.constant = statusLayout.heightPoints(headerPoints: header)
-        for part in statusLayout.order {
-            guard let view = part == .totals ? statusLabel : statusPartViews[part] else {
-                continue
-            }
-            let flexible = part == statusLayout.flexible
-            view.setContentHuggingPriority(flexible ? .init(1) : .defaultHigh, for: .horizontal)
-            // Text the row can truncate before anything moves a divider (ADR 0084).
-            yieldText(in: view)
-            // A stack's hugging above its labels' compression resistance squeezes them to
-            // nothing, so a part's stack hugs just under it.
-            (view as? NSStackView)?.setHuggingPriority(
-                flexible
-                    ? .init(1) : .init(CenteredRow.textCompressionPriority.rawValue - 1),
-                for: .horizontal)
-            statusParts.addArrangedSubview(view)
-        }
-        statusBar.middleFills = statusLayout.parts.contains(statusLayout.flexible)
+        let height = statusLayout.heightPoints(headerPoints: header, stackPoints: stackPoints)
+        statusHeight?.constant = height
         if let art = statusPartViews[.art], art.gestureRecognizers.isEmpty {
             art.addGestureRecognizer(
                 NSClickGestureRecognizer(target: self, action: #selector(openPlayingArt)))
         }
-        if let art = statusPartViews[.art], statusLayout.parts.contains(.art) {
+        if let art = statusPartViews[.art],
+            statusLayout.columns.columns.contains(where: { $0.column.parts.contains(.art) })
+        {
             statusArtHeight = art.heightAnchor.constraint(
-                equalToConstant: statusLayout.artPoints(headerPoints: header))
+                equalToConstant: statusLayout.artPoints(heightPoints: height))
             statusArtHeight?.isActive = true
         }
         insetListsUnderStatusBar()
+    }
+
+    /// The view that shows `part` in a column, set to stretch across it or to keep its width.
+    private func statusPartView(_ part: StatusPart, stretches: Bool, alignment: BarAlignment)
+        -> NSView?
+    {
+        guard let view = part == .totals ? statusLabel : statusPartViews[part] else { return nil }
+        view.setContentHuggingPriority(stretches ? .init(1) : .defaultHigh, for: .horizontal)
+        // Text the row can truncate before anything moves a divider (ADR 0084).
+        yieldText(in: view)
+        // A part's own stack hugs just under its labels, as a column's does.
+        (view as? NSStackView)?.setHuggingPriority(
+            stretches ? .init(1) : .init(CenteredRow.textCompressionPriority.rawValue - 1),
+            for: .horizontal)
+        if part == .totals { statusLabel.alignment = alignment.textAlignment }
+        return view
     }
 
     /// Lets every label under `view` that truncates give way to the status bar's layout.

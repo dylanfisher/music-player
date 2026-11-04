@@ -38,7 +38,7 @@ struct MainWindowFixture {
     let state: StateStore<AppState>
     let saver: LayoutSaver
 
-    init(glass: Bool = false, parts: [StatusPart] = [.totals]) async throws {
+    init(glass: Bool = false, statusBar: BarLayout<StatusPart> = .defaultStatusBar) async throws {
         home = FileManager.default.temporaryDirectory
             .appendingPathComponent("main-window-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
@@ -71,17 +71,22 @@ struct MainWindowFixture {
             settings: layout, banner: ConfigBanner().view, browser: browser, toolbar: toolbar,
             signalPath: SignalPathPanel(), queue: QueuePanel(model: QueueModel(lookup: lookup)),
             saver: saver)
-        setParts(parts)
+        setLayout(statusBar)
         window.window.orderFront(nil)
         await browser.load(BrowserState(source: nil))
         window.window.layoutIfNeeded()
     }
 
-    /// Lays the status bar out with `parts`, as a change of the setting does.
+    /// Lays the status bar out with `parts` in a flexible center column.
     func setParts(_ parts: [StatusPart], style: StatusBarStyle = .minimal) {
+        setLayout(.centered(parts), style: style)
+    }
+
+    /// Lays the status bar out as `layout` says, as a change of the setting does.
+    func setLayout(_ layout: BarLayout<StatusPart>, style: StatusBarStyle = .minimal) {
         nowPlaying.statusBar.apply(style)
         browser.setStatusBar(
-            StatusBarLayout(parts: parts, style: style),
+            StatusBarLayout(columns: layout, style: style),
             views: Dictionary(
                 uniqueKeysWithValues: StatusPart.allCases.compactMap { part in
                     nowPlaying.statusBar.view(for: part).map { (part, $0) }
@@ -145,5 +150,12 @@ struct MainWindowFixture {
     func close() {
         window.window.close()
         try? FileManager.default.removeItem(at: home)
+    }
+}
+
+extension BarLayout<StatusPart> {
+    /// `parts` alone, in a flexible center column.
+    static func centered(_ parts: [StatusPart]) -> Self {
+        BarLayout(center: BarColumn(parts: parts, width: .flexible, alignment: .center))
     }
 }
