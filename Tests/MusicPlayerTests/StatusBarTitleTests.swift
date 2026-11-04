@@ -32,3 +32,18 @@ func theStatusBarsMiddleCentersUnderTheTitle(_ glass: Bool) async throws {
         abs(midX(middle) - (glass ? content.bounds.midX : (sidebarEdge + content.bounds.maxX) / 2))
             <= 0.5)
 }
+
+/// On glass with the sidebar hidden and the queue shown, the middle is on the window's center:
+/// the area beside the sidebar is the whole window, the queue included.
+@MainActor @Test func onGlassWithoutTheSidebarTheMiddleIsOnTheWindowsCenter() async throws {
+    let fixture = try await MainWindowFixture(glass: true)
+    defer { fixture.close() }
+    let window = fixture.window
+    if !window.isQueueVisible { window.toggleQueue() }
+    if window.isSidebarVisible { window.toggleSidebar() }
+    window.window.layoutIfNeeded()
+    let content = try #require(window.window.contentView)
+    let middle = try #require(fixture.browser.statusColumn(at: .center))
+    #expect(window.isQueueVisible && !window.isSidebarVisible)
+    #expect(abs(middle.convert(middle.bounds, to: nil).midX - content.bounds.midX) <= 0.5)
+}

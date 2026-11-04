@@ -5,11 +5,6 @@ import Settings
 /// window, the trailing ones before the problems button. In each column the seek bar takes the
 /// width its parts leave, or else the totals do, their text aligned as the column is.
 public struct StatusBarLayout: Equatable, Sendable {
-    /// The tall style's height, in points: two lines of text and art beside them.
-    static let tallPoints = 44.0
-    /// The tallest the tall style grows to fit a stacked column, in points: three lines of
-    /// text with the seek bar under them, so the bar never takes a list's rows.
-    static let tallMaxPoints = 80.0
     /// The space above and below the art and the stacks, in points.
     static let artInsetPoints = 3.0
 
@@ -42,11 +37,11 @@ public struct StatusBarLayout: Equatable, Sendable {
     func stacks(at place: BarPlace) -> Bool { style == .tall && columns[place]?.stacks == true }
 
     /// The bar's height, given the track table header's, which the minimal style matches, and
-    /// the tallest stacked column's, which the tall style grows to fit up to `tallMaxPoints`.
+    /// the tallest stacked column's, which the tall style grows to fit up to `StatusBarStyle.tallMaxPoints`.
     func heightPoints(headerPoints: Double, stackPoints: Double = 0) -> Double {
         guard style == .tall else { return headerPoints }
-        let stacks = min(stackPoints + 2 * Self.artInsetPoints, Self.tallMaxPoints)
-        return max(Self.tallPoints, headerPoints, stacks)
+        let stacks = min(stackPoints + 2 * Self.artInsetPoints, StatusBarStyle.tallMaxPoints)
+        return max(StatusBarStyle.tallPoints, headerPoints, stacks)
     }
 
     func artPoints(heightPoints: Double) -> Double { heightPoints - 2 * Self.artInsetPoints }

@@ -88,7 +88,7 @@ private func frame(_ view: NSView?) throws -> NSRect {
     fixture.setLayout(layout, style: .tall)
     #expect(center.stack.orientation == .vertical)
     let height = browser.statusArea.frame.height
-    #expect(height > StatusBarLayout.tallPoints && height <= StatusBarLayout.tallMaxPoints)
+    #expect(height > StatusBarStyle.tallPoints && height <= StatusBarStyle.tallMaxPoints)
     // The totals' label is last, hidden until something fails.
     let views = center.stack.arrangedSubviews
     #expect(views.last == browser.statusLabel && browser.statusLabel.isHidden)
@@ -100,4 +100,43 @@ private func frame(_ view: NSView?) throws -> NSRect {
     #expect(abs(art.frame.height - (height - 2 * StatusBarLayout.artInsetPoints)) < 0.01)
     let scroll = try #require(browser.table.view as? NSScrollView)
     #expect(scroll.contentInsets.bottom == height)
+}
+
+/// A failure shown in a stacked column, which holds the totals' label for it, adds a line, and
+/// the bar and the lists' inset grow with it.
+@MainActor @Test func aFailureInAStackedColumnGrowsTheBar() async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    fixture.setLayout(
+        BarLayout(
+            center: BarColumn(
+                parts: [.track], width: .fixed(300), alignment: .leading, stacks: true)),
+        style: .tall)
+    let browser = fixture.browser
+    let scroll = try #require(browser.table.view as? NSScrollView)
+    let before = browser.statusArea.frame.height
+    browser.report("the disk went away")
+    fixture.window.window.layoutIfNeeded()
+    let after = browser.statusArea.frame.height
+    #expect(after > before, "\(before) then \(after)")
+    #expect(scroll.contentInsets.bottom == after)
+}
+
+/// A stack taller than the cap leaves the bar at the cap, cut at its edges.
+@MainActor @Test func aStackTallerThanTheCapIsClipped() async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    fixture.setLayout(
+        BarLayout(
+            center: BarColumn(
+                parts: [.track, .format, .seek, .totals], width: .fixed(300), alignment: .leading,
+                stacks: true)),
+        style: .tall)
+    let browser = fixture.browser
+    let stack = try #require(browser.statusColumn(at: .center)?.stack)
+    #expect(
+        stack.fittingSize.height + 2 * StatusBarLayout.artInsetPoints > StatusBarStyle.tallMaxPoints
+    )
+    #expect(abs(browser.statusArea.frame.height - StatusBarStyle.tallMaxPoints) < 0.01)
+    if #available(macOS 14, *) { #expect(browser.statusArea.clipsToBounds) }
 }

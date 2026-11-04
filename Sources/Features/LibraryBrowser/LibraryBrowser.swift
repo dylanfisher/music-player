@@ -115,6 +115,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var statusSideColumns: [StatusColumn] = []
     /// Keeps the flexible columns' widths equal.
     private var statusEqualWidths: [NSLayoutConstraint] = []
+    /// The columns that stack their parts, whose height the tall bar grows to.
+    private var statusStacks: [StatusColumn] = []
     private var statusHeight: NSLayoutConstraint?
     private var statusArtHeight: NSLayoutConstraint?
     /// The status bar on glass, or the toolbar's material before macOS 26, laid over the bottom
@@ -690,6 +692,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             playCount: showsTimeline ? timelineModel.playCount : nil)
         statusLabel.toolTip = nil
         statusLabel.isHidden = !statusLayout.showsTotals
+        fitStatusBarHeight()
         scanLabel.stringValue = status.scanText ?? ""
         scanLabel.isHidden = status.scanText == nil
         showScanProgress()
@@ -782,6 +785,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusLabel.stringValue = message
         statusLabel.toolTip = message
         statusLabel.isHidden = false
+        fitStatusBarHeight()
     }
 
     @objc private func searchChanged() {
@@ -1454,7 +1458,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         NSLayoutConstraint.deactivate(statusEqualWidths)
         statusArtHeight?.isActive = false
         var flexible: [StatusColumn] = []
-        var stackPoints = 0.0
+        statusStacks = []
         for (place, column) in statusLayout.columns.columns {
             let view = place == .center ? statusCenter : StatusColumn()
             let stretching = statusLayout.stretching(at: place)
@@ -1469,7 +1473,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 },
                 alignment: column.alignment, stacks: stacks, width: column.width,
                 spacing: Self.statusSpacingPoints)
-            if stacks { stackPoints = max(stackPoints, view.stack.fittingSize.height) }
+            if stacks { statusStacks.append(view) }
             if column.width == .flexible { flexible.append(view) }
             switch place {
             case .leading:
@@ -1491,11 +1495,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusBar.middleFills = statusLayout.columns.center.width == .flexible
         statusBar.leadingFills = statusLayout.columns.leading.contains { $0.width == .flexible }
         statusBar.trailingFills = statusLayout.columns.trailing.contains { $0.width == .flexible }
-        // As tall as the track table's header in the minimal style, read from it, so the bar
-        // matches the header on every macOS version.
-        let header = table.table.headerView?.frame.height ?? 0
-        let height = statusLayout.heightPoints(headerPoints: header, stackPoints: stackPoints)
-        statusHeight?.constant = height
         if let art = statusPartViews[.art], art.gestureRecognizers.isEmpty {
             art.addGestureRecognizer(
                 NSClickGestureRecognizer(target: self, action: #selector(openPlayingArt)))
@@ -1503,10 +1502,24 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         if let art = statusPartViews[.art],
             statusLayout.columns.columns.contains(where: { $0.column.parts.contains(.art) })
         {
-            statusArtHeight = art.heightAnchor.constraint(
-                equalToConstant: statusLayout.artPoints(heightPoints: height))
+            statusArtHeight = art.heightAnchor.constraint(equalToConstant: 0)
             statusArtHeight?.isActive = true
         }
+        fitStatusBarHeight()
+    }
+
+    /// Sets the bar's height, the art's and the lists' inset under the bar, for the stacks as
+    /// they are now: a part that shows or hides, the totals' label with a failure say, changes
+    /// a stack's height.
+    private func fitStatusBarHeight() {
+        // As tall as the track table's header in the minimal style, read from it, so the bar
+        // matches the header on every macOS version.
+        let header = table.table.headerView?.frame.height ?? 0
+        let stacks = statusStacks.map { Double($0.stack.fittingSize.height) }.max() ?? 0
+        let height = statusLayout.heightPoints(headerPoints: header, stackPoints: stacks)
+        statusArtHeight?.constant = statusLayout.artPoints(heightPoints: height)
+        guard statusHeight?.constant != CGFloat(height) else { return }
+        statusHeight?.constant = height
         insetListsUnderStatusBar()
     }
 
@@ -1751,6 +1764,9 @@ private func statusBackground(around content: NSView) -> NSView {
         material = effect
     }
     content.translatesAutoresizingMaskIntoConstraints = false
+    // A stack taller than the tall style's cap is cut at the bar's edges, not drawn over the
+    // rows. Views clip by default before macOS 14.
+    if #available(macOS 14, *) { material.clipsToBounds = true }
     NSLayoutConstraint.activate([
         content.leadingAnchor.constraint(equalTo: material.leadingAnchor),
         content.trailingAnchor.constraint(equalTo: material.trailingAnchor),

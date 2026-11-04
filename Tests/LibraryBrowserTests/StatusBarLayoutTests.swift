@@ -40,10 +40,10 @@ private func column(
     #expect(minimal.artPoints(heightPoints: 24) == 24 - 2 * StatusBarLayout.artInsetPoints)
     let tall = StatusBarLayout(columns: stacked, style: .tall)
     #expect(tall.stacks(at: .center))
-    #expect(tall.heightPoints(headerPoints: 24) == StatusBarLayout.tallPoints)
+    #expect(tall.heightPoints(headerPoints: 24) == StatusBarStyle.tallPoints)
     #expect(tall.heightPoints(headerPoints: 60) == 60)
     #expect(tall.heightPoints(headerPoints: 24, stackPoints: 50) == 50 + 6)
-    #expect(tall.heightPoints(headerPoints: 24, stackPoints: 500) == StatusBarLayout.tallMaxPoints)
+    #expect(tall.heightPoints(headerPoints: 24, stackPoints: 500) == StatusBarStyle.tallMaxPoints)
 }
 
 @MainActor @Test func theColumnsHoldTheirPartsAndAFailureShowsWithoutTotals() throws {

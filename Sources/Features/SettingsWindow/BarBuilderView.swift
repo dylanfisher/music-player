@@ -8,7 +8,6 @@ import Settings
 /// ⌘→ move the selected part, and Delete takes it out of the bar (ADR 0085).
 @MainActor
 final class BarBuilderView: NSView {
-    static let barPoints = 44.0
     static let chipPoints = 20.0
     static let trayPoints = 44.0
     private static let chipPadding = 8.0
@@ -50,7 +49,9 @@ final class BarBuilderView: NSView {
     var barHeight: Double {
         let tallest = model.layout.columns.filter(\.column.stacks).map(\.column.parts.count).max()
         let stacked = Double(tallest ?? 0) * (Self.chipPoints + Self.chipSpacing)
-        return max(Self.barPoints, stacked + 2 * Self.columnPadding)
+        return min(
+            max(StatusBarStyle.tallPoints, stacked + 2 * Self.columnPadding),
+            StatusBarStyle.tallMaxPoints)
     }
 
     override var intrinsicContentSize: NSSize {
@@ -159,7 +160,13 @@ final class BarBuilderView: NSView {
             drawText("Every part is in the bar", in: trayFrame, color: .secondaryLabelColor)
         }
         for chip in chips where !(chip.part == pressed && dragPoint != nil) {
+            // A stack taller than the bar's cap is clipped, as the bar clips it.
+            NSGraphicsContext.saveGraphicsState()
+            if chip.place != nil {
+                NSRect(x: 0, y: 0, width: bounds.width, height: barHeight).clip()
+            }
             drawChip(chip.part, in: chip.frame, selected: isSelected(chip))
+            NSGraphicsContext.restoreGraphicsState()
         }
         if let pressed, let dragPoint {
             let width = chipWidth(pressed)

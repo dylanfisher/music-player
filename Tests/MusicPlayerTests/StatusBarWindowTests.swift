@@ -133,7 +133,7 @@ func noStatusBarPartResizesTheWindowOrItsSplits(_ size: NSSize?) async throws {
     fixture.window.toggleStatusBar()
     fixture.setParts([.art], style: .tall)
     #expect(
-        Double(scroll.contentInsets.bottom) == StatusBarLayout.tallPoints,
+        Double(scroll.contentInsets.bottom) == StatusBarStyle.tallPoints,
         "\(scroll.contentInsets) \(area.frame)")
 }
 
