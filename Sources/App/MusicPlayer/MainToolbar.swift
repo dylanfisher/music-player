@@ -54,6 +54,13 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         toolbar.allowsUserCustomization = true
         toolbar.autosavesConfiguration = false
         toolbar.displayMode = .iconOnly
+        // AppKit centers the status on the window, whatever sits on either side, while it
+        // fits there at its width (ADR 0087).
+        if #available(macOS 13, *) {
+            toolbar.centeredItemIdentifiers = [ToolbarItem.status.identifier]
+        } else {
+            toolbar.centeredItemIdentifier = ToolbarItem.status.identifier
+        }
     }
 
     /// Puts the toolbar in `window` with the saved items. A toolbar fills itself with the

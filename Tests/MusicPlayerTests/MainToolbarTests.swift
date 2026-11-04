@@ -201,3 +201,37 @@ private func nextTurn() async {
         #expect(drawing !== made.toolbar.items[index].view, "\(item)")
     }
 }
+
+/// The status centers on the window whatever sits on either side of it: nothing on the left
+/// and Search on the right, as the owner lays it out, the default set, and a lopsided one; with
+/// the glass's full-size content view too.
+@MainActor @Test(arguments: [false, true])
+func theStatusCentersOnTheWindow(_ fullSize: Bool) throws {
+    let sets: [[ToolbarItem]] = [
+        [.flexibleSpace, .status, .flexibleSpace, .search],
+        ToolbarItem.defaultItems,
+        [.transport, .volume, .shuffle, .repeat, .flexibleSpace, .status, .flexibleSpace, .search],
+    ]
+    for items in sets {
+        let header = HeaderStatus()
+        let made = MainToolbar(
+            identifier: UUID().uuidString, transport: NSView(), status: header.view,
+            search: NSSearchField(), dispatcher: try dispatcher(), items: items)
+        var style: NSWindow.StyleMask = [.titled, .resizable]
+        if fullSize { style.insert(.fullSizeContentView) }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1440, height: 400), styleMask: style,
+            backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.toolbarStyle = .expanded
+        made.attach(to: window)
+        window.orderFront(nil)
+        for width in [1440.0, 1280] {
+            window.setContentSize(NSSize(width: width, height: 400))
+            window.layoutIfNeeded()
+            let status = header.view.convert(header.view.bounds, to: nil)
+            #expect(abs(status.midX - width / 2) <= 0.5, "\(items) at \(width): \(status)")
+        }
+    }
+}
