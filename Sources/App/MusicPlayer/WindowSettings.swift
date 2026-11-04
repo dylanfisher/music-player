@@ -20,6 +20,7 @@ struct WindowSettings {
     var groupByAlbumArtist: Bool
     var tableAppearance: TableAppearance
     var statusBar: StatusBarLayout
+    var headerStatus: BarLayout<HeaderPart>
 
     @MainActor init(_ settings: ConfigStore<AppSettings>, state: StateStore<AppState>) {
         frame = state[\.windowFrame]
@@ -38,6 +39,7 @@ struct WindowSettings {
         groupByAlbumArtist = settings[\.groupByAlbumArtist]
         tableAppearance = TableAppearance(settings)
         statusBar = StatusBarLayout(settings)
+        headerStatus = settings[\.headerStatusLayout]
     }
 }
 

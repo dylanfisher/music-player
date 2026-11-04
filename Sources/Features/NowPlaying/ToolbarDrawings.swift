@@ -1,9 +1,11 @@
 import AppKit
+import Settings
 
 extension NowPlayingBar {
     /// The status's width in its drawing, in points.
     static let drawingWidthPoints = 240.0
-    static let drawingArtPoints = 32.0
+    /// How much smaller than the toolbar's status its drawing is.
+    static let drawingScale = 0.7
 
     /// The transport as the customization sheet shows it: the same buttons, wired to nothing.
     public static func transportDrawing() -> NSView {
@@ -14,41 +16,38 @@ extension NowPlayingBar {
         return stack
     }
 
-    /// The now-playing status as the customization sheet shows it: art, a title, an artist and
-    /// album, and a seek bar part played, at the size the toolbar shows it at its narrowest.
-    public static func statusDrawing() -> NSView {
+    /// The now-playing status as the customization sheet shows it: `layout`'s parts with a
+    /// placeholder track and a seek bar part played, at the width the toolbar shows it at its
+    /// narrowest.
+    public static func statusDrawing(_ layout: BarLayout<HeaderPart>) -> NSView {
         guard
             let note = NSImage(
                 systemSymbolName: "music.quarternote.3", accessibilityDescription: nil)
         else { preconditionFailure("SF Symbols has no music.quarternote.3") }
-        let art = NSImageView(image: note)
-        art.wantsLayer = true
-        art.layer?.cornerRadius = 3
-        art.layer?.backgroundColor = NSColor.quaternaryLabelColor.cgColor
-        art.contentTintColor = .secondaryLabelColor
-        let title = NSTextField(labelWithString: "Song Title")
-        title.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        let subtitle = NSTextField(labelWithString: "Artist — Album")
-        subtitle.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        subtitle.textColor = .secondaryLabelColor
-        let seek = SeekBox()
-        seek.bar.fraction = 0.35
-        seek.showTimes(elapsed: "1:10", total: "3:20")
-        let text = NSStackView(views: [title, subtitle, seek])
-        text.orientation = .vertical
-        text.alignment = .leading
-        text.spacing = 1
-        let drawing = NSStackView(views: [art, text])
-        drawing.spacing = 8
-        for view in [art, seek, drawing] as [NSView] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-        }
+        let drawing = HeaderStatus()
+        drawing.apply(layout)
+        drawing.art.image = note
+        drawing.art.contentTintColor = .secondaryLabelColor
+        drawing.titleLabel.stringValue = "Song Title"
+        drawing.subtitleLabel.stringValue = "Artist — Album"
+        drawing.formatLabel.stringValue = "44.1 kHz 16-bit FLAC"
+        drawing.seekBox.bar.fraction = 0.35
+        drawing.seekBox.showTimes(elapsed: "1:10", total: "3:20")
+        // Drawn smaller, since the sheet's default set is about as tall as a button's row.
+        let width = drawingWidthPoints / drawingScale
+        let size = NSSize(width: width, height: drawing.view.fittingSize.height)
+        drawing.view.frame = NSRect(origin: .zero, size: size)
+        let shown = NSSize(width: drawingWidthPoints, height: size.height * drawingScale)
+        // The frame first: the bounds' scale is their size against it, and a later frame
+        // change keeps the scale.
+        let scaled = NSView(frame: NSRect(origin: .zero, size: shown))
+        scaled.setBoundsSize(size)
+        scaled.addSubview(drawing.view)
+        scaled.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            art.widthAnchor.constraint(equalToConstant: drawingArtPoints),
-            art.heightAnchor.constraint(equalToConstant: drawingArtPoints),
-            seek.widthAnchor.constraint(equalTo: text.widthAnchor),
-            drawing.widthAnchor.constraint(equalToConstant: drawingWidthPoints),
+            scaled.widthAnchor.constraint(equalToConstant: shown.width),
+            scaled.heightAnchor.constraint(equalToConstant: shown.height),
         ])
-        return drawing
+        return scaled
     }
 }

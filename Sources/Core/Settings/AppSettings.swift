@@ -80,6 +80,10 @@ public struct AppSettings: SettingsSchema {
         "appearance.statusBarLayout", title: "Status Bar Layout",
         default: BarLayout.defaultStatusBar,
         "What the status bar shows, in columns around its centered middle.")
+    public let headerStatusLayout = Setting(
+        "appearance.headerStatusLayout", title: "Toolbar Status Layout",
+        default: BarLayout.defaultHeaderStatus,
+        "What the toolbar's now-playing status shows, in columns that stack their parts.")
 
     public func conflicts(_ values: [String: any SettingValue]) -> [SettingConflict] {
         guard let sync = values[syncFolder.key] as? SyncFolder,

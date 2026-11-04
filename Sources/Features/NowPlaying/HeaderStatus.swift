@@ -1,0 +1,112 @@
+import AppKit
+import BarView
+import Settings
+
+/// The toolbar's now-playing status: the playing track's art, title, artist and album, format
+/// line and seek bar, laid out in columns as `appearance.headerStatusLayout` says (ADR 0085).
+/// A flexible center column takes the width the side columns leave, a stacked column always
+/// stacks, and the status is as tall as its tallest column.
+@MainActor
+public final class HeaderStatus {
+    static let spacingPoints = 10.0
+    /// Between the lines of a stacked column.
+    static let lineSpacingPoints = 1.0
+    /// Above a stacked seek bar.
+    static let seekSpacingPoints = 2.0
+
+    /// The status, which the toolbar's item shows.
+    public let view = NSView()
+    let art = NSImageView()
+    let titleLabel = NSTextField(labelWithString: "")
+    let subtitleLabel = NSTextField(labelWithString: "")
+    let formatLabel = NSTextField(labelWithString: "")
+    let seekBox = SeekBox()
+    private let leading = NSStackView()
+    private let trailing = NSStackView()
+    private let columns = BarColumns()
+    private let row: CenteredRow
+    private(set) var layout = BarLayout.defaultHeaderStatus
+
+    init() {
+        row = CenteredRow(
+            leading: leading, middle: columns.center, trailing: trailing,
+            spacing: Self.spacingPoints, inset: 0, fillsBeforeCentering: true)
+        art.imageScaling = .scaleProportionallyUpOrDown
+        art.wantsLayer = true
+        art.layer?.cornerRadius = 3
+        art.layer?.backgroundColor = NSColor.quaternaryLabelColor.cgColor
+        art.translatesAutoresizingMaskIntoConstraints = false
+        let artPoints = CGFloat(HeaderPart.artPoints)
+        NSLayoutConstraint.activate([
+            art.widthAnchor.constraint(equalToConstant: artPoints),
+            art.heightAnchor.constraint(equalToConstant: artPoints),
+        ])
+        titleLabel.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        subtitleLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        formatLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize - 1)
+        for label in [subtitleLabel, formatLabel] {
+            label.textColor = .secondaryLabelColor
+        }
+        for label in [titleLabel, subtitleLabel, formatLabel] {
+            label.lineBreakMode = .byTruncatingTail
+        }
+        for stack in [leading, trailing] {
+            stack.detachesHiddenViews = true
+            stack.distribution = .fill
+            stack.spacing = Self.spacingPoints
+            stack.alignment = .centerY
+            stack.setHuggingPriority(.init(1), for: .horizontal)
+        }
+        row.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(row)
+        var fit = [
+            row.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            row.topAnchor.constraint(equalTo: view.topAnchor),
+            row.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ]
+        // The row centers its views on its middle line; these make it as tall as the tallest.
+        for edge in [leading, columns.center, trailing] as [NSView] {
+            fit += [
+                edge.topAnchor.constraint(greaterThanOrEqualTo: row.topAnchor),
+                edge.bottomAnchor.constraint(lessThanOrEqualTo: row.bottomAnchor),
+            ]
+        }
+        NSLayoutConstraint.activate(fit)
+        apply(layout)
+    }
+
+    /// The view that shows `part`.
+    func view(for part: HeaderPart) -> NSView {
+        switch part {
+        case .art: art
+        case .title: titleLabel
+        case .subtitle: subtitleLabel
+        case .format: formatLabel
+        case .seek: seekBox
+        }
+    }
+
+    /// Lays the status out as `layout` says.
+    public func apply(_ layout: BarLayout<HeaderPart>) {
+        self.layout = layout
+        columns.layOut(
+            layout, in: row, leading: leading, trailing: trailing, trailingBefore: nil,
+            spacing: Self.spacingPoints, stacks: { layout[$0]?.stacks == true },
+            content: { [self] _, column in
+                (column.parts.map(view(for:)), column.parts.contains(.seek) ? seekBox : nil)
+            })
+        for (place, column) in layout.columns {
+            guard let stack = columns.column(at: place)?.stack else { continue }
+            let views = stack.arrangedSubviews
+            for (view, next) in zip(views, views.dropFirst()) {
+                stack.setCustomSpacing(
+                    !column.stacks
+                        ? NSStackView.useDefaultSpacing
+                        : next === seekBox ? Self.seekSpacingPoints : Self.lineSpacingPoints,
+                    after: view)
+            }
+        }
+        row.spaceEdges(leading: !layout.leading.isEmpty, trailing: !layout.trailing.isEmpty)
+    }
+}

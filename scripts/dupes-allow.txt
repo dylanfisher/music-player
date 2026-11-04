@@ -97,3 +97,5 @@ literal "Content-Type" | files Sources/Core/UPnP/SOAPAction.swift Sources/Primit
 literal "Game" | files Sources/Core/Metadata/ID3v1Genres.swift Sources/Core/Receiver/ReceiverInput.swift | an ID3v1 genre name and the receiver's input of that name
 literal "root" | files Sources/Core/Library/SwinsianArchive.swift Sources/Core/UPnP/DeviceDescription.swift | the root object of Swinsian's archive and the root element of a UPnP description, two formats
 literal "Stereo" | files Sources/Core/Library/BrowserGroupingSQL.swift Sources/Core/Receiver/ReceiverInput.swift | two channels in the browser's Channels column, and the receiver's Stereo sound mode
+literal "Controls" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Core/Commands/AppMenus.swift | the toolbar item of the previous, play and next buttons, as Swinsian names it, and the menu of every playback command
+literal "Title" | files Sources/Core/Library/TrackColumnTitle.swift Sources/Core/Settings/HeaderPart.swift | the track table's column and the toolbar status's part, two lists that each name the track's title

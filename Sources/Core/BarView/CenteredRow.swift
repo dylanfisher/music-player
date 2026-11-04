@@ -7,6 +7,9 @@ import AppKit
 /// content can move a divider or resize the window. When the middle can't be centered without
 /// overlapping an edge view it moves aside instead, and only when nothing fits at all does it
 /// overlap them.
+///
+/// A row that fills before it centers, as the toolbar's status is, centers on itself only, and
+/// a flexible middle there takes all the width the edge views leave before it centers.
 public final class CenteredRow: NSView {
     /// Keeps the middle clear of the edge views, under `NSSplitViewItem`'s lowest holding
     /// priority, 250, so content wider than the row overlaps rather than widens its pane.
@@ -21,13 +24,19 @@ public final class CenteredRow: NSView {
     /// The middle's pull to the row's width, under the centering, so it grows evenly to both
     /// sides until the nearer edge view stops it.
     static let fillPriority = NSLayoutConstraint.Priority(200)
+    /// The middle's pull to the row's width in a row that fills before it centers: over the
+    /// centering, and under `StatusColumn.equalPriority`, so flexible columns still share.
+    static let fillFirstPriority = NSLayoutConstraint.Priority(213)
+    /// The centering in a row that fills before it centers: under the fill, and over the text's
+    /// compression resistance, so text gives way before the middle moves aside.
+    static let afterFillCenteringPriority = NSLayoutConstraint.Priority(212)
 
     let leading: NSView
     let middle: NSView
     let trailing: NSView
     private lazy var fill: NSLayoutConstraint = {
         let fill = middle.widthAnchor.constraint(equalTo: widthAnchor)
-        fill.priority = Self.fillPriority
+        fill.priority = fillsBeforeCentering ? Self.fillFirstPriority : Self.fillPriority
         return fill
     }()
     /// The edge views' pulls toward the middle, under the centering, so they take the width
@@ -35,6 +44,8 @@ public final class CenteredRow: NSView {
     private lazy var leadingFill = edgeFill(leading.trailingAnchor, middle.leadingAnchor)
     private lazy var trailingFill = edgeFill(middle.trailingAnchor, trailing.leadingAnchor)
     private let spacing: CGFloat
+    private let fillsBeforeCentering: Bool
+    private var clearance: [NSLayoutConstraint] = []
     private var windowCentering: NSLayoutConstraint?
     /// The span of the content view the middle centers on when `centersFrom` is set.
     private var centeringGuide: NSLayoutGuide?
@@ -64,6 +75,13 @@ public final class CenteredRow: NSView {
         set { trailingFill.isActive = newValue }
     }
 
+    /// Whether the middle keeps the spacing from each edge view while that view is empty; an
+    /// empty edge without it lets the middle reach the row's inset.
+    public func spaceEdges(leading: Bool, trailing: Bool) {
+        clearance[0].constant = leading ? spacing : 0
+        clearance[1].constant = trailing ? -spacing : 0
+    }
+
     private func edgeFill(_ left: NSLayoutXAxisAnchor, _ right: NSLayoutXAxisAnchor)
         -> NSLayoutConstraint
     {
@@ -73,12 +91,14 @@ public final class CenteredRow: NSView {
     }
 
     public init(
-        leading: NSView, middle: NSView, trailing: NSView, spacing: CGFloat, inset: CGFloat
+        leading: NSView, middle: NSView, trailing: NSView, spacing: CGFloat, inset: CGFloat,
+        fillsBeforeCentering: Bool = false
     ) {
         self.leading = leading
         self.middle = middle
         self.trailing = trailing
         self.spacing = spacing
+        self.fillsBeforeCentering = fillsBeforeCentering
         super.init(frame: .zero)
         for view in [leading, middle, trailing] {
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -86,8 +106,9 @@ public final class CenteredRow: NSView {
             view.centerYAnchor.constraint(equalTo: centerYAnchor).isActive = true
         }
         let rowCentering = middle.centerXAnchor.constraint(equalTo: centerXAnchor)
-        rowCentering.priority = Self.rowCenteringPriority
-        let clearance = [
+        rowCentering.priority =
+            fillsBeforeCentering ? Self.afterFillCenteringPriority : Self.rowCenteringPriority
+        clearance = [
             middle.leadingAnchor.constraint(
                 greaterThanOrEqualTo: leading.trailingAnchor, constant: spacing),
             middle.trailingAnchor.constraint(
@@ -115,7 +136,8 @@ public final class CenteredRow: NSView {
         windowCentering = nil
         centeringGuide.map { $0.owningView?.removeLayoutGuide($0) }
         centeringGuide = nil
-        guard let content = window?.contentView, isDescendant(of: content) else { return }
+        guard !fillsBeforeCentering, let content = window?.contentView, isDescendant(of: content)
+        else { return }
         var anchor = content.centerXAnchor
         if let start = centersFrom, start.isDescendant(of: content) {
             let guide = NSLayoutGuide()

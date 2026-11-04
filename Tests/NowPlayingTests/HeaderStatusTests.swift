@@ -1,0 +1,138 @@
+import AppKit
+import Testing
+
+@testable import NowPlaying
+@testable import Settings
+
+private let width = 420.0
+
+/// A status with a track's text in it, laid out as `layout` says at `width`.
+@MainActor
+private func status(_ layout: BarLayout<HeaderPart> = .defaultHeaderStatus) -> HeaderStatus {
+    let status = HeaderStatus()
+    status.apply(layout)
+    status.titleLabel.stringValue = "A Title"
+    status.subtitleLabel.stringValue = "An Artist — An Album"
+    status.formatLabel.stringValue = "44.1 kHz 16-bit FLAC"
+    status.seekBox.showTimes(elapsed: "1:10", total: "3:20")
+    status.view.frame = NSRect(x: 0, y: 0, width: width, height: status.view.fittingSize.height)
+    status.view.layoutSubtreeIfNeeded()
+    return status
+}
+
+/// The header as phase 35 built it, by hand: the art, then the three lines over the seek bar
+/// across the rest. The default layout has to put every part where this does.
+@MainActor
+private func phase35Header(like status: HeaderStatus) -> (NSView, [HeaderPart: NSView]) {
+    let art = NSView()
+    let labels = [status.titleLabel, status.subtitleLabel, status.formatLabel].map { label in
+        let copy = NSTextField(labelWithString: label.stringValue)
+        copy.font = label.font
+        copy.lineBreakMode = .byTruncatingTail
+        copy.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return copy
+    }
+    let seek = SeekBox()
+    seek.showTimes(elapsed: "1:10", total: "3:20")
+    let text = NSStackView(views: labels)
+    text.orientation = .vertical
+    text.alignment = .leading
+    text.spacing = 1
+    let middle = NSStackView(views: [text, seek])
+    middle.orientation = .vertical
+    middle.alignment = .leading
+    middle.spacing = 2
+    for view in [text, seek] {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.widthAnchor.constraint(equalTo: middle.widthAnchor).isActive = true
+    }
+    let detailed = NSStackView(views: [art, middle])
+    detailed.spacing = 10
+    detailed.alignment = .centerY
+    art.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+        middle.topAnchor.constraint(greaterThanOrEqualTo: detailed.topAnchor),
+        middle.bottomAnchor.constraint(lessThanOrEqualTo: detailed.bottomAnchor),
+        art.widthAnchor.constraint(equalToConstant: 48),
+        art.heightAnchor.constraint(equalToConstant: 48),
+    ])
+    detailed.distribution = .fill
+    detailed.setClippingResistancePriority(.required, for: .vertical)
+    middle.setHuggingPriority(.init(1), for: .horizontal)
+    art.setContentHuggingPriority(.required, for: .horizontal)
+    detailed.frame = NSRect(x: 0, y: 0, width: width, height: detailed.fittingSize.height)
+    detailed.layoutSubtreeIfNeeded()
+    return (
+        detailed,
+        [.art: art, .title: labels[0], .subtitle: labels[1], .format: labels[2], .seek: seek]
+    )
+}
+
+@MainActor
+private func frame(_ view: NSView, in root: NSView) -> NSRect {
+    view.convert(view.bounds, to: root)
+}
+
+@MainActor @Test func theDefaultLayoutIsTheDetailedHeaderAsItWas() {
+    let status = status()
+    let (old, oldParts) = phase35Header(like: status)
+    #expect(status.view.fittingSize.height == old.fittingSize.height)
+    for part in HeaderPart.allCases {
+        let now = frame(status.view(for: part), in: status.view)
+        let before = frame(oldParts[part]!, in: old)
+        #expect(now.minX == before.minX && now.minY == before.minY, "\(part): \(now) \(before)")
+        #expect(now.height == before.height, "\(part): \(now) \(before)")
+    }
+    // The labels as wide as their text, which they were drawn at, and the seek bar across.
+    let seek = frame(status.seekBox, in: status.view)
+    #expect(seek.width == frame(oldParts[.seek]!, in: old).width)
+    #expect(abs(seek.maxX - width) < 0.01, "\(seek) \(frame(oldParts[.seek]!, in: old))")
+}
+
+/// The owner's other layout: the title over the artist centered in the status, and the seek
+/// bar under them, with the art and the format left out.
+@MainActor @Test func aCenteredLayoutCentersOnTheStatus() {
+    let layout = BarLayout<HeaderPart>(
+        center: BarColumn(
+            parts: [.title, .subtitle, .seek], width: .flexible, alignment: .center, stacks: true))
+    let status = status(layout)
+    for part in [HeaderPart.title, .subtitle] {
+        let label = frame(status.view(for: part), in: status.view)
+        #expect(abs(label.midX - width / 2) < 1, "\(part) \(label)")
+    }
+    let seek = frame(status.seekBox, in: status.view)
+    #expect(seek.minX == 0 && seek.maxX == width)
+    #expect(status.art.superview == nil && status.formatLabel.superview == nil)
+}
+
+/// A fixed center column centers on the status whatever the sides hold, until it would
+/// overlap one.
+@MainActor @Test func aFixedCenterColumnCentersBesideTheArt() {
+    let layout = BarLayout<HeaderPart>(
+        leading: [BarColumn(parts: [.art], width: .fixed(48), alignment: .leading)],
+        center: BarColumn(parts: [.seek], width: .fixed(200), alignment: .center),
+        trailing: [BarColumn(parts: [.format], width: .flexible, alignment: .trailing)])
+    let status = status(layout)
+    let seek = frame(status.seekBox, in: status.view)
+    #expect(abs(seek.midX - width / 2) < 1 && seek.width == 200, "\(seek)")
+    #expect(frame(status.art, in: status.view).minX == 0)
+    let format = frame(status.formatLabel, in: status.view)
+    #expect(status.formatLabel.alignmentRect(forFrame: format).maxX <= width, "\(format)")
+}
+
+/// Side by side, a column's parts keep the row's spacing, however a stacked layout spaced them
+/// before.
+@MainActor @Test func anUnstackedColumnPutsItsPartsSideBySide() {
+    let status = status()
+    status.apply(
+        BarLayout(
+            center: BarColumn(
+                parts: [.title, .format], width: .flexible, alignment: .leading, stacks: false)))
+    status.view.layoutSubtreeIfNeeded()
+    let title = status.titleLabel.alignmentRect(
+        forFrame: frame(status.titleLabel, in: status.view))
+    let format = status.formatLabel.alignmentRect(
+        forFrame: frame(status.formatLabel, in: status.view))
+    #expect(abs(format.minX - title.maxX - HeaderStatus.spacingPoints) < 0.5, "\(title) \(format)")
+    #expect(abs(format.midY - title.midY) < 1)
+}

@@ -3,6 +3,7 @@ import Testing
 
 @testable import Commands
 @testable import MusicPlayer
+@testable import NowPlaying
 @testable import Settings
 
 @MainActor
@@ -56,7 +57,7 @@ private func nextTurn() async {
 }
 
 @MainActor @Test func removingOrAddingAnItemReportsTheItems() async throws {
-    let made = toolbar(ToolbarItem.defaultItems, try dispatcher())
+    let made = toolbar([.transport, .status, .queue, .search], try dispatcher())
     var reported: [[ToolbarItem]] = []
     made.itemsChanged = { reported.append($0) }
     made.toolbar.removeItem(at: 0)
@@ -69,6 +70,51 @@ private func nextTurn() async {
     made.show([.queue])
     await nextTurn()
     #expect(reported.count == 2)
+}
+
+/// Swinsian's set, with the status in the middle and the queue left to the menu and its keys.
+@MainActor @Test func theDefaultSetIsSwinsians() throws {
+    #expect(
+        ToolbarItem.defaultItems == [
+            .transport, .flexibleSpace, .volume, .flexibleSpace, .status, .flexibleSpace,
+            .shuffle, .flexibleSpace, .search,
+        ])
+    let made = toolbar([], try dispatcher())
+    #expect(
+        made.toolbarDefaultItemIdentifiers(made.toolbar)
+            == ToolbarItem.defaultItems.map(\.identifier))
+    #expect(ToolbarItem.transport.label == "Controls")
+}
+
+/// A toolbar saved before the status had a layout lists the same items, which all come back.
+@MainActor @Test func aToolbarSavedBeforeTheLayoutComesBackWhole() throws {
+    let saved: [ToolbarItem] = [.transport, .status, .queue, .search]
+    #expect(toolbar(saved, try dispatcher()).items == saved)
+}
+
+/// The status's item takes its view's height again when its layout changes: one line is lower
+/// than the default's three over a seek bar.
+@MainActor @Test func aLayoutChangeSizesTheStatusAgain() throws {
+    let header = HeaderStatus()
+    let made = MainToolbar(
+        identifier: UUID().uuidString, transport: NSView(), status: header.view,
+        search: NSSearchField(), dispatcher: try dispatcher(), items: [.status])
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 1200, height: 400), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    made.attach(to: window)
+    let item = try #require(made.toolbar.items.first)
+    let tall = try #require((item.value(forKey: "minSize") as? NSValue)?.sizeValue.height)
+    #expect(tall == header.view.fittingSize.height)
+    let oneLine = BarLayout<HeaderPart>(
+        center: BarColumn(parts: [.title], width: .flexible, alignment: .center))
+    header.apply(oneLine)
+    made.statusLayout = oneLine
+    made.statusLayoutChanged()
+    let short = try #require((item.value(forKey: "maxSize") as? NSValue)?.sizeValue.height)
+    #expect(short == header.view.fittingSize.height && short < tall, "\(short) \(tall)")
 }
 
 @MainActor @Test func theRepeatButtonStepsThroughTheModes() throws {

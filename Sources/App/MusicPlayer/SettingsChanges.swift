@@ -108,6 +108,9 @@ extension AppDelegate {
         if !keys.isDisjoint(with: StatusBarLayout.keys) {
             applyStatusBar(StatusBarLayout(settings))
         }
+        if keys.contains(schema.headerStatusLayout.key) {
+            applyHeaderStatus(settings[\.headerStatusLayout])
+        }
         if !keys.isDisjoint(with: [schema.receiverEnabled.key, schema.receiverAddress.key]) {
             applyReceiverSetting()
         }
@@ -133,6 +136,13 @@ extension AppDelegate {
                 uniqueKeysWithValues: StatusPart.allCases.compactMap { part in
                     parts.view(for: part).map { (part, $0) }
                 }))
+    }
+
+    /// Lays out the toolbar's status, and its drawing in the customization sheet.
+    func applyHeaderStatus(_ layout: BarLayout<HeaderPart>) {
+        nowPlaying?.header.apply(layout)
+        toolbar?.statusLayout = layout
+        toolbar?.statusLayoutChanged()
     }
 
     /// The Settings window, made on first use.

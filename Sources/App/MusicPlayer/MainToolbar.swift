@@ -12,7 +12,8 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     static let volumeRangeDecibels = -60.0...0
     static let searchPoints = 220.0
     static let statusMinimumPoints = 280.0
-    static let statusMaximumPoints = 10_000.0
+    /// As wide as Swinsian's status, so the flexible spaces beside it keep a share of the width.
+    static let statusMaximumPoints = 560.0
     static let volumePoints = 90.0
     let toolbar: NSToolbar
     /// The output picker's menu, which the app fills as it opens.
@@ -22,6 +23,8 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     /// Sets the digital volume in dB; `done` is false while a drag goes on, and true for every
     /// other change, which is saved.
     var setVolume: (_ decibels: Double, _ done: Bool) -> Void = { _, _ in }
+    /// The now-playing status's layout, which its drawing in the customization sheet shows.
+    var statusLayout = BarLayout.defaultHeaderStatus
     /// Called with the toolbar's items after the user adds, removes or moves one.
     var itemsChanged: ([ToolbarItem]) -> Void = { _ in }
     private let views: [ToolbarItem: NSView]
@@ -86,7 +89,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
         guard let item = ToolbarItem(identifier) else { return nil }
-        if !flag, let drawing = Self.drawing(of: item) {
+        if !flag, let drawing = drawing(of: item) {
             let shown = NSToolbarItem(itemIdentifier: identifier)
             shown.view = drawing
             label(shown, item)
@@ -95,19 +98,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         if flag, let view = views[item] {
             let shown = NSToolbarItem(itemIdentifier: identifier)
             shown.view = view
-            if item == .status {
-                // The status takes the room the other items leave. The toolbar measures a view
-                // at its fitting size, so constraints can't widen it; `minSize` and `maxSize`,
-                // deprecated in macOS 12 with no replacement for a flexible width, can. KVC
-                // sets them without the deprecation warning.
-                let height = view.fittingSize.height
-                shown.setValue(
-                    NSValue(size: NSSize(width: Self.statusMinimumPoints, height: height)),
-                    forKey: "minSize")
-                shown.setValue(
-                    NSValue(size: NSSize(width: Self.statusMaximumPoints, height: height)),
-                    forKey: "maxSize")
-            }
+            if item == .status { Self.sizeStatus(shown) }
             label(shown, item)
             return shown
         }
@@ -128,22 +119,41 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         return made
     }
 
+    /// Sizes the status's item again for its view's layout, which sets its height.
+    func statusLayoutChanged() {
+        for shown in toolbar.items where ToolbarItem(shown.itemIdentifier) == .status {
+            Self.sizeStatus(shown)
+        }
+    }
+
+    /// The status takes the room the other items leave, at its view's height. The toolbar
+    /// measures a view at its fitting size, so constraints can't widen it; `minSize` and
+    /// `maxSize`, deprecated in macOS 12 with no replacement for a flexible width, can. KVC sets
+    /// them without the deprecation warning.
+    private static func sizeStatus(_ shown: NSToolbarItem) {
+        let height = shown.view?.fittingSize.height ?? 0
+        shown.setValue(
+            NSValue(size: NSSize(width: statusMinimumPoints, height: height)), forKey: "minSize")
+        shown.setValue(
+            NSValue(size: NSSize(width: statusMaximumPoints, height: height)), forKey: "maxSize")
+    }
+
     /// What the customization sheet shows for an item whose view is a feature's: a copy of the
     /// view wired to nothing, so the sheet, the default set included, shows what the toolbar
     /// will look like. A view can be in one place only, and AppKit's sheet drew no image for
     /// these items on macOS 12.
-    static func drawing(of item: ToolbarItem) -> NSView? {
+    func drawing(of item: ToolbarItem) -> NSView? {
         switch item {
         case .transport: return NowPlayingBar.transportDrawing()
-        case .status: return NowPlayingBar.statusDrawing()
+        case .status: return NowPlayingBar.statusDrawing(statusLayout)
         case .search:
             let field = NSSearchField()
             field.translatesAutoresizingMaskIntoConstraints = false
-            field.widthAnchor.constraint(equalToConstant: searchPoints).isActive = true
+            field.widthAnchor.constraint(equalToConstant: Self.searchPoints).isActive = true
             return field
         case .volume:
             let slider = VolumeItem.slider()
-            slider.doubleValue = volumeRangeDecibels.lowerBound / 3
+            slider.doubleValue = Self.volumeRangeDecibels.lowerBound / 3
             return slider
         default: return nil
         }
@@ -195,7 +205,7 @@ extension ToolbarItem {
 
     var label: String {
         switch self {
-        case .transport: "Playback Controls"
+        case .transport: "Controls"
         case .volume: "Volume"
         case .status: "Now Playing"
         case .search: "Search"

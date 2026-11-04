@@ -17,14 +17,14 @@ public final class NowPlayingBar: NSObject {
     /// How often the position updates while playing. Nothing ticks while paused or stopped, or
     /// while the window doesn't show.
     static let positionIntervalSeconds = 0.5
-    /// The art's size in points.
-    public static let artPoints = 48.0
 
     public let model: NowPlayingModel
     /// The previous, play and next buttons.
     public let transport: NSView
-    /// Art, title, artist and album, the format line, and a seek bar with times.
-    public let status = NSView()
+    /// Art, title, artist and album, the format line, and a seek bar with times, in the
+    /// columns the user lays out.
+    public let header = HeaderStatus()
+    public var status: NSView { header.view }
     /// The status bar's art, track, format and seek bar.
     public let statusBar = StatusBarParts()
     private let artwork: ArtworkLoader
@@ -40,15 +40,9 @@ public final class NowPlayingBar: NSObject {
     private var windowShows = true
     private var occlusion: NSObjectProtocol?
 
-    private let art = NSImageView()
-    private let titleLabel = NSTextField(labelWithString: "")
-    private let subtitleLabel = NSTextField(labelWithString: "")
-    private let formatLabel = NSTextField(labelWithString: "")
-    let seekBox = SeekBox()
     private let previousButton = NSButton()
     private let playButton = NSButton()
     private let nextButton = NSButton()
-    private let detailed = NSStackView()
 
     public init(model: NowPlayingModel, artwork: ArtworkLoader) {
         self.model = model
@@ -68,15 +62,6 @@ public final class NowPlayingBar: NSObject {
         for bar in seekBars {
             bar.seek = { [weak self] fraction, done in self?.seek(to: fraction, done: done) }
         }
-        buildDetailed()
-        detailed.translatesAutoresizingMaskIntoConstraints = false
-        status.addSubview(detailed)
-        NSLayoutConstraint.activate([
-            detailed.leadingAnchor.constraint(equalTo: status.leadingAnchor),
-            detailed.trailingAnchor.constraint(equalTo: status.trailingAnchor),
-            detailed.centerYAnchor.constraint(equalTo: status.centerYAnchor),
-            detailed.heightAnchor.constraint(equalTo: status.heightAnchor),
-        ])
         setEnabled(false)
         show()
     }
@@ -125,55 +110,9 @@ public final class NowPlayingBar: NSObject {
     /// No output could be opened, so nothing can play. Says why in the format line.
     public func showUnavailable(_ reason: String) {
         setEnabled(false)
-        formatLabel.stringValue = reason
-        formatLabel.textColor = .systemRed
+        header.formatLabel.stringValue = reason
+        header.formatLabel.textColor = .systemRed
         statusBar.show(format: reason, color: .systemRed)
-    }
-
-    /// Art, then the title, the artist and album, and the format line over the seek bar.
-    private func buildDetailed() {
-        art.imageScaling = .scaleProportionallyUpOrDown
-        art.wantsLayer = true
-        art.layer?.cornerRadius = 3
-        art.layer?.backgroundColor = NSColor.quaternaryLabelColor.cgColor
-        titleLabel.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        subtitleLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        formatLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize - 1)
-        for label in [subtitleLabel, formatLabel] {
-            label.textColor = .secondaryLabelColor
-        }
-        for label in [titleLabel, subtitleLabel, formatLabel] {
-            label.lineBreakMode = .byTruncatingTail
-            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        }
-        let text = NSStackView(views: [titleLabel, subtitleLabel, formatLabel])
-        text.orientation = .vertical
-        text.alignment = .leading
-        text.spacing = 1
-        let middle = NSStackView(views: [text, seekBox])
-        middle.orientation = .vertical
-        middle.alignment = .leading
-        middle.spacing = 2
-        for view in [text, seekBox] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            view.widthAnchor.constraint(equalTo: middle.widthAnchor).isActive = true
-        }
-        detailed.setViews([art, middle], in: .leading)
-        detailed.spacing = 10
-        detailed.alignment = .centerY
-        art.translatesAutoresizingMaskIntoConstraints = false
-        // A centered stack lets a tall view overflow it; this makes it tall enough instead.
-        NSLayoutConstraint.activate([
-            middle.topAnchor.constraint(greaterThanOrEqualTo: detailed.topAnchor),
-            middle.bottomAnchor.constraint(lessThanOrEqualTo: detailed.bottomAnchor),
-            art.widthAnchor.constraint(equalToConstant: Self.artPoints),
-            art.heightAnchor.constraint(equalToConstant: Self.artPoints),
-        ])
-        detailed.distribution = .fill
-        detailed.setClippingResistancePriority(.required, for: .vertical)
-        // A stack view's own hugging is its huggingPriority, not its content hugging.
-        middle.setHuggingPriority(.init(1), for: .horizontal)
-        art.setContentHuggingPriority(.required, for: .horizontal)
     }
 
     /// Gives the previous, play and next buttons their look, for the bar and for the drawing
@@ -224,13 +163,15 @@ public final class NowPlayingBar: NSObject {
     }
 
     private func show() {
-        titleLabel.stringValue = model.title
-        subtitleLabel.stringValue = model.subtitle
-        formatLabel.stringValue = model.message ?? model.formatLine
-        formatLabel.textColor = model.message == nil ? .secondaryLabelColor : .systemOrange
-        formatLabel.toolTip = formatLabel.stringValue
+        header.titleLabel.stringValue = model.title
+        header.subtitleLabel.stringValue = model.subtitle
+        header.formatLabel.stringValue = model.message ?? model.formatLine
+        header.formatLabel.textColor = model.message == nil ? .secondaryLabelColor : .systemOrange
+        header.formatLabel.toolTip = header.formatLabel.stringValue
         statusBar.show(title: model.title, subtitle: model.subtitle)
-        statusBar.show(format: formatLabel.stringValue, color: formatLabel.textColor ?? .labelColor)
+        statusBar.show(
+            format: header.formatLabel.stringValue,
+            color: header.formatLabel.textColor ?? .labelColor)
         let playing = model.isPlaying
         let title = AppCommands.title(of: playing ? .pause : .play)
         playButton.image = NSImage(
@@ -266,13 +207,13 @@ public final class NowPlayingBar: NSObject {
     }
 
     private func showTimes(_ times: (elapsed: String, total: String)) {
-        for box in [seekBox, statusBar.seekBox] {
+        for box in [header.seekBox, statusBar.seekBox] {
             box.showTimes(elapsed: times.elapsed, total: times.total)
         }
     }
 
     /// The toolbar's and the status bar's.
-    private var seekBars: [SeekBar] { [seekBox.bar, statusBar.seekBox.bar] }
+    private var seekBars: [SeekBar] { [header.seekBox.bar, statusBar.seekBox.bar] }
 
     private func loadArt() {
         showArt(nil)
@@ -297,7 +238,7 @@ public final class NowPlayingBar: NSObject {
     }
 
     private func showArt(_ image: NSImage?, toolTip: String? = nil) {
-        for view in [art, statusBar.art] {
+        for view in [header.art, statusBar.art] {
             view.image = image
             view.toolTip = toolTip
         }

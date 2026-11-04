@@ -176,8 +176,8 @@ let package = Package(
         .target(
             name: "NowPlaying",
             dependencies: [
-                "Artwork", "Commands", "DisplayText", "Library", "Log", "Metadata", "Playback",
-                "Settings",
+                "Artwork", "BarView", "Commands", "DisplayText", "Library", "Log", "Metadata",
+                "Playback", "Settings",
             ],
             path: "Sources/Features/NowPlaying",
             swiftSettings: strictSwift

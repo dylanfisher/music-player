@@ -29,7 +29,7 @@ private let logger = moduleLogger()
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The now-playing bar's art: twice its point size, for Retina displays.
-    static let artPixels = Int(NowPlayingBar.artPoints) * 2
+    static let artPixels = HeaderPart.artPoints * 2
     static let artCacheImages = 64
     /// Now Playing's art: the current track's and the one before, for going back.
     static let systemArtCacheImages = 2
@@ -225,6 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
+        nowPlaying.header.apply(layout.headerStatus)
         makeMediaControls(dispatcher, lookup: lookup)
         let queue = QueuePanel(model: QueueModel(lookup: lookup))
         let signalPath = SignalPathPanel()
@@ -232,6 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             identifier: String(describing: MainWindow.self), transport: nowPlaying.transport,
             status: nowPlaying.status, search: browser.searchField, dispatcher: dispatcher,
             items: state[\.toolbarItems])
+        toolbar.statusLayout = layout.headerStatus
         toolbar.itemsChanged = { items in
             saver.set(\.toolbarItems, items)
             if !items.contains(.search) { browser.clearSearch() }
@@ -361,6 +363,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 { [weak self] in
                     self?.settingsWindow?.barBuilderWindow(AppSettings().statusBarLayout.key)
                 }
+            case .headerStatus:
+                { [weak self] in
+                    self?.settingsWindow?.barBuilderWindow(AppSettings().headerStatusLayout.key)
+                }
+            case .toolbarSheet: { [weak self] in self?.window?.window.attachedSheet }
             }
         // The palette lists its items, and the tag editor reads its files, first.
         let wait = snapshotOf == .main ? 0 : snapshotOf == .tags ? 3.0 : 1.0
@@ -378,6 +385,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .shortcuts: settingsWindowController()?.show(.shortcuts)
         case .statusBar:
             settingsWindowController()?.showBarBuilder(AppSettings().statusBarLayout.key)
+        case .headerStatus:
+            settingsWindowController()?.showBarBuilder(AppSettings().headerStatusLayout.key)
+        case .toolbarSheet: toolbar?.toolbar.runCustomizationPalette(nil)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
             do {
