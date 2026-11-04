@@ -88,9 +88,19 @@ private func item(_ title: String, _ kind: PaletteItem.Kind = .artist) -> Palett
 @MainActor @Test func theLatestQueryWins() async {
     let model = PaletteModel(frecency: Frecency(VisitLog(visits: [])), now: { 0 })
     _ = model.open((0..<2000).map { item("Artist \($0)") } + [item("Zappa")], byKind: false)
-    async let first: Void = model.setQuery("a")
-    async let second: Void = model.setQuery("zap")
-    _ = await (first, second)
+    // `async let` children may start in either order under load, so the first query is begun
+    // and seen to be ranking (it sets `query` before its first suspension) before the second.
+    let first = Task { @MainActor in await model.setQuery("a") }
+    let deadline = Date().addingTimeInterval(10)
+    while model.query != "a" {
+        guard Date() < deadline else {
+            Issue.record("the first query never began: query is \"\(model.query)\"")
+            return
+        }
+        await Task.yield()
+    }
+    await model.setQuery("zap")
+    await first.value
     #expect(model.query == "zap")
     #expect(model.results.first?.item.title == "Zappa")
 }
