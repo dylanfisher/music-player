@@ -65,6 +65,10 @@ private func center(_ parts: [StatusPart]) -> BarLayout<StatusPart> {
     #expect(!builder.layout.center.stacks)
     #expect(builder.unsaved?.hasPrefix("Not saved: ") == true)
     #expect(builder.unsaved?.contains("art fills the bar's height") == true)
+    // Another setting's change reloads again; the note says it once.
+    let note = builder.unsaved
+    try builder.reload()
+    #expect(builder.unsaved == note)
     builder.setAlignment(.leading)
     #expect(builder.unsaved == nil)
 }

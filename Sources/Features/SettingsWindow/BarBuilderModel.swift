@@ -28,6 +28,9 @@ final class BarBuilderModel {
     private(set) var unsaved: String?
     /// Whether `unsaved` is a column waiting for a part, rather than a refused save.
     private var waitingForPart = false
+    /// Why the last save was refused, kept apart from `unsaved`'s wording, so a reload says it
+    /// once however many reloads follow.
+    private var refusal: String?
     /// Called after every change to the layout or the selection.
     var changed: () -> Void = {}
     /// The layout as the config file last had it.
@@ -68,11 +71,10 @@ final class BarBuilderModel {
     func reload() throws {
         let current = try Self.read(key, value())
         if current == saved, waitingForPart, !isBlocked { return changed() }
-        let refused = waitingForPart ? nil : unsaved
         saved = current
         layout = current
         waitingForPart = false
-        unsaved = refused.map { "Not saved: \($0)" }
+        unsaved = refusal.map { "Not saved: \($0)" }
         keepSelectionInLayout()
         changed()
     }
@@ -259,6 +261,7 @@ final class BarBuilderModel {
     /// Saves the layout unless a column is empty; a refusal leaves the layout shown, with why.
     private func save() {
         waitingForPart = false
+        refusal = nil
         if let empty = layout.columns.first(where: { $0.column.parts.isEmpty }) {
             unsaved = "Drag a part into \(empty.place) to save the layout."
             waitingForPart = true
@@ -271,7 +274,8 @@ final class BarBuilderModel {
                 saved = layout
                 unsaved = nil
             } catch {
-                unsaved = "\(error)"
+                refusal = "\(error)"
+                unsaved = refusal
             }
         }
         changed()
