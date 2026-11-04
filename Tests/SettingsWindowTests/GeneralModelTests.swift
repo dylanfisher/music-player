@@ -277,9 +277,12 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     // The toolbar is above the status bar in the window, so its layout's row comes first.
     let appearance = sections.first { $0.section == .appearance }?.rows.map(\.key) ?? []
     #expect(
-        appearance.suffix(3) == [
-            schema.headerStatusLayout.key, schema.statusBarStyle.key, schema.statusBarLayout.key,
+        appearance.suffix(4) == [
+            schema.headerStatusLayout.key, schema.headerTitleFormat.key, schema.statusBarStyle.key,
+            schema.statusBarLayout.key,
         ])
+    let titleFormat = model.rows.first { $0.key == schema.headerTitleFormat.key }
+    #expect(titleFormat?.control == .text(optional: false))
     let listed = sections.flatMap(\.rows).map(\.key)
     #expect(listed.count == AppSettings().settings.count - 3)
     #expect(!listed.contains(AppSettings().watchedFolders.key))

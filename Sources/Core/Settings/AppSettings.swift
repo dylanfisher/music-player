@@ -89,6 +89,10 @@ public struct AppSettings: SettingsSchema {
         "appearance.headerStatusLayout", title: "Toolbar Status Layout",
         default: BarLayout.defaultHeaderStatus,
         "What the toolbar's now-playing status shows, in columns that stack their parts.")
+    public let headerTitleFormat = Setting(
+        "appearance.headerTitleFormat", title: "Toolbar Title Line",
+        default: TitleFormat.defaultHeaderTitle,
+        "The Title Line part's text, such as {title} by {artist}.")
     public let statusBarStyle = Setting(
         "appearance.statusBarStyle", title: "Status Bar", default: StatusBarStyle.minimal,
         "One line at the header's height, or two with larger art.")

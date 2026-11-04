@@ -1,7 +1,8 @@
 /// A part the toolbar's now-playing status can show, as the user arranges them in its builder:
-/// the playing track's art, its title, its artist and album, its format and a seek bar.
+/// the playing track's art, its title, its artist and album, its format and a seek bar, and a
+/// title line as `appearance.headerTitleFormat` writes it.
 public enum HeaderPart: String, BarPart {
-    case art, title, subtitle, format, seek
+    case art, title, titleLine, subtitle, format, seek
 
     /// The art's size in points.
     public static let artPoints = 48
@@ -10,6 +11,7 @@ public enum HeaderPart: String, BarPart {
         switch self {
         case .art: StatusPart.art.title
         case .title: "Title"
+        case .titleLine: "Title Line"
         case .subtitle: "Artist and Album"
         case .format: StatusPart.format.title
         case .seek: StatusPart.seek.title

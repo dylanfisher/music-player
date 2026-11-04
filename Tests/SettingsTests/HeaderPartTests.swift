@@ -22,6 +22,9 @@ private func decode(_ json: String) -> Result<BarLayout<HeaderPart>, SettingProb
                 parts: [.title, .subtitle, .format, .seek], width: .flexible,
                 alignment: .leading, stacks: true))
     #expect(layout.trailing.isEmpty && layout.problems.isEmpty)
+    // The title line waits in the builder's tray.
+    #expect(!layout.columns.contains { $0.column.parts.contains(.titleLine) })
+    #expect(HeaderPart.titleLine.title == "Title Line" && !HeaderPart.titleLine.fillsHeight)
     guard case .barLayout(let bar) = setting.kind else {
         Issue.record("\(setting.kind)")
         return

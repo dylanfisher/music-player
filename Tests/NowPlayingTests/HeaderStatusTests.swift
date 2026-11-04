@@ -77,7 +77,7 @@ private func frame(_ view: NSView, in root: NSView) -> NSRect {
     let status = status()
     let (old, oldParts) = phase35Header(like: status)
     #expect(status.view.fittingSize.height == old.fittingSize.height)
-    for part in HeaderPart.allCases {
+    for part in HeaderPart.allCases where part != .titleLine {
         let now = frame(status.view(for: part), in: status.view)
         let before = frame(oldParts[part]!, in: old)
         #expect(now.minX == before.minX && now.minY == before.minY, "\(part): \(now) \(before)")
@@ -147,4 +147,23 @@ private func frame(_ view: NSView, in root: NSView) -> NSRect {
     let seek = frame(status.seekBox, in: status.view)
     #expect(abs(seek.minX - 60 - HeaderStatus.spacingPoints) < 0.5, "\(seek)")
     #expect(abs(seek.maxX - width) < 0.01)
+}
+
+/// The title line is one line, which truncates at its tail when the status is too narrow.
+@MainActor @Test func theTitleLineTruncatesAtItsTail() {
+    let status = HeaderStatus()
+    status.apply(
+        BarLayout(
+            leading: [BarColumn(parts: [.art], width: .fixed(48), alignment: .leading)],
+            center: BarColumn(
+                parts: [.titleLine, .seek], width: .flexible, alignment: .leading, stacks: true)))
+    status.titleLineLabel.stringValue = String(
+        repeating: "FI3AC2384210 by Aleksi Perälä ", count: 9)
+    status.view.frame = NSRect(x: 0, y: 0, width: width, height: status.view.fittingSize.height)
+    status.view.layoutSubtreeIfNeeded()
+    let line = status.titleLineLabel.alignmentRect(
+        forFrame: frame(status.titleLineLabel, in: status.view))
+    #expect(status.titleLineLabel.lineBreakMode == .byTruncatingTail)
+    #expect(line.minX == 48 + HeaderStatus.spacingPoints && line.maxX <= width + 0.5, "\(line)")
+    #expect(line.height < 2 * status.titleLineLabel.intrinsicContentSize.height)
 }

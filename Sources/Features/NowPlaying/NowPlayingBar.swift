@@ -25,6 +25,10 @@ public final class NowPlayingBar: NSObject {
     /// columns the user lays out.
     public let header = HeaderStatus()
     public var status: NSView { header.view }
+    /// What the status's Title Line says.
+    public var titleFormat = TitleFormat.defaultHeaderTitle {
+        didSet { show() }
+    }
     /// The status bar's art, track, format and seek bar.
     public let statusBar = StatusBarParts()
     /// What the window's title says while a track plays.
@@ -177,6 +181,12 @@ public final class NowPlayingBar: NSObject {
         // A message says what went wrong even with nothing playing.
         header.showsParts = model.currentURL != nil || model.message != nil || unavailable
         header.titleLabel.stringValue = model.title
+        var fields: [TitleFormat.Field: String] = [.title: model.title]
+        fields[.artist] = model.track?.artist
+        fields[.album] = model.track?.album
+        header.titleLineLabel.stringValue = titleFormat.line(fields)
+        // The line truncates at its tail, so the tooltip has all of it.
+        header.titleLineLabel.toolTip = header.titleLineLabel.stringValue
         header.subtitleLabel.stringValue = model.subtitle
         header.formatLabel.stringValue = model.message ?? model.formatLine
         header.formatLabel.textColor = model.message == nil ? .secondaryLabelColor : .systemOrange

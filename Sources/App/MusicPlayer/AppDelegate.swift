@@ -226,6 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         trackLookup = lookup
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
         nowPlaying.header.apply(layout.headerStatus)
+        nowPlaying.titleFormat = layout.headerTitleFormat
         makeMediaControls(dispatcher, lookup: lookup)
         let queue = QueuePanel(model: QueueModel(lookup: lookup))
         let signalPath = SignalPathPanel()

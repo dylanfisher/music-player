@@ -3,12 +3,12 @@ import Artwork
 import Fixtures
 import Foundation
 import HALOutput
-import Settings
 import Testing
 
 @testable import Library
 @testable import NowPlaying
 @testable import Playback
+@testable import Settings
 
 private let urls = ["/m/a.flac", "/m/b.flac"].map(URL.init(fileURLWithPath:))
 
@@ -227,4 +227,16 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     #expect(unavailable.header.showsParts)
     unavailable.libraryChanged()
     #expect(unavailable.header.showsParts)
+}
+
+/// The title line follows its format, and leaves out the words before a field the track
+/// doesn't have.
+@MainActor @Test func theTitleLineFollowsItsFormat() {
+    let bar = bar()
+    bar.apply(update(.trackStarted(index: 0), duration: 100))
+    // The track has no artist or album.
+    #expect(bar.header.titleLineLabel.stringValue == "Song")
+    bar.titleFormat = TitleFormat("Now: {title}")
+    #expect(bar.header.titleLineLabel.stringValue == "Now: Song")
+    #expect(bar.header.titleLineLabel.toolTip == "Now: Song")
 }

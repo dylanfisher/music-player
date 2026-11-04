@@ -22,6 +22,7 @@ struct WindowSettings {
     var statusBar: StatusBarLayout
     var headerStatus: BarLayout<HeaderPart>
     var windowTitle: WindowTitle
+    var headerTitleFormat: TitleFormat
 
     @MainActor init(_ settings: ConfigStore<AppSettings>, state: StateStore<AppState>) {
         frame = state[\.windowFrame]
@@ -42,6 +43,7 @@ struct WindowSettings {
         statusBar = StatusBarLayout(settings)
         headerStatus = settings[\.headerStatusLayout]
         windowTitle = settings[\.windowTitle]
+        headerTitleFormat = settings[\.headerTitleFormat]
     }
 }
 

@@ -2,8 +2,8 @@ import AppKit
 import BarView
 import Settings
 
-/// The toolbar's now-playing status: the playing track's art, title, artist and album, format
-/// line and seek bar, laid out in columns as `appearance.headerStatusLayout` says (ADR 0085).
+/// The toolbar's now-playing status: the playing track's art, title, title line, artist and
+/// album, format line and seek bar, laid out in columns as `appearance.headerStatusLayout` says (ADR 0085).
 /// A flexible center column takes the width the side columns leave, a stacked column always
 /// stacks, and the status is as tall as its tallest column.
 @MainActor
@@ -18,6 +18,8 @@ public final class HeaderStatus {
     public let view = NSView()
     let art = NSImageView()
     let titleLabel = NSTextField(labelWithString: "")
+    /// The title, artist and album in one line, as Swinsian's toolbar shows them.
+    let titleLineLabel = NSTextField(labelWithString: "")
     let subtitleLabel = NSTextField(labelWithString: "")
     let formatLabel = NSTextField(labelWithString: "")
     let seekBox = SeekBox()
@@ -41,13 +43,15 @@ public final class HeaderStatus {
             art.widthAnchor.constraint(equalToConstant: artPoints),
             art.heightAnchor.constraint(equalToConstant: artPoints),
         ])
-        titleLabel.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        for label in [titleLabel, titleLineLabel] {
+            label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        }
         subtitleLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         formatLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize - 1)
         for label in [subtitleLabel, formatLabel] {
             label.textColor = .secondaryLabelColor
         }
-        for label in [titleLabel, subtitleLabel, formatLabel] {
+        for label in [titleLabel, titleLineLabel, subtitleLabel, formatLabel] {
             label.lineBreakMode = .byTruncatingTail
         }
         for stack in [leading, trailing] {
@@ -89,6 +93,7 @@ public final class HeaderStatus {
         switch part {
         case .art: art
         case .title: titleLabel
+        case .titleLine: titleLineLabel
         case .subtitle: subtitleLabel
         case .format: formatLabel
         case .seek: seekBox

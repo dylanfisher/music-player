@@ -116,6 +116,9 @@ extension AppDelegate {
         if keys.contains(schema.windowTitle.key) {
             nowPlaying?.windowTitle = settings[\.windowTitle]
         }
+        if keys.contains(schema.headerTitleFormat.key) {
+            nowPlaying?.titleFormat = settings[\.headerTitleFormat]
+        }
         if !keys.isDisjoint(with: [schema.receiverEnabled.key, schema.receiverAddress.key]) {
             applyReceiverSetting()
         }
