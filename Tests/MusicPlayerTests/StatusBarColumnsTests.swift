@@ -12,6 +12,28 @@ private func frame(_ view: NSView?) throws -> NSRect {
     return view.convert(view.bounds, to: nil)
 }
 
+/// A 1-point line in the separator's color runs along the bar's top, over its parts, in both
+/// styles and on glass, inside the bar's height.
+@MainActor @Test(arguments: [false, true], [StatusBarStyle.minimal, .tall])
+func theBarHasALineAlongItsTop(glass: Bool, style: StatusBarStyle) async throws {
+    let fixture = try await MainWindowFixture(glass: glass)
+    defer { fixture.close() }
+    let layout = BarLayout<StatusPart>(
+        leading: [BarColumn(parts: [.art], width: .flexible, alignment: .leading)],
+        center: BarColumn(parts: [.track], width: .flexible, alignment: .center))
+    fixture.setLayout(layout, style: style)
+    let browser = fixture.browser
+    let area = try frame(browser.statusArea)
+    let border = browser.statusBorder
+    #expect(
+        try frame(border) == NSRect(x: area.minX, y: area.maxY - 1, width: area.width, height: 1))
+    #expect(!border.isHidden && border.boxType == .custom && border.borderWidth == 0)
+    #expect(border.fillColor == .separatorColor)
+    #expect(border.superview?.subviews.last === border)
+    let header = try #require(browser.table.table.headerView).frame.height
+    if style == .minimal { #expect(area.height == header) }
+}
+
 /// The default is the bar as it was before columns: the totals alone, their label stretched
 /// across a middle centered on the window up to the room beside the nearer edge, its text
 /// centered, at the track table header's height (ADR 0084, 0085).

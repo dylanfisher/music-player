@@ -116,7 +116,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var statusArtHeight: NSLayoutConstraint?
     /// The status bar on glass, or the toolbar's material before macOS 26, laid over the bottom
     /// of the track table and the timeline, and showing and hiding with them.
-    private(set) lazy var statusArea = statusBackground(around: statusBar)
+    private(set) lazy var statusArea = statusBackground(around: statusBar, border: statusBorder)
+    /// The line along the status bar's top, in the separator's color, as the track table
+    /// header's line along its bottom.
+    let statusBorder = NSBox()
     let statusLabel = NSTextField(labelWithString: "")
     private let scanIndicator = NSProgressIndicator()
     /// Whether the scan bar moves on its own, which only it does while the status bar shows.
@@ -1704,32 +1707,50 @@ private func problemsUnreadable(_ error: any Error) -> String {
 }
 
 /// `content` on glass from macOS 26, and before on the title bar's material, the toolbar's gray
-/// (ADR 0072), filling the view returned. Either blends with the rows scrolled under it
-/// (ADR 0084).
+/// (ADR 0072), filling the view returned, with `border` along its top. Either blends with the
+/// rows scrolled under it (ADR 0084).
 @MainActor
-private func statusBackground(around content: NSView) -> NSView {
+private func statusBackground(around content: NSView, border: NSBox) -> NSView {
+    // The bar and its border, the material's one content view. The border lies over the bar's
+    // top point, as the header's line lies in the header's last.
+    let bordered = NSView()
+    border.boxType = .custom
+    border.borderWidth = 0
+    border.fillColor = .separatorColor
+    for view in [content, border] {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        bordered.addSubview(view)
+    }
     let material: NSView
     if #available(macOS 26, *) {
         let glass = NSGlassEffectView()
         glass.cornerRadius = 0
-        glass.contentView = content
+        glass.contentView = bordered
         material = glass
     } else {
         let effect = NSVisualEffectView()
         effect.material = .titlebar
         effect.blendingMode = .withinWindow
-        effect.addSubview(content)
+        effect.addSubview(bordered)
         material = effect
     }
-    content.translatesAutoresizingMaskIntoConstraints = false
+    bordered.translatesAutoresizingMaskIntoConstraints = false
     // A stack taller than the tall style's cap is cut at the bar's edges, not drawn over the
     // rows. Views clip by default before macOS 14.
     if #available(macOS 14, *) { material.clipsToBounds = true }
     NSLayoutConstraint.activate([
-        content.leadingAnchor.constraint(equalTo: material.leadingAnchor),
-        content.trailingAnchor.constraint(equalTo: material.trailingAnchor),
-        content.topAnchor.constraint(equalTo: material.topAnchor),
-        content.bottomAnchor.constraint(equalTo: material.bottomAnchor),
+        bordered.leadingAnchor.constraint(equalTo: material.leadingAnchor),
+        bordered.trailingAnchor.constraint(equalTo: material.trailingAnchor),
+        bordered.topAnchor.constraint(equalTo: material.topAnchor),
+        bordered.bottomAnchor.constraint(equalTo: material.bottomAnchor),
+        content.leadingAnchor.constraint(equalTo: bordered.leadingAnchor),
+        content.trailingAnchor.constraint(equalTo: bordered.trailingAnchor),
+        content.topAnchor.constraint(equalTo: bordered.topAnchor),
+        content.bottomAnchor.constraint(equalTo: bordered.bottomAnchor),
+        border.leadingAnchor.constraint(equalTo: bordered.leadingAnchor),
+        border.trailingAnchor.constraint(equalTo: bordered.trailingAnchor),
+        border.topAnchor.constraint(equalTo: bordered.topAnchor),
+        border.heightAnchor.constraint(equalToConstant: 1),
     ])
     return material
 }
