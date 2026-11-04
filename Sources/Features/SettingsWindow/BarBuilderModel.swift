@@ -198,7 +198,8 @@ final class BarBuilderModel {
     }
 
     /// Whether the layout is the setting's default, which Reset to Default would leave as it is.
-    var isDefault: Bool { layout == defaultLayout }
+    /// Both as shown and as saved, so a reset whose write failed can be tried again.
+    var isDefault: Bool { layout == defaultLayout && saved == defaultLayout }
 
     /// Puts the setting's default back, saving it as any edit is.
     func resetToDefault() {

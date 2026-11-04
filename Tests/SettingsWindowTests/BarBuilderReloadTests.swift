@@ -151,6 +151,25 @@ private func twoTrailing() -> BarLayout<StatusPart> {
     #expect(builder.selection == .init(place: .center))
 }
 
+/// Reset to Default can be tried again after its write failed.
+@MainActor @Test func resetToDefaultRetriesAfterAFailedWrite() throws {
+    let file = try StandIn(center([.seek]))
+    let window = BarBuilderWindow(model: try file.builder())
+    file.writeFailure = "the disk is full"
+    window.model.resetToDefault()
+    #expect(window.model.unsaved?.contains("the disk is full") == true)
+    #expect(window.reset.isEnabled, "the default is shown but not saved")
+    file.writeFailure = nil
+    window.model.resetToDefault()
+    #expect(window.model.unsaved == nil)
+    #expect(!window.reset.isEnabled)
+    let json = try #require(file.values[file.setting.key])
+    #expect(
+        try JSONDecoder().decode(
+            BarLayout<StatusPart>.self, from: JSONSerialization.data(withJSONObject: json))
+            == .defaultStatusBar)
+}
+
 /// While the config file refuses every change, nothing drags.
 @MainActor @Test func aBlockedConfigStartsNoDrag() throws {
     let file = try StandIn(twoTrailing())
