@@ -4047,6 +4047,24 @@ against 35 ms. The macOS 12 to 15 paths wait for the owner check.
 - [ ] **38.11 Tag-write error.** Waiting on the error text from the owner.
 - [ ] **Owner check:** each item on mbp2026 and the 2015 MacBook Pro.
 
+Plan:
+- A `LineColor` setting value in `Core/Settings` (`"#RRGGBB"` or `"#RRGGBBAA"`, kind `.color`),
+  and `appearance.albumLines`, `appearance.rowLineColor` and `appearance.albumLineColor`, both
+  colors optional (null is the system's grid color). Settings ▸ Appearance shows a color well
+  with alpha and a Default button for `.color`; ⌘K lists the colors as it lists other settings.
+- `MarkedRowView` draws its own bottom line in a color it's given and paints one column plain
+  in the table's background; the track table gives each row the album line at an album's last
+  row (the art column's `albumID` runs), the row line elsewhere, and the art column. Column
+  lines keep AppKit's grid, in the row lines' color.
+- `revealSelection` (⇧⌘L, View menu) centers the selected rows, as ⌘L does with nothing
+  playing.
+- `showSettings` becomes a command (⌘,) so ⌘K, the menu and the Shortcuts pane have it; Open
+  Config File is already in ⌘K.
+- `BrowserChange` says when a user change widened the table back to everything; the browser
+  then selects and centers the playing track, as ⌘L does. The selection is centered already.
+- Tests: the color's parsing, the setting rows, the row lines given per row, the art column
+  plain, the commands and chords, and the return to all music, in the existing suites.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
