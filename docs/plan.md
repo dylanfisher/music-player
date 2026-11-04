@@ -3784,7 +3784,7 @@ Pro, in the toolbar and the status bar, glass on and off.
 
 ### 36. Window chrome and glass
 
-**Queued, not started.** Runs after 34, alongside 33 and 35.
+**Done; owner checks pending.** Ran after 34, alongside 33 and 35.
 
 - **36.1 The status bar centered on the window.** Its middle content stays centered on the
   window's full width, lined up with the window title. It doesn't move when the scan progress
@@ -3835,6 +3835,22 @@ Implementation plan:
 - `--snapshot` at 1440x900, light and dark, glass on and off, rows scrolled under the bar;
   `./scripts/bundle release`; the scroll and live resize benches by name against main.
 - ADR 0084, amending 0072 and 0065.
+
+Result: shipped as planned (ADR 0084). The status bar is centered on the window through
+`CenteredRow`, lies over the bottom of the rows with the scroll inset matching it, and is
+`NSGlassEffectView` on macOS 26+ with the title bar material on 12–15. Toggling a part shrank the
+window because nothing in the bar could stretch; no bar constraint now outranks the split panes,
+tested alone and together, at the default size, 720 wide and 1440x900 with every panel open.
+36.8's cause: the glass style-mask toggle shrank the frame by the toolbar's height and the splits
+shared out the change; glass now restores the frame and dividers, and a fresh-window comparison
+(light and dark, alternating on and off) found and fixed wrong alternating colors after glass.
+Scrolling costs nothing measurable on an idle Mac (scroll-bar drag p95 13.4 against 13.0 ms,
+compact rows 10.8 against 10.7, live resize 30.2); an earlier +18% reading ran beside CPU
+burners. `./scripts/check` and `./scripts/bundle release` pass. A correctness and performance
+review, a fix round and a re-review ran. Owner checks pending: dark mode, the real blur, 36.8's
+drawn lines, glass in full screen, and that the material bar blends on the 2015 MacBook Pro.
+Known limitation for phase 37: on glass, AppKit centers the title beside the sidebar, so the bar
+sits left of the title by half the sidebar's width.
 
 ### 37. Toolbar and status bar builders
 
