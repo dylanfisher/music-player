@@ -4197,13 +4197,16 @@ Result, part 38b: shipped 38b.1 to 38b.3 (ADR 0085 amended). With nothing playin
 status hides its row and shows only the toolbar's background, at the same height; a message
 such as no output device still shows it. The model's "Not Playing" stays for the dock menu, Now
 Playing info and the status bar. The Title Line part reads `appearance.headerTitleFormat`
-(`TitleFormat` in Settings; fields `{title}`, `{artist}`, `{album}`), drops an empty field with
-the text just before it, and trims the ends; an unknown field or an open brace is a setting
-problem. Settings ▸ Appearance shows the format as a text row, and lists Toolbar Status Layout
-and Toolbar Title Line before Status Bar and Status Bar Layout. `./scripts/check` passes except
-`glassLeavesTheSavedLayoutAsItWas`, which fails the same way on `main`. Checked in `--snapshot`
-(the empty status, the sheet with a Title Line layout, the Appearance pane); the Title Line
-with a track playing was checked by tests, not on screen.
+(`TitleFormat` in Settings; fields `{title}`, `{artist}`, `{album}`; `{{` and `}}` for braces).
+An empty field drops the text before it, and at either end of the line the text after it too,
+so nothing dangles; an empty line hides the part. An unknown field, an unpaired brace or an
+empty format is a setting problem. Settings ▸ Appearance shows the format as a text row, and
+lists Toolbar Status Layout and Toolbar Title Line before Status Bar and Status Bar Layout. A
+review round fixed the no-output reason being blanked by a redraw, the dangling text, the
+braces, empty formats and lines, and the sheet's drawing ignoring the owner's format.
+`./scripts/check` passes. Checked in `--snapshot` (the empty status, the sheet with a Title
+Line layout, the Appearance pane) before the review round; the Title Line with a track playing
+was checked by tests, not on screen.
 
 #### 38c. Layout builder
 

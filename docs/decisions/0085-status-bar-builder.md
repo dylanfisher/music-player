@@ -206,7 +206,9 @@ parts, no art box, title or seek bar, only the toolbar's background. It hides it
 keeps its constraints, so the item keeps its height and the toolbar doesn't move when a track
 starts. The now-playing model's "Not Playing" title stays, since the dock menu, Now Playing
 info and the status bar read it. A message with nothing playing, such as no output device or
-a failure that stopped playback, shows the parts again, so the failure is never hidden. The
+a failure that stopped playback, shows the parts again, so the failure is never hidden; the
+bar keeps the no-output reason until an engine connects, so a rescan or a format change that
+draws the status again doesn't blank it. The
 sheet's drawing keeps its placeholder track.
 
 **The Title Line (phase 38b).** A `titleLine` part, "Title Line", shows one semibold line, as
@@ -214,14 +216,28 @@ Swinsian's toolbar does ("FI3AC2384210 by Aleksi Perälä from Alithia E'"), bui
 `appearance.headerTitleFormat`, a `TitleFormat` in Settings whose default is
 `{title} by {artist} from {album}`. The fields are the title, the artist and the album, the
 text the status's other lines already show; the format line and the times are left out, since
-they have parts of their own and change as the track plays. An empty field goes with the text
-just before it, so a track with no artist reads "Song from Album", and the line is trimmed at
-both ends. Text before the first field and after the last stays. A field the format doesn't
-know, `{year}` say, or a `{` left open is a problem with the setting, which applies nothing and
-the banner shows, as for any setting (ADR 0082). The setting is a string, so Settings ▸
+they have parts of their own and change as the track plays.
+
+A field is empty when its value is blank, spaces and newlines included. The fields with values
+are joined by the text just before each, so an empty field takes the text before it along; the
+text before the first field stays only when that field has a value, and the text after the
+last only when that one does, so nothing dangles at either end. With the default, no artist
+reads "Song from Album", no album "Song by Artist", and neither "Song"; `{artist} - {title}`
+with no artist, `{title} ({album})` and `({album}) {title}` with no album all read "Song". The
+line is trimmed of spaces and newlines, and a line that comes out empty hides the part, so its
+column has no blank line. One case the rule doesn't cover: text that wraps a field in the
+middle, such as the `]` in `[{artist}] {title} ({album})` with only the artist, belongs to the
+next field and goes with it, leaving "[Artist".
+
+`{{` and `}}` write a brace. A field the format doesn't know, `{year}` say, a brace without its
+pair, or an empty or blank format is a problem with the setting, which applies nothing and the
+banner shows, as for any setting (ADR 0082). The format is read on Unicode scalars, so a brace
+followed by a combining mark is still a brace. The setting is a string, so Settings ▸
 Appearance gives it a text row like the receiver's address, with no code of its own. The part
 starts in the tray; the default layout is unchanged. It truncates at its tail, and its tooltip
-has the whole line.
+has the whole line. The customize sheet draws it with the owner's format. A field's value comes
+from a `switch` over the fields, so a new field doesn't compile until the bar and the sheet's
+drawing give it one.
 
 **Order (phase 38b).** Settings ▸ Appearance lists its rows in the schema's order, so the
 toolbar status's layout and title format come before the status bar's style and layout, as
@@ -249,6 +265,8 @@ the toolbar is above the status bar in the window.
   cover Swinsian's line, and each field added is one more name to keep in step with the table.
 - **Dropping the text after an empty field instead of before it.** Rejected: in
   `{title} by {artist} from {album}` the word that belongs to a field comes before it.
+- **Dropping only the text before an empty field (phase 38b's first cut).** Replaced: at the
+  ends of the line it left `{artist} - {title}` as "- Song" and `{title} ({album})` as "Song)".
 
 ## Consequences
 
