@@ -222,11 +222,17 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     failed.apply(update(.failed(reason: "the device stopped"), current: nil, duration: nil))
     #expect(failed.header.showsParts)
     #expect(failed.header.formatLabel.stringValue == "Playback stopped: the device stopped")
+    // The reason stays through a rescan and a format change, which draw the status again.
     let unavailable = bar()
     unavailable.showUnavailable("No output device")
-    #expect(unavailable.header.showsParts)
-    unavailable.libraryChanged()
-    #expect(unavailable.header.showsParts)
+    for redraw in [
+        { unavailable.libraryChanged() }, { unavailable.titleFormat = .defaultHeaderTitle },
+    ] {
+        redraw()
+        #expect(unavailable.header.showsParts)
+        #expect(unavailable.header.formatLabel.stringValue == "No output device")
+        #expect(unavailable.header.formatLabel.textColor == .systemRed)
+    }
 }
 
 /// The title line follows its format, and leaves out the words before a field the track

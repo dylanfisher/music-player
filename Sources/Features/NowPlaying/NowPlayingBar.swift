@@ -45,8 +45,8 @@ public final class NowPlayingBar: NSObject {
     private var pendingSeeks = 0
     /// Whether the engine is connected and an output opened.
     private var connected = false
-    /// Whether no output could be opened, which the format line says with nothing playing.
-    private var unavailable = false
+    /// Why no output could be opened, which the format line says until an engine connects.
+    private var unavailableReason: String?
     /// Whether any of the window shows. AppKit draws a window that's covered, so the bar stops
     /// its updates itself.
     private var windowShows = true
@@ -103,7 +103,7 @@ public final class NowPlayingBar: NSObject {
     /// Follows `engine` from now on.
     public func connect(_ engine: PlaybackEngine) {
         self.engine = engine
-        unavailable = false
+        unavailableReason = nil
         updates?.cancel()
         updates = Task { [weak self] in
             for await update in await engine.updates() {
@@ -123,11 +123,8 @@ public final class NowPlayingBar: NSObject {
     /// No output could be opened, so nothing can play. Says why in the format line.
     public func showUnavailable(_ reason: String) {
         setEnabled(false)
-        unavailable = true
-        header.showsParts = true
-        header.formatLabel.stringValue = reason
-        header.formatLabel.textColor = .systemRed
-        statusBar.show(format: reason, color: .systemRed)
+        unavailableReason = reason
+        show()
     }
 
     /// Gives the previous, play and next buttons their look, for the bar and for the drawing
@@ -179,7 +176,8 @@ public final class NowPlayingBar: NSObject {
 
     private func show() {
         // A message says what went wrong even with nothing playing.
-        header.showsParts = model.currentURL != nil || model.message != nil || unavailable
+        header.showsParts =
+            model.currentURL != nil || model.message != nil || unavailableReason != nil
         header.titleLabel.stringValue = model.title
         var fields: [TitleFormat.Field: String] = [.title: model.title]
         fields[.artist] = model.track?.artist
@@ -188,8 +186,10 @@ public final class NowPlayingBar: NSObject {
         // The line truncates at its tail, so the tooltip has all of it.
         header.titleLineLabel.toolTip = header.titleLineLabel.stringValue
         header.subtitleLabel.stringValue = model.subtitle
-        header.formatLabel.stringValue = model.message ?? model.formatLine
-        header.formatLabel.textColor = model.message == nil ? .secondaryLabelColor : .systemOrange
+        header.formatLabel.stringValue = unavailableReason ?? model.message ?? model.formatLine
+        header.formatLabel.textColor =
+            unavailableReason != nil
+            ? .systemRed : model.message != nil ? .systemOrange : .secondaryLabelColor
         header.formatLabel.toolTip = header.formatLabel.stringValue
         // With nothing playing the art keeps its place unseen, so nothing beside it moves
         // when a track starts.
