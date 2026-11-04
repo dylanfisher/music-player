@@ -30,9 +30,13 @@ extension NowPlayingBar {
         drawing.art.contentTintColor = .secondaryLabelColor
         let title = "Song Title"
         drawing.titleLabel.stringValue = title
-        drawing.titleLineLabel.stringValue = TitleFormat.defaultHeaderTitle.line([
-            .title: title, .artist: "The Artist", .album: "The Album",
-        ])
+        drawing.titleLineLabel.stringValue = TitleFormat.defaultHeaderTitle.line { field in
+            switch field {
+            case .title: title
+            case .artist: "The Artist"
+            case .album: "The Album"
+            }
+        }
         drawing.subtitleLabel.stringValue = "Artist — Album"
         drawing.formatLabel.stringValue = "44.1 kHz 16-bit FLAC"
         drawing.seekBox.bar.fraction = 0.35

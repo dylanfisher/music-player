@@ -179,10 +179,13 @@ public final class NowPlayingBar: NSObject {
         header.showsParts =
             model.currentURL != nil || model.message != nil || unavailableReason != nil
         header.titleLabel.stringValue = model.title
-        var fields: [TitleFormat.Field: String] = [.title: model.title]
-        fields[.artist] = model.track?.artist
-        fields[.album] = model.track?.album
-        header.titleLineLabel.stringValue = titleFormat.line(fields)
+        header.titleLineLabel.stringValue = titleFormat.line { [model] field in
+            switch field {
+            case .title: model.title
+            case .artist: model.track?.artist
+            case .album: model.track?.album
+            }
+        }
         // The line truncates at its tail, so the tooltip has all of it.
         header.titleLineLabel.toolTip = header.titleLineLabel.stringValue
         header.subtitleLabel.stringValue = model.subtitle

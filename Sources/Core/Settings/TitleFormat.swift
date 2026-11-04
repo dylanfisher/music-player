@@ -29,48 +29,51 @@ public struct TitleFormat: SettingValue {
     public static let defaultHeaderTitle = TitleFormat("{title} by {artist} from {album}")
 
     public func problem() -> String? {
-        switch pieces {
+        switch parsed {
         case .success: nil
         case .failure(let problem): problem.text
         }
     }
 
-    /// The line for a track with these fields' values. An empty field goes with the text just
-    /// before it, so "{title} by {artist}" with no artist is the title alone, and the line is
-    /// trimmed at both ends.
-    public func line(_ values: [Field: String]) -> String {
-        guard case .success(let pieces) = pieces else {
+    /// The line for a track whose fields have the values `value` gives; nil or blank is empty.
+    /// The fields with values are joined by the text just before each, so an empty field takes
+    /// the text before it along. The text before the first field stays only when that field has
+    /// a value, and the text after the last only when that one does, so nothing dangles at
+    /// either end: `{artist} - {title}` with no artist is the title alone. The line is trimmed.
+    public func line(_ value: (Field) -> String?) -> String {
+        guard case .success(let parsed) = parsed else {
             preconditionFailure("\(text.debugDescription) is an invalid title format")
         }
-        var line = ""
-        var before = ""
-        for piece in pieces {
-            switch piece {
-            case .text(let text): before += text
-            case .field(let field):
-                let value = values[field] ?? ""
-                if !value.trimmingCharacters(in: .whitespaces).isEmpty { line += before + value }
-                before = ""
-            }
+        guard !parsed.fields.isEmpty else { return trimmed(parsed.end) }
+        let kept = parsed.fields.enumerated().compactMap { index, piece in
+            value(piece.field).flatMap { trimmed($0).isEmpty ? nil : (index, $0) }
         }
-        return (line + before).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = kept.first?.0, let last = kept.last?.0 else { return "" }
+        var line = first == 0 ? parsed.fields[0].before : ""
+        for (position, (index, text)) in kept.enumerated() {
+            if position > 0 { line += parsed.fields[index].before }
+            line += text
+        }
+        if last == parsed.fields.count - 1 { line += parsed.end }
+        return trimmed(line)
     }
 
-    enum Piece: Equatable {
-        case text(String)
-        case field(Field)
+    /// The format's fields, each with the text just before it, and the text after the last.
+    struct Parsed {
+        var fields: [(before: String, field: Field)]
+        var end: String
     }
 
     struct Problem: Error {
         var text: String
     }
 
-    /// The format's text and fields in order, or what's wrong with it.
-    var pieces: Result<[Piece], Problem> {
-        var pieces: [Piece] = []
+    /// The format's fields and text, or what's wrong with it.
+    var parsed: Result<Parsed, Problem> {
+        var parsed = Parsed(fields: [], end: "")
         var rest = Substring(text)
         while let open = rest.firstIndex(of: "{") {
-            if open > rest.startIndex { pieces.append(.text(String(rest[..<open]))) }
+            let before = String(rest[..<open])
             guard let close = rest[open...].firstIndex(of: "}") else {
                 return .failure(Problem(text: "a { isn't closed with a }"))
             }
@@ -80,10 +83,14 @@ public struct TitleFormat: SettingValue {
                 return .failure(
                     Problem(text: "{\(name)} isn't a field; the fields are \(fields)"))
             }
-            pieces.append(.field(field))
+            parsed.fields.append((before, field))
             rest = rest[rest.index(after: close)...]
         }
-        if !rest.isEmpty { pieces.append(.text(String(rest))) }
-        return .success(pieces)
+        parsed.end = String(rest)
+        return .success(parsed)
     }
+}
+
+private func trimmed(_ text: String) -> String {
+    text.trimmingCharacters(in: .whitespacesAndNewlines)
 }

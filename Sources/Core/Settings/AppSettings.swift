@@ -92,7 +92,7 @@ public struct AppSettings: SettingsSchema {
     public let headerTitleFormat = Setting(
         "appearance.headerTitleFormat", title: "Toolbar Title Line",
         default: TitleFormat.defaultHeaderTitle,
-        "The Title Line part's text, such as {title} by {artist}.")
+        "The Title Line's text; an empty field drops the words around it.")
     public let statusBarStyle = Setting(
         "appearance.statusBarStyle", title: "Status Bar", default: StatusBarStyle.minimal,
         "One line at the header's height, or two with larger art.")

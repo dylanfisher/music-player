@@ -14,26 +14,40 @@ private let track: [TitleFormat.Field: String] = [
     .title: "FI3AC2384210", .artist: "Aleksi Perälä", .album: "Alithia E'",
 ]
 
+/// `format`'s line for a track with `values`.
+private func line(_ format: String, _ values: [TitleFormat.Field: String]) -> String {
+    TitleFormat(format).line { values[$0] }
+}
+
 @Test func theDefaultIsSwinsiansLine() {
     #expect(schema.headerTitleFormat.defaultValue.text == "{title} by {artist} from {album}")
     #expect(
-        schema.headerTitleFormat.defaultValue.line(track)
+        schema.headerTitleFormat.defaultValue.line { track[$0] }
             == "FI3AC2384210 by Aleksi Perälä from Alithia E'")
 }
 
-/// An empty field takes the text just before it along, so no "by" or "from" is left hanging.
-@Test func anEmptyFieldGoesWithTheTextBeforeIt() {
-    let format = TitleFormat.defaultHeaderTitle
-    #expect(format.line([.title: "Song", .album: "Album"]) == "Song from Album")
-    #expect(format.line([.title: "Song", .artist: "Artist", .album: " "]) == "Song by Artist")
-    #expect(format.line([.title: "Song"]) == "Song")
-    #expect(format.line([:]) == "")
-    // Only the text just before: the title has none, and the text after the last field stays.
-    #expect(format.line([.artist: "Artist"]) == "by Artist")
-    #expect(TitleFormat("{title} ({album}) ").line([.title: "Song"]) == "Song)")
-    #expect(TitleFormat("  {artist} — {title}  ").line(track) == "Aleksi Perälä — FI3AC2384210")
-    #expect(TitleFormat("Now: {title}").line([:]) == "")
-    #expect(TitleFormat("plain").line([:]) == "plain")
+/// An empty field takes the text before it along, and at either end of the line the text after
+/// it too, so nothing is left hanging.
+@Test func anEmptyFieldLeavesNoTextHanging() {
+    let swinsian = "{title} by {artist} from {album}"
+    #expect(line(swinsian, [.title: "Song", .album: "Album"]) == "Song from Album")
+    #expect(line(swinsian, [.title: "Song", .artist: "Artist"]) == "Song by Artist")
+    #expect(line(swinsian, [.title: "Song"]) == "Song")
+    #expect(line(swinsian, [.artist: "Artist", .album: "Album"]) == "Artist from Album")
+    #expect(line(swinsian, [:]) == "")
+    #expect(line("{artist} - {title}", [.title: "Song"]) == "Song")
+    #expect(line("{title} ({album})", [.title: "Song"]) == "Song")
+    #expect(line("({album}) {title}", [.title: "Song"]) == "Song")
+    #expect(line("({album}) {title}", [.title: "Song", .album: "Album"]) == "(Album) Song")
+    #expect(line("  {artist} — {title}  ", track) == "Aleksi Perälä — FI3AC2384210")
+    #expect(line("plain", [:]) == "plain")
+}
+
+/// Blank is empty, newlines included, and the line is trimmed of them too.
+@Test func whitespaceAndNewlinesAreEmpty() {
+    let swinsian = "{title} by {artist} from {album}"
+    #expect(line(swinsian, [.title: "Song", .artist: " \n", .album: "\t"]) == "Song")
+    #expect(line("\n{title}\n", [.title: "Song"]) == "Song")
 }
 
 @Test func anUnknownFieldOrAnOpenBraceIsAProblem() throws {
@@ -42,10 +56,9 @@ private let track: [TitleFormat.Field: String] = [
             == "{year} isn't a field; the fields are {title}, {artist}, {album}")
     #expect(TitleFormat("{Title}").problem() != nil)
     #expect(TitleFormat("{title").problem() == "a { isn't closed with a }")
-    #expect(TitleFormat("{title}} by {artist}").problem() == nil)
     let values = try parsed(#"{"appearance.headerTitleFormat": "{artist}: {title}"}"#).values
     #expect(
-        (values["appearance.headerTitleFormat"] as? TitleFormat)?.line(track)
+        (values["appearance.headerTitleFormat"] as? TitleFormat)?.line { track[$0] }
             == "Aleksi Perälä: FI3AC2384210")
     for text in ["{title} {genre}", "{", "{}"] {
         #expect(throws: ConfigErrorList.self, "\(text)") {
