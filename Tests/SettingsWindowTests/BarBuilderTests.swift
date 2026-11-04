@@ -229,7 +229,9 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
 
     // The art can't stack with the format, so dragging it there moves nothing.
     let format = try #require(view.chips.first { $0.part == "format" }).frame
-    view.drag("art", to: NSPoint(x: format.midX, y: format.maxY - 1))
+    let onFormat = NSPoint(x: format.midX, y: format.maxY - 1)
+    #expect(view.landing(of: "art", at: onFormat) == .column(.leading(0), 1), "a real place")
+    view.drag("art", to: onFormat)
     #expect(view.shown == builder.layout)
 
     view.drop("seek", at: point)
