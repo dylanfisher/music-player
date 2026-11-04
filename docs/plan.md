@@ -4084,6 +4084,16 @@ menu bar); the owner checks each item on both Macs.
 
 ### 38. Owner feedback, 2026-11-03 evening
 
+**Done; owner check pending.** `./scripts/check` passes clean on main after all three parts.
+The gate also fixed two tests that were failing on main: a glass toggle saved the sidebar width
+it passed through (172 for 180), and the status bar's art skipped its click recognizer when
+AppKit's own was already there. Still for the owner to check in the running app, in light and
+dark and on and off glass: the row lines, the status bar border's color off glass (the header's
+bottom line is darker than the separator color), the art margin, the builder with a real mouse,
+and the title line with a track playing. To decide: whether selected rows should show their row
+line, and whether "the first column on the right" should count from the center, as now, or
+from the window's edge.
+
 The owner's feedback from trying phase 37. `s1205`, the toolbar status with nothing playing, is
 in `~/.claude/projects/-Users-dylanfisher-projects-music-player/feedback-2026-11-03/`. The other
 four screenshots were in a temporary folder and are described where they're used. 38a and 38c
