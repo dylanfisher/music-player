@@ -193,9 +193,26 @@ func theGlassShowsThroughTheHeaders(_ appearance: NSAppearance.Name) throws {
         #expect(alpha > 0 && alpha <= 0.1, "\(x): \(alpha)")
     }
 
+    // A column shown from the header's menu while the glass is on is cleared too.
+    let added = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("artist"))
+    added.title = "Artist"
+    added.width = 100
+    let stock = added.headerCell
+    table.addTableColumn(added)
+    window.layoutIfNeeded()
+    let again = try #require(shown.bitmapImageRepForCachingDisplay(in: shown.bounds))
+    shown.cacheDisplay(in: shown.bounds, to: again)
+    #expect(added.headerCell is ClearHeaderCell)
+    let overAdded =
+        Int(shown.headerRect(ofColumn: 1).minX + 4) * again.pixelsWide
+        / Int(shown.bounds.width)
+    let alpha = try #require(again.colorAt(x: overAdded, y: 4)?.alphaComponent)
+    #expect(alpha > 0 && alpha <= 0.1, "\(alpha)")
+
     let menu = NSMenu(title: "Other Columns")
     shown.menu = menu
     glass.set(false)
     #expect(table.headerView === header)
     #expect(header.menu === menu)
+    #expect(added.headerCell === stock)
 }

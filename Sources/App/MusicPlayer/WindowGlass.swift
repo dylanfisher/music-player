@@ -88,12 +88,12 @@ final class WindowGlass {
             // Alternating rows are opaque, which would hide the glass.
             table.usesAlternatingRowBackgroundColors = false
             if let header = table.headerView {
-                for column in table.tableColumns {
-                    headerCells.append((column, column.headerCell))
-                    column.headerCell = ClearHeaderCell(copying: column.headerCell)
-                }
                 let glassHeader = GlassHeaderView(frame: header.frame)
                 glassHeader.menu = header.menu
+                // Columns shown from the header's menu while the glass is on come with a stock
+                // cell, which the header clears before it draws.
+                glassHeader.clear = { [weak self] column in self?.clearHeader(of: column) }
+                table.tableColumns.forEach(clearHeader)
                 headerViews.append((table, header))
                 table.headerView = glassHeader
             }
@@ -103,6 +103,13 @@ final class WindowGlass {
             }
         }
         for subview in view.subviews { clear(in: subview) }
+    }
+
+    /// Gives `column` a header cell that draws no background, remembering its own.
+    private func clearHeader(of column: NSTableColumn) {
+        guard !(column.headerCell is ClearHeaderCell) else { return }
+        headerCells.append((column, column.headerCell))
+        column.headerCell = ClearHeaderCell(copying: column.headerCell)
     }
 
     private func restore() {
@@ -156,6 +163,13 @@ struct DividerPositions {
 /// the glass (ADR 0087).
 final class GlassHeaderView: NSTableHeaderView {
     static let tint = NSColor.labelColor.withAlphaComponent(0.08)
+    /// Clears a column's header cell, for a column added after the glass went on.
+    var clear: (NSTableColumn) -> Void = { _ in }
+
+    override func viewWillDraw() {
+        tableView?.tableColumns.filter { !($0.headerCell is ClearHeaderCell) }.forEach(clear)
+        super.viewWillDraw()
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         Self.tint.setFill()

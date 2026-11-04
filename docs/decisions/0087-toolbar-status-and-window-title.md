@@ -66,7 +66,9 @@ transparent but leaves `titleVisibility` alone.
 draw no background, but `NSTableHeaderView` fills itself opaque behind any cell that isn't its
 own: 0.97 white in light and 0.26 in dark, measured by drawing a header here. The glass now
 also swaps each list's header view for a `GlassHeaderView` that draws the text color at 8%, a
-separator line under it and the cells, the dragged column last at its offset. Taking the glass
+separator line under it and the cells, the dragged column last at its offset. A column shown
+from the header's menu while the glass is on comes with a stock cell; the header clears it
+before it draws, and taking the glass off gives that column its stock cell back too. Taking the glass
 off puts the original header view back with whatever menu was set meanwhile.
 
 ## Alternatives considered
