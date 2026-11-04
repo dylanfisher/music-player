@@ -44,6 +44,32 @@ public struct BarLayout<Part: Codable & Hashable & Sendable>: Codable, Equatable
     }
 }
 
+extension BarLayout {
+    /// Everything wrong with the layout, in column order. `fillsHeight` says whether a part is
+    /// as tall as the bar, and `title` names it as the settings window does.
+    public func problems(
+        fillsHeight: (Part) -> Bool, title: (Part) -> String
+    ) -> [BarLayoutProblem] {
+        var problems: [BarLayoutProblem] = []
+        var seen: Set<Part> = []
+        for (place, column) in columns {
+            if case .fixed(let points) = column.width, !BarWidth.fixedRangePoints.contains(points) {
+                problems.append(.widthOutOfRange(place, points: points))
+            }
+            for part in column.parts {
+                if !seen.insert(part).inserted {
+                    problems.append(.repeatedPart(title(part), place))
+                }
+                // Alone, a part as tall as the bar has nothing to stack with.
+                if column.stacks, column.parts.count > 1, fillsHeight(part) {
+                    problems.append(.stackedPartFillsHeight(title(part), place))
+                }
+            }
+        }
+        return problems
+    }
+}
+
 extension BarLayout: SettingValue where Part: BarPart {
     public static var typeName: String {
         "a bar layout (leading, center and trailing columns of parts, width, alignment, stacks)"
@@ -53,28 +79,14 @@ extension BarLayout: SettingValue where Part: BarPart {
             SettingKind.Bar(
                 choices: Part.allCases.map {
                     SettingKind.Choice(rawValue: $0.rawValue, title: $0.title)
-                }, stackTitle: Part.stackTitle, centerHelp: Part.centerHelp,
+                }, fillsHeight: Part.allCases.filter(\.fillsHeight).map(\.rawValue),
+                stackTitle: Part.stackTitle, centerHelp: Part.centerHelp,
                 stackCapPoints: Part.stackCapPoints))
     }
 
     /// Everything wrong with the layout, in column order.
     public var problems: [BarLayoutProblem] {
-        var problems: [BarLayoutProblem] = []
-        var seen: Set<Part> = []
-        for (place, column) in columns {
-            if case .fixed(let points) = column.width, !BarWidth.fixedRangePoints.contains(points) {
-                problems.append(.widthOutOfRange(place, points: points))
-            }
-            for part in column.parts {
-                if !seen.insert(part).inserted {
-                    problems.append(.repeatedPart(part.rawValue, place))
-                }
-                if column.stacks, part.fillsHeight {
-                    problems.append(.stackedPartFillsHeight(part.rawValue, place))
-                }
-            }
-        }
-        return problems
+        problems(fillsHeight: \.fillsHeight, title: \.title)
     }
 
     /// The first few problems, and how many more, so a hostile layout can't fill the banner.
@@ -93,11 +105,25 @@ public enum BarPlace: Hashable, Sendable, CustomStringConvertible {
     case center
     case trailing(Int)
 
+    /// The column by where it is, each side counted left to right: "the first column on the
+    /// left", "the center column", "the second column on the right".
     public var description: String {
         switch self {
-        case .leading(let index): "leading column \(index + 1)"
+        case .leading(let index): "the \(ordinal(index + 1)) column on the left"
         case .center: "the center column"
-        case .trailing(let index): "trailing column \(index + 1)"
+        case .trailing(let index): "the \(ordinal(index + 1)) column on the right"
         }
     }
+}
+
+/// "first" to "tenth" in words, then "11th", "21st" and on.
+private func ordinal(_ number: Int) -> String {
+    let words = [
+        "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth",
+        "tenth",
+    ]
+    if words.indices.contains(number - 1) { return words[number - 1] }
+    let suffix =
+        (11...13).contains(number % 100) ? "th" : [1: "st", 2: "nd", 3: "rd"][number % 10] ?? "th"
+    return "\(number)\(suffix)"
 }

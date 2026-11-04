@@ -27,6 +27,9 @@ final class BarBuilderModel {
     private(set) var selection = Selection(place: .center)
     /// Why the layout shown isn't the one in effect, or nil when it is.
     private(set) var unsaved: String?
+    /// Why the last edit was refused, which would have given the layout a problem; the layout
+    /// shown is the one before it.
+    private(set) var refused: String?
     /// Why the last save was refused, kept apart from `unsaved`'s wording, so a reload says it
     /// once however many reloads follow.
     private var refusal: String?
@@ -102,7 +105,6 @@ final class BarBuilderModel {
     /// Adds an empty flexible column beside the selected one and selects it. The center column
     /// stays the only one, so a column beside it goes to that side's list.
     func addColumn(_ side: Side) {
-        guard !isBlocked else { return }
         let place: BarPlace
         switch (selection.place, side) {
         case (.center, .before): place = .leading(layout.leading.count)
@@ -112,13 +114,14 @@ final class BarBuilderModel {
         }
         let alignment: BarAlignment = if case .leading = place { .leading } else { .trailing }
         let column = BarColumn<String>(parts: [], width: .flexible, alignment: alignment)
-        switch place {
-        case .leading(let index): layout.leading.insert(column, at: index)
-        case .trailing(let index): layout.trailing.insert(column, at: index)
-        case .center: preconditionFailure("the center column is never added")
+        edit {
+            switch place {
+            case .leading(let index): layout.leading.insert(column, at: index)
+            case .trailing(let index): layout.trailing.insert(column, at: index)
+            case .center: preconditionFailure("the center column is never added")
+            }
+            selection = Selection(place: place)
         }
-        selection = Selection(place: place)
-        save()
     }
 
     /// Whether the selected column can go: any but the center.
@@ -126,18 +129,19 @@ final class BarBuilderModel {
 
     /// Removes the selected column; its parts go back to the unused ones.
     func removeColumn() {
-        guard !isBlocked else { return }
-        switch selection.place {
-        case .center: return
-        case .leading(let index):
-            layout.leading.remove(at: index)
-            selection.place = index > 0 ? .leading(index - 1) : .center
-        case .trailing(let index):
-            layout.trailing.remove(at: index)
-            selection.place = index > 0 ? .trailing(index - 1) : .center
+        guard canRemoveColumn else { return }
+        edit {
+            switch selection.place {
+            case .center: return
+            case .leading(let index):
+                layout.leading.remove(at: index)
+                selection.place = index > 0 ? .leading(index - 1) : .center
+            case .trailing(let index):
+                layout.trailing.remove(at: index)
+                selection.place = index > 0 ? .trailing(index - 1) : .center
+            }
+            selection.part = nil
         }
-        selection.part = nil
-        save()
     }
 
     func setWidth(_ width: BarWidth) { editColumn { $0.width = width } }
@@ -146,10 +150,8 @@ final class BarBuilderModel {
 
     func setStacks(_ stacks: Bool) { editColumn { $0.stacks = stacks } }
 
-    private func editColumn(_ edit: (inout BarColumn<String>) -> Void) {
-        guard !isBlocked else { return }
-        update(selection.place, edit)
-        save()
+    private func editColumn(_ change: (inout BarColumn<String>) -> Void) {
+        edit { update(selection.place, change) }
     }
 
     private func update(_ place: BarPlace, _ edit: (inout BarColumn<String>) -> Void) {
@@ -167,34 +169,37 @@ final class BarBuilderModel {
             selection.part.map(column.parts.indices.contains) != false
         else { return }
         self.selection = selection
+        refused = nil
         changed()
     }
 
     /// Puts `part` at `index` in the column at `place`, from wherever it was, an unused part
     /// included, and selects it there.
     func place(_ part: String, in place: BarPlace, at index: Int) {
-        guard !isBlocked, choices.contains(where: { $0.rawValue == part }), layout[place] != nil
-        else { return }
-        var target = index
-        if let from = location(of: part) {
-            if from.place == place, from.index < index { target -= 1 }
-            update(from.place) { $0.parts.remove(at: from.index) }
+        guard choices.contains(where: { $0.rawValue == part }), layout[place] != nil else { return }
+        edit {
+            var target = index
+            if let from = location(of: part) {
+                if from.place == place, from.index < index { target -= 1 }
+                update(from.place) { $0.parts.remove(at: from.index) }
+            }
+            update(place) { column in
+                target = min(max(target, 0), column.parts.count)
+                column.parts.insert(part, at: target)
+            }
+            selection = Selection(place: place, part: target)
         }
-        update(place) { column in
-            target = min(max(target, 0), column.parts.count)
-            column.parts.insert(part, at: target)
-        }
-        selection = Selection(place: place, part: target)
-        save()
     }
 
     /// Takes `part` out of its column, back to the unused ones.
     func remove(_ part: String) {
-        guard !isBlocked, let from = location(of: part) else { return }
-        update(from.place) { $0.parts.remove(at: from.index) }
-        let left = layout[from.place]?.parts.count ?? 0
-        selection = Selection(place: from.place, part: left == 0 ? nil : min(from.index, left - 1))
-        save()
+        guard let from = location(of: part) else { return }
+        edit {
+            update(from.place) { $0.parts.remove(at: from.index) }
+            let left = layout[from.place]?.parts.count ?? 0
+            selection = Selection(
+                place: from.place, part: left == 0 ? nil : min(from.index, left - 1))
+        }
     }
 
     private func location(of part: String) -> (place: BarPlace, index: Int)? {
@@ -253,6 +258,31 @@ final class BarBuilderModel {
     }
 
     // MARK: Saving
+
+    /// Makes `change` to the layout and the selection and saves it, or refuses it, putting both
+    /// back and saying why, when the layout would have a problem.
+    private func edit(_ change: () -> Void) {
+        guard !isBlocked else { return }
+        let before = (layout, selection)
+        change()
+        if let problem = problem(in: layout) {
+            (layout, selection) = before
+            refused = problem
+            return changed()
+        }
+        refused = nil
+        save()
+    }
+
+    /// The first thing wrong with `layout`, as a sentence, or nil when it can be saved.
+    func problem(in layout: BarLayout<String>) -> String? {
+        let problems = layout.problems(
+            fillsHeight: bar.fillsHeight.contains, title: title(of:))
+        return problems.first.map { problem in
+            let text = "\(problem)"
+            return text.prefix(1).uppercased() + text.dropFirst() + "."
+        }
+    }
 
     /// Saves the layout; a refusal leaves the layout shown, with why.
     private func save() {

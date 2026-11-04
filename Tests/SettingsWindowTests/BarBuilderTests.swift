@@ -74,20 +74,42 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
     #expect(!builder.canRemoveColumn)
 }
 
-/// A layout the setting refuses stays shown with the setting's reason, and nothing is saved.
-@MainActor @Test func aRefusedLayoutSaysWhyAndLeavesTheConfigAlone() throws {
+/// An edit that would give the layout a problem is refused: the layout stays as it was, and the
+/// hint line says why in plain words, without the config file's path or the setting's key.
+@MainActor @Test func anEditThatWouldMakeAProblemIsRefused() throws {
     let (builder, values) = try builder()
     builder.place("art", in: .center, at: 0)
     builder.setStacks(true)
-    #expect(builder.unsaved?.contains("art fills the bar's height") == true)
-    #expect(builder.layout.center.stacks)
+    #expect(
+        builder.refused
+            == "Art is as tall as the bar, so it can't stack with other parts in the center column."
+    )
+    #expect(!builder.layout.center.stacks)
+    #expect(builder.unsaved == nil)
     #expect(try saved(values()).center.stacks == false)
     builder.setWidth(.fixed(2))
-    #expect(builder.unsaved?.contains("2 points wide") == true)
-    builder.setWidth(.flexible)
-    builder.setStacks(false)
-    #expect(builder.unsaved == nil)
-    #expect(try saved(values()).center.parts == [.art, .totals])
+    #expect(builder.refused?.hasPrefix("The center column is 2 points wide") == true)
+    #expect(builder.layout.center.width == .flexible)
+    builder.select(.init(place: .center))
+    #expect(builder.refused == nil, "the next step clears it")
+
+    // Alone, the art stacks.
+    builder.remove("totals")
+    builder.setStacks(true)
+    #expect(builder.refused == nil)
+    #expect(
+        try saved(values()).center
+            == BarColumn(
+                parts: [.art], width: .flexible, alignment: .center, stacks: true))
+}
+
+@MainActor @Test func theHintLineSaysWhyAnEditWasRefused() throws {
+    let (builder, _) = try builder()
+    let window = BarBuilderWindow(model: builder)
+    builder.setWidth(.fixed(2))
+    let refused = try #require(builder.refused)
+    #expect(window.message.stringValue == refused)
+    #expect(!refused.contains(AppSettings().statusBarLayout.key))
 }
 
 /// The keys walk the parts left to right, move one across columns, and take one out.

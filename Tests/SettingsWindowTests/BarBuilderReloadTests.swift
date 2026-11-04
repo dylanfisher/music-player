@@ -12,10 +12,13 @@ private final class StandIn {
     let setting = AppSettings().statusBarLayout
     nonisolated(unsafe) var values: [String: Any] = [:]
     nonisolated(unsafe) var blocked = false
+    /// Why the next write fails, as a full disk would make it.
+    nonisolated(unsafe) var writeFailure: String?
     lazy var model = GeneralModel(
         settings: [setting.descriptor], searcherInstalled: true,
         value: { [unowned self] in values[$0] },
         set: { [unowned self] key, json in
+            if let writeFailure { throw ConfigProblem(line: nil, message: writeFailure) }
             if case .failure(let reason) = setting.decode(json: json) {
                 throw SettingProblem(key: key, reason: reason)
             }
@@ -54,17 +57,20 @@ private func center(_ parts: [StatusPart]) -> BarLayout<StatusPart> {
     #expect(builder.layout.center.parts.isEmpty)
 }
 
-/// After a refused edit, a reload shows the file's layout and says the edit wasn't saved, even
-/// when the file still has the layout last saved.
-@MainActor @Test func aReloadAfterARefusalShowsTheFilesLayout() throws {
+/// After a write that failed, a reload shows the file's layout and says the edit wasn't saved,
+/// even when the file still has the layout last saved.
+@MainActor @Test func aReloadAfterAFailedWriteShowsTheFilesLayout() throws {
     let file = try StandIn(center([.art]))
     let builder = try file.builder()
+    file.writeFailure = "the disk is full"
     builder.setStacks(true)
     #expect(builder.layout.center.stacks)
+    #expect(builder.unsaved?.contains("the disk is full") == true)
+    file.writeFailure = nil
     try builder.reload()
     #expect(!builder.layout.center.stacks)
     #expect(builder.unsaved?.hasPrefix("Not saved: ") == true)
-    #expect(builder.unsaved?.contains("art fills the bar's height") == true)
+    #expect(builder.unsaved?.contains("the disk is full") == true)
     // Another setting's change reloads again; the note says it once.
     let note = builder.unsaved
     try builder.reload()

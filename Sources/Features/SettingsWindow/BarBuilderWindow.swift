@@ -147,7 +147,8 @@ final class BarBuilderWindow: NSObject {
         stacks.state = column?.stacks == true ? .on : .off
         let problem =
             editable
-            ? model.unsaved : "The config file has a problem. \(ConfigBanner.blockedText)"
+            ? model.unsaved ?? model.refused
+            : "The config file has a problem. \(ConfigBanner.blockedText)"
         message.stringValue =
             problem
             ?? "Drag parts between columns and the tray. With the preview selected, ← and →"

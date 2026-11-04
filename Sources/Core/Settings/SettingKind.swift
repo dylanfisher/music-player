@@ -37,6 +37,8 @@ public indirect enum SettingKind: Sendable, Equatable {
     /// height that differ between bars.
     public struct Bar: Sendable, Equatable {
         public var choices: [Choice]
+        /// The parts as tall as the bar, by raw value, which stack with no others.
+        public var fillsHeight: [String]
         /// The stacking checkbox's title.
         public var stackTitle: String
         /// A sentence saying what the center column does.

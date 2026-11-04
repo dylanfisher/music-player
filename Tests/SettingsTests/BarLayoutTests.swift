@@ -70,15 +70,15 @@ private func column(_ parts: String, _ more: String = "") -> String {
     #expect(
         layout.problems == [
             .widthOutOfRange(.leading(1), points: 8),
-            .stackedPartFillsHeight("art", .leading(1)),
-            .repeatedPart("track", .center),
+            .stackedPartFillsHeight("Art", .leading(1)),
+            .repeatedPart("Title and Artist", .center),
             .widthOutOfRange(.trailing(0), points: 5000),
         ])
     guard case .failure(.invalid(let why)) = setting.decode(json: layout.json) else {
         Issue.record("a layout with problems was accepted")
         return
     }
-    #expect(why.contains("leading column 2 is 8 points wide"))
+    #expect(why.contains("the second column on the left is 8 points wide"))
     #expect(why.hasSuffix("; 1 more"), "the rest are counted")
 }
 
@@ -127,13 +127,41 @@ private func widthJSON(_ width: String) -> String {
 
 /// A layout with many problems lists the first few and how many more.
 @Test func manyProblemsAreCappedWithACount() {
-    let narrow = BarColumn<StatusPart>(parts: [], width: .fixed(1), alignment: .leading)
+    let narrow = BarColumn<StatusPart>(parts: [], width: .fixed(2), alignment: .leading)
     let layout = BarLayout(
         leading: Array(repeating: narrow, count: 5),
         center: BarColumn(parts: [.totals], width: .flexible, alignment: .center))
     #expect(layout.problems.count == 5)
     let text = layout.problem() ?? ""
-    #expect(text.contains("leading column 3 is 1 points wide"))
-    #expect(!text.contains("leading column 4"))
+    #expect(text.contains("the third column on the left is 2 points wide"))
+    #expect(!text.contains("fourth"))
     #expect(text.hasSuffix("; 2 more"))
+}
+
+/// Problems read as plain sentences, naming the part by its title and the column by where it
+/// is, each side counted left to right.
+@Test func problemsReadInPlainWords() {
+    let art = BarLayoutProblem.stackedPartFillsHeight(StatusPart.art.title, .center)
+    #expect(
+        "\(art)"
+            == "Art is as tall as the bar, so it can't stack with other parts in the center column")
+    let width = BarLayoutProblem.widthOutOfRange(.trailing(1), points: 2)
+    #expect(
+        "\(width)"
+            == "the second column on the right is 2 points wide, but a fixed width is 16 to 1200 points"
+    )
+    #expect("\(BarPlace.leading(0))" == "the first column on the left")
+    #expect("\(BarPlace.leading(10))" == "the 11th column on the left")
+    #expect("\(BarPlace.trailing(21))" == "the 22nd column on the right")
+}
+
+/// The art alone in a stacked column has nothing to stack with, so only sharing it is a
+/// problem.
+@Test func theArtStacksOnlyAlone() {
+    var layout = BarLayout<StatusPart>(
+        leading: [BarColumn(parts: [.art], width: .fixed(48), alignment: .leading, stacks: true)],
+        center: BarColumn(parts: [.totals], width: .flexible, alignment: .center))
+    #expect(layout.problems.isEmpty)
+    layout.leading[0].parts.append(.track)
+    #expect(layout.problems == [.stackedPartFillsHeight("Art", .leading(0))])
 }

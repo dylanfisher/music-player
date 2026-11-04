@@ -28,10 +28,11 @@ private func decode(_ json: String) -> Result<BarLayout<HeaderPart>, SettingProb
     }
     #expect(bar.choices.map(\.rawValue) == HeaderPart.allCases.map(\.rawValue))
     #expect(bar.stackTitle == HeaderPart.stackTitle && bar.stackCapPoints == nil)
+    #expect(bar.fillsHeight == ["art"])
 }
 
 /// The header has its own parts: the status bar's totals and one-line track aren't among them,
-/// and its art doesn't stack either.
+/// and its art doesn't stack with others either.
 @Test func theHeaderTakesOnlyItsOwnParts() throws {
     for part in ["totals", "track"] {
         let json =
@@ -44,5 +45,5 @@ private func decode(_ json: String) -> Result<BarLayout<HeaderPart>, SettingProb
     let stacked = BarLayout<HeaderPart>(
         center: BarColumn(
             parts: [.art, .title], width: .flexible, alignment: .leading, stacks: true))
-    #expect(stacked.problems == [.stackedPartFillsHeight("art", .center)])
+    #expect(stacked.problems == [.stackedPartFillsHeight("Art", .center)])
 }
