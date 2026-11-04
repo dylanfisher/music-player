@@ -406,12 +406,12 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         return appearance.rowLines ? appearance.rowLine : nil
     }
 
-    /// Whether the row after `row` is another album's, as the art column groups them: a row
-    /// with no album is an album of its own. The last row ends nothing.
+    /// Whether the row after `row` is another album's, by the album ID the art column groups
+    /// by. Adjacent rows with no album are one group, so loose tracks don't each get the heavy
+    /// line. The last row ends nothing.
     private func endsAlbum(_ row: Int) -> Bool {
         guard row + 1 < model.trackIDs.count else { return false }
-        guard let album = trackRow(row)?.albumID else { return true }
-        return trackRow(row + 1)?.albumID != album
+        return trackRow(row)?.albumID != trackRow(row + 1)?.albumID
     }
 
     /// Whether `row` shows the track playing. Read from the row cache, which already holds the

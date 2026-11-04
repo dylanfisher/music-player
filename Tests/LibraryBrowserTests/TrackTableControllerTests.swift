@@ -477,7 +477,7 @@ private let albumRed = HexColor("#FF0000")
     }
     let ends = rows.indices.map { row in
         row + 1 < rows.count
-            && (rows[row].albumID == nil || rows[row].albumID != rows[row + 1].albumID)
+            && rows[row].albumID != rows[row + 1].albumID
     }
     #expect(ends.contains(true) && ends.contains(false))
     #expect(lines(rows: false, albums: false).allSatisfy { $0 == nil })
