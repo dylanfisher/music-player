@@ -4,6 +4,7 @@ import Library
 import Log
 import Metadata
 import Playback
+import Settings
 
 private let logger = moduleLogger()
 
@@ -75,7 +76,12 @@ public final class NowPlayingModel {
     /// "96 kHz 24-bit FLAC → ADI-2 DAC: 'lpcm' 2 ch 32-bit int @ 96 kHz, non-mixable, hog mode":
     /// the file's format, then what the output is running, once it says.
     var formatLine: String {
-        let source = track.map { track in
+        [sourceFormat, state.outputFormat].compactMap { $0 }.joined(separator: " → ")
+    }
+
+    /// "96 kHz 24-bit FLAC": the file's format, from the library's row.
+    private var sourceFormat: String? {
+        track.map { track in
             // A DSD rate's name says the format and the depth already.
             guard track.codec != TrackAudio.Codec.dsd.rawValue else {
                 return sampleRateText(track.sampleRateHz)
@@ -83,7 +89,38 @@ public final class NowPlayingModel {
             let bits = track.bitsPerSample.map { " " + bitDepth($0) } ?? ""
             return "\(sampleRateText(track.sampleRateHz))\(bits) \(track.codec.uppercased())"
         }
-        return [source, state.outputFormat].compactMap { $0 }.joined(separator: " → ")
+    }
+
+    /// What separates a template's fields, trimmed from the ends of its title so a missing
+    /// first or last field leaves no dangling dash.
+    static let titleSeparators = CharacterSet.whitespaces.union(.init(charactersIn: "—–-|·:/,"))
+
+    /// The window's title, `template` filled from the current track: nil with nothing playing,
+    /// or when the fields it names are all empty, for the app's name instead.
+    func windowTitle(_ template: WindowTitle) -> String? {
+        guard currentURL != nil else { return nil }
+        let title = template.parts.map { part in
+            switch part {
+            case .text(let text): text
+            case .token(let token): value(of: token) ?? ""
+            }
+        }.joined().trimmingCharacters(in: Self.titleSeparators)
+        return title.isEmpty ? nil : title
+    }
+
+    private func value(of token: TitleToken) -> String? {
+        switch token {
+        case .title: title
+        case .artist: track?.artist
+        case .album: track?.album
+        case .albumArtist: track?.albumArtist
+        case .composer: track?.composer
+        case .genre: track?.genre
+        case .year: track?.year.map(String.init)
+        case .trackNumber: track?.trackNumber.map(String.init)
+        case .discNumber: track?.discNumber.map(String.init)
+        case .format: sourceFormat
+        }
     }
 
     /// Elapsed time and the track's length for the bar, as "1:02" and "4:42".

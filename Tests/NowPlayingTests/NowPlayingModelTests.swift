@@ -4,6 +4,7 @@ import Testing
 @testable import Library
 @testable import NowPlaying
 @testable import Playback
+@testable import Settings
 
 private let urls = ["/m/a.flac", "/m/b.flac"].map(URL.init(fileURLWithPath:))
 
@@ -97,4 +98,35 @@ private func update(
     #expect(model.title == "Old")
     model.libraryChanged()
     #expect(model.title == "New")
+}
+
+/// The window's title fills each token from the playing track; with nothing playing, or only
+/// empty fields, it's nil, for the app's name.
+@MainActor @Test func theWindowTitleFillsTheTemplateFromTheTrack() {
+    var current = row(urls[0].path)
+    let model = NowPlayingModel { _ in current }
+    #expect(model.windowTitle(.default) == nil)
+    model.apply(update(.trackStarted(index: 0)))
+    #expect(model.windowTitle(.default) == "Come Together — The Beatles")
+    let every = TitleToken.allCases.map(\.placeholder).joined(separator: "|")
+    #expect(
+        model.windowTitle(WindowTitle(every))
+            == "Come Together|The Beatles|Abbey Road|||Rock|1969|1|1|96 kHz 24-bit FLAC")
+    #expect(model.windowTitle(WindowTitle("Now: {album}")) == "Now: Abbey Road")
+    // A missing first or last field leaves no dash at the end.
+    current.artist = nil
+    model.libraryChanged()
+    #expect(model.windowTitle(.default) == "Come Together")
+    #expect(model.windowTitle(WindowTitle("{artist} — {title}")) == "Come Together")
+    #expect(model.windowTitle(WindowTitle("{composer}")) == nil)
+    #expect(model.windowTitle(WindowTitle("")) == nil)
+    model.apply(update(.stopped, current: nil))
+    #expect(model.windowTitle(.default) == nil)
+}
+
+/// A file the library doesn't have is titled by its name.
+@MainActor @Test func aTrackOutsideTheLibraryIsTitledByItsFileName() {
+    let model = NowPlayingModel { _ in nil }
+    model.apply(update(.trackStarted(index: 1), current: 1))
+    #expect(model.windowTitle(.default) == "b")
 }

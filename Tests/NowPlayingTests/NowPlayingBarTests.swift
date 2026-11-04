@@ -185,3 +185,15 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     bar.apply(update(.stopped, current: nil, duration: nil))
     #expect(arts.allSatisfy { $0.alphaValue == 0 })
 }
+
+/// The bar reports the window's title as the track starts and stops and as its template
+/// changes.
+@MainActor @Test func theBarReportsTheWindowTitle() {
+    let bar = bar()
+    var titles: [String?] = []
+    bar.windowTitleChanged = { titles.append($0) }
+    bar.apply(update(.trackStarted(index: 0), duration: 100))
+    bar.windowTitle = WindowTitle("{format}: {title}")
+    bar.apply(update(.stopped, current: nil, duration: nil))
+    #expect(titles == ["Song", "44.1 kHz 16-bit FLAC: Song", nil])
+}

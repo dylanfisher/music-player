@@ -27,6 +27,12 @@ public final class NowPlayingBar: NSObject {
     public var status: NSView { header.view }
     /// The status bar's art, track, format and seek bar.
     public let statusBar = StatusBarParts()
+    /// What the window's title says while a track plays.
+    public var windowTitle = WindowTitle.default {
+        didSet { show() }
+    }
+    /// Called with the window's title as the track or its tags change: nil for the app's name.
+    public var windowTitleChanged: (String?) -> Void = { _ in }
     private let artwork: ArtworkLoader
     private var engine: PlaybackEngine?
     private var updates: Task<Void, Never>?
@@ -174,6 +180,7 @@ public final class NowPlayingBar: NSObject {
             art.alphaValue = model.currentURL == nil ? 0 : 1
         }
         statusBar.show(title: model.title, subtitle: model.subtitle)
+        windowTitleChanged(model.windowTitle(windowTitle))
         statusBar.show(
             format: header.formatLabel.stringValue,
             color: header.formatLabel.textColor ?? .labelColor)
