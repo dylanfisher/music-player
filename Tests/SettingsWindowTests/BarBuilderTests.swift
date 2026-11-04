@@ -207,6 +207,30 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
     #expect(try saved(values()).center.parts == [.seek, .art])
 }
 
+/// The preview takes the settings window's colors: the bar is a section's faint box over the
+/// window's background, not an opaque gray, and a part is a light field like the shortcut
+/// recorder's.
+@MainActor @Test func thePreviewIsDrawnInTheSettingsWindowsColors() throws {
+    let (builder, _) = try builder(
+        BarLayout(center: BarColumn(parts: [.track], width: .fixed(200), alignment: .center)))
+    let view = BarBuilderView(model: builder)
+    view.appearance = NSAppearance(named: .aqua)
+    view.frame = NSRect(x: 0, y: 0, width: 760, height: view.intrinsicContentSize.height)
+    let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+    view.cacheDisplay(in: view.bounds, to: bitmap)
+    let scale = Double(bitmap.pixelsWide) / view.bounds.width
+    func color(_ point: NSPoint) throws -> NSColor {
+        try #require(
+            bitmap.colorAt(x: Int(point.x * scale), y: Int(point.y * scale))?.usingColorSpace(
+                .sRGB))
+    }
+    let bar = try color(NSPoint(x: 20, y: view.barHeight / 2))
+    #expect(bar.alphaComponent < 0.2, "\(bar)")
+    let chip = try #require(view.chips.first { $0.part == "track" }).frame
+    let field = try color(NSPoint(x: chip.minX + 3, y: chip.midY))
+    #expect(field.brightnessComponent > 0.9 && field.alphaComponent > 0.9, "\(field)")
+}
+
 /// Reset to Default saves the setting's default through the builder's own patch, and is off
 /// while the layout is the default.
 @MainActor @Test func resetToDefaultSavesTheDefault() throws {

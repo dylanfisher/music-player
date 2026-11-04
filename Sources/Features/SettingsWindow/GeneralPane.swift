@@ -22,6 +22,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     static let margin = 20.0
     /// The space between a box's edge and its rows.
     private static let boxInset = 12.0
+    /// The sections' boxes' look, which the bar builder's preview takes too.
+    static let boxFill = NSColor.quaternaryLabelColor.withAlphaComponent(0.05)
+    static let boxCornerRadius = 6.0
     /// How far a checkbox's title is from its left edge, where its summary starts too.
     private static let checkboxIndent = 20.0
     /// The widest a summary is, so the boxes keep the pane's width.
@@ -112,9 +115,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private func box(_ title: String, _ content: NSView) -> NSView {
         let background = NSBox()
         background.boxType = .custom
-        background.fillColor = .quaternaryLabelColor.withAlphaComponent(0.05)
+        background.fillColor = Self.boxFill
         background.borderColor = .separatorColor
-        background.cornerRadius = 6
+        background.cornerRadius = Self.boxCornerRadius
         let panel = NSView()
         for view in [background, content] {
             view.translatesAutoresizingMaskIntoConstraints = false

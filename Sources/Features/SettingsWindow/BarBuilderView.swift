@@ -137,18 +137,24 @@ final class BarBuilderView: NSView {
 
     // MARK: Drawing
 
+    /// Drawn in the settings window's own colors: the bar as a section's box, each column
+    /// outlined as the box is, and each part as a shortcut recorder's field.
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.underPageBackgroundColor.setFill()
-        NSRect(x: 0, y: 0, width: bounds.width, height: barHeight).fill()
-        NSColor.separatorColor.setFill()
-        NSRect(x: 0, y: barHeight - 1, width: bounds.width, height: 1).fill()
+        let box = NSBezierPath(
+            roundedRect: NSRect(x: 0, y: 0, width: bounds.width, height: barHeight).insetBy(
+                dx: 0.5, dy: 0.5), xRadius: GeneralPane.boxCornerRadius,
+            yRadius: GeneralPane.boxCornerRadius)
+        GeneralPane.boxFill.setFill()
+        box.fill()
+        NSColor.separatorColor.setStroke()
+        box.stroke()
         let frames = columnFrames
         for (place, column) in model.layout.columns {
             guard let frame = frames[place] else { continue }
             let path = NSBezierPath(
                 roundedRect: frame.insetBy(dx: 1, dy: 2), xRadius: 5, yRadius: 5)
             let selected = model.selection.place == place && model.selection.part == nil
-            (selected ? NSColor.controlAccentColor : NSColor.tertiaryLabelColor).setStroke()
+            (selected ? NSColor.controlAccentColor : NSColor.separatorColor).setStroke()
             path.lineWidth = selected ? 2 : 1
             if place == .center { path.setLineDash([4, 2], count: 2, phase: 0) }
             path.stroke()
@@ -184,9 +190,14 @@ final class BarBuilderView: NSView {
     }
 
     private func drawChip(_ part: String, in frame: NSRect, selected: Bool) {
-        let path = NSBezierPath(roundedRect: frame, xRadius: 4, yRadius: 4)
-        (selected ? NSColor.controlAccentColor : NSColor.quaternaryLabelColor).setFill()
+        let path = NSBezierPath(
+            roundedRect: frame.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
+        (selected ? NSColor.controlAccentColor : NSColor.controlBackgroundColor).setFill()
         path.fill()
+        if !selected {
+            NSColor.separatorColor.setStroke()
+            path.stroke()
+        }
         drawText(
             model.title(of: part), in: frame,
             color: selected ? .alternateSelectedControlTextColor : .labelColor)
