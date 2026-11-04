@@ -142,7 +142,7 @@ extension AppDelegate {
     func applyHeaderStatus(_ layout: BarLayout<HeaderPart>) {
         nowPlaying?.header.apply(layout)
         toolbar?.statusLayout = layout
-        toolbar?.statusLayoutChanged()
+        toolbar?.resizeStatus()
     }
 
     /// The Settings window, made on first use.

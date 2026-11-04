@@ -12,8 +12,10 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     static let volumeRangeDecibels = -60.0...0
     static let searchPoints = 220.0
     static let statusMinimumPoints = 280.0
-    /// As wide as Swinsian's status, so the flexible spaces beside it keep a share of the width.
-    static let statusMaximumPoints = 560.0
+    /// As wide as Swinsian's status, so flexible spaces beside it keep a share of the width.
+    static let statusSharingPoints = 560.0
+    /// With no flexible space in the toolbar, the status takes all the room the others leave.
+    static let statusMaximumPoints = 10_000.0
     static let volumePoints = 90.0
     let toolbar: NSToolbar
     /// The output picker's menu, which the app fills as it opens.
@@ -72,6 +74,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         for (index, item) in items.enumerated() {
             toolbar.insertItem(withItemIdentifier: item.identifier, at: index)
         }
+        resizeStatus()
     }
 
     // MARK: NSToolbarDelegate
@@ -98,7 +101,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         if flag, let view = views[item] {
             let shown = NSToolbarItem(itemIdentifier: identifier)
             shown.view = view
-            if item == .status { Self.sizeStatus(shown) }
+            if item == .status { size(shown) }
             label(shown, item)
             return shown
         }
@@ -119,23 +122,27 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         return made
     }
 
-    /// Sizes the status's item again for its view's layout, which sets its height.
-    func statusLayoutChanged() {
+    /// Sizes the status's item again: its view's layout sets its height, and whether a
+    /// flexible space shares the toolbar its widest.
+    func resizeStatus() {
         for shown in toolbar.items where ToolbarItem(shown.itemIdentifier) == .status {
-            Self.sizeStatus(shown)
+            size(shown)
         }
     }
 
-    /// The status takes the room the other items leave, at its view's height. The toolbar
-    /// measures a view at its fitting size, so constraints can't widen it; `minSize` and
-    /// `maxSize`, deprecated in macOS 12 with no replacement for a flexible width, can. KVC sets
-    /// them without the deprecation warning.
-    private static func sizeStatus(_ shown: NSToolbarItem) {
+    /// The status takes the room the other items leave, up to `statusSharingPoints` when a
+    /// flexible space takes the rest, at its view's height. The toolbar measures a view at its
+    /// fitting size, so constraints can't widen it; `minSize` and `maxSize`, deprecated in
+    /// macOS 12 with no replacement for a flexible width, can. KVC sets them without the
+    /// deprecation warning.
+    private func size(_ shown: NSToolbarItem) {
         let height = shown.view?.fittingSize.height ?? 0
+        let shares = toolbar.items.contains { $0.itemIdentifier == .flexibleSpace }
+        let widest = shares ? Self.statusSharingPoints : Self.statusMaximumPoints
         shown.setValue(
-            NSValue(size: NSSize(width: statusMinimumPoints, height: height)), forKey: "minSize")
-        shown.setValue(
-            NSValue(size: NSSize(width: statusMaximumPoints, height: height)), forKey: "maxSize")
+            NSValue(size: NSSize(width: Self.statusMinimumPoints, height: height)),
+            forKey: "minSize")
+        shown.setValue(NSValue(size: NSSize(width: widest, height: height)), forKey: "maxSize")
     }
 
     /// What the customization sheet shows for an item whose view is a feature's: a copy of the
@@ -171,6 +178,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             reporting = false
+            resizeStatus()
             itemsChanged(items)
         }
     }

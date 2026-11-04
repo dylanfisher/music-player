@@ -112,9 +112,31 @@ private func nextTurn() async {
         center: BarColumn(parts: [.title], width: .flexible, alignment: .center))
     header.apply(oneLine)
     made.statusLayout = oneLine
-    made.statusLayoutChanged()
+    made.resizeStatus()
     let short = try #require((item.value(forKey: "maxSize") as? NSValue)?.sizeValue.height)
     #expect(short == header.view.fittingSize.height && short < tall, "\(short) \(tall)")
+}
+
+/// Beside a flexible space the status stops at Swinsian's width so the space keeps a share;
+/// without one, as in a toolbar saved before the default set had them, it fills the room as it
+/// did. Adding or removing a space changes it.
+@MainActor @Test func theStatusFillsUnlessAFlexibleSpaceShares() async throws {
+    func widest(_ made: MainToolbar) throws -> CGFloat {
+        let item = try #require(
+            made.toolbar.items.first { ToolbarItem($0.itemIdentifier) == .status })
+        return try #require((item.value(forKey: "maxSize") as? NSValue)?.sizeValue.width)
+    }
+    let dispatcher = try dispatcher()
+    let shared = toolbar(ToolbarItem.defaultItems, dispatcher)
+    #expect(try widest(shared) == MainToolbar.statusSharingPoints)
+    let old = toolbar([.transport, .status, .queue, .search], dispatcher)
+    #expect(try widest(old) == MainToolbar.statusMaximumPoints)
+    old.toolbar.insertItem(withItemIdentifier: .flexibleSpace, at: 0)
+    await nextTurn()
+    #expect(try widest(old) == MainToolbar.statusSharingPoints)
+    old.toolbar.removeItem(at: 0)
+    await nextTurn()
+    #expect(try widest(old) == MainToolbar.statusMaximumPoints)
 }
 
 @MainActor @Test func theRepeatButtonStepsThroughTheModes() throws {
