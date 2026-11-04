@@ -22,10 +22,12 @@ private func decode(_ json: String) -> Result<BarLayout<HeaderPart>, SettingProb
                 parts: [.title, .subtitle, .format, .seek], width: .flexible,
                 alignment: .leading, stacks: true))
     #expect(layout.trailing.isEmpty && layout.problems.isEmpty)
-    #expect(
-        setting.kind
-            == .barLayout(HeaderPart.allCases.map { .init(rawValue: $0.rawValue, title: $0.title) })
-    )
+    guard case .barLayout(let bar) = setting.kind else {
+        Issue.record("\(setting.kind)")
+        return
+    }
+    #expect(bar.choices.map(\.rawValue) == HeaderPart.allCases.map(\.rawValue))
+    #expect(bar.stackTitle == HeaderPart.stackTitle && bar.stackCapPoints == nil)
 }
 
 /// The header has its own parts: the status bar's totals and one-line track aren't among them,

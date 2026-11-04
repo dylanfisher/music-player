@@ -18,6 +18,13 @@ public enum HeaderPart: String, BarPart {
 
     /// The art is a square as tall as the status's text, so it doesn't stack with it.
     public var fillsHeight: Bool { self == .art }
+    // The toolbar has no style, so a stacked column always stacks.
+    public static let stackTitle = "Stack Parts"
+    public static let centerHelp =
+        "The dashed column takes the width beside the others when flexible, and is centered on"
+        + " the status when fixed."
+    /// The status's tallest stack is its four lines, which the toolbar grows to fit.
+    public static let stackCapPoints: Double? = nil
 }
 
 extension BarLayout where Part == HeaderPart {

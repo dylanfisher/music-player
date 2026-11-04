@@ -14,6 +14,9 @@ public enum StatusPart: String, BarPart {
     }
 
     public var fillsHeight: Bool { self == .art }
+    public static let stackTitle = "Stack in Tall Style"
+    public static let centerHelp = "The dashed column is centered on the window."
+    public static let stackCapPoints: Double? = StatusBarStyle.tallMaxPoints
 }
 
 extension BarLayout where Part == StatusPart {

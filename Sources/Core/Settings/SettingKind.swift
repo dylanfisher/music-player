@@ -10,8 +10,8 @@ public indirect enum SettingKind: Sendable, Equatable {
     /// The value or null.
     case optional(SettingKind)
     case list(SettingKind)
-    /// Columns of these parts, which the settings window's bar builder edits.
-    case barLayout([Choice])
+    /// Columns of a bar's parts, which the settings window's bar builder edits.
+    case barLayout(Bar)
     case watchedFolder
     case syncFolder
     /// Window layout the app saves as it changes; the settings window shows no control for it.
@@ -20,5 +20,18 @@ public indirect enum SettingKind: Sendable, Equatable {
     public struct Choice: Sendable, Equatable {
         public var rawValue: String
         public var title: String
+    }
+
+    /// What the bar builder needs to know about one bar: its parts, and the words and the
+    /// height that differ between bars.
+    public struct Bar: Sendable, Equatable {
+        public var choices: [Choice]
+        /// The stacking checkbox's title.
+        public var stackTitle: String
+        /// A sentence saying what the center column does.
+        public var centerHelp: String
+        /// The tallest the bar grows to fit a stack, in points, or nil when only its parts
+        /// limit it.
+        public var stackCapPoints: Double?
     }
 }

@@ -26,8 +26,7 @@ final class BarBuilderWindow: NSObject {
     private let alignment = NSSegmentedControl(
         labels: BarAlignment.allCases.map(\.title), trackingMode: .selectOne, target: nil,
         action: nil)
-    private let stacks = NSButton(
-        checkboxWithTitle: "Stack in Tall Style", target: nil, action: nil)
+    let stacks = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     let message = NSTextField(wrappingLabelWithString: "")
 
     init(model: BarBuilderModel) {
@@ -38,6 +37,7 @@ final class BarBuilderWindow: NSObject {
             styleMask: [.titled, .closable], backing: .buffered, defer: true)
         super.init()
         window.title = model.title
+        stacks.title = model.bar.stackTitle
         window.isReleasedWhenClosed = false
         build()
         model.changed = { [weak self] in self?.show() }
@@ -152,7 +152,7 @@ final class BarBuilderWindow: NSObject {
             problem
             ?? "Drag parts between columns and the tray. With the preview selected, ← and →"
             + " select, ⌘← and ⌘→ move a part, and Delete removes it. The selected column is"
-            + " outlined; the dashed one is centered on the window."
+            + " outlined. " + model.bar.centerHelp
         message.textColor = problem == nil ? .secondaryLabelColor : .systemRed
     }
 

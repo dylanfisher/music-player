@@ -45,13 +45,13 @@ final class BarBuilderView: NSView {
     override var focusRingMaskBounds: NSRect { bounds }
     override func drawFocusRingMask() { bounds.fill() }
 
-    /// The bar's height: one row of chips, or the tallest stacked column.
+    /// The bar's height: one row of chips, or the tallest stacked column, up to the bar's own
+    /// cap.
     var barHeight: Double {
         let tallest = model.layout.columns.filter(\.column.stacks).map(\.column.parts.count).max()
         let stacked = Double(tallest ?? 0) * (Self.chipPoints + Self.chipSpacing)
-        return min(
-            max(StatusBarStyle.tallPoints, stacked + 2 * Self.columnPadding),
-            StatusBarStyle.tallMaxPoints)
+        let height = max(StatusBarStyle.tallPoints, stacked + 2 * Self.columnPadding)
+        return model.bar.stackCapPoints.map { min(height, $0) } ?? height
     }
 
     override var intrinsicContentSize: NSSize {

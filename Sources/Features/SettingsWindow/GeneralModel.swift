@@ -22,7 +22,7 @@ public final class GeneralModel {
         /// The network renderer, which the output device's row lists and picks too.
         case renderer
         /// Columns of parts, which a button opens the bar builder on.
-        case barLayout([SettingKind.Choice])
+        case barLayout(SettingKind.Bar)
         /// A kind with no control of its own: the value as the config file has it, edited there.
         case readOnly
     }
@@ -154,7 +154,7 @@ public final class GeneralModel {
             case .optional(.string): .text(optional: true)
             case .list(.watchedFolder): .folders
             case .optional(.syncFolder): .syncFolder
-            case .barLayout(let choices): .barLayout(choices)
+            case .barLayout(let bar): .barLayout(bar)
             default: .readOnly
             }
         return Row(
@@ -290,10 +290,10 @@ public final class GeneralModel {
     /// The bar builder's model for the bar layout row `key`.
     func barBuilder(_ key: String) throws -> BarBuilderModel {
         guard let row = rows.first(where: { $0.key == key }),
-            case .barLayout(let choices) = row.control
+            case .barLayout(let bar) = row.control
         else { preconditionFailure("\(key) isn't a bar layout") }
         return try BarBuilderModel(
-            key: key, title: row.title, choices: choices, value: { [value] in value(key) },
+            key: key, title: row.title, bar: bar, value: { [value] in value(key) },
             set: { [set] json in try set(key, json) }, blocked: isBlocked)
     }
 

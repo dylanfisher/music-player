@@ -22,6 +22,8 @@ final class BarBuilderModel {
     let key: String
     let title: String
     let choices: [SettingKind.Choice]
+    /// The words and the height that differ between bars.
+    let bar: SettingKind.Bar
     private(set) var layout: BarLayout<String>
     private(set) var selection = Selection(place: .center)
     /// Why the layout shown isn't the one in effect, or nil when it is.
@@ -42,12 +44,13 @@ final class BarBuilderModel {
     /// `value` reads the setting as JSON holds it; `set` writes it. `blocked` says whether the
     /// config file has a problem that refuses every change until it's fixed.
     init(
-        key: String, title: String, choices: [SettingKind.Choice], value: @escaping () -> Any?,
+        key: String, title: String, bar: SettingKind.Bar, value: @escaping () -> Any?,
         set: @escaping (Any) throws -> Void, blocked: @escaping () -> Bool
     ) throws {
         self.key = key
         self.title = title
-        self.choices = choices
+        self.choices = bar.choices
+        self.bar = bar
         self.value = value
         self.set = set
         self.blocked = blocked

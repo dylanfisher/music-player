@@ -49,7 +49,12 @@ extension BarLayout: SettingValue where Part: BarPart {
         "a bar layout (leading, center and trailing columns of parts, width, alignment, stacks)"
     }
     public static var kind: SettingKind {
-        .barLayout(Part.allCases.map { SettingKind.Choice(rawValue: $0.rawValue, title: $0.title) })
+        .barLayout(
+            SettingKind.Bar(
+                choices: Part.allCases.map {
+                    SettingKind.Choice(rawValue: $0.rawValue, title: $0.title)
+                }, stackTitle: Part.stackTitle, centerHelp: Part.centerHelp,
+                stackCapPoints: Part.stackCapPoints))
     }
 
     /// Everything wrong with the layout, in column order.
