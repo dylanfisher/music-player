@@ -23,8 +23,8 @@ public final class GeneralModel {
         case output
         /// The network renderer, which the output device's row lists and picks too.
         case renderer
-        /// Columns of parts, which a button opens the bar builder on.
-        case barLayout(SettingKind.Bar)
+        /// Columns of parts, which a button opens the bar builder on, and the setting's default.
+        case barLayout(SettingKind.Bar, defaultLayout: BarLayout<String>)
         /// A color well, with a button that sets null when the setting allows it.
         case color(optional: Bool)
         /// A kind with no control of its own: the value as the config file has it, edited there.
@@ -159,7 +159,8 @@ public final class GeneralModel {
             case .template(let tokens): .template(tokens)
             case .list(.watchedFolder): .folders
             case .optional(.syncFolder): .syncFolder
-            case .barLayout(let bar): .barLayout(bar)
+            case .barLayout(let bar):
+                .barLayout(bar, defaultLayout: barLayout(setting.defaultValue))
             case .color: .color(optional: false)
             case .optional(.color): .color(optional: true)
             default: .readOnly
@@ -297,10 +298,11 @@ public final class GeneralModel {
     /// The bar builder's model for the bar layout row `key`.
     func barBuilder(_ key: String) throws -> BarBuilderModel {
         guard let row = rows.first(where: { $0.key == key }),
-            case .barLayout(let bar) = row.control
+            case .barLayout(let bar, let defaultLayout) = row.control
         else { preconditionFailure("\(key) isn't a bar layout") }
         return try BarBuilderModel(
-            key: key, title: row.title, bar: bar, value: { [value] in value(key) },
+            key: key, title: row.title, bar: bar, defaultLayout: defaultLayout,
+            value: { [value] in value(key) },
             set: { [set] json in try set(key, json) }, blocked: isBlocked)
     }
 
@@ -350,6 +352,17 @@ public final class GeneralModel {
             .readOnly:
             preconditionFailure("\(key) isn't a text row")
         }
+    }
+}
+
+/// A bar layout setting's value with its parts by their names in the config file, as the bar
+/// builder holds them.
+private func barLayout(_ value: any SettingValue) -> BarLayout<String> {
+    do {
+        return try JSONDecoder().decode(
+            BarLayout<String>.self, from: JSONEncoder().encode(value))
+    } catch {
+        preconditionFailure("a bar layout's default doesn't read back: \(error)")
     }
 }
 

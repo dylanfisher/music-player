@@ -21,6 +21,7 @@ final class BarBuilderWindow: NSObject {
     private let removeColumn = NSButton()
     private let addPart = NSPopUpButton(frame: .zero, pullsDown: true)
     private let removePart = NSButton()
+    let reset = NSButton()
     private let width = NSPopUpButton(frame: .zero, pullsDown: false)
     let points = NSTextField()
     private let alignment = NSSegmentedControl(
@@ -50,6 +51,7 @@ final class BarBuilderWindow: NSObject {
             (addAfter, "Add Column After", #selector(addColumnAfter)),
             (removeColumn, "Remove Column", #selector(removeSelectedColumn)),
             (removePart, "Remove Part", #selector(removeSelectedPart)),
+            (reset, "Reset to Default", #selector(resetToDefault)),
         ] {
             button.title = title
             button.bezelStyle = .rounded
@@ -85,10 +87,11 @@ final class BarBuilderWindow: NSObject {
         let widthRow = NSStackView(views: [
             NSTextField(labelWithString: "Width:"), width, points,
             NSTextField(labelWithString: "pt"), NSTextField(labelWithString: "Alignment:"),
-            alignment, stacks,
+            alignment, stacks, reset,
         ])
         widthRow.setCustomSpacing(20, after: widthRow.views[3])
         widthRow.setCustomSpacing(20, after: alignment)
+        widthRow.setCustomSpacing(20, after: stacks)
         let content = NSStackView(views: [preview, columnRow, widthRow, message])
         content.orientation = .vertical
         content.alignment = .leading
@@ -123,6 +126,7 @@ final class BarBuilderWindow: NSObject {
         let editable = !model.isBlocked
         removeColumn.isEnabled = editable && model.canRemoveColumn
         removePart.isEnabled = editable && model.selection.part != nil
+        reset.isEnabled = editable && !model.isDefault
         for control in [addBefore, addAfter, width, alignment, stacks] as [NSControl] {
             control.isEnabled = editable
         }
@@ -164,6 +168,8 @@ final class BarBuilderWindow: NSObject {
     @objc private func removeSelectedColumn() { model.removeColumn() }
 
     @objc private func removeSelectedPart() { model.removeSelected() }
+
+    @objc private func resetToDefault() { model.resetToDefault() }
 
     /// Adds the chosen part at the end of the selected column.
     @objc private func addSelectedPart(_ sender: NSPopUpButton) {

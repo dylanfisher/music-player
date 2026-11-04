@@ -23,6 +23,8 @@ final class BarBuilderModel {
     let choices: [SettingKind.Choice]
     /// The words and the height that differ between bars.
     let bar: SettingKind.Bar
+    /// The setting's default, which Reset to Default puts back.
+    let defaultLayout: BarLayout<String>
     private(set) var layout: BarLayout<String>
     private(set) var selection = Selection(place: .center)
     /// Why the layout shown isn't the one in effect, or nil when it is.
@@ -44,13 +46,15 @@ final class BarBuilderModel {
     /// `value` reads the setting as JSON holds it; `set` writes it. `blocked` says whether the
     /// config file has a problem that refuses every change until it's fixed.
     init(
-        key: String, title: String, bar: SettingKind.Bar, value: @escaping () -> Any?,
+        key: String, title: String, bar: SettingKind.Bar, defaultLayout: BarLayout<String>,
+        value: @escaping () -> Any?,
         set: @escaping (Any) throws -> Void, blocked: @escaping () -> Bool
     ) throws {
         self.key = key
         self.title = title
         self.choices = bar.choices
         self.bar = bar
+        self.defaultLayout = defaultLayout
         self.value = value
         self.set = set
         self.blocked = blocked
@@ -159,6 +163,17 @@ final class BarBuilderModel {
         case .leading(let index): edit(&layout.leading[index])
         case .center: edit(&layout.center)
         case .trailing(let index): edit(&layout.trailing[index])
+        }
+    }
+
+    /// Whether the layout is the setting's default, which Reset to Default would leave as it is.
+    var isDefault: Bool { layout == defaultLayout }
+
+    /// Puts the setting's default back, saving it as any edit is.
+    func resetToDefault() {
+        edit {
+            layout = defaultLayout
+            selection = Selection(place: .center)
         }
     }
 

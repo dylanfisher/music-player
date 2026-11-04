@@ -206,3 +206,20 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
     view.drop("track", at: NSPoint(x: 5, y: view.trayFrame.midY))
     #expect(try saved(values()).center.parts == [.seek, .art])
 }
+
+/// Reset to Default saves the setting's default through the builder's own patch, and is off
+/// while the layout is the default.
+@MainActor @Test func resetToDefaultSavesTheDefault() throws {
+    let (builder, values) = try builder(
+        BarLayout(
+            leading: [BarColumn(parts: [.art], width: .fixed(40), alignment: .leading)],
+            center: BarColumn(parts: [.seek], width: .flexible, alignment: .center)))
+    let window = BarBuilderWindow(model: builder)
+    #expect(window.reset.isEnabled)
+    builder.select(.init(place: .leading(0), part: 0))
+    builder.resetToDefault()
+    #expect(try saved(values()) == .defaultStatusBar)
+    #expect(builder.layout.center.parts == ["totals"])
+    #expect(builder.selection == .init(place: .center))
+    #expect(!window.reset.isEnabled)
+}
