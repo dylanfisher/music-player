@@ -742,7 +742,9 @@ private func output(
     let first = try await FakeRenderer.denon()
     let moved = try await FakeRenderer.denon()
     let movedRenderer = try await discovered(moved)
-    let (output, log) = try await output(first, timeout: 0.3) { [movedRenderer] in
+    // A refused connection to the vanished renderer is instant, so the timeout only has to be
+    // long enough that a loaded machine doesn't time the moved renderer's commands out.
+    let (output, log) = try await output(first, timeout: 2) { [movedRenderer] in
         [movedRenderer]
     }
     defer { output.close() }
