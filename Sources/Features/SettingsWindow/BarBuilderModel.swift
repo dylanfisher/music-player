@@ -4,8 +4,7 @@ import Settings
 /// The bar builder's state for one `BarLayout` setting: the layout shown, the part or column
 /// selected, and the edits the builder's drags, buttons and keys make (ADR 0085). It holds the
 /// parts by their names in the config file, so one builder serves every bar. Each edit saves
-/// the layout as a patch to its own key, except while a column is empty: a column added for a
-/// part to be dragged into is shown, and saved once it has one.
+/// the layout as a patch to its own key.
 @MainActor
 final class BarBuilderModel {
     /// A column, and a part in it when one is selected.
@@ -28,8 +27,6 @@ final class BarBuilderModel {
     private(set) var selection = Selection(place: .center)
     /// Why the layout shown isn't the one in effect, or nil when it is.
     private(set) var unsaved: String?
-    /// Whether `unsaved` is a column waiting for a part, rather than a refused save.
-    private var waitingForPart = false
     /// Why the last save was refused, kept apart from `unsaved`'s wording, so a reload says it
     /// once however many reloads follow.
     private var refusal: String?
@@ -68,15 +65,11 @@ final class BarBuilderModel {
     /// nothing meanwhile.
     var isBlocked: Bool { blocked() }
 
-    /// Shows the layout the config file has now. A column waiting for a part survives another
-    /// setting's change, but a refused edit gives way to the file's layout, saying it wasn't
-    /// saved.
+    /// Shows the layout the config file has now. A refused save gives way to the file's
+    /// layout, saying it wasn't saved.
     func reload() throws {
-        let current = try Self.read(key, value())
-        if current == saved, waitingForPart, !isBlocked { return changed() }
-        saved = current
-        layout = current
-        waitingForPart = false
+        saved = try Self.read(key, value())
+        layout = saved
         unsaved = refusal.map { "Not saved: \($0)" }
         keepSelectionInLayout()
         changed()
@@ -261,14 +254,10 @@ final class BarBuilderModel {
 
     // MARK: Saving
 
-    /// Saves the layout unless a column is empty; a refusal leaves the layout shown, with why.
+    /// Saves the layout; a refusal leaves the layout shown, with why.
     private func save() {
-        waitingForPart = false
         refusal = nil
-        if let empty = layout.columns.first(where: { $0.column.parts.isEmpty }) {
-            unsaved = "Drag a part into \(empty.place) to save the layout."
-            waitingForPart = true
-        } else if layout == saved {
+        if layout == saved {
             unsaved = nil
         } else {
             do {

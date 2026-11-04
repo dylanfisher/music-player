@@ -69,7 +69,6 @@ private func column(_ parts: String, _ more: String = "") -> String {
         trailing: [BarColumn(parts: [.seek], width: .fixed(5000), alignment: .trailing)])
     #expect(
         layout.problems == [
-            .emptyColumn(.leading(0)),
             .widthOutOfRange(.leading(1), points: 8),
             .stackedPartFillsHeight("art", .leading(1)),
             .repeatedPart("track", .center),
@@ -79,8 +78,8 @@ private func column(_ parts: String, _ more: String = "") -> String {
         Issue.record("a layout with problems was accepted")
         return
     }
-    #expect(why.contains("leading column 1 has no parts"))
-    #expect(why.hasSuffix("; 2 more"), "the rest are counted")
+    #expect(why.contains("leading column 2 is 8 points wide"))
+    #expect(why.hasSuffix("; 1 more"), "the rest are counted")
 }
 
 @Test func columnsAreListedLeftToRightWithTheirPlaces() {
@@ -128,13 +127,13 @@ private func widthJSON(_ width: String) -> String {
 
 /// A layout with many problems lists the first few and how many more.
 @Test func manyProblemsAreCappedWithACount() {
-    let empty = BarColumn<StatusPart>(parts: [], width: .flexible, alignment: .leading)
+    let narrow = BarColumn<StatusPart>(parts: [], width: .fixed(1), alignment: .leading)
     let layout = BarLayout(
-        leading: Array(repeating: empty, count: 5),
+        leading: Array(repeating: narrow, count: 5),
         center: BarColumn(parts: [.totals], width: .flexible, alignment: .center))
     #expect(layout.problems.count == 5)
     let text = layout.problem() ?? ""
-    #expect(text.contains("leading column 3 has no parts"))
+    #expect(text.contains("leading column 3 is 1 points wide"))
     #expect(!text.contains("leading column 4"))
     #expect(text.hasSuffix("; 2 more"))
 }

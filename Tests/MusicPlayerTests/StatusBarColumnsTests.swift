@@ -140,3 +140,22 @@ private func frame(_ view: NSView?) throws -> NSRect {
     #expect(abs(browser.statusArea.frame.height - StatusBarStyle.tallMaxPoints) < 0.01)
     if #available(macOS 14, *) { #expect(browser.statusArea.clipsToBounds) }
 }
+
+/// An empty column takes its width and draws nothing: a fixed one its points, a flexible one
+/// its share beside the center.
+@MainActor @Test func anEmptyColumnKeepsItsWidth() async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    fixture.setLayout(
+        BarLayout<StatusPart>(
+            leading: [BarColumn(parts: [], width: .fixed(120), alignment: .leading)],
+            center: BarColumn(parts: [.seek], width: .flexible, alignment: .center),
+            trailing: [BarColumn(parts: [], width: .flexible, alignment: .trailing)]))
+    let browser = fixture.browser
+    let leading = try #require(browser.statusColumn(at: .leading(0)))
+    let trailing = try #require(browser.statusColumn(at: .trailing(0)))
+    #expect(leading.stack.arrangedSubviews.isEmpty && trailing.stack.arrangedSubviews.isEmpty)
+    #expect(try frame(leading).width == 120)
+    let center = try frame(browser.statusColumn(at: .center))
+    #expect(abs(try frame(trailing).width - center.width) <= 1, "\(center)")
+}

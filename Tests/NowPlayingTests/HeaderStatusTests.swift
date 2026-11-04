@@ -136,3 +136,15 @@ private func frame(_ view: NSView, in root: NSView) -> NSRect {
     #expect(abs(format.minX - title.maxX - HeaderStatus.spacingPoints) < 0.5, "\(title) \(format)")
     #expect(abs(format.midY - title.midY) < 1)
 }
+
+/// An empty column takes its width and draws nothing, so the parts beside it move over.
+@MainActor @Test func anEmptyColumnKeepsItsWidth() {
+    let status = status(
+        BarLayout(
+            leading: [BarColumn(parts: [], width: .fixed(60), alignment: .leading)],
+            center: BarColumn(
+                parts: [.title, .seek], width: .flexible, alignment: .leading, stacks: true)))
+    let seek = frame(status.seekBox, in: status.view)
+    #expect(abs(seek.minX - 60 - HeaderStatus.spacingPoints) < 0.5, "\(seek)")
+    #expect(abs(seek.maxX - width) < 0.01)
+}

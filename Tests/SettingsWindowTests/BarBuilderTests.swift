@@ -41,14 +41,14 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
     #expect(builder.unusedParts == ["art", "track", "format", "seek"])
 }
 
-/// A new column waits for a part before it saves; then each edit saves as it's made.
-@MainActor @Test func columnsAreAddedBesideTheSelectionAndSaveOnceTheyHoldAPart() throws {
+/// Each edit saves as it's made, a new column while it's still empty.
+@MainActor @Test func columnsAreAddedBesideTheSelectionAndSaveAtOnce() throws {
     let (builder, values) = try builder()
     builder.addColumn(.before)
     #expect(builder.selection == .init(place: .leading(0)))
     #expect(builder.layout.leading.first?.alignment == .leading)
-    #expect(builder.unsaved?.contains("leading column 1") == true)
-    #expect(try saved(values()) == .defaultStatusBar)
+    #expect(builder.unsaved == nil)
+    #expect(try saved(values()).leading.map(\.parts) == [[]])
 
     builder.place("art", in: .leading(0), at: 0)
     #expect(builder.unsaved == nil)
@@ -120,9 +120,8 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
     #expect(try saved(values()).leading[0].parts == [.track])
 }
 
-/// A change made elsewhere shows, but not over a column waiting for a part, unless the change
-/// is to this layout itself.
-@MainActor @Test func aReloadShowsTheConfigsLayoutUnlessItIsTheOneSaved() throws {
+/// A change made elsewhere shows, replacing a column just added.
+@MainActor @Test func aReloadShowsTheConfigsLayout() throws {
     let setting = AppSettings().statusBarLayout
     nonisolated(unsafe) var values: [String: Any] = [
         setting.key: try JSONSerialization.jsonObject(
@@ -134,7 +133,7 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
     let builder = try model.barBuilder(setting.key)
     builder.addColumn(.before)
     try builder.reload()
-    #expect(builder.layout.leading.count == 1, "the empty column stays")
+    #expect(builder.layout.leading.count == 1, "the empty column was saved")
     values[setting.key] = try JSONSerialization.jsonObject(
         with: JSONEncoder().encode(
             BarLayout<StatusPart>(

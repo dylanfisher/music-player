@@ -62,7 +62,6 @@ extension BarLayout: SettingValue where Part: BarPart {
         var problems: [BarLayoutProblem] = []
         var seen: Set<Part> = []
         for (place, column) in columns {
-            if column.parts.isEmpty { problems.append(.emptyColumn(place)) }
             if case .fixed(let points) = column.width, !BarWidth.fixedRangePoints.contains(points) {
                 problems.append(.widthOutOfRange(place, points: points))
             }

@@ -3,7 +3,6 @@ public enum BarLayoutProblem: Equatable, Sendable, CustomStringConvertible {
     /// How many a setting's error lists before "N more".
     static let shownCount = 3
 
-    case emptyColumn(BarPlace)
     /// A part listed a second time, at the place of the second; each part is one view.
     case repeatedPart(String, BarPlace)
     case widthOutOfRange(BarPlace, points: Int)
@@ -12,7 +11,6 @@ public enum BarLayoutProblem: Equatable, Sendable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .emptyColumn(let place): "\(place) has no parts"
         case .repeatedPart(let part, let place): "\(part) is listed again in \(place)"
         case .widthOutOfRange(let place, let points):
             "\(place) is \(points) points wide; a fixed width is"
