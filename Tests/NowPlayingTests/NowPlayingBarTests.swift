@@ -162,3 +162,26 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
         }
     }
 }
+
+/// With nothing playing the art, gray box and all, doesn't show; it keeps its place, so the
+/// parts beside it stay where they are when a track starts.
+@MainActor @Test func theArtShowsOnlyWhileATrackIsCurrent() {
+    let bar = bar()
+    let status = bar.header.view
+    status.frame = NSRect(x: 0, y: 0, width: 420, height: status.fittingSize.height)
+    /// Where each part starts; the title's width follows its text.
+    func frames() -> [NSPoint] {
+        status.layoutSubtreeIfNeeded()
+        return [bar.header.art, bar.header.titleLabel, bar.header.seekBox].map {
+            $0.convert($0.bounds, to: status).origin
+        }
+    }
+    let arts = [bar.header.art, bar.statusBar.art]
+    #expect(arts.allSatisfy { $0.alphaValue == 0 })
+    let before = frames()
+    bar.apply(update(.trackStarted(index: 0), duration: 100))
+    #expect(arts.allSatisfy { $0.alphaValue == 1 })
+    #expect(frames() == before)
+    bar.apply(update(.stopped, current: nil, duration: nil))
+    #expect(arts.allSatisfy { $0.alphaValue == 0 })
+}

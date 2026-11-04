@@ -168,6 +168,11 @@ public final class NowPlayingBar: NSObject {
         header.formatLabel.stringValue = model.message ?? model.formatLine
         header.formatLabel.textColor = model.message == nil ? .secondaryLabelColor : .systemOrange
         header.formatLabel.toolTip = header.formatLabel.stringValue
+        // With nothing playing the art keeps its place unseen, so nothing beside it moves
+        // when a track starts.
+        for art in [header.art, statusBar.art] {
+            art.alphaValue = model.currentURL == nil ? 0 : 1
+        }
         statusBar.show(title: model.title, subtitle: model.subtitle)
         statusBar.show(
             format: header.formatLabel.stringValue,
