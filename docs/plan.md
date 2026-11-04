@@ -3965,6 +3965,45 @@ Still open from the mbp2026 test run, for later: the manual checklist (scrolling
 a rescan, start time at the same and another rate, built-in and Bluetooth output, the UI pass,
 Get Info over 200), the `sudo purge` cold launch, and the stall log.
 
+### 38. Owner feedback, 2026-11-04
+
+The owner's feedback from trying phase 37b. The screenshots it referred to (our progress bar
+against Swinsian's, the header layout wanted, the tag-write error) didn't reach the session, so
+38.2 takes Swinsian's colors from its own app bundle on mbp2015 (a temp copy, read only) and
+38.11 waits for the error text. The two batches run in parallel worktrees.
+
+#### 38a. Toolbar, status and window title (ADR 0087)
+
+- [ ] **38.1 No art placeholder.** With nothing playing, the toolbar status and the status bar
+      hide the art; no gray box. The rest of the layout doesn't jump when art appears.
+- [ ] **38.2 Swinsian's progress bar colors.** The seek bar's track, fill, buffered part and
+      knob match Swinsian's in light and dark, on glass and off.
+- [ ] **38.3 A truly centered status.** With the toolbar's flexible spaces, the status (seek bar)
+      stays centered on the window whatever sits on either side, and with nothing on the left:
+      the owner's layout is nothing on the left, the status in the middle, Search on the right.
+- [ ] **38.4 Window title template.** A new `appearance.windowTitle` setting sets the window's
+      title (the name at the very top, today always "MusicPlayer") from a template such as
+      `{title} — {artist}`, with tokens for the playing track's fields. With nothing playing the
+      title is the app's name. Its row in Settings ▸ Appearance has a ? button whose popover
+      (and tooltip) lists every token. The tokens are defined once and shared with the help.
+- [ ] **38.5 Glass headers.** In window glass mode the table headers are more translucent.
+
+#### 38b. Table, navigation and palette (ADR 0088)
+
+- [ ] **38.6 Album lines.** An option draws a line between albums in the track table, and both
+      row lines and album lines take a color (with alpha) from Settings ▸ Appearance, so they can
+      be as faint or heavy as the owner likes.
+- [ ] **38.7 Art column background.** The album art column draws a plain white (the table's
+      background in dark mode) background, without grid lines or alternating rows.
+- [ ] **38.8 ⇧⌘L Reveal Selected Track.** Scrolls the table to center the selected track, as
+      ⌘L does for the playing one. In the menus, the shortcuts pane and ⌘K.
+- [ ] **38.9 Settings in ⌘K.** The palette has an entry that opens Settings, and one that opens
+      the config file if there isn't one already.
+- [ ] **38.10 Back to all music centers on the playing track.** Leaving a browse or filter for the
+      whole library centers the playing track, as ⌘L does; with nothing playing, the selection.
+- [ ] **38.11 Tag-write error.** Waiting on the error text from the owner.
+- [ ] **Owner check:** each item on mbp2026 and the 2015 MacBook Pro.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
