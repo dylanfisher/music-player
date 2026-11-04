@@ -274,6 +274,12 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
         ])
     #expect(
         sections.first { $0.section == .playCounts }?.rows.map(\.key) == [schema.playedPercent.key])
+    // The toolbar is above the status bar in the window, so its layout's row comes first.
+    let appearance = sections.first { $0.section == .appearance }?.rows.map(\.key) ?? []
+    #expect(
+        appearance.suffix(3) == [
+            schema.headerStatusLayout.key, schema.statusBarStyle.key, schema.statusBarLayout.key,
+        ])
     let listed = sections.flatMap(\.rows).map(\.key)
     #expect(listed.count == AppSettings().settings.count - 3)
     #expect(!listed.contains(AppSettings().watchedFolders.key))

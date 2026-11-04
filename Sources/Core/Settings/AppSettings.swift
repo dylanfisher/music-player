@@ -85,6 +85,10 @@ public struct AppSettings: SettingsSchema {
     public let windowTitle = Setting(
         "appearance.windowTitle", title: "Window Title", default: WindowTitle.default,
         "The window's title, with the playing track's fields in braces.")
+    public let headerStatusLayout = Setting(
+        "appearance.headerStatusLayout", title: "Toolbar Status Layout",
+        default: BarLayout.defaultHeaderStatus,
+        "What the toolbar's now-playing status shows, in columns that stack their parts.")
     public let statusBarStyle = Setting(
         "appearance.statusBarStyle", title: "Status Bar", default: StatusBarStyle.minimal,
         "One line at the header's height, or two with larger art.")
@@ -92,10 +96,6 @@ public struct AppSettings: SettingsSchema {
         "appearance.statusBarLayout", title: "Status Bar Layout",
         default: BarLayout.defaultStatusBar,
         "What the status bar shows, in columns around its centered middle.")
-    public let headerStatusLayout = Setting(
-        "appearance.headerStatusLayout", title: "Toolbar Status Layout",
-        default: BarLayout.defaultHeaderStatus,
-        "What the toolbar's now-playing status shows, in columns that stack their parts.")
 
     public func conflicts(_ values: [String: any SettingValue]) -> [SettingConflict] {
         guard let sync = values[syncFolder.key] as? SyncFolder,

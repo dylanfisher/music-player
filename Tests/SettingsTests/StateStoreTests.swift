@@ -238,8 +238,8 @@ private func problems(_ json: String) -> [SettingProblem] {
             "appearance.rowLineColor", "appearance.albumLineColor", "appearance.alternatingRows",
             "appearance.rowHeight", "appearance.artSize", "appearance.glass",
             "appearance.windowTitle",
-            "appearance.statusBarStyle",
-            "appearance.statusBarLayout", "appearance.headerStatusLayout",
+            "appearance.headerStatusLayout", "appearance.statusBarStyle",
+            "appearance.statusBarLayout",
         ])
 }
 
