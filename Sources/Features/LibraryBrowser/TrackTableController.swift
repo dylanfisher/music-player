@@ -396,6 +396,11 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         rowView.isMarked = isPlaying(row)
         rowView.bottomLine = line(below: row)
         rowView.plainColumn = columnIdentifier(.art)
+        // The row above may have been given its line before this row's page was read.
+        guard row > 0,
+            let above = table.rowView(atRow: row - 1, makeIfNecessary: false) as? MarkedRowView
+        else { return }
+        above.bottomLine = line(below: row - 1)
     }
 
     /// The line under `row`: the album line where its album ends, else the row line, if the
@@ -408,10 +413,14 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     /// Whether the row after `row` is another album's, by the album ID the art column groups
     /// by. Adjacent rows with no album are one group, so loose tracks don't each get the heavy
-    /// line. The last row ends nothing.
+    /// line. The last row ends nothing, and nor does a row whose neighbor isn't read yet or
+    /// couldn't be: the next row is read from the cache only, never fetched for this, and gives
+    /// the line when its own row view is made.
     private func endsAlbum(_ row: Int) -> Bool {
-        guard row + 1 < model.trackIDs.count else { return false }
-        return trackRow(row)?.albumID != trackRow(row + 1)?.albumID
+        guard row + 1 < model.trackIDs.count, let this = trackRow(row),
+            let next = cache.cachedRow(at: row + 1)
+        else { return false }
+        return this.albumID != next.albumID
     }
 
     /// Whether `row` shows the track playing. Read from the row cache, which already holds the

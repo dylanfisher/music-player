@@ -493,6 +493,46 @@ private let albumRed = HexColor("#FF0000")
     #expect(rowView?.bottomLine == nil)
 }
 
+/// A row whose next row isn't read, or can't be, has no album line, and asking doesn't read it.
+@MainActor @Test func anAlbumLineWaitsForTheNextRowsPage() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let index = try LibraryIndex(at: databaseURL)
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .album, ascending: true,
+        groupByAlbumArtist: false)
+    await model.load(BrowserState(source: nil))
+    let rows = try index.rows(ids: model.trackIDs)
+    // The last row of an album, made the last row of the cache's first page.
+    let last = try #require(
+        rows.indices.dropLast().first { $0 > 0 && rows[$0].albumID != rows[$0 + 1].albumID })
+    nonisolated(unsafe) var fetched: [[Int64]] = []
+    nonisolated(unsafe) var failing = true
+    let cache = RowCache(pageSize: last + 1) { ids in
+        fetched.append(ids)
+        if failing, ids.first == rows[last + 1].id { throw CocoaError(.fileReadUnknown) }
+        return try index.rows(ids: ids)
+    }
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in }, sort: { _, _ in },
+        layoutChanged: { _ in }, failed: { _ in }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: cache, layout: AppState().trackTable.defaultValue,
+        actions: actions, thumbnails: nil)
+    cache.setIDs(model.trackIDs)
+    controller.apply(
+        TableAppearance(
+            columnLines: false, rowLines: false, albumLines: true, rowLineColor: nil,
+            albumLineColor: albumRed, alternatingRows: true, rowHeight: .regular,
+            artSize: .fit, glass: false))
+    #expect(controller.line(below: last) == nil, "the next page isn't read")
+    #expect(fetched.count == 1, "only the row's own page is read")
+    _ = try? cache.row(at: last + 1)
+    #expect(controller.line(below: last) == nil, "the next page couldn't be read")
+    failing = false
+    _ = try cache.row(at: last + 1)
+    #expect(controller.line(below: last) == NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1))
+}
+
 /// The color of the pixel at `point` in `rowView`'s background, drawn as the row draws it,
 /// with its selection when it's selected.
 @MainActor

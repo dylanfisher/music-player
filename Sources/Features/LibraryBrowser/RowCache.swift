@@ -32,6 +32,12 @@ final class RowCache {
         recency = []
     }
 
+    /// The row at `index` if its page is cached, without fetching it or counting as a use.
+    func cachedRow(at index: Int) -> TrackRow? {
+        precondition(ids.indices.contains(index), "row \(index) is outside the table")
+        return pages[index / pageSize]?[ids[index]]
+    }
+
     /// The row at `index`, fetching its page if it isn't cached. Nil when its track has gone
     /// from the index since the IDs were loaded.
     func row(at index: Int) throws -> TrackRow? {
