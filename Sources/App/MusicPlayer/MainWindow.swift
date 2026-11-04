@@ -157,10 +157,10 @@ final class MainWindow: NSObject, NSWindowDelegate {
     }
 
     /// Puts the window's content on glass, or takes it off. The frame that puts back is no move
-    /// of the user's, so it isn't saved.
+    /// of the user's, so it isn't saved, and nor are the dividers on the way back.
     func setGlass(_ on: Bool) {
         restoring = true
-        glass?.set(on)
+        split.keepingWidths { glass?.set(on) }
         restoring = false
         centerStatusBarUnderTitle()
     }
@@ -173,7 +173,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
 
     func windowDidExitFullScreen(_ notification: Notification) {
         restoring = true
-        glass?.matchStyleMask()
+        split.keepingWidths { glass?.matchStyleMask() }
         restoring = false
         centerStatusBarUnderTitle()
     }

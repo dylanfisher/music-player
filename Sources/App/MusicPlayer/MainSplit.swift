@@ -64,6 +64,15 @@ final class MainSplit {
         ) { [weak self] _ in MainActor.assumeIsolated { self?.reportWidths() } }
     }
 
+    /// Runs a change that moves the dividers for a moment and puts them back, so what a layout
+    /// pass passes through on the way isn't saved.
+    func keepingWidths(_ change: () -> Void) {
+        let before = restoring
+        restoring = true
+        change()
+        restoring = before
+    }
+
     func toggleSidebar() { sidebar.isCollapsed.toggle() }
 
     func toggleQueue() { queue.isCollapsed.toggle() }
