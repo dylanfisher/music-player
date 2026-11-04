@@ -249,6 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.browser = browser
         self.nowPlaying = nowPlaying
         nowPlaying.follow(window.window)
+        window.showTitles(of: nowPlaying, layout.windowTitle)
         self.toolbar = toolbar
         self.signalPath = signalPath
         self.queue = queue

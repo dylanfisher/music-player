@@ -21,6 +21,7 @@ struct WindowSettings {
     var tableAppearance: TableAppearance
     var statusBar: StatusBarLayout
     var headerStatus: BarLayout<HeaderPart>
+    var windowTitle: WindowTitle
 
     @MainActor init(_ settings: ConfigStore<AppSettings>, state: StateStore<AppState>) {
         frame = state[\.windowFrame]
@@ -40,6 +41,7 @@ struct WindowSettings {
         tableAppearance = TableAppearance(settings)
         statusBar = StatusBarLayout(settings)
         headerStatus = settings[\.headerStatusLayout]
+        windowTitle = settings[\.windowTitle]
     }
 }
 

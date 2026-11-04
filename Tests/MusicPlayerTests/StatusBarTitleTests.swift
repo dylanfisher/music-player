@@ -3,6 +3,8 @@ import Testing
 
 @testable import LibraryBrowser
 @testable import MusicPlayer
+@testable import NowPlaying
+@testable import Playback
 @testable import Settings
 
 /// On glass the window has a full-size content view, and AppKit centers the title over the
@@ -46,4 +48,29 @@ func theStatusBarsMiddleCentersUnderTheTitle(_ glass: Bool) async throws {
     let middle = try #require(fixture.browser.statusColumn(at: .center))
     #expect(window.isQueueVisible && !window.isSidebarVisible)
     #expect(abs(middle.convert(middle.bounds, to: nil).midX - content.bounds.midX) <= 0.5)
+}
+
+/// The window's title is the playing track's, by `appearance.windowTitle`, and the app's name
+/// with nothing playing; it shows over the toolbar glass on and off.
+@MainActor @Test(arguments: [false, true])
+func theWindowIsTitledByThePlayingTrack(_ glass: Bool) async throws {
+    let fixture = try await MainWindowFixture(glass: glass)
+    defer { fixture.close() }
+    let window = fixture.window.window
+    #expect(window.title == appName)
+    var state = PlaybackState()
+    state.queue = [URL(fileURLWithPath: "/m/Come Together.flac", isDirectory: false)]
+    state.order = [0]
+    state.currentIndex = 0
+    state.status = .playing
+    fixture.nowPlaying.apply(PlaybackUpdate(state: state, event: .trackStarted(index: 0)))
+    #expect(window.title == "Come Together")
+    #expect(window.titleVisibility == .visible)
+    fixture.window.setGlass(!glass)
+    #expect(window.title == "Come Together" && window.titleVisibility == .visible)
+    fixture.nowPlaying.windowTitle = WindowTitle("♪ {title}")
+    #expect(window.title == "♪ Come Together")
+    state.currentIndex = nil
+    fixture.nowPlaying.apply(PlaybackUpdate(state: state, event: .stopped))
+    #expect(window.title == appName)
 }

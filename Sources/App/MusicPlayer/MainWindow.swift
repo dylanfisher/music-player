@@ -95,6 +95,13 @@ final class MainWindow: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
+    /// Titles the window from now on as `nowPlaying` fills `template`, the app's name with
+    /// nothing playing.
+    func showTitles(of nowPlaying: NowPlayingBar, _ template: WindowTitle) {
+        nowPlaying.windowTitleChanged = { [weak self] in self?.window.title = $0 ?? appName }
+        nowPlaying.windowTitle = template
+    }
+
     var isSidebarVisible: Bool { split.isSidebarVisible }
     var isQueueVisible: Bool { split.isQueueVisible }
     var isSignalPathVisible: Bool { !signalPath.view.isHidden }

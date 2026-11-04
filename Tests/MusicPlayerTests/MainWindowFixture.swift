@@ -71,6 +71,7 @@ struct MainWindowFixture {
             settings: layout, banner: ConfigBanner().view, browser: browser, toolbar: toolbar,
             signalPath: SignalPathPanel(), queue: QueuePanel(model: QueueModel(lookup: lookup)),
             saver: saver)
+        window.showTitles(of: nowPlaying, layout.windowTitle)
         setLayout(statusBar)
         window.window.orderFront(nil)
         await browser.load(BrowserState(source: nil))
