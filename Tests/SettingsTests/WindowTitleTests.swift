@@ -1,0 +1,71 @@
+import Foundation
+import Testing
+
+@testable import Settings
+
+private let setting = AppSettings().windowTitle
+
+@Test func theDefaultIsTheTitleAndTheArtist() {
+    #expect(setting.defaultValue == WindowTitle.default)
+    #expect(
+        WindowTitle.default.parts == [.token(.title), .text(" — "), .token(.artist)])
+    #expect(WindowTitle.default.problem() == nil)
+}
+
+@Test func textAndTokensSplitInOrder() {
+    #expect(
+        WindowTitle("♪ {albumArtist}: {album} ({year})").parts == [
+            .text("♪ "), .token(.albumArtist), .text(": "), .token(.album), .text(" ("),
+            .token(.year), .text(")"),
+        ])
+    #expect(WindowTitle("{trackNumber}{title}").parts == [.token(.trackNumber), .token(.title)])
+    #expect(WindowTitle("Plain").parts == [.text("Plain")])
+    #expect(WindowTitle("").parts.isEmpty && WindowTitle("").problem() == nil)
+}
+
+/// Braces hold only a token, so anything else in them, or a brace alone, is refused by name,
+/// with every token in the message.
+@Test(arguments: [
+    ("{title} — {artsit}", "no token {artsit}"), ("{}", "no token {}"),
+    ("{Title}", "no token {Title}"), ("{title", "a { with no } after it"),
+    ("title}", "a } with no { before it"), ("{ti{tle}", "no token {ti{tle}"),
+])
+func aTemplateWithAProblemIsRefused(_ template: String, _ problem: String) throws {
+    let title = WindowTitle(template)
+    let found = try #require(title.problem())
+    #expect(found.hasPrefix(problem), "\(found)")
+    #expect(title.parts.isEmpty)
+    if problem.hasPrefix("no token") {
+        for token in TitleToken.allCases { #expect(found.contains(token.placeholder)) }
+    }
+    guard case .failure(.invalid(let reason)) = setting.decode(json: template) else {
+        Issue.record("accepted \(template)")
+        return
+    }
+    #expect(reason == found)
+}
+
+@Test func theTemplateIsAStringInTheFile() throws {
+    let data = try JSONEncoder().encode(WindowTitle("{album} by {artist}"))
+    #expect(String(data: data, encoding: .utf8) == #""{album} by {artist}""#)
+    guard case .success(let title) = setting.decode(json: "{genre}") else {
+        Issue.record("refused {genre}")
+        return
+    }
+    #expect(title.parts == [.token(.genre)])
+    guard case .failure(.wrongType) = setting.decode(json: 3) else {
+        Issue.record("accepted a number")
+        return
+    }
+}
+
+/// The settings window lists every token with what it stands for.
+@Test func theKindCarriesEveryTokenAndItsHelp() {
+    guard case .template(let tokens) = setting.kind else {
+        Issue.record("\(setting.kind)")
+        return
+    }
+    #expect(tokens.map(\.name) == TitleToken.allCases.map { "{\($0.rawValue)}" })
+    #expect(tokens.map(\.help) == TitleToken.allCases.map(\.help))
+    #expect(Set(tokens.map(\.help)).count == tokens.count)
+}

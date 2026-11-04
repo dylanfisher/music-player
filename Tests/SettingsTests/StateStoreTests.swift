@@ -235,6 +235,7 @@ private func problems(_ json: String) -> [SettingProblem] {
         keys == [
             "appearance.columnLines", "appearance.rowLines", "appearance.alternatingRows",
             "appearance.rowHeight", "appearance.artSize", "appearance.glass",
+            "appearance.windowTitle",
             "appearance.statusBarStyle",
             "appearance.statusBarLayout", "appearance.headerStatusLayout",
         ])

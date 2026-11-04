@@ -5,6 +5,8 @@ public indirect enum SettingKind: Sendable, Equatable {
     case integer(ClosedRange<Int>?)
     case number(ClosedRange<Double>?)
     case string
+    /// Text with these tokens in braces.
+    case template([Token])
     /// One of these values.
     case choice([Choice])
     /// The value or null.
@@ -20,6 +22,13 @@ public indirect enum SettingKind: Sendable, Equatable {
     public struct Choice: Sendable, Equatable {
         public var rawValue: String
         public var title: String
+    }
+
+    public struct Token: Sendable, Equatable {
+        /// As a template writes it: `{artist}`.
+        public var name: String
+        /// What it stands for.
+        public var help: String
     }
 
     /// What the bar builder needs to know about one bar: its parts, and the words and the
