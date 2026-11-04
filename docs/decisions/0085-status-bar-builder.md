@@ -74,8 +74,11 @@ a test's window AppKit places it at the leading edge, not centered as on screen.
 style only; the minimal style stays one line, so they sit side by side there. The bar grows to
 the tallest stack's fitting height plus the art's inset, from the tall style's 44 points up to
 80, three lines of text with the seek bar under them, so it never takes more of the lists than
-that; a taller stack is centered and runs past the bar's edges. The art fills the bar's height in
-either style, which is why it can't stack.
+that; a taller stack is centered and cut at the bar's edges, which clip. The height is
+measured again whenever the bar's parts show or hide, such as the totals' label with a
+failure in a stacked column, and the lists' inset follows it. Both heights are
+`StatusBarStyle`'s, so the bar and the builder's preview share them. The art fills the bar's
+height in either style, which is why it can't stack.
 
 **The builder** opens from Edit Layout… on the Status Bar Layout row in Settings ▸
 Appearance, in its own window, one per setting. The settings window's rows come from the
@@ -83,7 +86,8 @@ schema, so the row is the `.barLayout` setting kind's control, and the builder w
 parts' config names with the titles the kind carries: phase 37b's header layout is a second
 `BarLayout` setting with its own part type, and gets its own row and builder window with no
 change to the builder. Its preview draws the columns across its own width, about a narrow
-window's, fixed widths at their points, by the layout's rules approximated with arithmetic, with the center column dashed, and each part as a chip;
+window's, fixed widths at their points, by the layout's rules approximated with arithmetic,
+with the center column dashed, and each part as a chip;
 below it a tray holds the parts not in the bar. Chips drag between columns and to and from the
 tray. Buttons add a column before or after the selected one, remove it, add an unused part or
 remove the selected one; a popup and a field set the width, a segmented control the alignment,
@@ -94,7 +98,12 @@ the arrows. The bar itself is the live preview too: each edit saves at once, as 
 own key, and the bar lays out again. A column just added is empty until a part goes in, so the
 builder holds back saving, and says so, while any column is empty; a layout the setting refuses
 (the art in a stacking column, a width out of range) stays shown with the setting's reason, and
-the config keeps the last good one.
+the config keeps the last good one. When the config file changes, the builder shows its layout:
+a column waiting for a part survives only a change that left this layout alone, and a refused
+edit gives way to the file's layout, marked "Not saved" with the reason. While the config file
+has a problem that refuses every change (ADR 0082), the builder edits nothing, turns its
+controls off and says so in the banner's words. The width field commits on Return and when it
+loses the keys. A layout's error lists its first three problems and a count of the rest.
 
 The checklist control, whose only setting this was, is gone.
 

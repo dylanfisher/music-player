@@ -39,6 +39,10 @@ public struct Setting<Value: SettingValue>: Sendable {
     /// Parses a value from `JSONSerialization` output and validates it.
     func decode(json: Any) -> Result<Value, SettingProblem.Reason> {
         let value: Value
+        // `data(withJSONObject:)` raises, rather than throws, on a NaN or an infinite number.
+        guard JSONSerialization.isValidJSONObject([json]) else {
+            return .failure(.wrongType(expected: Value.typeName, detail: "not a JSON value"))
+        }
         do {
             let data = try JSONSerialization.data(withJSONObject: json, options: .fragmentsAllowed)
             value = try JSONDecoder().decode(Value.self, from: data)

@@ -1,5 +1,8 @@
 /// Why a `BarLayout` can't be laid out, naming the column.
 public enum BarLayoutProblem: Equatable, Sendable, CustomStringConvertible {
+    /// How many a setting's error lists before "N more".
+    static let shownCount = 3
+
     case emptyColumn(BarPlace)
     /// A part listed a second time, at the place of the second; each part is one view.
     case repeatedPart(String, BarPlace)

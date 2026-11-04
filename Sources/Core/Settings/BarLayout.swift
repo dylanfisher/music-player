@@ -73,8 +73,13 @@ extension BarLayout: SettingValue where Part: BarPart {
         return problems
     }
 
+    /// The first few problems, and how many more, so a hostile layout can't fill the banner.
     public func problem() -> String? {
-        problems.isEmpty ? nil : problems.map(\.description).joined(separator: "; ")
+        let problems = problems
+        guard !problems.isEmpty else { return nil }
+        let shown = problems.prefix(BarLayoutProblem.shownCount).map(\.description)
+        let more = problems.count - shown.count
+        return shown.joined(separator: "; ") + (more > 0 ? "; \(more) more" : "")
     }
 }
 

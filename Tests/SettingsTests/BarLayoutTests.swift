@@ -80,7 +80,7 @@ private func column(_ parts: String, _ more: String = "") -> String {
         return
     }
     #expect(why.contains("leading column 1 has no parts"))
-    #expect(why.contains("track is listed again in the center column"))
+    #expect(why.hasSuffix("; 2 more"), "the rest are counted")
 }
 
 @Test func columnsAreListedLeftToRightWithTheirPlaces() {
@@ -98,4 +98,43 @@ extension BarLayout<StatusPart> {
     fileprivate var json: Any {
         (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(self))) as Any
     }
+}
+
+/// Widths that aren't whole points in range, however large or odd, fail rather than wrap.
+@Test func hugeAndOddWidthsAreRefused() {
+    for width in ["1e300", "1e400", "99999999999999999999", "-1e30", "\"NaN\"", "null", "true"] {
+        guard case .failure(.wrongType) = decode(widthJSON(width)) else {
+            Issue.record("accepted width \(width)")
+            continue
+        }
+    }
+    let nan: [String: Any] = [
+        "leading": [] as [Any], "trailing": [] as [Any],
+        "center": [
+            "parts": ["totals"], "width": NSNumber(value: Double.nan), "alignment": "center",
+            "stacks": false,
+        ] as [String: Any],
+    ]
+    if case .success = setting.decode(json: nan) { Issue.record("accepted a NaN width") }
+    guard case .failure(.invalid) = decode(widthJSON("-5")) else {
+        Issue.record("accepted a negative width")
+        return
+    }
+}
+
+private func widthJSON(_ width: String) -> String {
+    #"{"leading": [], "center": {"parts": ["totals"], "width": \#(width), "alignment": "center", "stacks": false}, "trailing": []}"#
+}
+
+/// A layout with many problems lists the first few and how many more.
+@Test func manyProblemsAreCappedWithACount() {
+    let empty = BarColumn<StatusPart>(parts: [], width: .flexible, alignment: .leading)
+    let layout = BarLayout(
+        leading: Array(repeating: empty, count: 5),
+        center: BarColumn(parts: [.totals], width: .flexible, alignment: .center))
+    #expect(layout.problems.count == 5)
+    let text = layout.problem() ?? ""
+    #expect(text.contains("leading column 3 has no parts"))
+    #expect(!text.contains("leading column 4"))
+    #expect(text.hasSuffix("; 2 more"))
 }
