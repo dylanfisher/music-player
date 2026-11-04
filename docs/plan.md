@@ -4048,15 +4048,15 @@ against 35 ms. The macOS 12 to 15 paths wait for the owner check.
 - [ ] **Owner check:** each item on mbp2026 and the 2015 MacBook Pro.
 
 Plan:
-- A `LineColor` setting value in `Core/Settings` (`"#RRGGBB"` or `"#RRGGBBAA"`, kind `.color`),
+- A `HexColor` setting value in `Core/Settings` (`"#RRGGBB"` or `"#RRGGBBAA"`, kind `.color`),
   and `appearance.albumLines`, `appearance.rowLineColor` and `appearance.albumLineColor`, both
   colors optional (null is the system's grid color). Settings ▸ Appearance shows a color well
   with alpha and a Default button for `.color`; ⌘K lists the colors as it lists other settings.
 - `MarkedRowView` draws its own bottom line in a color it's given and paints one column plain
   in the table's background; the track table gives each row the album line at an album's last
   row (the art column's `albumID` runs), the row line elsewhere, and the art column. Column
-  lines keep AppKit's grid, in the row lines' color.
-- `revealSelection` (⇧⌘L, View menu) centers the selected rows, as ⌘L does with nothing
+  lines are drawn by the rows too, in the row lines' color.
+- `showSelectedTrack` (⇧⌘L, View menu) centers the selected rows, as ⌘L does with nothing
   playing.
 - `showSettings` becomes a command (⌘,) so ⌘K, the menu and the Shortcuts pane have it; Open
   Config File is already in ⌘K.
@@ -4064,6 +4064,22 @@ Plan:
   then selects and centers the playing track, as ⌘L does. The selection is centered already.
 - Tests: the color's parsing, the setting rows, the row lines given per row, the art column
   plain, the commands and chords, and the return to all music, in the existing suites.
+
+Result, part 38b: shipped 38.6 to 38.10 (ADR 0088); 38.11 waits on the owner. The color kind
+is `HexColor`, a color well with opacity and a Default button that sets null, the system's grid
+color. The rows draw every line, row, album and column, so each row can carry its own and none
+crosses the plain art column; the table draws no grid, so nothing shows below the last row. An
+album ends where the art column's `albumID` changes, adjacent rows without an album are one
+group, and a row whose next row isn't cached has no album line until that row's view is made.
+The art column is the table's background, white in light, dark in dark, the glass on glass;
+review found it black on glass (a clear fill in copy mode), the column lines showing through
+it there, and the rows not asked to redraw when a column shows or hides, all fixed. ⇧⌘L is Show
+Selected Track; Settings… is a command on ⌘, so ⌘K and the Shortcuts pane list it. Back at all
+music from a source, pane or search, the playing track is selected and centered, the keys left
+where they were. `./scripts/check` passes; `--snapshot` with album lines in red, light, dark and
+glass; trackpad scroll with art p95 10.4 ms, compact rows 11.4 ms, against 16 ms. ⌘, from the
+palette and the Settings window is checked in code only (neither takes the chord before the
+menu bar); the owner checks each item on both Macs.
 
 ## Later
 
