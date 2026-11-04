@@ -4170,6 +4170,29 @@ on and off.
 - [ ] **38b.3 Order.** In Settings ▸ Appearance, Toolbar Status Layout comes before Status Bar
       Layout.
 
+Plan, part 38b (ADR 0085 amended):
+- 38b.3 first: the Appearance pane lists its rows in schema order, so `headerStatusLayout`
+  moves above `statusBarLayout` in `AppSettings`. A test checks the order.
+- 38b.1: `NowPlayingModel.title`'s "Not Playing" stays, since the dock menu, Now Playing info
+  and the status bar read it. Only `HeaderStatus` changes: with nothing current and no message
+  to show, it hides its row, which keeps its constraints, so the item keeps its size. A message
+  with nothing current (no output, a failed track) still shows. The sheet's drawing is
+  unchanged. Tests: hidden with nothing playing, the same fitting size, shown on a track and
+  on a message.
+- 38b.2: `TitleFormat` in Settings, a string setting value like `ReceiverAddress`: it parses
+  `{field}`s, with the fields `title`, `artist` and `album`, the header's own text, and
+  reports an unknown field or an unclosed brace as its `problem()`. Its line drops an empty
+  field with the literal text just before it, and trims the ends. The setting
+  `appearance.headerTitleFormat` gets a text row in Settings ▸ Appearance with no UI code.
+  `HeaderPart.titleLine` ("Title Line"), a semibold label truncating at its tail, in the tray;
+  the default layout is unchanged. `NowPlayingBar` fills it from the model and the format, and
+  the app passes the format at launch and on a change. The sheet's drawing fills it from the
+  default format with the placeholder track.
+- Tests: parsing, every problem, the dropping and trimming rules, the setting's default and a
+  bad value refused in the config file; the part's title and that the default leaves it out;
+  the bar's line for a track with and without an artist; a format change redraws it.
+- Then the ADR amendment, `--snapshot-of headerStatus` and `toolbarSheet`, and the result.
+
 #### 38c. Layout builder
 
 - [x] **38c.1 Colors.** The preview's columns and parts are too dark (`s4118`). They take the
