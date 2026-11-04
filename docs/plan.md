@@ -4109,6 +4109,36 @@ Searcher change.
 - [ ] **38a.5 Dismiss All.** The Library Problems window gets a Dismiss All button, which
       dismisses every row, selected or not.
 
+Plan, part 38a:
+- Probe (done before this plan, in a throwaway test rendering the rows' layers): AppKit gives
+  each row view its row line as a subview of its own, set up only when the row is added. A
+  change of `gridStyleMask` reaches no row already made, so Row Lines on shows nothing until
+  rows are made again, and off leaves the lines on the rows made while it was on. That subview
+  also lies over the cells, so it crosses the art.
+- Row lines (38a.1, 38a.2): `MarkedRowView` (DisplayText) draws a 1-pt line in the separator
+  color at its bottom edge, in its background, when told to, so the cells and the art draw
+  over it. The track table stops asking AppKit for horizontal grid lines; `apply` and each row
+  view the table makes take the setting, and a toggle redraws the rows on screen. Column Lines
+  stay AppKit's. Tests: in a window, toggling Row Lines several times with Alternating Rows and
+  the glass's translucent rows gives every row on screen exactly the line the setting says,
+  read from the drawn rows; art spanning rows covers their lines; the row view draws its line
+  only when set.
+- Status bar border (38a.3, LibraryBrowser): a 1-pt separator-colored line along the top of the
+  status bar's material, inside its height, in both styles and on glass. Tests: the line is
+  there at the top at 1 pt in minimal, tall and glass, and the bar's height doesn't change.
+- Art margin (38a.4): when the bar's leading side starts with the art (no scan progress
+  showing, the art first in the first leading column, aligned leading), the bar's leading inset
+  is `StatusBarLayout.artInsetPoints`, the art's top and bottom inset, instead of the spacing.
+  `CenteredRow` (BarView) gains a settable leading inset. Tests: the art's leading margin equals
+  its top margin in both styles; with the scan progress showing, or the art elsewhere, the
+  inset stays the spacing.
+- Dismiss All (38a.5): `ProblemAction.dismissAll`, whose rows are all the window's rows rather
+  than the selection, enabled while there are any; `LibraryBrowser.fix` dismisses them as
+  Dismiss does. Tests: the button acts on every row with none or some selected, and it
+  dismisses them in the library.
+- Order: row lines, border, art margin, Dismiss All, each its own commit through
+  `./scripts/check`, then the Result.
+
 #### 38b. Toolbar status
 
 - [ ] **38b.1 Empty when nothing plays.** With nothing playing, the toolbar status shows no art
