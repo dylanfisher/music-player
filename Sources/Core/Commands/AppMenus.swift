@@ -164,6 +164,7 @@ public enum AppMenus {
                         AppState().trackTable.title,
                         [
                             .setting(settings.columnLines.key), .setting(settings.rowLines.key),
+                            .setting(settings.albumLines.key),
                             .setting(settings.alternatingRows.key),
                             .setting(settings.rowHeight.key), .setting(settings.artSize.key),
                         ], showsChords: true),

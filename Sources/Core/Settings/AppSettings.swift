@@ -61,6 +61,15 @@ public struct AppSettings: SettingsSchema {
     public let rowLines = Setting(
         "appearance.rowLines", title: "Row Lines", default: false,
         "Draw a thin line between the track table's rows.")
+    public let albumLines = Setting(
+        "appearance.albumLines", title: "Album Lines", default: false,
+        "Draw a line where one album ends and the next begins.")
+    public let rowLineColor = Setting<HexColor?>(
+        "appearance.rowLineColor", title: "Row Line Color", default: nil,
+        "The row and column lines' color; none uses the system's grid color.")
+    public let albumLineColor = Setting<HexColor?>(
+        "appearance.albumLineColor", title: "Album Line Color", default: nil,
+        "The album lines' color; none uses the system's grid color.")
     public let alternatingRows = Setting(
         "appearance.alternatingRows", title: "Alternating Rows", default: true,
         "Shade every other row of the track table.")

@@ -16,6 +16,8 @@ public indirect enum SettingKind: Sendable, Equatable {
     case barLayout(Bar)
     case watchedFolder
     case syncFolder
+    /// A color with its opacity, which the settings window picks in a color well.
+    case color
     /// Window layout the app saves as it changes; the settings window shows no control for it.
     case windowState
 

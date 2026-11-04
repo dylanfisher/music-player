@@ -320,6 +320,9 @@ import Testing
     let settings = AppSettings()
     let defaults = TableAppearance(
         columnLines: settings.columnLines.defaultValue, rowLines: settings.rowLines.defaultValue,
+        albumLines: settings.albumLines.defaultValue,
+        rowLineColor: settings.rowLineColor.defaultValue,
+        albumLineColor: settings.albumLineColor.defaultValue,
         alternatingRows: settings.alternatingRows.defaultValue,
         rowHeight: settings.rowHeight.defaultValue, artSize: settings.artSize.defaultValue,
         glass: settings.glass.defaultValue)
@@ -334,17 +337,17 @@ import Testing
 
     controller.apply(
         TableAppearance(
-            columnLines: true, rowLines: true, alternatingRows: false, rowHeight: .compact,
+            columnLines: true, rowLines: true, albumLines: false, rowLineColor: nil,
+            albumLineColor: nil, alternatingRows: false, rowHeight: .compact,
             artSize: .fit, glass: false))
-    #expect(
-        controller.table.gridStyleMask == [
-            .solidVerticalGridLineMask, .solidHorizontalGridLineMask,
-        ])
+    // The rows draw the row lines themselves.
+    #expect(controller.table.gridStyleMask == .solidVerticalGridLineMask)
     #expect(!controller.table.usesAlternatingRowBackgroundColors)
     #expect(controller.table.rowHeight == 17)
     controller.apply(
         TableAppearance(
-            columnLines: true, rowLines: false, alternatingRows: true, rowHeight: .large,
+            columnLines: true, rowLines: false, albumLines: false, rowLineColor: nil,
+            albumLineColor: nil, alternatingRows: true, rowHeight: .large,
             artSize: .fit, glass: false))
     #expect(controller.table.gridStyleMask == .solidVerticalGridLineMask)
     #expect(controller.table.rowHeight > RowListController.rowHeight)
@@ -352,7 +355,8 @@ import Testing
     // The glass leaves out the rows' opaque shading.
     controller.apply(
         TableAppearance(
-            columnLines: true, rowLines: false, alternatingRows: true, rowHeight: .large,
+            columnLines: true, rowLines: false, albumLines: false, rowLineColor: nil,
+            albumLineColor: nil, alternatingRows: true, rowHeight: .large,
             artSize: .fit, glass: true))
     #expect(!controller.table.usesAlternatingRowBackgroundColors)
 }
@@ -380,7 +384,8 @@ import Testing
     for height in [RowHeight.compact, .regular, .large] {
         controller.apply(
             TableAppearance(
-                columnLines: false, rowLines: false, alternatingRows: true, rowHeight: height,
+                columnLines: false, rowLines: false, albumLines: false, rowLineColor: nil,
+                albumLineColor: nil, alternatingRows: true, rowHeight: height,
                 artSize: .fit, glass: false))
         let cell = try #require(
             table.view(atColumn: title, row: 0, makeIfNecessary: true) as? TextCell)
@@ -431,7 +436,8 @@ private func artTable(
     for size in [ArtSize.fit, .fullWidth] {
         controller.apply(
             TableAppearance(
-                columnLines: false, rowLines: false, alternatingRows: true,
+                columnLines: false, rowLines: false, albumLines: false, rowLineColor: nil,
+                albumLineColor: nil, alternatingRows: true,
                 rowHeight: .regular, artSize: size, glass: false))
         var runStart = 0
         var spanned = false
@@ -451,6 +457,98 @@ private func artTable(
         }
         #expect(spanned)
     }
+}
+
+/// Light gray row lines and heavy red album lines, as the owner might set them.
+private let rowGray = HexColor("#80808040")
+private let albumRed = HexColor("#FF0000")
+
+@MainActor @Test func albumLinesFallWhereTheAlbumChangesAndTakeTheirColor() async throws {
+    let (controller, _, rows) = try await artTable(artWidth: RowListController.rowHeight)
+    let gray = NSColor(srgbRed: 128 / 255, green: 128 / 255, blue: 128 / 255, alpha: 64 / 255)
+    let red = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)
+    func lines(rows rowLines: Bool, albums: Bool) -> [NSColor?] {
+        controller.apply(
+            TableAppearance(
+                columnLines: true, rowLines: rowLines, albumLines: albums,
+                rowLineColor: rowGray, albumLineColor: albumRed, alternatingRows: true,
+                rowHeight: .regular, artSize: .fit, glass: false))
+        return rows.indices.map(controller.line(below:))
+    }
+    let ends = rows.indices.map { row in
+        row + 1 < rows.count
+            && (rows[row].albumID == nil || rows[row].albumID != rows[row + 1].albumID)
+    }
+    #expect(ends.contains(true) && ends.contains(false))
+    #expect(lines(rows: false, albums: false).allSatisfy { $0 == nil })
+    #expect(lines(rows: true, albums: false).dropLast().allSatisfy { $0 == gray })
+    #expect(controller.table.gridColor == gray, "the column lines share the row lines' color")
+    #expect(lines(rows: false, albums: true) == ends.map { $0 ? red : nil })
+    #expect(lines(rows: true, albums: true) == ends.map { $0 ? red : gray })
+    // The row views on screen follow a change at once.
+    let row = try #require(ends.firstIndex(of: true))
+    let rowView = controller.table.rowView(atRow: row, makeIfNecessary: true) as? MarkedRowView
+    #expect(rowView?.bottomLine == red)
+    _ = lines(rows: false, albums: false)
+    #expect(rowView?.bottomLine == nil)
+}
+
+/// The color of the pixel at `point` in `rowView`'s background, drawn as the row draws it,
+/// with its selection when it's selected.
+@MainActor
+private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throws -> NSColor {
+    let bitmap = try #require(rowView.bitmapImageRepForCachingDisplay(in: rowView.bounds))
+    let context = try #require(NSGraphicsContext(bitmapImageRep: bitmap))
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = context
+    // The bitmap's origin is at the bottom, and the row is flipped.
+    context.cgContext.translateBy(x: 0, y: rowView.bounds.height)
+    context.cgContext.scaleBy(x: 1, y: -1)
+    rowView.drawBackground(in: rowView.bounds)
+    if rowView.isSelected { rowView.drawSelection(in: rowView.bounds) }
+    NSGraphicsContext.restoreGraphicsState()
+    let scale = CGFloat(bitmap.pixelsWide) / rowView.bounds.width
+    return try #require(
+        bitmap.colorAt(x: Int(point.x * scale), y: Int(point.y * scale))?.usingColorSpace(.sRGB))
+}
+
+@MainActor @Test func theArtColumnIsPlainUnderEveryLineShadeAndSelection() async throws {
+    let (controller, _, rows) = try await artTable(artWidth: 3 * RowListController.rowHeight)
+    let table = controller.table
+    table.appearance = NSAppearance(named: .aqua)
+    controller.apply(
+        TableAppearance(
+            columnLines: false, rowLines: true, albumLines: false, rowLineColor: albumRed,
+            albumLineColor: nil, alternatingRows: true, rowHeight: .regular, artSize: .fit,
+            glass: false))
+    #expect(rows.count > 3)
+    table.selectRowIndexes([2], byExtendingSelection: false)
+    func rect(_ column: String) -> NSRect {
+        table.rect(ofColumn: table.column(withIdentifier: NSUserInterfaceItemIdentifier(column)))
+    }
+    let (art, title) = (rect("art"), rect("title"))
+    func rowView(_ row: Int) throws -> MarkedRowView {
+        try #require(table.rowView(atRow: row, makeIfNecessary: true) as? MarkedRowView)
+    }
+    func isWhite(_ color: NSColor) -> Bool {
+        color.redComponent > 0.99 && color.greenComponent > 0.99 && color.blueComponent > 0.99
+    }
+    // Row 1 is shaded, and has the red line along its bottom outside the art column.
+    let shaded = try rowView(1)
+    #expect(shaded.plainColumn == NSUserInterfaceItemIdentifier("art"))
+    let bottom = shaded.bounds.maxY - 0.5
+    let middle = shaded.bounds.midY
+    #expect(isWhite(try backgroundPixel(shaded, at: NSPoint(x: art.midX, y: bottom))))
+    #expect(isWhite(try backgroundPixel(shaded, at: NSPoint(x: art.midX, y: middle))))
+    let line = try backgroundPixel(shaded, at: NSPoint(x: title.midX, y: bottom))
+    // Red, give or take the bitmap's color space.
+    #expect(line.redComponent > 0.9 && line.greenComponent < 0.3 && line.blueComponent < 0.1)
+    #expect(!isWhite(try backgroundPixel(shaded, at: NSPoint(x: title.midX, y: middle))))
+    // Row 2 is selected, outside the art column.
+    let selected = try rowView(2)
+    #expect(selected.isSelected)
+    #expect(isWhite(try backgroundPixel(selected, at: NSPoint(x: art.midX, y: middle))))
+    #expect(!isWhite(try backgroundPixel(selected, at: NSPoint(x: title.midX, y: middle))))
 }
 
 @MainActor @Test func hoveringArtShowsItWholeAtTheColumnsWidth() async throws {
@@ -924,7 +1022,8 @@ private func hoveredRescanTable() async throws -> (
     let table = controller.table
     func appearance(alternating: Bool, glass: Bool) -> TableAppearance {
         TableAppearance(
-            columnLines: false, rowLines: false, alternatingRows: alternating,
+            columnLines: false, rowLines: false, albumLines: false, rowLineColor: nil,
+            albumLineColor: nil, alternatingRows: alternating,
             rowHeight: .regular, artSize: .fit, glass: glass)
     }
     controller.apply(appearance(alternating: true, glass: true))

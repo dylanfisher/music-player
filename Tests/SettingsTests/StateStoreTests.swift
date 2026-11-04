@@ -225,6 +225,7 @@ private func problems(_ json: String) -> [SettingProblem] {
     let settings = try StateStore(AppSettings(), fileURL: temporaryFile())
     #expect(settings[\.columnLines] == false)
     #expect(settings[\.rowLines] == false)
+    #expect(settings[\.albumLines] == false)
     #expect(settings[\.alternatingRows] == true)
     #expect(settings[\.rowHeight] == .regular)
     #expect(settings[\.artSize] == .fit)
@@ -233,7 +234,8 @@ private func problems(_ json: String) -> [SettingProblem] {
     let keys = AppSettings().settings.map(\.key).filter { $0.hasPrefix("appearance.") }
     #expect(
         keys == [
-            "appearance.columnLines", "appearance.rowLines", "appearance.alternatingRows",
+            "appearance.columnLines", "appearance.rowLines", "appearance.albumLines",
+            "appearance.rowLineColor", "appearance.albumLineColor", "appearance.alternatingRows",
             "appearance.rowHeight", "appearance.artSize", "appearance.glass",
             "appearance.windowTitle",
             "appearance.statusBarStyle",

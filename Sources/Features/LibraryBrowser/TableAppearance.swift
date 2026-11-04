@@ -6,21 +6,43 @@ import Settings
 public struct TableAppearance: Equatable, Sendable {
     public var columnLines: Bool
     public var rowLines: Bool
+    public var albumLines: Bool
+    /// The row and column lines' color, and the album lines'; nil is the system's grid color.
+    public var rowLineColor: HexColor?
+    public var albumLineColor: HexColor?
     public var alternatingRows: Bool
     public var rowHeight: RowHeight
     public var artSize: ArtSize
     public var glass: Bool
 
     public init(
-        columnLines: Bool, rowLines: Bool, alternatingRows: Bool, rowHeight: RowHeight,
-        artSize: ArtSize, glass: Bool
+        columnLines: Bool, rowLines: Bool, albumLines: Bool, rowLineColor: HexColor?,
+        albumLineColor: HexColor?, alternatingRows: Bool, rowHeight: RowHeight, artSize: ArtSize,
+        glass: Bool
     ) {
         self.columnLines = columnLines
         self.rowLines = rowLines
+        self.albumLines = albumLines
+        self.rowLineColor = rowLineColor
+        self.albumLineColor = albumLineColor
         self.alternatingRows = alternatingRows
         self.rowHeight = rowHeight
         self.artSize = artSize
         self.glass = glass
+    }
+
+    var rowLine: NSColor { rowLineColor.map(NSColor.init) ?? .gridColor }
+    var albumLine: NSColor { albumLineColor.map(NSColor.init) ?? .gridColor }
+}
+
+extension NSColor {
+    /// A color setting's color. The config file refuses text that isn't a color, so this never
+    /// sees one.
+    fileprivate convenience init(_ hex: HexColor) {
+        guard let parts = hex.components else {
+            preconditionFailure("\(hex.text) isn't a color but passed the config file's check")
+        }
+        self.init(srgbRed: parts.red, green: parts.green, blue: parts.blue, alpha: parts.alpha)
     }
 }
 

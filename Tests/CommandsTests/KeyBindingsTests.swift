@@ -207,7 +207,7 @@ private func bindings(_ overrides: ShortcutOverrides = [:]) throws -> KeyBinding
         ])
     #expect(
         generated.filter { $0.key.hasPrefix("appearance.") }.map(\.command.title) == [
-            "Column Lines", "Row Lines", "Alternating Rows", "Compact Row Height",
+            "Column Lines", "Row Lines", "Album Lines", "Alternating Rows", "Compact Row Height",
             "Regular Row Height", "Large Row Height", "Scaled to Fit Album Art",
             "Full Width Album Art", "Window Glass", "Minimal Status Bar", "Tall Status Bar",
         ])

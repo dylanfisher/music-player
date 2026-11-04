@@ -374,6 +374,31 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(volumeKeys.isEnabled)
 }
 
+@MainActor @Test func aColorRowIsAWellWithADefaultButton() throws {
+    let schema = AppSettings()
+    let key = schema.rowLineColor.key
+    var stored: [String: Any] = [key: NSNull()]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
+        set: { key, json in stored[key] = json }, isBlocked: { false })
+    #expect(model.rows.first { $0.key == key }?.control == .color(optional: true))
+    #expect(model.color(key) == nil)
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.appearance])
+    pane.reload()
+    let well = try #require(view(key, in: pane.view) as? NSColorWell)
+    let reset = try #require(button("Default", in: pane.view))
+    #expect(!reset.isEnabled)
+    well.color = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 0.5)
+    _ = well.sendAction(well.action, to: well.target)
+    #expect(stored[key] as? String == "#FF000080")
+    pane.reload()
+    #expect(reset.isEnabled)
+    #expect(abs((well.color.usingColorSpace(.sRGB)?.alphaComponent ?? 0) - 0.5) < 0.01)
+    reset.performClick(nil)
+    #expect(stored[key] is NSNull)
+}
+
 @MainActor @Test func aCheckboxCarriesItsTitleAndAFieldItsLabel() throws {
     let (model, _) = model()
     let pane = GeneralPane(

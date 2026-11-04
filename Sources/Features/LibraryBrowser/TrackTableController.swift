@@ -180,10 +180,12 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// Draws the lines, rows and art as the appearance settings say.
     func apply(_ appearance: TableAppearance) {
         self.appearance = appearance
-        var lines: NSTableView.GridLineStyle = []
-        if appearance.columnLines { lines.insert(.solidVerticalGridLineMask) }
-        if appearance.rowLines { lines.insert(.solidHorizontalGridLineMask) }
-        table.gridStyleMask = lines
+        // The rows draw their own lines, which differ between rows (`decorate`).
+        table.gridStyleMask = appearance.columnLines ? .solidVerticalGridLineMask : []
+        table.gridColor = appearance.rowLine
+        table.enumerateAvailableRowViews { rowView, row in
+            (rowView as? MarkedRowView).map { decorate($0, row: row) }
+        }
         table.usesAlternatingRowBackgroundColors = appearance.alternatingRows && !appearance.glass
         table.drawsTranslucentRows = appearance.alternatingRows && appearance.glass
         let rowHeight = appearance.rowHeight.points
@@ -253,9 +255,9 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         let rows = IndexSet(changed.map { prepared[$0] })
         table.reloadData(
             forRowIndexes: rows, columnIndexes: IndexSet(integersIn: 0..<table.numberOfColumns))
-        for row in rows {
-            (table.rowView(atRow: row, makeIfNecessary: false) as? MarkedRowView)?.isMarked =
-                isPlaying(row)
+        // A changed album moves the album line of the row above too.
+        table.enumerateAvailableRowViews { rowView, row in
+            (rowView as? MarkedRowView).map { decorate($0, row: row) }
         }
         // An album's art spans its rows, so a changed cover or album moves where the art of the
         // rows around it starts and ends, and what it shows.
@@ -385,8 +387,31 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             rowView.wantsLayer = true
             rowView.canDrawSubviewsIntoLayer = true
         }
-        rowView.isMarked = isPlaying(row)
+        decorate(rowView, row: row)
         return rowView
+    }
+
+    /// Marks `rowView` if it plays, gives it its line, and keeps the art column plain.
+    private func decorate(_ rowView: MarkedRowView, row: Int) {
+        rowView.isMarked = isPlaying(row)
+        rowView.bottomLine = line(below: row)
+        rowView.plainColumn = columnIdentifier(.art)
+    }
+
+    /// The line under `row`: the album line where its album ends, else the row line, if the
+    /// appearance has either.
+    func line(below row: Int) -> NSColor? {
+        guard let appearance else { return nil }
+        if appearance.albumLines, endsAlbum(row) { return appearance.albumLine }
+        return appearance.rowLines ? appearance.rowLine : nil
+    }
+
+    /// Whether the row after `row` is another album's, as the art column groups them: a row
+    /// with no album is an album of its own. The last row ends nothing.
+    private func endsAlbum(_ row: Int) -> Bool {
+        guard row + 1 < model.trackIDs.count else { return false }
+        guard let album = trackRow(row)?.albumID else { return true }
+        return trackRow(row + 1)?.albumID != album
     }
 
     /// Whether `row` shows the track playing. Read from the row cache, which already holds the
@@ -699,6 +724,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
 
     func tableViewColumnDidMove(_ notification: Notification) {
         hideArtHover()
+        table.enumerateAvailableRowViews { rowView, _ in rowView.needsDisplay = true }
         guard !applyingColumns else { return }
         actions.layoutChanged(layout)
         // A drag moves the column a place at a time; the selection is centered once it's off
@@ -711,6 +737,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         if !applyingColumns { actions.layoutChanged(layout) }
         let resized = notification.userInfo?["NSTableColumn"] as? NSTableColumn
         if resized?.identifier == columnIdentifier(.art) { refitArt() }
+        // The rows paint the art column plain where it is now.
+        table.enumerateAvailableRowViews { rowView, _ in rowView.needsDisplay = true }
     }
 
     /// Shows `layout`'s columns in its order and widths, and hides the others. The sort is the

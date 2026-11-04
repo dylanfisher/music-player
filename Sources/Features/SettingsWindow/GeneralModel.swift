@@ -25,6 +25,8 @@ public final class GeneralModel {
         case renderer
         /// Columns of parts, which a button opens the bar builder on.
         case barLayout(SettingKind.Bar)
+        /// A color well, with a button that sets null when the setting allows it.
+        case color(optional: Bool)
         /// A kind with no control of its own: the value as the config file has it, edited there.
         case readOnly
     }
@@ -158,6 +160,8 @@ public final class GeneralModel {
             case .list(.watchedFolder): .folders
             case .optional(.syncFolder): .syncFolder
             case .barLayout(let bar): .barLayout(bar)
+            case .color: .color(optional: false)
+            case .optional(.color): .color(optional: true)
             default: .readOnly
             }
         return Row(
@@ -308,6 +312,14 @@ public final class GeneralModel {
         tokens.map { "\($0.name)  \($0.help)" }.joined(separator: "\n")
     }
 
+    /// A color row's color; nil for null, or for text that isn't a color, which the config
+    /// file refuses before it reaches here.
+    func color(_ key: String) -> HexColor? {
+        (value(key) as? String).map { HexColor($0) }.flatMap { $0.components == nil ? nil : $0 }
+    }
+
+    func setColor(_ key: String, _ color: HexColor) throws { try set(key, color.text) }
+
     func setOn(_ key: String, _ on: Bool) throws { try set(key, on) }
 
     func setChoice(_ key: String, _ raw: String) throws { try set(key, raw) }
@@ -334,7 +346,8 @@ public final class GeneralModel {
             try set(key, trimmed.isEmpty && optional ? NSNull() : trimmed)
         case .template:
             try set(key, trimmed)
-        case .checkbox, .popUp, .folders, .syncFolder, .output, .renderer, .barLayout, .readOnly:
+        case .checkbox, .popUp, .folders, .syncFolder, .output, .renderer, .barLayout, .color,
+            .readOnly:
             preconditionFailure("\(key) isn't a text row")
         }
     }

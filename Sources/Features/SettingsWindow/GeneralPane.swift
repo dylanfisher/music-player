@@ -44,6 +44,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private var copiedGeneration = 0
     private var syncFolderLabel: NSTextField?
     private var syncFolderButtons: (change: NSButton, open: NSButton, clear: NSButton)?
+    /// The color rows' wells, and their Default buttons, which set null.
+    private var colorWells: [String: NSColorWell] = [:]
+    private var colorDefaults: [String: NSButton] = [:]
     /// The bar builders opened from this pane, by key, kept so a reopen shows the same one.
     private(set) var barBuilders: [String: BarBuilderWindow] = [:]
     /// The tokens' popover while it shows, for tests.
@@ -284,6 +287,21 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             edit.identifier = NSUserInterfaceItemIdentifier(row.key)
             edit.setAccessibilityLabel(row.title)
             return edit
+        case .color(let optional):
+            let well = NSColorWell()
+            well.identifier = NSUserInterfaceItemIdentifier(row.key)
+            well.target = self
+            well.action = #selector(choseColor(_:))
+            // One change when the panel lets go, not a config file write for each drag step.
+            well.isContinuous = false
+            well.setAccessibilityLabel(row.title)
+            NSColorPanel.shared.showsAlpha = true
+            colorWells[row.key] = well
+            guard optional else { return well }
+            let reset = button("Default", #selector(defaultColor(_:)))
+            reset.identifier = NSUserInterfaceItemIdentifier(row.key)
+            colorDefaults[row.key] = reset
+            return NSStackView(views: [well, reset])
         case .readOnly:
             let list = NSTextField(wrappingLabelWithString: "")
             list.identifier = NSUserInterfaceItemIdentifier(row.key)
@@ -334,6 +352,14 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             syncFolderButtons?.clear.isEnabled = name != nil
         case .barLayout:
             barBuilders[row.key]?.reload()
+        case .color:
+            let color = model.color(row.key)?.components
+            // Null is the system's grid color, as the track table draws it.
+            colorWells[row.key]?.color =
+                color.map {
+                    NSColor(srgbRed: $0.red, green: $0.green, blue: $0.blue, alpha: $0.alpha)
+                } ?? .gridColor
+            colorDefaults[row.key]?.isEnabled = color != nil
         case .readOnly:
             (control as? NSTextField)?.stringValue =
                 model.text(row.key) + " (edit in the config file)"
@@ -397,6 +423,24 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     @objc private func openSyncFolder() { actions.openSyncFolder() }
+
+    @objc private func choseColor(_ well: NSColorWell) {
+        guard let key = well.identifier?.rawValue,
+            let color = well.color.usingColorSpace(.sRGB)
+        else { return }
+        attempt {
+            try model.setColor(
+                key,
+                HexColor(
+                    red: color.redComponent, green: color.greenComponent,
+                    blue: color.blueComponent, alpha: color.alphaComponent))
+        }
+    }
+
+    @objc private func defaultColor(_ button: NSButton) {
+        guard let key = button.identifier?.rawValue else { return }
+        attempt { try model.clear(key) }
+    }
 
     @objc private func clearSyncFolder(_ button: NSButton) {
         guard let key = button.identifier?.rawValue else { return }

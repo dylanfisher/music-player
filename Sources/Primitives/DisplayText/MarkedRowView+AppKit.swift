@@ -27,21 +27,68 @@ public final class MarkedRowView: NSTableRowView {
     public var isMarked = false {
         didSet { if isMarked != oldValue { needsDisplay = true } }
     }
+    /// The line along the row's bottom, drawn by the row so each row can have its own; nil for
+    /// none.
+    public var bottomLine: NSColor? {
+        didSet { if bottomLine != oldValue { needsDisplay = true } }
+    }
+    /// The table column drawn plain, in the table's background with no line, alternating
+    /// shade, mark or selection over it; nil for none.
+    public var plainColumn: NSUserInterfaceItemIdentifier? {
+        didSet { if plainColumn != oldValue { needsDisplay = true } }
+    }
 
     override public func drawBackground(in dirtyRect: NSRect) {
         super.drawBackground(in: dirtyRect)
+        let plain = plainRect
+        if let bottomLine {
+            bottomLine.setFill()
+            NSRect(x: 0, y: isFlipped ? bounds.maxY - 1 : 0, width: bounds.width, height: 1)
+                .fill(using: .sourceOver)
+        }
+        if let plain, let table = superview as? NSTableView {
+            table.backgroundColor.setFill()
+            // A clear background, on the window's glass, clears the shade under it too.
+            plain.fill(using: .copy)
+        }
         guard isMarked else { return }
-        Self.tint.setFill()
-        bounds.fill(using: .sourceOver)
+        outside(plain) {
+            Self.tint.setFill()
+            bounds.fill(using: .sourceOver)
+        }
         drawBar(.controlAccentColor)
     }
 
     override public func drawSelection(in dirtyRect: NSRect) {
-        super.drawSelection(in: dirtyRect)
+        outside(plainRect) { super.drawSelection(in: dirtyRect) }
         guard isMarked else { return }
         // The selection is the accent color while the table has the keys, so the bar takes
         // the selected text's color then.
         drawBar(isEmphasized ? .alternateSelectedControlTextColor : .controlAccentColor)
+    }
+
+    /// Where `plainColumn` is in the row, when the table shows it.
+    private var plainRect: NSRect? {
+        guard let plainColumn, let table = superview as? NSTableView else { return nil }
+        let column = table.column(withIdentifier: plainColumn)
+        guard column >= 0, !table.tableColumns[column].isHidden else { return nil }
+        let rect = table.rect(ofColumn: column)
+        return NSRect(x: rect.minX, y: bounds.minY, width: rect.width, height: bounds.height)
+    }
+
+    /// Runs `draw` clipped to the row without `plain`.
+    private func outside(_ plain: NSRect?, _ draw: () -> Void) {
+        guard let plain else { return draw() }
+        NSGraphicsContext.saveGraphicsState()
+        let clip = NSBezierPath(rect: NSRect(x: 0, y: 0, width: plain.minX, height: bounds.height))
+        clip.append(
+            NSBezierPath(
+                rect: NSRect(
+                    x: plain.maxX, y: 0, width: max(0, bounds.width - plain.maxX),
+                    height: bounds.height)))
+        clip.addClip()
+        draw()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawBar(_ color: NSColor) {

@@ -94,7 +94,8 @@ func glassOnThenOffLeavesTheWindowAsAFreshOne(
 ) async throws {
     func table(glass: Bool, alternating: Bool = alternating) -> TableAppearance {
         TableAppearance(
-            columnLines: false, rowLines: false, alternatingRows: alternating,
+            columnLines: false, rowLines: false, albumLines: false, rowLineColor: nil,
+            albumLineColor: nil, alternatingRows: alternating,
             rowHeight: .regular, artSize: .fit, glass: glass)
     }
     let fresh = try await MainWindowFixture()
