@@ -340,8 +340,8 @@ import Testing
             columnLines: true, rowLines: true, albumLines: false, rowLineColor: nil,
             albumLineColor: nil, alternatingRows: false, rowHeight: .compact,
             artSize: .fit, glass: false))
-    // The rows draw the row lines themselves.
-    #expect(controller.table.gridStyleMask == .solidVerticalGridLineMask)
+    // The rows draw every line themselves.
+    #expect(controller.table.gridStyleMask == [])
     #expect(!controller.table.usesAlternatingRowBackgroundColors)
     #expect(controller.table.rowHeight == 17)
     controller.apply(
@@ -349,7 +349,7 @@ import Testing
             columnLines: true, rowLines: false, albumLines: false, rowLineColor: nil,
             albumLineColor: nil, alternatingRows: true, rowHeight: .large,
             artSize: .fit, glass: false))
-    #expect(controller.table.gridStyleMask == .solidVerticalGridLineMask)
+    #expect(controller.table.gridStyleMask == [])
     #expect(controller.table.rowHeight > RowListController.rowHeight)
     #expect(controller.table.usesAlternatingRowBackgroundColors)
     // The glass leaves out the rows' opaque shading.
@@ -482,7 +482,8 @@ private let albumRed = HexColor("#FF0000")
     #expect(ends.contains(true) && ends.contains(false))
     #expect(lines(rows: false, albums: false).allSatisfy { $0 == nil })
     #expect(lines(rows: true, albums: false).dropLast().allSatisfy { $0 == gray })
-    #expect(controller.table.gridColor == gray, "the column lines share the row lines' color")
+    let first = controller.table.rowView(atRow: 0, makeIfNecessary: true) as? MarkedRowView
+    #expect(first?.columnLines == gray, "the column lines share the row lines' color")
     #expect(lines(rows: false, albums: true) == ends.map { $0 ? red : nil })
     #expect(lines(rows: true, albums: true) == ends.map { $0 ? red : gray })
     // The row views on screen follow a change at once.
@@ -600,6 +601,17 @@ private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throw
     #expect(try backgroundPixel(shaded, at: NSPoint(x: art.midX, y: middle)).alphaComponent < 0.01)
     #expect(try backgroundPixel(shaded, at: NSPoint(x: art.midX, y: bottom)).alphaComponent < 0.01)
     #expect(try backgroundPixel(shaded, at: NSPoint(x: title.midX, y: middle)).alphaComponent > 0)
+    // Column lines too: one at the title column's right edge, none in the art column's.
+    controller.apply(
+        TableAppearance(
+            columnLines: true, rowLines: false, albumLines: false, rowLineColor: albumRed,
+            albumLineColor: nil, alternatingRows: true, rowHeight: .regular, artSize: .fit,
+            glass: true))
+    let edge = try backgroundPixel(shaded, at: NSPoint(x: title.maxX - 0.5, y: middle))
+    #expect(edge.redComponent > 0.9 && edge.greenComponent < 0.3 && edge.alphaComponent > 0.9)
+    #expect(
+        try backgroundPixel(shaded, at: NSPoint(x: art.maxX - 0.5, y: middle)).alphaComponent
+            < 0.01)
 }
 
 @MainActor @Test func hoveringArtShowsItWholeAtTheColumnsWidth() async throws {

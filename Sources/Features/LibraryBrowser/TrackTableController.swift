@@ -180,9 +180,9 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// Draws the lines, rows and art as the appearance settings say.
     func apply(_ appearance: TableAppearance) {
         self.appearance = appearance
-        // The rows draw their own lines, which differ between rows (`decorate`).
-        table.gridStyleMask = appearance.columnLines ? .solidVerticalGridLineMask : []
-        table.gridColor = appearance.rowLine
+        // The rows draw every line (`decorate`): the row lines differ between rows, and no
+        // line crosses the plain art column, which AppKit's grid would on the glass.
+        table.gridStyleMask = []
         table.enumerateAvailableRowViews { rowView, row in
             (rowView as? MarkedRowView).map { decorate($0, row: row) }
         }
@@ -395,6 +395,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     private func decorate(_ rowView: MarkedRowView, row: Int) {
         rowView.isMarked = isPlaying(row)
         rowView.bottomLine = line(below: row)
+        rowView.columnLines = appearance?.columnLines == true ? appearance?.rowLine : nil
         rowView.plainColumn = columnIdentifier(.art)
         // The row above may have been given its line before this row's page was read.
         guard row > 0,

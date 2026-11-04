@@ -32,6 +32,11 @@ public final class MarkedRowView: NSTableRowView {
     public var bottomLine: NSColor? {
         didSet { if bottomLine != oldValue { needsDisplay = true } }
     }
+    /// The line along each shown column's right edge, drawn by the row so the plain column can
+    /// go without; nil for none.
+    public var columnLines: NSColor? {
+        didSet { if columnLines != oldValue { needsDisplay = true } }
+    }
     /// The table column drawn plain, in the table's background with no line, alternating
     /// shade, mark or selection over it; nil for none.
     public var plainColumn: NSUserInterfaceItemIdentifier? {
@@ -49,6 +54,15 @@ public final class MarkedRowView: NSTableRowView {
                 bottomLine.setFill()
                 NSRect(x: 0, y: isFlipped ? bounds.maxY - 1 : 0, width: bounds.width, height: 1)
                     .fill(using: .sourceOver)
+            }
+            if let columnLines, let table = superview as? NSTableView {
+                columnLines.setFill()
+                for (column, tableColumn) in table.tableColumns.enumerated()
+                where !tableColumn.isHidden {
+                    let edge = table.rect(ofColumn: column).maxX - 1
+                    NSRect(x: edge, y: bounds.minY, width: 1, height: bounds.height)
+                        .fill(using: .sourceOver)
+                }
             }
             if isMarked {
                 Self.tint.setFill()

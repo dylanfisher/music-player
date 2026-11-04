@@ -18,13 +18,13 @@ all music. Several of these left choices open.
   Appearance. `appearance.rowLineColor` and `appearance.albumLineColor` are optional. Null means
   the system's grid color, which follows light and dark mode, where a fixed default wouldn't.
   The row has a Default button that sets null.
-- **Column lines share the row lines' color.** One color for the grid. AppKit draws the column
-  lines with one `gridColor`, and a separate color would be a third setting for a line the owner
-  didn't ask about.
-- **The rows draw the row and album lines.** `MarkedRowView` draws a 1 pt line along its bottom
-  in the color it's given, so each row can carry the row or the album line. AppKit's horizontal
-  grid has one color for every row. The table no longer uses AppKit's horizontal grid, so no
-  lines are drawn below the last row.
+- **Column lines share the row lines' color.** One color for the grid; a separate color would
+  be a third setting for a line the owner didn't ask about.
+- **The rows draw every line.** `MarkedRowView` draws a 1 pt line along its bottom in the color
+  it's given, so each row can carry the row or the album line, and one along each shown
+  column's right edge. AppKit's grid has one color for every row, and on the glass its column
+  lines showed through the plain art column. The table no longer uses AppKit's grid, so no lines
+  are drawn below the last row.
 - **An album ends where the album ID changes**, the same `albumID` the art column groups its runs
   by (album title and album artist). Adjacent rows without an album are one group, so a run of
   untagged tracks doesn't get a heavy line under each one. The art column still gives each of
