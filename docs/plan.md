@@ -4125,20 +4125,20 @@ Searcher change.
 
 #### 38c. Layout builder
 
-- [ ] **38c.1 Colors.** The preview's columns and parts are too dark (`s4118`). They take the
+- [x] **38c.1 Colors.** The preview's columns and parts are too dark (`s4118`). They take the
       settings window's own colors: the sunken box's background, and lighter part tokens.
-- [ ] **38c.2 Live drag.** While a part is dragged, the others move aside to show where it will
+- [x] **38c.2 Live drag.** While a part is dragged, the others move aside to show where it will
       go, before it's dropped.
-- [ ] **38c.3 Move columns.** Each column has a handle that drags the whole column, parts and
+- [x] **38c.3 Move columns.** Each column has a handle that drags the whole column, parts and
       settings, to another place, moving the others aside as in 38c.2.
-- [ ] **38c.4 Empty columns save.** A column with no parts is allowed. It takes its width and
+- [x] **38c.4 Empty columns save.** A column with no parts is allowed. It takes its width and
       draws nothing. "Drag a part into leading column 1 to save the layout" goes.
-- [ ] **38c.5 Plain errors.** Problems read in plain words, naming the column by where it is
+- [x] **38c.5 Plain errors.** Problems read in plain words, naming the column by where it is
       ("the first column on the left"), without the file path or key in the builder. Art alone in
       a stacked column isn't a problem; that's the error the owner hit, from the default header
       layout with Stack Parts on. The builder refuses a change that would make a problem, and says
       why in its hint line.
-- [ ] **38c.6 Reset to Default.** Each builder has a Reset to Default button that puts its
+- [x] **38c.6 Reset to Default.** Each builder has a Reset to Default button that puts its
       setting back to its default.
 
 Plan, part 38c (ADR 0085 amended):
@@ -4162,6 +4162,17 @@ Plan, part 38c (ADR 0085 amended):
   why; an empty column saves; Reset to Default saves the default; part and column drags, live
   and on drop, across the center; the preview's colors. Order: 38c.4, 38c.5, 38c.6, 38c.1,
   38c.2, 38c.3, then the ADR. `--snapshot` of the builder for the colors.
+
+Result, part 38c: shipped 38c.1 to 38c.6 (ADR 0085 amended). The preview is drawn in the
+settings boxes' colors with light part fields. A dragged part moves the others aside before the
+drop, and each side column drags by a handle; the center column stays put, and a column dragged
+past its middle goes to the other side. Empty columns save and keep their width in both bars.
+Problems read in plain words with the column by position; the art alone in a stacked column is
+allowed; the builder refuses an edit that would make a problem and says why in its hint line.
+Reset to Default saves the default through the same patch. `./scripts/check` passes except
+`glassLeavesTheSavedLayoutAsItWas`, which fails the same way on `main` before this part. The
+drags were tested through the view's drag and drop calls and checked in `--snapshot`, not by
+hand with a mouse.
 
 Plan: written by the orchestrator under each part before it runs, as in phase 37.
 
