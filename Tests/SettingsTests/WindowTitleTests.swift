@@ -59,6 +59,24 @@ private let fills: [(String, [String: String], String)] = [
     ("{artist} ({year})", ["artist": "A", "year": "1969"], "A (1969)"),
     ("♪ {title}", ["title": "T"], "♪ T"), ("♪ {title}", [:], ""),
     ("Now: {album}!", ["album": "B"], "Now: B!"), ("Plain", [:], "Plain"),
+    // Brackets around empty fields go whole, with the space before them.
+    ("{artist} ({year}) {album}", ["artist": "A", "album": "Album"], "A Album"),
+    (
+        "{artist} ({year}) {album}", ["artist": "A", "year": "1969", "album": "Album"],
+        "A (1969) Album"
+    ),
+    (
+        "{album} - {artist} ({year}) {genre}", ["album": "A", "artist": "B", "genre": "D"],
+        "A - B D"
+    ),
+    ("{title} ({year})", ["title": "T"], "T"), ("({year}) {title}", ["title": "T"], "T"),
+    ("[{year}] {title}", ["year": "1969", "title": "T"], "[1969] T"),
+    ("{title} ({year}) [{genre}]", ["title": "T", "genre": "Rock"], "T [Rock]"),
+    ("{title} ({year}) [{genre}]", ["title": "T"], "T"),
+    ("{title} [{album} ({year})]", ["title": "T", "album": "B"], "T [B]"),
+    ("{title} [{album} ({year})]", ["title": "T"], "T"),
+    ("{title} (live)", ["title": "T"], "T (live)"),
+    ("{title} ({artist}", ["title": "T"], "T"), ("{title}) {artist}", ["title": "T"], "T"),
 ]
 
 @Test(arguments: fills)

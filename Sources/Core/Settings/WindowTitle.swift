@@ -46,15 +46,14 @@ public struct WindowTitle: SettingValue {
         var message: String
     }
 
-    /// The template with each token's value, fields as they are. Text between two tokens shows
-    /// only when the token before it has a value and one after it does, so a run of empty
-    /// fields leaves the one separator after the last field shown; text before the first token
-    /// shows only when that token has a value, and text after the last only when that one does.
+    /// The template with each token's value, fields as they are. First, brackets, `(` or `[`
+    /// and the matching closer, around tokens that are all empty go, with the spaces before
+    /// them, or after them at the start. Then text between two tokens shows only when the token
+    /// before it has a value and one after it does, so a run of empty fields leaves the one
+    /// separator after the last field shown; text before the first token shows only when that
+    /// token has a value, and text after the last only when that one does.
     public func fill(_ value: (TitleToken) -> String?) -> String {
-        let values: [String?] = parts.map { part in
-            guard case .token(let token) = part else { return nil }
-            return value(token) ?? ""
-        }
+        let (parts, values) = Self.droppingEmptyGroups(parts, value)
         func hasValue(_ index: Int) -> Bool { values[index]?.isEmpty == false }
         let tokens = parts.indices.filter { values[$0] != nil }
         return parts.indices.map { index -> String in
@@ -70,6 +69,69 @@ public struct WindowTitle: SettingValue {
                 }
             return shows ? text : ""
         }.joined()
+    }
+
+    private enum Item {
+        case character(Character)
+        case token(TitleToken, String)
+    }
+
+    /// `parts` without the bracketed groups whose tokens are all empty, and each token's
+    /// value, nil for text. A bracket with no token before its match is plain text.
+    private static func droppingEmptyGroups(
+        _ parts: [Part], _ value: (TitleToken) -> String?
+    ) -> ([Part], [String?]) {
+        let items: [Item] = parts.flatMap { part -> [Item] in
+            switch part {
+            case .text(let text): text.map { .character($0) }
+            case .token(let token): [.token(token, value(token) ?? "")]
+            }
+        }
+        let closers: [Character: Character] = ["(": ")", "[": "]"]
+        var open: [(closer: Character, index: Int)] = []
+        var dropped = Set<Int>()
+        for (index, item) in items.enumerated() {
+            guard case .character(let character) = item else { continue }
+            if let closer = closers[character] {
+                open.append((closer, index))
+            } else if let last = open.last, last.closer == character {
+                open.removeLast()
+                let inside = items[last.index...index].compactMap { item -> String? in
+                    guard case .token(_, let text) = item else { return nil }
+                    return text
+                }
+                guard !inside.isEmpty, inside.allSatisfy(\.isEmpty) else { continue }
+                dropped.formUnion(last.index...index)
+                var before = last.index - 1
+                while before >= 0, case .character(let c) = items[before], c.isWhitespace {
+                    dropped.insert(before)
+                    before -= 1
+                }
+                guard !(0..<last.index).contains(where: { !dropped.contains($0) }) else { continue }
+                var after = index + 1
+                while after < items.count, case .character(let c) = items[after], c.isWhitespace {
+                    dropped.insert(after)
+                    after += 1
+                }
+            }
+        }
+        var kept: [Part] = []
+        var values: [String?] = []
+        for (index, item) in items.enumerated() where !dropped.contains(index) {
+            switch item {
+            case .character(let character):
+                if case .text(let text) = kept.last {
+                    kept[kept.count - 1] = .text(text + String(character))
+                } else {
+                    kept.append(.text(String(character)))
+                    values.append(nil)
+                }
+            case .token(let token, let text):
+                kept.append(.token(token))
+                values.append(text)
+            }
+        }
+        return (kept, values)
     }
 
     private static func parse(_ template: String) -> Result<[Part], Problem> {

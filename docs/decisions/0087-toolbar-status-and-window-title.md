@@ -51,7 +51,10 @@ is `{title} — {artist}`. Braces hold only a token, so an unknown name, `{}` or
 the value's problem, refused at load and in Settings like any other, with every token in the
 message; an empty template is refused too, rather than meaning the app's name. NowPlaying fills
 the template from the playing track, each field exactly as tagged, so a title ending in a comma
-or a colon keeps it. Text between two tokens shows only when the token before it has a value and
+or a colon keeps it. First, a `(` or `[` and its matching closer around tokens that are all
+empty go whole, with the spaces before them (after them at the start), so `{artist} ({year})
+{album}` without a year is "A Album"; a bracket with no match, or with no token inside, is plain
+text. Then text between two tokens shows only when the token before it has a value and
 a later one does: a run of empty fields keeps the one separator after the last field shown, so
 `{title} — {artist} — {album}` without an artist is "T — Album", and `{artist} ({year})` without
 a year is "A". Text before the first token shows only when that token has a value, and text
