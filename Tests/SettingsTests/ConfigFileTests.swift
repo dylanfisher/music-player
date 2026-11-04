@@ -72,6 +72,14 @@ private func problems(_ text: String) -> [String] {
     #expect(problems("[1]") == ["must be a JSON object of settings"])
 }
 
+/// -1e400 parses to minus infinity, which `JSONSerialization.data` raises on rather than
+/// throwing; it is refused as the wrong type instead of crashing the app.
+@Test func aNumberTooLargeToHoldIsTheWrongType() {
+    let found = problems("{\n  \"a.count\": -1e400\n}")
+    #expect(found.count == 1)
+    #expect(found.first?.hasPrefix(#"line 2: "a.count": expected an integer"#) == true, "\(found)")
+}
+
 /// Inputs the fuzzer found that crashed the scan (ADR 0027), each a problem now.
 @Test(arguments: ["double-comma-after-a-comment", "double-comma-before-a-comment"])
 func fuzzedFilesAreProblemsNotCrashes(_ name: String) throws {
