@@ -46,8 +46,6 @@ public struct MenuSection: Sendable {
 /// The main menu bar as data, so the App tier builds it, the Shortcuts pane lists commands in
 /// its order, and the chord rules come from its standard items.
 public enum AppMenus {
-    /// The action the Settings… item sends, which the app's delegate answers.
-    static let showSettingsAction = "showSettings:"
     /// The Controls menu's submenu of the outputs found.
     public static let outputMenuTitle = "Output"
     /// The track menu's submenus: every manual playlist, and those listing the first selected
@@ -83,8 +81,8 @@ public enum AppMenus {
                 entries: [
                     .standard(StandardItem("About \(appName)", "orderFrontStandardAboutPanel:")),
                     .separator,
-                    .standard(StandardItem("Settings…", showSettingsAction, KeyChord(",", cmd))),
-                    .command(.openConfigFile), .command(.copyDefaultConfig), .separator,
+                    .command(.showSettings), .command(.openConfigFile),
+                    .command(.copyDefaultConfig), .separator,
                     .standard(StandardItem("Hide \(appName)", "hide:", KeyChord("h", cmd))),
                     .standard(
                         StandardItem(
@@ -158,6 +156,7 @@ public enum AppMenus {
                             .command(.reverseSort),
                         ], showsChords: true),
                     .separator, .command(.back), .command(.forward), .command(.showCurrentTrack),
+                    .command(.showSelectedTrack),
                     .command(.showAllTracks), .command(.scrollUp), .command(.scrollDown),
                     .separator, .setting(settings.appearance.key),
                     .submenu(

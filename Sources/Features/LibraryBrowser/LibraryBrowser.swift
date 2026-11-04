@@ -1513,8 +1513,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Whether Show Current Track has something to show: the track playing, or else a selected
     /// row.
     public func canShowCurrentTrack(playingPath: String?) -> Bool {
-        playingPath != nil || !shownList.table.selectedRowIndexes.isEmpty
+        playingPath != nil || hasSelection
     }
+
+    /// Whether the list the window shows has a row selected, for Show Selected Track.
+    public var hasSelection: Bool { !shownList.table.selectedRowIndexes.isEmpty }
 
     /// Show Current Track: the track at `playingPath`, or with nothing playing the selected
     /// rows, centered, with the keys.
@@ -1523,6 +1526,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             await reveal(path: playingPath)
             return
         }
+        showSelectedTrack()
+    }
+
+    /// Show Selected Track: the selected rows, centered, with the keys.
+    public func showSelectedTrack() {
         shownList.centerSelection()
         focusTracks()
     }

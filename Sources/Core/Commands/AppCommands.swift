@@ -38,6 +38,8 @@ extension CommandID {
     public static let toggleQueue = CommandID("view.toggleQueue")
     public static let toggleSignalPath = CommandID("view.toggleSignalPath")
     public static let showCurrentTrack = CommandID("view.showCurrentTrack")
+    /// Centers the selected rows, as Show Current Track does the track playing.
+    public static let showSelectedTrack = CommandID("view.showSelectedTrack")
     public static let showAllTracks = CommandID("view.showAllTracks")
     public static let scrollUp = CommandID("view.scrollUp")
     public static let scrollDown = CommandID("view.scrollDown")
@@ -124,6 +126,7 @@ extension CommandID {
         name.prefix(1).uppercased() + name.dropFirst()
     }
 
+    public static let showSettings = CommandID("app.showSettings")
     public static let openConfigFile = CommandID("app.openConfigFile")
     public static let copyDefaultConfig = CommandID("app.copyDefaultConfig")
 }
@@ -181,6 +184,7 @@ public enum AppCommands {
             Command(
                 .toggleSignalPath, state.signalPathVisible.title, [.init("s", [opt, cmd])]),
             Command(.showCurrentTrack, "Show Current Track", [.init("l", cmd)], links: true),
+            Command(.showSelectedTrack, "Show Selected Track", [.init("l", [cmd, shift])]),
             Command(.showAllTracks, "Show All Music"),
             Command(.scrollUp, "Scroll Up", [.init(.up, [ctrl, opt])]),
             Command(.scrollDown, "Scroll Down", [.init(.down, [ctrl, opt])]),
@@ -261,6 +265,7 @@ public enum AppCommands {
             Command(.receiverPowerOn, "Turn Receiver On"),
             Command(.receiverStandby, "Put Receiver in Standby"),
 
+            Command(.showSettings, "Settings…", [.init(",", cmd)]),
             Command(.openConfigFile, "Open Config File"),
             Command(.copyDefaultConfig, "Copy Default Config"),
         ]

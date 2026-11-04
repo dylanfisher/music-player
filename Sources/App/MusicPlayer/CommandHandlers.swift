@@ -164,6 +164,9 @@ extension AppDelegate {
                 Task { await browser.showCurrentTrack(playingPath: path) }
             })
         dispatcher.handle(
+            .showSelectedTrack, enabled: { [weak self] in self?.browser?.hasSelection == true },
+            run: { [weak self] in self?.browser?.showSelectedTrack() })
+        dispatcher.handle(
             .showAllTracks, enabled: { [weak self] in self?.browser?.showsAllMusic == false },
             run: { [weak self] in self?.browser?.showAll() })
         dispatcher.handle(.scrollUp, enabled: hasWindow) { [weak self] in

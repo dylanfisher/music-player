@@ -75,13 +75,32 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     let quit = items(menu.bar).first { $0.0.action == #selector(NSApplication.terminate(_:)) }
     #expect(quit?.0.keyEquivalent == "q")
     let rules = AppMenus.rules(appName: "App")
-    #expect(rules.reserved[KeyChord(",", .command)] == "Settings…")
     #expect(rules.fixed[.selectAll] == KeyChord("a", .command))
 }
 
-@MainActor @Test func settingsReachesTheAppDelegate() {
+/// Settings… and Show Selected Track are commands, so ⌘K and the Shortcuts pane list them too.
+@MainActor @Test func settingsAndShowSelectedTrackAreCommandsWithTheirChords() throws {
+    let (menu, dispatcher) = try menu()
+    func item(_ id: CommandID) -> (NSMenuItem, String)? {
+        items(menu.bar).first { ($0.0.representedObject as? CommandID) == id }
+    }
+    let settings = try #require(item(.showSettings))
+    #expect(settings.0.title == "Settings…" && settings.1 == "App")
+    #expect(settings.0.keyEquivalent == "," && settings.0.keyEquivalentModifierMask == .command)
+    let selected = try #require(item(.showSelectedTrack))
+    #expect(selected.1 == "View")
+    #expect(selected.0.keyEquivalent == "l")
+    #expect(selected.0.keyEquivalentModifierMask == [.command, .shift])
     #expect(
-        AppDelegate.instancesRespond(to: NSSelectorFromString(AppMenus.showSettingsAction)))
+        dispatcher.bindings.registry.command(.showCurrentTrack)?.chords == [KeyChord("l", .command)]
+    )
+    for id in [CommandID.showSettings, .showSelectedTrack, .openConfigFile] {
+        #expect(dispatcher.bindings.registry.command(id)?.runsFromMenus == true, "\(id)")
+    }
+    var ran: [CommandID] = []
+    dispatcher.handle(.showSettings, run: { ran.append(.showSettings) })
+    #expect(dispatcher.run(.showSettings))
+    #expect(ran == [.showSettings])
 }
 
 @MainActor @Test func theTrackMenuRunsAndValidatesItsCommandsThroughTheDispatcher() throws {

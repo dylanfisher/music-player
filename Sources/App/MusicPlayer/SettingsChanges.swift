@@ -15,7 +15,7 @@ extension AppDelegate {
     }
 
     /// A toggle for each Boolean setting and a command for each choice, all through the config
-    /// file, plus Open Config File and Copy Default Config.
+    /// file, plus Settings…, Open Config File and Copy Default Config.
     func registerSettingCommands(_ dispatcher: CommandDispatcher) {
         guard let settings else { return }
         for generated in SettingCommand.all(settings.schema) {
@@ -36,6 +36,8 @@ extension AppDelegate {
                     run: { [weak self] in self?.change(key, to: raw) })
             }
         }
+        dispatcher.handle(
+            .showSettings, run: { [weak self] in self?.settingsWindowController()?.show() })
         dispatcher.handle(.openConfigFile, run: { [weak self] in self?.openConfigFile() })
         dispatcher.handle(
             .copyDefaultConfig,

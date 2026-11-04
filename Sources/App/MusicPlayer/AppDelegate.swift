@@ -401,11 +401,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// App ▸ Settings…, which the standard item sends up the responder chain.
-    @objc func showSettings(_ sender: Any?) {
-        settingsWindowController()?.show()
-    }
-
     /// Accessibility permission is given in System Settings, so the volume keys are tried
     /// again when the owner comes back.
     func applicationDidBecomeActive(_ notification: Notification) {
