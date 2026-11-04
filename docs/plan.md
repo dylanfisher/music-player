@@ -3988,6 +3988,37 @@ against Swinsian's, the header layout wanted, the tag-write error) didn't reach 
       (and tooltip) lists every token. The tokens are defined once and shared with the help.
 - [ ] **38.5 Glass headers.** In window glass mode the table headers are more translucent.
 
+Implementation plan, part 38a (ADR 0087):
+- 38.1, NowPlaying: with no current track the toolbar status's and the status bar's art views
+  go transparent (alpha 0), keeping their place, so nothing beside them moves when art comes;
+  a track without art keeps the gray box. Test: alpha with and without a track, and the other
+  parts' frames the same in both.
+- 38.2, NowPlaying: `SeekBar` draws Swinsian 3.1's `ProgressControl` colors, read from its
+  binary on mbp2015 (a copy in the scratchpad): the track calibrated white 0.86, the played
+  part calibrated RGB 0.266/0.512/0.910, dark gray with the graphite accent, the same in light
+  and dark and on glass. Swinsian draws no knob and no buffered part, so neither do we. Test:
+  pixels of a drawn bar in both appearances.
+- 38.3, App: the toolbar centers the status on the window with
+  `NSToolbar.centeredItemIdentifiers` on macOS 13 and `centeredItemIdentifier` on 12; a probe
+  here showed both center it on the window, glass or not, whatever sits on either side, while
+  the status at its width fits centered. Test: the status's middle on the window's for the
+  owner's layout (nothing, status, search), the default set and a lopsided one.
+- 38.4, Settings: `TitleToken` (title, artist, album, album artist, composer, genre, year,
+  track and disc number, format), each with its help line, and `WindowTitle`, the template
+  `appearance.windowTitle` holds, which rejects an unknown token or a stray brace with the
+  tokens in the message. Its kind, `.template`, carries the tokens to Settings ▸ Appearance,
+  which shows a text field and a ? button whose tooltip and popover list them. NowPlaying
+  fills it from the playing track (nil with nothing playing, ends trimmed of separators); the
+  app sets the window's title to it or the app's name, on a track change and a setting change.
+  Tests: parsing and every problem, filling with missing fields, the row's control and help,
+  the window's title in the real window glass on and off.
+- 38.5, App: on glass `NSTableHeaderView` fills itself opaque behind any header cell that isn't
+  its own (measured: 0.97 white light, 0.26 dark), so the glass swaps each list's header view
+  for one that draws a translucent tint under the cells, and puts the original back. Test:
+  header pixels translucent on glass, and the header and its menu back after.
+- Checks: `./scripts/check`, `--snapshot` at 1440x900 glass on and off, the live resize bench
+  by name, `./scripts/bundle release` for the `#available` guard.
+
 #### 38b. Table, navigation and palette (ADR 0088)
 
 - [ ] **38.6 Album lines.** An option draws a line between albums in the track table, and both
