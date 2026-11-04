@@ -300,9 +300,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusHeight = statusArea.heightAnchor.constraint(equalToConstant: 0)
         statusHeight?.isActive = true
         layOutStatusBar()
-        for label in [statusLabel, scanLabel] {
-            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        }
+        scanLabel.setContentCompressionResistancePriority(
+            CenteredRow.textCompressionPriority, for: .horizontal)
         for view in [scanIndicator, scanLabel, problemsButton] { view.isHidden = true }
         timeline.view.isHidden = true
         let stack = NSStackView(views: [split, timeline.view])
@@ -1442,10 +1441,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             }
             let flexible = part == statusLayout.flexible
             view.setContentHuggingPriority(flexible ? .init(1) : .defaultHigh, for: .horizontal)
+            // Text the row can truncate before anything moves a divider (ADR 0084).
+            yieldText(in: view)
             // A stack's hugging above its labels' compression resistance squeezes them to
             // nothing, so a part's stack hugs just under it.
             (view as? NSStackView)?.setHuggingPriority(
-                flexible ? .init(1) : .init(NSLayoutConstraint.Priority.defaultLow.rawValue - 1),
+                flexible
+                    ? .init(1) : .init(CenteredRow.textCompressionPriority.rawValue - 1),
                 for: .horizontal)
             statusParts.addArrangedSubview(view)
         }
@@ -1460,6 +1462,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             statusArtHeight?.isActive = true
         }
         insetListsUnderStatusBar()
+    }
+
+    /// Lets every label under `view` that truncates give way to the status bar's layout.
+    private func yieldText(in view: NSView) {
+        if let label = view as? NSTextField, label.lineBreakMode == .byTruncatingTail {
+            label.setContentCompressionResistancePriority(
+                CenteredRow.textCompressionPriority, for: .horizontal)
+        }
+        for subview in view.subviews { yieldText(in: subview) }
     }
 
     /// Opens the status bar's art in the viewer a click on a row's art opens.

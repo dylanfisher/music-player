@@ -26,10 +26,16 @@ it. The middle grows evenly to both sides when the seek bar or the totals take t
 and stops at the nearer edge view; when even that can't keep it centered, it moves aside rather
 than overlap. Phase 37's columns can reuse the row: its middle column is this middle.
 
-**Nothing in the bar can resize the window.** Every constraint that places or sizes the middle
-is below `NSWindow`'s 500, the priority at which it keeps its size. Before, the bar was stacks
-pinned edge to edge, and with Art alone nothing in it could stretch, so the stacks held the
-browser, and the window with it, to the art's width (36.4).
+**Nothing in the bar can resize the window or move a divider.** Every constraint that places
+or sizes the middle, and every truncating label's resistance to truncation, is below 250, the
+lowest priority at which the main window's split panes keep their widths, and so below
+`NSWindow`'s 500. Text truncates first, then the middle moves aside, and when even the bar's
+fixed parts don't fit, such as the art, the seek bar's least width and the scan indicator at the
+window's narrowest with the sidebar and the queue open, they overlap rather than push. Before,
+the bar was stacks pinned edge to edge, and with Art alone nothing in it could stretch, so the
+stacks held the browser, and the window with it, to the art's width (36.4). A first version
+kept the middle clear of the edge views at required priority and centered it at 490, which
+still took width from the sidebar at 720 points wide.
 
 **Rows scroll under the bar.** The bar lies over the bottom of the track table and the
 timeline, and their bottom content inset is the bar's height while it shows, so the last row

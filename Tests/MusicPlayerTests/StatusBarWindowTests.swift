@@ -48,17 +48,41 @@ func theStatusBarsMiddleStaysCenteredOnTheWindow(_ parts: [StatusPart]) async th
 }
 
 /// No status bar part, alone or with the others, in either style, changes the window's frame or
-/// moves a split's divider. Before, Art alone left nothing in the bar that could stretch, and
-/// the bar's stacks held the window to the art's width.
-@MainActor @Test func noStatusBarPartResizesTheWindowOrItsSplits() async throws {
+/// moves a split's divider, at the default size, at the window's narrowest and at the 2015
+/// MacBook Pro's screen size, with every panel open, a scan's text and the problems button.
+/// Before, Art alone left nothing in the bar that could stretch, and the bar's stacks held the
+/// window to the art's width.
+@MainActor
+@Test(arguments: [nil, NSSize(width: 720, height: 600), NSSize(width: 1440, height: 900)])
+func noStatusBarPartResizesTheWindowOrItsSplits(_ size: NSSize?) async throws {
     let fixture = try await MainWindowFixture()
     defer { fixture.close() }
+    let window = fixture.window
+    if let size {
+        window.window.setFrame(
+            NSRect(origin: window.window.frame.origin, size: size), display: false)
+        if !window.isSignalPathVisible { window.toggleSignalPath() }
+        if !window.isSidebarVisible { window.toggleSidebar() }
+        if !window.isQueueVisible { window.toggleQueue() }
+        if !fixture.browser.isBrowserVisible { fixture.browser.toggleBrowser() }
+        fixture.browser.libraryChanged(.scanFailed(folder: "/elsewhere", reason: "gone"))
+        var progress = ScanProgress()
+        progress.found = 12345
+        fixture.browser.libraryChanged(
+            .scanning(folder: "/music/a folder with a long name of its own", progress))
+        #expect(fixture.browser.problemsButtonTitle != nil)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        window.window.layoutIfNeeded()
+        #expect(window.window.frame.size == size)
+    }
     let layout = fixture.layout
     let sets = StatusPart.allCases.map { [$0] } + [StatusPart.allCases, []]
     for style in StatusBarStyle.allCases {
         for parts in sets + sets.reversed() {
             fixture.setParts(parts, style: style)
-            #expect(fixture.layout == layout, "\(parts) \(style)")
+            #expect(
+                fixture.layout == layout,
+                "\(parts) \(style): \(zip(fixture.layout, layout).filter { $0 != $1 })")
         }
     }
     fixture.window.toggleStatusBar()

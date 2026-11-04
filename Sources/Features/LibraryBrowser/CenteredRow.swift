@@ -3,16 +3,24 @@ import AppKit
 /// Three views in a row: `leading` and `trailing` at the row's edges, and `middle` centered on
 /// its window's content view, so it lines up with the window's title wherever the row sits and
 /// whatever the edges hold (ADR 0084). Every constraint that places or sizes the middle is below
-/// the window's size priority: no content can resize the window, and when the middle can't be
-/// centered without overlapping an edge view it moves aside instead.
+/// the priority at which a split view's pane keeps its width, and so below the window's: no
+/// content can move a divider or resize the window. When the middle can't be centered without
+/// overlapping an edge view it moves aside instead, and only when nothing fits at all does it
+/// overlap them.
 final class CenteredRow: NSView {
-    /// Under `NSWindow`'s 500, at which the window keeps its size.
-    static let centeringPriority = NSLayoutConstraint.Priority(490)
+    /// Keeps the middle clear of the edge views, under `NSSplitViewItem`'s lowest holding
+    /// priority, 250, so content wider than the row overlaps rather than widens its pane.
+    static let clearancePriority = NSLayoutConstraint.Priority(240)
+    /// Under the clearance, so the middle moves aside before it overlaps.
+    static let centeringPriority = NSLayoutConstraint.Priority(230)
     /// Centered in the row itself, before the row is in a window.
-    static let rowCenteringPriority = NSLayoutConstraint.Priority(480)
+    static let rowCenteringPriority = NSLayoutConstraint.Priority(220)
+    /// How hard text in the row resists truncation: under the centering, so text gives way
+    /// before the middle moves aside.
+    static let textCompressionPriority = NSLayoutConstraint.Priority(210)
     /// The middle's pull to the row's width, under the centering, so it grows evenly to both
     /// sides until the nearer edge view stops it.
-    static let fillPriority = NSLayoutConstraint.Priority(470)
+    static let fillPriority = NSLayoutConstraint.Priority(200)
 
     let leading: NSView
     let middle: NSView
@@ -43,15 +51,19 @@ final class CenteredRow: NSView {
         }
         let rowCentering = middle.centerXAnchor.constraint(equalTo: centerXAnchor)
         rowCentering.priority = Self.rowCenteringPriority
-        NSLayoutConstraint.activate([
-            leading.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
-            trailing.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
+        let clearance = [
             middle.leadingAnchor.constraint(
                 greaterThanOrEqualTo: leading.trailingAnchor, constant: spacing),
             middle.trailingAnchor.constraint(
                 lessThanOrEqualTo: trailing.leadingAnchor, constant: -spacing),
-            rowCentering,
-        ])
+        ]
+        for constraint in clearance { constraint.priority = Self.clearancePriority }
+        NSLayoutConstraint.activate(
+            [
+                leading.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
+                trailing.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
+                rowCentering,
+            ] + clearance)
     }
 
     @available(*, unavailable)
