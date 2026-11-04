@@ -60,7 +60,7 @@ private func line(_ format: String, _ values: [TitleFormat.Field: String]) -> St
     #expect(
         (values["appearance.headerTitleFormat"] as? TitleFormat)?.line { track[$0] }
             == "Aleksi Perälä: FI3AC2384210")
-    for text in ["{title} {genre}", "{", "{}"] {
+    for text in ["{title} {genre}", "{", "{}", "", "  \n "] {
         #expect(throws: ConfigErrorList.self, "\(text)") {
             try parsed(#"{"appearance.headerTitleFormat": "\#(text)"}"#)
         }
@@ -83,4 +83,11 @@ private func line(_ format: String, _ values: [TitleFormat.Field: String]) -> St
     #expect(TitleFormat("{title}\u{301}").problem() == nil)
     #expect(line("{title}\u{301}x", [.title: "Song"]) == "Song\u{301}x")
     #expect(TitleFormat("{title} }\u{301}").problem() != nil)
+}
+
+@Test func anEmptyFormatIsAProblem() {
+    for text in ["", " ", "\n\t"] {
+        #expect(
+            TitleFormat(text).problem() == "the format is empty; it needs a field such as {title}")
+    }
 }

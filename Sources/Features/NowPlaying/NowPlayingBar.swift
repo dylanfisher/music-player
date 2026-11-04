@@ -188,6 +188,8 @@ public final class NowPlayingBar: NSObject {
         }
         // The line truncates at its tail, so the tooltip has all of it.
         header.titleLineLabel.toolTip = header.titleLineLabel.stringValue
+        // An empty line leaves no blank line in its column.
+        header.titleLineLabel.isHidden = header.titleLineLabel.stringValue.isEmpty
         header.subtitleLabel.stringValue = model.subtitle
         header.formatLabel.stringValue = unavailableReason ?? model.message ?? model.formatLine
         header.formatLabel.textColor =

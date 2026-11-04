@@ -246,3 +246,15 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     #expect(bar.header.titleLineLabel.stringValue == "Now: Song")
     #expect(bar.header.titleLineLabel.toolTip == "Now: Song")
 }
+
+/// A line that comes out empty hides its label, which leaves no blank line in its column.
+@MainActor @Test func anEmptyTitleLineHidesItsLabel() {
+    let bar = bar()
+    bar.apply(update(.trackStarted(index: 0), duration: 100))
+    #expect(!bar.header.titleLineLabel.isHidden)
+    // The track has no artist.
+    bar.titleFormat = TitleFormat("{artist}")
+    #expect(bar.header.titleLineLabel.stringValue == "" && bar.header.titleLineLabel.isHidden)
+    bar.titleFormat = .defaultHeaderTitle
+    #expect(!bar.header.titleLineLabel.isHidden)
+}

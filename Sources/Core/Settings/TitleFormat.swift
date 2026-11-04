@@ -2,8 +2,8 @@ import Foundation
 
 /// `appearance.headerTitleFormat`: the toolbar's Title Line, as text with fields in braces,
 /// `{title} by {artist} from {album}`, and `{{` and `}}` for a brace. Stored as the string the
-/// owner wrote; a field the format doesn't know, or a brace without its pair, is a problem with
-/// the setting.
+/// owner wrote; an empty format, a field the format doesn't know, or a brace without its pair is
+/// a problem with the setting.
 public struct TitleFormat: SettingValue {
     /// What a format can show: the playing track's text the toolbar's status already has.
     public enum Field: String, CaseIterable, Sendable {
@@ -72,6 +72,9 @@ public struct TitleFormat: SettingValue {
     /// The format read on Unicode scalars, so a brace followed by a combining mark is still a
     /// brace, or what's wrong with it.
     var parsed: Result<Parsed, Problem> {
+        guard !trimmed(text).isEmpty else {
+            return .failure(Problem(text: "the format is empty; it needs a field such as {title}"))
+        }
         let scalars = Array(text.unicodeScalars)
         var parsed = Parsed(fields: [], end: "")
         var literal = String.UnicodeScalarView()
