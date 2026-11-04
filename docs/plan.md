@@ -51,7 +51,7 @@ Set by the owner on 2026-10-30, 2026-10-31 and 2026-11-02:
    they're stored first (AGENTS.md).
 10. Phase 34 first, alone, because it guards the library. Then 33, 35 and 36 in parallel, and
     37 after 36. Added by the owner on 2026-11-03.
-11. Phase 38: 38a and 38c in parallel, then 38b. Added by the owner on 2026-11-03.
+11. Phase 39: 39a and 39c in parallel, then 39b. Added by the owner on 2026-11-03.
 
 ## Phase gate
 
@@ -4082,7 +4082,7 @@ glass; trackpad scroll with art p95 10.4 ms, compact rows 11.4 ms, against 16 ms
 palette and the Settings window is checked in code only (neither takes the chord before the
 menu bar); the owner checks each item on both Macs.
 
-### 38. Owner feedback, 2026-11-03 evening
+### 39. Owner feedback, 2026-11-03 evening
 
 **Done; owner check pending.** `./scripts/check` passes clean on main after all three parts.
 The gate also fixed two tests that were failing on main: a glass toggle saved the sidebar width
@@ -4096,36 +4096,36 @@ from the window's edge.
 
 The owner's feedback from trying phase 37. `s1205`, the toolbar status with nothing playing, is
 in `~/.claude/projects/-Users-dylanfisher-projects-music-player/feedback-2026-11-03/`. The other
-four screenshots were in a temporary folder and are described where they're used. 38a and 38c
-run in parallel worktrees; 38b follows 38c, since both change `BarLayout` and the builder.
+four screenshots were in a temporary folder and are described where they're used. 39a and 39c
+run in parallel worktrees; 39b follows 39c, since both change `BarLayout` and the builder.
 
 Answered, not a phase item: a reveal in Searcher opens a new window unless a window's focused
 pane already shows the folder. That's Searcher's `WorkspaceWindows.reveal`, answering the
 open-documents event every app's Show in Finder sends, so revealing in the active pane is a
 Searcher change.
 
-#### 38a. Track table and status bar
+#### 39a. Track table and status bar
 
-- [x] **38a.1 Row lines come back.** Double row lines are drawn again. They get darker, and Row
+- [x] **39a.1 Row lines come back.** Double row lines are drawn again. They get darker, and Row
       Lines off doesn't remove them all. Reproduce it first (Row Lines, Alternating Rows and
       glass on and off, toggled several times), find what draws the second line, and fix that.
-- [x] **38a.2 No lines over art.** Row lines show through the album art in the art column
+- [x] **39a.2 No lines over art.** Row lines show through the album art in the art column
       (owner's screenshot: the lines run across a snow photo, row by row). The art covers the
       lines of the rows it spans.
-- [x] **38a.3 Status bar border.** The bottom status bar gets a top border of the same gray as
+- [x] **39a.3 Status bar border.** The bottom status bar gets a top border of the same gray as
       the table header's bottom border.
-- [x] **38a.4 Status bar art margin.** The art's leading margin equals its top and bottom
+- [x] **39a.4 Status bar art margin.** The art's leading margin equals its top and bottom
       margins, which makes it smaller than it is now.
-- [x] **38a.5 Dismiss All.** The Library Problems window gets a Dismiss All button, which
+- [x] **39a.5 Dismiss All.** The Library Problems window gets a Dismiss All button, which
       dismisses every row, selected or not.
 
-Plan, part 38a:
+Plan, part 39a:
 - Probe (done before this plan, in a throwaway test rendering the rows' layers): AppKit gives
   each row view its row line as a subview of its own, set up only when the row is added. A
   change of `gridStyleMask` reaches no row already made, so Row Lines on shows nothing until
   rows are made again, and off leaves the lines on the rows made while it was on. That subview
   also lies over the cells, so it crosses the art.
-- Row lines (38a.1, 38a.2): `MarkedRowView` (DisplayText) draws a 1-pt line in the separator
+- Row lines (39a.1, 39a.2): `MarkedRowView` (DisplayText) draws a 1-pt line in the separator
   color at its bottom edge, in its background, when told to, so the cells and the art draw
   over it. The track table stops asking AppKit for horizontal grid lines; `apply` and each row
   view the table makes take the setting, and a toggle redraws the rows on screen. Column Lines
@@ -4133,23 +4133,23 @@ Plan, part 38a:
   the glass's translucent rows gives every row on screen exactly the line the setting says,
   read from the drawn rows; art spanning rows covers their lines; the row view draws its line
   only when set.
-- Status bar border (38a.3, LibraryBrowser): a 1-pt separator-colored line along the top of the
+- Status bar border (39a.3, LibraryBrowser): a 1-pt separator-colored line along the top of the
   status bar's material, inside its height, in both styles and on glass. Tests: the line is
   there at the top at 1 pt in minimal, tall and glass, and the bar's height doesn't change.
-- Art margin (38a.4): when the bar's leading side starts with the art (no scan progress
+- Art margin (39a.4): when the bar's leading side starts with the art (no scan progress
   showing, the art first in the first leading column, aligned leading), the bar's leading inset
   is `StatusBarLayout.artInsetPoints`, the art's top and bottom inset, instead of the spacing.
   `CenteredRow` (BarView) gains a settable leading inset. Tests: the art's leading margin equals
   its top margin in both styles; with the scan progress showing, or the art elsewhere, the
   inset stays the spacing.
-- Dismiss All (38a.5): `ProblemAction.dismissAll`, whose rows are all the window's rows rather
+- Dismiss All (39a.5): `ProblemAction.dismissAll`, whose rows are all the window's rows rather
   than the selection, enabled while there are any; `LibraryBrowser.fix` dismisses them as
   Dismiss does. Tests: the button acts on every row with none or some selected, and it
   dismisses them in the library.
 - Order: row lines, border, art margin, Dismiss All, each its own commit through
   `./scripts/check`, then the Result.
 
-Result, part 38a: shipped 38a.1 to 38a.5. Cause of 38a.1 and 38a.2: AppKit's row line is a
+Result, part 39a: shipped 39a.1 to 39a.5. Cause of 39a.1 and 39a.2: AppKit's row line is a
 subview each row view sets up only as the table adds it. Toggling Row Lines reached no row
 already made, so on showed nothing and off left lines behind. Rows reused from the pool got the
 line on top of their cells, across the art. `MarkedRowView` now draws the line in its background
@@ -4166,30 +4166,33 @@ All dismisses every listed row (ADR 0059 amended). `./scripts/check` passes exce
 passes in the full suite. Pending: checking these on screen in the app, light and dark, glass
 on and off.
 
-#### 38b. Toolbar status
+Rebased onto phase 38 on 2026-11-04: phase 38b's `decorate` already draws every row's lines in
+its background, so the row-line commits of 39a.1 and 39a.2 were dropped for it.
 
-- [x] **38b.1 Empty when nothing plays.** With nothing playing, the toolbar status shows no art
+#### 39b. Toolbar status
+
+- [x] **39b.1 Empty when nothing plays.** With nothing playing, the toolbar status shows no art
       box, no "Not Playing" and no seek bar (`s1205`), only the toolbar's own background. The item
       keeps its size, so the toolbar doesn't move when a track starts.
-- [x] **38b.2 A title line like Swinsian's.** A Title Line part shows one line built from a
+- [x] **39b.2 A title line like Swinsian's.** A Title Line part shows one line built from a
       template, `appearance.headerTitleFormat`, default `{title} by {artist} from {album}`,
       as Swinsian's toolbar does ("FI3AC2384210 by Aleksi Perälä from Alithia E'"). Its fields
       are those the header already shows. When a field is empty, the text before it goes too, so
       no "from" is left hanging. An unknown field is a problem with the setting. The part is in
       the tray, and the default layout doesn't change.
-- [x] **38b.3 Order.** In Settings ▸ Appearance, Toolbar Status Layout comes before Status Bar
+- [x] **39b.3 Order.** In Settings ▸ Appearance, Toolbar Status Layout comes before Status Bar
       Layout.
 
-Plan, part 38b (ADR 0085 amended):
-- 38b.3 first: the Appearance pane lists its rows in schema order, so `headerStatusLayout`
+Plan, part 39b (ADR 0085 amended):
+- 39b.3 first: the Appearance pane lists its rows in schema order, so `headerStatusLayout`
   moves above `statusBarLayout` in `AppSettings`. A test checks the order.
-- 38b.1: `NowPlayingModel.title`'s "Not Playing" stays, since the dock menu, Now Playing info
+- 39b.1: `NowPlayingModel.title`'s "Not Playing" stays, since the dock menu, Now Playing info
   and the status bar read it. Only `HeaderStatus` changes: with nothing current and no message
   to show, it hides its row, which keeps its constraints, so the item keeps its size. A message
   with nothing current (no output, a failed track) still shows. The sheet's drawing is
   unchanged. Tests: hidden with nothing playing, the same fitting size, shown on a track and
   on a message.
-- 38b.2: `TitleFormat` in Settings, a string setting value like `ReceiverAddress`: it parses
+- 39b.2: `TitleFormat` in Settings, a string setting value like `ReceiverAddress`: it parses
   `{field}`s, with the fields `title`, `artist` and `album`, the header's own text, and
   reports an unknown field or an unclosed brace as its `problem()`. Its line drops an empty
   field with the literal text just before it, and trims the ends. The setting
@@ -4203,7 +4206,7 @@ Plan, part 38b (ADR 0085 amended):
   the bar's line for a track with and without an artist; a format change redraws it.
 - Then the ADR amendment, `--snapshot-of headerStatus` and `toolbarSheet`, and the result.
 
-Result, part 38b: shipped 38b.1 to 38b.3 (ADR 0085 amended). With nothing playing the toolbar's
+Result, part 39b: shipped 39b.1 to 39b.3 (ADR 0085 amended). With nothing playing the toolbar's
 status hides its row and shows only the toolbar's background, at the same height; a message
 such as no output device still shows it. The model's "Not Playing" stays for the dock menu, Now
 Playing info and the status bar. The Title Line part reads `appearance.headerTitleFormat`
@@ -4218,25 +4221,25 @@ braces, empty formats and lines, and the sheet's drawing ignoring the owner's fo
 Line layout, the Appearance pane) before the review round; the Title Line with a track playing
 was checked by tests, not on screen.
 
-#### 38c. Layout builder
+#### 39c. Layout builder
 
-- [x] **38c.1 Colors.** The preview's columns and parts are too dark (`s4118`). They take the
+- [x] **39c.1 Colors.** The preview's columns and parts are too dark (`s4118`). They take the
       settings window's own colors: the sunken box's background, and lighter part tokens.
-- [x] **38c.2 Live drag.** While a part is dragged, the others move aside to show where it will
+- [x] **39c.2 Live drag.** While a part is dragged, the others move aside to show where it will
       go, before it's dropped.
-- [x] **38c.3 Move columns.** Each column has a handle that drags the whole column, parts and
-      settings, to another place, moving the others aside as in 38c.2.
-- [x] **38c.4 Empty columns save.** A column with no parts is allowed. It takes its width and
+- [x] **39c.3 Move columns.** Each column has a handle that drags the whole column, parts and
+      settings, to another place, moving the others aside as in 39c.2.
+- [x] **39c.4 Empty columns save.** A column with no parts is allowed. It takes its width and
       draws nothing. "Drag a part into leading column 1 to save the layout" goes.
-- [x] **38c.5 Plain errors.** Problems read in plain words, naming the column by where it is
+- [x] **39c.5 Plain errors.** Problems read in plain words, naming the column by where it is
       ("the first column on the left"), without the file path or key in the builder. Art alone in
       a stacked column isn't a problem; that's the error the owner hit, from the default header
       layout with Stack Parts on. The builder refuses a change that would make a problem, and says
       why in its hint line.
-- [x] **38c.6 Reset to Default.** Each builder has a Reset to Default button that puts its
+- [x] **39c.6 Reset to Default.** Each builder has a Reset to Default button that puts its
       setting back to its default.
 
-Plan, part 38c (ADR 0085 amended):
+Plan, part 39c (ADR 0085 amended):
 - Settings: `BarLayoutProblem` loses the empty column. The art is a problem only in a stacked
   column that holds other parts too. `BarPlace` reads by position ("the first column on the
   left", "the center column", "the second column on the right", counted left to right on each
@@ -4255,10 +4258,10 @@ Plan, part 38c (ADR 0085 amended):
   toolbar's status; tests check both, and that the art alone in a stacked column lays out.
 - Tests: the problems' wording and the art rule; a refused edit leaves the layout and says
   why; an empty column saves; Reset to Default saves the default; part and column drags, live
-  and on drop, across the center; the preview's colors. Order: 38c.4, 38c.5, 38c.6, 38c.1,
-  38c.2, 38c.3, then the ADR. `--snapshot` of the builder for the colors.
+  and on drop, across the center; the preview's colors. Order: 39c.4, 39c.5, 39c.6, 39c.1,
+  39c.2, 39c.3, then the ADR. `--snapshot` of the builder for the colors.
 
-Result, part 38c: shipped 38c.1 to 38c.6 (ADR 0085 amended). The preview is drawn in the
+Result, part 39c: shipped 39c.1 to 39c.6 (ADR 0085 amended). The preview is drawn in the
 settings boxes' colors with light part fields. A dragged part moves the others aside before the
 drop, and each side column drags by a handle; the center column stays put, and a column dragged
 past its middle goes to the other side. Empty columns save and keep their width in both bars.

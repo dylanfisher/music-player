@@ -7,8 +7,8 @@
   as toolbar items".
 - **Amends:** [0084](0084-status-bar-on-glass.md) (the bar's middle), [0055](0055-customizable-toolbar.md)
   (the toolbar's default set and the status's width, phase 37b)
-- **Amended:** phase 38c (empty columns, the art alone in a stacked column, plain problems, a
-  builder that refuses a problem, Reset to Default, live drags and column drags); phase 38b
+- **Amended:** phase 39c (empty columns, the art alone in a stacked column, plain problems, a
+  builder that refuses a problem, Reset to Default, live drags and column drags); phase 39b
   (the toolbar's status empty with nothing playing, the Title Line part and its format)
 
 ## Context
@@ -46,7 +46,7 @@ neither a whole number nor `"flexible"` and a part the bar doesn't have. A layou
 is then checked, and every problem is a typed `BarLayoutProblem` naming its column: a part
 listed twice (each part is one view), a fixed width out of range, and the art, which is as
 tall as the bar, in a stacked column with other parts. An empty column is no problem (phase
-38c): it takes its width, fixed or a flexible share, and draws nothing, in the status bar and
+39c): it takes its width, fixed or a flexible share, and draws nothing, in the status bar and
 in the toolbar's status alike. Problems read as plain sentences, parts by their titles and
 columns by where they are: "the first column on the left", "the center column", "the second
 column on the right", each side counted left to right, as the config file lists them. The
@@ -183,7 +183,7 @@ equivalent of its own: the transport, shuffle, repeat, output and the toggles ar
 the menus, which keep their key equivalents, and the Search field keeps its text-editing chords
 through the window's key monitor as before.
 
-**The builder after phase 38c.** The preview takes the settings window's own colors: the bar
+**The builder after phase 39c.** The preview takes the settings window's own colors: the bar
 is drawn as a section's box (its faint fill, separator border and corner, defined once in
 `GeneralPane`), columns are outlined with the separator, and each part is a light field like
 the shortcut recorder's, with the selection in the accent color. While a part is dragged, the
@@ -193,7 +193,7 @@ move during the drag, so the target can't flicker between two places. A place th
 a problem moves nothing, and the drop is refused like any edit. Reset to Default saves the
 setting's default through the same patch, and is off while the layout is the default.
 
-**Moving columns (phase 38c).** Each side column has a grab handle in a strip across the top of
+**Moving columns (phase 39c).** Each side column has a grab handle in a strip across the top of
 the preview, which drags the whole column, its parts, width, alignment and stacking, to
 another place, the others moving aside before the drop as for a part. The center column has no
 handle and stays where it is: it is single by the shape of the value, and moving it would mean
@@ -201,7 +201,7 @@ choosing which side column becomes the center. A side column dragged past the ce
 middle goes to the other side, after each column there whose middle is left of the pointer, so
 the center can be crossed but never taken.
 
-**Nothing playing (phase 38b).** With nothing playing the toolbar's status shows none of its
+**Nothing playing (phase 39b).** With nothing playing the toolbar's status shows none of its
 parts, no art box, title or seek bar, only the toolbar's background. It hides its row, which
 keeps its constraints, so the item keeps its height and the toolbar doesn't move when a track
 starts. The now-playing model's "Not Playing" title stays, since the dock menu, Now Playing
@@ -211,7 +211,7 @@ bar keeps the no-output reason until an engine connects, so a rescan or a format
 draws the status again doesn't blank it. The
 sheet's drawing keeps its placeholder track.
 
-**The Title Line (phase 38b).** A `titleLine` part, "Title Line", shows one semibold line, as
+**The Title Line (phase 39b).** A `titleLine` part, "Title Line", shows one semibold line, as
 Swinsian's toolbar does ("FI3AC2384210 by Aleksi Perälä from Alithia E'"), built from
 `appearance.headerTitleFormat`, a `TitleFormat` in Settings whose default is
 `{title} by {artist} from {album}`. The fields are the title, the artist and the album, the
@@ -239,7 +239,7 @@ has the whole line. The customize sheet draws it with the owner's format. A fiel
 from a `switch` over the fields, so a new field doesn't compile until the bar and the sheet's
 drawing give it one.
 
-**Order (phase 38b).** Settings ▸ Appearance lists its rows in the schema's order, so the
+**Order (phase 39b).** Settings ▸ Appearance lists its rows in the schema's order, so the
 toolbar status's layout and title format come before the status bar's style and layout, as
 the toolbar is above the status bar in the window.
 
@@ -254,18 +254,18 @@ the toolbar is above the status bar in the window.
 - **The preview built from the bar's real views.** Rejected: a view is in one place only, and
   Settings can't import the browser's feature. The real bar shows each change as it saves.
 - **Stacking in both styles.** Rejected: the minimal style is the table header's height, one line.
-- **A dragged column swapping with the center (phase 38c).** Rejected: the side column would
+- **A dragged column swapping with the center (phase 39c).** Rejected: the side column would
   become the center and the center a side column, which is harder to predict for a drop than
   moving to the other side, and the center is easy enough to edit in place.
-- **Holding back a layout with an empty column (phase 37a).** Dropped in phase 38c: an empty
+- **Holding back a layout with an empty column (phase 37a).** Dropped in phase 39c: an empty
   column is a fixed or flexible gap, which the owner wants to save.
-- **Dropping "Not Playing" from the model (phase 38b).** Rejected: the dock menu, Now Playing
+- **Dropping "Not Playing" from the model (phase 39b).** Rejected: the dock menu, Now Playing
   info and the status bar show it; only the toolbar's status is meant to be empty.
-- **A title line with every column the track table has (phase 38b).** Not now: the three fields
+- **A title line with every column the track table has (phase 39b).** Not now: the three fields
   cover Swinsian's line, and each field added is one more name to keep in step with the table.
 - **Dropping the text after an empty field instead of before it.** Rejected: in
   `{title} by {artist} from {album}` the word that belongs to a field comes before it.
-- **Dropping only the text before an empty field (phase 38b's first cut).** Replaced: at the
+- **Dropping only the text before an empty field (phase 39b's first cut).** Replaced: at the
   ends of the line it left `{artist} - {title}` as "- Song" and `{title} ({album})` as "Song)".
 
 ## Consequences
