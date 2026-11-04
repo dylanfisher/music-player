@@ -150,3 +150,17 @@ private func twoTrailing() -> BarLayout<StatusPart> {
     #expect(builder.layout.trailing.isEmpty)
     #expect(builder.selection == .init(place: .center))
 }
+
+/// While the config file refuses every change, nothing drags.
+@MainActor @Test func aBlockedConfigStartsNoDrag() throws {
+    let file = try StandIn(twoTrailing())
+    file.blocked = true
+    let view = BarBuilderView(model: try file.builder())
+    view.frame = NSRect(x: 0, y: 0, width: 760, height: view.intrinsicContentSize.height)
+    let point = NSPoint(x: try #require(view.columnFrames[.center]).midX, y: 5)
+    view.drag("format", to: point)
+    #expect(!view.isDragging)
+    view.dragColumn(.trailing(1), to: point)
+    #expect(!view.isDragging)
+    #expect(view.shown == view.model.layout)
+}

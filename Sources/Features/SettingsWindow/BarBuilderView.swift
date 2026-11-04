@@ -295,10 +295,11 @@ final class BarBuilderView: NSView {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
         dragPoint = nil
+        // While the config file refuses every change, nothing drags.
         let handle = handleFrames.first { $0.value.contains(point) }?.key
-        pressedColumn = handle
+        pressedColumn = model.isBlocked ? nil : handle
         pressed =
-            handle != nil ? nil : chips.first { $0.frame.contains(point) }?.part
+            model.isBlocked || handle != nil ? nil : chips.first { $0.frame.contains(point) }?.part
         if let handle {
             model.select(.init(place: handle))
         } else if let chip = chips.first(where: { $0.frame.contains(point) }),
@@ -320,6 +321,7 @@ final class BarBuilderView: NSView {
 
     /// Shows the column at `place` dragged to `point`, the others moved aside for it.
     func dragColumn(_ place: BarPlace, to point: NSPoint) {
+        guard !model.isBlocked else { return }
         pressedColumn = place
         dragPoint = point
         needsDisplay = true
@@ -327,6 +329,7 @@ final class BarBuilderView: NSView {
 
     /// Shows `part` dragged to `point`, the others moved aside for it.
     func drag(_ part: String, to point: NSPoint) {
+        guard !model.isBlocked else { return }
         pressed = part
         dragPoint = point
         needsDisplay = true
