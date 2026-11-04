@@ -64,7 +64,7 @@ before macOS 26.
   the second. Plain keys (Space, Return, the arrows, a plain letter) never become key
   equivalents, so text fields keep them; they reach their command from the focused view's
   `keyDown`. The row-movement submenu shows no chords. Changes show in the menus at once.
-- Reserved chords (Quit, Hide, Hide Others, Minimize, Settings… on ⌘,) can't be bound to a
+- Reserved chords (Quit, Hide, Hide Others, Minimize) can't be bound to a
   command. The six Edit items keep their chords (⌘Z, ⇧⌘Z, ⌘X, ⌘C, ⌘V, ⌘A), so text fields
   always have them: Select All's ⌘A is its command's fixed primary, and the other five, which
   have no commands, are reserved (0015). A command's alternate stays editable.
@@ -108,7 +108,7 @@ Kept from Searcher, the same job on the same key:
 | Toggle status bar | ⌘/ |
 | Edit Tags… (Searcher's Get Info) / Reveal in Finder / Copy Path | ⌘I / ⇧⌘R (as Music and Swinsian), alternate ⌥⌘R / ⌥⌘C |
 | Back / forward through sidebar sources | ⌘[ / ⌘] |
-| Settings | ⌘, (reserved) |
+| Settings | ⌘, (a command since 0088, so ⌘K lists it) |
 | Open Config File, Copy Default Config | no chord; app menu and palette |
 
 The player's own:
@@ -122,6 +122,7 @@ The player's own:
 | Seek Forward / Back | ⌥⌘→ / ⌥⌘← | |
 | Volume Up / Down | ⌃⌘↑ / ⌃⌘↓ | Enabled only while digital volume is on |
 | Show Current Track | ⌘L | |
+| Show Selected Track | ⇧⌘L | Centers the selection whatever plays (0088) |
 | Show Queue | ⌥⌘U | |
 | Show Browser | ⌘B | iTunes' key for its column browser. Hides the genre, artist and album panes, selecting All in each first |
 | Show Signal Path | ⌥⌘S | phase 20 |
