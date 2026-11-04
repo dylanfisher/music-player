@@ -46,6 +46,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private var syncFolderButtons: (change: NSButton, open: NSButton, clear: NSButton)?
     /// The bar builders opened from this pane, by key, kept so a reopen shows the same one.
     private(set) var barBuilders: [String: BarBuilderWindow] = [:]
+    /// The tokens' popover while it shows, for tests.
+    private(set) var tokensPopover: NSPopover?
 
     init(
         model: GeneralModel, configPath: String?, actions: SettingsActions,
@@ -193,6 +195,35 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         return button
     }
 
+    /// A number, text or template row's field.
+    private func textField(_ row: GeneralModel.Row, optional: Bool) -> NSTextField {
+        let field = NSTextField()
+        field.identifier = NSUserInterfaceItemIdentifier(row.key)
+        field.placeholderString = optional ? noValueText : nil
+        field.delegate = self
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.widthAnchor.constraint(equalToConstant: row.control.isNumber ? 60 : 300)
+            .isActive = true
+        field.setAccessibilityLabel(row.title)
+        fields[row.key] = field
+        return field
+    }
+
+    /// Lists a template's tokens in a popover under its help button.
+    @objc private func showTokens(_ button: NSButton) {
+        let list = NSTextField(labelWithString: button.toolTip ?? "")
+        list.isSelectable = true
+        let content = NSViewController()
+        content.view = NSStackView(views: [list])
+        (content.view as? NSStackView)?.edgeInsets = NSEdgeInsets(
+            top: Self.boxInset, left: Self.boxInset, bottom: Self.boxInset, right: Self.boxInset)
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentViewController = content
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+        tokensPopover = popover
+    }
+
     private func makeControl(_ row: GeneralModel.Row) -> NSView {
         switch row.control {
         case .checkbox:
@@ -211,16 +242,15 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             popUp.action = #selector(chose(_:))
             popUp.setAccessibilityLabel(row.title)
             return popUp
+        case .template(let tokens):
+            let field = textField(row, optional: false)
+            let help = NSButton(title: "", target: self, action: #selector(showTokens(_:)))
+            help.bezelStyle = .helpButton
+            help.toolTip = GeneralModel.help(tokens)
+            help.setAccessibilityLabel("Tokens for \(row.title)")
+            return NSStackView(views: [field, help])
         case .number(_, let optional), .text(let optional):
-            let field = NSTextField()
-            field.identifier = NSUserInterfaceItemIdentifier(row.key)
-            field.placeholderString = optional ? noValueText : nil
-            field.delegate = self
-            field.translatesAutoresizingMaskIntoConstraints = false
-            field.widthAnchor.constraint(equalToConstant: row.control.isNumber ? 60 : 300)
-                .isActive = true
-            field.setAccessibilityLabel(row.title)
-            fields[row.key] = field
+            let field = textField(row, optional: optional)
             guard let unit = row.unit else { return field }
             return NSStackView(views: [field, NSTextField(labelWithString: unit)])
         case .syncFolder:
@@ -285,7 +315,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             let raw = model.choice(row.key)
             popUp?.selectItem(
                 at: popUp?.itemArray.firstIndex { $0.representedObject as? String == raw } ?? -1)
-        case .number, .text:
+        case .number, .text, .template:
             guard let field = fields[row.key], field.currentEditor() == nil
             else { return }
             field.stringValue = model.text(row.key)

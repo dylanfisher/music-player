@@ -13,6 +13,8 @@ public final class GeneralModel {
         /// A number field; `whole` takes integers only, `optional` means empty is null.
         case number(whole: Bool, optional: Bool)
         case text(optional: Bool)
+        /// A text field for a template, beside a help button that lists its tokens.
+        case template([SettingKind.Token])
         /// Watched folders, which the Watched Folders pane lists, adds and removes.
         case folders
         /// The sync folder, with buttons to choose one and to clear it.
@@ -152,6 +154,7 @@ public final class GeneralModel {
             case .optional(.number): .number(whole: false, optional: true)
             case .string: .text(optional: false)
             case .optional(.string): .text(optional: true)
+            case .template(let tokens): .template(tokens)
             case .list(.watchedFolder): .folders
             case .optional(.syncFolder): .syncFolder
             case .barLayout(let bar): .barLayout(bar)
@@ -299,6 +302,12 @@ public final class GeneralModel {
 
     func clear(_ key: String) throws { try set(key, NSNull()) }
 
+    /// A template's tokens, one a line with what each stands for, for its help button's
+    /// tooltip and popover.
+    static func help(_ tokens: [SettingKind.Token]) -> String {
+        tokens.map { "\($0.name)  \($0.help)" }.joined(separator: "\n")
+    }
+
     func setOn(_ key: String, _ on: Bool) throws { try set(key, on) }
 
     func setChoice(_ key: String, _ raw: String) throws { try set(key, raw) }
@@ -323,6 +332,8 @@ public final class GeneralModel {
             try set(key, number)
         case .text(let optional):
             try set(key, trimmed.isEmpty && optional ? NSNull() : trimmed)
+        case .template:
+            try set(key, trimmed)
         case .checkbox, .popUp, .folders, .syncFolder, .output, .renderer, .barLayout, .readOnly:
             preconditionFailure("\(key) isn't a text row")
         }

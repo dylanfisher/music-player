@@ -575,3 +575,51 @@ private func button(_ title: String, in view: NSView) -> NSButton? {
     if let button = view as? NSButton, button.title == title { return button }
     return view.subviews.lazy.compactMap { button(title, in: $0) }.first
 }
+
+@MainActor
+private func helpButton(in view: NSView) -> NSButton? {
+    if let button = view as? NSButton, button.bezelStyle == .helpButton { return button }
+    return view.subviews.lazy.compactMap { helpButton(in: $0) }.first
+}
+
+/// The window title's row is a text field with a help button, whose tooltip and popover list
+/// every token with what it stands for; what's typed is saved as the template.
+@MainActor @Test func theWindowTitleRowListsItsTokens() throws {
+    let schema = AppSettings()
+    let key = schema.windowTitle.key
+    nonisolated(unsafe) var saved: [String: Any] = [:]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { saved[$0] },
+        set: { saved[$0] = $1 }, isBlocked: { false })
+    let row = try #require(model.rows.first { $0.key == key })
+    guard case .template(let tokens) = row.control else {
+        Issue.record("\(row.control)")
+        return
+    }
+    let help = GeneralModel.help(tokens)
+    for token in TitleToken.allCases {
+        #expect(help.contains("\(token.placeholder)  \(token.help)"))
+    }
+    try model.setText(key, " {album} — {title} ")
+    #expect(saved[key] as? String == "{album} — {title}")
+
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.appearance])
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 700, height: 700), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    window.contentView = pane.view
+    window.orderFront(nil)
+    pane.reload()
+    let field = try #require(view(key, in: pane.view) as? NSTextField)
+    #expect(field.stringValue == "{album} — {title}")
+    let button = try #require(helpButton(in: pane.view))
+    #expect(button.toolTip == help)
+    button.performClick(nil)
+    let popover = try #require(pane.tokensPopover)
+    #expect(popover.isShown)
+    #expect(labels(in: try #require(popover.contentViewController?.view)) == [help])
+    popover.close()
+}
