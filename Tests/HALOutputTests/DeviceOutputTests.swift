@@ -606,7 +606,6 @@ private func doubleClick(_ second: URL, after first: URL, on rig: Rig) async thr
 /// buffer as soon as it starts, so a test can't hold that audio back.
 @Test func aNewerPlaysIntervalIsNotEndedOrCancelledByAnEarlierCommand() async throws {
     let album = try album(44_100, 16)
-    // Slow enough that the first load's audio hasn't been taken when the second play begins.
     let device = NullDevice(speed: 0.05)
     let interval = PendingInterval(.playToFirstSample)
     let output = try DeviceOutput(
@@ -614,17 +613,26 @@ private func doubleClick(_ second: URL, after first: URL, on rig: Rig) async thr
         firstSound: interval)
     defer { output.close() }
     output.load(OutputItem(id: 1, url: album.tracks[0]), startSeconds: 0, playing: true)
-    try await Task.sleep(nanoseconds: 30_000_000)
+    try await waitUntil { device.openedSessionCount == 1 }
     interval.begin()
-    try await Task.sleep(nanoseconds: 100_000_000)
+    // The first load's audio is taken while the second play's interval is open; when the
+    // device takes it depends on the machine's load, so wait for the position to move.
+    try await waitUntil { (output.position()?.seconds ?? 0) > 0 }
     #expect(interval.isOpen)
 
-    // A stop posted before the begin that follows must not cancel it.
+    // A stop posted before the begin that follows must not cancel it: the interval ends, which
+    // the log records, and a cancelled one it doesn't. Whether the device takes the second
+    // load's first buffer before this looks again also depends on the load.
     output.stop()
+    let start = DispatchTime.now().uptimeNanoseconds
     output.load(OutputItem(id: 2, url: album.tracks[1]), startSeconds: 0, playing: true)
-    try await Task.sleep(nanoseconds: 30_000_000)
-    #expect(interval.isOpen)
+    let loaded = DispatchTime.now().uptimeNanoseconds
     try await waitUntil { !interval.isOpen }
+    #expect(
+        IntervalLog.shared.spans(from: start, to: .max).contains {
+            $0.interval == .playToFirstSample && $0.start >= start && $0.start <= loaded
+                && $0.end != nil
+        })
 }
 
 /// A load or seek that makes no sound cancels the interval, so a later play doesn't log the
