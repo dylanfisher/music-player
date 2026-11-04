@@ -934,23 +934,35 @@ private func hoveredRescanTable() async throws -> (
     controller.apply(appearance(alternating: true, glass: false))
     #expect(!table.drawsTranslucentRows && table.usesAlternatingRowBackgroundColors)
 
-    // In a window, the rows AppKit adds get the tint, every other one, and lose it with it.
+    // In a window, the rows AppKit adds get the tint, every other one, and lose it with it,
+    // back to the colors AppKit gave them.
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
         backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.contentView = controller.view
     defer { window.close() }
-    table.backgroundColor = .clear
-    controller.apply(appearance(alternating: true, glass: true))
     window.displayIfNeeded()
     func colors() throws -> [NSColor] {
         try (0..<3).map {
             try #require(table.rowView(atRow: $0, makeIfNecessary: true)).backgroundColor
         }
     }
-    #expect(try colors() == [.clear, KeyTableView.translucentRowColor, .clear])
+    let plain = try colors()
+    let background = table.backgroundColor
+    table.backgroundColor = .clear
+    controller.apply(appearance(alternating: true, glass: true))
+    window.displayIfNeeded()
+    // As the appearance draws them: the table holds its background resolved (ADR 0086).
+    func resolved(_ colors: [NSColor]) -> [NSColor?] {
+        var resolved: [NSColor?] = []
+        table.effectiveAppearance.performAsCurrentDrawingAppearance {
+            resolved = colors.map { $0.usingColorSpace(.sRGB) }
+        }
+        return resolved
+    }
+    #expect(try resolved(colors()) == resolved([.clear, KeyTableView.translucentRowColor, .clear]))
+    table.backgroundColor = background
     controller.apply(appearance(alternating: true, glass: false))
-    let alternating = NSColor.alternatingContentBackgroundColors
-    #expect(try colors() == [alternating[0], alternating[1], alternating[0]])
+    #expect(try colors() == plain)
 }

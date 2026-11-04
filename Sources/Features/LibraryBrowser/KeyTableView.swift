@@ -46,12 +46,10 @@ final class KeyTableView: NSTableView, ResolvedBackgroundTable {
             enumerateAvailableRowViews { rowView, row in
                 if drawsTranslucentRows {
                     tint(rowView, row: row)
-                } else {
-                    // As AppKit colors a row it adds.
-                    let colors = NSColor.alternatingContentBackgroundColors
-                    rowView.backgroundColor =
-                        usesAlternatingRowBackgroundColors
-                        ? colors[row % colors.count] : backgroundColor
+                } else if !usesAlternatingRowBackgroundColors {
+                    // A table that alternates has its rows colored by AppKit as that's turned
+                    // on, so set it first; one that doesn't takes its background back.
+                    rowView.backgroundColor = backgroundColor
                 }
             }
         }

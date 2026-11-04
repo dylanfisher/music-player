@@ -102,6 +102,8 @@ private func resolved(_ color: NSColor, in appearance: NSAppearance.Name) throws
         toggled.window.window.layoutIfNeeded()
         #expect(toggled.layout == fresh.layout, "glass \(on)")
     }
+    for window in [fresh.window.window, toggled.window.window] { window.displayIfNeeded() }
+    #expect(fresh.tableLooks.contains { !$0.hasSuffix("row views []") }, "no row views to compare")
     #expect(
         toggled.tableLooks == fresh.tableLooks,
         "\(zip(toggled.tableLooks, fresh.tableLooks).filter { $0 != $1 })")

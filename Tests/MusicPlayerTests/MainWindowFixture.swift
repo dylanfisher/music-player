@@ -116,12 +116,23 @@ struct MainWindowFixture {
                         "rows \(table.rowHeight) \(table.intercellSpacing) \(table.style.rawValue)",
                         "headers \(table.tableColumns.map { "\(type(of: $0.headerCell))" })",
                         "scroll \(scroll?.drawsBackground == true) \(scroll?.backgroundColor ?? .clear)",
+                        "row views \(rowViewColors(table))",
                     ].joined(separator: ", "))
             }
             view.subviews.forEach(walk)
         }
         window.window.contentView.map(walk)
         return looks
+    }
+
+    /// The background each row view on screen has, which AppKit sets as it adds the row and
+    /// glass sets as it tints it.
+    private func rowViewColors(_ table: NSTableView) -> [String] {
+        var colors: [String] = []
+        table.enumerateAvailableRowViews { rowView, row in
+            colors.append("\(row) \(rowView.backgroundColor)")
+        }
+        return colors.sorted()
     }
 
     private func background(_ table: NSTableView) -> NSColor {
