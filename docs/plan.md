@@ -4158,16 +4158,16 @@ on and off.
 
 #### 38b. Toolbar status
 
-- [ ] **38b.1 Empty when nothing plays.** With nothing playing, the toolbar status shows no art
+- [x] **38b.1 Empty when nothing plays.** With nothing playing, the toolbar status shows no art
       box, no "Not Playing" and no seek bar (`s1205`), only the toolbar's own background. The item
       keeps its size, so the toolbar doesn't move when a track starts.
-- [ ] **38b.2 A title line like Swinsian's.** A Title Line part shows one line built from a
+- [x] **38b.2 A title line like Swinsian's.** A Title Line part shows one line built from a
       template, `appearance.headerTitleFormat`, default `{title} by {artist} from {album}`,
       as Swinsian's toolbar does ("FI3AC2384210 by Aleksi Perälä from Alithia E'"). Its fields
       are those the header already shows. When a field is empty, the text before it goes too, so
       no "from" is left hanging. An unknown field is a problem with the setting. The part is in
       the tray, and the default layout doesn't change.
-- [ ] **38b.3 Order.** In Settings ▸ Appearance, Toolbar Status Layout comes before Status Bar
+- [x] **38b.3 Order.** In Settings ▸ Appearance, Toolbar Status Layout comes before Status Bar
       Layout.
 
 Plan, part 38b (ADR 0085 amended):
@@ -4192,6 +4192,18 @@ Plan, part 38b (ADR 0085 amended):
   bad value refused in the config file; the part's title and that the default leaves it out;
   the bar's line for a track with and without an artist; a format change redraws it.
 - Then the ADR amendment, `--snapshot-of headerStatus` and `toolbarSheet`, and the result.
+
+Result, part 38b: shipped 38b.1 to 38b.3 (ADR 0085 amended). With nothing playing the toolbar's
+status hides its row and shows only the toolbar's background, at the same height; a message
+such as no output device still shows it. The model's "Not Playing" stays for the dock menu, Now
+Playing info and the status bar. The Title Line part reads `appearance.headerTitleFormat`
+(`TitleFormat` in Settings; fields `{title}`, `{artist}`, `{album}`), drops an empty field with
+the text just before it, and trims the ends; an unknown field or an open brace is a setting
+problem. Settings ▸ Appearance shows the format as a text row, and lists Toolbar Status Layout
+and Toolbar Title Line before Status Bar and Status Bar Layout. `./scripts/check` passes except
+`glassLeavesTheSavedLayoutAsItWas`, which fails the same way on `main`. Checked in `--snapshot`
+(the empty status, the sheet with a Title Line layout, the Appearance pane); the Title Line
+with a track playing was checked by tests, not on screen.
 
 #### 38c. Layout builder
 
