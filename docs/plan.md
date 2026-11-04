@@ -4141,6 +4141,28 @@ Searcher change.
 - [ ] **38c.6 Reset to Default.** Each builder has a Reset to Default button that puts its
       setting back to its default.
 
+Plan, part 38c (ADR 0085 amended):
+- Settings: `BarLayoutProblem` loses the empty column. The art is a problem only in a stacked
+  column that holds other parts too. `BarPlace` reads by position ("the first column on the
+  left", "the center column", "the second column on the right", counted left to right on each
+  side), and problems name parts by their titles, so they read as sentences. `problems` takes
+  which parts fill the height, so the builder can check its `BarLayout<String>` with the parts
+  `SettingKind.Bar` marks.
+- SettingsWindow: `BarBuilderModel` checks every edit before it saves and refuses one that
+  would make a problem, keeping the layout and saying why in the hint line, without a path or
+  key. The empty-column hold-back goes, so an added column saves at once. Reset to Default
+  saves the setting's default, which the row carries, through the same patch. A side column
+  moves to another place; the center column stays where it is, and a column dropped past it
+  goes to the other side. `BarBuilderView` draws in the settings boxes' colors (their fill
+  and separator border, chips like the shortcut recorder's), draws a dragged part's or
+  column's layout as it would be if dropped, and gives each side column a grab handle.
+- Renderers: an empty column keeps its width and draws nothing in the status bar and in the
+  toolbar's status; tests check both, and that the art alone in a stacked column lays out.
+- Tests: the problems' wording and the art rule; a refused edit leaves the layout and says
+  why; an empty column saves; Reset to Default saves the default; part and column drags, live
+  and on drop, across the center; the preview's colors. Order: 38c.4, 38c.5, 38c.6, 38c.1,
+  38c.2, 38c.3, then the ADR. `--snapshot` of the builder for the colors.
+
 Plan: written by the orchestrator under each part before it runs, as in phase 37.
 
 ## Later
