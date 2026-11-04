@@ -1,19 +1,19 @@
 import AppKit
 import Settings
 
-/// One column of the status bar: its parts in a stack, side by side or one over another, placed
+/// One column of a bar: its parts in a stack, side by side or one over another, placed
 /// in the column by its alignment, or across it when a part stretches. A fixed column holds its
 /// width, and a flexible one takes what the row gives it (ADR 0085). Its constraints are all
 /// below `CenteredRow.clearancePriority` or tie it to its own stack, so no column can widen a
 /// split pane or the window.
-final class StatusColumn: NSView {
+public final class StatusColumn: NSView {
     /// A fixed width gives way only to keeping clear of the row's edge views, and so keeps its
     /// width when the center column has to move aside.
     static let fixedPriority = NSLayoutConstraint.Priority(235)
     /// Flexible columns share the free width equally, before any text truncates.
     static let equalPriority = NSLayoutConstraint.Priority(215)
 
-    let stack = NSStackView()
+    public let stack = NSStackView()
     private var placement: [NSLayoutConstraint] = []
 
     init() {
@@ -32,7 +32,7 @@ final class StatusColumn: NSView {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
+    public required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
 
     /// Holds `views` in order; `stretching`, one of them, takes the width the others leave.
     func show(
@@ -82,7 +82,7 @@ final class StatusColumn: NSView {
 
 extension BarAlignment {
     /// How a label's text lines up in a column of this alignment.
-    var textAlignment: NSTextAlignment {
+    public var textAlignment: NSTextAlignment {
         switch self {
         case .leading: .left
         case .center: .center

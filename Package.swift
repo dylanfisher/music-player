@@ -123,6 +123,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "BarView",
+            dependencies: ["Settings"],
+            path: "Sources/Core/BarView",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "Commands",
             dependencies: ["DisplayText", "KeyChord", "Log", "Receiver", "Settings"],
             path: "Sources/Core/Commands",
@@ -137,8 +143,8 @@ let package = Package(
         .target(
             name: "LibraryBrowser",
             dependencies: [
-                "Artwork", "Commands", "DisplayText", "KeyChord", "Library", "Log", "Metadata",
-                "Settings",
+                "Artwork", "BarView", "Commands", "DisplayText", "KeyChord", "Library", "Log",
+                "Metadata", "Settings",
             ],
             path: "Sources/Features/LibraryBrowser",
             swiftSettings: strictSwift

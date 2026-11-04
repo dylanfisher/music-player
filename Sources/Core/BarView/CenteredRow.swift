@@ -7,7 +7,7 @@ import AppKit
 /// content can move a divider or resize the window. When the middle can't be centered without
 /// overlapping an edge view it moves aside instead, and only when nothing fits at all does it
 /// overlap them.
-final class CenteredRow: NSView {
+public final class CenteredRow: NSView {
     /// Keeps the middle clear of the edge views, under `NSSplitViewItem`'s lowest holding
     /// priority, 250, so content wider than the row overlaps rather than widens its pane.
     static let clearancePriority = NSLayoutConstraint.Priority(240)
@@ -17,7 +17,7 @@ final class CenteredRow: NSView {
     static let rowCenteringPriority = NSLayoutConstraint.Priority(220)
     /// How hard text in the row resists truncation: under the centering, so text gives way
     /// before the middle moves aside.
-    static let textCompressionPriority = NSLayoutConstraint.Priority(210)
+    public static let textCompressionPriority = NSLayoutConstraint.Priority(210)
     /// The middle's pull to the row's width, under the centering, so it grows evenly to both
     /// sides until the nearer edge view stops it.
     static let fillPriority = NSLayoutConstraint.Priority(200)
@@ -41,7 +41,7 @@ final class CenteredRow: NSView {
 
     /// A view whose leading edge starts the part of the window the middle centers on, such as
     /// the pane beside the sidebar, where AppKit centers the title; nil centers on the whole window.
-    var centersFrom: NSView? {
+    public var centersFrom: NSView? {
         didSet { if centersFrom !== oldValue { center() } }
     }
 
@@ -72,7 +72,9 @@ final class CenteredRow: NSView {
         return fill
     }
 
-    init(leading: NSView, middle: NSView, trailing: NSView, spacing: CGFloat, inset: CGFloat) {
+    public init(
+        leading: NSView, middle: NSView, trailing: NSView, spacing: CGFloat, inset: CGFloat
+    ) {
         self.leading = leading
         self.middle = middle
         self.trailing = trailing
@@ -101,9 +103,9 @@ final class CenteredRow: NSView {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
+    public required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
 
-    override func viewDidMoveToWindow() {
+    override public func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         center()
     }
