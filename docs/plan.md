@@ -3876,6 +3876,39 @@ parts.
 - [ ] **Owner check:** build the current header and a centered-status layout with each builder
   on mbp2026 and on the 2015 MacBook Pro.
 
+Implementation plan, part 37a (37.1 and 37.2; ADR 0085, superseding 0072's rejected free-form
+editor):
+- Settings: a `BarLayout<Part>` value, generic over its parts: `leading` and `trailing` lists of
+  columns and one `center` column, each column with its `parts`, a `width` (`"flexible"` or a
+  number of points), an `alignment` (leading, center, trailing) and `stacks`. Decoding rejects
+  unknown keys at every level; `problems` lists typed `BarLayoutProblem`s (an empty column, a
+  part twice, a width out of range, a part that fills the bar's height in a stacked column).
+  `appearance.statusBarLayout` replaces `appearance.statusBarParts`, with a default of the
+  totals alone in a flexible centered column, today's bar. A `.barLayout` setting kind carries
+  the parts' choices.
+- LibraryBrowser: `StatusBarLayout` holds the columns and the style. The bar builds a view per
+  column (a stack of its parts, aligned in it, fixed or flexible, flexible columns sharing the
+  free width equally); the leading columns follow the scan progress, the trailing ones precede
+  the problems button, and the center column is `CenteredRow`'s middle, centered on the window.
+  In the tall style a stacked column lays its parts out vertically and the bar grows to the
+  tallest stack, up to a maximum height. On glass the middle centers on the area beside the
+  sidebar, where AppKit centers the title, if a probe confirms that's where the title is.
+- SettingsWindow: Settings ▸ Appearance shows an Edit Layout… button for a `.barLayout` row,
+  which opens a `BarBuilder` window for that key: a preview of the bar's columns, drawn by the
+  layout's rules, whose parts drag between columns and to and from a tray of unused parts; Add
+  Column, Remove Column, width, alignment and stacking for the selected column; arrows select
+  parts, ⌘ arrows move them and Delete removes one. Its logic is a `BarBuilderModel` with no
+  AppKit, which saves each change as a patch to its own key, holding back a layout with an empty
+  column. The checklist control loses its only setting and goes.
+- 37b plugs in as a second `BarLayout` setting with its own part type (the header's art, text
+  lines and seek bar): the builder opens for it from its own row, unchanged, and the column
+  views move down a tier when the toolbar needs them too.
+- Tests: decoding and every problem; the default reproduces today's bar (same views, fill and
+  centering); column order, alignment, fixed and flexible widths and the window centering in
+  the real window; tall stacks' height and its cap; no layout resizes the window; the builder
+  model's operations, saves and keyboard moves. `--snapshot` at 1440x900, both styles, a few
+  layouts and the builder; the live resize bench by name; `./scripts/bundle release`.
+
 Still open from the mbp2026 test run, for later: the manual checklist (scrolling with art during
 a rescan, start time at the same and another rate, built-in and Bluetooth output, the UI pass,
 Get Info over 200), the `sudo purge` cold launch, and the stall log.
