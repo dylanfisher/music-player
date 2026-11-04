@@ -1,8 +1,9 @@
 import Foundation
 
 /// `appearance.headerTitleFormat`: the toolbar's Title Line, as text with fields in braces,
-/// `{title} by {artist} from {album}`. Stored as the string the owner wrote; a field the
-/// format doesn't know, or a brace left open, is a problem with the setting.
+/// `{title} by {artist} from {album}`, and `{{` and `}}` for a brace. Stored as the string the
+/// owner wrote; a field the format doesn't know, or a brace without its pair, is a problem with
+/// the setting.
 public struct TitleFormat: SettingValue {
     /// What a format can show: the playing track's text the toolbar's status already has.
     public enum Field: String, CaseIterable, Sendable {
@@ -68,25 +69,42 @@ public struct TitleFormat: SettingValue {
         var text: String
     }
 
-    /// The format's fields and text, or what's wrong with it.
+    /// The format read on Unicode scalars, so a brace followed by a combining mark is still a
+    /// brace, or what's wrong with it.
     var parsed: Result<Parsed, Problem> {
+        let scalars = Array(text.unicodeScalars)
         var parsed = Parsed(fields: [], end: "")
-        var rest = Substring(text)
-        while let open = rest.firstIndex(of: "{") {
-            let before = String(rest[..<open])
-            guard let close = rest[open...].firstIndex(of: "}") else {
-                return .failure(Problem(text: "a { isn't closed with a }"))
+        var literal = String.UnicodeScalarView()
+        var index = 0
+        while index < scalars.count {
+            let scalar = scalars[index]
+            let doubled = index + 1 < scalars.count && scalars[index + 1] == scalar
+            switch scalar {
+            case "{" where doubled, "}" where doubled:
+                literal.append(scalar)
+                index += 2
+            case "{":
+                guard let close = scalars[index...].firstIndex(of: "}") else {
+                    return .failure(
+                        Problem(text: "a { isn't closed with a }; write {{ for a brace"))
+                }
+                let name = String(String.UnicodeScalarView(scalars[(index + 1)..<close]))
+                guard let field = Field(rawValue: name) else {
+                    let fields = Field.allCases.map { "{\($0.rawValue)}" }.joined(separator: ", ")
+                    return .failure(
+                        Problem(text: "{\(name)} isn't a field; the fields are \(fields)"))
+                }
+                parsed.fields.append((String(literal), field))
+                literal = String.UnicodeScalarView()
+                index = close + 1
+            case "}":
+                return .failure(Problem(text: "a } has no { before it; write }} for a brace"))
+            default:
+                literal.append(scalar)
+                index += 1
             }
-            let name = rest[rest.index(after: open)..<close]
-            guard let field = Field(rawValue: String(name)) else {
-                let fields = Field.allCases.map { "{\($0.rawValue)}" }.joined(separator: ", ")
-                return .failure(
-                    Problem(text: "{\(name)} isn't a field; the fields are \(fields)"))
-            }
-            parsed.fields.append((before, field))
-            rest = rest[rest.index(after: close)...]
         }
-        parsed.end = String(rest)
+        parsed.end = String(literal)
         return .success(parsed)
     }
 }

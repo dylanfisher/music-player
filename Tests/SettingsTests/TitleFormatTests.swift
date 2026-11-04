@@ -55,7 +55,7 @@ private func line(_ format: String, _ values: [TitleFormat.Field: String]) -> St
         TitleFormat("{title} on {year}").problem()
             == "{year} isn't a field; the fields are {title}, {artist}, {album}")
     #expect(TitleFormat("{Title}").problem() != nil)
-    #expect(TitleFormat("{title").problem() == "a { isn't closed with a }")
+    #expect(TitleFormat("{title").problem() == "a { isn't closed with a }; write {{ for a brace")
     let values = try parsed(#"{"appearance.headerTitleFormat": "{artist}: {title}"}"#).values
     #expect(
         (values["appearance.headerTitleFormat"] as? TitleFormat)?.line { track[$0] }
@@ -66,4 +66,21 @@ private func line(_ format: String, _ values: [TitleFormat.Field: String]) -> St
         }
     }
     #expect(throws: ConfigErrorList.self) { try parsed(#"{"appearance.headerTitleFormat": 1}"#) }
+}
+
+/// A doubled brace is a brace, and a lone one is a problem either way round. A brace stays one
+/// with a combining mark after it, which would make it part of one Character.
+@Test func doubledBracesAreBracesAndALoneOneIsAProblem() {
+    #expect(line("{{{title}}}", [.title: "Song"]) == "{Song}")
+    #expect(line("{{{title}}} by {artist}", [.title: "Song", .artist: "A"]) == "{Song} by A")
+    #expect(line("{{x}} {title}", [.title: "Song"]) == "{x} Song")
+    #expect(
+        TitleFormat("{title}} by {artist}").problem()
+            == "a } has no { before it; write }} for a brace")
+    #expect(TitleFormat("} {title}").problem() != nil)
+    #expect(
+        TitleFormat("{\u{301}title}").problem()?.hasPrefix("{\u{301}title} isn't a field") == true)
+    #expect(TitleFormat("{title}\u{301}").problem() == nil)
+    #expect(line("{title}\u{301}x", [.title: "Song"]) == "Song\u{301}x")
+    #expect(TitleFormat("{title} }\u{301}").problem() != nil)
 }
