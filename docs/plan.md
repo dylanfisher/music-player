@@ -4019,6 +4019,18 @@ Implementation plan, part 38a (ADR 0087):
 - Checks: `./scripts/check`, `--snapshot` at 1440x900 glass on and off, the live resize bench
   by name, `./scripts/bundle release` for the `#available` guard.
 
+Result, part 38a: shipped 38.1 to 38.5 (ADR 0087). With nothing playing the art is transparent
+in its place. The seek bar takes Swinsian 3.1's `ProgressControl` colors, read from its binary
+(white 0.86 track, 0.266/0.512/0.910 played, dark gray under graphite); the owner's eye against
+Swinsian still decides them. The toolbar centers the status with NSToolbar's centered item
+identifiers, on the window plain and beside the sidebar on glass, under the title. The window
+title follows `appearance.windowTitle`, ten tokens listed by a ? button in Settings; review
+found the end-trimming cut fields' own punctuation and left doubled separators, so the fill
+now keeps fields as tagged and drops text beside empty ones, and an empty template is refused.
+On glass the lists' header views draw a translucent tint, and a column added meanwhile is
+cleared too. `./scripts/check` and `./scripts/bundle release` pass; live resize p95 31.7 ms
+against 35 ms. The macOS 12 to 15 paths wait for the owner check.
+
 #### 38b. Table, navigation and palette (ADR 0088)
 
 - [ ] **38.6 Album lines.** An option draws a line between albums in the track table, and both
