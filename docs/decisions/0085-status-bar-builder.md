@@ -7,6 +7,8 @@
   as toolbar items".
 - **Amends:** [0084](0084-status-bar-on-glass.md) (the bar's middle), [0055](0055-customizable-toolbar.md)
   (the toolbar's default set and the status's width, phase 37b)
+- **Amended:** phase 38c (empty columns, the art alone in a stacked column, plain problems, a
+  builder that refuses a problem, Reset to Default, live drags and column drags)
 
 ## Context
 
@@ -40,9 +42,14 @@ width its parts leave, or else the totals do, their text aligned as the column i
 
 Every key is required at every level, and an unknown one fails, as does a width that is
 neither a whole number nor `"flexible"` and a part the bar doesn't have. A layout that decodes
-is then checked, and every problem is a typed `BarLayoutProblem` naming its column: an empty
-column, a part listed twice (each part is one view), a fixed width out of range, and the art,
-which is as tall as the bar, in a column that stacks. A bad value applies nothing and the
+is then checked, and every problem is a typed `BarLayoutProblem` naming its column: a part
+listed twice (each part is one view), a fixed width out of range, and the art, which is as
+tall as the bar, in a stacked column with other parts. An empty column is no problem (phase
+38c): it takes its width, fixed or a flexible share, and draws nothing, in the status bar and
+in the toolbar's status alike. Problems read as plain sentences, parts by their titles and
+columns by where they are: "the first column on the left", "the center column", "the second
+column on the right", each side counted left to right, as the config file lists them. The
+banner shows them after the file's path and the key; the builder shows them alone. A bad value applies nothing and the
 banner shows it, as for any setting (ADR 0082); an old config's `appearance.statusBarParts` is
 an obsolete key, reported and skipped, with Remove Obsolete Setting offered. The default is
 the totals alone in a flexible, centered center column, which is the bar as it was: a test
@@ -79,7 +86,8 @@ that; a taller stack is centered and cut at the bar's edges, which clip. The hei
 measured again whenever the bar's parts show or hide, such as the totals' label with a
 failure in a stacked column, and the lists' inset follows it. Both heights are
 `StatusBarStyle`'s, so the bar and the builder's preview share them. The art fills the bar's
-height in either style, which is why it can't stack.
+height in either style, which is why it can't stack with other parts; alone in a stacked
+column it has nothing to stack with, and lays out as in any column.
 
 **The builder** opens from Edit Layout… on the Status Bar Layout row in Settings ▸
 Appearance, in its own window, one per setting. The settings window's rows come from the
@@ -96,12 +104,12 @@ a checkbox the stacking. Every control is a standard one, so Tab reaches it, and
 preview selected ← and → select parts, ⌘← and ⌘→ move one across columns, and Delete takes one
 out; the preview takes those keys before the menus, which play the previous and next track on
 the arrows. The bar itself is the live preview too: each edit saves at once, as a patch to its
-own key, and the bar lays out again. A column just added is empty until a part goes in, so the
-builder holds back saving, and says so, while any column is empty; a layout the setting refuses
-(the art in a stacking column, a width out of range) stays shown with the setting's reason, and
-the config keeps the last good one. When the config file changes, the builder shows its layout:
-a column waiting for a part survives only a change that left this layout alone, and a refused
-edit gives way to the file's layout, marked "Not saved" with the reason. While the config file
+own key, and the bar lays out again, a column just added while it's still empty. The builder
+checks each edit against the layout's problems before it saves, and refuses one that would
+make a problem (the art stacked with other parts, a width out of range): the layout stays as
+it was, and the hint line says why, without the path or the key. A save that fails anyway,
+such as a write to a full disk, stays shown with the reason, and when the config file changes
+the builder shows the file's layout, marked "Not saved" with the reason. While the config file
 has a problem that refuses every change (ADR 0082), the builder edits nothing, turns its
 controls off and says so in the banner's words. The width field commits on Return and when it
 loses the keys. A layout's error lists its first three problems and a count of the rest.
@@ -174,6 +182,24 @@ equivalent of its own: the transport, shuffle, repeat, output and the toggles ar
 the menus, which keep their key equivalents, and the Search field keeps its text-editing chords
 through the window's key monitor as before.
 
+**The builder after phase 38c.** The preview takes the settings window's own colors: the bar
+is drawn as a section's box (its faint fill, separator border and corner, defined once in
+`GeneralPane`), columns are outlined with the separator, and each part is a light field like
+the shortcut recorder's, with the selection in the accent color. While a part is dragged, the
+preview draws the layout the drop would make, the other parts moved aside and a dashed outline
+where it will land; where it lands is measured on the layout without the part, which doesn't
+move during the drag, so the target can't flicker between two places. A place that would make
+a problem moves nothing, and the drop is refused like any edit. Reset to Default saves the
+setting's default through the same patch, and is off while the layout is the default.
+
+**Moving columns (phase 38c).** Each side column has a grab handle in a strip across the top of
+the preview, which drags the whole column, its parts, width, alignment and stacking, to
+another place, the others moving aside before the drop as for a part. The center column has no
+handle and stays where it is: it is single by the shape of the value, and moving it would mean
+choosing which side column becomes the center. A side column dragged past the center column's
+middle goes to the other side, after each column there whose middle is left of the pointer, so
+the center can be crossed but never taken.
+
 ## Alternatives considered
 
 - **A flat list of columns with one marked as the center.** Rejected: two marked, or none, would
@@ -185,6 +211,11 @@ through the window's key monitor as before.
 - **The preview built from the bar's real views.** Rejected: a view is in one place only, and
   Settings can't import the browser's feature. The real bar shows each change as it saves.
 - **Stacking in both styles.** Rejected: the minimal style is the table header's height, one line.
+- **A dragged column swapping with the center (phase 38c).** Rejected: the side column would
+  become the center and the center a side column, which is harder to predict for a drop than
+  moving to the other side, and the center is easy enough to edit in place.
+- **Holding back a layout with an empty column (phase 37a).** Dropped in phase 38c: an empty
+  column is a fixed or flexible gap, which the owner wants to save.
 
 ## Consequences
 
