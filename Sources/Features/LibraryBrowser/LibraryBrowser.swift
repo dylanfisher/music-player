@@ -738,6 +738,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private func showScanProgress() {
         let scans = status.scanText != nil
         scanIndicator.isHidden = !scans
+        insetStatusBar()
         let fraction = status.scanFraction
         scanIndicator.isIndeterminate = fraction == nil
         if let fraction { scanIndicator.doubleValue = fraction }
@@ -750,6 +751,14 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         } else {
             scanIndicator.stopAnimation(nil)
         }
+    }
+
+    /// The bar's leading inset: the art's top and bottom inset when the art starts the bar, so
+    /// it has as much space on its left, and the spacing otherwise.
+    private func insetStatusBar() {
+        statusBar.leadingInset =
+            statusLayout.startsWithArt(scanning: status.scanText != nil)
+            ? StatusBarLayout.artInsetPoints : Self.statusSpacingPoints
     }
 
     /// Logs a failure and shows it in the status bar.
@@ -1469,6 +1478,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             statusArtHeight = art.heightAnchor.constraint(equalToConstant: 0)
             statusArtHeight?.isActive = true
         }
+        insetStatusBar()
         fitStatusBarHeight()
     }
 

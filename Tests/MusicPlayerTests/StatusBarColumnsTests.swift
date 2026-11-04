@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 
+@testable import Library
 @testable import LibraryBrowser
 @testable import MusicPlayer
 @testable import Settings
@@ -32,6 +33,29 @@ func theBarHasALineAlongItsTop(glass: Bool, style: StatusBarStyle) async throws 
     #expect(border.superview?.subviews.last === border)
     let header = try #require(browser.table.table.headerView).frame.height
     if style == .minimal { #expect(area.height == header) }
+}
+
+/// Art that starts the bar has as much space on its left as above and below it, in both
+/// styles; a scan's progress before it takes the usual spacing back.
+@MainActor @Test(arguments: [StatusBarStyle.minimal, .tall])
+func artAtTheBarsStartHasEqualMargins(style: StatusBarStyle) async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    fixture.setLayout(
+        BarLayout(
+            leading: [BarColumn(parts: [.art, .track], width: .flexible, alignment: .leading)],
+            center: BarColumn(parts: [.totals], width: .flexible, alignment: .center)),
+        style: style)
+    let browser = fixture.browser
+    let area = try frame(browser.statusArea)
+    let art = try frame(fixture.nowPlaying.statusBar.view(for: .art))
+    #expect(abs(area.maxY - art.maxY - StatusBarLayout.artInsetPoints) < 0.01, "\(art) in \(area)")
+    #expect(abs(art.minY - area.minY - StatusBarLayout.artInsetPoints) < 0.01, "\(art) in \(area)")
+    #expect(abs(art.minX - area.minX - StatusBarLayout.artInsetPoints) < 0.01, "\(art) in \(area)")
+    browser.libraryChanged(.scanning(folder: "/music", ScanProgress()))
+    fixture.window.window.layoutIfNeeded()
+    let scanning = try frame(fixture.nowPlaying.statusBar.view(for: .art))
+    #expect(scanning.minX > art.minX + LibraryBrowser.statusSpacingPoints)
 }
 
 /// The default is the bar as it was before columns: the totals alone, their label stretched

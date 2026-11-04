@@ -45,4 +45,16 @@ public struct StatusBarLayout: Equatable, Sendable {
     }
 
     func artPoints(heightPoints: Double) -> Double { heightPoints - 2 * Self.artInsetPoints }
+
+    /// Whether the art is the first thing at the bar's leading edge: the first part of the first
+    /// leading column, at that column's leading edge, with no scan progress before it. The bar
+    /// then gives the art the same space on its left as above and below it.
+    func startsWithArt(scanning: Bool) -> Bool {
+        guard !scanning, let first = columns.leading.first, first.parts.first == .art else {
+            return false
+        }
+        // Side by side, a part stretching across the column keeps the art at its left.
+        let stretches = stretching(at: .leading(0)) != nil && !stacks(at: .leading(0))
+        return first.alignment == .leading || stretches
+    }
 }

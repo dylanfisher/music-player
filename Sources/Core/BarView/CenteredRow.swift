@@ -45,6 +45,13 @@ public final class CenteredRow: NSView {
     private lazy var trailingFill = edgeFill(middle.trailingAnchor, trailing.leadingAnchor)
     private let spacing: CGFloat
     private let fillsBeforeCentering: Bool
+    private lazy var leadingEdge = leading.leadingAnchor.constraint(equalTo: leadingAnchor)
+
+    /// The space between the row's leading edge and the leading view.
+    public var leadingInset: CGFloat {
+        get { leadingEdge.constant }
+        set { leadingEdge.constant = newValue }
+    }
     private var clearance: [NSLayoutConstraint] = []
     private var windowCentering: NSLayoutConstraint?
     /// The span of the content view the middle centers on when `centersFrom` is set.
@@ -115,9 +122,10 @@ public final class CenteredRow: NSView {
                 lessThanOrEqualTo: trailing.leadingAnchor, constant: -spacing),
         ]
         for constraint in clearance { constraint.priority = Self.clearancePriority }
+        leadingInset = inset
         NSLayoutConstraint.activate(
             [
-                leading.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
+                leadingEdge,
                 trailing.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
                 rowCentering,
             ] + clearance)

@@ -46,6 +46,28 @@ private func column(
     #expect(tall.heightPoints(headerPoints: 24, stackPoints: 500) == StatusBarStyle.tallMaxPoints)
 }
 
+@Test func theArtStartsTheBarOnlyFirstAtTheLeadingEdgeWithNoScanBeforeIt() {
+    func starts(_ leading: [BarColumn<StatusPart>], style: StatusBarStyle = .minimal) -> Bool {
+        StatusBarLayout(
+            columns: BarLayout(leading: leading, center: column([.totals])), style: style
+        )
+        .startsWithArt(scanning: false)
+    }
+    #expect(starts([column([.art, .track], .leading)]))
+    #expect(starts([column([.art], .leading), column([.track])]))
+    #expect(starts([column([.art, .seek])]))
+    #expect(!starts([column([.art])]))
+    #expect(!starts([column([.track, .art], .leading)]))
+    #expect(!starts([column([.track], .leading), column([.art], .leading)]))
+    #expect(!starts([]))
+    #expect(starts([column([.art, .track], .leading, stacks: true)], style: .tall))
+    #expect(!starts([column([.art, .seek], stacks: true)], style: .tall))
+    let art = StatusBarLayout(
+        columns: BarLayout(leading: [column([.art], .leading)], center: column([.totals])),
+        style: .minimal)
+    #expect(!art.startsWithArt(scanning: true))
+}
+
 @MainActor @Test func theColumnsHoldTheirPartsAndAFailureShowsWithoutTotals() throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let browser = LibraryBrowser(
