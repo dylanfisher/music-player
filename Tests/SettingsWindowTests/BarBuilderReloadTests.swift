@@ -112,3 +112,41 @@ private func center(_ parts: [StatusPart]) -> BarLayout<StatusPart> {
     #expect(window.makeFirstResponder(builder.preview))
     #expect(builder.model.layout.center.width == .fixed(150))
 }
+
+private func twoTrailing() -> BarLayout<StatusPart> {
+    BarLayout(
+        center: BarColumn(parts: [.seek], width: .flexible, alignment: .center),
+        trailing: [
+            BarColumn(parts: [.format], width: .flexible, alignment: .trailing),
+            BarColumn(parts: [.totals], width: .fixed(80), alignment: .trailing),
+        ])
+}
+
+/// A reload in the middle of a column drag ends the drag; and a drag whose column the file
+/// took away draws the layout as it is and moves nothing, rather than trapping.
+@MainActor @Test func aReloadDuringAColumnDragEndsIt() throws {
+    let file = try StandIn(twoTrailing())
+    let window = BarBuilderWindow(model: try file.builder())
+    let view = window.preview
+    view.frame = NSRect(x: 0, y: 0, width: 760, height: view.intrinsicContentSize.height)
+    let point = NSPoint(x: try #require(view.columnFrames[.trailing(0)]).minX + 1, y: 5)
+    view.dragColumn(.trailing(1), to: point)
+    #expect(view.isDragging)
+    try file.write(center([.seek]))
+    window.reload()
+    #expect(!view.isDragging)
+
+    // The model reloaded on its own, under a drag still going.
+    let builder = window.model
+    try file.write(twoTrailing())
+    try builder.reload()
+    view.dragColumn(.trailing(1), to: point)
+    try file.write(center([.seek]))
+    try builder.reload()
+    #expect(view.shown == builder.layout)
+    #expect(view.landing(of: .trailing(1), at: point) == nil)
+    view.dropColumn(.trailing(1), at: point)
+    builder.moveColumn(.trailing(1), to: .trailing(0))
+    #expect(builder.layout.trailing.isEmpty)
+    #expect(builder.selection == .init(place: .center))
+}

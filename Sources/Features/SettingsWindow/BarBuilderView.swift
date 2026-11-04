@@ -90,7 +90,9 @@ final class BarBuilderView: NSView {
     /// let go here, unless that layout has a problem.
     var shown: BarLayout<String> {
         if let pressedColumn, let dragPoint {
-            return model.moving(pressedColumn, to: landing(of: pressedColumn, atX: dragPoint.x))
+            return landing(of: pressedColumn, at: dragPoint).flatMap {
+                model.moving(pressedColumn, to: $0)
+            } ?? model.layout
         }
         guard let pressed, let dragPoint, let landing = landing(of: pressed, at: dragPoint)
         else { return model.layout }
@@ -186,7 +188,7 @@ final class BarBuilderView: NSView {
         let frames = columnFrames(of: layout)
         // Where a dragged column is drawn, outlined as selected.
         let draggedColumn = pressedColumn.flatMap { column in
-            dragPoint.map { landing(of: column, atX: $0.x) }
+            dragPoint.flatMap { landing(of: column, at: $0) }
         }
         for (place, column) in layout.columns {
             guard let frame = frames[place] else { continue }
@@ -293,10 +295,12 @@ final class BarBuilderView: NSView {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
         dragPoint = nil
-        pressedColumn = handleFrames.first { $0.value.contains(point) }?.key
-        pressed = pressedColumn == nil ? chips.first { $0.frame.contains(point) }?.part : nil
-        if let pressedColumn {
-            model.select(.init(place: pressedColumn))
+        let handle = handleFrames.first { $0.value.contains(point) }?.key
+        pressedColumn = handle
+        pressed =
+            handle != nil ? nil : chips.first { $0.frame.contains(point) }?.part
+        if let handle {
+            model.select(.init(place: handle))
         } else if let chip = chips.first(where: { $0.frame.contains(point) }),
             let place = chip.place
         {
@@ -329,30 +333,49 @@ final class BarBuilderView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer {
-            pressed = nil
-            pressedColumn = nil
-            dragPoint = nil
-            needsDisplay = true
-        }
+        defer { cancelDrag() }
         guard dragPoint != nil else { return }
         let point = convert(event.locationInWindow, from: nil)
         if let pressedColumn {
-            model.moveColumn(pressedColumn, to: landing(of: pressedColumn, atX: point.x))
+            dropColumn(pressedColumn, at: point)
         } else if let pressed {
             drop(pressed, at: point)
         }
     }
 
-    /// Where the side column at `place` lands let go at `x`: left of the center column's middle
-    /// among the leading columns, right of it among the trailing ones, after each column of
-    /// that side whose middle is left of `x`. It's measured on the layout without the column.
-    func landing(of place: BarPlace, atX x: Double) -> BarPlace {
+    /// Ends a drag with nothing moved.
+    func cancelDrag() {
+        pressed = nil
+        pressedColumn = nil
+        dragPoint = nil
+        needsDisplay = true
+    }
+
+    /// Whether a part or a column is being dragged.
+    var isDragging: Bool { dragPoint != nil && (pressed != nil || pressedColumn != nil) }
+
+    /// Moves the column at `place` where a drag let go of it at `point`.
+    func dropColumn(_ place: BarPlace, at point: NSPoint) {
+        guard let target = landing(of: place, at: point) else { return }
+        model.moveColumn(place, to: target)
+    }
+
+    /// Where the side column at `place` lands let go at `point`: left of the center column's
+    /// middle among the leading columns, right of it among the trailing ones, after each column
+    /// of that side whose middle is left of the point. It's measured on the layout without the
+    /// column. Nil outside the preview, or for a place the layout doesn't have.
+    func landing(of place: BarPlace, at point: NSPoint) -> BarPlace? {
+        guard bounds.contains(point) else { return nil }
+        let x = point.x
         var without = model.layout
         switch place {
-        case .center: return place
-        case .leading(let index): without.leading.remove(at: index)
-        case .trailing(let index): without.trailing.remove(at: index)
+        case .center: return nil
+        case .leading(let index):
+            guard without.leading.indices.contains(index) else { return nil }
+            without.leading.remove(at: index)
+        case .trailing(let index):
+            guard without.trailing.indices.contains(index) else { return nil }
+            without.trailing.remove(at: index)
         }
         let frames = columnFrames(of: without)
         let before = { (place: BarPlace) in (frames[place]?.midX ?? 0) < x }
@@ -410,6 +433,7 @@ final class BarBuilderView: NSView {
         case KeyChord(.left, .command): model.moveSelected(false)
         case KeyChord(.right, .command): model.moveSelected(true)
         case KeyChord(.delete): model.removeSelected()
+        case KeyChord(.escape) where isDragging: cancelDrag()
         default: return false
         }
         return true

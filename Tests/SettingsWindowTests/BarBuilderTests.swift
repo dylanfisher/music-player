@@ -308,3 +308,77 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
     #expect(builder.selection == .init(place: .center))
     #expect(!window.reset.isEnabled)
 }
+
+/// A column move to or from a place the layout doesn't have, or of the center, does nothing,
+/// so the selection stays on a column that exists.
+@MainActor @Test func aColumnMoveOutsideTheLayoutDoesNothing() throws {
+    let (empty, emptyValues) = try builder()
+    for (place, target) in [
+        (BarPlace.leading(0), BarPlace.leading(0)), (.trailing(0), .trailing(0)),
+        (.center, .leading(0)), (.center, .trailing(0)),
+    ] {
+        #expect(empty.moving(place, to: target) == nil, "\(place) to \(target)")
+        empty.moveColumn(place, to: target)
+    }
+    #expect(empty.layout.leading.isEmpty && empty.layout.trailing.isEmpty)
+    #expect(try saved(emptyValues()) == .defaultStatusBar)
+    #expect(empty.selection == .init(place: .center))
+
+    let (builder, values) = try builder(
+        BarLayout(
+            leading: [BarColumn(parts: [.art], width: .fixed(60), alignment: .leading)],
+            center: BarColumn(parts: [.seek], width: .flexible, alignment: .center)))
+    let before = try saved(values())
+    for target in [BarPlace.leading(2), .trailing(1), .center] {
+        builder.moveColumn(.leading(0), to: target)
+    }
+    builder.moveColumn(.leading(3), to: .leading(0))
+    #expect(try saved(values()) == before)
+    #expect(builder.selection == .init(place: .center))
+}
+
+/// A column let go over itself, or outside the preview, moves nothing; Escape ends any drag
+/// with nothing moved.
+@MainActor @Test func aColumnDropOnItselfOrOutsideOrCancelledMovesNothing() throws {
+    let (builder, values) = try builder(
+        BarLayout(
+            leading: [
+                BarColumn(parts: [.art], width: .fixed(60), alignment: .leading),
+                BarColumn(parts: [.track], width: .flexible, alignment: .leading),
+            ],
+            center: BarColumn(parts: [.seek], width: .fixed(200), alignment: .center)))
+    let view = BarBuilderView(model: builder)
+    view.frame = NSRect(x: 0, y: 0, width: 760, height: view.intrinsicContentSize.height)
+    let before = try saved(values())
+    let art = try #require(view.columnFrames[.leading(0)])
+    let onItself = NSPoint(x: art.midX, y: 5)
+    #expect(view.landing(of: .leading(0), at: onItself) == .leading(0))
+    view.dragColumn(.leading(0), to: onItself)
+    #expect(view.shown == builder.layout)
+    view.dropColumn(.leading(0), at: onItself)
+    #expect(try saved(values()) == before)
+    #expect(builder.selection == .init(place: .leading(0)))
+
+    let track = try #require(view.columnFrames[.leading(1)])
+    let below = NSPoint(x: track.maxX - 1, y: view.bounds.maxY + 40)
+    #expect(view.landing(of: .leading(0), at: below) == nil)
+    view.dragColumn(.leading(0), to: below)
+    #expect(view.shown == builder.layout)
+    view.dropColumn(.leading(0), at: below)
+    #expect(try saved(values()) == before)
+
+    let escape = try #require(
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+            context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
+            isARepeat: false, keyCode: 53))
+    view.dragColumn(.leading(0), to: NSPoint(x: track.maxX - 1, y: 5))
+    #expect(view.shown != builder.layout)
+    view.keyDown(with: escape)
+    #expect(!view.isDragging)
+    #expect(view.shown == builder.layout)
+    view.drag("format", to: NSPoint(x: track.midX, y: track.midY))
+    view.keyDown(with: escape)
+    #expect(!view.isDragging)
+    #expect(try saved(values()) == before)
+}

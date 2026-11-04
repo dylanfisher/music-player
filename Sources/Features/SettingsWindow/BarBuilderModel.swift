@@ -154,28 +154,35 @@ final class BarBuilderModel {
     /// Moves the side column at `place` to `target`, its place among the side columns once
     /// it's out of its own, and selects it there. The center column stays where it is.
     func moveColumn(_ place: BarPlace, to target: BarPlace) {
-        guard place != .center, target != .center else { return }
+        guard let moved = moving(place, to: target) else { return }
         edit {
-            layout = moving(place, to: target)
+            layout = moved
             selection = Selection(place: target)
         }
     }
 
-    /// The layout as `moveColumn(_:to:)` would make it, which a drag shows before the drop.
-    func moving(_ place: BarPlace, to target: BarPlace) -> BarLayout<String> {
+    /// The layout as `moveColumn(_:to:)` would make it, which a drag shows before the drop, or
+    /// nil when `place` isn't a side column of the layout or `target` isn't a place for it.
+    func moving(_ place: BarPlace, to target: BarPlace) -> BarLayout<String>? {
         var layout = layout
         let column: BarColumn<String>
         switch place {
-        case .center: return layout
-        case .leading(let index): column = layout.leading.remove(at: index)
-        case .trailing(let index): column = layout.trailing.remove(at: index)
+        case .center: return nil
+        case .leading(let index):
+            guard layout.leading.indices.contains(index) else { return nil }
+            column = layout.leading.remove(at: index)
+        case .trailing(let index):
+            guard layout.trailing.indices.contains(index) else { return nil }
+            column = layout.trailing.remove(at: index)
         }
         switch target {
-        case .center: return self.layout
+        case .center: return nil
         case .leading(let index):
-            layout.leading.insert(column, at: min(max(index, 0), layout.leading.count))
+            guard (0...layout.leading.count).contains(index) else { return nil }
+            layout.leading.insert(column, at: index)
         case .trailing(let index):
-            layout.trailing.insert(column, at: min(max(index, 0), layout.trailing.count))
+            guard (0...layout.trailing.count).contains(index) else { return nil }
+            layout.trailing.insert(column, at: index)
         }
         return layout
     }

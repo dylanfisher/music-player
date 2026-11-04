@@ -110,6 +110,8 @@ final class BarBuilderWindow: NSObject {
 
     /// Shows the config file's layout, after a change to the settings.
     func reload() {
+        // A drag's places may be gone from the new layout.
+        preview.cancelDrag()
         do {
             try model.reload()
         } catch {
