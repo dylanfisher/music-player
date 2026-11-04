@@ -89,6 +89,10 @@ public final class BrowserModel {
     /// narrows it.
     var showsEverything: Bool { pending == everything }
 
+    private static func isEverything(_ filter: TrackFilter) -> Bool {
+        filter == TrackFilter(groupByAlbumArtist: filter.groupByAlbumArtist)
+    }
+
     /// Follows a change of `library.groupByAlbumArtist`: the Artist pane lists the other kind
     /// of artist, keeping its selection where the same artist is listed.
     public func setGroupByAlbumArtist(_ on: Bool) async {
@@ -627,6 +631,8 @@ public final class BrowserModel {
             pendingVisit = .none
             missingTracks = missing
             let previousIDs = trackIDs
+            let widened =
+                reason == .user && !Self.isEverything(filter) && Self.isEverything(next)
             // A rescan that left every column's entries as they were leaves the panes alone.
             let panesChanged =
                 first != nil
@@ -642,7 +648,10 @@ public final class BrowserModel {
             self.entries = entries
             trackIDs = ids
             applied += 1
-            changed(BrowserChange(reason: reason, panes: panesChanged, previousIDs: previousIDs))
+            changed(
+                BrowserChange(
+                    reason: reason, panes: panesChanged, previousIDs: previousIDs,
+                    showsEverythingAgain: widened))
         } catch {
             guard mine == generation else { return }
             // What failed never showed, so the next change starts from what the views show.
@@ -749,6 +758,8 @@ public struct BrowserChange: Equatable, Sendable {
     var panes: Bool
     /// The track IDs the views showed before, for finding the selected tracks again.
     var previousIDs: [Int64]
+    /// The user went from a source, a pane or a search back to the whole library.
+    var showsEverythingAgain: Bool
 }
 
 /// What the window saves of the browser: the sidebar's source, nil for the whole library, and

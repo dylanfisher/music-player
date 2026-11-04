@@ -116,6 +116,36 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
     #expect(window.firstResponder === table)
 }
 
+@MainActor @Test func backAtAllMusicThePlayingTrackIsSelectedAndCentered() async throws {
+    let (browser, index) = try await browser(selecting: [])
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = browser.content.view
+    window.layoutIfNeeded()
+    let table = browser.table.table
+    let row = min(80, table.numberOfRows - 1)
+    let playing = try #require(try index.rows(ids: [browser.model.trackIDs[row]]).first)
+    browser.showPlaying(path: playing.path)
+    func centered(_ row: Int) -> Bool {
+        abs(table.rect(ofRow: row).midY - table.visibleRect.midY) < 3 * table.rowHeight
+    }
+    for narrow in [
+        { await browser.model.setSource(.history) }, { await browser.model.setSearch("a") },
+    ] {
+        table.selectRowIndexes([2], byExtendingSelection: false)
+        await narrow()
+        #expect(!browser.showsAllMusic)
+        _ = await browser.model.showAll()
+        #expect(table.selectedRowIndexes == [row])
+        #expect(centered(row))
+    }
+    // A change within the whole library leaves the selection alone.
+    table.selectRowIndexes([3], byExtendingSelection: false)
+    await browser.model.setSearch("")
+    #expect(table.selectedRowIndexes == [3])
+}
+
 @MainActor @Test func scrollingByRowsKeepsTheSelection() async throws {
     let (browser, _) = try await browser(selecting: [3])
     let window = NSWindow(

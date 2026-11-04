@@ -642,6 +642,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private func apply(_ change: BrowserChange) {
         if change.panes { panes.reload() }
         table.reload(change)
+        if change.showsEverythingAgain { selectPlayingTrack() }
         showTimelineIfItIsTheSource()
         runHealthIfShownFirst()
         readTotals(
@@ -1535,6 +1536,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         focusTracks()
     }
 
+    /// Back at the whole library, selects the track playing, centered, as Show Current Track
+    /// does, but leaves the keys where they are. With nothing playing, the reload has centered
+    /// the selection already.
+    private func selectPlayingTrack() {
+        guard let path = table.playingPath, let id = trackID(path: path),
+            let row = model.rows(holding: [id]).first
+        else { return }
+        table.selectCentered(row)
+    }
+
     /// Scrolls the list the window shows `rows` rows down, or up when negative, keeping the
     /// selection.
     public func scrollTracks(byRows rows: Int) { shownList.scroll(byRows: rows) }
@@ -1545,15 +1556,19 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Selects the track at `path` in the table, centered, showing the whole library first if
     /// the source, a pane or the search hides it.
     public func reveal(path: String) async {
-        let id: Int64
+        guard let id = trackID(path: path) else { return }
+        await reveal(trackID: id)
+    }
+
+    /// The ID of the track at `path`; nil when the library has none, or after reporting why it
+    /// couldn't be read.
+    private func trackID(path: String) -> Int64? {
         do {
-            guard let track = try index.track(path: path) else { return }
-            id = track.id
+            return try index.track(path: path)?.id
         } catch {
             report("couldn't find \(path) in the library: \(error)")
-            return
+            return nil
         }
-        await reveal(trackID: id)
     }
 
     /// Selects track `id` in the table, centered, showing the whole library first if the
