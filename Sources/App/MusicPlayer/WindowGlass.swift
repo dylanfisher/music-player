@@ -13,6 +13,7 @@ final class WindowGlass {
     private var tables: [(NSTableView, NSColor, Bool)] = []
     private var scrolls: [NSScrollView] = []
     private var headerCells: [(NSTableColumn, NSTableHeaderCell)] = []
+    private var headerViews: [(NSTableView, NSTableHeaderView)] = []
     private(set) var isOn = false
 
     /// Makes `content` the window's content, under the toolbar however the window lays out.
@@ -86,12 +87,15 @@ final class WindowGlass {
             table.backgroundColor = .clear
             // Alternating rows are opaque, which would hide the glass.
             table.usesAlternatingRowBackgroundColors = false
-            if table.headerView != nil {
+            if let header = table.headerView {
                 for column in table.tableColumns {
                     headerCells.append((column, column.headerCell))
                     column.headerCell = ClearHeaderCell(copying: column.headerCell)
                 }
-                table.headerView?.needsDisplay = true
+                let glassHeader = GlassHeaderView(frame: header.frame)
+                glassHeader.menu = header.menu
+                headerViews.append((table, header))
+                table.headerView = glassHeader
             }
             if let scroll = table.enclosingScrollView, scroll.drawsBackground {
                 scrolls.append(scroll)
@@ -106,14 +110,17 @@ final class WindowGlass {
             table.backgroundColor = color
             table.usesAlternatingRowBackgroundColors = alternating
         }
-        for (column, cell) in headerCells {
-            column.headerCell = cell
-            column.tableView?.headerView?.needsDisplay = true
+        for (column, cell) in headerCells { column.headerCell = cell }
+        for (table, header) in headerViews {
+            // A menu set while the glass was on is kept.
+            header.menu = table.headerView?.menu
+            table.headerView = header
         }
         for scroll in scrolls { scroll.drawsBackground = true }
         tables = []
         scrolls = []
         headerCells = []
+        headerViews = []
     }
 }
 
@@ -140,6 +147,31 @@ struct DividerPositions {
     func restore() {
         for (split, index, position) in positions {
             split.setPosition(position, ofDividerAt: index)
+        }
+    }
+}
+
+/// A list's header on glass: a translucent tint, a line under it and the column's cells over
+/// it. `NSTableHeaderView` fills itself opaque behind any cell that isn't its own, which hid
+/// the glass (ADR 0087).
+final class GlassHeaderView: NSTableHeaderView {
+    static let tint = NSColor.labelColor.withAlphaComponent(0.08)
+
+    override func draw(_ dirtyRect: NSRect) {
+        Self.tint.setFill()
+        dirtyRect.fill(using: .sourceOver)
+        NSColor.separatorColor.setFill()
+        NSRect(x: bounds.minX, y: bounds.maxY - 1, width: bounds.width, height: 1)
+            .fill(using: .sourceOver)
+        guard let table = tableView else { return }
+        // The column being dragged goes last, over the others, where the pointer has it.
+        let columns = table.tableColumns.indices
+        let order = columns.filter { $0 != draggedColumn } + columns.filter { $0 == draggedColumn }
+        for index in order {
+            var frame = headerRect(ofColumn: index)
+            if index == draggedColumn { frame.origin.x += draggedDistance }
+            guard frame.intersects(dirtyRect) else { continue }
+            table.tableColumns[index].headerCell.draw(withFrame: frame, in: self)
         }
     }
 }

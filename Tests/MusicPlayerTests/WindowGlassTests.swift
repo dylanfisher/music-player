@@ -157,3 +157,45 @@ func glassOnThenOffLeavesTheWindowAsAFreshOne(
         #expect(saved() == before, "glass \(on)")
     }
 }
+
+/// On glass a list's header lets the glass through, a light tint under its titles, in light
+/// and dark; the header, with a menu set meanwhile, comes back after.
+@MainActor @Test(arguments: [NSAppearance.Name.aqua, .darkAqua])
+func theGlassShowsThroughTheHeaders(_ appearance: NSAppearance.Name) throws {
+    let table = NSTableView()
+    let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("title"))
+    column.title = "Title"
+    column.width = 100
+    table.addTableColumn(column)
+    let scroll = NSScrollView()
+    scroll.documentView = table
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+        styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    window.appearance = NSAppearance(named: appearance)
+    let glass = WindowGlass(window: window, content: scroll)
+    let header = try #require(table.headerView)
+    header.menu = NSMenu(title: "Columns")
+    window.layoutIfNeeded()
+
+    glass.set(true)
+    let shown = try #require(table.headerView)
+    #expect(shown is GlassHeaderView)
+    #expect(shown.menu === header.menu)
+    window.layoutIfNeeded()
+    let image = try #require(shown.bitmapImageRepForCachingDisplay(in: shown.bounds))
+    shown.cacheDisplay(in: shown.bounds, to: image)
+    // Past the column, and over the column away from its title.
+    for x in [image.pixelsWide - 4, 4] {
+        let alpha = try #require(image.colorAt(x: x, y: 4)?.alphaComponent)
+        #expect(alpha > 0 && alpha <= 0.1, "\(x): \(alpha)")
+    }
+
+    let menu = NSMenu(title: "Other Columns")
+    shown.menu = menu
+    glass.set(false)
+    #expect(table.headerView === header)
+    #expect(header.menu === menu)
+}
