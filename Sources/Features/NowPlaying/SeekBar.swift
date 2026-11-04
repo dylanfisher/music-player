@@ -1,12 +1,20 @@
 import AppKit
 
-/// A seek bar: a rounded track filled in the accent color up to the position. A click moves the
-/// position there at once and seeks, with no animation; a drag moves it with the pointer and
-/// seeks where it's let go.
+/// A seek bar: a rounded track filled in Swinsian's colors up to the position. A click moves
+/// the position there at once and seeks, with no animation; a drag moves it with the pointer
+/// and seeks where it's let go.
 @MainActor
 final class SeekBar: NSView {
     static let trackPoints = 4.0
     static let heightPoints = 12.0
+    /// Swinsian 3.1's progress bar colors, read from its `ProgressControl`: the same in light
+    /// and dark, with the played part dark gray under the graphite accent (ADR 0087).
+    static let trackColor = NSColor(calibratedWhite: 0.86, alpha: 1)
+    static let playedBlue = NSColor(
+        calibratedRed: 0.265625, green: 0.51171875, blue: 0.91015625, alpha: 1)
+    static var playedColor: NSColor {
+        NSColor.currentControlTint == .graphiteControlTint ? .darkGray : playedBlue
+    }
 
     /// The position, from 0 to 1.
     var fraction = 0.0 {
@@ -96,13 +104,13 @@ final class SeekBar: NSView {
         let radius = Self.trackPoints / 2
         let track = NSRect(
             x: bounds.minX, y: bounds.midY - radius, width: bounds.width, height: Self.trackPoints)
-        NSColor.tertiaryLabelColor.setFill()
+        Self.trackColor.setFill()
         NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius).fill()
         guard isEnabled, fraction > 0 else { return }
         var played = track
         // At least a round end's width, so the start of a track still shows as played.
         played.size.width = max(track.width * fraction, Self.trackPoints)
-        NSColor.controlAccentColor.setFill()
+        Self.playedColor.setFill()
         NSBezierPath(roundedRect: played, xRadius: radius, yRadius: radius).fill()
     }
 

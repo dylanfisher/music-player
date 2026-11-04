@@ -63,3 +63,34 @@ private func bar() -> (SeekBar, () -> [(Double, Bool)]) {
     bar.release()
     #expect(seeks().map(\.1) == [true, false, true, false])
 }
+
+/// The track and the played part are Swinsian's colors, the same in light and dark.
+@MainActor @Test(arguments: [NSAppearance.Name.aqua, .darkAqua])
+func theBarDrawsSwinsiansColors(_ appearance: NSAppearance.Name) throws {
+    let (bar, _) = bar()
+    bar.fraction = 0.5
+    bar.appearance = NSAppearance(named: appearance)
+    let image = try #require(bar.bitmapImageRepForCachingDisplay(in: bar.bounds))
+    bar.cacheDisplay(in: bar.bounds, to: image)
+    let scale = Double(image.pixelsWide) / bar.bounds.width
+    func pixel(atX x: Double) throws -> NSColor {
+        try #require(
+            image.colorAt(x: Int(x * scale), y: image.pixelsHigh / 2)?.usingColorSpace(.sRGB))
+    }
+    func matches(_ drawn: NSColor, _ expected: NSColor) throws -> Bool {
+        let expected = try #require(expected.usingColorSpace(.sRGB))
+        return [
+            drawn.redComponent - expected.redComponent,
+            drawn.greenComponent - expected.greenComponent,
+            drawn.blueComponent - expected.blueComponent,
+        ].allSatisfy { abs($0) < 0.02 }
+    }
+    let track = try pixel(atX: 150)
+    let played = try pixel(atX: 50)
+    #expect(try matches(track, SeekBar.trackColor), "\(track)")
+    #expect(try matches(played, SeekBar.playedColor), "\(played)")
+    #expect(
+        SeekBar.playedColor
+            == (NSColor.currentControlTint == .graphiteControlTint ? .darkGray : SeekBar.playedBlue)
+    )
+}
