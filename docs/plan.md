@@ -4096,17 +4096,17 @@ Searcher change.
 
 #### 38a. Track table and status bar
 
-- [ ] **38a.1 Row lines come back.** Double row lines are drawn again. They get darker, and Row
+- [x] **38a.1 Row lines come back.** Double row lines are drawn again. They get darker, and Row
       Lines off doesn't remove them all. Reproduce it first (Row Lines, Alternating Rows and
       glass on and off, toggled several times), find what draws the second line, and fix that.
-- [ ] **38a.2 No lines over art.** Row lines show through the album art in the art column
+- [x] **38a.2 No lines over art.** Row lines show through the album art in the art column
       (owner's screenshot: the lines run across a snow photo, row by row). The art covers the
       lines of the rows it spans.
-- [ ] **38a.3 Status bar border.** The bottom status bar gets a top border of the same gray as
+- [x] **38a.3 Status bar border.** The bottom status bar gets a top border of the same gray as
       the table header's bottom border.
-- [ ] **38a.4 Status bar art margin.** The art's leading margin equals its top and bottom
+- [x] **38a.4 Status bar art margin.** The art's leading margin equals its top and bottom
       margins, which makes it smaller than it is now.
-- [ ] **38a.5 Dismiss All.** The Library Problems window gets a Dismiss All button, which
+- [x] **38a.5 Dismiss All.** The Library Problems window gets a Dismiss All button, which
       dismisses every row, selected or not.
 
 Plan, part 38a:
@@ -4138,6 +4138,23 @@ Plan, part 38a:
   dismisses them in the library.
 - Order: row lines, border, art margin, Dismiss All, each its own commit through
   `./scripts/check`, then the Result.
+
+Result, part 38a: shipped 38a.1 to 38a.5. Cause of 38a.1 and 38a.2: AppKit's row line is a
+subview each row view sets up only as the table adds it. Toggling Row Lines reached no row
+already made, so on showed nothing and off left lines behind. Rows reused from the pool got the
+line on top of their cells, across the art. `MarkedRowView` now draws the line in its background
+and the table sets it on every row. Rendered-layer tests cover both. A second line one point
+above, the reported double line, didn't show in any toggle sequence the tests ran, glass
+included. With AppKit's horizontal grid gone, no AppKit line is drawn now, and none is drawn
+below the last row either. The status bar's top border uses the separator color. That matches
+the header's line on glass. Off glass, macOS 26 draws the header cell's line about twice as
+dark (measured 204 against 230 on white), in a color AppKit doesn't name, so the owner should
+compare the two. Art that starts the bar now sits 3 pt from its left, top and bottom. Dismiss
+All dismisses every listed row (ADR 0059 amended). `./scripts/check` passes except
+`glassLeavesTheSavedLayoutAsItWas` (sidebar width 180 saved as 172), which fails the same way on
+`main` on this Mac. `theStatusBarsArtOpensTheViewer` fails when run alone, on `main` too, and
+passes in the full suite. Pending: checking these on screen in the app, light and dark, glass
+on and off.
 
 #### 38b. Toolbar status
 
