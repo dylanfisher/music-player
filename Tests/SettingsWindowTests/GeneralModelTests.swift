@@ -26,7 +26,7 @@ private func model() -> (GeneralModel, () -> [String: Any]) {
     ]
     let model = GeneralModel(
         settings: Schema().settings, searcherInstalled: true, value: { values[$0] },
-        set: { key, json in values[key] = json })
+        set: { key, json in values[key] = json }, isBlocked: { false })
     return (model, { values })
 }
 
@@ -72,7 +72,8 @@ private var appearanceChoices: [SettingKind.Choice] {
 @MainActor @Test func everyAppSettingButTheConfigFileOnesHasARow() {
     let schema = AppSettings()
     let model = GeneralModel(
-        settings: schema.settings, searcherInstalled: true, value: { _ in nil }, set: { _, _ in })
+        settings: schema.settings, searcherInstalled: true, value: { _ in nil }, set: { _, _ in },
+        isBlocked: { false })
     #expect(
         model.rows.map(\.key)
             == schema.settings.map(\.key).filter { $0 != schema.networkScanReaders.key })
@@ -131,7 +132,7 @@ private func modelWithFoldersAndValues() -> (GeneralModel, () -> [[String: Any]]
         value: { $0 == "a.folders" ? folders : nil },
         set: { key, json in
             if key == "a.folders", let json = json as? [[String: Any]] { folders = json }
-        })
+        }, isBlocked: { false })
     return (model, { folders })
 }
 
@@ -250,7 +251,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let schema = AppSettings()
     let model = GeneralModel(
         settings: schema.settings, searcherInstalled: false, value: { _ in nil },
-        set: { _, _ in })
+        set: { _, _ in }, isBlocked: { false })
     let keys = model.rows.map(\.key)
     #expect(!keys.contains(schema.fileViewer.key))
     #expect(!keys.contains(schema.networkScanReaders.key))
@@ -260,7 +261,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
 @MainActor @Test func theAppSettingsSitInNamedSectionsWithoutTheWatchedFolders() {
     let schema = AppSettings()
     let model = GeneralModel(
-        settings: schema.settings, searcherInstalled: true, value: { _ in nil }, set: { _, _ in })
+        settings: schema.settings, searcherInstalled: true, value: { _ in nil }, set: { _, _ in },
+        isBlocked: { false })
     let sections = model.sections
     #expect(
         sections.map(\.section) == [
@@ -315,7 +317,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     var chosen: [OutputChoice] = []
     let model = GeneralModel(
         settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
-        set: { key, json in stored[key] = json })
+        set: { key, json in stored[key] = json }, isBlocked: { false })
     #expect(model.rows.first { $0.key == schema.outputDeviceUID.key }?.control == .output)
     let pane = GeneralPane(
         model: model, configPath: "/tmp/config.json",
@@ -350,7 +352,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     var stored: [String: Any] = [schema.receiverEnabled.key: false]
     let model = GeneralModel(
         settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
-        set: { key, json in stored[key] = json })
+        set: { key, json in stored[key] = json }, isBlocked: { false })
     #expect(model.isEnabled(schema.receiverEnabled.key))
     #expect(!model.isEnabled(schema.receiverAddress.key))
     #expect(!model.isEnabled(schema.receiverVolumeKeys.key))
@@ -385,7 +387,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
 @MainActor @Test func everyLabelFitsItsColumn() {
     let model = GeneralModel(
         settings: AppSettings().settings, searcherInstalled: true, value: { _ in nil },
-        set: { _, _ in })
+        set: { _, _ in }, isBlocked: { false })
     let pane = GeneralPane(
         model: model, configPath: "/tmp/config.json", actions: actions(),
         sections: GeneralModel.Section.allCases)
@@ -431,7 +433,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let model = GeneralModel(
         settings: schema.settings, searcherInstalled: true,
         value: { $0 == schema.syncFolder.key ? stored : nil },
-        set: { _, json in stored = json })
+        set: { _, json in stored = json }, isBlocked: { false })
     #expect(model.syncFolderName(schema.syncFolder.key) == "sync")
     let pane = GeneralPane(
         model: model, configPath: nil,
@@ -458,7 +460,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     var stored: [String: Any] = [schema.playedPercent.key: 75]
     let model = GeneralModel(
         settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
-        set: { key, json in stored[key] = json })
+        set: { key, json in stored[key] = json }, isBlocked: { false })
     #expect(model.rows.first { $0.key == schema.playedPercent.key }?.unit == "%")
     let pane = GeneralPane(
         model: model, configPath: nil, actions: actions(), sections: [.playCounts])
@@ -477,7 +479,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
         set: { key, json in
             #expect(key == "sync.folder")
             stored = json
-        })
+        }, isBlocked: { false })
     #expect(model.rows.first { $0.key == "sync.folder" }?.control == .syncFolder)
     #expect(model.syncFolder("sync.folder") == "sync on smb://nas/music")
     try model.clear("sync.folder")
@@ -496,7 +498,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
 @MainActor @Test func theAppearanceSettingsHaveAPaneOfTheirOwn() throws {
     let schema = AppSettings()
     let model = GeneralModel(
-        settings: schema.settings, searcherInstalled: true, value: { _ in nil }, set: { _, _ in })
+        settings: schema.settings, searcherInstalled: true, value: { _ in nil }, set: { _, _ in },
+        isBlocked: { false })
     let bindings = try KeyBindings(
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(
@@ -538,7 +541,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     var opened = 0
     let model = GeneralModel(
         settings: schema.settings, searcherInstalled: false, value: { _ in nil },
-        set: { _, _ in })
+        set: { _, _ in }, isBlocked: { false })
     let bindings = try KeyBindings(
         AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App"))
     let controller = SettingsWindowController(

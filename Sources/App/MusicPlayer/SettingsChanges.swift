@@ -144,7 +144,8 @@ extension AppDelegate {
             searcherInstalled: NSWorkspace.shared.urlForApplication(
                 withBundleIdentifier: FileViewer.searcher.bundleID) != nil,
             value: { [weak settings] in settings?.json(forKey: $0) },
-            set: { [weak settings] key, json in try settings?.set(key: key, json: json) })
+            set: { [weak settings] key, json in try settings?.set(key: key, json: json) },
+            isBlocked: { [weak settings] in settings?.blocked ?? false })
         let shortcuts = ShortcutsModel(bindings: dispatcher.bindings, appName: appName) {
             [weak self, weak settings, weak dispatcher] changes in
             do {

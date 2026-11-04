@@ -10,6 +10,8 @@ import Settings
 @MainActor
 public final class ConfigBanner: NSViewController {
     static let removeTitle = "Remove Obsolete Setting"
+    /// What a config file with a problem that refuses every change means.
+    static let blockedText = "Nothing in it applies, and nothing can change, until it's fixed."
     static let removeAllTitle = "Remove Obsolete Settings"
 
     public var openConfigFile: () -> Void = {}
@@ -76,7 +78,7 @@ public final class ConfigBanner: NSViewController {
             if problems.isEmpty {
                 ""
             } else if problems.contains(where: \.blocks) {
-                " Nothing in it applies, and nothing can change, until it's fixed."
+                " " + Self.blockedText
             } else {
                 " The rest of it applies."
             }

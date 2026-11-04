@@ -16,19 +16,19 @@ final class BarBuilderWindow: NSObject {
     let window: NSWindow
     let model: BarBuilderModel
     let preview: BarBuilderView
-    private let addBefore = NSButton()
+    let addBefore = NSButton()
     private let addAfter = NSButton()
     private let removeColumn = NSButton()
     private let addPart = NSPopUpButton(frame: .zero, pullsDown: true)
     private let removePart = NSButton()
     private let width = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let points = NSTextField()
+    let points = NSTextField()
     private let alignment = NSSegmentedControl(
         labels: BarAlignment.allCases.map(\.title), trackingMode: .selectOne, target: nil,
         action: nil)
     private let stacks = NSButton(
         checkboxWithTitle: "Stack in Tall Style", target: nil, action: nil)
-    private let message = NSTextField(wrappingLabelWithString: "")
+    let message = NSTextField(wrappingLabelWithString: "")
 
     init(model: BarBuilderModel) {
         self.model = model
@@ -64,6 +64,8 @@ final class BarBuilderWindow: NSObject {
         width.setAccessibilityLabel("Width")
         points.target = self
         points.action = #selector(typedPoints)
+        // Tab or a click elsewhere commits the width, as Return does.
+        points.cell?.sendsActionOnEndEditing = true
         points.setAccessibilityLabel("Width in points")
         points.translatesAutoresizingMaskIntoConstraints = false
         points.widthAnchor.constraint(equalToConstant: 60).isActive = true
@@ -118,19 +120,23 @@ final class BarBuilderWindow: NSObject {
         preview.invalidateIntrinsicContentSize()
         preview.needsDisplay = true
         let column = model.selectedColumn
-        removeColumn.isEnabled = model.canRemoveColumn
-        removePart.isEnabled = model.selection.part != nil
+        let editable = !model.isBlocked
+        removeColumn.isEnabled = editable && model.canRemoveColumn
+        removePart.isEnabled = editable && model.selection.part != nil
+        for control in [addBefore, addAfter, width, alignment, stacks] as [NSControl] {
+            control.isEnabled = editable
+        }
         addPart.removeAllItems()
         addPart.addItem(withTitle: "Add Part")
         for part in model.unusedParts {
             addPart.addItem(withTitle: model.title(of: part))
             addPart.lastItem?.representedObject = part
         }
-        addPart.isEnabled = !model.unusedParts.isEmpty
+        addPart.isEnabled = editable && !model.unusedParts.isEmpty
         if case .fixed(let fixed) = column?.width {
             width.selectItem(withTitle: Self.fixedTitle)
             points.integerValue = fixed
-            points.isEnabled = true
+            points.isEnabled = editable
         } else {
             width.selectItem(withTitle: Self.flexibleTitle)
             points.stringValue = ""
@@ -139,12 +145,15 @@ final class BarBuilderWindow: NSObject {
         alignment.selectedSegment =
             column.flatMap { BarAlignment.allCases.firstIndex(of: $0.alignment) } ?? -1
         stacks.state = column?.stacks == true ? .on : .off
+        let problem =
+            editable
+            ? model.unsaved : "The config file has a problem. \(ConfigBanner.blockedText)"
         message.stringValue =
-            model.unsaved
+            problem
             ?? "Drag parts between columns and the tray. With the preview selected, ← and →"
             + " select, ⌘← and ⌘→ move a part, and Delete removes it. The selected column is"
             + " outlined; the dashed one is centered on the window."
-        message.textColor = model.unsaved == nil ? .secondaryLabelColor : .systemRed
+        message.textColor = problem == nil ? .secondaryLabelColor : .systemRed
     }
 
     @objc private func addColumnBefore() { model.addColumn(.before) }

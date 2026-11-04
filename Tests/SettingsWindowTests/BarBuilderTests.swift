@@ -22,7 +22,7 @@ private func builder(_ layout: BarLayout<StatusPart> = .defaultStatusBar) throws
                 throw SettingProblem(key: key, reason: reason)
             }
             values[key] = json
-        })
+        }, isBlocked: { false })
     return (try model.barBuilder(setting.key), { values })
 }
 
@@ -130,7 +130,7 @@ private func saved(_ values: [String: Any]) throws -> BarLayout<StatusPart> {
     ]
     let model = GeneralModel(
         settings: [setting.descriptor], searcherInstalled: true, value: { values[$0] },
-        set: { key, json in values[key] = json })
+        set: { key, json in values[key] = json }, isBlocked: { false })
     let builder = try model.barBuilder(setting.key)
     builder.addColumn(.before)
     try builder.reload()

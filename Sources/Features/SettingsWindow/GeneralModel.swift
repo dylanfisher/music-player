@@ -109,17 +109,21 @@ public final class GeneralModel {
     var foldersRow: Row? { rows.first { $0.control == .folders } }
     private let value: (String) -> Any?
     private let set: (String, Any) throws -> Void
+    /// Whether the config file refuses every change until it's fixed (ADR 0082).
+    let isBlocked: () -> Bool
 
     /// `value` reads a setting as JSON holds it; `set` writes one. `searcherInstalled` says
-    /// whether the File Viewer setting has a choice to make.
+    /// whether the File Viewer setting has a choice to make; `isBlocked` whether the config file
+    /// refuses changes.
     public init(
         settings: [SettingDescriptor], searcherInstalled: Bool, value: @escaping (String) -> Any?,
-        set: @escaping (String, Any) throws -> Void
+        set: @escaping (String, Any) throws -> Void, isBlocked: @escaping () -> Bool
     ) {
         rows = settings.filter { Self.isShown($0.key, searcherInstalled: searcherInstalled) }
             .map(Self.row)
         self.value = value
         self.set = set
+        self.isBlocked = isBlocked
     }
 
     /// Whether the window has a row for the setting. Network Scan Readers is a tuning number
@@ -290,7 +294,7 @@ public final class GeneralModel {
         else { preconditionFailure("\(key) isn't a bar layout") }
         return try BarBuilderModel(
             key: key, title: row.title, choices: choices, value: { [value] in value(key) },
-            set: { [set] json in try set(key, json) })
+            set: { [set] json in try set(key, json) }, blocked: isBlocked)
     }
 
     func clear(_ key: String) throws { try set(key, NSNull()) }

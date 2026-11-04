@@ -26,23 +26,28 @@ final class BarBuilderModel {
     private(set) var selection = Selection(place: .center)
     /// Why the layout shown isn't the one in effect, or nil when it is.
     private(set) var unsaved: String?
+    /// Whether `unsaved` is a column waiting for a part, rather than a refused save.
+    private var waitingForPart = false
     /// Called after every change to the layout or the selection.
     var changed: () -> Void = {}
     /// The layout as the config file last had it.
     private var saved: BarLayout<String>
     private let value: () -> Any?
     private let set: (Any) throws -> Void
+    private let blocked: () -> Bool
 
-    /// `value` reads the setting as JSON holds it; `set` writes it.
+    /// `value` reads the setting as JSON holds it; `set` writes it. `blocked` says whether the
+    /// config file has a problem that refuses every change until it's fixed.
     init(
         key: String, title: String, choices: [SettingKind.Choice], value: @escaping () -> Any?,
-        set: @escaping (Any) throws -> Void
+        set: @escaping (Any) throws -> Void, blocked: @escaping () -> Bool
     ) throws {
         self.key = key
         self.title = title
         self.choices = choices
         self.value = value
         self.set = set
+        self.blocked = blocked
         saved = try Self.read(key, value())
         layout = saved
     }
@@ -53,16 +58,35 @@ final class BarBuilderModel {
         return try JSONDecoder().decode(BarLayout<String>.self, from: data)
     }
 
-    /// Shows the layout the config file has now, unless it's the one this builder last saved,
-    /// so a column waiting for a part survives another setting's change.
+    /// Whether the config file refuses every change until it's fixed; the builder edits
+    /// nothing meanwhile.
+    var isBlocked: Bool { blocked() }
+
+    /// Shows the layout the config file has now. A column waiting for a part survives another
+    /// setting's change, but a refused edit gives way to the file's layout, saying it wasn't
+    /// saved.
     func reload() throws {
         let current = try Self.read(key, value())
-        guard current != saved else { return }
+        if current == saved, waitingForPart, !isBlocked { return changed() }
+        let refused = waitingForPart ? nil : unsaved
         saved = current
         layout = current
-        unsaved = nil
-        if layout[selection.place] == nil { selection = Selection(place: .center) }
+        waitingForPart = false
+        unsaved = refused.map { "Not saved: \($0)" }
+        keepSelectionInLayout()
         changed()
+    }
+
+    /// Moves the selection to what the layout still has: the last part of a column that lost
+    /// parts, or the center column for one that's gone.
+    private func keepSelectionInLayout() {
+        guard let column = layout[selection.place] else {
+            selection = Selection(place: .center)
+            return
+        }
+        if let part = selection.part, part >= column.parts.count {
+            selection.part = column.parts.isEmpty ? nil : column.parts.count - 1
+        }
     }
 
     func title(of part: String) -> String { choices.first { $0.rawValue == part }?.title ?? part }
@@ -80,6 +104,7 @@ final class BarBuilderModel {
     /// Adds an empty flexible column beside the selected one and selects it. The center column
     /// stays the only one, so a column beside it goes to that side's list.
     func addColumn(_ side: Side) {
+        guard !isBlocked else { return }
         let place: BarPlace
         switch (selection.place, side) {
         case (.center, .before): place = .leading(layout.leading.count)
@@ -103,6 +128,7 @@ final class BarBuilderModel {
 
     /// Removes the selected column; its parts go back to the unused ones.
     func removeColumn() {
+        guard !isBlocked else { return }
         switch selection.place {
         case .center: return
         case .leading(let index):
@@ -123,6 +149,7 @@ final class BarBuilderModel {
     func setStacks(_ stacks: Bool) { editColumn { $0.stacks = stacks } }
 
     private func editColumn(_ edit: (inout BarColumn<String>) -> Void) {
+        guard !isBlocked else { return }
         update(selection.place, edit)
         save()
     }
@@ -148,7 +175,8 @@ final class BarBuilderModel {
     /// Puts `part` at `index` in the column at `place`, from wherever it was, an unused part
     /// included, and selects it there.
     func place(_ part: String, in place: BarPlace, at index: Int) {
-        guard choices.contains(where: { $0.rawValue == part }), layout[place] != nil else { return }
+        guard !isBlocked, choices.contains(where: { $0.rawValue == part }), layout[place] != nil
+        else { return }
         var target = index
         if let from = location(of: part) {
             if from.place == place, from.index < index { target -= 1 }
@@ -164,7 +192,7 @@ final class BarBuilderModel {
 
     /// Takes `part` out of its column, back to the unused ones.
     func remove(_ part: String) {
-        guard let from = location(of: part) else { return }
+        guard !isBlocked, let from = location(of: part) else { return }
         update(from.place) { $0.parts.remove(at: from.index) }
         let left = layout[from.place]?.parts.count ?? 0
         selection = Selection(place: from.place, part: left == 0 ? nil : min(from.index, left - 1))
@@ -230,8 +258,10 @@ final class BarBuilderModel {
 
     /// Saves the layout unless a column is empty; a refusal leaves the layout shown, with why.
     private func save() {
+        waitingForPart = false
         if let empty = layout.columns.first(where: { $0.column.parts.isEmpty }) {
             unsaved = "Drag a part into \(empty.place) to save the layout."
+            waitingForPart = true
         } else if layout == saved {
             unsaved = nil
         } else {
