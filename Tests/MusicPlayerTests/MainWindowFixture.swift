@@ -35,6 +35,8 @@ struct MainWindowFixture {
     let browser: LibraryBrowser
     let nowPlaying: NowPlayingBar
     let home: URL
+    let state: StateStore<AppState>
+    let saver: LayoutSaver
 
     init(glass: Bool = false, parts: [StatusPart] = [.totals]) async throws {
         home = FileManager.default.temporaryDirectory
@@ -44,7 +46,8 @@ struct MainWindowFixture {
         let databaseURL = try windowLibrary.get()
         let settings = ConfigStore(
             AppSettings(), fileURL: paths.configFile, check: try shortcutCheck(), creating: true)
-        let state = try StateStore(AppState(), fileURL: paths.stateFile)
+        state = try StateStore(AppState(), fileURL: paths.stateFile)
+        saver = LayoutSaver(state)
         var layout = WindowSettings(settings, state: state)
         layout.tableAppearance.glass = glass
         let index = try LibraryIndex(at: databaseURL)
@@ -67,7 +70,7 @@ struct MainWindowFixture {
         window = MainWindow(
             settings: layout, banner: ConfigBanner().view, browser: browser, toolbar: toolbar,
             signalPath: SignalPathPanel(), queue: QueuePanel(model: QueueModel(lookup: lookup)),
-            saver: LayoutSaver(state))
+            saver: saver)
         setParts(parts)
         window.window.orderFront(nil)
         await browser.load(BrowserState(source: nil))

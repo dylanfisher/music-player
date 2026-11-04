@@ -110,3 +110,35 @@ private func resolved(_ color: NSColor, in appearance: NSAppearance.Name) throws
     #expect(toggled.window.window.styleMask == fresh.window.window.styleMask)
     #expect(!toggled.window.window.titlebarAppearsTransparent)
 }
+
+/// Glass in a zoomed window keeps it zoomed.
+@MainActor @Test func glassKeepsAZoomedWindowZoomed() async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    let window = fixture.window.window
+    window.zoom(nil)
+    #expect(window.isZoomed)
+    let zoomed = window.frame
+    for on in [true, false] {
+        fixture.window.setGlass(on)
+        #expect(window.isZoomed, "glass \(on)")
+        #expect(window.frame == zoomed, "glass \(on)")
+    }
+}
+
+/// Putting the frame and the dividers back after a glass change saves the layout as it was.
+@MainActor @Test func glassLeavesTheSavedLayoutAsItWas() async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    func saved() -> String {
+        fixture.saver.flush()
+        let state = fixture.state
+        return "\(String(describing: state[\.windowFrame])) \(state[\.sidebarWidth]) "
+            + "\(state[\.queueWidth]) \(state[\.browserHeight])"
+    }
+    let before = saved()
+    for on in [true, false, true, false] {
+        fixture.window.setGlass(on)
+        #expect(saved() == before, "glass \(on)")
+    }
+}

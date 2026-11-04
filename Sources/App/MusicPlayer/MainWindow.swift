@@ -148,8 +148,19 @@ final class MainWindow: NSObject, NSWindowDelegate {
         if next.statusBar != current.statusBar { toggleStatusBar() }
     }
 
-    /// Puts the window's content on glass, or takes it off.
-    func setGlass(_ on: Bool) { glass?.set(on) }
+    /// Puts the window's content on glass, or takes it off. The frame that puts back is no move
+    /// of the user's, so it isn't saved.
+    func setGlass(_ on: Bool) {
+        restoring = true
+        glass?.set(on)
+        restoring = false
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        restoring = true
+        glass?.matchStyleMask()
+        restoring = false
+    }
 
     func toggleSignalPath() {
         signalPath.view.isHidden.toggle()

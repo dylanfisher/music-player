@@ -49,17 +49,26 @@ final class WindowGlass {
         isOn = on
         backdrop.isHidden = !on
         window.titlebarAppearsTransparent = on
+        matchStyleMask()
+        if on { clear(in: window.contentView) } else { restore() }
+    }
+
+    /// Gives the window the full-size content view while the glass is on, and takes it away
+    /// while off. In full screen the frame is the screen's, for AppKit to manage and put back, so
+    /// the change waits until the window has left full screen and calls this again.
+    func matchStyleMask() {
+        guard !window.styleMask.contains(.fullScreen),
+            window.styleMask.contains(.fullSizeContentView) != isOn
+        else { return }
         // A change of the style mask keeps the content's size, so the frame shrinks or grows by
         // the toolbar, and the splits share that out, a fraction of a point to each pane. Both
         // are put back as they were (ADR 0084).
         let frame = window.frame
         let dividers = window.contentView.map(DividerPositions.init) ?? DividerPositions()
-        if on {
+        if isOn {
             window.styleMask.insert(.fullSizeContentView)
-            clear(in: window.contentView)
         } else {
             window.styleMask.remove(.fullSizeContentView)
-            restore()
         }
         window.setFrame(frame, display: false)
         window.contentView?.layoutSubtreeIfNeeded()
