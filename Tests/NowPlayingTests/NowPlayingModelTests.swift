@@ -111,15 +111,14 @@ private func update(
     let every = TitleToken.allCases.map(\.placeholder).joined(separator: "|")
     #expect(
         model.windowTitle(WindowTitle(every))
-            == "Come Together|The Beatles|Abbey Road|||Rock|1969|1|1|96 kHz 24-bit FLAC")
+            == "Come Together|The Beatles|Abbey Road|Rock|1969|1|1|96 kHz 24-bit FLAC")
     #expect(model.windowTitle(WindowTitle("Now: {album}")) == "Now: Abbey Road")
-    // A missing first or last field leaves no dash at the end.
+    // A missing first or last field takes the separator beside it.
     current.artist = nil
     model.libraryChanged()
     #expect(model.windowTitle(.default) == "Come Together")
     #expect(model.windowTitle(WindowTitle("{artist} — {title}")) == "Come Together")
     #expect(model.windowTitle(WindowTitle("{composer}")) == nil)
-    #expect(model.windowTitle(WindowTitle("")) == nil)
     model.apply(update(.stopped, current: nil))
     #expect(model.windowTitle(.default) == nil)
 }

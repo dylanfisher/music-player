@@ -49,10 +49,14 @@ with a help line each: title, artist, album, album artist, composer, genre, year
 disc number, and the file's format. Their names follow the track table's columns. The default
 is `{title} — {artist}`. Braces hold only a token, so an unknown name, `{}` or a stray brace is
 the value's problem, refused at load and in Settings like any other, with every token in the
-message. NowPlaying fills the template from the playing track; separators (spaces, dashes,
-bars, dots, colons, slashes, commas) are trimmed from the ends, so a track without an artist is
-titled "Song", not "Song —". With nothing playing, or with every named field empty, the window
-takes the app's name. The title updates on a track change, a rescan of its tags and a change of
+message; an empty template is refused too, rather than meaning the app's name. NowPlaying fills
+the template from the playing track, each field exactly as tagged, so a title ending in a comma
+or a colon keeps it. Text between two tokens shows only when the token before it has a value and
+a later one does: a run of empty fields keeps the one separator after the last field shown, so
+`{title} — {artist} — {album}` without an artist is "T — Album", and `{artist} ({year})` without
+a year is "A". Text before the first token shows only when that token has a value, and text
+after the last only when that one does. With nothing playing, or with every named field empty,
+the window takes the app's name. The title updates on a track change, a rescan of its tags and a change of
 the setting. Settings ▸ Appearance shows a text field and a help button whose tooltip and
 popover list the tokens, from the setting's kind, a new `SettingKind.template`. The window's
 title shows over the expanded toolbar with the glass on and off; the glass makes the title bar

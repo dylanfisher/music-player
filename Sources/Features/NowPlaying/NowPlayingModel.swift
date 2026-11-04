@@ -91,20 +91,11 @@ public final class NowPlayingModel {
         }
     }
 
-    /// What separates a template's fields, trimmed from the ends of its title so a missing
-    /// first or last field leaves no dangling dash.
-    static let titleSeparators = CharacterSet.whitespaces.union(.init(charactersIn: "—–-|·:/,"))
-
     /// The window's title, `template` filled from the current track: nil with nothing playing,
     /// or when the fields it names are all empty, for the app's name instead.
     func windowTitle(_ template: WindowTitle) -> String? {
         guard currentURL != nil else { return nil }
-        let title = template.parts.map { part in
-            switch part {
-            case .text(let text): text
-            case .token(let token): value(of: token) ?? ""
-            }
-        }.joined().trimmingCharacters(in: Self.titleSeparators)
+        let title = template.fill(value(of:))
         return title.isEmpty ? nil : title
     }
 
