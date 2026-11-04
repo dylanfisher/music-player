@@ -3854,7 +3854,7 @@ sits left of the title by half the sidebar's width.
 
 ### 37. Toolbar and status bar builders
 
-**In progress: 37a done, 37b next.** Builds on 36. Reverses ADR 0072's rejected "free-form status bar
+**Done; owner check pending.** Builds on 36. Reverses ADR 0072's rejected "free-form status bar
 editor" and "now-playing parts as toolbar items", so it needs a new ADR that supersedes those
 parts.
 
@@ -3949,6 +3949,17 @@ Implementation plan, part 37b (37.3 and 37.4; ADR 0085 amended, superseding 0072
   default set, labels, every item's drawing, a saved toolbar from before; a layout change
   resizes the item. `--snapshot` at 1440x900 short and tall, glass on and off, the sheet and
   the builder; the live resize bench by name; `./scripts/bundle release`.
+
+Result, part 37b: shipped 37.3 and 37.4 (ADR 0085 amended, superseding 0072's rejected
+now-playing toolbar parts). `CenteredRow` and `StatusColumn` moved into `Sources/Core/BarView`,
+the one Core module allowed AppKit, which `scripts/arch.swift` now enforces. The toolbar status
+is laid out by its own builder from `appearance.headerStatusLayout`, whose default matches the
+phase 35 header frame for frame. Customize Toolbar offers Controls, Volume, Status, Search,
+Shuffle, Repeat, Output, Flexible Space and Space, with the default set asked for; saved toolbars
+restore whole, and the status caps at 560 pt only while a flexible space shares the toolbar. One
+review, a fix round (preview height and wording per builder, the cap, the import rule) and a
+re-review. `./scripts/check` and `./scripts/bundle release` pass; live resize p95 31.3 ms against
+35 ms. The owner check below stays pending.
 
 Still open from the mbp2026 test run, for later: the manual checklist (scrolling with art during
 a rescan, start time at the same and another rate, built-in and Bluetooth output, the UI pass,
