@@ -87,18 +87,33 @@ private func resolved(_ color: NSColor, in appearance: NSAppearance.Name) throws
 /// Glass turned on and off leaves the window as a fresh one draws it (ADR 0084). Before, the
 /// style mask changed with it: the frame shrank by the toolbar and grew back, and the splits
 /// shared that out, moving their dividers off the pixel grid.
-@MainActor @Test func glassOnThenOffLeavesTheWindowAsAFreshOne() async throws {
+/// In light and dark, with the user's alternating rows on and off.
+@MainActor @Test(arguments: [NSAppearance.Name.aqua, .darkAqua], [true, false])
+func glassOnThenOffLeavesTheWindowAsAFreshOne(
+    _ appearance: NSAppearance.Name, alternating: Bool
+) async throws {
+    func table(glass: Bool, alternating: Bool = alternating) -> TableAppearance {
+        TableAppearance(
+            columnLines: false, rowLines: false, alternatingRows: alternating,
+            rowHeight: .regular, artSize: .fit, glass: glass)
+    }
     let fresh = try await MainWindowFixture()
     defer { fresh.close() }
     let toggled = try await MainWindowFixture()
     defer { toggled.close() }
+    for fixture in [fresh, toggled] {
+        fixture.window.window.appearance = NSAppearance(named: appearance)
+        fixture.browser.setTableAppearance(table(glass: false))
+        fixture.window.window.displayIfNeeded()
+    }
     #expect(toggled.layout == fresh.layout)
-    for on in [true, false, true, false] {
+    // Alternating turned on and back as the user had it while on glass, so the translucent
+    // rows come and go there too.
+    let steps = [(true, true), (true, alternating), (false, alternating)]
+    for (on, rowsAlternate) in steps + steps {
         toggled.window.setGlass(on)
-        toggled.browser.setTableAppearance(
-            TableAppearance(
-                columnLines: false, rowLines: false, alternatingRows: true, rowHeight: .regular,
-                artSize: .fit, glass: on))
+        toggled.browser.setTableAppearance(table(glass: on, alternating: rowsAlternate))
+        toggled.window.window.displayIfNeeded()
         toggled.window.window.layoutIfNeeded()
         #expect(toggled.layout == fresh.layout, "glass \(on)")
     }
