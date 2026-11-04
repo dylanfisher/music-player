@@ -87,7 +87,9 @@ album's art cells**, the space beside a scaled-down image included.
 
 - With glass on, AppKit centers the title over the area beside the sidebar, so the bar's middle,
   centered on the whole window, sits left of the title by half the sidebar's width. A known
-  limitation, for phase 37's builder to address.
+  limitation, for phase 37's builder to address. Fixed in phase 37a
+  ([0085](0085-status-bar-builder.md)): with a full-size content view the middle centers on the
+  area beside the sidebar.
 - The window and live resize benches run with the bar over the rows, glass off, so on macOS 26
   and later the bar is an `NSGlassEffectView` over them. The bar over the rows costs the scroll
   benches no more than the bar below them: measured one after the other on the build Mac, the

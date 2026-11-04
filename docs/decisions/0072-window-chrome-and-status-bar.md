@@ -15,7 +15,9 @@ shortcut that hides the toolbar, sidebar and status bar and brings them back.
 
 ## Decision
 
-**Status bar parts.** `appearance.statusBarParts` lists the parts left to right: Art, Title and
+**Status bar parts.** (Superseded in phase 37a by [0085](0085-status-bar-builder.md): the
+parts go in columns, `appearance.statusBarLayout`, edited in a builder.)
+`appearance.statusBarParts` lists the parts left to right: Art, Title and
 Artist, Format and Bit Rate, Seek Bar and Track Totals, each at most once, since each is one
 view; a list naming one twice is refused like any invalid setting. `appearance.statusBarStyle`
 is Minimal, the track table header's height with the track on one line ("Title — Artist —
@@ -94,7 +96,7 @@ in the bar, which can't tell the old time from the new.
 ## Alternatives considered
 
 - **A free-form status bar editor dragging parts into a bar drawing**, like the toolbar sheet.
-  Rejected for now: five parts in one row are an order and a set, which a checklist edits in
+  Superseded by [0085](0085-status-bar-builder.md), the status bar builder. Rejected for now: five parts in one row are an order and a set, which a checklist edits in
   fewer steps, and the bar itself shows the result as it changes.
 - **The now-playing parts as toolbar items too.** Rejected: the toolbar keeps its Now Playing
   item for the detailed status; the parts are the status bar's.
