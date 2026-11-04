@@ -3,9 +3,10 @@
 - **Date:** 2026-11-03
 - **Status:** accepted
 - **Supersedes:** [0072](0072-window-chrome-and-status-bar.md)'s rejected "free-form status
-  bar editor" and its list of status bar parts. Phase 37b supersedes 0072's rejected "now-playing
-  parts as toolbar items".
-- **Amends:** [0084](0084-status-bar-on-glass.md) (the bar's middle)
+  bar editor" and its list of status bar parts, and (phase 37b) its rejected "now-playing parts
+  as toolbar items".
+- **Amends:** [0084](0084-status-bar-on-glass.md) (the bar's middle), [0055](0055-customizable-toolbar.md)
+  (the toolbar's default set and the status's width, phase 37b)
 
 ## Context
 
@@ -107,6 +108,66 @@ loses the keys. A layout's error lists its first three problems and a count of t
 
 The checklist control, whose only setting this was, is gone.
 
+**The toolbar's status (phase 37b).** The header's now-playing status is a second layout,
+`appearance.headerStatusLayout`, a `BarLayout<HeaderPart>` of the art, the title, the artist
+and album, the format line and the seek bar (phase 35's `SeekBox`, which keeps its window-drag
+and seek-hold behavior). Its row in Settings ▸ Appearance opens the same builder. The default
+is the detailed header as it was:
+
+```json
+"appearance.headerStatusLayout": {
+  "leading": [{ "parts": ["art"], "width": 48, "alignment": "leading", "stacks": false }],
+  "center": { "parts": ["title", "subtitle", "format", "seek"], "width": "flexible",
+              "alignment": "leading", "stacks": true },
+  "trailing": []
+}
+```
+
+A test builds the old stack by hand and checks that the default puts every part in the same
+place at the same height. `CenteredRow`, `StatusColumn` and `BarColumns`, which places a
+layout's columns in a row, are in the Core module BarView, so the status bar and the toolbar's
+status each lay out their own with the same code. The toolbar's row differs from the status
+bar's in two ways, both choices of the row: it **fills before it centers**, since a toolbar
+item isn't in the window's content view and the old header gave the text all the width beside
+the art. A flexible middle's pull to the row's width holds at 213, over the centering (212),
+which is over the text's compression resistance (210) and under the flexible columns' equal
+widths (215); a fixed middle centers on the item. And **an empty side keeps no spacing**, so
+the default's lines reach the item's edge as they did. Stacked columns always stack in the
+toolbar, which has no style; their lines sit 1 point apart and the seek bar 2 points under the
+line above it, as before, and the status is as tall as its tallest column. With five parts the
+tallest stack is the default's, so it needs no cap. The art is a 48-point square that doesn't
+stack, for the same reason as the status bar's.
+
+The builder is unchanged, so for this layout two of its words are the status bar's: the stack
+checkbox says "Stack in Tall Style", and the help says the dashed column centers on the window,
+where the toolbar's centers on its item.
+
+**The toolbar's items (phase 37b, superseding ADR 0072's rejected "now-playing parts as
+toolbar items").** Customize Toolbar offers Controls (previous, play and next), Volume, Status
+(this layout), Search, Shuffle, Repeat, Output (the Output menu, whose devices include AirPlay
+and UPnP renderers), Show Queue, Show Signal Path, Flexible Space and Space. There is no Mini
+Window item while there is no mini window. The default set is Swinsian's: Controls, flexible
+space, Volume, flexible space, Status, flexible space, Shuffle, flexible space, Search. The
+status grows to 560 points, about Swinsian's, rather than without limit, so the flexible
+spaces beside it keep a share and it sits near the toolbar's middle. Its drawing in the sheet
+is a status of the current layout with a placeholder track, drawn at 70%, since the sheet's
+default set row is about a button row tall. A layout change sets the status item's height
+again.
+
+The items stay in `state.json`'s `window.toolbarItems` (ADR 0055), not NSToolbar's autosave:
+the toolbar keeps `autosavesConfiguration` off, so nothing is read from user defaults. Every
+item keeps its raw value (Controls is still `transport`, the status still `status`), so a
+toolbar saved before this phase names only items the app has and comes back as it was, with no
+migration; one that names an item the app doesn't have is discarded with the rest of the state
+file, under the pre-release rule, and the toolbar falls back to the default set, so nothing
+crashes and no item is left empty. Only a saved toolbar keeps the old items; a toolbar never
+customized has nothing saved and gets the new default set.
+
+Every item is a standard control or one of the features' views, and none has a key
+equivalent of its own: the transport, shuffle, repeat, output and the toggles are commands in
+the menus, which keep their key equivalents, and the Search field keeps its text-editing chords
+through the window's key monitor as before.
+
 ## Alternatives considered
 
 - **A flat list of columns with one marked as the center.** Rejected: two marked, or none, would
@@ -121,9 +182,11 @@ The checklist control, whose only setting this was, is gone.
 
 ## Consequences
 
-- Phase 37b's toolbar status needs the column views outside LibraryBrowser, since NowPlaying
-  can't import it; `StatusColumn` and `CenteredRow` depend only on AppKit and Settings, so they
-  move down a tier then.
+- The column views are in the Core module BarView, the only Core module that imports AppKit,
+  since NowPlaying can't import LibraryBrowser and they depend only on AppKit and Settings.
+- With the toolbar's middle filling before it centers, a flexible center beside fixed sides
+  is drawn by the builder's preview as the toolbar lays it out, and differs from the status bar,
+  which keeps it centered on the window.
 - The preview's arithmetic gives every flexible column a share and lets the sides reach the
   center; the bar's constraints make the flexible widths exactly equal. The two can differ by a
   few points when a flexible center and a flexible side meet.

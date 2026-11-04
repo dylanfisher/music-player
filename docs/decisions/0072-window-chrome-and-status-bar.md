@@ -98,7 +98,9 @@ in the bar, which can't tell the old time from the new.
 - **A free-form status bar editor dragging parts into a bar drawing**, like the toolbar sheet.
   Superseded by [0085](0085-status-bar-builder.md), the status bar builder. Rejected for now: five parts in one row are an order and a set, which a checklist edits in
   fewer steps, and the bar itself shows the result as it changes.
-- **The now-playing parts as toolbar items too.** Rejected: the toolbar keeps its Now Playing
+- **The now-playing parts as toolbar items too.** Superseded in phase 37b by
+  [0085](0085-status-bar-builder.md): the toolbar's status is laid out from its parts in the
+  same builder. Rejected: the toolbar keeps its Now Playing
   item for the detailed status; the parts are the status bar's.
 - **Translucent status bar by default, behind the window.** Rejected: over a light or busy
   desktop the bar stops matching the toolbar's gray, which is what the owner asked for first.

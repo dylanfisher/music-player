@@ -3920,7 +3920,6 @@ value in any setting; all fixed and tested, and a re-review's two leftovers fixe
 `./scripts/check` and `./scripts/bundle release` pass; live resize p95 30.5 ms against 35 ms.
 Part 37b (37.3, 37.4) and the owner check follow.
 
-
 Implementation plan, part 37b (37.3 and 37.4; ADR 0085 amended, superseding 0072's rejected
 "now-playing parts as toolbar items"):
 - BarView, a new Core module (AppKit and Settings): `CenteredRow` and `StatusColumn` move out

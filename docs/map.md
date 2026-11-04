@@ -40,7 +40,7 @@ the dependency direction.
 | Tier | Path | What belongs here | May import from |
 |---|---|---|---|
 | **primitives** | `Sources/Primitives` | Portable units with no knowledge of music or this app: ring buffer, SQLite wrapper, HTTP server, SSDP, key chords. No settings reads. System frameworks are fine, AppKit included, in a file of its own (`<Type>+AppKit.swift`) so the rest of the unit stays testable without a window. | nothing in this table |
-| **core** | `Sources/Core` | The domain: library index and scanner, tag reading, decoders, DSD/DoP, outputs (CoreAudio HAL device, UPnP renderer), settings, logging. | primitives, other core modules |
+| **core** | `Sources/Core` | The domain: library index and scanner, tag reading, decoders, DSD/DoP, outputs (CoreAudio HAL device, UPnP renderer), settings, logging, and views two features lay out from a setting (AppKit, in a module of their own). | primitives, other core modules |
 | **features** | `Sources/Features` | User-facing slices: library browser, now playing, settings window, and later remote control. | core, primitives |
 | **app** | `Sources/App` | The composition root: `main`, app delegate, menus. Wires features together; holds no logic of its own. A second executable here, the `music-player` command line, ships in the bundle beside the app. | features, core, primitives |
 | **tools** | `Sources/Tools` | Development tooling that never ships in the app: the fixture generator, test stand-ins such as a null audio device, and benchmarks. | tools, features, core, primitives |
