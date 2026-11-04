@@ -138,9 +138,13 @@ line above it, as before, and the status is as tall as its tallest column. With 
 tallest stack is the default's, so it needs no cap. The art is a 48-point square that doesn't
 stack, for the same reason as the status bar's.
 
-The builder is unchanged, so for this layout two of its words are the status bar's: the stack
-checkbox says "Stack in Tall Style", and the help says the dashed column centers on the window,
-where the toolbar's centers on its item.
+The builder opens on either layout the same way; what differs between the two bars comes with
+the setting's kind (`SettingKind.Bar`, from the part type): the stacking checkbox's title
+("Stack in Tall Style" for the status bar, "Stack Parts" for the toolbar's status, which
+always stacks), a sentence on what the dashed center column does (centered on the window; or
+filling the width beside the others when flexible and centered on the status when fixed), and
+how tall the preview grows for a stack (the tall style's 80 points for the status bar; no cap
+for the toolbar's status, whose tallest stack is its four lines, all shown).
 
 **The toolbar's items (phase 37b, superseding ADR 0072's rejected "now-playing parts as
 toolbar items").** Customize Toolbar offers Controls (previous, play and next), Volume, Status
@@ -148,8 +152,10 @@ toolbar items").** Customize Toolbar offers Controls (previous, play and next), 
 and UPnP renderers), Show Queue, Show Signal Path, Flexible Space and Space. There is no Mini
 Window item while there is no mini window. The default set is Swinsian's: Controls, flexible
 space, Volume, flexible space, Status, flexible space, Shuffle, flexible space, Search. The
-status grows to 560 points, about Swinsian's, rather than without limit, so the flexible
-spaces beside it keep a share and it sits near the toolbar's middle. Its drawing in the sheet
+status grows to 560 points, about Swinsian's, while the toolbar holds a flexible space, so the
+spaces beside it keep a share and it sits near the toolbar's middle; with no flexible space, as
+in a toolbar saved before this phase, it takes all the room the others leave, as it did. Adding
+or removing a space sizes it again. Its drawing in the sheet
 is a status of the current layout with a placeholder track, drawn at 70%, since the sheet's
 default set row is about a button row tall. A layout change sets the status item's height
 again.
@@ -157,8 +163,8 @@ again.
 The items stay in `state.json`'s `window.toolbarItems` (ADR 0055), not NSToolbar's autosave:
 the toolbar keeps `autosavesConfiguration` off, so nothing is read from user defaults. Every
 item keeps its raw value (Controls is still `transport`, the status still `status`), so a
-toolbar saved before this phase names only items the app has and comes back as it was, with no
-migration; one that names an item the app doesn't have is discarded with the rest of the state
+toolbar saved before this phase names only items the app has and comes back with the same
+items, the status filling the free width as before, with no migration; one that names an item the app doesn't have is discarded with the rest of the state
 file, under the pre-release rule, and the toolbar falls back to the default set, so nothing
 crashes and no item is left empty. Only a saved toolbar keeps the old items; a toolbar never
 customized has nothing saved and gets the new default set.
@@ -182,8 +188,11 @@ through the window's key monitor as before.
 
 ## Consequences
 
-- The column views are in the Core module BarView, the only Core module that imports AppKit,
-  since NowPlaying can't import LibraryBrowser and they depend only on AppKit and Settings.
+- The column views are in the Core module BarView, since NowPlaying can't import
+  LibraryBrowser and they depend only on AppKit and Settings. That changes the Core tier in
+  docs/map.md: Core may hold views two features lay out from a setting, in a module of their
+  own. BarView is the only Core module that imports AppKit, and `scripts/arch.swift` fails an
+  `import AppKit` in any other.
 - With the toolbar's middle filling before it centers, a flexible center beside fixed sides
   is drawn by the builder's preview as the toolbar lays it out, and differs from the status bar,
   which keeps it centered on the window.
