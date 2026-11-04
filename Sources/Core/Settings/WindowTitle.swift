@@ -46,7 +46,38 @@ public struct WindowTitle: SettingValue {
         var message: String
     }
 
+    /// The template with each token's value, fields as they are. Text between two tokens shows
+    /// only when the token before it has a value and one after it does, so a run of empty
+    /// fields leaves the one separator after the last field shown; text before the first token
+    /// shows only when that token has a value, and text after the last only when that one does.
+    public func fill(_ value: (TitleToken) -> String?) -> String {
+        let values: [String?] = parts.map { part in
+            guard case .token(let token) = part else { return nil }
+            return value(token) ?? ""
+        }
+        func hasValue(_ index: Int) -> Bool { values[index]?.isEmpty == false }
+        let tokens = parts.indices.filter { values[$0] != nil }
+        return parts.indices.map { index -> String in
+            guard case .text(let text) = parts[index] else { return values[index] ?? "" }
+            let before = tokens.last { $0 < index }
+            let after = tokens.filter { $0 > index }
+            let shows =
+                switch (before, after.first) {
+                case (nil, nil): true
+                case (nil, let next?): hasValue(next)
+                case (let previous?, nil): hasValue(previous)
+                case (let previous?, _): hasValue(previous) && after.contains(where: hasValue)
+                }
+            return shows ? text : ""
+        }.joined()
+    }
+
     private static func parse(_ template: String) -> Result<[Part], Problem> {
+        guard !template.isEmpty else {
+            return .failure(
+                Problem(
+                    message: "empty; write the window's title, such as \(Self.default.template)"))
+        }
         var parts: [Part] = []
         var rest = Substring(template)
         while !rest.isEmpty {
