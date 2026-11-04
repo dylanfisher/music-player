@@ -81,8 +81,11 @@ public final class BrowserModel {
     }
 
     /// No source, panes or search, grouped as the setting says.
-    private var everything: TrackFilter {
-        TrackFilter(groupByAlbumArtist: pending.groupByAlbumArtist)
+    private var everything: TrackFilter { Self.everything(like: pending) }
+
+    /// No source, panes or search, grouped as `filter` is.
+    private static func everything(like filter: TrackFilter) -> TrackFilter {
+        TrackFilter(groupByAlbumArtist: filter.groupByAlbumArtist)
     }
 
     /// Whether the table shows, or is about to show, every track: no source, pane or search
@@ -90,7 +93,7 @@ public final class BrowserModel {
     var showsEverything: Bool { pending == everything }
 
     private static func isEverything(_ filter: TrackFilter) -> Bool {
-        filter == TrackFilter(groupByAlbumArtist: filter.groupByAlbumArtist)
+        filter == everything(like: filter)
     }
 
     /// Follows a change of `library.groupByAlbumArtist`: the Artist pane lists the other kind
