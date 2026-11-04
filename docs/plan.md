@@ -51,6 +51,7 @@ Set by the owner on 2026-10-30, 2026-10-31 and 2026-11-02:
    they're stored first (AGENTS.md).
 10. Phase 34 first, alone, because it guards the library. Then 33, 35 and 36 in parallel, and
     37 after 36. Added by the owner on 2026-11-03.
+11. Phase 38: 38a and 38c in parallel, then 38b. Added by the owner on 2026-11-03.
 
 ## Phase gate
 
@@ -4080,6 +4081,67 @@ where they were. `./scripts/check` passes; `--snapshot` with album lines in red,
 glass; trackpad scroll with art p95 10.4 ms, compact rows 11.4 ms, against 16 ms. ⌘, from the
 palette and the Settings window is checked in code only (neither takes the chord before the
 menu bar); the owner checks each item on both Macs.
+
+### 38. Owner feedback, 2026-11-03 evening
+
+The owner's feedback from trying phase 37. `s1205`, the toolbar status with nothing playing, is
+in `~/.claude/projects/-Users-dylanfisher-projects-music-player/feedback-2026-11-03/`. The other
+four screenshots were in a temporary folder and are described where they're used. 38a and 38c
+run in parallel worktrees; 38b follows 38c, since both change `BarLayout` and the builder.
+
+Answered, not a phase item: a reveal in Searcher opens a new window unless a window's focused
+pane already shows the folder. That's Searcher's `WorkspaceWindows.reveal`, answering the
+open-documents event every app's Show in Finder sends, so revealing in the active pane is a
+Searcher change.
+
+#### 38a. Track table and status bar
+
+- [ ] **38a.1 Row lines come back.** Double row lines are drawn again. They get darker, and Row
+      Lines off doesn't remove them all. Reproduce it first (Row Lines, Alternating Rows and
+      glass on and off, toggled several times), find what draws the second line, and fix that.
+- [ ] **38a.2 No lines over art.** Row lines show through the album art in the art column
+      (owner's screenshot: the lines run across a snow photo, row by row). The art covers the
+      lines of the rows it spans.
+- [ ] **38a.3 Status bar border.** The bottom status bar gets a top border of the same gray as
+      the table header's bottom border.
+- [ ] **38a.4 Status bar art margin.** The art's leading margin equals its top and bottom
+      margins, which makes it smaller than it is now.
+- [ ] **38a.5 Dismiss All.** The Library Problems window gets a Dismiss All button, which
+      dismisses every row, selected or not.
+
+#### 38b. Toolbar status
+
+- [ ] **38b.1 Empty when nothing plays.** With nothing playing, the toolbar status shows no art
+      box, no "Not Playing" and no seek bar (`s1205`), only the toolbar's own background. The item
+      keeps its size, so the toolbar doesn't move when a track starts.
+- [ ] **38b.2 A title line like Swinsian's.** A Title Line part shows one line built from a
+      template, `appearance.headerTitleFormat`, default `{title} by {artist} from {album}`,
+      as Swinsian's toolbar does ("FI3AC2384210 by Aleksi Perälä from Alithia E'"). Its fields
+      are those the header already shows. When a field is empty, the text before it goes too, so
+      no "from" is left hanging. An unknown field is a problem with the setting. The part is in
+      the tray, and the default layout doesn't change.
+- [ ] **38b.3 Order.** In Settings ▸ Appearance, Toolbar Status Layout comes before Status Bar
+      Layout.
+
+#### 38c. Layout builder
+
+- [ ] **38c.1 Colors.** The preview's columns and parts are too dark (`s4118`). They take the
+      settings window's own colors: the sunken box's background, and lighter part tokens.
+- [ ] **38c.2 Live drag.** While a part is dragged, the others move aside to show where it will
+      go, before it's dropped.
+- [ ] **38c.3 Move columns.** Each column has a handle that drags the whole column, parts and
+      settings, to another place, moving the others aside as in 38c.2.
+- [ ] **38c.4 Empty columns save.** A column with no parts is allowed. It takes its width and
+      draws nothing. "Drag a part into leading column 1 to save the layout" goes.
+- [ ] **38c.5 Plain errors.** Problems read in plain words, naming the column by where it is
+      ("the first column on the left"), without the file path or key in the builder. Art alone in
+      a stacked column isn't a problem; that's the error the owner hit, from the default header
+      layout with Stack Parts on. The builder refuses a change that would make a problem, and says
+      why in its hint line.
+- [ ] **38c.6 Reset to Default.** Each builder has a Reset to Default button that puts its
+      setting back to its default.
+
+Plan: written by the orchestrator under each part before it runs, as in phase 37.
 
 ## Later
 
