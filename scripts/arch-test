@@ -36,18 +36,18 @@ for line in 1 2 4; do
 done
 
 # The AppKit rule: a Core module that may import it, one that doesn't, and one that does at
-# lines 2 and 4.
+# lines 2, 4, 5 and 6.
 mkdir -p "$base/core/BarView" "$base/core/Library" "$base/bad-core/Library"
 printf 'import AppKit\n' > "$base/core/BarView/Row.swift"
-printf 'import Foundation\n// AppKit is named in a comment\n' > "$base/core/Library/Index.swift"
-printf 'import Foundation\nimport AppKit\nlet a = 1\n@preconcurrency import class AppKit.NSView\n' \
+printf 'import Foundation\n// AppKit is named in a comment\n// import AppKit\n' > "$base/core/Library/Index.swift"
+printf 'import Foundation\nimport AppKit\nlet a = 1\n@preconcurrency import class AppKit.NSView\nimport Cocoa\nimport AppKit;\n' \
   > "$base/bad-core/Library/Index.swift"
 if ! out=$(swift scripts/arch.swift --appkit-only "$base/core" 2>&1); then
   printf 'arch-test: the good Core tree failed:\n%s\n' "$out" >&2
   problems=$((problems + 1))
 fi
 out=$(swift scripts/arch.swift --appkit-only "$base/bad-core" 2>&1)
-for line in 2 4; do
+for line in 2 4 5 6; do
   printf '%s\n' "$out" | grep -q "Index.swift:$line: " ||
     { printf 'arch-test: no AppKit finding at Index.swift:%s in:\n%s\n' "$line" "$out" >&2; problems=$((problems + 1)); }
 done

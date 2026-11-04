@@ -32,11 +32,14 @@ func appKitProblems(root: String) -> [String] {
         for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: false)
             .enumerated()
         {
-            let words = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            // Code before a `//` comment, split on spaces, tabs and the `;` that can end it.
+            let code = line.components(separatedBy: "//")[0]
+            let words = code.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == ";" })
             guard let at = words.firstIndex(of: "import"), at + 1 < words.count else { continue }
-            // `import AppKit`, `import AppKit.NSView`, `import class AppKit.NSView`.
-            let named = words[(at + 1)...].contains {
-                $0 == "AppKit" || $0.hasPrefix("AppKit.")
+            // `import AppKit`, `import AppKit.NSView`, `import class AppKit.NSView`, and Cocoa,
+            // which re-exports AppKit.
+            let named = words[(at + 1)...].contains { word in
+                ["AppKit", "Cocoa"].contains { word == $0 || word.hasPrefix($0 + ".") }
             }
             if named {
                 problems.append(
