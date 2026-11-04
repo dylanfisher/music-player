@@ -235,6 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             status: nowPlaying.status, search: browser.searchField, dispatcher: dispatcher,
             items: state[\.toolbarItems])
         toolbar.statusLayout = layout.headerStatus
+        toolbar.titleFormat = layout.headerTitleFormat
         toolbar.itemsChanged = { items in
             saver.set(\.toolbarItems, items)
             if !items.contains(.search) { browser.clearSearch() }

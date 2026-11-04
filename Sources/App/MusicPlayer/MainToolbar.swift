@@ -27,6 +27,8 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     var setVolume: (_ decibels: Double, _ done: Bool) -> Void = { _, _ in }
     /// The now-playing status's layout, which its drawing in the customization sheet shows.
     var statusLayout = BarLayout.defaultHeaderStatus
+    /// The status's title line format, which its drawing in the customization sheet shows.
+    var titleFormat = TitleFormat.defaultHeaderTitle
     /// Called with the toolbar's items after the user adds, removes or moves one.
     var itemsChanged: ([ToolbarItem]) -> Void = { _ in }
     private let views: [ToolbarItem: NSView]
@@ -159,7 +161,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     func drawing(of item: ToolbarItem) -> NSView? {
         switch item {
         case .transport: return NowPlayingBar.transportDrawing()
-        case .status: return NowPlayingBar.statusDrawing(statusLayout)
+        case .status: return NowPlayingBar.statusDrawing(statusLayout, titleFormat: titleFormat)
         case .search:
             let field = NSSearchField()
             field.translatesAutoresizingMaskIntoConstraints = false

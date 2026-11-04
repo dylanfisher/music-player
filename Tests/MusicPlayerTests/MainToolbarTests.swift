@@ -235,3 +235,16 @@ func theStatusCentersOnTheWindow(_ fullSize: Bool) throws {
         }
     }
 }
+
+/// The sheet draws the status's title line with the owner's format, not the default.
+@MainActor @Test func theSheetsStatusDrawingUsesTheTitleFormat() throws {
+    let made = toolbar([.status], try dispatcher())
+    made.statusLayout = BarLayout(
+        center: BarColumn(parts: [.titleLine], width: .flexible, alignment: .leading))
+    made.titleFormat = TitleFormat("{artist}: {title}")
+    func texts(_ view: NSView) -> [String] {
+        ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(texts)
+    }
+    let drawing = try #require(made.drawing(of: .status))
+    #expect(texts(drawing).contains("The Artist: Song Title"), "\(texts(drawing))")
+}

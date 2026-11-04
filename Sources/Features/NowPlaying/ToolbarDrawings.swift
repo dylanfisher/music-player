@@ -17,9 +17,11 @@ extension NowPlayingBar {
     }
 
     /// The now-playing status as the customization sheet shows it: `layout`'s parts with a
-    /// placeholder track and a seek bar part played, at the width the toolbar shows it at its
-    /// narrowest.
-    public static func statusDrawing(_ layout: BarLayout<HeaderPart>) -> NSView {
+    /// placeholder track, its title line as `titleFormat` writes it, and a seek bar part played,
+    /// at the width the toolbar shows it at its narrowest.
+    public static func statusDrawing(
+        _ layout: BarLayout<HeaderPart>, titleFormat: TitleFormat
+    ) -> NSView {
         guard
             let note = NSImage(
                 systemSymbolName: "music.quarternote.3", accessibilityDescription: nil)
@@ -30,7 +32,7 @@ extension NowPlayingBar {
         drawing.art.contentTintColor = .secondaryLabelColor
         let title = "Song Title"
         drawing.titleLabel.stringValue = title
-        drawing.titleLineLabel.stringValue = TitleFormat.defaultHeaderTitle.line { field in
+        drawing.titleLineLabel.stringValue = titleFormat.line { field in
             switch field {
             case .title: title
             case .artist: "The Artist"
