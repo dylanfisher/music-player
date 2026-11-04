@@ -6,7 +6,46 @@
 // Foundation stats the path to learn whether it is a directory, and on an SMB share that wait
 // blocks the calling thread for seconds. `--urls-only <root>` runs just that rule on another
 // tree, for scripts/arch-test.
+//
+// And it fails an `import AppKit` in a Core module other than those in `appKitCore`: Core is
+// the domain, testable without a window, except for the bars' column views (ADR 0085), which
+// two features share. `--appkit-only <core root>` runs just that rule, for scripts/arch-test.
 import Foundation
+
+/// The Core modules that may import AppKit.
+let appKitCore: Set<String> = ["BarView"]
+
+/// Where a Core module outside `appKitCore` imports AppKit, under `root`, the Core tier's folder.
+func appKitProblems(root: String) -> [String] {
+    var problems: [String] = []
+    let walk = FileManager.default.enumerator(atPath: root)
+    while let relative = walk?.nextObject() as? String {
+        guard relative.hasSuffix(".swift"),
+            let module = relative.split(separator: "/").first.map(String.init),
+            !appKitCore.contains(module)
+        else { continue }
+        let path = root + "/" + relative
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else {
+            problems.append("\(path): unreadable")
+            continue
+        }
+        for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: false)
+            .enumerated()
+        {
+            let words = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            guard let at = words.firstIndex(of: "import"), at + 1 < words.count else { continue }
+            // `import AppKit`, `import AppKit.NSView`, `import class AppKit.NSView`.
+            let named = words[(at + 1)...].contains {
+                $0 == "AppKit" || $0.hasPrefix("AppKit.")
+            }
+            if named {
+                problems.append(
+                    "\(path):\(index + 1): \(module) is Core and may not import AppKit")
+            }
+        }
+    }
+    return problems
+}
 
 /// Where in `text` a `fileURLWithPath` call has no `isDirectory:` argument, as 1-based lines.
 /// A call is the text up to the parenthesis that closes it; a bare `URL.init(fileURLWithPath:)`
@@ -70,6 +109,9 @@ let arguments = CommandLine.arguments
 if arguments.count == 3, arguments[1] == "--urls-only" {
     finish(statProblems(root: arguments[2]), "no fileURLWithPath stats a path")
 }
+if arguments.count == 3, arguments[1] == "--appkit-only" {
+    finish(appKitProblems(root: arguments[2]), "no Core module but BarView imports AppKit")
+}
 
 // Tier -> tiers it may depend on. Must match the Tiers table in docs/map.md.
 let allowed: [String: Set<String>] = [
@@ -122,4 +164,8 @@ for target in targets where target["type"] as? String != "test" {
 }
 
 problems += statProblems(root: "Sources")
-finish(problems, "\(tierOf.count) targets, dependency direction holds, no URL stats a path")
+problems += appKitProblems(root: "Sources/Core")
+finish(
+    problems,
+    "\(tierOf.count) targets, dependency direction holds, no URL stats a path, AppKit only in"
+        + " \(appKitCore.sorted().joined(separator: ", ")) of Core")
