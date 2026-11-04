@@ -142,6 +142,7 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
 /// it drags the window: the title bar, and with glass a full-size content view.
 @MainActor @Test func aMouseDownOnEitherSeekBoxNeverMovesTheWindow() throws {
     let bar = bar()
+    bar.apply(update(.trackStarted(index: 0), duration: 100))
     bar.status.frame = NSRect(x: 0, y: 0, width: 400, height: CGFloat(HeaderPart.artPoints))
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 600, height: 300),
@@ -196,4 +197,34 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     bar.windowTitle = WindowTitle("{format}: {title}")
     bar.apply(update(.stopped, current: nil, duration: nil))
     #expect(titles == ["Song", "44.1 kHz 16-bit FLAC: Song", nil])
+}
+
+/// With nothing playing the toolbar's status draws nothing, no art box, title or seek bar,
+/// and keeps its height, so the toolbar doesn't move when a track starts; the toolbar sets
+/// its width.
+@MainActor @Test func theToolbarsStatusIsEmptyWithNothingPlaying() throws {
+    let bar = bar()
+    let size = bar.status.fittingSize
+    bar.status.frame = NSRect(origin: .zero, size: NSSize(width: 400, height: size.height))
+    bar.status.layoutSubtreeIfNeeded()
+    #expect(!bar.header.showsParts)
+    #expect(bar.status.hitTest(NSPoint(x: 24, y: size.height / 2)) === bar.status)
+    bar.apply(update(.trackStarted(index: 0), duration: 100))
+    #expect(bar.header.showsParts && bar.status.fittingSize.height == size.height)
+    #expect(bar.header.titleLabel.stringValue == "Song")
+    bar.apply(update(.stopped, current: nil, duration: nil))
+    #expect(!bar.header.showsParts && bar.status.fittingSize.height == size.height)
+}
+
+/// What went wrong shows with nothing playing, in the format line.
+@MainActor @Test func aMessageShowsWithNothingPlaying() {
+    let failed = bar()
+    failed.apply(update(.failed(reason: "the device stopped"), current: nil, duration: nil))
+    #expect(failed.header.showsParts)
+    #expect(failed.header.formatLabel.stringValue == "Playback stopped: the device stopped")
+    let unavailable = bar()
+    unavailable.showUnavailable("No output device")
+    #expect(unavailable.header.showsParts)
+    unavailable.libraryChanged()
+    #expect(unavailable.header.showsParts)
 }

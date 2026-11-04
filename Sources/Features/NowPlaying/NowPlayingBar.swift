@@ -41,6 +41,8 @@ public final class NowPlayingBar: NSObject {
     private var pendingSeeks = 0
     /// Whether the engine is connected and an output opened.
     private var connected = false
+    /// Whether no output could be opened, which the format line says with nothing playing.
+    private var unavailable = false
     /// Whether any of the window shows. AppKit draws a window that's covered, so the bar stops
     /// its updates itself.
     private var windowShows = true
@@ -97,6 +99,7 @@ public final class NowPlayingBar: NSObject {
     /// Follows `engine` from now on.
     public func connect(_ engine: PlaybackEngine) {
         self.engine = engine
+        unavailable = false
         updates?.cancel()
         updates = Task { [weak self] in
             for await update in await engine.updates() {
@@ -116,6 +119,8 @@ public final class NowPlayingBar: NSObject {
     /// No output could be opened, so nothing can play. Says why in the format line.
     public func showUnavailable(_ reason: String) {
         setEnabled(false)
+        unavailable = true
+        header.showsParts = true
         header.formatLabel.stringValue = reason
         header.formatLabel.textColor = .systemRed
         statusBar.show(format: reason, color: .systemRed)
@@ -169,6 +174,8 @@ public final class NowPlayingBar: NSObject {
     }
 
     private func show() {
+        // A message says what went wrong even with nothing playing.
+        header.showsParts = model.currentURL != nil || model.message != nil || unavailable
         header.titleLabel.stringValue = model.title
         header.subtitleLabel.stringValue = model.subtitle
         header.formatLabel.stringValue = model.message ?? model.formatLine

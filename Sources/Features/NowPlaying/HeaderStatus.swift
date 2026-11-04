@@ -76,6 +76,14 @@ public final class HeaderStatus {
         apply(layout)
     }
 
+    /// Whether the status shows its parts. With nothing playing it shows none, only the
+    /// toolbar's background; the hidden row keeps its constraints, so the status keeps its size
+    /// and the toolbar doesn't move when a track starts.
+    var showsParts: Bool {
+        get { !row.isHidden }
+        set { row.isHidden = !newValue }
+    }
+
     /// The view that shows `part`.
     func view(for part: HeaderPart) -> NSView {
         switch part {
