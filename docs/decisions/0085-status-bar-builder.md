@@ -8,7 +8,8 @@
 - **Amends:** [0084](0084-status-bar-on-glass.md) (the bar's middle), [0055](0055-customizable-toolbar.md)
   (the toolbar's default set and the status's width, phase 37b)
 - **Amended:** phase 38c (empty columns, the art alone in a stacked column, plain problems, a
-  builder that refuses a problem, Reset to Default, live drags and column drags)
+  builder that refuses a problem, Reset to Default, live drags and column drags); phase 38b
+  (the toolbar's status empty with nothing playing, the Title Line part and its format)
 
 ## Context
 
@@ -200,6 +201,32 @@ choosing which side column becomes the center. A side column dragged past the ce
 middle goes to the other side, after each column there whose middle is left of the pointer, so
 the center can be crossed but never taken.
 
+**Nothing playing (phase 38b).** With nothing playing the toolbar's status shows none of its
+parts, no art box, title or seek bar, only the toolbar's background. It hides its row, which
+keeps its constraints, so the item keeps its height and the toolbar doesn't move when a track
+starts. The now-playing model's "Not Playing" title stays, since the dock menu, Now Playing
+info and the status bar read it. A message with nothing playing, such as no output device or
+a failure that stopped playback, shows the parts again, so the failure is never hidden. The
+sheet's drawing keeps its placeholder track.
+
+**The Title Line (phase 38b).** A `titleLine` part, "Title Line", shows one semibold line, as
+Swinsian's toolbar does ("FI3AC2384210 by Aleksi Perälä from Alithia E'"), built from
+`appearance.headerTitleFormat`, a `TitleFormat` in Settings whose default is
+`{title} by {artist} from {album}`. The fields are the title, the artist and the album, the
+text the status's other lines already show; the format line and the times are left out, since
+they have parts of their own and change as the track plays. An empty field goes with the text
+just before it, so a track with no artist reads "Song from Album", and the line is trimmed at
+both ends. Text before the first field and after the last stays. A field the format doesn't
+know, `{year}` say, or a `{` left open is a problem with the setting, which applies nothing and
+the banner shows, as for any setting (ADR 0082). The setting is a string, so Settings ▸
+Appearance gives it a text row like the receiver's address, with no code of its own. The part
+starts in the tray; the default layout is unchanged. It truncates at its tail, and its tooltip
+has the whole line.
+
+**Order (phase 38b).** Settings ▸ Appearance lists its rows in the schema's order, so the
+toolbar status's layout and title format come before the status bar's style and layout, as
+the toolbar is above the status bar in the window.
+
 ## Alternatives considered
 
 - **A flat list of columns with one marked as the center.** Rejected: two marked, or none, would
@@ -216,6 +243,12 @@ the center can be crossed but never taken.
   moving to the other side, and the center is easy enough to edit in place.
 - **Holding back a layout with an empty column (phase 37a).** Dropped in phase 38c: an empty
   column is a fixed or flexible gap, which the owner wants to save.
+- **Dropping "Not Playing" from the model (phase 38b).** Rejected: the dock menu, Now Playing
+  info and the status bar show it; only the toolbar's status is meant to be empty.
+- **A title line with every column the track table has (phase 38b).** Not now: the three fields
+  cover Swinsian's line, and each field added is one more name to keep in step with the table.
+- **Dropping the text after an empty field instead of before it.** Rejected: in
+  `{title} by {artist} from {album}` the word that belongs to a field comes before it.
 
 ## Consequences
 
