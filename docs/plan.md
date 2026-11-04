@@ -3854,7 +3854,7 @@ sits left of the title by half the sidebar's width.
 
 ### 37. Toolbar and status bar builders
 
-**Queued, not started.** Builds on 36. Reverses ADR 0072's rejected "free-form status bar
+**In progress: 37a done, 37b next.** Builds on 36. Reverses ADR 0072's rejected "free-form status bar
 editor" and "now-playing parts as toolbar items", so it needs a new ADR that supersedes those
 parts.
 
@@ -3908,6 +3908,17 @@ editor):
   the real window; tall stacks' height and its cap; no layout resizes the window; the builder
   model's operations, saves and keyboard moves. `--snapshot` at 1440x900, both styles, a few
   layouts and the builder; the live resize bench by name; `./scripts/bundle release`.
+
+Result, part 37a: shipped 37.1 and 37.2 (ADR 0085). `appearance.statusBarLayout` replaces
+`appearance.statusBarParts`, which is now reported as obsolete; the default reproduces the old
+bar. The builder opens from Settings ▸ Appearance with drag and drop, a live preview and keys,
+saves each edit as a patch, and goes read-only with the banner's wording while the config is
+blocked. Stacked columns grow the tall bar to 80 pt and clip past it. On glass the center column
+now sits under the title, fixing ADR 0084's limitation. Review found a crash on a reload that
+removed the selected part, a stale tall height, builder/file drift, and a crash on a `-1e400`
+value in any setting; all fixed and tested, and a re-review's two leftovers fixed.
+`./scripts/check` and `./scripts/bundle release` pass; live resize p95 30.5 ms against 35 ms.
+Part 37b (37.3, 37.4) and the owner check follow.
 
 Still open from the mbp2026 test run, for later: the manual checklist (scrolling with art during
 a rescan, start time at the same and another rate, built-in and Bluetooth output, the UI pass,
