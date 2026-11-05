@@ -645,7 +645,9 @@ private struct RetitledReads: ScanFileAccess {
     let edited = library.path(files[0])
     let gone = library.path(files[1])
     try FileManager.default.removeItem(atPath: gone)
-    var times = [timespec(tv_sec: 0, tv_nsec: Int(UTIME_OMIT)), timespec(tv_sec: 2_000_000_000, tv_nsec: 0)]
+    var times = [
+        timespec(tv_sec: 0, tv_nsec: Int(UTIME_OMIT)), timespec(tv_sec: 2_000_000_000, tv_nsec: 0),
+    ]
     #expect(utimensat(AT_FDCWD, edited, &times, 0) == 0)
     let scanner = LibraryScanner(
         databaseURL: library.databaseURL,

@@ -60,7 +60,7 @@ public final class TagEditing {
     private let writes = DispatchQueue(
         label: "\(bundleIdentifier).tag-writes", qos: .userInitiated)
     /// Writes and undos asked for and not yet finished.
-    public private(set) var pendingWrites = 0
+    private(set) var pendingWrites = 0
     /// Where a finished write's failures are shown, by the write's number.
     private var alertWindows: [Int: (action: String, window: NSWindow)] = [:]
     private var lastWrite = 0
@@ -78,8 +78,8 @@ public final class TagEditing {
         self.effects = effects
     }
 
-    public var isOpen: Bool { !editors.isEmpty }
-    public var isWriting: Bool { pendingWrites > 0 }
+    var isOpen: Bool { !editors.isEmpty }
+    var isWriting: Bool { pendingWrites > 0 }
 
     /// The info window the art commands act on: the key one, else the last opened.
     var active: TagEditorWindow? {

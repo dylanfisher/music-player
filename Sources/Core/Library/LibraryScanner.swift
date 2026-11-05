@@ -225,7 +225,7 @@ public struct LibraryScanner: Sendable {
                 ScanIssue(kind: .unreadable, path: path, detail: "\(error.localizedDescription)"))
         }
         guard let size = values.fileSize, let modified = values.contentModificationDate else {
-            return .issue(ScanIssue(kind: .unreadable, path: path, detail: "no size or mtime"))
+            return .issue(ScanIssue(kind: .unreadable, path: path, detail: noSizeOrMtime))
         }
         return .file(
             ScannedFile(

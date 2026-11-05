@@ -150,15 +150,17 @@ private func writeAndRescanRuns() throws -> (write: [Double], rescan: [Double]) 
     }
     guard let flac else { throw BenchError.expected("a fixture FLAC") }
     let directory = try emptyCacheDirectory("bench-tag-write")
-    let music = directory.appendingPathComponent("Music", isDirectory: true)
+    let music = directory.appendingPathComponent("music", isDirectory: true)
     try FileManager.default.createDirectory(at: music, withIntermediateDirectories: true)
     let path = music.appendingPathComponent("track.flac", isDirectory: false).path
-    try FileManager.default.copyItem(atPath: root.appendingPathComponent(flac.path).path, toPath: path)
+    try FileManager.default.copyItem(
+        atPath: root.appendingPathComponent(flac.path).path, toPath: path)
     let scanner = LibraryScanner(
-        databaseURL: directory.appendingPathComponent("library.sqlite", isDirectory: false))
+        databaseURL: libraryFileURL(in: directory))
     _ = try scanner.scan(WatchedFolder(path: music.path, kind: .local))
     let writer = TagWriter(
-        journal: TagUndoJournal(dataDirectory: directory.appendingPathComponent("data")))
+        journal: TagUndoJournal(
+            dataDirectory: directory.appendingPathComponent("undo", isDirectory: true)))
     var write: [Double] = []
     var rescan: [Double] = []
     for run in 0...editorRuns {
@@ -184,5 +186,5 @@ private func writeAndRescanRuns() throws -> (write: [Double], rescan: [Double]) 
 private func median(_ values: [Double]) -> Double { values.sorted()[values.count / 2] }
 
 private func runsNote(_ values: [Double]) -> String {
-    "each run: " + values.map { String(format: "%.1f ms", $0) }.joined(separator: ", ")
+    "runs: " + values.map { String(format: "%.1f ms", $0) }.joined(separator: ", ")
 }

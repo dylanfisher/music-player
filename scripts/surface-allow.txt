@@ -8,4 +8,4 @@ PaletteController.controlTextDidChange | NSControlTextEditingDelegate
 PaletteController.control | NSControlTextEditingDelegate
 RuleEditorSheet.controlTextDidChange | NSControlTextEditingDelegate
 SettingsWindowController.toolbarSelectableItemIdentifiers | NSToolbarDelegate
-TagEditorSheet.controlTextDidChange | NSControlTextEditingDelegate
+TagEditorWindow.controlTextDidChange | NSControlTextEditingDelegate

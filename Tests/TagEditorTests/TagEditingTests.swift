@@ -46,9 +46,10 @@ private func editable(_ path: String, title: String? = nil) -> EditableTrack {
     return EditableTrack(path: path, tags: tags, art: nil)
 }
 
-private typealias Read = @Sendable ([String], @escaping @Sendable () -> Bool) -> (
-    [EditableTrack], [String]
-)
+private typealias Read =
+    @Sendable ([String], @escaping @Sendable () -> Bool) -> (
+        [EditableTrack], [String]
+    )
 
 @MainActor
 private func makeEditing(

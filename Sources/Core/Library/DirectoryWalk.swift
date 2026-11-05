@@ -36,6 +36,9 @@ private let walkKeys: [URLResourceKey] = [
 ]
 private let walkKeySet = Set(walkKeys)
 
+/// What a file whose listing or stat gave no size or mtime is reported with.
+let noSizeOrMtime = "no size or mtime"
+
 /// Whether a subtree scan may start at `start`. It's checked like the directories the walk
 /// descends through, so changes inside an excluded folder don't get it indexed.
 func startIsIncluded(_ start: String, root: String, filter: FolderFilter) -> Bool {
@@ -91,7 +94,7 @@ func list(
             guard let size = values.fileSize, let modified = values.contentModificationDate
             else {
                 result.issues.append(
-                    ScanIssue(kind: .unreadable, path: path, detail: "no size or mtime"))
+                    ScanIssue(kind: .unreadable, path: path, detail: noSizeOrMtime))
                 continue
             }
             result.files.append(

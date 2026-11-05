@@ -38,7 +38,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSWindowDeleg
     /// Where the next window opens, so each one opens down and to the right of the last.
     private static var nextTopLeft: NSPoint?
 
-    package init(paths: [String]) {
+    init(paths: [String]) {
         precondition(!paths.isEmpty, "Get Info opens on at least one track")
         self.paths = paths
         window = NSWindow(
@@ -72,7 +72,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
     /// Shows the fields for `model`. A second call, after the files were read again, keeps what
     /// the user typed and the art they chose, and shows the rest as the files hold them now.
-    package func load(_ model: TagEditorModel) {
+    func load(_ model: TagEditorModel) {
         if var current = self.model {
             current.reread(model.tracks)
             self.model = current

@@ -34,7 +34,7 @@ public struct TagEditorModel: Equatable, Sendable {
     private(set) var typed: [TagEditField: String] = [:]
     public private(set) var art = Art.unchanged
 
-    package init(tracks: [EditableTrack]) {
+    init(tracks: [EditableTrack]) {
         precondition(!tracks.isEmpty, "the editor opens on at least one track")
         self.tracks = tracks
     }

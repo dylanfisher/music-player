@@ -312,8 +312,7 @@ public struct TagWriter: Sendable {
 
     /// The file at `path` opened once, with its tags as the reader reads them and its layout as
     /// the writer parses it, each through a reader of its own.
-    private func opened(_ path: String) throws(MetadataError) -> (FileSource, ParsedFile, TagFile)
-    {
+    private func opened(_ path: String) throws(MetadataError) -> (FileSource, ParsedFile, TagFile) {
         do throws(ParseFailure) {
             let source = try FileSource(path: path)
             return (source, try parse(ByteReader(source)), try TagFile(ByteReader(source)))

@@ -116,8 +116,7 @@ private let copyBytes = 4 * 1024 * 1024
 func writeTemp(
     _ segments: [Segment], from original: String, identity: FileIdentity,
     faults: WriteFaults = WriteFaults()
-) throws(TagWriteError) -> TempFile
-{
+) throws(TagWriteError) -> TempFile {
     let leftovers: [String]
     do {
         leftovers = try leftoverTemps(for: original)
