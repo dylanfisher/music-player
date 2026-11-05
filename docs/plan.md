@@ -4279,6 +4279,81 @@ hand with a mouse.
 
 Plan: written by the orchestrator under each part before it runs, as in phase 37.
 
+### 40. Owner feedback, 2026-11-04 evening
+
+The owner's feedback from trying phases 38 and 39. The two progress bar screenshots are in
+`~/.claude/projects/-Users-dylanfisher-projects-music-player/feedback-2026-11-04/`. The four
+parts run in parallel worktrees and rebase onto main in order a, b, c, d.
+
+Measured from the screenshots: the bar's track (231) and played part (120/170/235) already
+match Swinsian's. The box around them is what's darker: ours fills 234 on a 245 toolbar, a
+darker box; Swinsian's fills 250 on 242, a lighter one.
+
+#### 40a. Settings that don't apply
+
+- [ ] **40a.1 Row Line Color.** Choosing a color doesn't change the row lines.
+- [ ] **40a.2 Album Line Color.** Choosing a color doesn't change the album lines.
+- [ ] **40a.3 Default buttons.** The color rows' Default buttons do nothing.
+- [ ] **40a.4 Window title as you type.** The window title follows its setting as it's typed,
+      without pressing Return or leaving the field.
+
+Plan, part 40a: reproduce each in the running app and in a test first (choose a color through
+the well and the panel, press Default, type in the template field), find the cause, then fix
+it. 40a.4: a template row saves on each edit whose text parses; while the text doesn't parse
+(an open brace mid-typing), nothing is saved and the row says why. Tests: a color chosen in the
+well reaches the rows' drawn lines, Default sets null and the lines go back to the grid color,
+typing a template sets the window's title without ending the edit.
+
+#### 40b. Progress box and glass headers
+
+- [ ] **40b.1 A lighter progress box.** The box around the toolbar status's seek bar is lighter
+      than the toolbar, as Swinsian's is (250 on 242 in light), not darker; dark mode gets the
+      same relation.
+- [ ] **40b.2 Frosted glass headers.** On window glass the table headers are now fully
+      transparent. They get a frosted backdrop, blurring what scrolls under them, as Finder's do.
+
+Plan, part 40b: `SeekBox` fills white at an alpha that gives Swinsian's step over the toolbar
+(about 0.6 in light) and a light step in dark, with a faint border or none, checked against
+the screenshot by pixels. The glass header views put an `NSVisualEffectView` (header material,
+within window) behind their cells, and remove it when the glass goes. Tests: the box's pixels
+lighter than the toolbar in both appearances; the header's pixels neither opaque nor clear
+on glass, and the header back as it was after.
+
+#### 40c. Builder items in Customize Toolbar
+
+- [ ] **40c.1 Custom status items.** Customize Toolbar offers Custom Status 1, 2 and 3 beside
+      Status. Each is a now-playing bar with its own layout, built in the same builder from its
+      own row in Settings ▸ Appearance, and can go anywhere in the toolbar. AppKit shows each
+      custom item at most once, so there are numbered slots rather than one item added many
+      times.
+
+Plan, part 40c: an ADR amending 0055 and 0085. `ToolbarItem` gains three slots; one setting,
+`appearance.toolbarItemLayouts`, holds their three `BarLayout`s with the header's parts, each
+checked as the status's is. Each slot is its own `NowPlayingBar` with its own views, fed by
+the same model; its width follows its layout (fixed columns add up, a flexible one lets the
+item grow between the status's minimum and maximum). Only the Status stays centered. The
+customization sheet draws each slot from its layout. Tests: the slots in the allowed items and
+not the default set; a slot's layout drawn and saved; two slots and the status showing the
+same track at once; a bad layout refused.
+
+#### 40d. Undo and redo plays
+
+- [ ] **40d.1 One history for plays and places.** ⌘[ and ⌘] (Back and Forward) step through
+      one history whose steps are the sources visited and the tracks played, each kept with
+      the window's state at that moment: source, browse and search, selection and scroll. Back
+      over a play puts the previous track back, at the position it had when it was replaced,
+      playing if it was playing, and the window as it was. Forward redoes it. So an accidental
+      play is undone with ⌘[.
+
+Plan, part 40d: probe how `BrowserModel`'s history and `PlayCommand` record today. The history
+moves to one model of steps, a place or a play, each with the window state; a play started by
+Back or Forward isn't recorded again, and a new step after going back drops the steps ahead,
+as a browser does. Tracks advancing on their own at the end of a track are recorded too, so
+Back after an album has played on returns to the earlier track; decide in the probe whether
+those are steps of their own or fold into the play that started them, and record it in an ADR.
+Tests: play A, play B, ⌘[ plays A from where it stopped with the window as it was, ⌘] plays B
+again; a source change between them is a step of its own; a new play after Back drops Forward.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
