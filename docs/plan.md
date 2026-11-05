@@ -4556,6 +4556,45 @@ access conflict detected" on the old code.
 - [ ] **41b.6 Timeline columns.** The timeline shows the library's columns, with Played first,
       until the owner changes the timeline's own columns.
 
+Plan, part 41b:
+- Probe (done before this plan): Compact is `RowHeight.points` in `TableAppearance.swift`; its
+  text is the lists' 11 pt font, one line 14 pt tall, so a 16 pt row still holds it centered,
+  and the art's rows follow the row pitch. `MarkedRowView` draws every line from its background,
+  clipped out of the art column, and the art cells draw over the row's background, so a line
+  drawn there would go under the art wherever an album's art reaches its last row. The hover is
+  a subview of the table above the row views. The timeline's columns aren't stored anywhere:
+  `TimelineController` builds Played, Title, Artist, Album and Time in code, with no header menu.
+- 41b.1: Compact is 16 points. The test that the text fits each height already runs at Compact.
+- 41b.2: `AlbumArtCell` draws a line along its bottom, over its art, in the album line's color
+  where its row ends an album; the controller sets it with the row view's line, and on the row
+  above when the next page is read, as now. Row and column lines stay out of the art column.
+  The cell is inside its row view, so the hover still covers it. Tests: an album's last art cell
+  has the album line and draws it over its art; with only row lines it has none; the hover stays
+  the table's top subview, over the row that draws it.
+- 41b.3 and 41b.4 (one change): `TrackColumn.nowPlaying`, "Now Playing" in the header's menu,
+  an empty header, 20 points wide, not sortable, not in the default layout. Its cell shows `▶`
+  on the playing track's row and nothing elsewhere. The Title cell starts with `▶ ` on the
+  playing row only while the Now Playing column is hidden, so the mark shows once. A change of
+  the playing track, or showing or hiding the column, redraws those two columns' cells. Tests:
+  the mark follows the playing track in Title; with the column shown it moves there.
+- 41b.5: `appearance.playingRowColor`, "Playing Row Color", optional like the line colors and
+  after them in the schema, so the Appearance pane lists it after Album Line Color with its
+  Default button. Null keeps the light gray tint. `MarkedRowView.markTint` replaces the tint
+  when set; the bar at the row's edge stays. Test: the playing row's background takes the color,
+  and goes back to the gray with null.
+- 41b.6: one state key, `browser.timelineTable`, a `TimelineLayout` (Played's width and the
+  track columns after it), null by default. Null means the library's columns: Played, then the
+  track table's columns in their order and widths, without Album Art, Order and Now Playing,
+  which mean nothing for a play; it follows the track table's changes. The timeline gets the
+  header's column menu, moving and resizing; the first change the owner makes there (a column
+  shown or hidden, moved, or resized by its header) saves its columns, and from then the timeline
+  keeps them. A resize by the window's width isn't a change of the owner's. Played stays first.
+  Tests: the timeline shows the library's columns and follows them; after a change of its own
+  it reports its layout and stops following; a saved layout is shown; the setting refuses an
+  album art column, a duplicate and a bad width.
+- Order: this plan, then 41b.1, 41b.2, 41b.3 with 41b.4, 41b.5, 41b.6, each through the tests,
+  `./scripts/check` at the end, then the result.
+
 #### 41c. Navigation
 
 - [x] **41c.1 ⌘L to where it started.** Show Playing goes to the source the playing track was
