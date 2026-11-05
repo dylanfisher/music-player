@@ -4,7 +4,7 @@ import Settings
 
 private let logger = moduleLogger()
 
-/// Writes the play state to the config file (ADR 0092), which syncs, so it changes a few times
+/// Writes the play state to the config file (ADR 0095), which syncs, so it changes a few times
 /// an hour at most: a track starting, a pause or a source change asks for a write, which runs
 /// `delaySeconds` later and at least `intervalSeconds` after the last one, and reads the state
 /// as it is then. Playing on asks for nothing. Quitting writes at once.

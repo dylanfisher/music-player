@@ -4806,7 +4806,7 @@ this environment on `main` as well as here (it reads the screen); everything els
       track list's scroll. Kept in the config so it syncs to other Macs, in as few keys as it
       takes.
 
-Plan, part 41f (ADR 0092):
+Plan, part 41f (ADR 0095):
 - Probe (done before this plan): the window's source is `browser.source` in `state.json`, read
   by `WindowSettings` and passed to `LibraryBrowser.load`; `browser.columns` beside it keeps
   each column's grouping and selection by name. The state file is per Mac and never synced;
@@ -4853,7 +4853,7 @@ Plan, part 41f (ADR 0092):
 - Order: this plan, the engine's cue, shared names, the key, the browser, the app, the ADR and
   the result.
 
-Result, part 41f: shipped 41f.1 (ADR 0092). `playback.resume` in the config holds the track by
+Result, part 41f: shipped 41f.1 (ADR 0095). `playback.resume` in the config holds the track by
 its sync path (or absolute path for a folder stored by path), its seconds, the source it was
 played from, and the window's source, selected track and first visible track; `browser.source`
 left the state file. At launch the window shows the saved source with the selection and first

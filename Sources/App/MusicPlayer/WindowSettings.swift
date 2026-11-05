@@ -18,7 +18,7 @@ struct WindowSettings {
     var trackTable: TrackTableLayout
     var timelineTable: TimelineLayout?
     var browser: BrowserState
-    /// The play state saved at quit, whose source the window shows (ADR 0092).
+    /// The play state saved at quit, whose source the window shows (ADR 0095).
     var resume: ResumePoint
     var groupByAlbumArtist: Bool
     var tableAppearance: TableAppearance

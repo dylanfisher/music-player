@@ -63,7 +63,7 @@ public final class BrowserModel {
     /// The sources the sidebar showed and the plays from the browser, for Back and Forward.
     private(set) var history = StepHistory(start: WindowPlace(filter: TrackFilter()))
     /// The source the track of the play state saved at quit was played from, which stands for
-    /// a play's until the history has one (ADR 0092).
+    /// a play's until the history has one (ADR 0095).
     var resumedFrom: TrackFilter?
     /// The track table's selections, for Undo Selection and Redo Selection.
     private(set) var selections = SelectionHistory()

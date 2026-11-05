@@ -15,7 +15,7 @@ struct ResumedWindow {
     var top: Int64?
 }
 
-/// The play state the config file carries across quits and between Macs (ADR 0092). Each read
+/// The play state the config file carries across quits and between Macs (ADR 0095). Each read
 /// is a lookup or two in the main thread's index, which touches no music file.
 extension LibraryBrowser {
     /// Where playback and the window are, as the config file keeps them. `playing` is the

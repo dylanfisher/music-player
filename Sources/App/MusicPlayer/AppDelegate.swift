@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var trackLookup: ((String) throws -> TrackRow?)?
     private(set) var saver: LayoutSaver?
     /// The play state saved at quit, read at launch, and what saves it once that's put back
-    /// (ADR 0092).
+    /// (ADR 0095).
     private var launchResume = ResumePoint()
     private(set) var resumeSaver: ResumeSaver?
     /// Set once quitting has gone on, so the play state's wait replies once.
@@ -487,7 +487,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Playback
 
     /// Cues the track of the play state saved at quit, paused where it was, then starts saving
-    /// the play state (ADR 0092). Saving waits for the cue, so a save before it can't replace
+    /// the play state (ADR 0095). Saving waits for the cue, so a save before it can't replace
     /// the saved track with nothing.
     private func resumePlayback(_ settings: ConfigStore<AppSettings>) {
         guard let browser else { return }

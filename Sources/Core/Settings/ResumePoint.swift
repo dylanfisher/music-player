@@ -4,7 +4,7 @@ import Log
 private let logger = moduleLogger()
 
 /// Where playback and the window were at quit, which every Mac reading the config file puts
-/// back at launch, paused (ADR 0092). Tracks are shared names: a sync path, or an absolute path
+/// back at launch, paused (ADR 0095). Tracks are shared names: a sync path, or an absolute path
 /// for a folder stored by path. Sources are `BrowserSource` texts with a playlist named by its
 /// sync ID, null for the library. Nothing saved is null in the file.
 ///

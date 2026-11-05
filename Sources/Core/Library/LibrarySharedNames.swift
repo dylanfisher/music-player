@@ -6,7 +6,7 @@ import Settings
 private let logger = moduleLogger()
 
 /// Names for a track and a playlist that every Mac reads the same way, for the play state the
-/// config file carries between them (ADR 0092). A track under a folder stored by share is its
+/// config file carries between them (ADR 0095). A track under a folder stored by share is its
 /// sync path (ADR 0038), which each Mac maps to where it mounts the share; any other track is
 /// its absolute path, which starts with `/` and finds the track only on a Mac with the same
 /// path. A playlist is its sync ID.

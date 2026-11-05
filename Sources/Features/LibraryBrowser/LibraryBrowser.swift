@@ -368,7 +368,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Loads everything, selecting what `saved` names where it still exists. A play state
     /// saved at quit, `resume`, gives the source in place of `saved`'s, and its selected track
-    /// and first visible row (ADR 0092).
+    /// and first visible row (ADR 0095).
     public func load(_ saved: BrowserState, resume: ResumePoint? = nil) async {
         var saved = saved
         let resumed = resume.map(resumedWindow)

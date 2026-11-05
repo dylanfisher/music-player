@@ -1,4 +1,4 @@
-# 0092. The play state across quits, in the config file
+# 0095. The play state across quits, in the config file
 
 - **Date:** 2026-11-05
 - **Status:** accepted
