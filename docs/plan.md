@@ -5459,6 +5459,69 @@ hours; a Year in Review page is part of this phase; Stats is a sidebar source.
 Deferred: skip statistics by period (skips have no dates; no new table in this phase).
 Read-only: Stats writes nothing but a playlist the owner asks for.
 
+Plan, phase 43 (ADR 0102, amending 0099):
+- Probe (done before this plan): only `history` rows have dates, whole seconds since 1970, and
+  nothing indexes `played_at` (ADR 0022); `history_path (path_id)` is the one index. An import
+  adds to `plays.play_count` and no history row (ADR 0033), so the plays without dates are the
+  sum of `play_count` less the history rows. A path no longer in `files` keeps its last codec,
+  rate, length and title in `paths`. Measured with `sqlite3` on a copy of Bench's library of 1M
+  synthetic plays over the 43k fixture tracks (Apple Silicon): a period's plays per path with
+  SQLite's own plan take 0.62 to 0.72 s, since it walks `history_path` and looks up every row;
+  the same with `NOT INDEXED` (a scan of the table) 16 ms for a week, 23 ms for a year, 194 ms
+  for all time, where the plain plan reads the covering `history_path` in 22 ms; the period's
+  plays per hour 19 ms; every path's first play 240 ms. With an index on `history (played_at,
+  path_id)` the week takes 0.1 ms and the year 8 ms, and the index takes 16 MB, 55% more than
+  the history and its index now. The schema is checked by its SQL text per part
+  (`SchemaPart`): a change to `statsSchema` would rebuild the stats and discard the owner's
+  history, so an index, if one were needed, would be a part of its own, like `recorded`, whose
+  rebuild drops nothing. Decision for now: no index; Bench decides, against budgets set below.
+- Settings: `PlaySpan` (start and end seconds, half open) and `StatsPeriod` (`week`, `month`,
+  `year`, `year(n)`, `all`), whose span comes from `Calendar` (local time zone, the system's
+  first weekday). `BrowserSource.stats(period)`, saved as `stats:week` … `stats:2024`,
+  `stats:all`, and `BrowserSource.plays(span)`, the timeline of a span, saved as
+  `plays:<start>-<end>`. `window.statsHeight`, an added state key (default 380), the panel's
+  height while Stats shows, so dragging it taller leaves the browser columns as they were.
+- Library: `StatsReport`, built in Swift from two scans of the period (plays per path, joined
+  to `tracks` and `paths`; plays per hour, or per quarter hour in a time zone with an offset
+  that isn't whole hours) and the first play of every path: totals, approximate hours, distinct
+  tracks, artists, albums, the share of the library, plays not in the library, undated plays
+  for All Time, top 25 artists, albums, tracks and genres by plays and by hours, bars per day
+  (week, month), week (year) or month (all time), the weekday × hour grid, albums and artists
+  first played, and plays by codec and by rate group (CD quality up to 48 kHz, hi-res PCM,
+  DSD). Local days come from the zone's offset at each bucket; bars from `Calendar` intervals.
+  `StatsReader`, an actor on its own read-only connection, runs the scans and keeps every
+  path's first play until `PRAGMA data_version` says another connection wrote. Sources:
+  `.stats` lists the period's tracks, `.plays` throws as `.timeline` does; the timeline pages
+  and counts with an optional span.
+- LibraryBrowser: Stats after Timeline in the sidebar. `StatsModel` (no AppKit) loads a report
+  per period and ranking off the main thread, dropping a late one, and answers what a click
+  does. `StatsPanel` (`SourcePanel`): a header (Listening Stats, the period picker with a year
+  menu, Plays or Hours, Year in Review) over cards that flow as the health tiles do and
+  scroll: totals, plays over time (bars), the week's clock (grid), the four top lists, first
+  played, formats. A top artist or album shows it as Go to Item does, a genre filters, a track
+  selects it in the table below, a bar shows `.plays(span)`, each list's Save as Playlist makes
+  a manual playlist of its tracks played in the period. Year in Review is a window of its own
+  for one year, from the header or the command, built from the year's report.
+- Commands: `library.stats` (Show Listening Stats, argument `period`) and
+  `library.yearInReview` (Show Year in Review), in the File menu after Show Library Health and
+  so in the palette. `music-player stats [--period <period>] [--json]` runs the first, shows
+  Stats and prints the totals and top lists, or the report as JSON; `--period` and `--json`
+  go only with it (and `--json` with `status`). `--snapshot-of stats` and `review`.
+- Tests that fail without each part: period spans across a year boundary and the first
+  weekday; a play at 23:59 and one at 00:01 on two days; a DST day's hours; a 30-minute zone;
+  totals, hours, missing plays and undated plays; top lists by plays and hours; first played
+  across periods; formats; source texts round-trip and the old ones still decode; the `.stats`
+  source lists the period's tracks; the timeline of a span; the panel's cards show the report,
+  a bar's click shows its span's plays, an album row shows it as Go to Item, Save as Playlist
+  makes the list; the stats height is kept apart from the columns'; the command line parses
+  `--period` and `--json`; the router answers `stats` with text and JSON.
+- Bench: "stats: open Stats, 1M synthetic plays" (first plays and This Month's report) and
+  "stats: change the period, 1M synthetic plays" (each period in turn), p95; budgets set from
+  the first measurement with room for the old Mac.
+- Order: this plan; Settings; Library with its tests; Bench, and the index decision; the panel,
+  sidebar and model; navigation and playlists; Year in Review; commands and the command line;
+  snapshots; the ADR; `./scripts/check`; the result.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
