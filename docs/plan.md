@@ -4291,10 +4291,10 @@ darker box; Swinsian's fills 250 on 242, a lighter one.
 
 #### 40a. Settings that don't apply
 
-- [ ] **40a.1 Row Line Color.** Choosing a color doesn't change the row lines.
-- [ ] **40a.2 Album Line Color.** Choosing a color doesn't change the album lines.
-- [ ] **40a.3 Default buttons.** The color rows' Default buttons do nothing.
-- [ ] **40a.4 Window title as you type.** The window title follows its setting as it's typed,
+- [x] **40a.1 Row Line Color.** Choosing a color doesn't change the row lines.
+- [x] **40a.2 Album Line Color.** Choosing a color doesn't change the album lines.
+- [x] **40a.3 Default buttons.** The color rows' Default buttons do nothing.
+- [x] **40a.4 Window title as you type.** The window title follows its setting as it's typed,
       without pressing Return or leaving the field.
 
 Plan, part 40a:
@@ -4322,6 +4322,23 @@ Plan, part 40a:
   title and the Title Line; an open brace saves nothing and shows the problem; unchanged text
   calls no save. The title's following its setting is already tested.
 - Order: this plan, colors, templates, each through `./scripts/check`, then the result.
+
+Result, part 40a: shipped 40a.1 to 40a.4. Cause of 40a.1 to 40a.3: the color wells weren't
+continuous, and an `NSColorWell` like that takes the panel's color and shows it but sends no
+action, so no color was ever saved. The table's lines never changed, and Default stayed
+disabled because there was no saved color to clear. The wells are continuous now, and
+the pane saves a color once it has stayed the same for 0.25 s, so a drag in the panel writes
+the config file once per pause. Default cancels a save that hasn't run yet. A template row
+(Window Title and Toolbar Title Line, through the same code) saves on each change whose text
+parses and differs from what's saved. While the text doesn't parse, nothing is saved and a red
+line under the field says why. Leaving the field with such text puts back the saved template,
+as before, with the refusal in the pane's error line. `./scripts/check` passes; one earlier run
+failed `glassOnThenOffLeavesTheWindowAsAFreshOne` and two renderer tests, which pass on their own
+with and without these changes, and passed in the next runs. Checked by tests only, nothing on
+screen: the panel pick with the well active, Default, and typing in both template rows with
+the field still being edited. The rest of each chain, a changed setting reaching the rows'
+lines and the window title, was already tested. For the owner: pick a color in the panel and
+drag the opacity, press Default, and type a title template with an open brace on the way.
 
 #### 40b. Progress box and glass headers
 
