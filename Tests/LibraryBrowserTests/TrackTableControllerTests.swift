@@ -767,6 +767,40 @@ private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throw
     #expect(abs(gray.redComponent - gray.greenComponent) < 0.02 && gray.redComponent < 0.95)
 }
 
+@MainActor @Test func aDarkPlayingRowColorTurnsEveryColumnsTextWhite() async throws {
+    let (controller, _, rows) = try await artTable(artWidth: RowListController.rowHeight)
+    var layout = controller.layout
+    layout.columns += [.artist, .duration, .rating, .playCount].map {
+        ColumnLayout(column: $0, width: $0.defaultWidth)
+    }
+    controller.showColumns(layout)
+    let table = controller.table
+    table.appearance = NSAppearance(named: .aqua)
+    func appearance(_ color: HexColor?) -> TableAppearance {
+        TableAppearance(
+            columnLines: false, rowLines: false, albumLines: false, rowLineColor: nil,
+            albumLineColor: nil, playingRowColor: color, alternatingRows: false,
+            rowHeight: .regular, artSize: .fit, glass: false)
+    }
+    func colors(_ row: Int) -> [NSColor] {
+        (0..<table.numberOfColumns).compactMap {
+            (table.view(atColumn: $0, row: row, makeIfNecessary: true) as? TextCell)?.drawnColor
+        }
+    }
+    controller.apply(appearance(HexColor("#1A2B5C")))
+    controller.playingPath = rows[1].path
+    _ = table.rowView(atRow: 1, makeIfNecessary: true)
+    #expect(colors(1).count == 5)
+    #expect(colors(1).allSatisfy { $0 == .alternateSelectedControlTextColor })
+    #expect(colors(0).allSatisfy { $0 != .alternateSelectedControlTextColor })
+    // The next track playing takes the white text along.
+    controller.playingPath = rows[0].path
+    #expect(colors(0).allSatisfy { $0 == .alternateSelectedControlTextColor })
+    #expect(colors(1).allSatisfy { $0 != .alternateSelectedControlTextColor })
+    controller.apply(appearance(HexColor("#FFE680")))
+    #expect(colors(0).allSatisfy { $0 != .alternateSelectedControlTextColor })
+}
+
 @MainActor @Test func hoveringArtShowsItWholeAtTheColumnsWidth() async throws {
     let (controller, _, rows) = try await artTable(artWidth: 3 * RowListController.rowHeight)
     let table = controller.table

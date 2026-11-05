@@ -1,3 +1,5 @@
+import Foundation
+
 /// 312.4 -> "5:12", 3725 -> "1:02:05".
 public func clock(_ seconds: Double) -> String {
     let whole = Int(max(0, seconds))
@@ -65,4 +67,15 @@ public enum SymbolName {
     public static let playlist = "music.note.list"
     /// Something the owner should look at: a problem count, an unreadable playlist.
     public static let problem = "exclamationmark.triangle"
+}
+
+/// Whether white text has more contrast than black on an opaque sRGB color, each component
+/// from 0 to 1, by WCAG 2's relative luminance: white wins below a luminance of about 0.18.
+func prefersWhiteText(red: Double, green: Double, blue: Double) -> Bool {
+    func linear(_ component: Double) -> Double {
+        component <= 0.04045 ? component / 12.92 : pow((component + 0.055) / 1.055, 2.4)
+    }
+    let luminance = 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+    // Contrast is (lighter + 0.05) / (darker + 0.05); white's luminance is 1, black's 0.
+    return 1.05 / (luminance + 0.05) > (luminance + 0.05) / 0.05
 }

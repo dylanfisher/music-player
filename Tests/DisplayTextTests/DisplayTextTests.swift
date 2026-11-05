@@ -54,3 +54,39 @@ func formatsKilohertz(hertz: Double, expected: String) {
     #expect(abs(rgb.redComponent - rgb.blueComponent) < 0.03)
     #expect(abs(rgb.greenComponent - rgb.blueComponent) < 0.03)
 }
+
+@Test func whiteTextIsForColorsDarkerThanWCAGsMiddle() {
+    #expect(prefersWhiteText(red: 0, green: 0, blue: 0))
+    #expect(!prefersWhiteText(red: 1, green: 1, blue: 1))
+    // #757575 and #777777 sit either side of the luminance where the contrasts are equal.
+    #expect(prefersWhiteText(red: 117 / 255, green: 117 / 255, blue: 117 / 255))
+    #expect(!prefersWhiteText(red: 119 / 255, green: 119 / 255, blue: 119 / 255))
+    #expect(prefersWhiteText(red: 0, green: 0, blue: 1))
+    #expect(!prefersWhiteText(red: 1, green: 1, blue: 0))
+}
+
+@MainActor @Test func aDarkMarkTintEmphasizesTheCellsUnlessTheRowIsSelected() {
+    let row = MarkedRowView(frame: NSRect(x: 0, y: 0, width: 40, height: 18))
+    row.appearance = NSAppearance(named: .aqua)
+    let cell = NSTableCellView(frame: row.bounds)
+    row.addSubview(cell)
+    let navy = NSColor(srgbRed: 0.1, green: 0.1, blue: 0.4, alpha: 1)
+    row.isMarked = true
+    #expect(cell.backgroundStyle == .normal, "the gray tint keeps the text as it is")
+    row.markTint = navy
+    #expect(row.interiorBackgroundStyle == .emphasized)
+    #expect(cell.backgroundStyle == .emphasized)
+    // A faint dark color over the white background is light.
+    row.markTint = navy.withAlphaComponent(0.3)
+    #expect(cell.backgroundStyle == .normal)
+    row.markTint = NSColor(srgbRed: 1, green: 0.9, blue: 0.5, alpha: 1)
+    #expect(cell.backgroundStyle == .normal)
+    row.markTint = navy
+    row.isSelected = true
+    #expect(row.interiorBackgroundStyle != .emphasized, "a selection without the keys")
+    #expect(cell.backgroundStyle != .emphasized)
+    row.isSelected = false
+    #expect(cell.backgroundStyle == .emphasized)
+    row.isMarked = false
+    #expect(cell.backgroundStyle == .normal)
+}

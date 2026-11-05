@@ -25,11 +25,69 @@ public final class MarkedRowView: NSTableRowView {
     private static let identifier = NSUserInterfaceItemIdentifier("MarkedRowView")
 
     public var isMarked = false {
-        didSet { if isMarked != oldValue { needsDisplay = true } }
+        didSet {
+            guard isMarked != oldValue else { return }
+            needsDisplay = true
+            restyleCells()
+        }
     }
-    /// The marked row's fill in place of `tint`; nil for `tint`.
+    /// The marked row's fill in place of `tint`; nil for `tint`. One dark enough for white text
+    /// gives the cells the emphasized style, as a selection does, so their text turns white.
     public var markTint: NSColor? {
-        didSet { if markTint != oldValue { needsDisplay = true } }
+        didSet {
+            guard markTint != oldValue else { return }
+            needsDisplay = true
+            restyleCells()
+        }
+    }
+
+    /// The cells' style: emphasized on a marked row whose `markTint` is dark, unless the row is
+    /// selected, whose style the selection decides.
+    override public var interiorBackgroundStyle: NSView.BackgroundStyle {
+        isMarked && !isSelected && markTintIsDark ? .emphasized : super.interiorBackgroundStyle
+    }
+
+    /// Whether white text reads better than black on `markTint`, laid over the controls'
+    /// background in the row's appearance, which shows through a tint that isn't opaque.
+    var markTintIsDark: Bool {
+        guard let markTint else { return false }
+        var dark = false
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            guard let tint = markTint.usingColorSpace(.sRGB),
+                let base = NSColor.controlBackgroundColor.usingColorSpace(.sRGB)
+            else { return }
+            let alpha = tint.alphaComponent
+            func over(_ top: CGFloat, _ bottom: CGFloat) -> Double {
+                Double(top * alpha + bottom * (1 - alpha))
+            }
+            dark = prefersWhiteText(
+                red: over(tint.redComponent, base.redComponent),
+                green: over(tint.greenComponent, base.greenComponent),
+                blue: over(tint.blueComponent, base.blueComponent))
+        }
+        return dark
+    }
+
+    override public var isSelected: Bool {
+        didSet { if isSelected != oldValue { restyleCells() } }
+    }
+
+    override public var isEmphasized: Bool {
+        didSet { if isEmphasized != oldValue { restyleCells() } }
+    }
+
+    override public func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        restyleCells()
+    }
+
+    /// Gives the cells `interiorBackgroundStyle`, which AppKit doesn't do on every change it
+    /// depends on.
+    private func restyleCells() {
+        let style = interiorBackgroundStyle
+        for case let cell as NSTableCellView in subviews where cell.backgroundStyle != style {
+            cell.backgroundStyle = style
+        }
     }
     /// The line along the row's bottom, drawn by the row so each row can have its own; nil for
     /// none.
