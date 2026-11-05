@@ -164,8 +164,8 @@ public struct DeviceProfiles: SettingValue {
     }
 
     /// The profile `uid` plays with. A device not seen before starts from `config` at full volume,
-    /// with hog mode as `typeHogs` says for its kind of device, or as `config` has it when that's
-    /// nil (ADR 0037); it's read only for such a device. The config's output settings show the
+    /// hogging only when `config` does and `typeHogs` doesn't say its kind of device shouldn't
+    /// (ADR 0037, 0098); it's read only for such a device. The config's output settings show the
     /// device in use, so when they changed without the device changing (`switched` false, which
     /// includes launch) they are an edit, and the profile takes them; when the device changed,
     /// they belong to the device before, and a profile keeps its own.
@@ -175,7 +175,7 @@ public struct DeviceProfiles: SettingValue {
     ) -> DeviceProfile {
         guard var profile = profiles.first(where: { $0.uid == uid }) else {
             return DeviceProfile(
-                uid: uid, hogMode: typeHogs() ?? config.hogMode,
+                uid: uid, hogMode: config.hogMode && (typeHogs() ?? true),
                 digitalVolume: config.digitalVolume, volumeDecibels: 0, formats: nil)
         }
         if !switched {

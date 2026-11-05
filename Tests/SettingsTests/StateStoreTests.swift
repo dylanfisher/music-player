@@ -210,7 +210,7 @@ private func problems(_ json: String) -> [SettingProblem] {
     let keys = AppSettings().settings.map(\.key)
     #expect(Set(keys).count == keys.count)
     let settings = try StateStore(AppSettings(), fileURL: temporaryFile())
-    #expect(settings[\.hogMode] == true)
+    #expect(settings[\.hogMode] == false)
     #expect(settings[\.outputDeviceUID] == nil)
     #expect(settings[\.digitalVolume] == false)
 }

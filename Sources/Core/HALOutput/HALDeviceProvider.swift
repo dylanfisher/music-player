@@ -75,8 +75,8 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
             hogged: hogged, isConnected: { try deviceID(uid: $0) != nil })
     }
 
-    /// Whether the device `uid` takes hog mode when first seen, from its transport type, or nil
-    /// when it isn't connected (ADR 0037).
+    /// Whether the device `uid` may take hog mode when first seen, from its transport type, or
+    /// nil when it isn't connected (ADR 0037). It hogs only when `output.hogMode` is on too.
     public static func hogsByDefault(_ uid: String) throws -> Bool? {
         guard let id = try deviceID(uid: uid) else { return nil }
         return hogsByDefault(

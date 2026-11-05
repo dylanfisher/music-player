@@ -32,13 +32,19 @@ private let twoDevices = DeviceProfiles(profiles: [
                 uid: "USB", hogMode: false, digitalVolume: true, volumeDecibels: 0, formats: nil))
 }
 
-@Test func aFirstSeenDeviceTakesHogModeFromItsKind() {
+@Test func aFirstSeenDeviceHogsOnlyWhenTheConfigAndItsKindBothDo() {
     let hogging = OutputConfig(hogMode: true, digitalVolume: false)
     #expect(
         !twoDevices.profile(for: "Speakers", config: hogging, switched: true, typeHogs: false)
             .hogMode)
     #expect(
-        twoDevices.profile(
+        twoDevices.profile(for: "USB", config: hogging, switched: true, typeHogs: true).hogMode)
+    #expect(
+        twoDevices.profile(for: "Unplugged", config: hogging, switched: true, typeHogs: nil)
+            .hogMode)
+    // Hog mode is off unless asked for, so a DAC seen first with the setting off doesn't hog.
+    #expect(
+        !twoDevices.profile(
             for: "USB", config: OutputConfig(hogMode: false, digitalVolume: false),
             switched: true, typeHogs: true
         ).hogMode)

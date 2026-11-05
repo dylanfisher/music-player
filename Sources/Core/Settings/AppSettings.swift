@@ -6,7 +6,7 @@ public struct AppSettings: SettingsSchema {
         "output.deviceUID", title: "Output Device", default: nil,
         "The device to play through; none uses the system default.")
     public let hogMode = Setting(
-        "output.hogMode", title: "Hog Mode", default: true,
+        "output.hogMode", title: "Hog Mode", default: false,
         "Keep other apps off the output device while playing.")
     public let digitalVolume = Setting(
         "output.digitalVolume", title: "Digital Volume", default: false,
