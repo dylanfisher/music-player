@@ -75,7 +75,7 @@ extension TrackColumn {
         case .key: row.key ?? ""
         case .codec: row.codec.uppercased()
         case .fileType: row.fileType
-        case .bitRate: row.bitRateKbps.map { "\(Int($0.rounded())) kbps" } ?? ""
+        case .bitRate: row.bitRateKbps.map(kbpsText) ?? ""
         case .sampleRate: sampleRateText(row.sampleRateHz)
         case .bitDepth: number(row.bitsPerSample)
         case .channels: String(row.channels)

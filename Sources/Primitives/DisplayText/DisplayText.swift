@@ -22,6 +22,11 @@ public func kilohertz(_ range: ClosedRange<Double>) -> String {
         : "\(kilohertz(range.lowerBound))–\(kilohertz(range.upperBound))"
 }
 
+/// 320.4 -> "320 kbps".
+public func kbpsText(_ kilobitsPerSecond: Double) -> String {
+    "\(Int(kilobitsPerSecond.rounded())) kbps"
+}
+
 /// 24 -> "24-bit".
 public func bitDepth(_ bits: some BinaryInteger) -> String { "\(bits)-bit" }
 
