@@ -102,6 +102,9 @@ extension CommandID {
     public static let previousTrack = CommandID("playback.previous")
     public static let seekForward = CommandID("playback.seekForward")
     public static let seekBack = CommandID("playback.seekBack")
+    /// Seek by `AppCommands.seekStepPercent` of the playing track's duration.
+    public static let seekForwardPercent = CommandID("playback.seekForwardPercent")
+    public static let seekBackPercent = CommandID("playback.seekBackPercent")
     public static let volumeUp = CommandID("playback.volumeUp")
     public static let volumeDown = CommandID("playback.volumeDown")
     public static let stop = CommandID("playback.stop")
@@ -151,6 +154,8 @@ public enum AppCommands {
     private static let playArgument = "a search, or album:, artist: or genre: and a name"
     /// Set Receiver Volume's argument, as `ReceiverVolume(decibels:)` reads it.
     private static let receiverVolumeArgument = "a level in dB from -80 to +18, in half steps"
+    /// How far Seek Forward and Back 5% move, as a percentage of the track's duration.
+    public static let seekStepPercent = 5
 
     /// The commands written here, without the ones generated from settings.
     static let fixedSet: [Command] =
@@ -253,8 +258,18 @@ public enum AppCommands {
             Command(.nextTrack, "Next Track", [.init(.right, cmd), .init(.right)], links: true),
             Command(
                 .previousTrack, "Previous Track", [.init(.left, cmd), .init(.left)], links: true),
-            Command(.seekForward, "Seek Forward", [.init(.right, [opt, cmd])], links: true),
-            Command(.seekBack, "Seek Back", [.init(.left, [opt, cmd])], links: true),
+            Command(
+                .seekForward, "Seek Forward", [.init(.right, [opt, cmd]), .init(.right, ctrl)],
+                links: true),
+            Command(
+                .seekBack, "Seek Back", [.init(.left, [opt, cmd]), .init(.left, ctrl)],
+                links: true),
+            Command(
+                .seekForwardPercent, "Seek Forward \(seekStepPercent)%",
+                [.init(.right, [ctrl, shift])], links: true),
+            Command(
+                .seekBackPercent, "Seek Back \(seekStepPercent)%", [.init(.left, [ctrl, shift])],
+                links: true),
             // Not from links: a page could raise it to full in a loop (ADR 0036).
             Command(.volumeUp, "Volume Up", [.init(.up, [ctrl, cmd])]),
             Command(.volumeDown, "Volume Down", [.init(.down, [ctrl, cmd])], links: true),

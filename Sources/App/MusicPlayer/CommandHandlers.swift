@@ -229,6 +229,8 @@ extension AppDelegate {
         engineCommand(.previousTrack) { await $0.previous() }
         engineCommand(.seekForward) { await seek($0, by: seekStepSeconds) }
         engineCommand(.seekBack) { await seek($0, by: -seekStepSeconds) }
+        engineCommand(.seekForwardPercent) { await seek($0, byShare: seekStepShare) }
+        engineCommand(.seekBackPercent) { await seek($0, byShare: -seekStepShare) }
         engineCommand(.shuffle, isOn: \.shuffle) { await $0.setShuffle(!(await $0.state.shuffle)) }
         let repeats: [(CommandID, RepeatMode)] = [
             (.repeatOff, .off), (.repeatAll, .all), (.repeatOne, .one),
@@ -317,6 +319,21 @@ extension AppDelegate {
 private func seek(_ engine: PlaybackEngine, by seconds: Double) async {
     guard let position = await engine.position() else { return }
     await engine.seek(toSeconds: max(0, position + seconds))
+}
+
+/// The share of the track's duration Seek Forward and Back 5% move by.
+let seekStepShare = Double(AppCommands.seekStepPercent) / 100
+
+/// Seeks by `share` of the playing track's duration; nothing while the duration is unknown.
+private func seek(_ engine: PlaybackEngine, byShare share: Double) async {
+    guard let seconds = seekSeconds(share, ofDuration: await engine.state.durationSeconds)
+    else { return }
+    await seek(engine, by: seconds)
+}
+
+/// How far a seek by `share` of a track `durationSeconds` long moves.
+func seekSeconds(_ share: Double, ofDuration durationSeconds: Double?) -> Double? {
+    durationSeconds.map { share * $0 }
 }
 
 /// What Remove from Queue or Playlist takes from.

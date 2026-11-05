@@ -44,7 +44,8 @@ import Testing
     #expect(
         linked == [
             .playPause, .play, .pause, .playSelection, .playNext, .nextTrack, .previousTrack,
-            .seekForward, .seekBack, .volumeDown, .stop, .shuffle, .repeatOff,
+            .seekForward, .seekBack, .seekForwardPercent, .seekBackPercent, .volumeDown,
+            .stop, .shuffle, .repeatOff,
             .repeatAll, .repeatOne, .back, .forward, .showCurrentTrack, .receiverVolumeDown,
         ])
     #expect(

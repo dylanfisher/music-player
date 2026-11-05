@@ -135,6 +135,28 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     #expect(registry.command(for: KeyChord(.tab, .shift)) == .focusPreviousArea)
 }
 
+/// ⌃→ and ⌃← seek 10 s as ⌥⌘→ and ⌥⌘← do; with ⇧, 5% of the track.
+@MainActor @Test func theControlArrowsSeekByTenSecondsOrFivePercent() throws {
+    let (main, dispatcher) = try menu()
+    let registry = dispatcher.bindings.registry
+    #expect(registry.command(for: KeyChord(.right, .control)) == .seekForward)
+    #expect(registry.command(for: KeyChord(.left, .control)) == .seekBack)
+    #expect(registry.command(for: KeyChord(.right, [.control, .shift])) == .seekForwardPercent)
+    #expect(registry.command(for: KeyChord(.left, [.control, .shift])) == .seekBackPercent)
+    let controls = items(main.bar).filter { $0.1 == "Controls" }.map(\.0)
+        .filter { !$0.isHidden }
+    let back = try #require(
+        controls.firstIndex { ($0.representedObject as? CommandID) == .seekBack })
+    #expect(controls[(back + 1)...].prefix(2).map(\.title) == ["Seek Forward 5%", "Seek Back 5%"])
+    #expect(
+        controls[(back + 1)...].prefix(2).map(\.keyEquivalentModifierMask) == [
+            [.control, .shift], [.control, .shift],
+        ])
+    #expect(seekSeconds(seekStepShare, ofDuration: 200) == 10)
+    #expect(seekSeconds(-seekStepShare, ofDuration: 300) == -15)
+    #expect(seekSeconds(seekStepShare, ofDuration: nil) == nil)
+}
+
 @MainActor @Test func theTrackMenuRunsAndValidatesItsCommandsThroughTheDispatcher() throws {
     let (menu, dispatcher) = try menu()
     var ran: [CommandID] = []

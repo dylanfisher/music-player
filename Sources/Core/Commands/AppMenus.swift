@@ -182,7 +182,8 @@ public enum AppMenus {
                     .command(.playPause), .command(.play), .command(.pause),
                     .command(.playSelection), .command(.playNext), .command(.addToQueue),
                     .command(.stop), .separator, .command(.nextTrack), .command(.previousTrack),
-                    .command(.seekForward), .command(.seekBack), .separator, .command(.shuffle),
+                    .command(.seekForward), .command(.seekBack), .command(.seekForwardPercent),
+                    .command(.seekBackPercent), .separator, .command(.shuffle),
                     .submenu(
                         repeatMenuTitle,
                         repeatCommands.map { .command($0) },
