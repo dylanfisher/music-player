@@ -18,6 +18,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     static let width = 640.0
     /// How long Copy Default Config's button says "Copied".
     static let copiedSeconds = 1.5
+    /// How long a color well's color stays the same before it's saved: a drag in the color
+    /// panel changes it at every step, and each save writes the config file.
+    static let colorPauseSeconds = 0.25
     /// The space around the pane's boxes.
     static let margin = 20.0
     /// The space between a box's edge and its rows.
@@ -50,6 +53,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     /// The color rows' wells, and their Default buttons, which set null.
     private var colorWells: [String: NSColorWell] = [:]
     private var colorDefaults: [String: NSButton] = [:]
+    /// Counts each color row's changes, so a save waiting out the pause knows a newer one
+    /// replaced it.
+    private var colorGenerations: [String: Int] = [:]
     /// The bar builders opened from this pane, by key, kept so a reopen shows the same one.
     private(set) var barBuilders: [String: BarBuilderWindow] = [:]
     /// The tokens' popover while it shows, for tests.
@@ -295,8 +301,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             well.identifier = NSUserInterfaceItemIdentifier(row.key)
             well.target = self
             well.action = #selector(choseColor(_:))
-            // One change when the panel lets go, not a config file write for each drag step.
-            well.isContinuous = false
+            // A well that isn't continuous gets the panel's color but sends no action at all.
+            well.isContinuous = true
             well.setAccessibilityLabel(row.title)
             NSColorPanel.shared.showsAlpha = true
             colorWells[row.key] = well
@@ -427,21 +433,33 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
 
     @objc private func openSyncFolder() { actions.openSyncFolder() }
 
+    /// Saves the well's color once it has stopped changing for `colorPauseSeconds`.
     @objc private func choseColor(_ well: NSColorWell) {
         guard let key = well.identifier?.rawValue,
             let color = well.color.usingColorSpace(.sRGB)
         else { return }
-        attempt {
-            try model.setColor(
-                key,
-                HexColor(
-                    red: color.redComponent, green: color.greenComponent,
-                    blue: color.blueComponent, alpha: color.alphaComponent))
+        let hex = HexColor(
+            red: color.redComponent, green: color.greenComponent, blue: color.blueComponent,
+            alpha: color.alphaComponent)
+        colorGenerations[key, default: 0] += 1
+        let mine = colorGenerations[key]
+        Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: UInt64(Self.colorPauseSeconds * 1_000_000_000))
+            } catch {
+                return
+            }
+            guard let self, self.colorGenerations[key] == mine, self.model.color(key) != hex else {
+                return
+            }
+            self.attempt { try self.model.setColor(key, hex) }
         }
     }
 
     @objc private func defaultColor(_ button: NSButton) {
         guard let key = button.identifier?.rawValue else { return }
+        // A color still waiting to be saved would put the color back after the null.
+        colorGenerations[key, default: 0] += 1
         attempt { try model.clear(key) }
     }
 

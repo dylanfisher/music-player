@@ -385,7 +385,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(volumeKeys.isEnabled)
 }
 
-@MainActor @Test func aColorRowIsAWellWithADefaultButton() throws {
+@MainActor @Test func aColorRowIsAWellWithADefaultButton() async throws {
     let schema = AppSettings()
     let key = schema.rowLineColor.key
     var stored: [String: Any] = [key: NSNull()]
@@ -402,12 +402,68 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(!reset.isEnabled)
     well.color = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 0.5)
     _ = well.sendAction(well.action, to: well.target)
+    try await waitFor { stored[key] is String }
     #expect(stored[key] as? String == "#FF000080")
     pane.reload()
     #expect(reset.isEnabled)
     #expect(abs((well.color.usingColorSpace(.sRGB)?.alphaComponent ?? 0) - 0.5) < 0.01)
     reset.performClick(nil)
     #expect(stored[key] is NSNull)
+}
+
+/// Waits for `condition`, such as a color well's color saved after its pause, for up to 5 s.
+@MainActor
+private func waitFor(_ condition: () -> Bool) async throws {
+    let deadline = Date().addingTimeInterval(5)
+    while !condition() {
+        guard Date() < deadline else {
+            Issue.record("timed out")
+            return
+        }
+        try await Task.sleep(nanoseconds: 20_000_000)
+    }
+}
+
+/// A color picked in the color panel reaches the setting, once the panel stops changing, and
+/// Default then clears it.
+@MainActor @Test func aColorPickedInThePanelIsSavedAndDefaultClearsIt() async throws {
+    let schema = AppSettings()
+    let key = schema.rowLineColor.key
+    nonisolated(unsafe) var stored: [String: Any] = [key: NSNull()]
+    nonisolated(unsafe) var saves = 0
+    nonisolated(unsafe) var pane: GeneralPane?
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
+        set: { key, json in
+            stored[key] = json
+            saves += 1
+            // The app reloads the pane on every change of the config file.
+            pane?.reload()
+        }, isBlocked: { false })
+    pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.appearance])
+    let shown = try #require(pane)
+    let window = NSWindow(contentViewController: shown)
+    window.makeKeyAndOrderFront(nil)
+    defer {
+        NSColorPanel.shared.close()
+        window.close()
+    }
+    let well = try #require(view(key, in: shown.view) as? NSColorWell)
+    let reset = try #require(button("Default", in: shown.view))
+    well.activate(true)
+    NSColorPanel.shared.color = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 0.75)
+    NSColorPanel.shared.color = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 0.5)
+    try await waitFor { stored[key] is String }
+    // Long enough for a second save, if the first step had one of its own.
+    try await Task.sleep(nanoseconds: UInt64(GeneralPane.colorPauseSeconds * 1_000_000_000))
+    #expect(stored[key] as? String == "#FF000080")
+    #expect(saves == 1, "one save for the steps of one change")
+    #expect(reset.isEnabled)
+    reset.performClick(nil)
+    #expect(stored[key] is NSNull)
+    #expect(well.color == .gridColor)
+    #expect(!reset.isEnabled)
 }
 
 @MainActor @Test func aCheckboxCarriesItsTitleAndAFieldItsLabel() throws {
