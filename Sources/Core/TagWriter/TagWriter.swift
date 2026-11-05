@@ -122,12 +122,13 @@ public struct TagWriter: Sendable {
     {
         let before = try FileIdentity(path: path)
         try requireWritable(path)
-        let url = URL(fileURLWithPath: path, isDirectory: false)
+        // One open for the tags, the layout, the replaced bytes and the art: on a NAS each open
+        // is a few round trips.
+        let source: FileSource
         let current: ParsedFile
         let file: TagFile
         do throws(MetadataError) {
-            current = try readMetadata(at: url)
-            file = try parsed(path)
+            (source, current, file) = try opened(path)
         } catch {
             throw TagWriteError(path: path, kind: kind(error.kind), detail: error.description)
         }
@@ -149,8 +150,9 @@ public struct TagWriter: Sendable {
             throw TagWriteError(path: path, kind: kind(error.kind), detail: error.detail)
         }
         let hashes = try fileHashes(path, payload: file.payload)
-        let (restore, oldBytes) = try restoreSegments(segments, path: path, size: before.size)
-        let oldArt = try art == nil ? currentArt(current, url) : nil
+        let (restore, oldBytes) = try restoreSegments(
+            segments, from: source, path: path, size: before.size)
+        let oldArt = try art == nil ? currentArt(current, source, path) : nil
 
         if let hook = faults.beforeWritingTemp {
             do {
@@ -273,12 +275,11 @@ public struct TagWriter: Sendable {
         func failed(_ detail: String) -> TagWriteError {
             TagWriteError(path: path, kind: .checkFailed, detail: detail)
         }
-        let url = URL(fileURLWithPath: temp, isDirectory: false)
+        let source: FileSource
         let edited: TagFile
         let reread: ParsedFile
         do throws(MetadataError) {
-            edited = try parsed(temp)
-            reread = try readMetadata(at: url)
+            (source, reread, edited) = try opened(temp)
         } catch {
             throw failed("the new file doesn't read: \(error.detail)")
         }
@@ -302,35 +303,42 @@ public struct TagWriter: Sendable {
             case .remove: nil
             case nil: oldArt
             }
-        let newArt = try currentArt(reread, url)
+        let newArt = try currentArt(reread, source, temp)
         guard newArt == expectedArt else {
             throw failed(
                 "the art reads back as \(newArt?.count ?? 0) bytes, not \(expectedArt?.count ?? 0)")
         }
     }
 
-    private func parsed(_ path: String) throws(MetadataError) -> TagFile {
+    /// The file at `path` opened once, with its tags as the reader reads them and its layout as
+    /// the writer parses it, each through a reader of its own.
+    private func opened(_ path: String) throws(MetadataError) -> (FileSource, ParsedFile, TagFile)
+    {
         do throws(ParseFailure) {
-            return try TagFile(path: path)
+            let source = try FileSource(path: path)
+            return (source, try parse(ByteReader(source)), try TagFile(ByteReader(source)))
         } catch {
             throw error.error(path: path)
         }
     }
 
-    private func currentArt(_ file: ParsedFile, _ url: URL) throws(TagWriteError) -> Data? {
+    private func currentArt(_ file: ParsedFile, _ source: FileSource, _ path: String)
+        throws(TagWriteError) -> Data?
+    {
         guard let art = file.metadata.art else { return nil }
-        do throws(MetadataError) {
-            return try readArt(art, at: url)
+        do throws(ParseFailure) {
+            return try readArt(art, from: source)
         } catch {
-            throw TagWriteError(path: url.path, kind: .unreadable, detail: error.description)
+            throw TagWriteError(
+                path: path, kind: .unreadable, detail: error.error(path: path).description)
         }
     }
 
     /// The original's bytes that `segments` don't keep, and where the rest went, so the
     /// original can be put back together from the edited file.
-    private func restoreSegments(_ segments: [Segment], path: String, size: Int)
-        throws(TagWriteError) -> ([TagUndoJournal.RestoreSegment], [[UInt8]])
-    {
+    private func restoreSegments(
+        _ segments: [Segment], from source: FileSource, path: String, size: Int
+    ) throws(TagWriteError) -> ([TagUndoJournal.RestoreSegment], [[UInt8]]) {
         var kept: [(original: Range<Int>, edited: Int)] = []
         var offset = 0
         for segment in segments {
@@ -341,12 +349,6 @@ public struct TagWriter: Sendable {
         var result: [TagUndoJournal.RestoreSegment] = []
         var bytes: [[UInt8]] = []
         var cursor = 0
-        let source: FileSource
-        do throws(ParseFailure) {
-            source = try FileSource(path: path)
-        } catch {
-            throw TagWriteError(path: path, kind: .unreadable, detail: error.detail)
-        }
         func oldBytes(_ range: Range<Int>) throws(TagWriteError) {
             guard !range.isEmpty else { return }
             do throws(ParseFailure) {
