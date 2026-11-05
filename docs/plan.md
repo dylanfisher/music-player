@@ -4708,6 +4708,57 @@ which fail the same on `main` in this environment.
       receiver, and the settings say so instead of looking required. The section reads as one
       choice: media keys control the receiver's volume while it's connected.
 
+Plan, part 41d (ADR 0091, amending 0035, 0039 and 0041):
+- Probe (done before this plan): "Not bit-perfect" is one string, the signal path badge, and
+  the owner's case gets it only for "the format is mixable" and "hog mode isn't held", which
+  change nothing while no other app plays. The status line's
+  `44.1 kHz 16-bit PCM → ADI-2 DAC (57850288): 'lpcm' 2 ch 32-bit int @ 44.1 kHz` is the
+  file's format, then `DeviceFormat.summary`, made for the log. The app appends no ID: the
+  RME DAC names itself `ADI-2 DAC (57850288)`, its serial number, in
+  `kAudioObjectPropertyName`, and the Output menu shows that name too.
+- 41d.1 (NowPlaying): a verdict whose changes are only ones another app could make (mixable
+  format, hog mode free) reads "Not guaranteed bit-perfect"; a change the app or macOS makes
+  to the samples still reads "Not bit-perfect" or "Converted". Test: each badge from its
+  changes.
+- 41d.2: `deviceDisplayName` (HALOutput) drops a trailing serial in parentheses, six or more
+  digits, unless another device's name would then read the same, and the provider's
+  `deviceName`, the Output menu and Settings use it; `--list-devices` keeps the full name.
+  `formatText` (DisplayText) is "44.1 kHz · 16-bit", "32-bit float". The panel becomes a row
+  of stages, each a rounded box with a title, a value and a note: "File" with "44.1 kHz ·
+  16-bit" and "FLAC · stereo", a decoder box only when the decoder changes something, then the
+  device by name with its rate and depth and "Exclusive" or "Shared" and its volume, or the
+  renderer by name; arrows between them, a box tinted where a change happens. The verdict's
+  reasons are sentences without PIDs; the device's list of formats goes. The status line's
+  output half is `DeviceFormat.shown`, "ADI-2 DAC: 44.1 kHz · 32-bit". Tests: stages for PCM,
+  a resampling decoder, DoP, a renderer and a missing device; the name rule; the status line.
+  `--snapshot` shows nothing playing, so a throwaway test draws the panel with sample paths
+  to look at.
+- 41d.3 (UPnP, UPnPOutput, App): `XMLTree` keeps attributes. Discovery reads a Sonos
+  player's room (`roomName`) and its ZoneGroupTopology control URL from the root device, then
+  asks one player for `GetZoneGroupState`. A group's renderer is its coordinator, named as the
+  topology gives it: the room name when every visible member shares it (a stereo pair, or a
+  room with a sub), else the coordinator's room "+ N" for the other rooms. Members that aren't
+  the coordinator are kept, marked, and left out of the picker; a stored member's UDN plays to
+  its group's coordinator. A player not in the topology is named by its room. A failed
+  topology call leaves the rooms. `--capture-renderers` saves the topology reply. Tests with
+  XML in Sonos's documented shape: the parse, the names for a pair, a two-room group and a
+  single player, the picker's entries, the coordinator redirect, and discovery against a
+  loopback stand-in.
+- 41d.4 (NowPlaying, Receiver, App): with receiver control connected, the panel shows a
+  volume slider from −80 to 0 dB, its value from the receiver's `MV` lines, and dragging it
+  sends `MV` levels. A level waiting to be sent is replaced by the next, so a drag sends at
+  most one line per 50 ms and ends on the last. The slider ignores status lines while it's
+  dragged. Tests: the slider shows and follows the state and sends levels; the connection
+  replaces a waiting level.
+- 41d.5 (Settings, SettingsWindow, App): `receiver.volumeKeys` folds into `receiver.enabled`,
+  titled "Volume Keys Control the Receiver": on, receiver control runs and, while it's
+  connected, the volume and mute keys set the receiver's volume; while the app plays to the
+  Denon as a renderer they do whatever the setting. The address row sits behind a "Can't find
+  the receiver?" disclosure, open when it has a value. Breaking: a config's
+  `receiver.volumeKeys` is skipped as an unknown key, which Remove Obsolete Setting takes out. Tests: the keys'
+  rule, the disclosure, the schema.
+- Order: this plan, then each item through `./scripts/check`, then the ADR and the result.
+
 #### 41e. Toolbar status and Settings
 
 - [ ] **41e.1 Help popover padding.** The template rows' ? popover has top and bottom padding
