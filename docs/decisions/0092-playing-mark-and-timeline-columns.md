@@ -17,6 +17,9 @@ could show it, how a line gets over the art, and what "until he changes them" is
 - **The mark shows once.** The Title cell starts with `▶` on the playing row only while the
   Now Playing column is hidden; with the column shown, the column has it and Title doesn't.
   The owner picks where it goes by showing or hiding the column, with no setting for it.
+  Amended 2026-11-05 (phase 42b, [0097](0097-playing-row-text-and-keeping-the-queue.md)): the
+  Now Playing column centers its mark, the Title's mark has 4 points more space after it, and
+  a dark playing row color turns the row's text white.
 - **Now Playing is a track column** (`TrackColumn.nowPlaying`), so it's shown, moved, resized
   and saved like the others. It isn't sortable, its header is empty with its name in the
   tooltip and the menu, and it's 20 points wide by default, the narrowest a column may be.

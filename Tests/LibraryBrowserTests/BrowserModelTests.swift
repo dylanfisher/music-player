@@ -385,6 +385,28 @@ private func loadedModel(
     #expect(request.urls[request.first] == start.url)
 }
 
+@MainActor @Test func aPlayFromTheListTheLastPlayQueuedCarriesItsQueue() async throws {
+    let (model, _) = try await loadedModel()
+    let first = try #require(try await model.playStart(selected: [], clicked: 3))
+    #expect(first.queue == nil, "nothing was queued from this list yet")
+    let queued = try await first.request()
+
+    let again = try #require(try await model.playStart(selected: [], clicked: 4))
+    #expect(again.queue == PlayRequest(urls: queued.urls, first: queued.first + 1))
+    #expect(again.url == queued.urls[queued.first + 1])
+    #expect(try await again.request() == again.queue)
+
+    // Another order is another list.
+    await model.setSort(.title, ascending: false)
+    #expect(try await model.playStart(selected: [], clicked: 4)?.queue == nil)
+    await model.setSort(.artist, ascending: true)
+    _ = try await model.playStart(selected: [], clicked: 4)?.request()
+    #expect(try await model.playStart(selected: [], clicked: 5)?.queue != nil)
+    // A library change may have moved the files.
+    await model.refresh()
+    #expect(try await model.playStart(selected: [], clicked: 5)?.queue == nil)
+}
+
 @MainActor @Test func theQueueStartsAtTheClickedRowEvenWhenATrackRepeats() async throws {
     let (model, _) = try await loadedModel()
     let reader = try LibraryReader(databaseURL: try browserLibrary.get().databaseURL)

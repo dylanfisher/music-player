@@ -60,6 +60,11 @@ public final class BrowserModel {
     /// Counts applied changes, so names read for one list aren't used for the next.
     private var applied = 0
     private var names: (applied: Int, list: [TrackName])?
+    /// The list the last play from the table queued, as its track IDs in play order, and its
+    /// queue, so a play from the same list can keep the queue the engine plays (ADR 0097).
+    private var lastQueued: (ids: [Int64], queue: ListQueue)?
+    /// Counts library changes, so a queue read before one isn't kept after it.
+    private var queuedGeneration = 0
     /// The sources the sidebar showed and the plays from the browser, for Back and Forward.
     private(set) var history = StepHistory(start: WindowPlace(filter: TrackFilter()))
     /// The source the track of the play state saved at quit was played from, which stands for
@@ -599,6 +604,9 @@ public final class BrowserModel {
     /// Runs every query again after the library changed, keeping each selection that's still
     /// there.
     package func refresh() async {
+        // The tracks' files may have moved.
+        lastQueued = nil
+        queuedGeneration += 1
         await reload(panesFrom: 0, reason: .libraryChanged)
     }
 
@@ -617,16 +625,31 @@ public final class BrowserModel {
         let (rows, first) = playOrder(
             rowCount: trackIDs.count, selected: selected, clicked: clicked)
         let ids = rows.map { trackIDs[$0] }
+        // The same list in the same order as the last play: its queue is known, and the
+        // engine may still be playing it.
+        if let queued = lastQueued, queued.ids == ids,
+            let request = Self.request(queued.queue, first: first),
+            request.urls.indices.contains(request.first)
+        {
+            return PlayStart(url: request.urls[request.first], queue: request) { request }
+        }
         let reader = reader
+        let remember = { @MainActor [weak self, queuedGeneration] (queue: ListQueue) in
+            guard let self, queuedGeneration == self.queuedGeneration else { return }
+            lastQueued = (ids, queue)
+        }
         guard let path = try await reader.paths(ids: [ids[first]])[ids[first]] else {
             // The clicked track has gone from the index: the queue says where playback starts.
-            guard let request = try await Self.request(ids: ids, first: first, reader: reader)
-            else { return nil }
+            let queue = try await Self.queue(ids: ids, reader: reader)
+            guard let request = Self.request(queue, first: first) else { return nil }
+            remember(queue)
             return PlayStart(url: request.urls[request.first]) { request }
         }
         return PlayStart(url: URL(fileURLWithPath: path, isDirectory: false)) {
-            guard let request = try await Self.request(ids: ids, first: first, reader: reader)
+            let queue = try await Self.queue(ids: ids, reader: reader)
+            guard let request = Self.request(queue, first: first)
             else { throw PlayStartError.noTracks }
+            await remember(queue)
             return request
         }
     }
@@ -634,16 +657,34 @@ public final class BrowserModel {
     nonisolated static func request(ids: [Int64], first: Int, reader: LibraryReader)
         async throws -> PlayRequest?
     {
+        request(try await queue(ids: ids, reader: reader), first: first)
+    }
+
+    /// The files of `ids`, in their order, and the index in them of each ID's file; nil for an
+    /// ID gone from the index, which is left out.
+    nonisolated static func queue(ids: [Int64], reader: LibraryReader) async throws -> ListQueue {
         let paths = try await reader.paths(ids: ids)
         var urls: [URL] = []
         urls.reserveCapacity(paths.count)
-        var start = 0
-        for (row, id) in ids.enumerated() {
-            if row == first { start = urls.count }
-            guard let path = paths[id] else { continue }
+        var entries: [Int?] = []
+        entries.reserveCapacity(ids.count)
+        for id in ids {
+            guard let path = paths[id] else {
+                entries.append(nil)
+                continue
+            }
+            entries.append(urls.count)
             urls.append(URL(fileURLWithPath: path, isDirectory: false))
         }
-        return urls.isEmpty ? nil : PlayRequest(urls: urls, first: start)
+        return (urls, entries)
+    }
+
+    /// `queue` played from the row `first`, or from the next row whose track is still in the
+    /// index when that one's isn't; nil for an empty queue.
+    nonisolated static func request(_ queue: ListQueue, first: Int) -> PlayRequest? {
+        guard !queue.urls.isEmpty else { return nil }
+        let start = queue.entries[first...].lazy.compactMap { $0 }.first ?? queue.urls.count
+        return PlayRequest(urls: queue.urls, first: start)
     }
 
     /// The files of the rows at `rows`, in table order, for "Play Next".
@@ -807,6 +848,9 @@ public struct BrowserState: Equatable, Sendable {
 /// A track to start playing at once, and the queue it belongs to, read after it starts.
 public struct PlayStart: Sendable {
     public var url: URL
+    /// The whole queue when it's known already: the one the last play from the same list in
+    /// the same order queued, which the engine may still be playing as it was set.
+    public var queue: PlayRequest? = nil
     /// The whole queue, with `url` at its `first`. Runs off the main actor.
     public var request: @Sendable () async throws -> PlayRequest
 }
@@ -816,6 +860,10 @@ enum PlayStartError: Error, CustomStringConvertible {
 
     var description: String { "none of the tracks to play are in the library any more" }
 }
+
+/// A list's files in its order, and the index in them of each row's file; nil for a row whose
+/// track is gone from the index.
+typealias ListQueue = (urls: [URL], entries: [Int?])
 
 /// Files to play as a new queue, and the index in it to start at.
 public struct PlayRequest: Equatable, Sendable {

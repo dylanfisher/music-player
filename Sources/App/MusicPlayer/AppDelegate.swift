@@ -608,6 +608,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func play(_ start: PlayStart) {
         guard let engine else { return }
         Task {
+            // The queue playing is this list's as it was set: play the track in it, as Next
+            // does, rather than replace it (ADR 0097).
+            if let queue = start.queue,
+                await engine.play(entry: queue.first, ifQueueIs: queue.urls)
+            {
+                return
+            }
             let filling = await engine.play(starting: start.url) {
                 let request = try await start.request()
                 return (request.urls, request.first)
