@@ -149,7 +149,8 @@ public enum AppMenus {
                     .command(.toggleStatusBar), .command(.toggleQueue), .command(.toggleSignalPath),
                     .command(.distractionFree),
                     .separator, .command(.focusSidebar), .command(.focusNextPane),
-                    .command(.focusPreviousPane), .command(.focusNextArea), .separator,
+                    .command(.focusPreviousPane), .command(.focusNextArea),
+                    .command(.focusPreviousArea), .separator,
                     .submenu(
                         "Sort By",
                         [

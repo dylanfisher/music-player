@@ -1590,13 +1590,20 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Hides or shows the browser's columns; they come back at their saved height.
     /// Hiding them selects All in each first, since a hidden selection would narrow the table
-    /// with nothing on screen saying why.
+    /// with nothing on screen saying why. Shown, the first column takes the keys, unless the
+    /// timeline shows in their place.
     public func toggleBrowser() {
         if isBrowserVisible { Task { await model.clearPanes() } }
         let paneHadKeys = if case .pane = focusedList { true } else { false }
         isBrowserVisible.toggle()
         fillPanelSlot()
-        if paneHadKeys { focusTracks() }
+        if showsColumns {
+            if !showsTimeline, let first = panes.tables.first {
+                first.window?.makeFirstResponder(first)
+            }
+        } else if paneHadKeys {
+            focusTracks()
+        }
     }
 
     /// The panel shown over the track table in the columns' place while `source` shows; nil
@@ -1937,11 +1944,23 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Esc clears the search and gives the keys back to the table; ↑ and ↓ move the table's
-    /// selection while the field keeps the keys.
+    /// selection while the field keeps the keys. Tab and ⇧Tab go to the registry, as from the
+    /// lists, so they walk the same areas rather than AppKit's key-view loop.
     public func control(
         _ control: NSControl, textView: NSTextView, doCommandBy selector: Selector
     ) -> Bool {
         switch selector {
+        case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertBacktab(_:)):
+            let chord =
+                selector == #selector(NSResponder.insertTab(_:))
+                ? KeyChord(.tab) : KeyChord(.tab, .shift)
+            switch keyCommand([chord]) {
+            case .ran: return true
+            case .refused:
+                NSSound.beep()
+                return true
+            case .unbound: return false
+            }
         case #selector(NSResponder.cancelOperation(_:)):
             searchField.stringValue = ""
             searchChanged()

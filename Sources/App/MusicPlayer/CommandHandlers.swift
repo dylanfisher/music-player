@@ -198,7 +198,10 @@ extension AppDelegate {
             self?.browser?.focusPane(forward: false)
         }
         dispatcher.handle(.focusNextArea, enabled: hasWindow) { [weak self] in
-            self?.focusNextArea()
+            self?.window?.moveFocus(forward: true)
+        }
+        dispatcher.handle(.focusPreviousArea, enabled: hasWindow) { [weak self] in
+            self?.window?.moveFocus(forward: false)
         }
     }
 
@@ -286,17 +289,6 @@ extension AppDelegate {
                 browser.reportCommand("couldn't read the selected tracks", error)
             }
         }
-    }
-
-    /// Tab: the sidebar, the panes, the track table, then the queue when it shows.
-    private func focusNextArea() {
-        guard let browser, let window = window?.window else { return }
-        var areas = browser.focusAreas
-        if self.window?.isQueueVisible == true, let queue { areas.append(queue.list) }
-        if self.window?.isSidebarVisible != true { areas.removeFirst() }
-        let current = areas.firstIndex { $0 === window.firstResponder }
-        let next = current.map { (areas.index(after: $0)) % areas.count } ?? 0
-        window.makeFirstResponder(areas[next])
     }
 
     /// The digital volume is the device's; a renderer has none the app sets (ADR 0041).

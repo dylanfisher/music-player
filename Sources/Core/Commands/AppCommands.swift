@@ -51,6 +51,7 @@ extension CommandID {
     public static let focusNextPane = CommandID("focus.nextPane")
     public static let focusPreviousPane = CommandID("focus.previousPane")
     public static let focusNextArea = CommandID("focus.nextArea")
+    public static let focusPreviousArea = CommandID("focus.previousArea")
 
     public static let addFolder = CommandID("library.addFolder")
     public static let showWatchedFolders = CommandID("library.showWatchedFolders")
@@ -201,6 +202,7 @@ public enum AppCommands {
             Command(.focusNextPane, "Focus Next Pane"),
             Command(.focusPreviousPane, "Focus Previous Pane"),
             Command(.focusNextArea, "Focus Next Area", [.init(.tab)]),
+            Command(.focusPreviousArea, "Focus Previous Area", [.init(.tab, shift)]),
 
             Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
             Command(.showWatchedFolders, "Watched Folders…"),

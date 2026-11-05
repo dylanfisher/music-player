@@ -20,6 +20,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
     private let split: MainSplit
     private let signalPath: SignalPathPanel
     private let browser: LibraryBrowser
+    let queue: QueuePanel
     private let saver: LayoutSaver
     private var restoring = true
     /// What Distraction-Free Mode hid, while it's on.
@@ -37,6 +38,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
             sidebarWidth: settings.sidebarWidth, queueWidth: settings.queueWidth)
         self.signalPath = signalPath
         self.browser = browser
+        self.queue = queue
         self.saver = saver
         savedToolbar = SavedVisibility(settings.toolbarVisible)
         window = SilentEscapeWindow(
@@ -105,6 +107,31 @@ final class MainWindow: NSObject, NSWindowDelegate {
     var isSidebarVisible: Bool { split.isSidebarVisible }
     var isQueueVisible: Bool { split.isQueueVisible }
     var isSignalPathVisible: Bool { !signalPath.view.isHidden }
+
+    /// The views Tab gives the keys to, in order, and ⇧Tab in reverse: the sidebar, the browser's
+    /// lists, then the queue, each while it shows.
+    var focusAreas: [NSView] {
+        let browserAreas = browser.focusAreas
+        return (isSidebarVisible ? browserAreas : Array(browserAreas.dropFirst()))
+            + (isQueueVisible ? [queue.list] : [])
+    }
+
+    /// Gives the keys to the area after the one that has them, or with false the one before.
+    /// From anywhere else, as the search field, Tab starts at the first area and ⇧Tab at the
+    /// last. A list with rows and no selection selects its first, so the move shows.
+    func moveFocus(forward: Bool) {
+        let areas = focusAreas
+        let current = areas.firstIndex { $0 === window.firstResponder }
+        guard let next = focusArea(after: current, of: areas.count, forward: forward) else {
+            return
+        }
+        let area = areas[next]
+        window.makeFirstResponder(area)
+        if let list = area as? NSTableView, list.selectedRowIndexes.isEmpty, list.numberOfRows > 0 {
+            list.selectRowIndexes([0], byExtendingSelection: false)
+            list.scrollRowToVisible(0)
+        }
+    }
 
     func toggleSidebar() {
         split.toggleSidebar()
@@ -210,6 +237,14 @@ class SilentEscapeWindow: NSWindow {
     }
 
     override func cancelOperation(_ sender: Any?) {}
+}
+
+/// The index of the area after `current` among `count`, or before it when not `forward`,
+/// wrapping; with none current, the first or the last. Nil when there are none.
+func focusArea(after current: Int?, of count: Int, forward: Bool) -> Int? {
+    guard count > 0 else { return nil }
+    guard let current else { return forward ? 0 : count - 1 }
+    return (current + (forward ? 1 : count - 1)) % count
 }
 
 /// The saved frame, unless no screen in `screens` (their visible frames) shows any of it, as when

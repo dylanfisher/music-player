@@ -124,6 +124,17 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     #expect(item.0.keyEquivalent == "z" && item.0.keyEquivalentModifierMask == .control)
 }
 
+@MainActor @Test func focusPreviousAreaFollowsFocusNextAreaOnShiftTab() throws {
+    let (main, dispatcher) = try menu()
+    let view = items(main.bar).filter { $0.1 == "View" }.map(\.0).filter { !$0.isHidden }
+    let next = try #require(
+        view.firstIndex { ($0.representedObject as? CommandID) == .focusNextArea })
+    #expect(view[next + 1].title == "Focus Previous Area")
+    let registry = dispatcher.bindings.registry
+    #expect(registry.command(for: KeyChord(.tab)) == .focusNextArea)
+    #expect(registry.command(for: KeyChord(.tab, .shift)) == .focusPreviousArea)
+}
+
 @MainActor @Test func theTrackMenuRunsAndValidatesItsCommandsThroughTheDispatcher() throws {
     let (menu, dispatcher) = try menu()
     var ran: [CommandID] = []

@@ -6,8 +6,6 @@ LibraryBrowser.splitViewDidResizeSubviews | NSSplitViewDelegate
 PaletteController.windowDidResignKey | NSWindowDelegate
 PaletteController.controlTextDidChange | NSControlTextEditingDelegate
 PaletteController.control | NSControlTextEditingDelegate
-PaletteController.numberOfRows | NSTableViewDataSource
-QueuePanel.numberOfRows | NSTableViewDataSource
 RuleEditorSheet.controlTextDidChange | NSControlTextEditingDelegate
 SettingsWindowController.toolbarSelectableItemIdentifiers | NSToolbarDelegate
 TagEditorSheet.controlTextDidChange | NSControlTextEditingDelegate
