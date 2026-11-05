@@ -32,8 +32,8 @@ import Settings
 // --report-launch prints "launched" once every watched folder's scan at launch has ended, or the
 // watcher has left it to the index, for Bench to know the app is idle.
 // --snapshot draws the window into a PNG a few seconds after its first rows, to check the layout.
-// --snapshot-of draws Library Health, the palette, the smart playlist editor, the tag editor, or
-// the Settings window's General or Shortcuts pane, instead.
+// --snapshot-of draws Library Health, Listening Stats, Year in Review, the palette, the smart
+// playlist editor, the tag editor, or the Settings window's General or Shortcuts pane, instead.
 let arguments = CommandLine.arguments
 
 func value(after flag: Flag) -> String? { value(after: flag, in: arguments) }

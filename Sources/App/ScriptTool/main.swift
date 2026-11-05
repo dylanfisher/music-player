@@ -95,7 +95,12 @@ if let answered = exchange() {
 }
 switch reply {
 case .done(let message):
-    if let message { print(terminalSafe(message)) }
+    // Line by line, so a reply of several lines, such as stats, keeps them.
+    if let message {
+        print(
+            message.split(separator: "\n", omittingEmptySubsequences: false)
+                .map { terminalSafe(String($0)) }.joined(separator: "\n"))
+    }
 case .failed(let message):
     fail(message)
 case .status(let status):

@@ -5,6 +5,7 @@ import LibraryBrowser
 import Log
 import Playback
 import Scripting
+import Settings
 
 private let logger = moduleLogger()
 
@@ -29,6 +30,12 @@ extension AppDelegate {
             arguments: [
                 .play: { [weak self] text in try await self?.playQuery(text) },
                 .receiverSetVolume: { [weak self] text in try self?.setReceiverVolume(text) },
+            ],
+            reports: [
+                .showStats: { [weak self] text, json in
+                    guard let self else { throw NoWindow() }
+                    return try await statsReply(text, json: json)
+                }
             ])
         scriptRouter = router
         do {
@@ -82,6 +89,23 @@ extension AppDelegate {
         return try await browser.play(PlayQuery(text))
     }
 
+    /// Shows Listening Stats for the period `text` names, or the one shown last, and says what
+    /// they hold, as `music-player stats` prints it.
+    private func statsReply(_ text: String?, json: Bool) async throws -> String {
+        guard let browser else { throw NoWindow() }
+        let period: StatsPeriod?
+        if let text {
+            guard let named = StatsPeriod(text: text) else {
+                throw InvalidPeriod(text: text)
+            }
+            period = named
+        } else {
+            period = nil
+        }
+        browser.showStats(period)
+        return try await browser.statsText(period ?? browser.shownStatsPeriod, json: json)
+    }
+
     private func scriptStatus() async -> ScriptStatus {
         let state = playback
         let position = await engine?.position()
@@ -104,4 +128,14 @@ extension AppDelegate {
 /// Play has nothing to play through.
 private struct NoOutput: Error, CustomStringConvertible {
     var description: String { "the app has no output device" }
+}
+
+/// Stats has no window to read the library through.
+private struct NoWindow: Error, CustomStringConvertible {
+    var description: String { "the app has no library window" }
+}
+
+private struct InvalidPeriod: Error, CustomStringConvertible {
+    var text: String
+    var description: String { "\(text) isn't a period: \(StatsPeriod.textHelp)" }
 }

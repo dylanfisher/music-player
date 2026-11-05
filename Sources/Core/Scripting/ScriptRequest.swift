@@ -5,6 +5,9 @@ import Settings
 public enum ScriptRequest: Equatable, Sendable {
     /// A registry command, with the argument it declares, if any.
     case run(CommandID, argument: String?)
+    /// A registry command that answers with what it found (`Command.replies`), as text or as
+    /// JSON.
+    case report(CommandID, argument: String?, json: Bool)
     case status
 
     /// Why `text` can't be an argument: too long, or holding a control character, which no
@@ -22,11 +25,11 @@ public enum ScriptRequest: Equatable, Sendable {
 
 extension ScriptRequest: Codable {
     private enum CodingKeys: String, CodingKey, CaseIterable {
-        case kind, command, argument
+        case kind, command, argument, json
     }
 
     private enum Kind: String, Codable {
-        case run, status
+        case run, report, status
     }
 
     public init(from decoder: any Decoder) throws {
@@ -38,6 +41,12 @@ extension ScriptRequest: Codable {
             self = .run(
                 CommandID(try container.decode(String.self, forKey: .command)),
                 argument: try container.decodeIfPresent(String.self, forKey: .argument))
+        case .report:
+            try onlyKeys(container, [.kind, .command, .argument, .json])
+            self = .report(
+                CommandID(try container.decode(String.self, forKey: .command)),
+                argument: try container.decodeIfPresent(String.self, forKey: .argument),
+                json: try container.decode(Bool.self, forKey: .json))
         case .status:
             try onlyKeys(container, [.kind])
             self = .status
@@ -51,6 +60,11 @@ extension ScriptRequest: Codable {
             try container.encode(Kind.run, forKey: .kind)
             try container.encode(id.rawValue, forKey: .command)
             try container.encodeIfPresent(argument, forKey: .argument)
+        case .report(let id, let argument, let json):
+            try container.encode(Kind.report, forKey: .kind)
+            try container.encode(id.rawValue, forKey: .command)
+            try container.encodeIfPresent(argument, forKey: .argument)
+            try container.encode(json, forKey: .json)
         case .status:
             try container.encode(Kind.status, forKey: .kind)
         }

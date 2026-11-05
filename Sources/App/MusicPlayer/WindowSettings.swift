@@ -7,6 +7,7 @@ struct WindowSettings {
     var frame: WindowFrame?
     var sidebarWidth: Int
     var browserHeight: Int
+    var statsHeight: Int
     var sidebarVisible: Bool
     var browserVisible: Bool
     var statusBarVisible: Bool
@@ -32,6 +33,7 @@ struct WindowSettings {
         frame = state[\.windowFrame]
         sidebarWidth = state[\.sidebarWidth]
         browserHeight = state[\.browserHeight]
+        statsHeight = state[\.statsHeight]
         sidebarVisible = state[\.sidebarVisible]
         browserVisible = state[\.browserVisible]
         statusBarVisible = state[\.statusBarVisible]

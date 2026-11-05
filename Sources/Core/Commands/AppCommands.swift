@@ -58,6 +58,9 @@ extension CommandID {
     /// Shows Library Health over the track table; the ID is the one it had as Check Library
     /// Health, so a saved shortcut still holds.
     public static let checkHealth = CommandID("library.checkHealth")
+    /// Shows Listening Stats; `music-player stats` prints them (ADR 0102).
+    public static let showStats = CommandID("library.stats")
+    public static let showYearInReview = CommandID("library.yearInReview")
     public static let rescanNow = CommandID("library.rescanNow")
     public static let resolveLostStats = CommandID("library.resolveLostStats")
     public static let restoreRemoved = CommandID("library.restoreRemoved")
@@ -156,6 +159,8 @@ public enum AppCommands {
     private static let receiverVolumeArgument = "a level in dB from -80 to +18, in half steps"
     /// How far Seek Forward and Back 5% move, as a percentage of the track's duration.
     public static let seekStepPercent = 5
+    /// Show Listening Stats' argument, as `StatsPeriod(text:)` reads it.
+    public static let statsPeriodArgument = StatsPeriod.textHelp
 
     /// The commands written here, without the ones generated from settings.
     static let fixedSet: [Command] =
@@ -212,6 +217,9 @@ public enum AppCommands {
             Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
             Command(.showWatchedFolders, "Watched Folders…"),
             Command(.checkHealth, "Show Library Health"),
+            Command(
+                .showStats, "Show Listening Stats", argument: statsPeriodArgument, replies: true),
+            Command(.showYearInReview, "Show Year in Review"),
             // Not from links: it ignores the playback pause, so a page could keep the NAS busy.
             Command(.rescanNow, "Rescan All"),
             Command(.resolveLostStats, "Resolve Lost Stats…"),

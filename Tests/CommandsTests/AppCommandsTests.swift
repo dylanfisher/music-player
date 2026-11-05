@@ -49,7 +49,9 @@ import Testing
             .repeatAll, .repeatOne, .back, .forward, .showCurrentTrack, .receiverVolumeDown,
         ])
     #expect(
-        AppCommands.all().filter { $0.argument != nil }.map(\.id) == [.play, .receiverSetVolume])
+        AppCommands.all().filter { $0.argument != nil }.map(\.id)
+            == [.showStats, .play, .receiverSetVolume])
+    #expect(AppCommands.all().filter(\.replies).map(\.id) == [.showStats])
 }
 
 @Test func everyReceiverInputAndSoundModeIsACommand() {

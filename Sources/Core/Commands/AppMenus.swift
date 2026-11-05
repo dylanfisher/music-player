@@ -100,7 +100,7 @@ public enum AppMenus {
                     .command(.importPlaylist), .command(.exportPlaylist),
                     .command(.importSwinsian), .command(.importITunes), .separator,
                     .command(.addFolder), .command(.showWatchedFolders), .command(.checkHealth),
-                    .command(.rescanNow),
+                    .command(.showStats), .command(.showYearInReview), .command(.rescanNow),
                     .command(.resolveLostStats), .command(.restoreRemoved),
                     .setting(settings.pausePollingDuringPlayback.key),
                     .setting(settings.rescanNetworkFoldersAtLaunch.key),

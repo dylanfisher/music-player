@@ -21,10 +21,12 @@ public struct Command: Sendable, Equatable {
     /// Its chords are keys the palette takes while it shows, apart from the app's, so one may
     /// be a chord a menu or a list also has. It runs from no menu.
     public let inPalette: Bool
+    /// The command line prints what it found, as text or with `--json`.
+    public let replies: Bool
 
     init(
         _ id: CommandID, _ title: String, _ chords: [KeyChord] = [], links: Bool = false,
-        argument: String? = nil, menus: Bool = true, palette: Bool = false
+        argument: String? = nil, menus: Bool = true, palette: Bool = false, replies: Bool = false
     ) {
         precondition(chords.count <= 2, "\(id) has more than a primary and an alternate")
         precondition(Set(chords).count == chords.count, "\(id) lists one chord twice")
@@ -35,6 +37,7 @@ public struct Command: Sendable, Equatable {
         self.argument = argument
         runsFromMenus = menus && !palette
         inPalette = palette
+        self.replies = replies
     }
 
     /// The default chord at `position`.

@@ -27,6 +27,13 @@ private final class Recorder {
                 arguments.append(text)
                 return nil
             },
+        ],
+        reports: [
+            .showStats: { [unowned self] text, json in
+                arguments.append(text ?? "-")
+                if text == "fail" { throw Failure() }
+                return json ? "{}" : "stats \(text ?? "shown")"
+            }
         ], now: { [unowned self] in clock })
 
     struct Failure: Error, CustomStringConvertible {
@@ -140,4 +147,36 @@ private final class Recorder {
     recorder.clock = 1.0
     #expect(await router.link("music-player://pause") == .done(nil))
     #expect(recorder.ran == Array(repeating: .nextTrack, count: 4) + [.pause])
+}
+
+@MainActor @Test func aReplyingCommandAnswersTheCommandLineWithWhatItFound() async throws {
+    let recorder = try Recorder()
+    let router = recorder.router
+    #expect(
+        await router.handle(.report(.showStats, argument: nil, json: false), from: .commandLine)
+            == .done("stats shown"))
+    #expect(
+        await router.handle(.report(.showStats, argument: "2024", json: true), from: .commandLine)
+            == .done("{}"))
+    #expect(
+        await router.handle(.report(.showStats, argument: "fail", json: false), from: .commandLine)
+            == .failed("nothing matches"))
+    #expect(
+        await router.handle(.report(.showStats, argument: nil, json: false), from: .link)
+            == .failed("a link can't ask for library.stats"))
+    #expect(
+        await router.handle(.report(.nextTrack, argument: nil, json: true), from: .commandLine)
+            == .failed("playback.next doesn't reply; run it without --json"))
+    #expect(recorder.arguments == ["-", "2024", "fail"])
+    // Run as a plain command, as the menu runs it, it shows Stats and says nothing.
+    #expect(await router.handle(.run(.showStats, argument: nil), from: .commandLine) == .done(nil))
+    #expect(recorder.ran == [.showStats])
+}
+
+@Test func aReportRequestRoundTrips() throws {
+    let request = ScriptRequest.report(.showStats, argument: "week", json: true)
+    let data = try JSONEncoder().encode(request)
+    #expect(try JSONDecoder().decode(ScriptRequest.self, from: data) == request)
+    let plain = ScriptRequest.report(.showStats, argument: nil, json: false)
+    #expect(try JSONDecoder().decode(ScriptRequest.self, from: try JSONEncoder().encode(plain)) == plain)
 }

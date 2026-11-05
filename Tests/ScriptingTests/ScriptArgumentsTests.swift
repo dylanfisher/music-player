@@ -1,4 +1,5 @@
 import Commands
+import Settings
 import Testing
 
 @testable import Scripting
@@ -67,7 +68,7 @@ private func problem(_ arguments: String...) -> String? {
     #expect(problem("next", "--home") == "--home needs a folder")
     #expect(problem("next", "--home", "--json") == "--home needs a folder")
     #expect(problem("next", "--home", "a", "--home", "b") == "--home is given twice")
-    #expect(problem("next", "--json") == "--json only goes with status")
+    #expect(problem("next", "--json") == "--json only goes with status and stats")
     #expect(problem("next", "x") == "next takes no argument")
     #expect(problem("play", "a", "b") == "play takes one argument; quote one with spaces")
     #expect(problem("help", "x") == "help takes no argument")
@@ -97,4 +98,21 @@ private func problem(_ arguments: String...) -> String? {
     }
     #expect(help.contains("  status [--json]"))
     #expect(help.contains("music-player://play?q=album:Kind%20of%20Blue"))
+}
+
+@Test func statsTakesAPeriodAndJSON() throws {
+    #expect(try parse("stats").action == .request(.report(.showStats, argument: nil, json: false)))
+    #expect(
+        try parse("stats", "--period", "2024", "--json").action
+            == .request(.report(.showStats, argument: "2024", json: true)))
+    #expect(try parse("stats", "week").action == .request(.report(.showStats, argument: "week", json: false)))
+    #expect(try parse("stats", "--json").json)
+    #expect(problem("stats", "--period") == "--period needs a period: \(StatsPeriod.textHelp)")
+    #expect(problem("stats", "--period", "decade") == "--period takes \(StatsPeriod.textHelp), not decade")
+    #expect(problem("stats", "--period", "week", "--period", "all") == "--period is given twice")
+    #expect(problem("stats", "week", "--period", "all") == "stats takes a period once")
+    #expect(problem("next", "--period", "week") == "--period only goes with stats")
+    #expect(problem("status", "--period", "week") == "--period only goes with stats")
+    #expect(problem("help", "--json") == "help takes no argument")
+    #expect(scriptHelp(names).contains("stats [--period <\(StatsPeriod.textHelp)>] [--json]"))
 }

@@ -29,6 +29,13 @@ extension AppDelegate {
             self?.window?.window.makeKeyAndOrderFront(nil)
             self?.browser?.checkHealth()
         }
+        dispatcher.handle(.showStats, enabled: hasWindow) { [weak self] in
+            self?.window?.window.makeKeyAndOrderFront(nil)
+            self?.browser?.showStats()
+        }
+        dispatcher.handle(.showYearInReview, enabled: hasWindow) { [weak self] in
+            self?.browser?.showYearInReview()
+        }
         dispatcher.handle(
             .rescanNow, enabled: { [weak self] in self?.watcher != nil },
             run: { [weak self] in self?.watcher?.rescanNow() })

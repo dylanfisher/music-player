@@ -14,25 +14,34 @@ public final class ScriptRouter {
 
     /// Runs a command's argument; each command declaring one has one.
     public typealias ArgumentHandler = (String) async throws -> String?
+    /// Runs a command that replies, with its argument if given and whether JSON is asked
+    /// for, and says what it found.
+    public typealias ReportHandler = (String?, Bool) async throws -> String
 
     private let dispatcher: CommandDispatcher
     private let status: () async -> ScriptStatus
     private let arguments: [CommandID: ArgumentHandler]
+    private let reports: [CommandID: ReportHandler]
     private let names: CommandNames
     private var linkRate: LinkRate
 
     /// `now` is seconds on any steady clock, injected so tests needn't wait.
     public init(
         dispatcher: CommandDispatcher, status: @escaping () async -> ScriptStatus,
-        arguments: [CommandID: ArgumentHandler],
+        arguments: [CommandID: ArgumentHandler], reports: [CommandID: ReportHandler] = [:],
         now: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime }
     ) {
-        for command in dispatcher.bindings.defaults.commands where command.argument != nil {
-            precondition(arguments[command.id] != nil, "\(command.id) has no argument handler")
+        for command in dispatcher.bindings.defaults.commands {
+            if command.replies {
+                precondition(reports[command.id] != nil, "\(command.id) has no report handler")
+            } else if command.argument != nil {
+                precondition(arguments[command.id] != nil, "\(command.id) has no argument handler")
+            }
         }
         self.dispatcher = dispatcher
         self.status = status
         self.arguments = arguments
+        self.reports = reports
         names = CommandNames(dispatcher.bindings.defaults.commands)
         linkRate = LinkRate(now: now)
     }
@@ -73,6 +82,19 @@ public final class ScriptRouter {
             if let problem = ScriptRequest.argumentProblem(argument) { return .failed(problem) }
             do {
                 return .done(try await handler(argument))
+            } catch {
+                return .failed("\(error)")
+            }
+        case .report(let id, let argument, let json):
+            guard origin == .commandLine else { return .failed("a link can't ask for \(id)") }
+            guard let report = reports[id] else {
+                return .failed("\(id) doesn't reply; run it without \(ScriptFlag.json.rawValue)")
+            }
+            if let argument, let problem = ScriptRequest.argumentProblem(argument) {
+                return .failed(problem)
+            }
+            do {
+                return .done(try await report(argument, json))
             } catch {
                 return .failed("\(error)")
             }

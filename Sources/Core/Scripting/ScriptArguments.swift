@@ -1,4 +1,5 @@
 import Commands
+import Settings
 
 /// What a run of the tool asks for, read from its arguments.
 public struct ScriptInvocation: Equatable, Sendable {
@@ -8,7 +9,7 @@ public struct ScriptInvocation: Equatable, Sendable {
     }
 
     public var action: Action
-    /// `status --json`.
+    /// `status --json`, or a replying command's.
     public var json = false
     /// `--home`: the app's data folder, as the app's own `--home` takes it.
     public var home: String?
@@ -26,6 +27,8 @@ struct ScriptUsageError: Error, Equatable, CustomStringConvertible {
 enum ScriptFlag: String, CaseIterable {
     case home = "--home"
     case json = "--json"
+    /// Show Listening Stats' period, as its argument.
+    case period = "--period"
 }
 
 /// Reads the tool's arguments, without the executable, against the registry's commands.
@@ -36,6 +39,7 @@ public func parseScriptArguments(_ arguments: [String], names: CommandNames)
     var words: [String] = []
     var json = false
     var home: String?
+    var period: String?
     var index = 0
     while index < arguments.count {
         let word = arguments[index]
@@ -54,6 +58,16 @@ public func parseScriptArguments(_ arguments: [String], names: CommandNames)
             index += 1
         case .json:
             json = true
+        case .period:
+            guard index < arguments.count, !arguments[index].hasPrefix("--") else {
+                throw fail("\(word) needs a period: \(StatsPeriod.textHelp)")
+            }
+            guard period == nil else { throw fail("\(word) is given twice") }
+            guard StatsPeriod(text: arguments[index]) != nil else {
+                throw fail("\(word) takes \(StatsPeriod.textHelp), not \(arguments[index])")
+            }
+            period = arguments[index]
+            index += 1
         case nil:
             throw fail("\(word) isn't an option")
         }
@@ -78,11 +92,29 @@ public func parseScriptArguments(_ arguments: [String], names: CommandNames)
             guard command.argument != nil else { throw fail(ScriptMessage.takesNoArgument(shown)) }
             if let problem = ScriptRequest.argumentProblem(argument) { throw fail(problem) }
         }
+        if period != nil {
+            guard command.id == .showStats else {
+                throw fail("\(ScriptFlag.period.rawValue) only goes with \(names.name(of: .showStats))")
+            }
+            guard rest.isEmpty else { throw fail("\(shown) takes a period once") }
+        }
         // An empty argument is none, as an empty search is no search.
-        action = .request(.run(command.id, argument: rest.first.flatMap { $0.isEmpty ? nil : $0 }))
+        let argument = (period ?? rest.first).flatMap { $0.isEmpty ? nil : $0 }
+        action = .request(
+            command.replies
+                ? .report(command.id, argument: argument, json: json)
+                : .run(command.id, argument: argument))
+        if json, !command.replies {
+            throw fail(
+                "\(ScriptFlag.json.rawValue) only goes with \(CommandNames.Builtin.status) and"
+                    + " \(names.name(of: .showStats))")
+        }
     }
-    if json, action != .request(.status) {
-        throw fail("\(ScriptFlag.json.rawValue) only goes with \(CommandNames.Builtin.status)")
+    if action == .help, json || period != nil {
+        throw fail(ScriptMessage.takesNoArgument(CommandNames.Builtin.help.rawValue))
+    }
+    if period != nil, case .request(.status) = action {
+        throw fail("\(ScriptFlag.period.rawValue) only goes with \(names.name(of: .showStats))")
     }
     return ScriptInvocation(action: action, json: json, home: home)
 }
@@ -99,7 +131,11 @@ public func scriptHelp(_ names: CommandNames) -> String {
     ]
     let commands = names.commands.map { command in
         let name = names.name(of: command.id)
-        let usage = command.argument.map { "\(name) [<\($0)>]" } ?? name
+        let usage =
+            command.replies
+            ? "\(name) [\(ScriptFlag.period.rawValue) <\(command.argument ?? "")>]"
+                + " [\(ScriptFlag.json.rawValue)]"
+            : command.argument.map { "\(name) [<\($0)>]" } ?? name
         return (usage, command.title + (command.runsFromLinks ? "  (link)" : ""))
     }
     let column = 34

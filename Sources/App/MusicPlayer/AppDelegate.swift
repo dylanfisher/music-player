@@ -230,6 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             layout: layout.trackTable, browserHeight: layout.browserHeight,
             groupByAlbumArtist: layout.groupByAlbumArtist, thumbnails: thumbnails)
         browser.setTableAppearance(layout.tableAppearance)
+        browser.statsHeight = layout.statsHeight
         if let timelineTable = layout.timelineTable { browser.showTimelineColumns(timelineTable) }
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
@@ -289,6 +290,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if AppState.browserHeightRange.contains(height) {
                 saver.set(\.browserHeight, height)
             }
+        }
+        browser.statsHeightChanged = { height in
+            if AppState.browserHeightRange.contains(height) { saver.set(\.statsHeight, height) }
         }
         browser.stateChanged = { [weak self] state in
             saver.set(\.browserColumns, state.columns)
@@ -376,7 +380,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func snapshot(to url: URL) {
         let target: () -> NSWindow? =
             switch snapshotOf {
-            case .main, .health: { [weak self] in self?.window?.window }
+            case .main, .health, .stats: { [weak self] in self?.window?.window }
+            case .review: { [weak self] in self?.browser?.yearReviewWindow }
             case .palette: { [weak self] in self?.palette?.window }
             case .playlist: { [weak self] in self?.ruleEditor?.window }
             case .tags: { [weak self] in self?.tagEditing.editors.last?.window }
@@ -397,6 +402,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch snapshotOf {
         case .main: break
         case .health: dispatcher?.run(.checkHealth)
+        case .stats: dispatcher?.run(.showStats)
+        case .review: dispatcher?.run(.showYearInReview)
         case .palette: dispatcher?.run(.showPalette)
         case .playlist: dispatcher?.run(.newSmartPlaylist)
         case .tags:

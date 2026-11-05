@@ -1,13 +1,13 @@
 import AppKit
 
-/// What `--snapshot-of` draws: the main window, the main window showing Library Health, its
-/// palette opened on ⌘K, the smart playlist
-/// editor opened on a new playlist, the tag editor opened on every track, the Settings
-/// window's General, Playback, Appearance, Toolbar, Watched Folders or Shortcuts pane, the
-/// status bar's or the toolbar status's builder, or the toolbar's customization sheet.
+/// What `--snapshot-of` draws: the main window, the main window showing Library Health or
+/// Listening Stats, Year in Review, its palette opened on ⌘K, the smart playlist editor opened
+/// on a new playlist, the tag editor opened on every track, the Settings window's General,
+/// Playback, Appearance, Toolbar, Watched Folders or Shortcuts pane, the status bar's or the
+/// toolbar status's builder, or the toolbar's customization sheet.
 enum SnapshotTarget: String, CaseIterable {
-    case main, health, palette, playlist, tags, settings, playback, appearance, toolbar, folders,
-        shortcuts
+    case main, health, stats, review, palette, playlist, tags, settings, playback, appearance,
+        toolbar, folders, shortcuts
     case statusBar, headerStatus, toolbarSheet
 }
 
