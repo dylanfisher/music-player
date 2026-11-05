@@ -2,6 +2,7 @@
 
 - **Date:** 2026-11-03
 - **Status:** accepted
+- **Amended by:** [0100](0100-get-info-windows-and-smb-temp-files.md)
 
 ## Context
 

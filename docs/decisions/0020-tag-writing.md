@@ -3,7 +3,8 @@
 - **Date:** 2026-10-31
 - **Status:** accepted
 - **Amended by:** [0050](0050-remove-from-library.md): Remove and Move to Trash moves the
-  files the user confirmed to the Trash.
+  files the user confirmed to the Trash. [0100](0100-get-info-windows-and-smb-temp-files.md): the temp file's identity is taken
+  after it closes.
 - **See also:** [0025](0025-threat-model.md) records the writer's threats and how the temp file is made and checked.
 
 ## Context

@@ -150,6 +150,10 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Build the library health report over every fixture track (p95); the old Mac figure is an estimate until its checkpoint | < 1 s | < 3 s |
 | Palette, Go to Item over every fixture track, the last of 8 keystrokes 50 ms apart to its results (median; phase 32d); the old Mac figure is an estimate until its checkpoint | < 15 ms | < 80 ms |
 | Tag editor, read 200 fixture files with each file's opens on the slow simulated NAS (phase 32d); the old Mac figure is an estimate until its checkpoint | < 5 s | < 15 s |
+| Get Info on one fixture track, to its window on screen (median of 5; phase 42e); the old Mac figure is an estimate until its checkpoint | < 50 ms | < 150 ms |
+| Get Info on one fixture track, to its fields (median of 5; phase 42e); the old Mac figure is an estimate until its checkpoint | < 100 ms | < 300 ms |
+| Get Info on 100 fixture tracks, to their fields (median of 5; phase 42e); the old Mac figure is an estimate until its checkpoint | < 500 ms | < 2000 ms |
+| One fixture FLAC's title written and read back into the index (median of 5; phase 42e); the old Mac figure is an estimate until its checkpoint | < 100 ms | < 400 ms |
 | Launch to the first scan's start with a 1M-event sync merge pending (phase 32d); the old Mac figure is an estimate until its checkpoint | < 1 s | < 3 s |
 
 ## Phases
@@ -5308,13 +5312,13 @@ from Settings, click through the tiles, drag the divider, then click Music.
 
 #### 42e. Get Info speed and tag writes
 
-- [ ] **42e.1 Get Info at any time.** Get Info opens at once on any track or selection,
+- [x] **42e.1 Get Info at any time.** Get Info opens at once on any track or selection,
       including while a tag write is running; more than one info window can be open.
-- [ ] **42e.2 Rescan after a write.** After a tag write, the track's tags are read again at
+- [x] **42e.2 Rescan after a write.** After a tag write, the track's tags are read again at
       once and the table, info window and columns show them.
-- [ ] **42e.3 Speed review.** Review the open, edit, write and rescan path for speed on the
+- [x] **42e.3 Speed review.** Review the open, edit, write and rescan path for speed on the
       2015 MacBook Pro, with bench rows for opening Get Info and for one write.
-- [ ] **42e.4 "Something else replaced the temp file".** Writing a FLAC on the NAS failed with
+- [x] **42e.4 "Something else replaced the temp file".** Writing a FLAC on the NAS failed with
       "something else replaced the temp file while the tags were written". Find why and fix it.
 
 Plan, part 42e (ADR 0100):
@@ -5371,6 +5375,40 @@ Plan, part 42e (ADR 0100):
   the browser refreshing on `edited`; one open per file read.
 - Order: this plan, 42e.4, the scanner's file rescan, the editor windows and queue, the reads,
   the bench, the ADR and the result.
+
+Result, part 42e: shipped 42e.1 to 42e.4 (ADR 0100). Cause of 42e.4: the writer took the temp
+file's identity with `fstat` while it was still open for writing and compared it, mtime
+included, just before the rename; an SMB server sets a written file's mtime when its handle
+closes (MS-FSA 2.1.5.4), so every whole-file write on the NAS failed the check, and APFS, which
+sets it at each write, never showed it. The identity is now taken after the close, once the
+name is known to still hold the file written; the check before the rename is unchanged. Get
+Info opens a window at once on any selection, while writes run too, and fills it when the read
+ends; several can be open, the same tracks bring their window forward, closing one stops its
+read, and the 25-file question is gone. Writes and undos queue one at a time in the order
+asked; a batch asks in its own window, and No keeps what was typed. A write's files are read
+again at once by `LibraryWatcher.rescan(files:)`, not behind a scan or playback, and the rows,
+columns and open info windows show them; the folder rescan follows as a backstop. Each file is
+read through one open in the editor, and the original and the temp file once each in the
+writer. Bench on Apple Silicon (fixture files, median of 5): Get Info on one track 5.1 ms to
+its window and 31 ms to its fields, on 100 tracks 43 ms to their fields, one FLAC title written
+and read back 12.7 ms (write 9.9, rescan 2.6); the slow NAS read of 200 files 0.57 s, down from
+the 3.2 s of 32d mostly because the model now charges one open a file, not three, which is what
+the change saves. Tests: the mtime moved at the close (FLAC, MP4, MP3, written and undone; fails
+on the old order), a swap at the close and a change after it refused, the swap tests as before;
+Get Info while a write is held, several windows, the same tracks focusing, writes and undo in
+order, a declined batch keeping its window, a closed window stopping its read, an open window
+read again after a write, the model keeping typed text over a reread; the file rescan (stored,
+a folder scan after finds it unchanged, an unknown path skipped, a gone file reported) and
+during paused polls; the browser refreshing on `edited`; one open reading what three did. The
+one-open count itself isn't asserted, only that it reads the same. Left for the owner: writing
+in place within the padding, which would cut a NAS write from about four transfers of the file
+to a few kilobytes but gives up ADR 0020's temp file; see ADR 0100. For the owner: on a copy of
+a NAS FLAC, edit a tag and check it saves without the error, reads back in Swinsian, and Undo
+Tag Edit puts it back; open Get Info on two selections while a batch writes; edit a track while
+one plays and watch its row change at once. `./scripts/check` passes clean; an earlier run in
+the session failed `glassOnThenOffLeavesTheWindowAsAFreshOne`, which reads the screen, and
+`aColorPickedInThePanelIsSavedAndDefaultClearsIt`, a 5 s wait, neither touched here, and both
+passed on the run after.
 
 #### 42f. Listening Stats
 
