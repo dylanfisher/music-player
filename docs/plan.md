@@ -5418,7 +5418,7 @@ See phase 43.
 
 #### 42g. Get Info fields as in YATE
 
-- [ ] **42g.1 Field review.** Compare Get Info's fields with YATE's panels (Info, Artwork,
+- [x] **42g.1 Field review.** Compare Get Info's fields with YATE's panels (Info, Artwork,
       Sorting, Lyrics, Audio, Credits, More Info, Privacy, URLs). Every field YATE edits that
       the tag writer can write is editable, grouped so it's easy to find: the main tags; sorting
       next to the field it sorts; credits; more info (key, language, dates, mood, work and
@@ -5492,6 +5492,33 @@ Plan, part 42g (ADR 0101):
   the new keys. Bench rows of 42e re-run; the window checked with `--snapshot-of tags`.
 - Order: this plan, the table-driven fields, the writer's new keys, the editor's tabs, the
   snapshot pass, the ADR and the result.
+
+Result, part 42g: shipped 42g.1 (ADR 0101). Get Info edits 38 more fields: grouping, BPM, key,
+conductor, lyricist, remixer, original artist, label, copyright, catalog number, barcode, ISRC,
+encoded by, description, disc subtitle, work, movement number, total and name, original date
+and album, language, mood, media, lyrics, the five sort fields and eight webpages, each written
+and read back in FLAC, MP4 and ID3v2.3 and 2.4 through the writer's usual temp file, checks and
+undo journal. Each field's keys sit in one table beside the reader's map, which is built from
+it. The omissions and their reasons are in the table above and the ADR; the largest are
+involved people and musician credits, and user-defined text and URLs. Get Info is now tabs:
+Info (compact, as YATE's), Sorting (each sort field above the field it sorts), Credits, Details,
+Rights & Label, URLs, Lyrics, Artwork and File (read-only format, rate, depth, length, bit rate,
+size, tag kind and dates). Mixed values work for every field, and a dot marks a field once
+edited. No index change: the new fields live in the files and are read on Get Info, so the
+owner's library isn't rebuilt (a schema change would rescan every file, keeping plays and
+history). Bench on Apple Silicon (fixture files, median of 5): Get Info on one track 7.3 ms to
+its window and 29.9 ms to its fields, on 100 tracks 51 ms, the FLAC title write and read back
+14.4 ms; making every tab at open had cost 55 ms to the fields, so each tab is made when first
+shown. Checked with `--snapshot-of tags` against fixture files, one tagged FLAC and a selection
+of three, every tab; not checked: dark mode, macOS 12, a real picture in the Artwork tab.
+Tests: every new field per format written in its named key, read back, cleared and undone, with
+blocks outside the edit unchanged; 2.3's year frame, `GRP1` kept, a described `USLT` kept, a
+non-Latin-1 URL refused in ID3 and taken in FLAC; the reader on other taggers' spellings; every
+field on a tab and each sort field above its field; the model's mixed and edited state; the File
+tab's text. For the owner: on copies of a FLAC, an MP3 and an M4A, fill in a few fields on each
+tab, save, and check them in Picard or Mp3tag and in YATE; check Get Info across an album shows
+Mixed where tracks differ, and that the tab chosen is the next window's. `./scripts/check`
+passes clean.
 
 ### 43. Listening Stats
 
