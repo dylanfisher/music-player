@@ -530,7 +530,8 @@ private func syncAll(_ machines: [Machine]) throws {
     let added = try #require(try a.track("A/1.flac")).addedSeconds
     #expect(
         events == [
-            .addedFiles(folder: "music/library/A", names: ["1.flac", "2.flac", "3.flac"], at: added),
+            .addedFiles(
+                folder: "music/library/A", names: ["1.flac", "2.flac", "3.flac"], at: added),
             .addedFiles(folder: "music/library/B", names: ["1.flac"], at: added),
         ])
     Thread.sleep(forTimeInterval: 0.01)
