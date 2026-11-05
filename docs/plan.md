@@ -4963,8 +4963,8 @@ the same on `main` here (41c).
 ### 42. Owner feedback, 2026-11-05
 
 The owner's feedback from trying phase 41. Parts 42a to 42d run in parallel worktrees and
-rebase onto main in order a, b, c, d. Parts 42e and 42f run after them, also in parallel; 42g
-runs after 42f. Each part keeps the owner's window layout, column widths, toolbar and settings:
+rebase onto main in order a, b, c, d. Parts 42e (Get Info) and 42f (Listening Stats, phase 43,
+which uses 42d's panel) then run in parallel; 42g runs after 42e, since both change Get Info. Each part keeps the owner's window layout, column widths, toolbar and settings:
 a state or config key changes only by adding an optional key, and the owner's current
 `state.json` and `config.json` still decode after the part (checked against a copy, not the
 files themselves). The owner's answers: Ctrl+Left and Ctrl+Right seek even though macOS binds
