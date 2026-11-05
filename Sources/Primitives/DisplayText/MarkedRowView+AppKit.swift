@@ -27,6 +27,10 @@ public final class MarkedRowView: NSTableRowView {
     public var isMarked = false {
         didSet { if isMarked != oldValue { needsDisplay = true } }
     }
+    /// The marked row's fill in place of `tint`; nil for `tint`.
+    public var markTint: NSColor? {
+        didSet { if markTint != oldValue { needsDisplay = true } }
+    }
     /// The line along the row's bottom, drawn by the row so each row can have its own; nil for
     /// none.
     public var bottomLine: NSColor? {
@@ -65,7 +69,7 @@ public final class MarkedRowView: NSTableRowView {
                 }
             }
             if isMarked {
-                Self.tint.setFill()
+                (markTint ?? Self.tint).setFill()
                 bounds.fill(using: .sourceOver)
             }
         }

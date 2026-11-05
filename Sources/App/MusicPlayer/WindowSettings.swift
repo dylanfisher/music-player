@@ -66,6 +66,7 @@ extension TableAppearance {
     static let keys = [
         AppSettings().columnLines.key, AppSettings().rowLines.key, AppSettings().albumLines.key,
         AppSettings().rowLineColor.key, AppSettings().albumLineColor.key,
+        AppSettings().playingRowColor.key,
         AppSettings().alternatingRows.key, AppSettings().rowHeight.key, AppSettings().artSize.key,
         AppSettings().glass.key,
     ]
@@ -75,6 +76,7 @@ extension TableAppearance {
             columnLines: settings[\.columnLines], rowLines: settings[\.rowLines],
             albumLines: settings[\.albumLines], rowLineColor: settings[\.rowLineColor],
             albumLineColor: settings[\.albumLineColor],
+            playingRowColor: settings[\.playingRowColor],
             alternatingRows: settings[\.alternatingRows], rowHeight: settings[\.rowHeight],
             artSize: settings[\.artSize], glass: settings[\.glass])
     }

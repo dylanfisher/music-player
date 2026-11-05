@@ -10,6 +10,8 @@ public struct TableAppearance: Equatable, Sendable {
     /// The row and column lines' color, and the album lines'; nil is the system's grid color.
     public var rowLineColor: HexColor?
     public var albumLineColor: HexColor?
+    /// The playing track's row; nil is `MarkedRowView`'s light gray.
+    public var playingRowColor: HexColor?
     public var alternatingRows: Bool
     public var rowHeight: RowHeight
     public var artSize: ArtSize
@@ -17,14 +19,15 @@ public struct TableAppearance: Equatable, Sendable {
 
     public init(
         columnLines: Bool, rowLines: Bool, albumLines: Bool, rowLineColor: HexColor?,
-        albumLineColor: HexColor?, alternatingRows: Bool, rowHeight: RowHeight, artSize: ArtSize,
-        glass: Bool
+        albumLineColor: HexColor?, playingRowColor: HexColor?, alternatingRows: Bool,
+        rowHeight: RowHeight, artSize: ArtSize, glass: Bool
     ) {
         self.columnLines = columnLines
         self.rowLines = rowLines
         self.albumLines = albumLines
         self.rowLineColor = rowLineColor
         self.albumLineColor = albumLineColor
+        self.playingRowColor = playingRowColor
         self.alternatingRows = alternatingRows
         self.rowHeight = rowHeight
         self.artSize = artSize
@@ -33,6 +36,7 @@ public struct TableAppearance: Equatable, Sendable {
 
     var rowLine: NSColor { rowLineColor.map(NSColor.init) ?? .gridColor }
     var albumLine: NSColor { albumLineColor.map(NSColor.init) ?? .gridColor }
+    var playingRow: NSColor? { playingRowColor.map(NSColor.init) }
 }
 
 extension NSColor {

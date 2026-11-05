@@ -70,6 +70,9 @@ public struct AppSettings: SettingsSchema {
     public let albumLineColor = Setting<HexColor?>(
         "appearance.albumLineColor", title: "Album Line Color", default: nil,
         "The album lines' color; none uses the system's grid color.")
+    public let playingRowColor = Setting<HexColor?>(
+        "appearance.playingRowColor", title: "Playing Row Color", default: nil,
+        "The playing track's row color; none uses a light gray.")
     public let alternatingRows = Setting(
         "appearance.alternatingRows", title: "Alternating Rows", default: true,
         "Shade every other row of the track table.")

@@ -397,6 +397,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// Marks `rowView` if it plays, gives it its line, and keeps the art column plain.
     private func decorate(_ rowView: MarkedRowView, row: Int) {
         rowView.isMarked = isPlaying(row)
+        rowView.markTint = appearance?.playingRow
         setLines(rowView, row: row)
         rowView.columnLines = appearance?.columnLines == true ? appearance?.rowLine : nil
         rowView.plainColumn = columnIdentifier(.art)
