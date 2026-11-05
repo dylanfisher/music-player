@@ -4297,12 +4297,31 @@ darker box; Swinsian's fills 250 on 242, a lighter one.
 - [ ] **40a.4 Window title as you type.** The window title follows its setting as it's typed,
       without pressing Return or leaving the field.
 
-Plan, part 40a: reproduce each in the running app and in a test first (choose a color through
-the well and the panel, press Default, type in the template field), find the cause, then fix
-it. 40a.4: a template row saves on each edit whose text parses; while the text doesn't parse
-(an open brace mid-typing), nothing is saved and the row says why. Tests: a color chosen in the
-well reaches the rows' drawn lines, Default sets null and the lines go back to the grid color,
-typing a template sets the window's title without ending the edit.
+Plan, part 40a:
+- Probe (a throwaway test with a real `ConfigStore` behind the pane, the well made active and
+  the shared color panel's color set, as a pick in the panel does): the well takes the color
+  and shows it, but sends no action, not on the change, not when the panel closes, not when
+  the well lets go. `isContinuous = false` on an `NSColorWell` means the panel never reaches its
+  target. So nothing is saved: the table's chain (`TableAppearance.keys`, `setTableAppearance`,
+  `decorate`) is never started, and a test already covers it from a changed appearance to the
+  rows' lines. With the well continuous, the same probe saves the color.
+- 40a.3 has the same cause: Default is enabled only while the setting has a color, and none was
+  ever saved, so it stayed disabled beside a well showing the picked color. Pressed with a color
+  saved, it sets null and the well goes back to the grid color, as the probe showed.
+- Colors (40a.1 to 40a.3, one commit, one cause): the well is continuous, and the pane saves its
+  color once it has stopped changing for 0.25 s, so a drag in the panel writes the file once
+  per pause, not per step; a color equal to the saved one isn't saved, and Default cancels a
+  save still waiting. Tests: a color set in the panel with the well active is saved after the
+  pause and enables Default; Default then saves null and puts the grid color back in the well.
+- Template rows (40a.4): `GeneralPane` saves a template row on each change of its text whose
+  template parses (`TitleTemplate`'s `problem()`), so the window title and the Title Line follow
+  as they're typed; text equal to the saved template isn't saved, so no write per keystroke
+  that changes nothing. While the text doesn't parse, nothing is saved and a red line under the
+  field says why; it goes when the text parses or the edit ends, which puts back the saved
+  template as now. Tests: typing saves while the field is still being edited, for the window
+  title and the Title Line; an open brace saves nothing and shows the problem; unchanged text
+  calls no save. The title's following its setting is already tested.
+- Order: this plan, colors, templates, each through `./scripts/check`, then the result.
 
 #### 40b. Progress box and glass headers
 
