@@ -49,7 +49,7 @@ public final class GeneralModel {
         case output, playCounts
         case library, sync, receiver
         /// Shown under the Watched Folders pane's list, as Swinsian has them.
-        case networkFolders
+        case folderChanges, networkFolders
         case appearance
         /// A key no section claims; a test keeps the app's settings out of it.
         case other
@@ -61,6 +61,7 @@ public final class GeneralModel {
             case .library: "Library"
             case .sync: "Sync"
             case .receiver: "Receiver"
+            case .folderChanges: "Folder Changes"
             case .networkFolders: "Network Folders"
             case .appearance: AppSettings().appearance.title
             case .other: "Other"
@@ -76,6 +77,7 @@ public final class GeneralModel {
             case .library: ["library."]
             case .sync: ["sync."]
             case .receiver: ["receiver."]
+            case .folderChanges: [schema.removeMissingTracks.key, schema.rescanModifiedFiles.key]
             case .networkFolders:
                 [schema.pausePollingDuringPlayback.key, schema.rescanNetworkFoldersAtLaunch.key]
             case .appearance: [schema.appearance.key]

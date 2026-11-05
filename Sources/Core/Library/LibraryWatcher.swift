@@ -75,7 +75,8 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// each scan and on each trigger. The caller reads them from Settings.
     public func start(
         folders: [WatchedFolder], syncFolder: SyncFolder? = nil,
-        rescanNetworkFoldersAtLaunch: Bool, pausePollingDuringPlayback: Bool
+        rescanNetworkFoldersAtLaunch: Bool, pausePollingDuringPlayback: Bool,
+        options: ScanOptions = ScanOptions()
     ) {
         queue.async { [self] in
             precondition(state == nil, "the watcher is already running")
@@ -103,7 +104,8 @@ public final class LibraryWatcher: @unchecked Sendable {
             let started = WatchState(
                 folders: folders, indexed: indexed(folders),
                 rescanNetworkFoldersAtLaunch: rescanNetworkFoldersAtLaunch,
-                pausePollingDuringPlayback: pausePollingDuringPlayback, now: Date())
+                pausePollingDuringPlayback: pausePollingDuringPlayback, options: options,
+                now: Date())
             state = started
             for path in started.leftToTheIndex { events(.keptIndex(folder: path)) }
             reportLaunchIfEnded()
@@ -321,7 +323,8 @@ public final class LibraryWatcher: @unchecked Sendable {
                 }
                 let result = Result {
                     try scanner.scan(
-                        job.folder, only: job.subtrees, control: control, progress: progress)
+                        job.folder, only: job.subtrees, control: control, progress: progress,
+                        options: job.options)
                 }
                 progress.finish()
                 Task { [self] in

@@ -40,7 +40,7 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
     let removeButton = NSButton()
     let rescanButton = NSButton()
     private(set) var folders: [GeneralModel.Folder] = []
-    /// The Network Folders section's settings.
+    /// The Folder Changes and Network Folders sections' settings.
     private let settings: GeneralPane
 
     init(model: GeneralModel, actions: SettingsActions) {
@@ -51,7 +51,8 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         self.row = row
         self.actions = actions
         settings = GeneralPane(
-            model: model, configPath: nil, actions: actions, sections: [.networkFolders])
+            model: model, configPath: nil, actions: actions,
+            sections: [.folderChanges, .networkFolders])
         super.init(nibName: nil, bundle: nil)
     }
 

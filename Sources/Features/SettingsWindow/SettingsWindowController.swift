@@ -50,7 +50,8 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         self.general = GeneralPane(
             model: general, configPath: configPath, actions: actions,
             sections: GeneralModel.Section.allCases.filter {
-                !playbackSections.contains($0) && ![.appearance, .networkFolders].contains($0)
+                !playbackSections.contains($0)
+                    && ![.appearance, .folderChanges, .networkFolders].contains($0)
             })
         playback = GeneralPane(
             model: general, configPath: nil, actions: actions, sections: playbackSections)
@@ -95,7 +96,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         case .appearance:
             show(.appearance)
             appearance.focus(key)
-        case .networkFolders:
+        case .folderChanges, .networkFolders:
             show(.folders)
             folders.focus(key)
         default:

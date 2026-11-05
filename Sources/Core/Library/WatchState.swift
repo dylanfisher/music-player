@@ -9,6 +9,10 @@ struct WatchJob: Equatable, Sendable {
     /// Rescan or Rescan All asked for it, so it runs while playing even if `pausePollingDuringPlayback`
     /// says not to. It still waits while a track starts, which takes seconds.
     var ignoresPlaybackPause = false
+    /// What the scan does with changed and gone files: the settings', except that a scan
+    /// someone asked for, by Rescan, Rescan All or a tag edit, reads modified files whatever
+    /// they say.
+    var options = ScanOptions()
 }
 
 /// What the watcher scans and when, apart from timers, FSEvents and threads, so tests can drive
@@ -30,8 +34,13 @@ struct WatchState {
     private(set) var running: WatchJob?
     private var activity = PlaybackActivity.stopped
     private var pausePollingDuringPlayback: Bool
+    /// What the settings say scans do with changed and gone files (ADR 0094).
+    private let options: ScanOptions
     /// Local folders queued for a whole scan, by path.
     private var wholeScans: [String]
+    /// The folders, by path, whose next scan someone asked for: a local folder's Rescan, or
+    /// any folder's tag edit, so it reads modified files whatever `options` say.
+    private var asked: Set<String> = []
     /// Changed directories under each folder, by the folder's path: from FSEvents for local
     /// folders, and from tag edits for any folder.
     private var changed: [String: Set<String>] = [:]
@@ -54,10 +63,11 @@ struct WatchState {
     /// to never rescan isn't rescanned at launch either (ADR 0082).
     init(
         folders: [WatchedFolder], indexed: Set<String>, rescanNetworkFoldersAtLaunch: Bool,
-        pausePollingDuringPlayback: Bool, now: Date
+        pausePollingDuringPlayback: Bool, options: ScanOptions = ScanOptions(), now: Date
     ) {
         self.folders = folders
         self.pausePollingDuringPlayback = pausePollingDuringPlayback
+        self.options = options
         wholeScans = folders.filter { $0.kind == .local }.map(\.path)
         for folder in folders where folder.kind == .network {
             if indexed.contains(folder.path)
@@ -89,6 +99,7 @@ struct WatchState {
         precondition(running == nil, "relocated during a scan")
         for (old, new) in zip(folders, moved) where old.path != new.path {
             if launchPending.remove(old.path) != nil { launchPending.insert(new.path) }
+            if asked.remove(old.path) != nil { asked.insert(new.path) }
             changed[old.path] = nil
             wholeScans = wholeScans.map { $0 == old.path ? new.path : $0 }
             requested = requested.map { $0 == old.path ? new.path : $0 }
@@ -118,6 +129,7 @@ struct WatchState {
                 })
             else { continue }
             changed[folder.path, default: []].insert(path)
+            asked.insert(folder.path)
         }
     }
 
@@ -134,14 +146,17 @@ struct WatchState {
     mutating func rescanEverything() { rescan(wholeFolders: folders.map(\.path)) }
 
     /// Rescan: the folders at `paths` are scanned whole, network ones too while playing with
-    /// `pausePollingDuringPlayback` on. A running whole scan of a folder counts for it, and
-    /// stops waiting for playback.
+    /// `pausePollingDuringPlayback` on, reading modified files. A running whole scan of a
+    /// folder that reads them counts for it, and stops waiting for playback.
     mutating func rescan(wholeFolders paths: [String]) {
         for folder in folders where paths.contains(folder.path) {
-            if running?.folder.path == folder.path, running?.subtrees.isEmpty == true {
+            if running?.folder.path == folder.path, running?.subtrees.isEmpty == true,
+                running?.options.rescansModifiedFiles == true
+            {
                 running?.ignoresPlaybackPause = true
             } else if folder.kind == .local {
                 if !wholeScans.contains(folder.path) { wholeScans.append(folder.path) }
+                asked.insert(folder.path)
                 changed[folder.path] = nil
             } else if !requested.contains(folder.path) {
                 requested.append(folder.path)
@@ -174,22 +189,25 @@ struct WatchState {
     /// or nothing may run. Local changes go first, since someone is likely waiting to see them.
     mutating func start(now: Date) -> WatchJob? {
         guard running == nil else { return nil }
-        let job: WatchJob
+        var job: WatchJob
         if let (path, directories) = changed.first(where: { entry in
             !entry.value.isEmpty && (folder(entry.key).kind == .local || pollsAllowed)
         }) {
             changed[path] = nil
-            job = WatchJob(folder: folder(path), subtrees: directories.sorted())
+            job = WatchJob(
+                folder: folder(path), subtrees: directories.sorted(), options: options)
         } else if !wholeScans.isEmpty {
             let path = wholeScans.removeFirst()
             changed[path] = nil
             retryDue[path] = nil
-            job = WatchJob(folder: folder(path), subtrees: [])
+            job = WatchJob(folder: folder(path), subtrees: [], options: options)
         } else if activity != .starting, !requested.isEmpty {
             let path = requested.removeFirst()
             changed[path] = nil
             pollDue[path] = nil
-            job = WatchJob(folder: folder(path), subtrees: [], ignoresPlaybackPause: true)
+            asked.insert(path)
+            job = WatchJob(
+                folder: folder(path), subtrees: [], ignoresPlaybackPause: true, options: options)
         } else if pollsAllowed,
             let (path, _) = retryDue.filter({ $0.value <= now }).min(by: {
                 $0.value < $1.value
@@ -197,15 +215,17 @@ struct WatchState {
         {
             retryDue[path] = nil
             changed[path] = nil
-            job = WatchJob(folder: folder(path), subtrees: [])
+            job = WatchJob(folder: folder(path), subtrees: [], options: options)
         } else if pollsAllowed,
             let (path, _) = pollDue.filter({ $0.value <= now }).min(by: { $0.value < $1.value })
         {
             pollDue[path] = nil
-            job = WatchJob(folder: folder(path), subtrees: [])
+            job = WatchJob(folder: folder(path), subtrees: [], options: options)
         } else {
             return nil
         }
+        // Each of these scans covers what the folder's tag edits changed.
+        if asked.remove(job.folder.path) != nil { job.options.rescansModifiedFiles = true }
         running = job
         return job
     }

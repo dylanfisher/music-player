@@ -45,13 +45,14 @@ public struct LibraryScanner: Sendable {
         self.batchSize = batchSize
     }
 
-    /// Scans `folder`, or only the directories in `subtrees`, each of which must be inside it.
-    /// Blocks until done, so call it off the main thread and outside Swift concurrency's
-    /// threads. Throws only when the database fails; problems with files and folders are in the
-    /// summary.
+    /// Scans `folder`, or only the directories in `subtrees`, each of which must be inside it,
+    /// reading and removing as `options` say. Blocks until done, so call it off the main thread
+    /// and outside Swift concurrency's threads. Throws only when the database fails; problems
+    /// with files and folders are in the summary.
     public func scan(
         _ folder: WatchedFolder, only subtrees: [String] = [], control: ScanControl = ScanControl(),
-        progress: AsyncStream<ScanProgress>.Continuation? = nil
+        progress: AsyncStream<ScanProgress>.Continuation? = nil,
+        options: ScanOptions = ScanOptions()
     ) throws -> ScanSummary {
         let root = canonicalPath(folder.path)
         var summary = ScanSummary()
@@ -103,7 +104,7 @@ public struct LibraryScanner: Sendable {
             controller: controller,
             readers: readers,
             access: access, control: control, counter: ProgressCounter(progress),
-            batchSize: batchSize,
+            batchSize: batchSize, rescansModifiedFiles: options.rescansModifiedFiles,
             rootIsThere: { directoryDevice(root) == device })
         let outcome = try pipeline.run()
         summary.read = outcome.read
@@ -146,9 +147,10 @@ public struct LibraryScanner: Sendable {
             return summary
         }
 
-        // The walk finished, so remove what's gone, except under anything it couldn't see.
+        // The walk finished, so remove what's gone, except under anything it couldn't see, and
+        // nothing when the owner keeps missing tracks.
         let gone = known.filter { path, _ in
-            !outcome.seen.contains(path)
+            options.removesMissingTracks && !outcome.seen.contains(path)
                 && !protected.contains { $0 == path || isPath(path, under: $0) }
         }
         try index.remove(gone.map(\.value.id))

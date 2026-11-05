@@ -268,11 +268,16 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let sections = model.sections
     #expect(
         sections.map(\.section) == [
-            .output, .playCounts, .library, .sync, .receiver, .networkFolders, .appearance,
+            .output, .playCounts, .library, .sync, .receiver, .folderChanges, .networkFolders,
+            .appearance,
         ])
     #expect(
         sections.first { $0.section == .networkFolders }?.rows.map(\.key) == [
             schema.pausePollingDuringPlayback.key, schema.rescanNetworkFoldersAtLaunch.key,
+        ])
+    #expect(
+        sections.first { $0.section == .folderChanges }?.rows.map(\.key) == [
+            schema.removeMissingTracks.key, schema.rescanModifiedFiles.key,
         ])
     #expect(
         sections.first { $0.section == .playCounts }?.rows.map(\.key) == [schema.playedPercent.key])
@@ -671,6 +676,12 @@ private func waitFor(_ condition: () -> Bool) async throws {
     #expect(controller.window.title == schema.watchedFolders.title)
     let folders = try #require(controller.window.contentViewController?.view)
     #expect(view(schema.rescanNetworkFoldersAtLaunch.key, in: folders) != nil)
+    // Swinsian's two options for what changes in the folders do, as checkboxes.
+    for key in [schema.removeMissingTracks.key, schema.rescanModifiedFiles.key] {
+        #expect(view(key, in: folders) is NSButton, "\(key)")
+    }
+    controller.show(setting: schema.rescanModifiedFiles.key)
+    #expect(controller.window.title == schema.watchedFolders.title)
     controller.show(setting: schema.networkScanReaders.key)
     controller.show(setting: schema.fileViewer.key)
     #expect(opened == 2)

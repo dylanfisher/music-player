@@ -52,6 +52,34 @@ import Testing
     #expect(try library.index().trackCount() == library.readableCount - 1)
 }
 
+/// With Remove Missing Tracks off, a deleted file's track stays; with Rescan Modified Files
+/// off, a changed file isn't read, and is read once it's on again. New files are read either
+/// way.
+@Test func theSettingsKeepMissingTracksAndLeaveModifiedFiles() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let files = library.manifest.files.filter { $0.malformation == nil }
+    let changed = try FileHandle(forWritingTo: URL(fileURLWithPath: library.path(files[0])))
+    try changed.seekToEnd()
+    try changed.write(contentsOf: Data(count: 16))
+    try changed.close()
+    try FileManager.default.removeItem(atPath: library.path(files[1]))
+    try FileManager.default.copyItem(
+        atPath: library.path(files[2]), toPath: library.root + "/Added Copy.flac")
+
+    let off = ScanOptions(removesMissingTracks: false, rescansModifiedFiles: false)
+    let kept = try library.scanner.scan(library.folder, options: off)
+    #expect(kept.read == 1, "only the new file")
+    #expect(kept.removed == 0)
+    #expect(try library.index().trackCount() == library.readableCount + 1)
+    #expect(try library.scanner.scan(library.folder, options: off).read == 0)
+
+    let on = try library.scan()
+    #expect(on.read == 1, "the modified file, now that the setting reads it")
+    #expect(on.removed == 1)
+    #expect(try library.index().trackCount() == library.readableCount)
+}
+
 @Test func missingFolderRemovesNothing() throws {
     let library = try TestLibrary()
     _ = try library.scan()

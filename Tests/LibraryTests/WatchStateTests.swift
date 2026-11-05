@@ -144,6 +144,54 @@ private struct FakeEngine {
     #expect(state.start(now: start) == WatchJob(folder: nas, subtrees: ["/Volumes/Music/C"]))
 }
 
+/// With Rescan Modified Files off, the launch scan, FSEvents and polls leave modified files,
+/// but a tag edit's scan and Rescan read them; Remove Missing Tracks applies to every scan.
+@Test func onlyAScanSomeoneAskedForReadsModifiedFilesWhenTheSettingIsOff() {
+    let off = ScanOptions(removesMissingTracks: false, rescansModifiedFiles: false)
+    let reads = ScanOptions(removesMissingTracks: false, rescansModifiedFiles: true)
+    var state = WatchState(
+        folders: [local, nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false, options: off, now: start)
+    #expect(state.start(now: start)?.options == off, "the launch scan")
+    state.finished(now: start)
+    #expect(state.start(now: start)?.options == off, "the network folder's first poll")
+    state.finished(now: start)
+    state.directoriesChanged(["/Users/me/Music/A"])
+    #expect(state.start(now: start)?.options == off, "FSEvents")
+    state.finished(now: start)
+    state.directoriesEdited(["/Users/me/Music/B"])
+    state.directoriesChanged(["/Users/me/Music/A"])
+    #expect(
+        state.start(now: start)
+            == WatchJob(
+                folder: local, subtrees: ["/Users/me/Music/A", "/Users/me/Music/B"],
+                options: reads))
+    state.finished(now: start)
+    state.directoriesChanged(["/Users/me/Music/A"])
+    #expect(state.start(now: start)?.options == off, "the edit was read")
+    state.finished(now: start)
+    state.rescanEverything()
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: [], options: reads))
+    state.finished(now: start)
+    #expect(
+        state.start(now: start)
+            == WatchJob(folder: nas, subtrees: [], ignoresPlaybackPause: true, options: reads))
+    state.finished(now: start)
+    #expect(state.start(now: minutes(15))?.options == off, "the next poll")
+}
+
+/// A Rescan during a launch scan that leaves modified files scans the folder again after it.
+@Test func aRescanDuringAScanThatLeavesModifiedFilesComesAfterIt() {
+    let off = ScanOptions(rescansModifiedFiles: false)
+    var state = WatchState(
+        folders: [local], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: false, options: off, now: start)
+    #expect(state.start(now: start)?.options == off)
+    state.rescan(wholeFolders: [local.path])
+    state.finished(now: start)
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
+}
+
 @Test func aFailedLocalScanIsRetriedWholeWithABackoff() {
     var state = WatchState(
         folders: [local], indexed: [], rescanNetworkFoldersAtLaunch: false,

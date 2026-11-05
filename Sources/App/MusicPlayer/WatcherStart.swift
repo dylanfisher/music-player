@@ -22,7 +22,10 @@ func startedWatcher(
     watcher.start(
         folders: folders, syncFolder: settings[\.syncFolder],
         rescanNetworkFoldersAtLaunch: settings[\.rescanNetworkFoldersAtLaunch],
-        pausePollingDuringPlayback: settings[\.pausePollingDuringPlayback])
+        pausePollingDuringPlayback: settings[\.pausePollingDuringPlayback],
+        options: ScanOptions(
+            removesMissingTracks: settings[\.removeMissingTracks],
+            rescansModifiedFiles: settings[\.rescanModifiedFiles]))
     return watcher
 }
 

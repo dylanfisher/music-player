@@ -23,6 +23,12 @@ public struct AppSettings: SettingsSchema {
     public let watchedFolders = Setting<[WatchedFolder]>(
         "library.watchedFolders", title: "Watched Folders", default: [],
         "Folders the library scans and watches for changes.")
+    public let removeMissingTracks = Setting(
+        "library.removeMissingTracks", title: "Remove Missing Tracks", default: true,
+        "Drop a track when its file leaves a watched folder; files stay.")
+    public let rescanModifiedFiles = Setting(
+        "library.rescanModifiedFiles", title: "Rescan Modified Files", default: true,
+        "Read a file's tags again when it changes in a watched folder.")
     public let pausePollingDuringPlayback = Setting(
         "library.pausePollingDuringPlayback", title: "Pause Network Rescans While Playing",
         default: false,

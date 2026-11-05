@@ -54,6 +54,8 @@ final class ScanPipeline: @unchecked Sendable {
     private let root: String
     private let filter: FolderFilter
     private let known: [String: KnownFile]
+    /// Whether a known file whose size or time changed is read again (`ScanOptions`).
+    private let rescansModifiedFiles: Bool
     /// The paths removed from the library, in NFC, which the walk passes over.
     private let removed: Set<String>
     private let access: any ScanFileAccess
@@ -119,9 +121,11 @@ final class ScanPipeline: @unchecked Sendable {
         removed: Set<String>, index: LibraryIndex, controller: ReadConcurrency?, readers: Int,
         access: any ScanFileAccess,
         control: ScanControl,
-        counter: ProgressCounter, batchSize: Int, rootIsThere: @escaping @Sendable () -> Bool
+        counter: ProgressCounter, batchSize: Int, rescansModifiedFiles: Bool = true,
+        rootIsThere: @escaping @Sendable () -> Bool
     ) {
         self.batchSize = batchSize
+        self.rescansModifiedFiles = rescansModifiedFiles
         directories = starts.reversed()
         self.root = root
         self.filter = filter
@@ -225,9 +229,11 @@ final class ScanPipeline: @unchecked Sendable {
 
     private func isChanged(_ file: WalkedFile) -> Bool {
         guard let previous = known[file.path] else { return true }
-        return previous.sizeBytes != file.sizeBytes
-            || previous.modifiedSeconds != file.modifiedSeconds
-            || previous.failure == .unreadable
+        // An unreadable file is read again whatever the setting: it didn't change, it failed.
+        return previous.failure == .unreadable
+            || (rescansModifiedFiles
+                && (previous.sizeBytes != file.sizeBytes
+                    || previous.modifiedSeconds != file.modifiedSeconds))
     }
 
     /// Called with `condition` held.
