@@ -9,6 +9,8 @@ let pathSQL = "SELECT path FROM paths WHERE id = ?"
 let maximumMoves = 100_000
 let maximumMoveChain = 16
 let syncPlaylistIDSQL = "SELECT id FROM \(syncPlaylistsTable) WHERE playlist_id = ?"
+/// The playlist a sync ID names; NULL for one deleted.
+let syncPlaylistSQL = "SELECT playlist_id FROM \(syncPlaylistsTable) WHERE id = ?"
 /// A playlist's sync ID; a NULL playlist marks one deleted.
 let insertSyncPlaylistSQL = "INSERT INTO \(syncPlaylistsTable) (id, playlist_id) VALUES (?, ?)"
 

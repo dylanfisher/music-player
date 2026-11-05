@@ -65,7 +65,7 @@ extension LibraryIndex {
 
     /// The playlist with sync ID `syncID` on this Mac; nil when there's none, or it was deleted.
     public func playlistID(syncID: String) throws -> Int64? {
-        try statement("SELECT playlist_id FROM \(syncPlaylistsTable) WHERE id = ?")
-            .map(syncID, row: { $0.optionalInt(0).map(Int64.init) }).first ?? nil
+        try statement(syncPlaylistSQL).map(syncID, row: { $0.optionalInt(0).map(Int64.init) }).first
+            ?? nil
     }
 }

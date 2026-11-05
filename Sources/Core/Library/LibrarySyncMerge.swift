@@ -178,9 +178,9 @@ extension LibraryIndex {
 
     private func mergedPlaylist(_ syncID: String) throws -> MergedPlaylist {
         guard
-            let row = try statement(
-                "SELECT playlist_id FROM \(syncPlaylistsTable) WHERE id = ?"
-            ).map(syncID, row: { $0.optionalInt(0).map(Int64.init) }).first
+            let row = try statement(syncPlaylistSQL).map(
+                syncID, row: { $0.optionalInt(0).map(Int64.init) }
+            ).first
         else { return .unknown }
         return row.map { .local($0) } ?? .deleted
     }
