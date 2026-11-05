@@ -77,6 +77,21 @@ from the header's menu while the glass is on comes with a stock cell; the header
 before it draws, and taking the glass off gives that column its stock cell back too. Taking the glass
 off puts the original header view back with whatever menu was set meanwhile.
 
+**The glass headers are frosted (phase 40b).** The 8% tint left the headers looking fully
+transparent, the rows' text showing through the titles. `GlassHeaderView` now holds an
+`NSVisualEffectView` with the header material, blending within the window, so it blurs the rows
+that scroll under it as Finder's headers do. A view's subviews draw over its own drawing, so the
+header draws nothing itself: a titles view over the material draws the line under the header and
+the cells, and the header's `viewWillDraw` marks it for display, so a resize, a drag or a sort
+that asks the header to redraw redraws the titles. The header returns itself from `hitTest`, so
+clicks, drags and its menu stay its own. The material follows the window's active state, as the
+glass's backdrop does, so an inactive window's header is a flat color. It goes with the header
+view when the glass goes off. `cacheDisplay` draws a visual effect view as a flat fill, so the
+test reads its window as the screen shows it with `CGWindowListCreateImage`, which Swift can't
+call from the macOS 15 SDK on but which is still exported and needs no screen recording
+permission for the app's own windows. `--snapshot` shows the flat fill too; the blur is checked
+by that test and by eye.
+
 ## Alternatives considered
 
 - **Hiding the art views.** Rejected: the status's stacks drop hidden views, so the text would
@@ -95,6 +110,11 @@ off puts the original header view back with whatever menu was set meanwhile.
   report.
 - **A clearer header without a tint.** Rejected: the titles would float over the rows scrolling
   under them, with nothing to mark the header's edge.
+- **The material beside the header, in the scroll view or the header's clip view** (phase 40b).
+  Rejected: the scroll view tiles its parts by frame, so the material would have to follow the
+  header's frame and horizontal scroll by hand, where a subview of the header follows it free.
+- **An always active material** (phase 40b). Rejected: in an inactive window the backdrop goes
+  flat while the header would stay frosted.
 
 ## Consequences
 

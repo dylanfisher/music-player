@@ -158,22 +158,51 @@ struct DividerPositions {
     }
 }
 
-/// A list's header on glass: a translucent tint, a line under it and the column's cells over
-/// it. `NSTableHeaderView` fills itself opaque behind any cell that isn't its own, which hid
-/// the glass (ADR 0087).
+/// A list's header on glass: the header material, blurring the rows that scroll under it, with
+/// a line under it and the columns' titles over it. `NSTableHeaderView` fills itself opaque
+/// behind any cell that isn't its own, which hid the glass (ADR 0087), and a view's subviews
+/// draw over its own drawing, so this header draws nothing itself and a titles view over the
+/// material draws the cells.
 final class GlassHeaderView: NSTableHeaderView {
-    static let tint = NSColor.labelColor.withAlphaComponent(0.08)
+    private let backdrop = NSVisualEffectView()
+    private let titles = HeaderTitles()
     /// Clears a column's header cell, for a column added after the glass went on.
     var clear: (NSTableColumn) -> Void = { _ in }
 
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        backdrop.material = .headerView
+        backdrop.blendingMode = .withinWindow
+        backdrop.state = .followsWindowActiveState
+        titles.header = self
+        for view in [backdrop, titles] {
+            view.frame = bounds
+            view.autoresizingMask = [.width, .height]
+            addSubview(view)
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("built in code, not from a nib") }
+
+    override var isOpaque: Bool { false }
+
+    /// Clicks, drags and the menu are the header's, not its backdrop's or titles'.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        super.hitTest(point) == nil ? nil : self
+    }
+
+    /// Whatever asks the header to redraw, a column resized or dragged or a sort, redraws the
+    /// titles.
     override func viewWillDraw() {
         tableView?.tableColumns.filter { !($0.headerCell is ClearHeaderCell) }.forEach(clear)
+        titles.needsDisplay = true
         super.viewWillDraw()
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        Self.tint.setFill()
-        dirtyRect.fill(using: .sourceOver)
+    override func draw(_ dirtyRect: NSRect) {}
+
+    fileprivate func drawTitles(in dirtyRect: NSRect) {
         NSColor.separatorColor.setFill()
         NSRect(x: bounds.minX, y: bounds.maxY - 1, width: bounds.width, height: 1)
             .fill(using: .sourceOver)
@@ -188,6 +217,16 @@ final class GlassHeaderView: NSTableHeaderView {
             table.tableColumns[index].headerCell.draw(withFrame: frame, in: self)
         }
     }
+}
+
+/// The columns' titles over a glass header's material, in the header's coordinates.
+private final class HeaderTitles: NSView {
+    weak var header: GlassHeaderView?
+
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) { header?.drawTitles(in: dirtyRect) }
 }
 
 /// A table header cell that draws its title, sort indicator and the line after it, but no

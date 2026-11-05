@@ -159,10 +159,42 @@ func glassOnThenOffLeavesTheWindowAsAFreshOne(
     }
 }
 
-/// On glass a list's header lets the glass through, a light tint under its titles, in light
-/// and dark; the header, with a menu set meanwhile, comes back after.
+/// `window` as the screen shows it, its materials blended. `cacheDisplay` draws a visual effect
+/// view as a flat fill, so it can't tell a translucent material from an opaque one. Swift can't
+/// call `CGWindowListCreateImage` from the macOS 15 SDK on, but the function is still there,
+/// and for the app's own windows it needs no screen recording permission, as ScreenCaptureKit
+/// does.
+@MainActor
+private func onScreen(_ window: NSWindow) throws -> NSBitmapImageRep {
+    typealias CreateImage =
+        @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
+    let symbol = try #require(dlsym(dlopen(nil, RTLD_NOW), "CGWindowListCreateImage"))
+    let image = try #require(
+        unsafeBitCast(symbol, to: CreateImage.self)(
+            .null, CGWindowListOption.optionIncludingWindow.rawValue,
+            CGWindowID(window.windowNumber), CGWindowImageOption.boundsIgnoreFraming.rawValue
+        )?.takeRetainedValue())
+    return NSBitmapImageRep(cgImage: image)
+}
+
+/// The color the screen shows at `point` in `view`.
+@MainActor
+private func pixel(at point: NSPoint, in view: NSView, of image: NSBitmapImageRep) throws
+    -> NSColor
+{
+    let window = try #require(view.window)
+    let scale = Double(image.pixelsWide) / window.frame.width
+    let inWindow = view.convert(point, to: nil)
+    return try #require(
+        image.colorAt(
+            x: Int(inWindow.x * scale), y: Int((window.frame.height - inWindow.y) * scale)
+        )?.usingColorSpace(.sRGB))
+}
+
+/// On glass a list's header is frosted, the header material blurring what lies under it, in
+/// light and dark; the header, with a menu set meanwhile, comes back after.
 @MainActor @Test(arguments: [NSAppearance.Name.aqua, .darkAqua])
-func theGlassShowsThroughTheHeaders(_ appearance: NSAppearance.Name) throws {
+func theGlassHeadersAreFrosted(_ appearance: NSAppearance.Name) throws {
     let table = NSTableView()
     let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("title"))
     column.title = "Title"
@@ -170,45 +202,54 @@ func theGlassShowsThroughTheHeaders(_ appearance: NSAppearance.Name) throws {
     table.addTableColumn(column)
     let scroll = NSScrollView()
     scroll.documentView = table
+    // Red under the list, which the glass clears, for the header to blur.
+    let red = NSView()
+    red.wantsLayer = true
+    red.layer?.backgroundColor = NSColor.red.cgColor
+    scroll.autoresizingMask = [.width, .height]
+    red.addSubview(scroll)
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
         styleMask: [.titled, .resizable], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     defer { window.close() }
     window.appearance = NSAppearance(named: appearance)
-    let glass = WindowGlass(window: window, content: scroll)
+    let glass = WindowGlass(window: window, content: red)
     let header = try #require(table.headerView)
     header.menu = NSMenu(title: "Columns")
-    window.layoutIfNeeded()
+    window.orderFront(nil)
 
     glass.set(true)
     let shown = try #require(table.headerView)
     #expect(shown is GlassHeaderView)
     #expect(shown.menu === header.menu)
-    window.layoutIfNeeded()
-    let image = try #require(shown.bitmapImageRepForCachingDisplay(in: shown.bounds))
-    shown.cacheDisplay(in: shown.bounds, to: image)
-    // Past the column, and over the column away from its title.
-    for x in [image.pixelsWide - 4, 4] {
-        let alpha = try #require(image.colorAt(x: x, y: 4)?.alphaComponent)
-        #expect(alpha > 0 && alpha <= 0.1, "\(x): \(alpha)")
-    }
-
     // A column shown from the header's menu while the glass is on is cleared too.
     let added = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("artist"))
     added.title = "Artist"
     added.width = 100
     let stock = added.headerCell
     table.addTableColumn(added)
-    window.layoutIfNeeded()
-    let again = try #require(shown.bitmapImageRepForCachingDisplay(in: shown.bounds))
-    shown.cacheDisplay(in: shown.bounds, to: again)
+    // The test's window is never key, and an inactive window's material is a flat color, as
+    // the glass's own backdrop is.
+    let materials = shown.subviews.compactMap { $0 as? NSVisualEffectView }
+    #expect(materials.map(\.material) == [.headerView])
+    for material in materials { material.state = .active }
+    window.displayIfNeeded()
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.5))
     #expect(added.headerCell is ClearHeaderCell)
-    let overAdded =
-        Int(shown.headerRect(ofColumn: 1).minX + 4) * again.pixelsWide
-        / Int(shown.bounds.width)
-    let alpha = try #require(again.colorAt(x: overAdded, y: 4)?.alphaComponent)
-    #expect(alpha > 0 && alpha <= 0.1, "\(alpha)")
+    let image = try onScreen(window)
+    let under = try pixel(at: NSPoint(x: 300, y: 100), in: red, of: image)
+    // Over each column, away from its title.
+    for x in [4, shown.headerRect(ofColumn: 1).minX + 4] {
+        let color = try pixel(at: NSPoint(x: x, y: 3), in: shown, of: image)
+        // Not clear: the material changes the red. Not opaque: the red comes through the
+        // material's gray.
+        let change =
+            abs(color.redComponent - under.redComponent)
+            + abs(color.greenComponent - under.greenComponent)
+        #expect(change > 0.2, "\(x): \(color) over \(under)")
+        #expect(color.redComponent - color.greenComponent > 0.05, "\(x): \(color)")
+    }
 
     let menu = NSMenu(title: "Other Columns")
     shown.menu = menu
