@@ -4389,14 +4389,37 @@ at most. The 2015 MacBook Pro and macOS 12 to 15 wait for the owner check.
       custom item at most once, so there are numbered slots rather than one item added many
       times.
 
-Plan, part 40c: an ADR amending 0055 and 0085. `ToolbarItem` gains three slots; one setting,
-`appearance.toolbarItemLayouts`, holds their three `BarLayout`s with the header's parts, each
-checked as the status's is. Each slot is its own `NowPlayingBar` with its own views, fed by
-the same model; its width follows its layout (fixed columns add up, a flexible one lets the
-item grow between the status's minimum and maximum). Only the Status stays centered. The
-customization sheet draws each slot from its layout. Tests: the slots in the allowed items and
-not the default set; a slot's layout drawn and saved; two slots and the status showing the
-same track at once; a bad layout refused.
+Plan, part 40c (ADR 0089, amending 0055 and 0085):
+- Probe (done before this plan): the builder, its row and its window work on any `.barLayout`
+  setting by key, with no code of their own per bar, and the Appearance pane lists rows in
+  schema order. A list of three layouts in one setting would need the builder to edit one
+  element of a list and the pane to show three rows for one setting; three settings need
+  neither. `NowPlayingBar` follows the engine and owns the timer and the seeks, so a second
+  bar on the same model would apply every update twice and tick twice.
+- Settings: `ToolbarItem` gains `customStatus1`, `customStatus2` and `customStatus3`, after
+  `status`, not in the default set. Three settings, `appearance.customStatus1Layout` to `3`,
+  "Custom Status 1 Layout" and on, each a `BarLayout<HeaderPart>` checked as the status's is,
+  after Toolbar Status Layout in the schema. Their default is Swinsian's centered line: the
+  Title Line over the seek bar, stacked in a flexible center column, centered. The slots' Title
+  Line reads `appearance.headerTitleFormat`, the one template for every Title Line.
+- NowPlaying: `NowPlayingBar` gains `customStatuses`, one `HeaderStatus` per slot, each with its
+  own art, labels and `SeekBox`, filled, seeking and ticking with the status from the one model
+  and engine. `HeaderStatus.fixedWidthPoints(of:)` is a layout's width when every column is
+  fixed: the widths and the spacing between the columns.
+- App: `MainToolbar` takes the slots' views and their layouts. A slot's item is its width when
+  its layout is all fixed, and otherwise sized as the status is (280 points up to 560 beside a
+  flexible space, or the free width), at its view's height. Only the status is centered. The
+  sheet draws each slot with `statusDrawing` from its own layout and the owner's template. The
+  app reads the three settings at launch and applies a change to the slot's views, its drawing
+  and its size. `--snapshot-of` gains the first slot's builder.
+- Tests: the slots are allowed and not in the default set, with labels and drawings; the three
+  settings' defaults, order, and a bad layout refused in the config file; a slot's layout is
+  drawn in the sheet; a fixed layout sets the item's width and a flexible one the status's
+  range; a layout change resizes the slot; the status and two slots showing the same track,
+  times and seek fraction at once; a saved toolbar with a slot comes back.
+- Order: settings and items, the bar's slots, the toolbar and app wiring, then the ADR,
+  `--snapshot` of the sheet, the toolbar with slots placed and the slot's builder, and the
+  result.
 
 #### 40d. Undo and redo plays
 
