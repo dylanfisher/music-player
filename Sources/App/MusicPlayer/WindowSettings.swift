@@ -16,6 +16,7 @@ struct WindowSettings {
     var signalPathVisible: Bool
     var queueWidth: Int
     var trackTable: TrackTableLayout
+    var timelineTable: TimelineLayout?
     var browser: BrowserState
     var groupByAlbumArtist: Bool
     var tableAppearance: TableAppearance
@@ -38,6 +39,7 @@ struct WindowSettings {
         signalPathVisible = state[\.signalPathVisible]
         queueWidth = state[\.queueWidth]
         trackTable = state[\.trackTable]
+        timelineTable = state[\.timelineTable]
         browser = BrowserState(source: state[\.source], columns: state[\.browserColumns])
         groupByAlbumArtist = settings[\.groupByAlbumArtist]
         tableAppearance = TableAppearance(settings)

@@ -32,18 +32,27 @@ public struct TrackTableLayout: SettingValue {
     public func problem() -> String? {
         if columns.isEmpty { return "columns is empty; the table needs at least one" }
         if !sortColumn.isSortable { return "sortColumn: \(sortColumn.rawValue) can't be sorted by" }
-        var seen: Set<TrackColumn> = []
-        for (index, layout) in columns.enumerated() {
-            if !seen.insert(layout.column).inserted {
-                return "columns[\(index)]: \(layout.column.rawValue) is listed twice"
-            }
-            if !Self.widthRange.contains(layout.width) {
-                return "columns[\(index)]: width \(layout.width) is outside"
-                    + " \(Self.widthRange.lowerBound)...\(Self.widthRange.upperBound)"
-            }
-        }
-        return nil
+        return columnsProblem(columns)
     }
+}
+
+/// Why a list of columns can't be shown: a column listed twice or a width out of range.
+func columnsProblem(_ columns: [ColumnLayout]) -> String? {
+    var seen: Set<TrackColumn> = []
+    for (index, layout) in columns.enumerated() {
+        if !seen.insert(layout.column).inserted {
+            return "columns[\(index)]: \(layout.column.rawValue) is listed twice"
+        }
+        if let problem = widthProblem(layout.width) { return "columns[\(index)]: \(problem)" }
+    }
+    return nil
+}
+
+/// Why a column's width can't be shown: it's outside `TrackTableLayout.widthRange`.
+func widthProblem(_ width: Double) -> String? {
+    let range = TrackTableLayout.widthRange
+    guard !range.contains(width) else { return nil }
+    return "width \(width) is outside \(range.lowerBound)...\(range.upperBound)"
 }
 
 /// One visible column and its width in points.

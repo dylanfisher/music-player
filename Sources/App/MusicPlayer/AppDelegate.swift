@@ -222,6 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             layout: layout.trackTable, browserHeight: layout.browserHeight,
             groupByAlbumArtist: layout.groupByAlbumArtist, thumbnails: thumbnails)
         browser.setTableAppearance(layout.tableAppearance)
+        if let timelineTable = layout.timelineTable { browser.showTimelineColumns(timelineTable) }
         let lookup = { (path: String) in try index.track(path: path) }
         trackLookup = lookup
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
@@ -274,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await engine.addToQueue(urls) }
         }
         browser.tableLayoutChanged = { saver.set(\.trackTable, $0) }
+        browser.timelineLayoutChanged = { saver.set(\.timelineTable, $0) }
         browser.browserHeightChanged = { height in
             if AppState.browserHeightRange.contains(height) {
                 saver.set(\.browserHeight, height)

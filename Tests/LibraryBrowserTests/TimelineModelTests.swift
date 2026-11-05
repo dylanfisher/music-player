@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Settings
 import Testing
@@ -216,6 +217,82 @@ private func timelineBrowser() throws -> (LibraryBrowser, LibraryIndex, [TrackRo
 }
 
 private let showingTimeline = BrowserState(source: .timeline)
+
+/// The timeline's visible columns, left to right.
+@MainActor
+private func shownColumns(_ browser: LibraryBrowser) -> [String] {
+    browser.timeline.table.tableColumns.filter { !$0.isHidden }.map(\.identifier.rawValue)
+}
+
+/// Picks `title` in a header's column menu, as a click on it does.
+@MainActor
+private func pick(_ title: String, in menu: NSMenu, of delegate: any NSMenuDelegate) throws {
+    delegate.menuNeedsUpdate?(menu)
+    let item = try #require(menu.items.first { $0.title == title })
+    let action = try #require(item.action)
+    _ = (item.target as AnyObject).perform(action, with: item)
+}
+
+@MainActor @Test func theTimelineShowsTheLibrarysColumnsUntilItHasItsOwn() async throws {
+    let (browser, _, _) = try timelineBrowser()
+    var saved: [TimelineLayout] = []
+    browser.timelineLayoutChanged = { saved.append($0) }
+    let library = AppState().trackTable.defaultValue.columns.map(\.column.rawValue)
+    #expect(shownColumns(browser) == ["played"] + library)
+    #expect(browser.timeline.table.tableColumns.first?.width == 130)
+
+    // The track table's changes, Album Art left out.
+    let menu = NSMenu()
+    try pick("Rating", in: menu, of: browser.table)
+    try pick("Art", in: menu, of: browser.table)
+    #expect(shownColumns(browser) == ["played"] + library + ["rating"])
+    // A change of the table's width isn't the user's.
+    browser.timeline.columnResized(byUser: false)
+    #expect(saved.isEmpty)
+
+    // Played stays first.
+    #expect(
+        !browser.timeline.tableView(browser.timeline.table, shouldReorderColumn: 0, toColumn: 2))
+    #expect(
+        !browser.timeline.tableView(browser.timeline.table, shouldReorderColumn: 2, toColumn: 0))
+    #expect(browser.timeline.tableView(browser.timeline.table, shouldReorderColumn: 2, toColumn: 3))
+
+    // The timeline's own change is saved, and the track table's no longer reach it.
+    try pick("Year", in: menu, of: browser.timeline)
+    let own = ["played"] + library.filter { $0 != "year" } + ["rating"]
+    #expect(shownColumns(browser) == own)
+    #expect(saved.map { ["played"] + $0.columns.map(\.column.rawValue) } == [own])
+    #expect(saved.first?.playedWidth == 130)
+    try pick("Composer", in: menu, of: browser.table)
+    #expect(shownColumns(browser) == own)
+
+    // A resize by the header is a change too.
+    let (resized, _, _) = try timelineBrowser()
+    var resizes: [TimelineLayout] = []
+    resized.timelineLayoutChanged = { resizes.append($0) }
+    resized.timeline.columnResized(byUser: true)
+    #expect(resizes.count == 1)
+    try pick("Rating", in: menu, of: resized.table)
+    #expect(!shownColumns(resized).contains("rating"))
+}
+
+@MainActor @Test func aSavedTimelineLayoutIsShownAndKept() async throws {
+    let (browser, _, _) = try timelineBrowser()
+    var saved: [TimelineLayout] = []
+    browser.timelineLayoutChanged = { saved.append($0) }
+    let layout = TimelineLayout(
+        playedWidth: 150,
+        columns: [
+            ColumnLayout(column: .artist, width: 100), ColumnLayout(column: .title, width: 200),
+        ]
+    )
+    browser.showTimelineColumns(layout)
+    #expect(shownColumns(browser) == ["played", "artist", "title"])
+    #expect(browser.timeline.layout == layout)
+    #expect(saved.isEmpty, "showing what's saved isn't a change to save")
+    try pick("Rating", in: NSMenu(), of: browser.table)
+    #expect(browser.timeline.layout == layout)
+}
 
 /// Waits up to 10 seconds for `condition`.
 @MainActor

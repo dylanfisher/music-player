@@ -283,6 +283,35 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(byRowNumber.problem() == "sortColumn: rowNumber can't be sorted by")
 }
 
+@Test func timelineColumnsAreNullUntilSavedAndRefuseWhatAPlayHasNot() throws {
+    let url = temporaryFile()
+    let settings = try StateStore(AppState(), fileURL: url)
+    #expect(settings[\.timelineTable] == nil)
+    let layout = TimelineLayout(
+        playedWidth: 150,
+        columns: [
+            ColumnLayout(column: .artist, width: 120), ColumnLayout(column: .rating, width: 50),
+        ]
+    )
+    try settings.set(\.timelineTable, to: layout)
+    #expect(try StateStore(AppState(), fileURL: url)[\.timelineTable] == layout)
+    // Played alone is a layout.
+    #expect(TimelineLayout(playedWidth: 150, columns: []).problem() == nil)
+    for column in [TrackColumn.art, .playlistOrder, .nowPlaying] {
+        let shown = TimelineLayout(
+            playedWidth: 150, columns: [ColumnLayout(column: column, width: 40)])
+        #expect(
+            shown.problem() == "columns[0]: the timeline can't show \(column.rawValue)")
+        #expect(throws: SettingsError.self) { try settings.set(\.timelineTable, to: shown) }
+    }
+    let twice = TimelineLayout(
+        playedWidth: 150,
+        columns: [ColumnLayout(column: .title, width: 90), ColumnLayout(column: .title, width: 90)])
+    #expect(twice.problem() == "columns[1]: title is listed twice")
+    let narrow = TimelineLayout(playedWidth: 1, columns: [])
+    #expect(narrow.problem()?.hasPrefix("playedWidth: width 1.0 is outside") == true)
+}
+
 @Test func toolbarItemsRepeatOnlyTheSpaces() throws {
     let settings = try StateStore(AppState(), fileURL: temporaryFile())
     let spaced: [ToolbarItem] = [.space, .search, .space, .flexibleSpace, .flexibleSpace]

@@ -65,6 +65,10 @@ public struct AppState: SettingsSchema {
                 ColumnLayout(column: .genre, width: 100),
             ], sortColumn: .artist, sortAscending: true),
         "The track table's columns, left to right, with their widths, and the column it sorts by.")
+    public let timelineTable = Setting<TimelineLayout?>(
+        "browser.timelineTable", title: "Timeline Columns", default: nil,
+        "The timeline's columns after Played, with their widths, once changed in the timeline."
+            + " Null shows the track table's.")
     public let source = Setting<BrowserSource?>(
         "browser.source", title: "Source", default: nil,
         "The folder, playlist, History, timeline or health check the sidebar shows. Null shows"

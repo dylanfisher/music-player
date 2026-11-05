@@ -54,6 +54,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
     public var tableLayoutChanged: (TrackTableLayout) -> Void = { _ in }
+    /// The timeline's own columns, each time the user changes them there.
+    public var timelineLayoutChanged: (TimelineLayout) -> Void = { _ in }
     /// Which totals the status bar shows. A click on them moves to the next and reports it.
     public var statusTotals = AppState().statusTotals.defaultValue {
         didSet { showStatus() }
@@ -183,7 +185,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             sort: { column, ascending in
                 Task { await model.setSort(column, ascending: ascending) }
             },
-            layoutChanged: { layout in owner?.tableLayoutChanged(layout) },
+            layoutChanged: { layout in owner?.trackTableLayoutChanged(layout) },
             failed: { message in owner?.show(failure: message) },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         table = TrackTableController(
@@ -199,7 +201,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
         self.timelineModel = timelineModel
         timeline = TimelineController(
-            model: timelineModel,
+            model: timelineModel, library: layout,
             play: { rows, clicked in
                 do {
                     guard
@@ -220,6 +222,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound },
             failed: { message in owner?.show(failure: message) })
+        timeline.layoutChanged = { layout in owner?.timelineLayoutChanged(layout) }
         panes = PanesController(
             model: model,
             select: { grouping, value in Task { await model.select(grouping, value) } },
@@ -1423,7 +1426,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                     let layout = columns.layout(over: table.layout)
                     table.showColumns(layout)
                     await model.setSort(layout.sortColumn, ascending: layout.sortAscending)
-                    tableLayoutChanged(table.layout)
+                    trackTableLayoutChanged(table.layout)
                     summary += " · column layout"
                     rows += columns.detailLines.map { Problem($0) }
                 }
@@ -1477,6 +1480,17 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Follows `library.groupByAlbumArtist`.
     public func setGroupByAlbumArtist(_ on: Bool) async { await model.setGroupByAlbumArtist(on) }
+
+    /// Reports the track table's changed columns, which the timeline shows too until it has
+    /// its own.
+    private func trackTableLayoutChanged(_ layout: TrackTableLayout) {
+        tableLayoutChanged(layout)
+        timeline.follow(layout)
+    }
+
+    /// Shows the timeline's own columns, saved after the user changed them there; until then
+    /// it shows the track table's.
+    public func showTimelineColumns(_ layout: TimelineLayout) { timeline.showOwn(layout) }
 
     /// Follows the track table's `appearance.` settings.
     public func setTableAppearance(_ appearance: TableAppearance) {
