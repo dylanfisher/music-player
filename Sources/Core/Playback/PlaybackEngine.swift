@@ -341,6 +341,18 @@ public actor PlaybackEngine {
         play()
     }
 
+    /// Plays the queue's entry `entry` now, as Next does, when the queue is `urls`, the list
+    /// as it was set and unedited: a play from the list the queue came from then keeps the
+    /// queue, what's shuffled and the next track the output has open. Returns false, changing
+    /// nothing, for another queue, or one still being read (ADR 0097).
+    public func play(entry: Int, ifQueueIs urls: [URL]) -> Bool {
+        guard !completing, queue.entries == urls,
+            let position = queue.order.firstIndex(of: entry)
+        else { return false }
+        play(at: position)
+        return true
+    }
+
     /// Queues `urls` to play straight after the current track, or after the one `play()` would
     /// start with.
     public func playNext(_ urls: [URL]) {

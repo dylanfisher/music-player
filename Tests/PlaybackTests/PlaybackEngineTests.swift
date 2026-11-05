@@ -302,6 +302,54 @@ private func playing(_ urls: [URL], _ output: FakeOutput) async -> PlaybackEngin
     #expect(output.takeCalls() == [.setNext(3, urls[2])])
 }
 
+@Test func playingAnEntryOfTheSameQueueKeepsItAsNextDoes() async {
+    let skipped = FakeOutput()
+    let skipping = await playing(urls, skipped)
+    await skipping.handle(.trackStarted(1, info))
+    _ = skipped.takeCalls()
+    await skipping.next()
+
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    _ = output.takeCalls()
+    #expect(await !engine.play(entry: 1, ifQueueIs: Array(urls.prefix(2))))
+    #expect(await !engine.play(entry: 1, ifQueueIs: urls.reversed()))
+    #expect(output.takeCalls() == [])
+    #expect(await engine.play(entry: 1, ifQueueIs: urls))
+    // The same load of the next track Next makes, which the device output takes from the
+    // next track it has open.
+    let calls = output.takeCalls()
+    #expect(calls == skipped.takeCalls())
+    #expect(calls == [.load(3, urls[1], startSeconds: 0, playing: true), .setNext(4, urls[2])])
+    #expect(await engine.state.queue == urls)
+    #expect(await engine.state.currentIndex == 1)
+
+    // An edited queue isn't the list any more.
+    let extra = URL(fileURLWithPath: "/music/extra.flac")
+    await engine.playNext([extra])
+    _ = output.takeCalls()
+    #expect(await !engine.play(entry: 2, ifQueueIs: urls))
+    #expect(output.takeCalls() == [])
+    #expect(await engine.state.queue == [urls[0], urls[1], extra, urls[2]])
+}
+
+@Test func playingAnEntryOfTheSameQueueKeepsItsShuffle() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.setShuffle(true)
+    let order = await engine.state.order
+    _ = output.takeCalls()
+    #expect(await engine.play(entry: 2, ifQueueIs: urls))
+    #expect(await engine.state.order == order)
+    #expect(await engine.state.currentIndex == 2)
+    let loaded = output.takeCalls().compactMap { call -> URL? in
+        guard case .load(_, let url, _, _) = call else { return nil }
+        return url
+    }
+    #expect(loaded == [urls[2]])
+}
+
 @Test func nextPastTheLastTrackStops() async {
     let output = FakeOutput()
     let engine = await playing(Array(urls.prefix(1)), output)
