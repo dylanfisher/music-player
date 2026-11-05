@@ -85,7 +85,11 @@ extension AppDelegate {
     private func readDevices(then: @escaping @MainActor () -> Void = {}) {
         Self.deviceReads.async { [weak self] in
             let read = Result {
-                try AudioDevice.outputDevices().map { FoundOutput(id: $0.uid, name: $0.name) }
+                let devices = try AudioDevice.outputDevices()
+                return devices.map {
+                    FoundOutput(
+                        id: $0.uid, name: deviceDisplayName($0.name, among: devices.map(\.name)))
+                }
             }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {

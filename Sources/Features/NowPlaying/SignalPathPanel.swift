@@ -2,17 +2,15 @@ import AppKit
 import Playback
 
 /// A strip under the now-playing bar showing what happens to the samples between the file and the
-/// device: the verdict as a badge on top, the stages in two columns under it. The app hands it
-/// each path the output publishes.
+/// device: the verdict as a badge on top, the stages under it as boxes joined by arrows. The app
+/// hands it each path the output publishes.
 @MainActor
 public final class SignalPathPanel: NSViewController {
     let badge = BadgeBackground()
     let badgeLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
-    private let columns = NSStackView()
-    /// Made again for each path: `NSGridView.removeRow` leaves the row's views in the grid,
-    /// where they draw under the new rows.
-    private(set) var grids: [NSGridView] = []
+    /// The stage boxes and the arrows between them, made again for each path.
+    let stages = NSStackView()
 
     public init() { super.init(nibName: nil, bundle: nil) }
 
@@ -37,22 +35,23 @@ public final class SignalPathPanel: NSViewController {
         let verdict = NSStackView(views: [badge, detailLabel])
         verdict.alignment = .top
         verdict.spacing = 6
-        columns.alignment = .top
-        columns.distribution = .fillEqually
-        columns.spacing = 20
-        let stack = NSStackView(views: [verdict, columns])
+        stages.alignment = .centerY
+        stages.spacing = 6
+        let stack = NSStackView(views: [verdict, stages])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 4
-        stack.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
+        stack.spacing = 6
+        stack.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 8, right: 10)
         stack.setClippingResistancePriority(.required, for: .vertical)
-        for view in [verdict, columns] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            view.widthAnchor.constraint(
-                equalTo: stack.widthAnchor,
-                constant: -stack.edgeInsets.left - stack.edgeInsets.right
-            ).isActive = true
-        }
+        verdict.translatesAutoresizingMaskIntoConstraints = false
+        verdict.widthAnchor.constraint(
+            equalTo: stack.widthAnchor, constant: -stack.edgeInsets.left - stack.edgeInsets.right
+        ).isActive = true
+        stages.translatesAutoresizingMaskIntoConstraints = false
+        stages.widthAnchor.constraint(
+            lessThanOrEqualTo: stack.widthAnchor,
+            constant: -stack.edgeInsets.left - stack.edgeInsets.right
+        ).isActive = true
         view = stack
         show(nil)
     }
@@ -72,50 +71,63 @@ public final class SignalPathPanel: NSViewController {
         badge.color = color.withAlphaComponent(0.15)
         detailLabel.stringValue = lines.detail
         detailLabel.isHidden = lines.detail.isEmpty
-        grids = lines.columns.map(grid)
-        columns.setViews(grids.map(half), in: .leading)
-    }
-
-    /// Holds `grid` at the leading edge of half the panel. A grid stretched to the half gives the
-    /// spare width to its label column, and a grid in the stack on its own keeps its own width,
-    /// so the right column starts wherever the left one ends.
-    private func half(_ grid: NSGridView) -> NSView {
-        let half = NSView()
-        half.addSubview(grid)
-        grid.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            grid.leadingAnchor.constraint(equalTo: half.leadingAnchor),
-            grid.trailingAnchor.constraint(lessThanOrEqualTo: half.trailingAnchor),
-            grid.topAnchor.constraint(equalTo: half.topAnchor),
-            grid.bottomAnchor.constraint(equalTo: half.bottomAnchor),
-        ])
-        return half
-    }
-
-    private func grid(_ rows: [SignalPathLines.Row]) -> NSGridView {
-        let grid = NSGridView()
-        grid.rowSpacing = 2
-        grid.columnSpacing = 8
-        for row in rows {
-            let label = NSTextField(labelWithString: row.label)
-            let value = NSTextField(labelWithString: row.value)
-            label.textColor = .secondaryLabelColor
-            value.lineBreakMode = .byTruncatingTail
-            // Above the grid's own hugging, so a value shows in full while its half has room, and
-            // below a window resize, so it truncates instead of holding the window wide.
-            value.setContentCompressionResistancePriority(.init(490), for: .horizontal)
-            value.toolTip = row.value
-            for field in [label, value] {
-                field.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-            }
-            grid.addRow(with: [label, value])
+        var views: [NSView] = []
+        for stage in lines.stages {
+            if !views.isEmpty { views.append(arrow()) }
+            views.append(box(stage))
         }
-        if grid.numberOfColumns > 0 { grid.column(at: 0).xPlacement = .trailing }
-        return grid
+        stages.setViews(views, in: .leading)
+    }
+
+    /// A stage's title over its value and note, on a rounded fill, tinted where the samples
+    /// change.
+    private func box(_ stage: SignalPathLines.Stage) -> NSView {
+        let title = NSTextField(labelWithString: stage.title)
+        title.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
+        let value = NSTextField(labelWithString: stage.value)
+        value.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let note = NSTextField(labelWithString: stage.note)
+        note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        note.textColor = .secondaryLabelColor
+        note.isHidden = stage.note.isEmpty
+        for field in [title, value, note] {
+            field.lineBreakMode = .byTruncatingTail
+            // Below a window resize, so a long name truncates instead of holding the window wide.
+            field.setContentCompressionResistancePriority(.init(490), for: .horizontal)
+            field.toolTip = field.stringValue
+        }
+        let text = NSStackView(views: [title, value, note])
+        text.orientation = .vertical
+        text.alignment = .leading
+        text.spacing = 1
+        let box = BadgeBackground()
+        box.color =
+            stage.changes
+            ? NSColor.systemOrange.withAlphaComponent(0.12)
+            : NSColor.labelColor.withAlphaComponent(0.06)
+        box.addSubview(text)
+        text.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            text.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 8),
+            text.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -8),
+            text.topAnchor.constraint(equalTo: box.topAnchor, constant: 4),
+            text.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -4),
+        ])
+        return box
+    }
+
+    private func arrow() -> NSView {
+        let arrow = NSImageView(
+            image: NSImage(systemSymbolName: "arrow.right", accessibilityDescription: "then")
+                ?? NSImage())
+        arrow.contentTintColor = .tertiaryLabelColor
+        arrow.setContentHuggingPriority(.required, for: .horizontal)
+        return arrow
     }
 }
 
-/// The verdict badge's rounded fill, in a color that follows the appearance.
+/// A rounded fill in a color that follows the appearance: the verdict's badge and each stage's
+/// box.
 final class BadgeBackground: NSView {
     var color = NSColor.clear {
         didSet { needsDisplay = true }

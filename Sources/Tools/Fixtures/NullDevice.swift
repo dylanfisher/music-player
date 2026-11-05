@@ -388,6 +388,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
             return DeviceFormat(
                 stream: format,
                 summary: "\(device.deviceName): \(PhysicalFormat(format).summary)",
+                shown: "\(device.deviceName): \(PhysicalFormat(format).shown)",
                 latencySeconds: Double(device.ioFrames) / format.mSampleRate / device.speed,
                 isConverted: isConverted)
         }

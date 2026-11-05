@@ -142,6 +142,7 @@ final class HALDevice: PCMDevice {
         return DeviceFormat(
             stream: try readScalar(stream, address(kAudioStreamPropertyVirtualFormat)),
             summary: "\(name): \(physical.summary)\(hogMode ? ", hog mode" : "")",
+            shown: "\(name): \(physical.shown)",
             latencySeconds: try latencyFrames() / rateHz, isConverted: isConverted,
             steps: clock.steps)
     }

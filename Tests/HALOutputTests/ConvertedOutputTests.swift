@@ -62,7 +62,7 @@ func aFloatOnlyDevicePlaysAnAlbumConvertedWithoutASeam(rate: Int, bits: Int) asy
     let changes = rig.events.compactMap { event -> FormatChange? in
         if case .formatChanged(let change) = event { change } else { nil }
     }
-    #expect(changes.map(\.to) == ["converted for null device: 'lpcm' 2 ch 32-bit float @ 48 kHz"])
+    #expect(changes.map(\.to) == ["null device: 48 kHz · 32-bit float, converted"])
     #expect(rig.device.openSessionCount == 0)
 }
 

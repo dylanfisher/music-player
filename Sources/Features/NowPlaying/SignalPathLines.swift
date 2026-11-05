@@ -3,12 +3,17 @@ import Foundation
 import Metadata
 import Playback
 
-/// What the signal path panel shows: the verdict as a badge with the reasons after it, then one
-/// row per stage.
+/// What the signal path panel shows: the verdict as a badge with the reasons after it, then the
+/// stages the samples pass through, from the file to the device or renderer.
 struct SignalPathLines: Equatable {
-    struct Row: Equatable {
-        var label: String
+    /// One step of the path, such as `File` with `44.1 kHz · 16-bit` and `FLAC · stereo`.
+    struct Stage: Equatable {
+        var title: String
         var value: String
+        /// Smaller text under the value; empty for none.
+        var note: String
+        /// Whether something here changes the samples, which tints the stage.
+        var changes: Bool
     }
 
     /// Picks the badge's color.
@@ -19,46 +24,46 @@ struct SignalPathLines: Equatable {
     var badge: String
     var tone: Tone
     var detail: String
-    var rows: [Row]
-
-    /// The rows in two columns, the file's stages on the left and the output's on the right, with
-    /// an odd row on the left.
-    var columns: [[Row]] {
-        let split = (rows.count + 1) / 2
-        return [Array(rows[..<split]), Array(rows[split...])].filter { !$0.isEmpty }
-    }
+    var stages: [Stage]
 }
 
 /// The panel's text for `path`, or for no output at all when it's nil.
 func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
     guard let path else {
-        return SignalPathLines(badge: "No output device", tone: .neutral, detail: "", rows: [])
+        return SignalPathLines(badge: "No output device", tone: .neutral, detail: "", stages: [])
     }
-    var lines = SignalPathLines(badge: "", tone: .neutral, detail: "", rows: [])
+    var lines = SignalPathLines(badge: "", tone: .neutral, detail: "", stages: [])
+    var changes: [SignalChange] = []
     switch signalVerdict(path) {
     case .idle: lines.badge = "Nothing playing"
     case .bitPerfect: (lines.badge, lines.tone) = ("Bit-perfect", .bitPerfect)
-    case .changed(let changes):
-        let reasons = changes.map(describe).joined(separator: "; ")
-        (lines.badge, lines.tone) = (badge(for: changes), .changed)
+    case .changed(let found):
+        changes = found
+        let reasons = found.map(describe).joined(separator: "; ")
+        (lines.badge, lines.tone) = (badge(for: found), .changed)
         lines.detail = reasons.prefix(1).uppercased() + reasons.dropFirst()
     case .unverifiable:
         lines.badge = "Can't be checked"
         lines.detail = "Sent unchanged to a network renderer, which decodes it"
     }
     if let track = path.track {
-        lines.rows.append(.init(label: "File", value: describe(track.file)))
+        lines.stages.append(
+            .init(
+                title: "File", value: value(of: track.file),
+                note: note([codec(track.file), channels(track.file.channels)]),
+                changes: false))
     }
     switch path.sink {
     case .device(let sink):
-        if let track = path.track {
-            let (from, to) = (track.file.channels, track.decoded.channels)
-            let assumed = track.channelOrderAssumed ? ", channel order assumed" : ""
-            let mix = to < from ? ", \(downmixed(from, to))\(assumed)" : ""
-            lines.rows.append(.init(label: "Decoder", value: describe(track.decoded) + mix))
+        let decoderChanges = changes.filter(\.isTheDecoders)
+        if let track = path.track, !decoderChanges.isEmpty {
+            lines.stages.append(decoderStage(track))
         }
-        lines.rows += deviceRows(sink, isDoP: path.track?.decoded.formatID == dopFormatID)
-    case .renderer(let sink): lines.rows += rendererRows(sink)
+        lines.stages.append(
+            deviceStage(
+                sink, isDoP: path.track?.decoded.formatID == dopFormatID,
+                changes: changes.contains { !$0.isTheDecoders }))
+    case .renderer(let sink): lines.stages.append(rendererStage(sink))
     }
     return lines
 }
@@ -78,102 +83,90 @@ private func badge(for changes: [SignalChange]) -> String {
     return onlyOtherApps ? "Not guaranteed bit-perfect" : "Not bit-perfect"
 }
 
-/// DoP is never scaled, so the digital volume reads as bypassed while it plays (ADR 0064).
-private func deviceRows(_ sink: DeviceSink, isDoP: Bool) -> [SignalPathLines.Row] {
-    let gain =
-        isDoP
-        ? "digital bypassed for DoP" : "digital \(sink.gain == 1 ? "unity" : decibels(sink.gain))"
-    switch sink.state {
-    case .notConnected:
-        return [.init(label: "Device", value: "\(sink.name), not connected")]
-    case .unreadable(let why):
-        return [.init(label: "Device", value: "\(sink.name), can't be read: \(why)")]
-    case .connected(let device):
-        let mixing = device.isMixable ? "mixable" : "non-mixable"
-        let hog: String
-        switch device.hogMode {
-        case .thisProcess: hog = "held by this app"
-        case .free: hog = "not held"
-        case .otherProcess(let pid): hog = "held by another process (pid \(pid))"
+extension SignalChange {
+    /// Whether the decoder makes the change, rather than the device or macOS after it.
+    fileprivate var isTheDecoders: Bool {
+        switch self {
+        case .converted, .decoderResamples, .decoderRemixes, .channelOrderAssumed,
+            .decoderLosesPrecision:
+            true
+        default: false
         }
-        let volumes =
-            device.volumes.isEmpty
-            ? "no device controls"
-            : device.volumes.map { "\(name(of: $0.kind)) \(percent($0.scalar))" }
-                .joined(separator: ", ")
-        return [
-            .init(
-                label: "Device",
-                value:
-                    "\(sink.name) at \(kilohertz(device.nominalSampleRateHz)) kHz: "
-                    + "\(describe(device.physical)), \(mixing)"),
-            .init(label: "Takes", value: describe(device.formats)),
-            .init(label: "Hog mode", value: hog),
-            .init(label: "Volume", value: "\(volumes); \(gain)"),
-        ]
     }
 }
 
-private func rendererRows(_ sink: RendererSink) -> [SignalPathLines.Row] {
-    let gapless: String
+/// Shown only when the decoder changes the samples, so a plain path is file, then device.
+private func decoderStage(_ track: TrackSignal) -> SignalPathLines.Stage {
+    let (from, to) = (track.file.channels, track.decoded.channels)
+    let mix = to < from ? "downmixed from \(from)" : nil
+    return .init(
+        title: track.isConverted ? "Converted" : "Decoder", value: value(of: track.decoded),
+        note: note([channels(to), mix]), changes: true)
+}
+
+/// DoP is never scaled, so the digital volume doesn't apply while it plays (ADR 0064).
+private func deviceStage(_ sink: DeviceSink, isDoP: Bool, changes: Bool) -> SignalPathLines.Stage {
+    var stage = SignalPathLines.Stage(title: sink.name, value: "", note: "", changes: changes)
+    switch sink.state {
+    case .notConnected: stage.value = "Not connected"
+    case .unreadable(let why):
+        stage.value = "Can't be read"
+        stage.note = why
+    case .connected(let device):
+        stage.value = formatText(
+            rateHz: device.nominalSampleRateHz, bits: device.physical.bitsPerChannel,
+            isFloat: device.physical.isFloat)
+        let access: String
+        switch device.hogMode {
+        case .thisProcess: access = "exclusive"
+        case .free: access = "shared with other apps"
+        case .otherProcess: access = "held by another app"
+        }
+        let digital = isDoP || sink.gain == 1 ? nil : "volume \(decibels(sink.gain))"
+        let control = device.volumes.filter { $0.scalar != 1 }.min { $0.scalar < $1.scalar }
+            .map { "device volume \(percent($0.scalar))" }
+        stage.note = note([isDoP ? "DoP" : nil, access, digital, control])
+    }
+    return stage
+}
+
+private func rendererStage(_ sink: RendererSink) -> SignalPathLines.Stage {
+    let gapless: String?
     switch sink.gapless {
-    case .unknown: gapless = "not known yet"
-    case .nextURI: gapless = "yes, the next track is handed over while one plays"
-    case .afterStop(let why): gapless = "no, each track starts after the last stops: \(why)"
+    case .unknown: gapless = nil
+    case .nextURI: gapless = "gapless"
+    case .afterStop: gapless = "not gapless"
     }
-    return [
-        .init(label: "Renderer", value: "\(sink.name) at \(sink.address)"),
-        .init(
-            label: "Sent",
-            value: sink.contentType.map { "the file's own bytes over HTTP, as \($0)" }
-                ?? "nothing loaded"),
-        .init(label: "Decoder", value: "the renderer's own"),
-        .init(label: "Gapless", value: gapless),
-        .init(
-            label: "Volume",
-            value: sink.volumeIsReceivers
-                ? "the receiver's own, set with the Receiver volume commands"
-                : "the renderer's own; the app sends none"),
-    ]
-}
-
-/// For example `44.1, 48, 88.2, 96 kHz; 2 ch 16-bit int, 2 ch 24-bit int`: the rates, then each
-/// layout once, whatever rates it comes at.
-private func describe(_ formats: DeviceFormats) -> String {
-    let rates = formats.sampleRatesHz.map(kilohertz).joined(separator: ", ")
-    var layouts: [String] = []
-    for format in formats.formats {
-        let layout =
-            "\(format.channels) ch \(sampleType(bits: format.bitsPerChannel, isFloat: format.isFloat))"
-        if !layouts.contains(layout) { layouts.append(layout) }
-    }
-    return "\(rates.isEmpty ? "no rates" : rates + " kHz"); "
-        + (layouts.isEmpty ? "no formats" : layouts.joined(separator: ", "))
+    let volume = sink.volumeIsReceivers ? "receiver's volume" : "its own volume"
+    return .init(
+        title: sink.name,
+        value: sink.contentType == nil ? "Nothing loaded" : "Plays the file itself",
+        note: note([gapless, volume]), changes: false)
 }
 
 private func describe(_ change: SignalChange) -> String {
     switch change {
     case .converted(let format):
-        "the device can't take the file's format, so it's converted to \(describe(format))"
+        "the device can't take the file's format, so it's converted to \(value(of: format))"
     case .decoderResamples(let from, let to):
         "the decoder resamples \(kilohertz(from)) kHz to \(kilohertz(to)) kHz"
     case .decoderRemixes(let from, let to):
         to < from
-            ? "the decoder \(downmixed(from, to))"
+            ? "the decoder downmixes \(from) channels to \(to)"
             : "the decoder copies \(from) channels into \(to)"
     case .channelOrderAssumed:
         "the file doesn't name its channels, so the downmix assumes the WAV default order"
     case .decoderLosesPrecision(let format):
-        "the decoder rounds the samples to \(sampleType(format))"
+        "the decoder rounds the samples to \(depth(format))"
     case .deviceResamples(let from, let to):
         "the device runs at \(kilohertz(to)) kHz, so macOS resamples from \(kilohertz(from)) kHz"
     case .deviceRemixes(let from, let to):
         "macOS maps \(from) channels onto the device's \(to)"
     case .deviceLosesPrecision(let format):
-        "the device's \(sampleType(format)) format rounds the samples"
-    case .mixableFormat: "the format is mixable, so macOS mixes other apps' sound in"
-    case .hogModeFree: "hog mode isn't held, so other apps can play through the device"
-    case .hogModeHeld(let pid): "another process (pid \(pid)) holds hog mode"
+        "the device's \(depth(format)) format rounds the samples"
+    case .mixableFormat: "other apps' sound can be mixed in"
+    case .hogModeFree: "the device isn't held for this app alone, as Hog Mode is off"
+    case .hogModeHeld: "another app holds the device for itself"
     case .deviceVolume(let control):
         "the device's \(name(of: control.kind)) volume is at \(percent(control.scalar))"
     case .digitalVolume(let gain): "the digital volume is at \(decibels(gain))"
@@ -182,31 +175,46 @@ private func describe(_ change: SignalChange) -> String {
     }
 }
 
-/// For example `FLAC 24-bit int, 96 kHz, 2 ch`, or `MP3 44.1 kHz, 2 ch` for a lossy codec, or
-/// `DSD128, 2 ch` and `DoP at 352.8 kHz, 2 ch`.
-private func describe(_ format: SignalFormat) -> String {
+/// For example `44.1 kHz · 16-bit`, `44.1 kHz` for a lossy codec, which has no depth, or
+/// `DSD128`.
+private func value(of format: SignalFormat) -> String {
     switch format.formatID {
-    case dsdFormatID: return "\(sampleRateText(Int(format.sampleRateHz))), \(format.channels) ch"
-    case dopFormatID:
-        return "\(dopText(carrierRateHz: format.sampleRateHz)), \(format.channels) ch"
-    default: break
+    case dsdFormatID: sampleRateText(Int(format.sampleRateHz))
+    case dopFormatID: dopText(carrierRateHz: format.sampleRateHz)
+    default:
+        formatText(
+            rateHz: format.sampleRateHz, bits: format.bitsPerChannel, isFloat: format.isFloat)
     }
-    let codec =
-        format.formatID == linearPCMFormatID
-        ? "PCM"
-        : format.formatID.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
+}
+
+/// `FLAC`, `MP3`, `PCM` for uncompressed samples, or `DSD`.
+private func codec(_ format: SignalFormat) -> String {
+    switch format.formatID {
+    case linearPCMFormatID: "PCM"
+    case dsdFormatID: "DSD"
+    default:
+        format.formatID.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
             .uppercased()
-    let sample = format.bitsPerChannel == nil ? "" : " \(sampleType(format)),"
-    return "\(codec)\(sample) \(kilohertz(format.sampleRateHz)) kHz, \(format.channels) ch"
+    }
 }
 
-/// For example `downmixed 6→2 channels`.
-private func downmixed(_ from: UInt32, _ to: UInt32) -> String {
-    "downmixed \(from)→\(to) channels"
+/// The parts there are, joined by middle dots, the first capitalized: `Exclusive · volume -6 dB`.
+private func note(_ parts: [String?]) -> String {
+    let joined = parts.compactMap { $0 }.joined(separator: " · ")
+    return joined.prefix(1).uppercased() + joined.dropFirst()
 }
 
-private func sampleType(_ format: SignalFormat) -> String {
-    sampleType(bits: format.bitsPerChannel ?? 0, isFloat: format.isFloat)
+private func channels(_ count: UInt32) -> String {
+    switch count {
+    case 1: "mono"
+    case 2: "stereo"
+    default: "\(count) channels"
+    }
+}
+
+/// `24-bit` or `32-bit float`.
+private func depth(_ format: SignalFormat) -> String {
+    bitDepth(format.bitsPerChannel ?? 0) + (format.isFloat ? " float" : "")
 }
 
 private func name(of kind: VolumeControl.Kind) -> String {

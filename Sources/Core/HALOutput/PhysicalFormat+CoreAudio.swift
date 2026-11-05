@@ -24,6 +24,11 @@ extension PhysicalFormat {
         )
     }
 
+    /// For example `96 kHz · 32-bit`, as the status line shows it; `summary` is for the log.
+    public var shown: String {
+        formatText(rateHz: sampleRateHz.lowerBound, bits: bitsPerChannel, isFloat: isFloat)
+    }
+
     /// For example `'lpcm' 2 ch 32-bit int @ 96 kHz, non-mixable`.
     public var summary: String {
         let sample = sampleType(bits: bitsPerChannel, isFloat: isFloat)

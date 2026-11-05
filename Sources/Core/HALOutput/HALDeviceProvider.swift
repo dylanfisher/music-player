@@ -45,8 +45,12 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
         self.deviceUID = deviceUID
         self.snapshots = snapshots
         let id = try deviceID(uid: self.deviceUID)
+        let name = try id.map { try readString($0, address(kAudioObjectPropertyName)) }
         deviceName =
-            try id.map { try readString($0, address(kAudioObjectPropertyName)) } ?? self.deviceUID
+            try name.map {
+                deviceDisplayName($0, among: try AudioDevice.outputDevices().map(\.name))
+            }
+            ?? self.deviceUID
         self.hogMode = hogMode
         self.restoreRecordURL = restoreRecordURL
     }

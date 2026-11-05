@@ -181,7 +181,10 @@ private final class TwoDevices: @unchecked Sendable {
     let outputs = rig.events.compactMap { event -> String? in
         if case .formatChanged(let change) = event { change.to } else { nil }
     }
-    #expect(outputs.map { $0.hasPrefix("converted for Speakers: ") } == [true, false, true, false])
+    #expect(
+        outputs.map { $0.hasPrefix("Speakers: ") && $0.hasSuffix(", converted") } == [
+            true, false, true, false,
+        ])
     #expect(rig.dac.captured.isEmpty)
 }
 

@@ -9,6 +9,9 @@ public struct DeviceFormat {
     /// For display: the device's name and hardware format, such as
     /// `ADI-2 DAC: 'lpcm' 2 ch 32-bit int @ 96 kHz, non-mixable, hog mode`.
     public var summary: String
+    /// For the status line: the device's name and its rate and depth, such as
+    /// `ADI-2 DAC: 96 kHz · 32-bit`.
+    public var shown: String
     /// From the IO proc taking a byte to the device playing it, which a drain waits out before
     /// stopping the device.
     public var latencySeconds: Double
@@ -19,11 +22,12 @@ public struct DeviceFormat {
     public var isConverted: Bool
 
     public init(
-        stream: AudioStreamBasicDescription, summary: String, latencySeconds: Double,
-        isConverted: Bool, steps: [SwitchStep] = []
+        stream: AudioStreamBasicDescription, summary: String, shown: String,
+        latencySeconds: Double, isConverted: Bool, steps: [SwitchStep] = []
     ) {
         self.stream = stream
         self.summary = summary
+        self.shown = shown
         self.latencySeconds = latencySeconds
         self.isConverted = isConverted
         self.steps = steps

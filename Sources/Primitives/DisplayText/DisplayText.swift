@@ -28,6 +28,13 @@ public func sampleType(bits: some BinaryInteger, isFloat: Bool) -> String {
     "\(bitDepth(bits)) \(isFloat ? "float" : "int")"
 }
 
+/// A format as the signal path and the status line show it: "44.1 kHz · 16-bit", "48 kHz ·
+/// 32-bit float", or "44.1 kHz" with no depth, as for a lossy file.
+public func formatText(rateHz: Double, bits: UInt32?, isFloat: Bool) -> String {
+    let depth = bits.map { " · \(bitDepth($0))\(isFloat ? " float" : "")" } ?? ""
+    return "\(kilohertz(rateHz)) kHz\(depth)"
+}
+
 /// 3 -> "★★★"; 0, unrated, -> "".
 public func stars(_ count: Int) -> String {
     String(repeating: "★", count: max(0, count))

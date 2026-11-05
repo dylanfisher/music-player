@@ -22,6 +22,12 @@ func formatsKilohertz(hertz: Double, expected: String) {
     #expect(bitDepth(UInt32(32)) == "32-bit")
 }
 
+@Test func aFormatReadsAsItsRateAndDepth() {
+    #expect(formatText(rateHz: 44_100, bits: 16, isFloat: false) == "44.1 kHz · 16-bit")
+    #expect(formatText(rateHz: 48_000, bits: 32, isFloat: true) == "48 kHz · 32-bit float")
+    #expect(formatText(rateHz: 44_100, bits: nil, isFloat: false) == "44.1 kHz")
+}
+
 @Test func controlCharactersAreEscapedForTheTerminal() {
     for value in Array(0x00..<0x20) + Array(0x7F...0x9F) {
         let scalar = Unicode.Scalar(value)!

@@ -91,7 +91,7 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     #expect(rig.events.contains(.trackStarted(index: 1)))
     #expect(!rig.events.contains { if case .underrun = $0 { true } else { false } })
     let output = try #require(rig.seen.last { $0.state.outputFormat != nil }?.state.outputFormat)
-    #expect(output.hasPrefix("DoP at 176.4 kHz on null device: "))
+    #expect(output.hasPrefix("null device: 176.4 kHz · ") && output.hasSuffix(", DoP"))
 }
 
 @Test func aSeekWhilePlayingKeepsTheMarkersAlternating() async throws {

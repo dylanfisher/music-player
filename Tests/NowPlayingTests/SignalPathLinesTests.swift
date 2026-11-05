@@ -33,22 +33,17 @@ private let formats = DeviceFormats(
             isFloat: false, isMixable: true)
     })
 
-@Test func aBitPerfectPathListsEachStage() {
+@Test func aBitPerfectPathShowsTheFileThenTheDevice() {
     let lines = signalPathLines(path(device(volumes: [.init(.virtualMain, scalar: 1)])))
     #expect(lines.badge == "Bit-perfect")
     #expect(lines.tone == .bitPerfect)
     #expect(lines.detail == "")
+    // The decoder changes nothing, so it isn't a stage of its own.
     #expect(
-        lines.rows == [
-            .init(label: "File", value: "FLAC 16-bit int, 44.1 kHz, 2 ch"),
-            .init(label: "Decoder", value: "PCM 32-bit int, 44.1 kHz, 2 ch"),
+        lines.stages == [
+            .init(title: "File", value: "44.1 kHz · 16-bit", note: "FLAC · stereo", changes: false),
             .init(
-                label: "Device",
-                value: "ADI-2 DAC at 44.1 kHz: PCM 32-bit int, 44.1 kHz, 2 ch, non-mixable"),
-            .init(
-                label: "Takes", value: "44.1, 48, 88.2–192 kHz; 2 ch 16-bit int, 2 ch 24-bit int"),
-            .init(label: "Hog mode", value: "held by this app"),
-            .init(label: "Volume", value: "system unity; digital unity"),
+                title: "ADI-2 DAC", value: "44.1 kHz · 32-bit", note: "Exclusive", changes: false),
         ])
 }
 
@@ -61,7 +56,11 @@ private let formats = DeviceFormats(
         lines.detail
             == "The digital volume is at -6.0 dB; the device runs at 48 kHz, so macOS resamples"
             + " from 44.1 kHz; the device's channel 1 volume is at 99.9%")
-    #expect(lines.rows.last == .init(label: "Volume", value: "channel 1 99.9%; digital -6.0 dB"))
+    #expect(
+        lines.stages.last
+            == .init(
+                title: "ADI-2 DAC", value: "48 kHz · 32-bit",
+                note: "Exclusive · volume -6.0 dB · device volume 99.9%", changes: true))
 }
 
 @Test func aSharedDeviceIsNotGuaranteedBitPerfect() {
@@ -72,21 +71,35 @@ private let formats = DeviceFormats(
     let lines = signalPathLines(path(shared))
     #expect(lines.badge == "Not guaranteed bit-perfect")
     #expect(lines.tone == .changed)
+    #expect(lines.stages.last?.note == "Shared with other apps")
     #expect(signalPathLines(path(shared, gain: 0.5)).badge == "Not bit-perfect")
+}
+
+@Test func anotherAppHoldingTheDeviceIsNamedWithoutItsProcess() {
+    let held = DeviceState.connected(
+        DeviceSignal(
+            nominalSampleRateHz: 44_100, physical: int32, isMixable: false,
+            hogMode: .otherProcess(pid: 4321), volumes: [], formats: formats))
+    let lines = signalPathLines(path(held))
+    #expect(lines.badge == "Not bit-perfect")
+    #expect(lines.detail == "Another app holds the device for itself")
+    #expect(lines.stages.last?.note == "Held by another app")
 }
 
 @Test func noOutputNothingPlayingAndAMissingDeviceSaySo() {
     #expect(
         signalPathLines(nil)
-            == .init(badge: "No output device", tone: .neutral, detail: "", rows: []))
+            == .init(badge: "No output device", tone: .neutral, detail: "", stages: []))
     let idle = signalPathLines(path(device(), playing: false))
     #expect(idle.badge == "Nothing playing")
     #expect(idle.tone == .neutral)
-    #expect(idle.rows.map(\.label) == ["Device", "Takes", "Hog mode", "Volume"])
+    #expect(idle.stages.map(\.title) == ["ADI-2 DAC"])
     let missing = signalPathLines(path(.notConnected))
     #expect(missing.badge == "Not bit-perfect")
     #expect(missing.detail == "The device isn't connected")
-    #expect(missing.rows.last == .init(label: "Device", value: "ADI-2 DAC, not connected"))
+    #expect(
+        missing.stages.last
+            == .init(title: "ADI-2 DAC", value: "Not connected", note: "", changes: true))
 }
 
 private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: Bool = true)
@@ -110,69 +123,66 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
     #expect(lines.tone == .neutral)
     #expect(lines.detail == "Sent unchanged to a network renderer, which decodes it")
     #expect(
-        lines.rows == [
-            .init(label: "File", value: "FLAC 16-bit int, 44.1 kHz, 2 ch"),
-            .init(label: "Renderer", value: "Denon AVR-X1800H at 192.0.2.45"),
-            .init(label: "Sent", value: "the file's own bytes over HTTP, as audio/flac"),
-            .init(label: "Decoder", value: "the renderer's own"),
-            .init(label: "Gapless", value: "yes, the next track is handed over while one plays"),
+        lines.stages == [
+            .init(title: "File", value: "44.1 kHz · 16-bit", note: "FLAC · stereo", changes: false),
             .init(
-                label: "Volume", value: "the receiver's own, set with the Receiver volume commands"),
+                title: "Denon AVR-X1800H", value: "Plays the file itself",
+                note: "Gapless · receiver's volume", changes: false),
         ])
     let other = signalPathLines(
         rendererPath(.afterStop("its AVTransport has no X"), receiver: false, playing: false))
     #expect(other.badge == "Nothing playing")
-    #expect(other.rows.first == .init(label: "Renderer", value: "Denon AVR-X1800H at 192.0.2.45"))
-    #expect(other.rows.contains(.init(label: "Sent", value: "nothing loaded")))
     #expect(
-        other.rows.contains(
+        other.stages == [
             .init(
-                label: "Gapless",
-                value: "no, each track starts after the last stops: its AVTransport has no X")))
-    #expect(
-        other.rows.last == .init(label: "Volume", value: "the renderer's own; the app sends none"))
-}
-
-@Test func theStagesSplitIntoTwoColumnsWithTheFileOnTheLeft() {
-    let playing = signalPathLines(path(device()))
-    #expect(
-        playing.columns.map { $0.map(\.label) } == [
-            ["File", "Decoder", "Device"], ["Takes", "Hog mode", "Volume"],
+                title: "Denon AVR-X1800H", value: "Nothing loaded",
+                note: "Not gapless · its own volume", changes: false)
         ])
-    let missing = signalPathLines(path(.notConnected))
-    #expect(missing.columns.map { $0.map(\.label) } == [["File", "Decoder"], ["Device"]])
-    #expect(signalPathLines(nil).columns.isEmpty)
 }
 
-@MainActor @Test func thePanelShowsOnlyTheRowsOfTheLatestPathInTwoColumns() {
+/// The shown text of each of the panel's stage boxes, in order.
+@MainActor private func shownStages(_ panel: SignalPathPanel) -> [[String]] {
+    panel.stages.arrangedSubviews.compactMap { view in
+        let fields = (view.subviews.first as? NSStackView)?.arrangedSubviews
+            .compactMap { $0 as? NSTextField }
+        return fields.map { $0.filter { !$0.isHidden }.map(\.stringValue) }
+    }
+}
+
+@MainActor @Test func thePanelShowsOnlyTheStagesOfTheLatestPathJoinedByArrows() {
     let panel = SignalPathPanel()
     panel.show(path(device()))
     panel.show(rendererPath(.nextURI, receiver: true))
-    let shown = panel.grids.map { grid in
-        grid.subviews.compactMap { ($0 as? NSTextField)?.stringValue }
-    }
-    #expect(shown.map(\.count) == [6, 6])
-    #expect(shown[0].contains("Renderer") && shown[1].contains("Gapless"))
-    #expect(!shown.joined().contains("Hog mode"))
-    let stack = panel.view as? NSStackView
-    let columns = stack?.arrangedSubviews.last as? NSStackView
-    #expect(columns?.arrangedSubviews.map(\.subviews) == panel.grids.map { [$0] })
-    #expect(columns?.subviews.count == 2)
-    #expect(stack?.alignment == .leading)
+    #expect(
+        shownStages(panel) == [
+            ["File", "44.1 kHz · 16-bit", "FLAC · stereo"],
+            ["Denon AVR-X1800H", "Plays the file itself", "Gapless · receiver's volume"],
+        ])
+    #expect(panel.stages.arrangedSubviews.count == 3)
+    #expect(panel.stages.arrangedSubviews[1] is NSImageView)
+    panel.show(nil)
+    #expect(panel.stages.arrangedSubviews.isEmpty)
 }
 
-@MainActor @Test func theBadgeAndThreeLinesOfStagesFitTheMinimumWindowWidth() {
+@MainActor @Test func theStagesFitTheMinimumWindowWidth() {
     let panel = SignalPathPanel()
-    panel.show(path(device()))
+    panel.show(
+        SignalPath(
+            track: TrackSignal(
+                file: flac, decoded: int32, isConverted: false, channelOrderAssumed: false),
+            sink: .device(
+                DeviceSink(
+                    name: "ADI-2 DAC", uid: "ADI-2",
+                    state: device(rate: 48_000, volumes: [.init(.channel(1), scalar: 0.5)]),
+                    gain: 0.5))))
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 720, height: 100), styleMask: [.titled],
         backing: .buffered, defer: false)
     window.contentView = panel.view
     panel.view.layoutSubtreeIfNeeded()
-    let line = NSTextField(labelWithString: "File")
-    line.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-    // The verdict and six stages one per line would take seven lines before any spacing.
-    #expect(panel.view.fittingSize.height < line.fittingSize.height * 6)
+    for box in panel.stages.arrangedSubviews {
+        #expect(panel.view.bounds.contains(box.convert(box.bounds, to: panel.view)))
+    }
 }
 
 @MainActor @Test func theBadgeShowsItsWholeLabel() {
@@ -189,7 +199,7 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
     #expect(panel.view.bounds.contains(label))
 }
 
-@Test func dsdShowsItsRateAndDoPWithTheDigitalVolumeBypassed() {
+@Test func dsdShowsItsRateAndDoP() {
     let dsd = SignalFormat(
         formatID: dsdFormatID, sampleRateHz: 5_644_800, bitsPerChannel: 1, channels: 2,
         isFloat: false)
@@ -209,16 +219,13 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
                 channelOrderAssumed: false),
             sink: .device(DeviceSink(name: "ADI-2 DAC", uid: "ADI-2", state: state, gain: 1))))
     #expect(lines.badge == "Bit-perfect")
-    #expect(lines.rows[0] == .init(label: "File", value: "DSD128, 2 ch"))
-    #expect(lines.rows[1] == .init(label: "Decoder", value: "DoP at 352.8 kHz, 2 ch"))
     #expect(
-        lines.rows[2]
-            == .init(
-                label: "Device",
-                value: "ADI-2 DAC at 352.8 kHz: PCM 32-bit int, 352.8 kHz, 2 ch, non-mixable"))
-    #expect(
-        lines.rows.last
-            == .init(label: "Volume", value: "no device controls; digital bypassed for DoP"))
+        lines.stages == [
+            .init(title: "File", value: "DSD128", note: "DSD · stereo", changes: false),
+            .init(
+                title: "ADI-2 DAC", value: "352.8 kHz · 32-bit", note: "DoP · exclusive",
+                changes: false),
+        ])
 }
 
 @Test func aConvertedTrackIsBadgedConvertedWithWhatTo() {
@@ -241,9 +248,14 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
     #expect(lines.tone == .changed)
     #expect(
         lines.detail
-            == "The device can't take the file's format, so it's converted to PCM 32-bit float,"
-            + " 48 kHz, 2 ch; the decoder resamples 44.1 kHz to 48 kHz; the format is mixable,"
-            + " so macOS mixes other apps' sound in")
+            == "The device can't take the file's format, so it's converted to 48 kHz · 32-bit"
+            + " float; the decoder resamples 44.1 kHz to 48 kHz; other apps' sound can be mixed"
+            + " in")
+    #expect(
+        lines.stages[1]
+            == .init(
+                title: "Converted", value: "48 kHz · 32-bit float", note: "Stereo", changes: true)
+    )
 }
 
 @Test func aDownmixInAnAssumedChannelOrderSaysSo() {
@@ -263,14 +275,14 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
                             nominalSampleRateHz: 48_000, physical: float48, isMixable: false,
                             hogMode: .thisProcess, volumes: [], formats: formats)),
                     gain: 1))))
+    #expect(lines.stages[0].note == "PCM · 6 channels")
     #expect(
-        lines.rows[1]
+        lines.stages[1]
             == .init(
-                label: "Decoder",
-                value: "PCM 32-bit float, 48 kHz, 2 ch, downmixed 6→2 channels, channel order"
-                    + " assumed"))
+                title: "Converted", value: "48 kHz · 32-bit float",
+                note: "Stereo · downmixed from 6", changes: true))
     #expect(
         lines.detail.contains(
-            "the decoder downmixed 6→2 channels; the file doesn't name its channels, so the"
+            "the decoder downmixes 6 channels to 2; the file doesn't name its channels, so the"
                 + " downmix assumes the WAV default order"))
 }

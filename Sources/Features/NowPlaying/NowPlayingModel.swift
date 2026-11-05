@@ -73,8 +73,8 @@ public final class NowPlayingModel {
         [track?.artist, track?.album].compactMap { $0 }.joined(separator: " — ")
     }
 
-    /// "96 kHz 24-bit FLAC → ADI-2 DAC: 'lpcm' 2 ch 32-bit int @ 96 kHz, non-mixable, hog mode":
-    /// the file's format, then what the output is running, once it says.
+    /// "96 kHz 24-bit FLAC → ADI-2 DAC: 96 kHz · 32-bit": the file's format, then the device
+    /// and what it runs at, once the output says.
     var formatLine: String {
         [sourceFormat, state.outputFormat].compactMap { $0 }.joined(separator: " → ")
     }

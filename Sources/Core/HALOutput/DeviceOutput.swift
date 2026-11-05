@@ -1363,10 +1363,11 @@ private final class RenderStream {
         TrackInfo(durationSeconds: track.durationSeconds, outputFormat: outputFormat)
     }
 
-    /// The device's format, after what DoP plays as when it carries DoP.
+    /// The device and its format, as the status line shows it, and whether it carries DoP or
+    /// a converted track.
     var outputFormat: String {
-        if isDoP { return "\(dopText(carrierRateHz: sampleRateHz)) on \(format.summary)" }
-        return format.isConverted ? "converted for \(format.summary)" : format.summary
+        if isDoP { return "\(format.shown), DoP" }
+        return format.isConverted ? "\(format.shown), converted" : format.shown
     }
 
     var chunkIsEmpty: Bool { chunkOffset == chunkBytes }
