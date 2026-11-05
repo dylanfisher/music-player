@@ -4806,6 +4806,53 @@ this environment on `main` as well as here (it reads the screen); everything els
       track list's scroll. Kept in the config so it syncs to other Macs, in as few keys as it
       takes.
 
+Plan, part 41f (ADR 0092):
+- Probe (done before this plan): the window's source is `browser.source` in `state.json`, read
+  by `WindowSettings` and passed to `LibraryBrowser.load`; `browser.columns` beside it keeps
+  each column's grouping and selection by name. The state file is per Mac and never synced;
+  the config file syncs when the owner links it into a synced folder (ADR 0012). The engine
+  starts after the first rows draw, holding no device until something plays. `restore(_:)`
+  loads the track into the output, which opens the device (hog mode included) and reads the
+  file. Sync names a track by its sync path, the share's name and the path inside the share
+  (ADR 0026, 0038), which `SyncRoots` maps to this Mac's path through `share_roots`; folders
+  stored by path aren't synced. A playlist's sync ID is in `sync_playlists`.
+- The key: `playback.resume` in the config, one object, null until something is saved:
+  `{"track", "seconds", "from", "source", "selected", "top"}`. `track`, `selected` and `top`
+  (the first visible row) are a track's sync path, or its absolute path for a folder stored by
+  path, which starts with `/` and only finds the track on a Mac with the same path. `from` is
+  the source the track was played from, `source` the one the window shows; each is a
+  `BrowserSource` text with a playlist named by its sync ID, null for the library. The
+  Settings window and the palette list no row for it (`.windowState`). A value of another
+  shape is read as null and logged, not a config problem, so a Mac on another build never
+  blocks the file over it. `browser.source` goes from the state file: one source, the
+  config's. The column selections, search and the scroll's offset aren't kept.
+- Writing: a `ResumeSaver` (MusicPlayer) writes the key when a track starts, playback pauses
+  or stops, a seek ends, the source changes or the selection changes: 5 s after the first
+  change, and at least 30 s after the last write, reading the engine and the window when it
+  writes. No write while playing on, so the file changes a few times an hour at most. At quit
+  the app waits up to 1 s for the engine's place (`terminateLater`) and writes it at once. An
+  unchanged value isn't written. A config that refuses changes (ADR 0082) is logged. Last
+  writer wins, by the config's read-before-write.
+- Launch: `LibraryBrowser.load` takes the key: its source (a playlist by sync ID, through the
+  main thread's index, one lookup) replaces the saved source, and once the first list loads
+  the selected track and the first visible row come back through `show(_:)` (41c). After the
+  engine starts, the browser reads `from`'s list off the main actor as the queue and the app
+  cues the track: `PlaybackEngine.cue` sets the queue, the track paused at its seconds, and its
+  length from the index, loading nothing, so no device opens and no file is read until Play,
+  which loads there. A seek while cued moves the place. A cue after the user started
+  something is ignored. A track this Mac can't find starts with nothing loaded and logs a
+  line saying which; a source it can't find shows the library, logged.
+- ⌘L after a resume goes to `from`, as after a play (41c).
+- Tests: the engine's cue (nothing loaded, Play loads at the seconds, a seek moves it, `spot()`
+  reads it); shared names (a track found on a second Mac with the share mounted elsewhere, a
+  playlist by sync ID, a local path); the key's decoding (null, a value, another shape read as
+  null); the round trip (a browser's place and playback written to a config file, read by a
+  new store, and a new browser shows the source, selection and first row and gives the track
+  paused at its seconds in `from`'s queue); a missing track starts clean and logs; the saver
+  writes once for many changes and at once at quit.
+- Order: this plan, the engine's cue, shared names, the key, the browser, the app, the ADR and
+  the result.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
