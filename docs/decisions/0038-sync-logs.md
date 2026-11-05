@@ -5,6 +5,8 @@
 - **Amends:** [0022](0022-stable-track-identity-and-play-timeline.md),
   [0025](0025-threat-model.md), [0026](0026-sync-identity-is-the-relative-path.md),
   [0028](0028-network-folders-by-share.md), [0033](0033-import-from-other-players.md)
+- **Amended by:** [0098](0098-scan-adds-by-folder-hog-mode-off-ember-icon.md): a scan's new
+  files go in the log as one `addedFiles` event a folder.
 
 ## Context
 
@@ -60,6 +62,7 @@ the config file but music files, through the tag writer.
   | `loved` | `path`, `loved` |
   | `disliked` | `path`: Dislike; `loved` and `disliked` share one field ([0048](0048-like-and-dislike.md)) |
   | `added` | `path`, `at`: Date Added |
+  | `addedFiles` | `folder`, `names`, `at`: a scan's Date Added for 1 to 500 files in a folder ([0098](0098-scan-adds-by-folder-hog-mode-off-ember-icon.md)) |
   | `move` | `from`, `to` |
   | `playlistCreate` | `playlist` (32 hex digits), `name`, `rules` (a smart playlist's JSON or null) |
   | `playlistRename` | `playlist`, `name` |

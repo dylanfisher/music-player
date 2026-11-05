@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-01
 - **Status:** accepted
+- **Amended by:** [0098](0098-scan-adds-by-folder-hog-mode-off-ember-icon.md): `output.hogMode`
+  is off by default, and a device seen first hogs only when it's on and its kind allows it.
 
 ## Context
 

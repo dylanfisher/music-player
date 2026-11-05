@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-01
 - **Status:** accepted
+- **Amended by:** [0098](0098-scan-adds-by-folder-hog-mode-off-ember-icon.md): the drawing is
+  the owner's "Ember", whose tile clip path is in canvas coordinates.
 
 ## Context
 

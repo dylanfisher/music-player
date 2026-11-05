@@ -5122,20 +5122,20 @@ rebuilding. `./scripts/check` passes; one run before the last failed
 
 #### 42c. Settings, sync and the icon
 
-- [ ] **42c.1 Bit-perfect badge in line.** Signal path shows the bit-perfect badge as the first
+- [x] **42c.1 Bit-perfect badge in line.** Signal path shows the bit-perfect badge as the first
       item of the row of details, not on a row of its own.
-- [ ] **42c.2 Change opens the sync folder.** With a sync folder set, Change opens the panel at
+- [x] **42c.2 Change opens the sync folder.** With a sync folder set, Change opens the panel at
       that folder.
-- [ ] **42c.3 Any receiver.** The receiver setting doesn't name Denon where the feature works
+- [x] **42c.3 Any receiver.** The receiver setting doesn't name Denon where the feature works
       with other receivers.
-- [ ] **42c.4 No gap after "Can't find the receiver?".** Closing the disclosure returns the box
+- [x] **42c.4 No gap after "Can't find the receiver?".** Closing the disclosure returns the box
       to its height.
-- [ ] **42c.5 Hog mode off by default.** The default output mode has hog mode off.
-- [ ] **42c.6 Sync log review.** Check the owner's two logs in `/Volumes/music/music-player`
+- [x] **42c.5 Hog mode off by default.** The default output mode has hog mode off.
+- [x] **42c.6 Sync log review.** Check the owner's two logs in `/Volumes/music/music-player`
       (read only): one per Mac, each written only by its own machine, the machine id kept across
       reinstalls. Estimate their size with hundreds of thousands of files and years of plays,
       and fix what makes them grow without need.
-- [ ] **42c.7 App icon.** The ember icon (`music-player-icon-ember.svg`, from the owner) is the
+- [x] **42c.7 App icon.** The ember icon (`music-player-icon-ember.svg`, from the owner) is the
       app icon.
 
 Plan, part 42c (ADR 0098, amending 0037, 0038 and 0043):
@@ -5165,7 +5165,7 @@ Plan, part 42c (ADR 0098, amending 0037, 0038 and 0043):
 - 42c.2 (App): Change… finds where the sync folder is now, as Open does, off the main thread,
   and opens the panel there; a folder that can't be found opens it where macOS would. Test: the
   panel's `directoryURL` is the folder.
-- 42c.3 (Settings): "While a receiver is connected, the volume keys set its volume." plus that
+- 42c.3 (Settings): the summary says the volume keys set the connected receiver's, and that
   the search finds Denon receivers and a Marantz or other receiver on Denon's protocol needs
   its address; the address row says so too. Problem lines that say "no Denon receiver
   answered" are accurate and stay. Test: the summary names no single make as the only one.
@@ -5188,6 +5188,52 @@ Plan, part 42c (ADR 0098, amending 0037, 0038 and 0043):
   masked one look the same inside the tile, and the SVG refers to nothing outside itself.
 - Order: this plan, each item through its tests, `./scripts/check`, then the ADR and the
   result.
+
+Result, part 42c: shipped 42c.1 to 42c.7 (ADR 0098, amending 0037, 0038 and 0043). The badge
+leads the row of stage boxes, centered on them, and the reasons sit on a line under the row.
+Change… opens at the sync folder where it is now, found off the main thread; a folder that
+isn't there opens the panel where macOS would and is logged. Receiver control speaks Denon's
+line protocol on port 23; the search keeps only Denon receivers (manufacturer Denon, model
+AVR), and the address reaches anything on that protocol, so the summaries now read "The volume
+keys set a connected Denon or Marantz receiver's volume." and "Its IP address: for a Marantz,
+or a Denon the search misses." (one sentence of at most twelve words, as the pane's test
+asks). Marantz is untested. The problem lines saying no Denon receiver answered are accurate
+and stay. The Receiver box's gap was the window: it grows to fit a taller pane but never
+shrank back, so the stack spread the rows over 191 points instead of 141; a disclosure now
+sets the window to the pane's fitting height, keeping its top. `output.hogMode` defaults to
+false, and a device seen first hogs only when the setting is on and its kind allows it; the
+owner's config already says false and stays so, and devices with a profile keep theirs. The
+logs, read only: each is one Mac's and only that Mac writes it. `030dabf0…` is this Mac's
+(its `sync_state` names it, and its 16,762,794 bytes are exactly the outbox), `bae0cca1…`
+the other's, read here to its last line, 98,190; both run from seq 1 with no gap, and a Mac
+writes only the log its own ID names and only as a byte prefix of its outbox, so they can't
+interfere. The ID is 128 random bits minted by SQL in
+`~/Library/Application Support/MusicPlayer/library.sqlite`, not tied to the bundle, its path
+or its signature: a new build, a new ad-hoc signature, deleting and reinstalling the app all
+keep it. It changes only when that database is deleted or its `sync` part's SQL changes (by
+design, ADR 0038: a new log, and the old one read back), so nothing needed fixing there. Of
+the 98,431 and 98,190 lines, `added` was 86,750 and 86,644 (14.3 MB, 165 bytes each): every
+file twice, from the first scan and from the Swinsian import; `counts` 11,191 and 11,268
+(2.4 MB, 212 bytes); plays 111 and 10 (150 bytes), skips 193 and 99. A scan batch's new files
+now go as one `addedFiles` line a folder, at most 500 names, with the batch's one time as their
+Date Added: the owner's first scan comes to 2.2 MB instead of 7.1 MB, 51 bytes a file. With
+300,000 files a Mac's log would hold about 15 MB from its first scan (was 50 MB), 50 MB from
+an import that dates every file (the import keeps `added`, one date per file, and logs only
+dates it changes) and about 16 MB of import counts, plus 150 bytes a play: ten years at 50 plays
+a day is 27 MB, far under the 1 GiB and 4,000,000-event caps. The owner's logs need nothing:
+`added` reads as before and new lines carry on after them; a Mac on an older build reports
+each `addedFiles` line as an unknown event and keeps its own dates, so both Macs need this
+build. The icon is the owner's ember SVG with its tile clip path moved to canvas coordinates so
+`icon-mask.swift` cuts the right square; it refers to nothing outside itself, and
+`./scripts/bundle` renders it through Quick Look to a 1024 px master and all ten iconset sizes;
+the mask cuts away the drawn drop shadow, as Quick Look draws it on white. Looked at: the panel
+drawn by a throwaway test, the Quick Look master before and after the mask, and the bundle's
+256 px icon. Checked by tests only: the panel opening at the folder (not shown on screen), the
+window shrinking. For the owner: the icon in the Dock and Finder on both Macs, the Receiver box
+after opening and closing the disclosure, and the Change panel with the NAS mounted.
+`./scripts/check` passes; the color well tests (`aColorRowIsAWellWithADefaultButton`,
+`aColorPickedInThePanelIsSavedAndDefaultClearsIt`) fail about one suite run in three with or
+without this part's changes, from the shared color panel, and passed in the final run.
 
 #### 42d. Library Health as a view
 
