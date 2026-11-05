@@ -5431,28 +5431,28 @@ table that 42d builds for Library Health. The owner's answers: imported plays (A
 separate count, not ranked in any period; top lists rank by plays by default, with a toggle to
 hours; a Year in Review page is part of this phase; Stats is a sidebar source.
 
-- [ ] **43.1 Stats source.** A Stats item in the sidebar's Library group after Timeline, saved as
+- [x] **43.1 Stats source.** A Stats item in the sidebar's Library group after Timeline, saved as
       a source like the others. A period picker: This Week, This Month, This Year, a chosen year,
       All Time.
-- [ ] **43.2 Totals.** For the period: plays, approximate hours (the sum of the track's length
+- [x] **43.2 Totals.** For the period: plays, approximate hours (the sum of the track's length
       per play, labeled as approximate), distinct tracks, artists and albums, and the share of
       the library played. All Time also shows imported plays without dates as a separate count.
-- [ ] **43.3 Top lists.** Top artists, albums, tracks and genres, by plays (default) or hours.
+- [x] **43.3 Top lists.** Top artists, albums, tracks and genres, by plays (default) or hours.
       Plays whose path is no longer in the library count toward totals and show as "not in the
       library".
-- [ ] **43.4 Charts.** Plays per day, week or month as bars, and a weekday × hour grid, drawn in
+- [x] **43.4 Charts.** Plays per day, week or month as bars, and a weekday × hour grid, drawn in
       AppKit (no Swift Charts, no dependencies). Days and weeks use the local calendar and the
       system's first weekday.
-- [ ] **43.5 First played.** Albums and artists first played in the period.
-- [ ] **43.6 Formats.** Plays by codec and by sample rate group (CD quality, hi-res PCM, DSD).
-- [ ] **43.7 Everything navigates.** An artist or album row shows it as Go to Item does
+- [x] **43.5 First played.** Albums and artists first played in the period.
+- [x] **43.6 Formats.** Plays by codec and by sample rate group (CD quality, hi-res PCM, DSD).
+- [x] **43.7 Everything navigates.** An artist or album row shows it as Go to Item does
       (ADR 0046), a bar shows the Timeline for its span, and a top list can be saved as a
       manual playlist.
-- [ ] **43.8 Year in Review.** A page for one year built on the same queries: the year's totals,
+- [x] **43.8 Year in Review.** A page for one year built on the same queries: the year's totals,
       top lists, its busiest month and day, and what was first played that year.
-- [ ] **43.9 Command line and palette.** `music-player stats [--period ...] [--json]` and the ⌘K
+- [x] **43.9 Command line and palette.** `music-player stats [--period ...] [--json]` and the ⌘K
       rows come from the same command registry entries as the UI.
-- [ ] **43.10 Speed.** Bench rows with budgets for opening Stats and changing the period with
+- [x] **43.10 Speed.** Bench rows with budgets for opening Stats and changing the period with
       1,000,000 history rows generated in the fixture library; queries off the main thread;
       whether an index on `history (played_at, path_id)` is needed is measured, not guessed.
 - [ ] **Hardware checkpoint (owner):** open Stats and change periods on the 2015 MacBook Pro
@@ -5523,6 +5523,41 @@ Plan, phase 43 (ADR 0102, amending 0099):
 - Order: this plan; Settings; Library with its tests; Bench, and the index decision; the panel,
   sidebar and model; navigation and playlists; Year in Review; commands and the command line;
   snapshots; the ADR; `./scripts/check`; the result.
+
+Result, phase 43: shipped 43.1 to 43.10 (ADR 0102, amending 0099 and 0036). Stats is a sidebar
+row after Timeline, saved as `stats:<period>`; its panel takes the health panel's slot at a
+height of its own, `window.statsHeight` (380 by default, the one added state key), with a
+header (the four period segments, a year menu from the first dated play to now, Plays or
+Hours, Year in Review) over cards that flow and scroll: totals (plays, hours marked approximate,
+tracks, artists, albums, share of the library, the span, plays not in the library, and for All
+Time "+N imported plays without dates, not ranked"), plays per day, week, month or year, a
+weekday × hour grid in the calendar's first weekday, the four top 25 lists (missing plays a
+dimmed "Not in the library" row), First Played (albums or artists) and Formats (rate groups as
+a bar: CD quality, hi-res PCM, DSD and lossy, then codecs). The track table lists the period's
+tracks. An artist or album row goes to it as Go to Item does, a genre filters, a track is
+selected below, a bar shows `plays:<start>-<end>` in the timeline with the span in the status
+bar, and each list saves a manual playlist of its played tracks. Year in Review is its own
+window for one year (totals, busiest month and day, new albums and artists, months with the
+busiest marked, top tens, first played, clock, formats). Show Listening Stats (`library.stats`)
+and Show Year in Review are in the File menu and the palette; `music-player stats [--period
+<period>] [--json]` shows Stats and prints the totals and top lists or the report as JSON.
+Bench, Apple Silicon, 1M synthetic plays: opening Stats 285 to 366 ms over runs (budget
+400 / 1500 old Mac), changing the period 159 to 168 ms p95, All Time the slowest (budget 250 /
+900); This Week 26 ms, This Month 25 to 28, a year 57 to 74. No index on `history (played_at,
+path_id)`: with one the week and month took 2 ms and a year 35, opening and All Time didn't
+change, and it would add 16 MB, so every period is within budget without it; the scans say
+`NOT INDEXED`, since SQLite's own plan took 0.7 s a period. Were one added it would be a schema
+part of its own, since a change to the stats part's SQL discards the history. Checked on screen
+with `--snapshot-of stats` and `review` against a copy of Bench's 43k-track fixture library
+with 23k generated plays: the cards, the grid, the lists and the review page (the fixture
+tracks have no length, so hours read ≈ 0). Not checked on screen: hover, clicks, dark mode,
+glass, macOS 12, and the command line against a running app (the scratch folder's socket path
+is too long for a socket; the router, parser and the browser's text and JSON are tested).
+`./scripts/check` passes but for `aColorPickedInThePanelIsSavedAndDefaultClearsIt`, which timed
+out in the full run and passes alone; the new browser tests were also run by name, and pass.
+For the owner: open Stats, change periods and rankings, hover the bars and grid, click a bar,
+an album and a track, save a list, open Year in Review, drag the panel's divider and then show
+Music to see the columns keep their height, and time it on the 2015 MacBook Pro.
 
 ## Later
 
