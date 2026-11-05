@@ -383,3 +383,32 @@ func theStatusCentersOnTheWindow(_ fullSize: Bool) throws {
         }
     }
 }
+
+/// While Customize Toolbar's sheet is open the status and every Custom Status item are
+/// outlined, so an empty one can be seen; the outline goes when the sheet ends.
+@MainActor @Test func theStatusItemsAreOutlinedWhileTheToolbarIsCustomized() async throws {
+    let views = slots()
+    let status = NSView()
+    let made = MainToolbar(
+        identifier: UUID().uuidString, transport: NSView(), status: status,
+        customStatuses: views, search: NSSearchField(), dispatcher: try dispatcher(),
+        items: [.flexibleSpace, .status, .customStatus1, .flexibleSpace])
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 1200, height: 400), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    made.attach(to: window)
+    window.orderFront(nil)
+    func outlined() -> [Bool] { ([status] + views).map { ($0.layer?.borderWidth ?? 0) > 0 } }
+    #expect(outlined() == [false, false, false, false])
+    made.toolbar.runCustomizationPalette(nil)
+    for _ in 0..<50 where !made.outlinesStatuses { await nextTurn() }
+    #expect(made.toolbar.customizationPaletteIsRunning)
+    // The Custom Status items not in the toolbar are outlined too, ready for when they're added.
+    #expect(outlined() == [true, true, true, true])
+    let sheet = try #require(window.attachedSheet)
+    window.endSheet(sheet)
+    for _ in 0..<50 where made.outlinesStatuses { await nextTurn() }
+    #expect(outlined() == [false, false, false, false])
+}

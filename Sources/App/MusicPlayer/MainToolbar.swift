@@ -17,6 +17,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     /// With no flexible space in the toolbar, or alone in it, a status takes all the room.
     static let statusMaximumPoints = 10_000.0
     static let volumePoints = 90.0
+    static let outlineCornerRadius = 4.0
     let toolbar: NSToolbar
     /// The output picker's menu, which the app fills as it opens.
     let outputMenu = NSMenu(title: AppMenus.outputMenuTitle)
@@ -38,6 +39,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     private let views: [ToolbarItem: NSView]
     private let dispatcher: CommandDispatcher
     private var restoring = false
+    private var sheetObservers: [any NSObjectProtocol] = []
     /// Set while a report of the items waits to run.
     private var reporting = false
     /// The items to show once the toolbar is in a window.
@@ -89,6 +91,35 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     func attach(to window: NSWindow) {
         window.toolbar = toolbar
         show(savedItems)
+        let center = NotificationCenter.default
+        for name in [NSWindow.willBeginSheetNotification, NSWindow.didEndSheetNotification] {
+            sheetObservers.append(
+                center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    // The palette's sheet is attached by the time the next turn runs.
+                    DispatchQueue.main.async { self?.outlineStatuses() }
+                })
+        }
+    }
+
+    /// Whether the status items draw their outline, which they do while Customize Toolbar's
+    /// sheet is open, so an empty one can be seen and dragged out (ADR 0094).
+    private(set) var outlinesStatuses = false
+
+    /// Outlines the status and the Custom Status items while the customization palette runs,
+    /// and takes the outline off after.
+    private func outlineStatuses() {
+        let on = toolbar.customizationPaletteIsRunning
+        guard on != outlinesStatuses else { return }
+        outlinesStatuses = on
+        for item in [ToolbarItem.status] + ToolbarItem.customStatuses {
+            guard let view = views[item] else { continue }
+            view.wantsLayer = true
+            view.effectiveAppearance.performAsCurrentDrawingAppearance {
+                view.layer?.borderColor = NSColor.tertiaryLabelColor.cgColor
+            }
+            view.layer?.borderWidth = on ? 1 : 0
+            view.layer?.cornerRadius = on ? Self.outlineCornerRadius : 0
+        }
     }
 
     /// The items the toolbar holds, left to right.
