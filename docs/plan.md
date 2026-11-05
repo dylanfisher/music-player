@@ -4446,14 +4446,52 @@ The slots with a track playing were checked by tests, not on screen. `./scripts/
       playing if it was playing, and the window as it was. Forward redoes it. So an accidental
       play is undone with ⌘[.
 
-Plan, part 40d: probe how `BrowserModel`'s history and `PlayCommand` record today. The history
-moves to one model of steps, a place or a play, each with the window state; a play started by
-Back or Forward isn't recorded again, and a new step after going back drops the steps ahead,
-as a browser does. Tracks advancing on their own at the end of a track are recorded too, so
-Back after an album has played on returns to the earlier track; decide in the probe whether
-those are steps of their own or fold into the play that started them, and record it in an ADR.
-Tests: play A, play B, ⌘[ plays A from where it stopped with the window as it was, ⌘] plays B
-again; a source change between them is a step of its own; a new play after Back drops Forward.
+Plan, part 40d (ADR 0089):
+- Probe (done before this plan): `PlayCommand` is the `--play` terminal player; the window's
+  plays reach the engine through `LibraryBrowser.play` and `playStart`, which the app wires to
+  `PlaybackEngine.play(starting:)`. Those come from a double-click or Return in the track table
+  or the timeline, Play (the menu and its key), and `music-player play`. ⌘K only shows things.
+  Next, Previous, the media keys, a double-click in the queue panel and the end of a track move
+  within the queue the engine already has, and none goes through the browser. `BrowserModel`
+  keeps `SourceHistory`, the sidebar sources shown, which a change appends when it's applied.
+  The window's selection and scroll aren't kept anywhere.
+- What a step is (the ADR): a source shown, as now, or a play that replaces the queue, from
+  the browser. Advances at a track's end, Next, Previous, the media keys and queue panel jumps
+  are no steps of their own: they fold into the play that started the queue. What a step
+  replaced is whatever played when the next step was taken, so Back after an album has played
+  on goes to the track it had reached, at the place it had reached. Steps of their own would
+  make an accidental play take a press per track it had advanced through to undo, and put
+  every track of an evening's album between a source and the one before it.
+- Playback: `PlaybackSpot` (Playback) is a queue, the entry in it, seconds in, and stopped,
+  playing or paused. `PlaybackEngine.spot()` reads it; `restore(_:)` replaces the queue and
+  loads the entry at those seconds, playing or paused, keeping the device open as
+  `play(starting:)` does, or stops on the queue for a stopped spot. Tests: restore playing,
+  paused and stopped, with the calls the output gets.
+- History: `StepHistory` (LibraryBrowser) replaces `SourceHistory`. Each step keeps the window
+  as it was left (`WindowPlace`: the filter's source, column selections and search, the
+  selected track IDs and the first visible row with its offset), and a play also what it
+  replaced and what it played. Leaving a step, by a new step, Back or Forward, saves the
+  window into it; crossing a play also saves the playback on the side being left, so Forward
+  replays B from where Back left it. A new step after Back drops the steps ahead. Showing the
+  source already shown adds nothing, and a deleted playlist's places go as before. In memory
+  only; the saved source still starts it at launch.
+- Browser: `BrowserModel` records a place when a change that visits a source is applied, with
+  the list's selection and scroll read from the table first, and shows a step's window by
+  setting the source, the column selections still shown, and the search. `LibraryBrowser`
+  records a play before handing it to the app, with the playback read from
+  `currentPlayback`, and on Back or Forward restores the window (sidebar, search field,
+  selection, scroll) and hands the playback to `restorePlayback`; the app wires both to the
+  engine. Back, Forward and recording run one after another, so a quick second ⌘[ reads the
+  playback the first one put back. The timeline keeps its source only; its rows are plays,
+  and it loads afresh when shown. Menu titles stay Back and Forward; their enabling reads the
+  merged history.
+- Tests: the history's steps, crossing, dropping and removal as values; in the browser with
+  stand-ins for the engine: play A, play B, Back restores A where it stopped, playing, with the
+  window's search, selection and scroll as they were, Forward plays B again; a source change
+  between them is a step of its own and leaves playback alone; a new play after Back drops
+  Forward; `canGoBack` and `canGoForward` follow plays too.
+- Order: the engine's spot and restore, the history and the browser together (one change,
+  since `SourceHistory` goes), the app's wiring, then the ADR and the result.
 
 ## Later
 
