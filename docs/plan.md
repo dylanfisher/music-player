@@ -5317,6 +5317,61 @@ from Settings, click through the tiles, drag the divider, then click Music.
 - [ ] **42e.4 "Something else replaced the temp file".** Writing a FLAC on the NAS failed with
       "something else replaced the temp file while the tags were written". Find why and fix it.
 
+Plan, part 42e (ADR 0100):
+- Probe (done before this plan): Get Info is `TagEditing.open`, which refuses while a sheet is
+  open or a write runs (`isBusy`), asks first above 25 files (ADR 0081), reads every file, and
+  only then shows `TagEditorSheet` as a sheet on the main window, so one editor at a time and
+  none while a write runs; ⌘I is disabled meanwhile. Save closes the sheet and writes in a
+  detached task; a batch asks in a sheet on the main window. After a write the app calls
+  `LibraryWatcher.rescan(directories:)`, which queues the folder behind any running scan and,
+  for a network folder with `library.pausePollingDuringPlayback`, waits until playback stops:
+  that wait is the slow update. Each file the editor reads is opened three times (tags, art,
+  fields holding several values); the writer opens the original five times and the temp file
+  four, and reads the whole file three times (hash, copy, read-back), since SMB can't clone.
+  The temp-file error comes from `requireUnchanged`, which compares the temp file's device,
+  inode, size and mtime just before the rename with an `fstat` taken while it was still open
+  for writing. An SMB server sets a written file's last write time when its handle closes
+  (MS-FSA 2.1.5.4; Samba also delays it up to 2 s), so on the NAS the mtime moves after the
+  `fstat`, and every whole-file write there fails the check. APFS sets the mtime at each write,
+  so the build Mac never sees it.
+- 42e.4: `writeTemp` closes the temp file first, then takes its identity by name and checks
+  the name still holds the file it wrote (device and inode). The check before the rename is
+  unchanged: same device, inode, size and mtime, one link. A fault point where the temp file
+  closes lets a test move the mtime there, as the server does; the test fails on the old order.
+  The two "temp file" failures get details of their own, and a mismatch logs both identities.
+- 42e.1: Get Info opens a window (not a sheet) at once, before any file is read, showing the
+  heading and "Reading tags…"; the fields fill in when the read ends. Several windows can be
+  open; Get Info on the same tracks as an open window brings that window forward. ⌘I is
+  enabled whenever tracks are selected. Closing a window that's still reading stops its read
+  between files, so the 25-file question goes: nothing waits on the read any more. Save writes
+  one file at once; a batch asks in a sheet on the info window, and No leaves the window open
+  with what was typed. Writes and undos go to one serial queue in the order saved; the window
+  closes at Save and other windows stay usable. Replace and Remove Artwork act on the key info
+  window.
+- 42e.2: a write's files are read again at once: `LibraryWatcher.rescan(files:)` runs
+  `LibraryScanner.rescan(files:)` on a queue of its own, not behind a scan and not waiting for
+  playback, storing each file the index knows with its new size and mtime, and sends
+  `WatcherEvent.edited`, on which the browser refreshes its rows and columns. The folder rescan
+  still follows, as a backstop for a scan that read the file before the write and stores it
+  after; it finds nothing changed. An open info window on a written file reads it again,
+  keeping what was typed.
+- 42e.3: the editor reads each file through one open (tags, art and several values from the
+  same descriptor, the first 16 KiB read once); the writer reads the original's tags, layout,
+  replaced bytes and art through one open, and the temp file's tags, layout and art through one.
+  The hash, the copy and the read-back stay: they are the write's safety (ADR 0020). Writing in
+  place within the padding is considered in the ADR and left for the owner to decide. Bench rows,
+  on fixture files only: Get Info on one track to its window and to its fields, Get Info on 100
+  tracks to their fields, and one FLAC's title written and read back into the index; the slow
+  NAS read row counts one open a file.
+- Tests: the SMB close (mtime moved when the temp closes, the write succeeds; the swap tests
+  still refuse); Get Info while a write is held, two windows, the same tracks focusing the open
+  window, writes in order, a batch declined keeping the window, closing a reading window
+  stopping its read, a written file re-read in an open window keeping typed text; the scanner's
+  file rescan (new tags stored, a file the index doesn't know skipped, a missing file reported);
+  the browser refreshing on `edited`; one open per file read.
+- Order: this plan, 42e.4, the scanner's file rescan, the editor windows and queue, the reads,
+  the bench, the ADR and the result.
+
 #### 42f. Listening Stats
 
 See phase 43.
