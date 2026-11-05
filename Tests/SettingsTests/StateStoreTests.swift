@@ -427,6 +427,23 @@ private func problems(_ json: String) -> [SettingProblem] {
     }
 }
 
+// A column showing All has no selection; it's written as null so it reads back, rather than left
+// out, which reset the whole window layout at the next launch.
+@Test func browserColumnsShowingAllReadBackAfterASave() throws {
+    let url = temporaryFile()
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let columns = [
+        BrowserColumn(grouping: .genres, selection: nil),
+        BrowserColumn(grouping: .artists, selection: "Arvo Pärt"),
+        BrowserColumn(grouping: .albums, selection: nil),
+    ]
+    try StateStore(AppState(), fileURL: url).set(\.browserColumns, to: columns)
+    let reloaded = try StateStore(AppState(), fileURL: url)
+    #expect(reloaded.discardReason == nil)
+    #expect(reloaded[\.browserColumns] == columns)
+}
+
 @Test func browserColumnsMustBeThreeDifferentKnownGroupings() throws {
     let url = temporaryFile()
     try FileManager.default.createDirectory(

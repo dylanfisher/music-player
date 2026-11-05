@@ -27,6 +27,13 @@ public struct BrowserColumn: SettingValue {
         selection = try container.decode(String?.self, forKey: .selection)
     }
 
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(grouping, forKey: .grouping)
+        // Null, not left out, since the key is required.
+        try container.encode(selection, forKey: .selection)
+    }
+
     public static var typeName: String { "a browser column (grouping, selection)" }
     public static var kind: SettingKind { .windowState }
 }
