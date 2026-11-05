@@ -904,3 +904,29 @@ private func visibleLabels(in view: NSView) -> [String] {
     _ = playback.view
     #expect(playback.healthButton == nil)
 }
+
+@MainActor @Test func closingTheReceiverDisclosureReturnsTheWindowToItsHeight() throws {
+    let schema = AppSettings()
+    let key = schema.receiverAddress.key
+    let stored: [String: Any] = [schema.receiverEnabled.key: true, key: NSNull()]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
+        set: { _, _ in }, isBlocked: { false })
+    let pane = GeneralPane(model: model, configPath: nil, actions: actions())
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentViewController = pane
+    window.layoutIfNeeded()
+    let triangle = try #require(pane.disclosures[key])
+    let closed = pane.view.frame.height
+    let top = window.frame.maxY
+    #expect(closed == pane.view.fittingSize.height)
+    triangle.performClick(nil)
+    window.layoutIfNeeded()
+    #expect(pane.view.frame.height > closed)
+    triangle.performClick(nil)
+    window.layoutIfNeeded()
+    #expect(pane.view.frame.height == closed)
+    #expect(window.frame.maxY == top)
+}

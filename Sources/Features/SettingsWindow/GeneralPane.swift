@@ -276,6 +276,22 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     @objc private func disclose(_ triangle: NSButton) {
         guard let key = disclosures.first(where: { $0.value === triangle })?.key else { return }
         fallbackRows[key]?.isHidden = triangle.state == .off
+        fitWindow()
+    }
+
+    /// Sets the window to the rows' height, keeping its top where it is. The window grows by
+    /// itself for an opened disclosure but keeps that height when it closes, which left a gap.
+    private func fitWindow() {
+        guard let window = view.window else { return }
+        view.layoutSubtreeIfNeeded()
+        let content = window.contentRect(forFrameRect: window.frame)
+        let height = view.fittingSize.height
+        window.setFrame(
+            window.frameRect(
+                forContentRect: NSRect(
+                    x: content.minX, y: content.maxY - height, width: content.width,
+                    height: height)),
+            display: true)
     }
 
     private func button(_ title: String, _ action: Selector) -> NSButton {
