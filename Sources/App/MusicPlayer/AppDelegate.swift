@@ -862,17 +862,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Asks for the sync folder, stored by share when it's on one, as a watched folder is.
+    /// Asks for the sync folder, stored by share when it's on one, as a watched folder is. The
+    /// panel opens at the folder set now, where it is now.
     func chooseSyncFolder() {
         guard let settings else { return }
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.prompt = "Sync Here"
-        panel.message =
-            "Choose a folder outside your music for the Macs that play this library to share"
-            + " their stats through. The app writes only its own log there."
+        guard let current = settings[\.syncFolder] else { return showSyncFolderPanel(at: nil) }
+        let shares: [MountedShare]
+        do {
+            shares = current.share == nil ? [] : try SystemShareMounts().mountedShares()
+        } catch {
+            logger.error("Couldn't list the mounted shares to open at the sync folder: \(error)")
+            return showSyncFolderPanel(at: nil)
+        }
+        Task {
+            // The folder may be on a share that has stopped answering.
+            let found = await blockingFileWork {
+                existingSyncFolder(current, among: shares, isDirectory: isDirectory)
+            }
+            switch found {
+            case .success(let path): showSyncFolderPanel(at: path)
+            case .failure(let missing):
+                // Change… is how a missing folder gets replaced, so the panel opens anyway.
+                let place = String(describing: missing.place)
+                logger.notice("the sync folder isn't there to open the panel at: \(place)")
+                showSyncFolderPanel(at: nil)
+            }
+        }
+    }
+
+    private func showSyncFolderPanel(at path: String?) {
+        guard let settings else { return }
+        let panel = syncFolderPanel(at: path)
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             self?.syncFolderPicks += 1

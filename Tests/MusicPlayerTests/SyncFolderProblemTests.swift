@@ -1,3 +1,4 @@
+import AppKit
 import Library
 import Testing
 
@@ -13,4 +14,9 @@ import Testing
         .ambiguous(["/Volumes/music", "/Volumes/music-1"]), share: "smb://nas.local/music")
     #expect(ambiguous.0 != unmounted.0)
     #expect(ambiguous.1.contains("/Volumes/music, /Volumes/music-1"))
+}
+
+@MainActor @Test func changeOpensThePanelAtTheSyncFolder() {
+    let folder = FileManager.default.temporaryDirectory.standardizedFileURL.path
+    #expect(syncFolderPanel(at: folder).directoryURL?.standardizedFileURL.path == folder)
 }

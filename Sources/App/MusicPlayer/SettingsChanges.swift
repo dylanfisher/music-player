@@ -267,6 +267,22 @@ func syncFolderProblem(_ place: SyncFolderPlace, share: String) -> (String, Stri
     }
 }
 
+/// The panel that asks for the sync folder, open at `path`, or where macOS opens one when it's
+/// nil.
+@MainActor
+func syncFolderPanel(at path: String?) -> NSOpenPanel {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.canCreateDirectories = true
+    panel.prompt = "Sync Here"
+    panel.message =
+        "Choose a folder outside your music for the Macs that play this library to share"
+        + " their stats through. The app writes only its own log there."
+    panel.directoryURL = path.map { URL(fileURLWithPath: $0, isDirectory: true) }
+    return panel
+}
+
 /// Sets the whole app's appearance; nil follows the system as it changes.
 @MainActor
 func applyAppearance(_ appearance: Appearance) {
