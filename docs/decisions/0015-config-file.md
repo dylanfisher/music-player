@@ -6,6 +6,8 @@
   changed how this reports.
 - **Amended by:** [0082](0082-config-safety.md): unknown keys are skipped and the rest applies,
   and the watcher starts only on watched folders the file gives.
+- **Amended by:** [0092](0092-play-state-across-quits.md): the play state, which the app
+  writes to the file, and the window's source with it, which leaves the state file.
 - **Amends:** [0003](0003-settings-schema.md), [0012](0012-searcher-conventions.md)
 
 ## Context

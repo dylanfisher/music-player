@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-04
 - **Status:** accepted
+- **Amended by:** [0092](0092-play-state-across-quits.md): the history starts from the play
+  state's source, and a track it puts back is cued rather than restored.
 
 ## Context
 

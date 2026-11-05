@@ -4801,7 +4801,7 @@ this environment on `main` as well as here (it reads the screen); everything els
 
 #### 41f. Play state across quits
 
-- [ ] **41f.1 Resume.** Quitting and opening the app again puts back the playing track and how
+- [x] **41f.1 Resume.** Quitting and opening the app again puts back the playing track and how
       far it had played (paused), the source it was playing from, the selected item, and the
       track list's scroll. Kept in the config so it syncs to other Macs, in as few keys as it
       takes.
@@ -4852,6 +4852,27 @@ Plan, part 41f (ADR 0092):
   writes once for many changes and at once at quit.
 - Order: this plan, the engine's cue, shared names, the key, the browser, the app, the ADR and
   the result.
+
+Result, part 41f: shipped 41f.1 (ADR 0092). `playback.resume` in the config holds the track by
+its sync path (or absolute path for a folder stored by path), its seconds, the source it was
+played from, and the window's source, selected track and first visible track; `browser.source`
+left the state file. At launch the window shows the saved source with the selection and first
+row, and once the engine starts the track is cued paused at its place, in its source's list as
+the queue, showing its length; no device opens and no file is read until Play, which plays from
+there. ⌘L goes to the source it was played from. A track start, pause, stop, seek, source or
+selection change writes the key 5 s later, at most every 30 s; quitting writes at once, waiting
+up to 1 s for the engine. A track or source this Mac lacks starts without it, logged; a value of
+another shape reads as null without blocking the file. Two rows in ADR 0023's table. Checked by
+tests only, nothing on screen: the engine's cue, shared names across two Macs' mounts, the key's
+decoding, a round trip through a config file into a second browser (source, selection, first
+row, the track paused at its seconds in its source's queue, ⌘L), a missing track, and the
+saver's throttle. Left out: the search, the column selections (still per Mac in the state file)
+and the scroll offset within the top row. For the owner: quit while a track is paused partway,
+reopen, check the toolbar shows it paused at that time and Play resumes there; then the same on
+the second Mac with the config synced. The first launch of this build discards the old state
+file once (it names `browser.source`), so the window layout starts from its defaults.
+`./scripts/check` passes but for `theGlassHeadersAreFrosted`, which reads the screen and fails
+the same on `main` here (41c).
 
 ## Later
 
