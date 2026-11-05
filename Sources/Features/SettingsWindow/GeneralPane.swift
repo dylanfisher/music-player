@@ -260,10 +260,14 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     @objc private func showTokens(_ button: NSButton) {
         let list = NSTextField(labelWithString: button.toolTip ?? "")
         list.isSelectable = true
-        let content = NSViewController()
-        content.view = NSStackView(views: [list])
-        (content.view as? NSStackView)?.edgeInsets = NSEdgeInsets(
+        let stack = NSStackView(views: [list])
+        stack.edgeInsets = NSEdgeInsets(
             top: Self.boxInset, left: Self.boxInset, bottom: Self.boxInset, right: Self.boxInset)
+        // The popover takes the view's frame, which is the label's until it's set here, and
+        // the insets then show only at the sides.
+        stack.frame.size = stack.fittingSize
+        let content = NSViewController()
+        content.view = stack
         let popover = NSPopover()
         popover.behavior = .transient
         popover.contentViewController = content

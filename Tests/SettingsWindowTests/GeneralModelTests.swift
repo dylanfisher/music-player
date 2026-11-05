@@ -740,7 +740,15 @@ private func helpButton(in view: NSView) -> NSButton? {
     button.performClick(nil)
     let popover = try #require(pane.tokensPopover)
     #expect(popover.isShown)
-    #expect(labels(in: try #require(popover.contentViewController?.view)) == [help])
+    let content = try #require(popover.contentViewController?.view)
+    #expect(labels(in: content) == [help])
+    // As much space above and below the tokens as beside them.
+    content.layoutSubtreeIfNeeded()
+    let list = try #require(content.subviews.first).frame
+    let margins = [
+        list.minX, content.bounds.maxX - list.maxX, list.minY, content.bounds.maxY - list.maxY,
+    ]
+    #expect(margins.allSatisfy { abs($0 - margins[0]) <= 2 && $0 >= 8 }, "\(margins)")
     popover.close()
 }
 
