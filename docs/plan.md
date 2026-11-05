@@ -4960,6 +4960,127 @@ file once (it names `browser.source`), so the window layout starts from its defa
 `./scripts/check` passes but for `theGlassHeadersAreFrosted`, which reads the screen and fails
 the same on `main` here (41c).
 
+### 42. Owner feedback, 2026-11-05
+
+The owner's feedback from trying phase 41. Parts 42a to 42d run in parallel worktrees and
+rebase onto main in order a, b, c, d. Parts 42e and 42f run after them, also in parallel; 42g
+runs after 42f. Each part keeps the owner's window layout, column widths, toolbar and settings:
+a state or config key changes only by adding an optional key, and the owner's current
+`state.json` and `config.json` still decode after the part (checked against a copy, not the
+files themselves). The owner's answers: Ctrl+Left and Ctrl+Right seek even though macOS binds
+them to Spaces by default; the owner turns those off if they clash.
+
+#### 42a. Focus and seek keys
+
+- [ ] **42a.1 Shift-Tab back a column.** From the second browser column, Shift-Tab focuses the
+      first column at once; today focus leaves the columns and a second Shift-Tab is needed.
+- [ ] **42a.2 Tab and Shift-Tab are inverses.** Shift-Tab visits the same views as Tab, in the
+      reverse order, everywhere in the main window.
+- [ ] **42a.3 Columns open focused.** Showing the browser columns focuses the first column.
+- [ ] **42a.4 Tab into the filtered tracks.** With a track playing from All Tracks and another
+      column item selected, Tab from the columns still reaches the track table below.
+- [ ] **42a.5 Seek keys.** Ctrl+Left and Ctrl+Right seek back and forward 10 s; Ctrl+Shift+Left
+      and Ctrl+Shift+Right by 5% of the track's length. Commands in the registry, rebindable.
+
+#### 42b. Rows and the queue
+
+- [ ] **42b.1 Centered triangle.** The Now Playing column centers its play triangle.
+- [ ] **42b.2 Room after the Title's triangle.** With the Now Playing column hidden, about 4 pt
+      more space between the Title's triangle and the title.
+- [ ] **42b.3 Readable playing row.** When the playing row color is dark enough, the row's text
+      turns white.
+- [ ] **42b.4 Queue times.** A queue row's time is in the small font (as the artist and album
+      line), aligned to the top of the row and right-aligned against the row's right edge.
+- [ ] **42b.5 Enter on the next track.** Enter or a double-click on a track starts it without
+      rebuilding the queue when the queue already holds it in the same order (for example the
+      track after the playing one), as Next does.
+
+#### 42c. Settings, sync and the icon
+
+- [ ] **42c.1 Bit-perfect badge in line.** Signal path shows the bit-perfect badge as the first
+      item of the row of details, not on a row of its own.
+- [ ] **42c.2 Change opens the sync folder.** With a sync folder set, Change opens the panel at
+      that folder.
+- [ ] **42c.3 Any receiver.** The receiver setting doesn't name Denon where the feature works
+      with other receivers.
+- [ ] **42c.4 No gap after "Can't find the receiver?".** Closing the disclosure returns the box
+      to its height.
+- [ ] **42c.5 Hog mode off by default.** The default output mode has hog mode off.
+- [ ] **42c.6 Sync log review.** Check the owner's two logs in `/Volumes/music/music-player`
+      (read only): one per Mac, each written only by its own machine, the machine id kept across
+      reinstalls. Estimate their size with hundreds of thousands of files and years of plays,
+      and fix what makes them grow without need.
+- [ ] **42c.7 App icon.** The ember icon (`music-player-icon-ember.svg`, from the owner) is the
+      app icon.
+
+#### 42d. Library Health as a view
+
+- [ ] **42d.1 Out of the sidebar.** Library Health leaves the sidebar. It opens from a button in
+      Settings ▸ Library and a menu item.
+- [ ] **42d.2 A health panel.** It shows the track table with a panel above it, placed like the
+      browser columns, listing the health filters (unreadable, warnings and the rest) with their
+      counts; choosing one filters the tracks below.
+
+#### 42e. Get Info speed and tag writes
+
+- [ ] **42e.1 Get Info at any time.** Get Info opens at once on any track or selection,
+      including while a tag write is running; more than one info window can be open.
+- [ ] **42e.2 Rescan after a write.** After a tag write, the track's tags are read again at
+      once and the table, info window and columns show them.
+- [ ] **42e.3 Speed review.** Review the open, edit, write and rescan path for speed on the
+      2015 MacBook Pro, with bench rows for opening Get Info and for one write.
+- [ ] **42e.4 "Something else replaced the temp file".** Writing a FLAC on the NAS failed with
+      "something else replaced the temp file while the tags were written". Find why and fix it.
+
+#### 42f. Listening Stats
+
+See phase 43.
+
+#### 42g. Get Info fields as in YATE
+
+- [ ] **42g.1 Field review.** Compare Get Info's fields with YATE's panels (Info, Artwork,
+      Sorting, Lyrics, Audio, Credits, More Info, Privacy, URLs). Every field YATE edits that
+      the tag writer can write is editable, grouped so it's easy to find: the main tags; sorting
+      next to the field it sorts; credits; more info (key, language, dates, mood, work and
+      movement); rights and label; URLs; lyrics; artwork; and a read-only audio summary.
+
+### 43. Listening Stats
+
+Part 42f. A Stats source for the owner's listening history, with the visual panel above the
+table that 42d builds for Library Health. The owner's answers: imported plays (ADR 0033) are a
+separate count, not ranked in any period; top lists rank by plays by default, with a toggle to
+hours; a Year in Review page is part of this phase; Stats is a sidebar source.
+
+- [ ] **43.1 Stats source.** A Stats item in the sidebar's Library group after Timeline, saved as
+      a source like the others. A period picker: This Week, This Month, This Year, a chosen year,
+      All Time.
+- [ ] **43.2 Totals.** For the period: plays, approximate hours (the sum of the track's length
+      per play, labeled as approximate), distinct tracks, artists and albums, and the share of
+      the library played. All Time also shows imported plays without dates as a separate count.
+- [ ] **43.3 Top lists.** Top artists, albums, tracks and genres, by plays (default) or hours.
+      Plays whose path is no longer in the library count toward totals and show as "not in the
+      library".
+- [ ] **43.4 Charts.** Plays per day, week or month as bars, and a weekday × hour grid, drawn in
+      AppKit (no Swift Charts, no dependencies). Days and weeks use the local calendar and the
+      system's first weekday.
+- [ ] **43.5 First played.** Albums and artists first played in the period.
+- [ ] **43.6 Formats.** Plays by codec and by sample rate group (CD quality, hi-res PCM, DSD).
+- [ ] **43.7 Everything navigates.** An artist or album row shows it as Go to Item does
+      (ADR 0046), a bar shows the Timeline for its span, and a top list can be saved as a
+      manual playlist.
+- [ ] **43.8 Year in Review.** A page for one year built on the same queries: the year's totals,
+      top lists, its busiest month and day, and what was first played that year.
+- [ ] **43.9 Command line and palette.** `music-player stats [--period ...] [--json]` and the ⌘K
+      rows come from the same command registry entries as the UI.
+- [ ] **43.10 Speed.** Bench rows with budgets for opening Stats and changing the period with
+      1,000,000 history rows generated in the fixture library; queries off the main thread;
+      whether an index on `history (played_at, path_id)` is needed is measured, not guessed.
+- [ ] **Hardware checkpoint (owner):** open Stats and change periods on the 2015 MacBook Pro
+      with the real library; report the times against the bench rows.
+
+Deferred: skip statistics by period (skips have no dates; no new table in this phase).
+Read-only: Stats writes nothing but a playlist the owner asks for.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
