@@ -28,6 +28,9 @@ struct StepHistory: Equatable, Sendable {
         var replaced: PlaybackSpot
         /// What this play started, and once Back has undone it, where it had got to.
         var played: PlaybackSpot
+        /// What the browser showed when the play started, which Show Current Track goes back
+        /// to. The step's window changes as the step is left; this doesn't.
+        var from: TrackFilter
     }
 
     struct Step: Equatable, Sendable {
@@ -64,7 +67,16 @@ struct StepHistory: Equatable, Sendable {
     mutating func play(
         _ played: PlaybackSpot, replacing replaced: PlaybackSpot, from window: WindowPlace
     ) {
-        add(Step(window: window, play: Play(replaced: replaced, played: played)), leaving: window)
+        add(
+            Step(
+                window: window, play: Play(replaced: replaced, played: played, from: window.filter)),
+            leaving: window)
+    }
+
+    /// What the browser showed when the playback Back and Forward have put in place started:
+    /// the latest play's at or before the place. Nil before the first play.
+    var playSource: TrackFilter? {
+        steps[...position].last { $0.play != nil }?.play?.from
     }
 
     /// Drops the steps Forward would have gone to.

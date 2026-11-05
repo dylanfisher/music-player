@@ -196,6 +196,12 @@ public final class BrowserModel {
         await showSource(source)
     }
 
+    /// Whether `source` can still be shown: a playlist that hasn't been deleted, or any other.
+    func exists(_ source: BrowserSource?) -> Bool {
+        guard case .playlist(let id) = source else { return true }
+        return playlists.contains { $0.id == id }
+    }
+
     /// A manual playlist opens in its own order, and History with the latest play first. Other
     /// sources keep the sort the table has, and leaving one of those two puts back the sort it
     /// replaced, unless the user chose another meanwhile.
@@ -378,8 +384,10 @@ public final class BrowserModel {
     }
 
     /// Shows a step's source, search and column selections, leaving out the selections of
-    /// groupings no column shows now, which would narrow the table unseen.
-    func show(_ window: WindowPlace) async {
+    /// groupings no column shows now, which would narrow the table unseen. `visiting` makes
+    /// a new source a step Back can undo, as the sidebar's does.
+    func show(_ window: WindowPlace, visiting: Bool = false) async {
+        if visiting { pendingVisit = .some(window.filter.source) }
         changeSort(from: pending.source, to: window.filter.source)
         pending.source = window.filter.source
         pending.search = window.filter.search

@@ -105,6 +105,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     let timelineModel: TimelineModel
     /// Shown in place of the panes and the track table while the timeline is the source.
     let timeline: TimelineController
+    /// The timeline's load since it last showed, which Show Current Track waits for.
+    private var timelineLoad: Task<Void, Never>?
     private let panes: PanesController
     private let sidebarController: SidebarController
     private let split = NSSplitView()
@@ -680,7 +682,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         timeline.view.isHidden = !shows
         searchField.isEnabled = !shows
         if shows {
-            Task { await timelineModel.load() }
+            timelineLoad = Task { await timelineModel.load() }
         } else {
             timelineModel.clear()
         }
@@ -1606,14 +1608,52 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Whether the list the window shows has a row selected, for Show Selected Track.
     public var hasSelection: Bool { !shownList.table.selectedRowIndexes.isEmpty }
 
-    /// Show Current Track: the track at `playingPath`, or with nothing playing the selected
-    /// rows, centered, with the keys.
+    /// Show Current Track: the track at `playingPath` in what the browser showed when its play
+    /// started, or else in the library (ADR 0091); with nothing playing, the selected rows.
+    /// Centered, with the keys.
     public func showCurrentTrack(playingPath: String?) async {
-        if let playingPath {
-            await reveal(path: playingPath)
-            return
+        guard let playingPath else { return showSelectedTrack() }
+        guard let id = trackID(path: playingPath) else { return }
+        if await reveal(trackID: id, in: model.history.playSource) { return }
+        await reveal(trackID: id)
+    }
+
+    /// Selects track `id` in what `start` shows: where the window shows its source and lists
+    /// the track, else in the source with `start`'s search and column selections, else in the
+    /// source alone. False when there's no `start`, its playlist is gone, or it doesn't list
+    /// the track.
+    private func reveal(trackID id: Int64, in start: TrackFilter?) async -> Bool {
+        guard let start, model.exists(start.source) else { return false }
+        if start.source == .timeline { return await revealPlay(ofTrack: id) }
+        if model.filter.source == start.source, let row = model.rows(holding: [id]).first {
+            showRow(row)
+            return true
         }
-        showSelectedTrack()
+        let alone = TrackFilter(source: start.source)
+        for filter in start.search.isEmpty && start.selections.isEmpty ? [alone] : [start, alone] {
+            await model.show(WindowPlace(filter: filter), visiting: true)
+            guard let row = model.rows(holding: [id]).first else { continue }
+            searchField.stringValue = model.filter.search
+            showSource()
+            showRow(row)
+            return true
+        }
+        return false
+    }
+
+    /// Shows the timeline with the newest loaded play of track `id` selected; false when it
+    /// lists none.
+    private func revealPlay(ofTrack id: Int64) async -> Bool {
+        if !showsTimeline {
+            await model.setSource(.timeline)
+            showSource()
+        }
+        await timelineLoad?.value
+        guard let row = timelineModel.entries.firstIndex(where: { $0.trackID == id }) else {
+            return false
+        }
+        showRow(row)
+        return true
     }
 
     /// Show Selected Track: the selected rows, centered, with the keys.

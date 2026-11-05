@@ -93,6 +93,22 @@ private let stopped = PlaybackSpot(queue: [], index: nil, seconds: 0, status: .s
     #expect(history.steps.count == 3)
 }
 
+@Test func thePlaySourceIsWhereThePlaybackInPlaceStarted() {
+    var history = StepHistory(start: window(nil))
+    #expect(history.playSource == nil)
+    history.play(spot("a"), replacing: stopped, from: window(.playlist(1), search: "a"))
+    history.visit(window(nil), leaving: window(.playlist(1), search: "later"))
+    // Leaving the play's step changes its window, not where it started.
+    #expect(history.playSource == TrackFilter(source: .playlist(1), search: "a"))
+    history.play(spot("b"), replacing: spot("a"), from: window(.timeline))
+    #expect(history.playSource == TrackFilter(source: .timeline))
+    _ = history.back(leaving: window(nil), playing: spot("b"))
+    #expect(history.playSource == TrackFilter(source: .playlist(1), search: "a"))
+    _ = history.back(leaving: window(nil), playing: nil)
+    _ = history.back(leaving: window(nil), playing: nil)
+    #expect(history.playSource == nil)
+}
+
 // MARK: In the browser
 
 /// A browser in a window, showing the library, with an engine stand-in behind its plays.
@@ -105,8 +121,9 @@ private final class Stand {
     var plays = 0
     var restores = 0
 
-    init() async throws {
-        let databaseURL = try browserLibrary.get().databaseURL
+    /// Over the shared library, or over `databaseURL`, a copy a test writes playlists to.
+    init(databaseURL: URL? = nil) async throws {
+        let databaseURL = try databaseURL ?? browserLibrary.get().databaseURL
         browser = LibraryBrowser(
             reader: try LibraryReader(databaseURL: databaseURL),
             index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
@@ -124,6 +141,11 @@ private final class Stand {
         }
         browser.playStart = { [unowned self] start in
             playback = PlaybackSpot(queue: [start.url], index: 0, seconds: 0, status: .playing)
+            plays += 1
+        }
+        browser.play = { [unowned self] request in
+            playback = PlaybackSpot(
+                queue: request.urls, index: request.first, seconds: 0, status: .playing)
             plays += 1
         }
     }
@@ -234,4 +256,108 @@ private final class Stand {
     try await stand.play(row: 7, top: 0)
     #expect(!stand.browser.canGoForward)
     #expect(stand.browser.canGoBack)
+}
+
+// MARK: Show Current Track
+
+/// A stand over a writable library with a playlist listing two of its tracks, its ID, the
+/// index, and the path of each track by ID.
+@MainActor
+private func standWithPlaylist() async throws -> (
+    Stand, playlist: Int64, index: LibraryIndex, paths: [Int64: String]
+) {
+    let databaseURL = try writableBrowserDatabase()
+    let index = try LibraryIndex(at: databaseURL)
+    let stand = try await Stand(databaseURL: databaseURL)
+    let ids = stand.model.trackIDs
+    let playlist = try index.createPlaylist(named: "Mix")
+    _ = try index.addToPlaylist(playlist, trackIDs: [ids[5], ids[40]])
+    try await stand.model.reloadPlaylists()
+    let paths = Dictionary(
+        uniqueKeysWithValues: try index.rows(ids: Array(ids)).map { ($0.id, $0.path) })
+    return (stand, playlist, index, paths)
+}
+
+@MainActor @Test func showCurrentTrackGoesToTheSourceThePlayStartedIn() async throws {
+    let (stand, playlist, _, paths) = try await standWithPlaylist()
+    let model = stand.model
+    let track = model.trackIDs[40]
+    let path = try #require(paths[track])
+
+    // Played from the library, shown from the playlist that lists it too.
+    try await stand.play(row: 40, top: 30)
+    await model.setSource(.playlist(playlist))
+    stand.browser.table.select([0])
+    await stand.browser.showCurrentTrack(playingPath: path)
+    #expect(model.filter.source == nil)
+    #expect(stand.selectedIDs == [track])
+
+    // Played from the playlist, with a search, shown from the library.
+    await model.setSource(.playlist(playlist))
+    let word = try #require(
+        try await model.allTrackNames().first { $0.id == track }?.title.split(separator: " ")
+            .first)
+    await stand.search(String(word))
+    let row = try #require(model.rows(holding: [track]).first)
+    try await stand.play(row: row, top: 0)
+    await stand.search("")
+    await model.setSource(nil)
+    await stand.browser.showCurrentTrack(playingPath: path)
+    #expect(model.filter.source == .playlist(playlist))
+    #expect(model.filter.search == String(word))
+    #expect(stand.browser.searchField.stringValue == String(word))
+    #expect(stand.selectedIDs == [track])
+    // It's a step Back can undo.
+    await stand.back()
+    #expect(model.filter.source == nil)
+}
+
+@MainActor @Test func showCurrentTrackFallsBackToTheLibrary() async throws {
+    let (stand, playlist, index, paths) = try await standWithPlaylist()
+    let model = stand.model
+    let track = model.trackIDs[40]
+    let path = try #require(paths[track])
+    await model.setSource(.playlist(playlist))
+    let row = try #require(model.rows(holding: [track]).first)
+    try await stand.play(row: row, top: 0)
+    await model.setSource(.history)
+
+    // Taken out of the playlist it started in.
+    try index.removeFromPlaylist(playlist, trackIDs: [track])
+    await stand.browser.showCurrentTrack(playingPath: path)
+    #expect(model.filter.source == nil)
+    #expect(stand.selectedIDs == [track])
+
+    // The playlist deleted.
+    await model.setSource(.history)
+    try index.deletePlaylist(playlist)
+    try await model.reloadPlaylists()
+    await stand.browser.showCurrentTrack(playingPath: path)
+    #expect(model.filter.source == nil)
+    #expect(stand.selectedIDs == [track])
+}
+
+@MainActor @Test func showCurrentTrackGoesBackToTheTimelinesPlay() async throws {
+    let databaseURL = try writableBrowserDatabase()
+    let index = try LibraryIndex(at: databaseURL)
+    let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    for (seconds, row) in rows.prefix(5).enumerated() {
+        try index.recordPlay(row.path, at: Double(seconds))
+    }
+    let stand = try await Stand(databaseURL: databaseURL)
+    let browser = stand.browser
+    await stand.model.setSource(.timeline)
+    try await waitFor("the timeline") { browser.timelineModel.entries.count == 5 }
+    browser.timeline.table.selectRowIndexes([2], byExtendingSelection: false)
+    let track = browser.timelineModel.entries[2].trackID
+    let before = stand.plays
+    browser.playSelection()
+    try await waitFor("the play") { stand.plays == before + 1 }
+    await browser.stepping?.value
+
+    await stand.model.setSource(nil)
+    let path = try #require(rows.first { $0.id == track }?.path)
+    await browser.showCurrentTrack(playingPath: path)
+    #expect(stand.model.filter.source == .timeline)
+    #expect(browser.timeline.table.selectedRowIndexes == [2])
 }
