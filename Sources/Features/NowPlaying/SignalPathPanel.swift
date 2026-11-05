@@ -2,8 +2,8 @@ import AppKit
 import Playback
 
 /// A strip under the now-playing bar showing what happens to the samples between the file and the
-/// device: the verdict as a badge on top, the stages under it as boxes joined by arrows. The app
-/// hands it each path the output publishes.
+/// device: the verdict as a badge, then the stages as boxes joined by arrows, in one row, and the
+/// verdict's reasons under them. The app hands it each path the output publishes.
 @MainActor
 public final class SignalPathPanel: NSViewController {
     let badge = BadgeBackground()
@@ -11,6 +11,8 @@ public final class SignalPathPanel: NSViewController {
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
     /// The stage boxes and the arrows between them, made again for each path.
     let stages = NSStackView()
+    /// The badge, then the stages.
+    let verdictRow = NSStackView()
     /// The receiver's volume, shown while receiver control is connected (ADR 0093).
     let receiverRow = NSStackView()
     let receiverSlider = NSSlider(
@@ -45,11 +47,11 @@ public final class SignalPathPanel: NSViewController {
         detailLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         detailLabel.textColor = .secondaryLabelColor
         detailLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let verdict = NSStackView(views: [badge, detailLabel])
-        verdict.alignment = .top
-        verdict.spacing = 6
         stages.alignment = .centerY
         stages.spacing = 6
+        verdictRow.setViews([badge, stages], in: .leading)
+        verdictRow.alignment = .centerY
+        verdictRow.spacing = 8
         let receiverTitle = NSTextField(labelWithString: "Receiver")
         receiverTitle.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
         receiverSlider.cell = receiverCell
@@ -67,18 +69,18 @@ public final class SignalPathPanel: NSViewController {
         receiverRow.setViews([receiverTitle, receiverSlider, receiverLevel], in: .leading)
         receiverRow.spacing = 8
         receiverRow.isHidden = true
-        let stack = NSStackView(views: [verdict, stages, receiverRow])
+        let stack = NSStackView(views: [verdictRow, detailLabel, receiverRow])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
         stack.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 8, right: 10)
         stack.setClippingResistancePriority(.required, for: .vertical)
-        verdict.translatesAutoresizingMaskIntoConstraints = false
-        verdict.widthAnchor.constraint(
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+        detailLabel.widthAnchor.constraint(
             equalTo: stack.widthAnchor, constant: -stack.edgeInsets.left - stack.edgeInsets.right
         ).isActive = true
-        stages.translatesAutoresizingMaskIntoConstraints = false
-        stages.widthAnchor.constraint(
+        verdictRow.translatesAutoresizingMaskIntoConstraints = false
+        verdictRow.widthAnchor.constraint(
             lessThanOrEqualTo: stack.widthAnchor,
             constant: -stack.edgeInsets.left - stack.edgeInsets.right
         ).isActive = true
