@@ -4595,7 +4595,7 @@ Plan, part 41b:
 - Order: this plan, then 41b.1, 41b.2, 41b.3 with 41b.4, 41b.5, 41b.6, each through the tests,
   `./scripts/check` at the end, then the result.
 
-Result, part 41b: shipped 41b.1 to 41b.6 (ADR 0091, amending 0088). Compact rows are 16 points;
+Result, part 41b: shipped 41b.1 to 41b.6 (ADR 0092, amending 0088). Compact rows are 16 points;
 the 11 pt text is 14 pt tall and stays centered. The album line runs on across the Album Art
 column, drawn by the art cell over its art where its row ends an album; row and column lines
 still stay out of the column, and the hover, over the row views, covers the line. The playing

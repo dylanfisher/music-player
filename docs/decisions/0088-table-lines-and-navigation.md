@@ -34,7 +34,7 @@ all music. Several of these left choices open.
   the alternating shade, the line, the playing tint and the selection, then fills it with that
   background. Erasing the shade with a clear fill instead drew the column black on glass. The playing row's bar still draws at the row's leading edge. The row view finds
   the column by identifier when it draws, so a moved or resized column is followed.
-  Amended 2026-11-04 (phase 41b, [0091](0091-playing-mark-and-timeline-columns.md)): the album
+  Amended 2026-11-04 (phase 41b, [0092](0092-playing-mark-and-timeline-columns.md)): the album
   line crosses the art column, drawn by the art cell over its art; row and column lines don't.
 - **⇧⌘L is Show Selected Track** (`view.showSelectedTrack`), the same step ⌘L takes with nothing
   playing. No link may run it, since it needs a selection only the window has.
