@@ -52,3 +52,17 @@ private func library(mount: String) throws -> LibraryIndex {
     #expect(try index.playlistID(syncID: syncID) == nil)
     #expect(try index.playlistID(syncID: String(repeating: "0", count: 32)) == nil)
 }
+
+@Test func aSourceIsNamedWithItsPlaylistsSyncIDAndAnUnknownOneIsTheLibrary() throws {
+    let index = try library(mount: "/Volumes/music")
+    let id = try index.createPlaylist(named: "Evening")
+    let name = try #require(try index.sharedName(of: .playlist(id)))
+    #expect(name == "playlist:" + (try #require(try index.syncID(ofPlaylist: id))))
+    #expect(try index.source(sharedName: name) == .playlist(id))
+    #expect(try index.sharedName(of: nil) == nil)
+    #expect(try index.sharedName(of: .history) == "history")
+    #expect(try index.source(sharedName: "history") == .history)
+    #expect(try index.source(sharedName: nil) == nil)
+    #expect(try index.source(sharedName: "playlist:" + String(repeating: "f", count: 32)) == nil)
+    #expect(try index.source(sharedName: "somewhere") == nil)
+}

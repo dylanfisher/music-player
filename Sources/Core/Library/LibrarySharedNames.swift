@@ -1,5 +1,9 @@
 import Foundation
+import Log
 import SQLite
+import Settings
+
+private let logger = moduleLogger()
 
 /// Names for a track and a playlist that every Mac reads the same way, for the play state the
 /// config file carries between them (ADR 0092). A track under a folder stored by share is its
@@ -27,6 +31,31 @@ extension LibraryIndex {
         return try statement(
             "SELECT f.id FROM paths p JOIN files f ON f.id = p.id WHERE p.path = ?"
         ).map(path, row: { try $0.int64(0) }).first
+    }
+
+    /// The shared name of `source`: its text, with a playlist named by its sync ID. Nil for the
+    /// library, and for a playlist without a sync ID, which is logged.
+    public func sharedName(of source: BrowserSource?) throws -> String? {
+        guard case .playlist(let id) = source else { return source?.text }
+        guard let syncID = try syncID(ofPlaylist: id) else {
+            logger.notice("playlist \(id) has no sync ID; the play state names the library")
+            return nil
+        }
+        return BrowserSource.playlistPrefix + syncID
+    }
+
+    /// The source the shared name `name` is on this Mac, nil for the library. A playlist this
+    /// Mac doesn't have, or a name that isn't a source, is the library, logged.
+    public func source(sharedName name: String?) throws -> BrowserSource? {
+        guard let name else { return nil }
+        if name.hasPrefix(BrowserSource.playlistPrefix) {
+            let syncID = String(name.dropFirst(BrowserSource.playlistPrefix.count))
+            if let id = try playlistID(syncID: syncID) { return .playlist(id) }
+        } else if let source = BrowserSource(text: name) {
+            return source
+        }
+        logger.notice("the saved source \(name) isn't here; showing the library")
+        return nil
     }
 
     /// Playlist `id`'s sync ID; nil for one made before sync and not changed since.

@@ -11,7 +11,7 @@ public enum BrowserSource: SettingValue, Hashable {
     /// The tracks a check of the health report found (ADR 0034).
     case health(HealthCheck)
 
-    private static let playlistPrefix = "playlist:"
+    public static let playlistPrefix = "playlist:"
     private static let historyText = "history"
     private static let timelineText = "timeline"
     private static let healthPrefix = "health:"
