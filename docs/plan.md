@@ -4348,12 +4348,26 @@ drag the opacity, press Default, and type a title template with an open brace on
 - [ ] **40b.2 Frosted glass headers.** On window glass the table headers are now fully
       transparent. They get a frosted backdrop, blurring what scrolls under them, as Finder's do.
 
-Plan, part 40b: `SeekBox` fills white at an alpha that gives Swinsian's step over the toolbar
-(about 0.6 in light) and a light step in dark, with a faint border or none, checked against
-the screenshot by pixels. The glass header views put an `NSVisualEffectView` (header material,
-within window) behind their cells, and remove it when the glass goes. Tests: the box's pixels
-lighter than the toolbar in both appearances; the header's pixels neither opaque nor clear
-on glass, and the header back as it was after.
+Plan, part 40b:
+- 40b.1, NowPlaying: Swinsian's box has no border; its edge goes straight from 242 to 250.
+  `SeekBox` fills white at 60% in light, which makes 250 on 242 (and 251 on our 245), and at
+  5% in dark, a step of about 13 levels on the dark toolbar, and draws no border. White over
+  the bar, not a color of its own, keeps it a step lighter on glass. The status bar's box is
+  the same view and changes with it. Test: the box drawn over Swinsian's 242 gives 250, over
+  the dark window color a step of 4 to 20 levels, and nothing darker at its edge.
+- 40b.2, App: a probe showed `cacheDisplay` draws a visual effect view as a flat fill, so only
+  the window as the screen shows it tells a blur from an opaque header; a test's own window can
+  be read with `CGWindowListCreateImage` (still exported, though Swift can't call it from the
+  macOS 15 SDK on) without the screen recording permission. `GlassHeaderView` holds an
+  `NSVisualEffectView`, header material, within window, following the window's active state as
+  the glass's backdrop does, and a titles view over it that draws the line and the cells: a
+  view's subviews draw over its own drawing, so the header itself draws nothing. The header
+  takes every click, and any redraw of it redraws the titles. The material goes with the header
+  view when the glass goes off. Test: over red under a cleared list, the header's pixels on
+  screen change the red and let it through, in light and dark, over a column added on glass
+  too; the header and its menu back after.
+- Checks: `./scripts/check`, `--snapshot` light and dark, glass on and off (the box against
+  the screenshot), the live resize bench by name with the glass on, against main.
 
 #### 40c. Builder items in Customize Toolbar
 
