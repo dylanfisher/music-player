@@ -40,8 +40,7 @@ func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
     case .bitPerfect: (lines.badge, lines.tone) = ("Bit-perfect", .bitPerfect)
     case .changed(let changes):
         let reasons = changes.map(describe).joined(separator: "; ")
-        let converted = changes.contains { if case .converted = $0 { true } else { false } }
-        (lines.badge, lines.tone) = (converted ? "Converted" : "Not bit-perfect", .changed)
+        (lines.badge, lines.tone) = (badge(for: changes), .changed)
         lines.detail = reasons.prefix(1).uppercased() + reasons.dropFirst()
     case .unverifiable:
         lines.badge = "Can't be checked"
@@ -62,6 +61,21 @@ func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
     case .renderer(let sink): lines.rows += rendererRows(sink)
     }
     return lines
+}
+
+/// "Not guaranteed bit-perfect" when every change is one only another app's sound would make:
+/// usually nothing else plays, and then the samples reach the device unchanged.
+private func badge(for changes: [SignalChange]) -> String {
+    if changes.contains(where: { if case .converted = $0 { true } else { false } }) {
+        return "Converted"
+    }
+    let onlyOtherApps = changes.allSatisfy { change in
+        switch change {
+        case .mixableFormat, .hogModeFree: true
+        default: false
+        }
+    }
+    return onlyOtherApps ? "Not guaranteed bit-perfect" : "Not bit-perfect"
 }
 
 /// DoP is never scaled, so the digital volume reads as bypassed while it plays (ADR 0064).

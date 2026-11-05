@@ -64,6 +64,17 @@ private let formats = DeviceFormats(
     #expect(lines.rows.last == .init(label: "Volume", value: "channel 1 99.9%; digital -6.0 dB"))
 }
 
+@Test func aSharedDeviceIsNotGuaranteedBitPerfect() {
+    let shared = DeviceState.connected(
+        DeviceSignal(
+            nominalSampleRateHz: 44_100, physical: int32, isMixable: true, hogMode: .free,
+            volumes: [], formats: formats))
+    let lines = signalPathLines(path(shared))
+    #expect(lines.badge == "Not guaranteed bit-perfect")
+    #expect(lines.tone == .changed)
+    #expect(signalPathLines(path(shared, gain: 0.5)).badge == "Not bit-perfect")
+}
+
 @Test func noOutputNothingPlayingAndAMissingDeviceSaySo() {
     #expect(
         signalPathLines(nil)
