@@ -104,9 +104,22 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         self.model = model
         window.contentView = makeContent()
         if let content = window.contentView { window.setContentSize(content.fittingSize) }
-        showValues()
+        build(Self.lastTab)
         tabs.selectTabViewItem(withIdentifier: Self.lastTab.rawValue)
+        showValues()
         focusFirstField()
+    }
+
+    private var builtTabs: Set<TagEditorTab> = []
+
+    /// Makes `tab`'s fields the first time it's shown, filled with the model's values.
+    private func build(_ tab: TagEditorTab) {
+        guard !builtTabs.contains(tab),
+            let item = tabs.tabViewItems.first(where: { $0.identifier as? String == tab.rawValue })
+        else { return }
+        builtTabs.insert(tab)
+        item.view = tabView(tab)
+        showValues()
     }
 
     func replaceArt(_ image: Data, mimeType: String) {
@@ -161,10 +174,13 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     private func makeContent() -> NSView {
         let heading = headingLabel()
+        setUpArtViews()
+        // Each tab's fields are made when it's first shown, so the window opens on one tab's
+        // worth of views.
         for tab in TagEditorTab.allCases {
             let item = NSTabViewItem(identifier: tab.rawValue)
             item.label = tab.title
-            item.view = tabView(tab)
+            item.view = NSView()
             tabs.addTabViewItem(item)
         }
         // After the tabs are added, since adding the first selects it, which isn't a choice.
@@ -385,13 +401,16 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         return NSStackView(views: [replace, remove])
     }
 
-    private func artworkView() -> NSView {
+    private func setUpArtViews() {
         for (view, points) in [(artView, Self.artPoints), (largeArtView, Self.largeArtPoints)] {
             view.imageScaling = .scaleProportionallyUpOrDown
             view.imageFrameStyle = .grayBezel
             view.widthAnchor.constraint(equalToConstant: points).isActive = true
             view.heightAnchor.constraint(equalToConstant: points).isActive = true
         }
+    }
+
+    private func artworkView() -> NSView {
         artDetails.textColor = .secondaryLabelColor
         artDetails.isSelectable = true
         let stack = NSStackView(views: [largeArtView, artDetails, artButtons(size: .regular)])
@@ -430,16 +449,18 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     // MARK: Values
 
-    /// Puts the model's values in the fields the user hasn't typed in, and the art.
+    /// Puts the model's values in the fields, and the art. A field typed in keeps what was
+    /// typed, which a tab made since shows too.
     private func showValues() {
         guard let model else { return }
-        for (field, views) in fields where !model.isTyped(field) {
+        for (field, views) in fields {
             for view in views {
-                view.stringValue = model.text(field)
+                // Setting the same text would move the cursor of the field being typed in.
+                if view.stringValue != model.text(field) { view.stringValue = model.text(field) }
                 view.placeholderString = model.isMixed(field) ? mixedPlaceholder : nil
             }
         }
-        for (field, view) in areas where !model.isTyped(field) {
+        for (field, view) in areas where view.string != model.text(field) {
             view.string = model.text(field)
         }
         showAreaPlaceholders()
@@ -551,6 +572,13 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 }
 
 extension TagEditorWindow: NSTabViewDelegate {
+    public func tabView(_ tabView: NSTabView, willSelect item: NSTabViewItem?) {
+        guard let id = item?.identifier as? String, let tab = TagEditorTab(rawValue: id) else {
+            return
+        }
+        build(tab)
+    }
+
     public func tabView(_ tabView: NSTabView, didSelect item: NSTabViewItem?) {
         guard let id = item?.identifier as? String, let tab = TagEditorTab(rawValue: id) else {
             return
