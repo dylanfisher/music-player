@@ -50,6 +50,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private var copiedGeneration = 0
     private var syncFolderLabel: NSTextField?
     private var syncFolderButtons: (change: NSButton, open: NSButton, clear: NSButton)?
+    /// The template rows' lines under their fields, saying why the text typed isn't saved.
+    private var templateProblems: [String: NSTextField] = [:]
     /// The color rows' wells, and their Default buttons, which set null.
     private var colorWells: [String: NSColorWell] = [:]
     private var colorDefaults: [String: NSButton] = [:]
@@ -260,7 +262,17 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             help.bezelStyle = .helpButton
             help.toolTip = GeneralModel.help(tokens)
             help.setAccessibilityLabel("Tokens for \(row.title)")
-            return NSStackView(views: [field, help])
+            let problem = NSTextField(wrappingLabelWithString: "")
+            problem.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            problem.textColor = .systemRed
+            problem.preferredMaxLayoutWidth = Self.summaryWidth
+            problem.isHidden = true
+            templateProblems[row.key] = problem
+            let stack = NSStackView(views: [NSStackView(views: [field, help]), problem])
+            stack.orientation = .vertical
+            stack.alignment = .leading
+            stack.spacing = 2
+            return stack
         case .number(_, let optional), .text(let optional):
             let field = textField(row, optional: optional)
             guard let unit = row.unit else { return field }
@@ -490,9 +502,24 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         actions.chooseOutput(choice)
     }
 
+    /// Saves a template row as it's typed, when the text parses; else says why under the field
+    /// and saves nothing.
+    func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField,
+            let key = field.identifier?.rawValue, let problemLine = templateProblems[key]
+        else { return }
+        let problem = GeneralModel.templateProblem(field.stringValue)
+        problemLine.stringValue = problem ?? ""
+        problemLine.isHidden = problem == nil
+        guard problem == nil else { return }
+        attempt { try model.setText(key, field.stringValue) }
+    }
+
     func controlTextDidEndEditing(_ notification: Notification) {
         guard let field = notification.object as? NSTextField, let key = field.identifier?.rawValue
         else { return }
+        // Text that didn't parse is put back below, so its problem no longer applies.
+        templateProblems[key]?.isHidden = true
         // The field may still be the one being edited, which `reload` leaves alone, so a value
         // the setting refused is put back here.
         if !attempt({ try model.setText(key, field.stringValue) }) {

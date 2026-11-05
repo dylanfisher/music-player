@@ -308,6 +308,11 @@ public final class GeneralModel {
 
     func clear(_ key: String) throws { try set(key, NSNull()) }
 
+    /// Why `text` isn't a template, as `setText` would refuse it; nil when it parses.
+    static func templateProblem(_ text: String) -> String? {
+        TitleTemplate(text.trimmingCharacters(in: .whitespaces)).problem()
+    }
+
     /// A template's tokens, one a line with what each stands for, for its help button's
     /// tooltip and popover.
     static func help(_ tokens: [SettingKind.Token]) -> String {
@@ -347,6 +352,9 @@ public final class GeneralModel {
         case .text(let optional):
             try set(key, trimmed.isEmpty && optional ? NSNull() : trimmed)
         case .template:
+            // Saved as it's typed, so a keystroke that leaves the template as it is, a space
+            // at the end, writes nothing.
+            guard trimmed != self.text(key) else { return }
             try set(key, trimmed)
         case .checkbox, .popUp, .folders, .syncFolder, .output, .renderer, .barLayout, .color,
             .readOnly:

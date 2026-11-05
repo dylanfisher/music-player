@@ -715,3 +715,70 @@ private func helpButton(in view: NSView) -> NSButton? {
     #expect(labels(in: try #require(popover.contentViewController?.view)) == [help])
     popover.close()
 }
+
+/// A template row saves as it's typed, while the field is still being edited, each time the
+/// text parses and differs from what's saved. Text that doesn't parse saves nothing, and the
+/// row says why.
+@MainActor @Test(arguments: [AppSettings().windowTitle.key, AppSettings().headerTitleFormat.key])
+func aTemplateRowSavesAsItsTyped(key: String) throws {
+    let schema = AppSettings()
+    nonisolated(unsafe) var saved: [String: Any] = [key: "{title}"]
+    nonisolated(unsafe) var saves = 0
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { saved[$0] },
+        set: {
+            // The config file refuses a template that doesn't parse.
+            if let problem = ($1 as? String).flatMap({ TitleTemplate($0).problem() }) {
+                throw ConfigProblem(line: nil, message: problem)
+            }
+            saved[$0] = $1
+            saves += 1
+        }, isBlocked: { false })
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.appearance])
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 700, height: 700), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    window.contentView = pane.view
+    window.makeKeyAndOrderFront(nil)
+    pane.reload()
+    let field = try #require(view(key, in: pane.view) as? NSTextField)
+    #expect(window.makeFirstResponder(field))
+    let editor = try #require(field.currentEditor() as? NSTextView)
+    editor.moveToEndOfDocument(nil)
+    // The row's own line under the field, not the pane's error line at the bottom.
+    let row = try #require(field.superview?.superview)
+    let problem = "a { with no } after it"
+    func problemShown() -> Bool {
+        visibleLabels(in: row).contains { $0.contains(problem) }
+    }
+
+    editor.insertText(" ", replacementRange: editor.selectedRange())
+    #expect(saves == 0, "the same template once trimmed")
+    editor.insertText("— {", replacementRange: editor.selectedRange())
+    #expect(saves == 0)
+    #expect(problemShown())
+    editor.insertText("artist}", replacementRange: editor.selectedRange())
+    #expect(saved[key] as? String == "{title} — {artist}")
+    #expect(saves == 1)
+    #expect(!problemShown())
+    #expect(field.currentEditor() != nil, "still being edited")
+    // Leaving with text that doesn't parse puts back the saved template, and the pane's error
+    // line says why instead of the row's.
+    editor.insertText(" {", replacementRange: editor.selectedRange())
+    #expect(problemShown())
+    #expect(window.makeFirstResponder(nil))
+    #expect(field.stringValue == "{title} — {artist}")
+    #expect(!problemShown())
+    #expect(saves == 1)
+}
+
+/// The text of every label under `view` that shows.
+@MainActor
+private func visibleLabels(in view: NSView) -> [String] {
+    guard !view.isHidden else { return [] }
+    return ((view as? NSTextField).map { [$0.stringValue] } ?? [])
+        + view.subviews.flatMap(visibleLabels)
+}
