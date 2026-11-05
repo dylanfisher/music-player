@@ -220,7 +220,10 @@ extension AppDelegate {
                 rescanFolders: { [weak self] in self?.rescanFolders(at: $0) },
                 outputs: { [weak self] in self?.outputOptionsNow() ?? [] },
                 searchOutputs: { [weak self] in self?.searchOutputs() },
-                chooseOutput: { [weak self] in self?.chooseOutput($0) }))
+                chooseOutput: { [weak self] in self?.chooseOutput($0) },
+                showHealth: { [weak dispatcher] in
+                    if dispatcher?.run(.checkHealth) != true { NSSound.beep() }
+                }))
         settingsWindow = controller
         return controller
     }

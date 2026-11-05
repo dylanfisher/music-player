@@ -37,14 +37,15 @@ private func actions(
     addFolder: @escaping () -> Void = {}, removeFolder: @escaping (Int) -> Void = { _ in },
     rescanNow: @escaping () -> Void = {}, rescanFolders: @escaping ([Int]) -> Void = { _ in },
     outputs: @escaping () -> [OutputOption] = { [] },
-    chooseOutput: @escaping (OutputChoice) -> Void = { _ in }
+    chooseOutput: @escaping (OutputChoice) -> Void = { _ in },
+    showHealth: @escaping () -> Void = {}
 ) -> SettingsActions {
     SettingsActions(
         openConfigFile: openConfigFile, revealConfigFile: {}, copyDefaultConfig: {},
         chooseSyncFolder: chooseSyncFolder, openSyncFolder: openSyncFolder, addFolder: addFolder,
         removeFolder: removeFolder, rescanNow: rescanNow,
         rescanFolders: rescanFolders, outputs: outputs,
-        searchOutputs: {}, chooseOutput: chooseOutput)
+        searchOutputs: {}, chooseOutput: chooseOutput, showHealth: showHealth)
 }
 
 private var appearanceChoices: [SettingKind.Choice] {
@@ -880,4 +881,26 @@ private func visibleLabels(in view: NSView) -> [String] {
     // All three on the line the first one starts.
     let buttons = schema.customStatusLayouts.compactMap { view($0.key, in: pane.view) }
     #expect(Set(buttons.map { $0.superview.map(ObjectIdentifier.init) }).count == 1)
+}
+
+@MainActor @Test func theLibrarySectionHasShowLibraryHealth() throws {
+    let schema = AppSettings()
+    var stored: [String: Any] = [:]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
+        set: { key, json in stored[key] = json }, isBlocked: { false })
+    var shown = 0
+    let pane = GeneralPane(
+        model: model, configPath: "/tmp/config.json", actions: actions(showHealth: { shown += 1 }))
+    _ = pane.view
+    let button = try #require(pane.healthButton)
+    #expect(button.title == AppCommands.title(of: .checkHealth))
+    _ = button.target?.perform(button.action, with: button)
+    #expect(shown == 1)
+    // Only the pane with the Library section has it.
+    let playback = GeneralPane(
+        model: model, configPath: nil, actions: actions(),
+        sections: SettingsWindowController.Pane.playback.sections)
+    _ = playback.view
+    #expect(playback.healthButton == nil)
 }

@@ -51,6 +51,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
     private var copiedGeneration = 0
     private var syncFolderLabel: NSTextField?
+    /// Show Library Health, in the Library section; nil in a pane without that section.
+    private(set) var healthButton: NSButton?
     private var syncFolderButtons: (change: NSButton, open: NSButton, clear: NSButton)?
     /// The template rows' lines under their fields, saying why the text typed isn't saved.
     private var templateProblems: [String: NSTextField] = [:]
@@ -88,6 +90,9 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     override func loadView() {
         let shown = model.sections.filter { sections.contains($0.section) }
         let grids = shown.map { grid($0.rows) }
+        if let library = shown.firstIndex(where: { $0.section == .library }) {
+            addHealthRow(to: grids[library])
+        }
         // One label column width for every box, so the controls of all of them line up.
         let labelWidth =
             grids.flatMap { grid in
@@ -233,6 +238,27 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         labels[row.key] = label
         grid.addRow(with: [label, cell])
     }
+
+    /// Show Library Health's button, the last row of the Library section, with what it shows
+    /// under it as a setting's summary is.
+    private func addHealthRow(to grid: NSGridView) {
+        let open = button(AppCommands.title(of: .checkHealth), #selector(showHealth))
+        healthButton = open
+        let summary = NSTextField(
+            wrappingLabelWithString:
+                "Shows the library's problems, such as files that couldn't be read, likely"
+                + " duplicates and missing tags, over the track table.")
+        summary.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        summary.textColor = .secondaryLabelColor
+        summary.preferredMaxLayoutWidth = Self.summaryWidth
+        let cell = NSStackView(views: [open, summary])
+        cell.orientation = .vertical
+        cell.alignment = .leading
+        cell.spacing = 2
+        grid.addRow(with: [NSGridCell.emptyContentView, cell])
+    }
+
+    @objc private func showHealth() { actions.showHealth() }
 
     /// A disclosure triangle and `title`, which show and hide the row `key` under them.
     private func disclosureLine(_ title: String, _ key: String) -> NSView {

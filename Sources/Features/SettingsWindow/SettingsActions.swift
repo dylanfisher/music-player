@@ -21,6 +21,8 @@ public struct SettingsActions {
     /// Starts a search for renderers, as the output picker opens; `reload` shows what it finds.
     public var searchOutputs: () -> Void
     public var chooseOutput: (OutputChoice) -> Void
+    /// Shows Library Health in the main window, from the Library section's button.
+    public var showHealth: () -> Void
 
     public init(
         openConfigFile: @escaping () -> Void, revealConfigFile: @escaping () -> Void,
@@ -29,7 +31,8 @@ public struct SettingsActions {
         addFolder: @escaping () -> Void, removeFolder: @escaping (Int) -> Void,
         rescanNow: @escaping () -> Void, rescanFolders: @escaping ([Int]) -> Void,
         outputs: @escaping () -> [OutputOption],
-        searchOutputs: @escaping () -> Void, chooseOutput: @escaping (OutputChoice) -> Void
+        searchOutputs: @escaping () -> Void, chooseOutput: @escaping (OutputChoice) -> Void,
+        showHealth: @escaping () -> Void
     ) {
         self.openConfigFile = openConfigFile
         self.revealConfigFile = revealConfigFile
@@ -43,5 +46,6 @@ public struct SettingsActions {
         self.outputs = outputs
         self.searchOutputs = searchOutputs
         self.chooseOutput = chooseOutput
+        self.showHealth = showHealth
     }
 }
