@@ -24,6 +24,9 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// Guards every field below it, and runs FSEvents and timer callbacks.
     private let queue = DispatchQueue(label: "\(bundleIdentifier).watcher")
     private let scanQueue = DispatchQueue(label: "\(bundleIdentifier).scan", qos: .utility)
+    /// Reads the files the tag editor wrote, one write's files at a time.
+    private let editQueue = DispatchQueue(
+        label: "\(bundleIdentifier).edited", qos: .userInitiated)
     private var state: WatchState?
     private var control: ScanControl?
     private var timer: DispatchSourceTimer?
@@ -141,6 +144,23 @@ public final class LibraryWatcher: @unchecked Sendable {
             state?.directoriesEdited(directories.map(canonicalPath))
             advance()
         }
+    }
+
+    /// Reads `files`, which the tag editor just wrote, again at once, on a queue of their own:
+    /// not behind a running scan and not waiting for playback, since the user is looking at
+    /// them. Sends `edited` when they're stored. Their folders are rescanned after, as
+    /// `rescan(directories:)` does, in case a scan read a file before the write and stores it
+    /// after; that rescan finds them unchanged.
+    public func rescan(files: [String]) {
+        editQueue.async { [scanner, events] in
+            do {
+                events(.edited(try scanner.rescan(files: files)))
+            } catch {
+                // The folder rescan below tries them again.
+                logger.error("couldn't read the edited files again: \(error)")
+            }
+        }
+        rescan(directories: Set(files.map { ($0 as NSString).deletingLastPathComponent }).sorted())
     }
 
     /// Rescan All: scans every watched folder whole, now, whatever the poll timer says and even

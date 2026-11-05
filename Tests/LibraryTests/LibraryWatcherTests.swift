@@ -96,6 +96,15 @@ private final class LockedEvents: @unchecked Sendable {
 
     func append(_ event: WatcherEvent) { lock.withLock { events.append(event) } }
 
+    var edited: [ScanSummary] {
+        lock.withLock {
+            events.compactMap { event in
+                guard case .edited(let summary) = event else { return nil }
+                return summary
+            }
+        }
+    }
+
     var removed: [Int] {
         lock.withLock {
             events.compactMap { event in
@@ -397,6 +406,34 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     #expect(
         try await eventually(within: 20) { try index.trackCount() == library.readableCount + 1 })
     #expect(try await eventually(within: 20) { received.scanned.count == 1 })
+}
+
+/// The tag editor's files are read at once in a network folder whose polls wait for playback,
+/// while the folder's own rescan still waits.
+@Test func editedFilesAreReadAtOnceWhilePollsArePausedForPlayback() async throws {
+    let library = try TestLibrary()
+    let network = WatchedFolder(path: library.root, kind: .network)
+    _ = try library.scan(network)
+    let file = try #require(library.manifest.files.first { $0.malformation == nil })
+    let path = library.path(file)
+    let size = try #require(try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int)
+    let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path, isDirectory: false))
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data(count: 16))
+    try handle.close()
+    let received = LockedEvents()
+    let watcher = watcher(library, through: ListingRecorder(), events: received.append)
+    watcher.start(
+        folders: [network], rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
+    defer { watcher.stop() }
+    watcher.playbackChanged(.playing, pausePollingDuringPlayback: true)
+    #expect(try await eventually(within: 20) { received.kept == [library.root] })
+
+    watcher.rescan(files: [path])
+    #expect(try await eventually(within: 5) { received.edited.map(\.read) == [1] })
+    let index = try library.index()
+    #expect(try index.knownFile(at: path)?.sizeBytes == size + 16)
+    #expect(received.scanned.isEmpty, "the folder's rescan waits for playback")
 }
 
 @Test func rescanWalksTheChosenFolderAsSettingsHasIt() async throws {

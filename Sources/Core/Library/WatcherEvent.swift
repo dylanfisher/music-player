@@ -7,6 +7,8 @@ public enum WatcherEvent: Sendable {
     /// most once per `LibraryWatcher.progressIntervalSeconds`.
     case scanning(folder: String, ScanProgress)
     case scanned(folder: String, ScanSummary)
+    /// Files the tag editor wrote were read again and stored (`LibraryWatcher.rescan(files:)`).
+    case edited(ScanSummary)
     /// The scan stopped because the database failed. What it stored before then stays.
     case scanFailed(folder: String, reason: String)
     /// At start, the network folder at this path shows what the index holds, and is first

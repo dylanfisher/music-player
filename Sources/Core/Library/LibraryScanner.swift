@@ -167,6 +167,73 @@ public struct LibraryScanner: Sendable {
         )
         return summary
     }
+
+    /// Reads the files at `paths` again and stores what they hold now, whatever their size and
+    /// mtime say: the tag editor just wrote them, and a folder scan would wait behind other
+    /// scans and, on a network volume, for playback. A file the index doesn't hold is skipped,
+    /// since only a folder scan knows whether its folder includes it. Blocks, so call it off
+    /// the main thread and outside Swift concurrency's threads.
+    public func rescan(files paths: [String]) throws -> ScanSummary {
+        let index = try LibraryIndex(at: databaseURL)
+        var summary = ScanSummary()
+        var targets: [(path: String, known: KnownFile)] = []
+        for path in paths.map(canonicalPath) {
+            guard let known = try index.knownFile(at: path) else {
+                logger.notice("not reading \(path) again: the index doesn't hold it")
+                continue
+            }
+            targets.append((path, known))
+        }
+        let results = RescanResults(count: targets.count)
+        DispatchQueue.concurrentPerform(iterations: targets.count) { position in
+            let (path, known) = targets[position]
+            results.store(scannedAgain(path, known: known), at: position)
+        }
+        var files: [ScannedFile] = []
+        for result in results.all {
+            switch result {
+            case .file(let file)?:
+                files.append(file)
+                summary.read += 1
+                if case .failure = file.outcome { summary.failed += 1 }
+            case .issue(let issue)?: summary.issues.append(issue)
+            case nil: break
+            }
+        }
+        if !files.isEmpty {
+            try index.store(files)
+            // An edit can leave an album, artist or genre with no tracks.
+            try index.deleteOrphans()
+        }
+        logger.info(
+            "read \(summary.read) edited files again, \(summary.failed) failed, \(summary.issues.count) issues"
+        )
+        return summary
+    }
+
+    /// The file at `path` read again, with its size and mtime as a directory listing gives
+    /// them, so the next folder scan finds it unchanged.
+    private func scannedAgain(_ path: String, known: KnownFile) -> Rescanned {
+        let values: URLResourceValues
+        do {
+            values = try URL(fileURLWithPath: path, isDirectory: false).resourceValues(forKeys: [
+                .fileSizeKey, .contentModificationDateKey, .creationDateKey,
+            ])
+        } catch {
+            return .issue(
+                ScanIssue(kind: .unreadable, path: path, detail: "\(error.localizedDescription)"))
+        }
+        guard let size = values.fileSize, let modified = values.contentModificationDate else {
+            return .issue(ScanIssue(kind: .unreadable, path: path, detail: "no size or mtime"))
+        }
+        return .file(
+            ScannedFile(
+                path: path, sizeBytes: size, modifiedSeconds: modified.timeIntervalSince1970,
+                createdSeconds: values.creationDate?.timeIntervalSince1970, known: known,
+                outcome: Result { () throws(MetadataError) -> ParsedFile in
+                    try access.readMetadata(at: path)
+                }))
+    }
 }
 
 /// The device of the directory at `path`, or nil when it's missing or not a directory. A NAS
@@ -204,6 +271,27 @@ private func coalesced(_ subtrees: [String], in root: String) -> [String] {
     let unique = Set(starts)
     return unique.filter { start in !unique.contains { $0 != start && isPath(start, under: $0) } }
         .sorted()
+}
+
+/// One file `rescan(files:)` read, or why it couldn't stat it.
+private enum Rescanned {
+    case file(ScannedFile)
+    case issue(ScanIssue)
+}
+
+/// What `rescan(files:)` read of each file, by position, filled in from several threads.
+private final class RescanResults: @unchecked Sendable {
+    // `results` is guarded by `lock`.
+    private let lock = NSLock()
+    private var results: [Rescanned?]
+
+    init(count: Int) { results = Array(repeating: nil, count: count) }
+
+    func store(_ result: Rescanned, at position: Int) {
+        lock.withLock { results[position] = result }
+    }
+
+    var all: [Rescanned?] { lock.withLock { results } }
 }
 
 /// Progress, published to the stream under a lock so values arrive in order.

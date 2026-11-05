@@ -261,20 +261,35 @@ public final class LibraryIndex {
     /// Every indexed file under `directory`, by path.
     func knownFiles(under directory: String) throws -> [String: KnownFile] {
         let range = pathRange(under: directory)
-        var files: [String: KnownFile] = [:]
-        try database.prepare(
+        return try knownFiles(
+            where: "f.path >= ? AND f.path < ?", [range.lowerBound, range.upperBound])
+    }
+
+    /// The indexed file at `path`, or nil when the index doesn't hold it.
+    func knownFile(at path: String) throws -> KnownFile? {
+        try knownFiles(where: "f.path = ?", [path])[path]
+    }
+
+    private func knownFiles(where condition: String, _ values: [String]) throws
+        -> [String: KnownFile]
+    {
+        let rows = try database.prepare(
             """
             SELECT f.path, f.id, f.size_bytes, f.modified_seconds, f.failure_kind,
                 t.file_id IS NOT NULL
             FROM files f LEFT JOIN tracks t ON t.file_id = f.id
-            WHERE f.path >= ? AND f.path < ?
+            WHERE \(condition)
             """
-        ).query(range.lowerBound, range.upperBound) { row in
-            files[try row.text(0)] = KnownFile(
-                id: try row.int64(1), sizeBytes: try row.int(2), modifiedSeconds: try row.double(3),
-                failure: try row.optionalText(4).map(errorKind), hasTrack: try row.int(5) == 1)
+        ).map(binding: values) { row in
+            (
+                try row.text(0),
+                KnownFile(
+                    id: try row.int64(1), sizeBytes: try row.int(2),
+                    modifiedSeconds: try row.double(3),
+                    failure: try row.optionalText(4).map(errorKind), hasTrack: try row.int(5) == 1)
+            )
         }
-        return files
+        return Dictionary(rows) { first, _ in first }
     }
 
     /// Whether the last whole scan of the folder at `root` finished, so the index holds all of

@@ -177,6 +177,28 @@ import Testing
     #expect(browser.scanIndicatorAnimates)
 }
 
+/// Files the tag editor wrote and the watcher read again refresh the rows and columns at once;
+/// a rescan that read nothing doesn't.
+@MainActor @Test func editedFilesReadAgainRefreshTheBrowser() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, groupByAlbumArtist: false, thumbnails: nil)
+    await browser.load(BrowserState(source: nil))
+    var refreshes = 0
+    browser.libraryRefreshed = { refreshes += 1 }
+    browser.libraryChanged(.edited(ScanSummary()))
+    try await Task.sleep(nanoseconds: 100_000_000)
+    #expect(refreshes == 0)
+    var summary = ScanSummary()
+    summary.read = 1
+    browser.libraryChanged(.edited(summary))
+    let deadline = Date().addingTimeInterval(5)
+    while refreshes == 0, Date() < deadline { try await Task.sleep(nanoseconds: 10_000_000) }
+    #expect(refreshes == 1)
+}
+
 @MainActor @Test func leftAndRightMoveBetweenThePanesAndGoToTheRegistryElsewhere() throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let browser = LibraryBrowser(

@@ -615,3 +615,49 @@ private final class CountingReads: ScanFileAccess, @unchecked Sendable {
     #expect(issue?.problem == .failure(.unsupported))
     #expect(issue?.detail == "DST-compressed DSDIFF")
 }
+
+/// Reads files as they are, but with `title` as the title of the file at `edited`, as if the
+/// tag editor had written it there.
+private struct RetitledReads: ScanFileAccess {
+    var edited: String
+    var title: String
+
+    func volumeIsLocal(_ path: String) throws -> Bool? { true }
+
+    func contentsOfDirectory(_ directory: String, keys: [URLResourceKey]) throws -> [URL] {
+        try SystemFileAccess().contentsOfDirectory(directory, keys: keys)
+    }
+
+    func readMetadata(at path: String) throws(MetadataError) -> ParsedFile {
+        var parsed = try SystemFileAccess().readMetadata(at: path)
+        if path == edited { parsed.metadata.tags.title = title }
+        return parsed
+    }
+}
+
+/// The tag editor's rescan reads the files it names at once, whatever their size and mtime,
+/// stores each one the index holds with its new size and mtime, so a folder scan after finds
+/// nothing changed, skips a path the index doesn't hold, and reports one that's gone.
+@Test func aRescanOfEditedFilesStoresTheirNewTags() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let files = library.manifest.files.filter { $0.malformation == nil }
+    let edited = library.path(files[0])
+    let gone = library.path(files[1])
+    try FileManager.default.removeItem(atPath: gone)
+    var times = [timespec(tv_sec: 0, tv_nsec: Int(UTIME_OMIT)), timespec(tv_sec: 2_000_000_000, tv_nsec: 0)]
+    #expect(utimensat(AT_FDCWD, edited, &times, 0) == 0)
+    let scanner = LibraryScanner(
+        databaseURL: library.databaseURL,
+        access: RetitledReads(edited: edited, title: "Edited"))
+
+    let summary = try scanner.rescan(files: [edited, library.root + "/not indexed.flac", gone])
+    #expect(summary.read == 1)
+    #expect(summary.failed == 0)
+    #expect(summary.issues.map(\.path) == [gone])
+    #expect(try library.index().track(path: edited)?.title == "Edited")
+
+    let after = try scanner.scan(library.folder)
+    #expect(after.read == 0, "the folder scan finds the edited file unchanged")
+    #expect(try library.index().track(path: edited)?.title == "Edited")
+}
