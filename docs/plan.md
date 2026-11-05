@@ -4787,16 +4787,16 @@ this environment on `main` as well as here (it reads the screen); everything els
 
 #### 41e. Toolbar status and Settings
 
-- [ ] **41e.1 Help popover padding.** The template rows' ? popover has top and bottom padding
+- [x] **41e.1 Help popover padding.** The template rows' ? popover has top and bottom padding
       equal to its side padding.
-- [ ] **41e.2 Outlined status items.** While the toolbar's customize sheet is open, each status
+- [x] **41e.2 Outlined status items.** While the toolbar's customize sheet is open, each status
       item has an outline, so an empty Custom Status item can be seen and removed.
-- [ ] **41e.3 One item fills the row.** In flexible width, a status item alone on its row (the
+- [x] **41e.3 One item fills the row.** In flexible width, a status item alone on its row (the
       Now Playing bar, or any other) stretches to the full width.
-- [ ] **41e.4 Watched folder options.** Swinsian's two options, if we lack them: remove tracks
+- [x] **41e.4 Watched folder options.** Swinsian's two options, if we lack them: remove tracks
       from the library when they disappear from watched folders, and rescan tags when files in
       watched folders are modified.
-- [ ] **41e.5 Appearance page.** The Appearance pane has grown to 20 rows in one box. Group it
+- [x] **41e.5 Appearance page.** The Appearance pane has grown to 20 rows in one box. Group it
       into sections a reader can scan.
 
 Plan, part 41e (ADR 0094):
@@ -4826,7 +4826,7 @@ Plan, part 41e (ADR 0094):
   has them. The status bar isn't in the toolbar and keeps no outline. Test: run the palette on
   a window, the items' views have the outline; end the sheet, they don't.
 - 41e.4: two settings, default on: `library.removeMissingTracks` ("Remove Missing Tracks")
-  and `library.rescanChangedFiles` ("Rescan Changed Files"), in a new "Folder Changes" box
+  and `library.rescanModifiedFiles` ("Rescan Modified Files"), in a new "Folder Changes" box
   above Network Folders in Settings ▸ Watched Folders. The scanner takes `ScanOptions`: with
   removal off, a finished walk leaves the tracks of gone files in the index (no files are
   touched in either case); with rescanning off, a known file whose size or mtime changed is
@@ -4849,6 +4849,31 @@ Plan, part 41e (ADR 0094):
   Status row's buttons each open their own builder, labels fit; snapshots of both panes.
 - Order: this plan, 41e.1, 41e.3, 41e.2, 41e.4, 41e.5, each through its tests,
   `./scripts/check`, then the ADR and the result.
+
+Result, part 41e: shipped 41e.1 to 41e.5 (ADR 0094, amending 0009, 0067, 0087 and 0089). The
+tokens popover is sized to its fitting size, so its 12-point insets hold above and below too. A
+status item with a flexible column fills the toolbar when no flexible space is in it or nothing
+but spaces is beside it; the status stops being AppKit's centered item while it fills, since
+AppKit never widens a centered item, and with another item and a flexible space it stays
+centered at 560 points. While Customize Toolbar's sheet is open the status and the Custom Status
+items have a 1-point rounded outline, from the window's sheet notifications and
+`customizationPaletteIsRunning`, both on macOS 12; the status bar has none. We did both of
+Swinsian's folder options unconditionally; Remove Missing Tracks (`library.removeMissingTracks`)
+and Rescan Modified Files (`library.rescanModifiedFiles`), both on, now sit in a Folder Changes
+box in Settings ▸ Watched Folders and in the File menu. Off, a gone file's track stays, and a
+modified file keeps its track and stored size and time until the setting is on again. Rescan,
+Rescan All and the tag editor's writes read modified files anyway; a missing, empty or vanished
+folder removes nothing whatever the setting, as before, so an unmounted NAS keeps its tracks.
+Files are never touched. Settings ▸ Appearance has Theme and Track Table; a new Toolbar pane has
+Titles, Toolbar Status (with the three Custom Status layouts on one row, Edit 1… to Edit 3…) and
+Status Bar. Sections list their keys, since all share `appearance.`. Summaries are shorter and
+the color wells no longer stretch. `--snapshot-of toolbar` draws the new pane; the Appearance,
+Toolbar and Watched Folders panes were checked in snapshots. Checked by tests only, nothing on
+screen: the popover's padding, the status filling the toolbar, and the outlines in the sheet.
+For the owner: the status alone in the toolbar and beside fixed items (it's no longer centered
+there), the outlines while customizing in light and dark, and the two folder options with a
+file edited or deleted in Finder. `./scripts/check` passes but for `theGlassHeadersAreFrosted`,
+which reads the screen and fails the same on `main` here, as 41b and 41c found.
 
 #### 41f. Play state across quits
 
