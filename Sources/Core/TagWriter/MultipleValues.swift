@@ -5,13 +5,18 @@ import Metadata
 /// ID3v2.4 text frame with values separated by terminators, an MP4 item with several `data`
 /// atoms, or a Vorbis key given more than once. The reader shows the first, and an edit keeps
 /// only the value written, so the editor says so before saving.
-public func multiValuedFields(at url: URL) throws(MetadataError) -> Set<TagEditField> {
-    let file: TagFile
+func multiValuedFields(at url: URL) throws(MetadataError) -> Set<TagEditField> {
     do throws(ParseFailure) {
-        file = try TagFile(path: url.path)
+        return try multiValuedFields(in: ByteReader(FileSource(path: url.path)))
     } catch {
         throw error.error(path: url.path)
     }
+}
+
+/// `multiValuedFields` through a reader already open on the file, as the one a parse of its
+/// tags read, so its first bytes aren't read twice.
+package func multiValuedFields(in reader: ByteReader) throws(ParseFailure) -> Set<TagEditField> {
+    let file = try TagFile(reader)
     var groups = Set<TagGroup>()
     switch file {
     case .id3(let id3):
@@ -31,12 +36,7 @@ public func multiValuedFields(at url: URL) throws(MetadataError) -> Set<TagEditF
         }
     case .flac(let flac):
         for block in flac.blocks where block.type == FLACFile.BlockType.vorbisComment.rawValue {
-            let comments: [(raw: [UInt8], range: Range<Int>)]
-            do throws(ParseFailure) {
-                comments = try vorbisComments(block.body, base: 0).comments
-            } catch {
-                throw error.error(path: url.path)
-            }
+            let comments = try vorbisComments(block.body, base: 0).comments
             var counts: [String: Int] = [:]
             for comment in comments { counts[vorbisKey(comment.raw), default: 0] += 1 }
             for (key, count) in counts where count > 1 {

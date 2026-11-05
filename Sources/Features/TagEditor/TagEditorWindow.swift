@@ -2,20 +2,24 @@ import AppKit
 import Artwork
 import TagWriter
 
-/// The tag editor: a sheet with a field per tag, the art with Replace and Remove beside it, and
-/// Cancel and Save. Fields where the tracks differ show "Mixed" until typed in. It edits a
-/// `TagEditorModel` and hands back the checked edit.
+/// An info window: a field per tag, the art with Replace and Remove beside it, and Cancel and
+/// Save. It opens at once, before its files are read, saying so, and shows the fields once
+/// `load` hands it the tracks. Fields where the tracks differ show "Mixed" until typed in. It
+/// edits a `TagEditorModel` and hands back the checked edit. Several can be open at once.
 @MainActor
-public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
-    public private(set) var model: TagEditorModel
+public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
+    /// The files Get Info was asked for, in the selection's order.
+    public let paths: [String]
+    /// Nil until the files are read.
+    public private(set) var model: TagEditorModel?
     public let window: NSWindow
-    /// Called with the edit when the user saves; the sheet has closed.
-    public var saved: (TagEdit) -> Void = { _ in }
-    /// Called when the user cancels; the sheet has closed.
-    public var cancelled: () -> Void = {}
+    /// Called with the edit when the user saves. The window stays open until `close()`.
+    var saved: (TagEdit) -> Void = { _ in }
+    /// Called once when the window closes, by Cancel, its close button or `close()`.
+    var closed: () -> Void = {}
     /// The art buttons, which run the registry's Replace Artwork… and Remove Artwork.
-    public var replaceArtwork: () -> Void = {}
-    public var removeArtwork: () -> Void = {}
+    var replaceArtwork: () -> Void = {}
+    var removeArtwork: () -> Void = {}
 
     private var fields: [TagEditField: NSTextField] = [:]
     private let compilationBox = NSButton(
@@ -26,45 +30,112 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
     private let problemLabel = NSTextField(labelWithString: "")
     /// Says, as soon as such a field is edited, that saving keeps one of its several values.
     private let collapseLabel = NSTextField(wrappingLabelWithString: "")
+    private var isClosed = false
 
     static let width = 560.0
     static let artPoints = 120.0
     private static let numberWidth = 52.0
+    /// Where the next window opens, so each one opens down and to the right of the last.
+    private static var nextTopLeft: NSPoint?
 
-    init(model: TagEditorModel) {
-        self.model = model
+    package init(paths: [String]) {
+        precondition(!paths.isEmpty, "Get Info opens on at least one track")
+        self.paths = paths
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 420),
-            styleMask: [.titled], backing: .buffered, defer: false)
+            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 120),
+            styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         super.init()
-        window.contentView = makeContent()
+        window.isReleasedWhenClosed = false
+        window.title = heading
+        window.delegate = self
+        window.contentView = makeReading()
         if let content = window.contentView { window.setContentSize(content.fittingSize) }
-        showArt()
     }
 
-    public func begin(over parent: NSWindow) {
-        parent.beginSheet(window)
+    /// The file's name, or how many tracks.
+    private var heading: String {
+        paths.count == 1 ? (paths[0] as NSString).lastPathComponent : "\(paths.count) tracks"
+    }
+
+    public var isLoaded: Bool { model != nil }
+
+    /// Shows the window in front, a step down and to the right of the last one opened.
+    func show(beside parent: NSWindow) {
+        if !window.isVisible {
+            let start =
+                Self.nextTopLeft
+                ?? NSPoint(x: parent.frame.minX + 40, y: parent.frame.maxY - 40)
+            Self.nextTopLeft = window.cascadeTopLeft(from: start)
+        }
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Shows the fields for `model`. A second call, after the files were read again, keeps what
+    /// the user typed and the art they chose, and shows the rest as the files hold them now.
+    package func load(_ model: TagEditorModel) {
+        if var current = self.model {
+            current.reread(model.tracks)
+            self.model = current
+            showValues()
+            return
+        }
+        self.model = model
+        window.contentView = makeContent(model)
+        if let content = window.contentView { window.setContentSize(content.fittingSize) }
+        showValues()
         window.makeFirstResponder(fields[.title])
     }
 
     func replaceArt(_ image: Data, mimeType: String) {
-        model.replaceArt(image, mimeType: mimeType)
+        model?.replaceArt(image, mimeType: mimeType)
         showArt()
     }
 
-    public func removeArt() {
-        model.removeArt()
+    func removeArt() {
+        model?.removeArt()
         showArt()
     }
 
-    private func makeContent() -> NSView {
-        let heading = NSTextField(
-            labelWithString: model.tracks.count == 1
-                ? (model.tracks[0].path as NSString).lastPathComponent
-                : "\(model.tracks.count) tracks")
-        heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
-        heading.lineBreakMode = .byTruncatingMiddle
+    func close() {
+        window.close()
+        // A window never put on screen doesn't send `windowWillClose`.
+        windowClosed()
+    }
 
+    public func windowWillClose(_ notification: Notification) { windowClosed() }
+
+    private func windowClosed() {
+        guard !isClosed else { return }
+        isClosed = true
+        closed()
+    }
+
+    private func makeReading() -> NSView {
+        let spinner = NSProgressIndicator()
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.startAnimation(nil)
+        let label = NSTextField(labelWithString: "Reading tags…")
+        label.textColor = .secondaryLabelColor
+        let row = NSStackView(views: [spinner, label])
+        let stack = NSStackView(views: [headingLabel(), row])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 14
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        stack.widthAnchor.constraint(equalToConstant: Self.width).isActive = true
+        return stack
+    }
+
+    private func headingLabel() -> NSTextField {
+        let label = NSTextField(labelWithString: heading)
+        label.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        label.lineBreakMode = .byTruncatingMiddle
+        return label
+    }
+
+    private func makeContent(_ model: TagEditorModel) -> NSView {
+        let heading = headingLabel()
         let textFields: [TagEditField] = [
             .title, .artist, .album, .albumArtist, .genre, .date, .composer, .comment,
         ]
@@ -77,8 +148,6 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
         ])
         rows.append([label(TagEditField.trackNumber.title), numbers])
         compilationBox.allowsMixedState = true
-        compilationBox.state =
-            model.isMixed(.compilation) ? .mixed : model.text(.compilation) == "1" ? .on : .off
         compilationBox.target = self
         compilationBox.action = #selector(compilationChanged)
         rows.append([NSGridCell.emptyContentView, compilationBox])
@@ -129,8 +198,6 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
 
     private func field(_ field: TagEditField, width: Double? = nil) -> NSTextField {
         let view = NSTextField()
-        view.stringValue = model.text(field)
-        view.placeholderString = model.isMixed(field) ? mixedPlaceholder : nil
         view.delegate = self
         view.lineBreakMode = .byTruncatingTail
         if let width {
@@ -143,7 +210,24 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
         return view
     }
 
+    /// Puts the model's values in the fields the user hasn't typed in, and the art.
+    private func showValues() {
+        guard let model else { return }
+        for (field, view) in fields where !model.isTyped(field) {
+            view.stringValue = model.text(field)
+            view.placeholderString = model.isMixed(field) ? mixedPlaceholder : nil
+        }
+        if !model.isTyped(.compilation) {
+            compilationBox.state =
+                model.isMixed(.compilation)
+                ? .mixed : model.text(.compilation) == "1" ? .on : .off
+        }
+        showArt()
+        showCollapse()
+    }
+
     private func showArt() {
+        guard let model else { return }
         // A Retina screen draws two pixels a point.
         artView.image = model.shownArt
             .flatMap { thumbnail(of: $0, maxPixelSize: Int(Self.artPoints) * 2) }
@@ -162,44 +246,34 @@ public final class TagEditorSheet: NSObject, NSTextFieldDelegate {
         guard let view = notification.object as? NSTextField,
             let field = fields.first(where: { $0.value === view })?.key
         else { return }
-        model.set(field, view.stringValue)
+        model?.set(field, view.stringValue)
         showCollapse()
     }
 
     private func showCollapse() {
-        collapseLabel.stringValue = model.collapseNote ?? ""
-        collapseLabel.isHidden = model.collapseNote == nil
+        let note = model?.collapseNote
+        collapseLabel.stringValue = note ?? ""
+        collapseLabel.isHidden = note == nil
     }
 
     @objc private func compilationChanged() {
         // The mixed state is only where it starts; a click sets the flag for every track.
         if compilationBox.state == .mixed { compilationBox.state = .on }
-        model.set(.compilation, compilationBox.state == .on ? "1" : "")
+        model?.set(.compilation, compilationBox.state == .on ? "1" : "")
         showCollapse()
     }
 
     @objc private func replaceClicked() { replaceArtwork() }
     @objc private func removeClicked() { removeArtwork() }
-    @objc private func cancelClicked() { cancel() }
-
-    func cancel() {
-        close()
-        cancelled()
-    }
+    @objc private func cancelClicked() { close() }
 
     @objc private func saveClicked() {
+        guard let model else { return }
         do {
-            let edit = try model.edit()
-            close()
-            saved(edit)
+            saved(try model.edit())
         } catch {
             problemLabel.stringValue = error.description
             NSSound.beep()
         }
-    }
-
-    private func close() {
-        window.sheetParent?.endSheet(window)
-        window.orderOut(nil)
     }
 }

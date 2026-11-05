@@ -184,9 +184,10 @@ public struct LibraryScanner: Sendable {
             }
             targets.append((path, known))
         }
-        let results = RescanResults(count: targets.count)
-        DispatchQueue.concurrentPerform(iterations: targets.count) { position in
-            let (path, known) = targets[position]
+        let found = targets
+        let results = RescanResults(count: found.count)
+        DispatchQueue.concurrentPerform(iterations: found.count) { position in
+            let (path, known) = found[position]
             results.store(scannedAgain(path, known: known), at: position)
         }
         var files: [ScannedFile] = []

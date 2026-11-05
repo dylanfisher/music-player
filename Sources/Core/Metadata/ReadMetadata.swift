@@ -28,25 +28,30 @@ let maximumArtBytes = 64 * 1024 * 1024
 /// The image bytes of `art`, as recorded by `readMetadata` for the same file.
 public func readArt(_ art: EmbeddedArt, at url: URL) throws(MetadataError) -> Data {
     do throws(ParseFailure) {
-        guard art.byteCount <= maximumArtBytes else {
-            throw .unsupported(
-                at: art.offset,
-                "art of \(art.byteCount) bytes, more than the \(maximumArtBytes) this reads")
-        }
-        let source = try FileSource(path: url.path)
-        guard art.offset >= 0, art.byteCount >= 0, art.byteCount <= source.size - art.offset
-        else {
-            throw .malformed(
-                at: art.offset,
-                "art of \(art.byteCount) bytes runs past the end of the file (\(source.size)"
-                    + " bytes); the file changed since it was read")
-        }
-        let range = art.offset..<art.offset + art.byteCount
-        guard art.unsynchronised else { return try source.readData(range) }
-        return Data(UnsyncEscapes.decode(try source.read(range)).0)
+        return try readArt(art, from: FileSource(path: url.path))
     } catch {
         throw error.error(path: url.path)
     }
+}
+
+/// `readArt` from a file already open, as the one `readMetadata`'s parse read, so a caller that
+/// wants both opens the file once.
+package func readArt(_ art: EmbeddedArt, from source: FileSource) throws(ParseFailure) -> Data {
+    guard art.byteCount <= maximumArtBytes else {
+        throw .unsupported(
+            at: art.offset,
+            "art of \(art.byteCount) bytes, more than the \(maximumArtBytes) this reads")
+    }
+    guard art.offset >= 0, art.byteCount >= 0, art.byteCount <= source.size - art.offset
+    else {
+        throw .malformed(
+            at: art.offset,
+            "art of \(art.byteCount) bytes runs past the end of the file (\(source.size)"
+                + " bytes); the file changed since it was read")
+    }
+    let range = art.offset..<art.offset + art.byteCount
+    guard art.unsynchronised else { return try source.readData(range) }
+    return Data(UnsyncEscapes.decode(try source.read(range)).0)
 }
 
 /// Picks the parser from the file's first bytes.

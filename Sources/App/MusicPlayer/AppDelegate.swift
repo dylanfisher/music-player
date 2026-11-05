@@ -379,7 +379,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .main, .health: { [weak self] in self?.window?.window }
             case .palette: { [weak self] in self?.palette?.window }
             case .playlist: { [weak self] in self?.ruleEditor?.window }
-            case .tags: { [weak self] in self?.tagEditing.sheet?.window }
+            case .tags: { [weak self] in self?.tagEditing.editors.last?.window }
             case .settings, .playback, .appearance, .toolbar, .folders, .shortcuts:
                 { [weak self] in self?.settingsWindow?.window }
             case .statusBar:
@@ -580,10 +580,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeTagEditing() -> TagEditing {
         let editing = TagEditing(
             writer: TagWriter(journal: TagUndoJournal(dataDirectory: paths.dataDirectory)))
-        editing.written = { [weak self] paths in
-            let folders = Set(paths.map { ($0 as NSString).deletingLastPathComponent })
-            self?.watcher?.rescan(directories: folders.sorted())
-        }
+        editing.written = { [weak self] paths in self?.watcher?.rescan(files: paths) }
         editing.replaceArtwork = { [weak self] in self?.dispatcher?.run(.replaceArtwork) }
         editing.removeArtwork = { [weak self] in self?.dispatcher?.run(.removeArtwork) }
         return editing

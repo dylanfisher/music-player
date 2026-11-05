@@ -29,15 +29,25 @@ public struct TagEditorModel: Equatable, Sendable {
         case removed
     }
 
-    let tracks: [EditableTrack]
+    private(set) var tracks: [EditableTrack]
     /// What the user typed, by field, including fields typed back to their old value.
     private(set) var typed: [TagEditField: String] = [:]
     public private(set) var art = Art.unchanged
 
-    init(tracks: [EditableTrack]) {
+    package init(tracks: [EditableTrack]) {
         precondition(!tracks.isEmpty, "the editor opens on at least one track")
         self.tracks = tracks
     }
+
+    /// The same files as read again after a write: what the user typed and the art they chose
+    /// stay, and every other field shows what the files hold now.
+    mutating func reread(_ tracks: [EditableTrack]) {
+        precondition(
+            tracks.map(\.path) == self.tracks.map(\.path), "a reread holds the same files")
+        self.tracks = tracks
+    }
+
+    func isTyped(_ field: TagEditField) -> Bool { typed[field] != nil }
 
     /// The field's text in every track, or nil when they differ. Empty when none has it.
     public func shared(_ field: TagEditField) -> String? {
@@ -140,13 +150,16 @@ public struct TagEditorModel: Equatable, Sendable {
 
 /// Reads each file's tags and art for the editor, through `read`, `filesReadAtOnce` at a time,
 /// since on a NAS each file waits on a few round trips. A file that can't be read is reported
-/// and left out, so the rest can still be edited. Both lists keep the order of `paths`.
+/// and left out, so the rest can still be edited. Both lists keep the order of `paths`. Once
+/// `isStopped` says so, as when the info window closes, no further file is started, and what
+/// was read comes back.
 package func readEditableTracks(
-    _ paths: [String], read: @Sendable (String) throws -> EditableTrack = readEditableTrack
+    _ paths: [String], isStopped: @Sendable () -> Bool = { false },
+    read: @Sendable (String) throws -> EditableTrack = readEditableTrack
 ) -> (tracks: [EditableTrack], problems: [String]) {
     let results = ReadResults(count: paths.count)
     DispatchQueue.concurrentPerform(iterations: min(filesReadAtOnce, paths.count)) { _ in
-        while let index = results.claim() {
+        while !isStopped(), let index = results.claim() {
             results.store(Result { try read(paths[index]) }, at: index)
         }
     }
@@ -156,6 +169,7 @@ package func readEditableTracks(
         switch result {
         case .success(let track): tracks.append(track)
         case .failure(let error): problems.append("\(error)")
+        case nil: break
         }
     }
     return (tracks, problems)
@@ -183,18 +197,25 @@ private final class ReadResults: @unchecked Sendable {
         lock.withLock { results[index] = result }
     }
 
-    /// Every file's result, once all are read.
-    var all: [Result<EditableTrack, any Error>] {
-        lock.withLock { results.map { $0! } }
-    }
+    /// Every file's result, nil for one a stop left unread.
+    var all: [Result<EditableTrack, any Error>?] { lock.withLock { results } }
 }
 
-/// The tags, art and fields holding several values of the file at `path`.
+/// The tags, art and fields holding several values of the file at `path`, through one open,
+/// since on a NAS each open is a few round trips. The tags and the fields holding several
+/// values come from the same first read.
 package func readEditableTrack(_ path: String) throws -> EditableTrack {
-    let url = URL(fileURLWithPath: path, isDirectory: false)
-    let parsed = try readMetadata(at: url)
-    let art = try parsed.metadata.art.map { try readArt($0, at: url) }
-    return EditableTrack(
-        path: path, tags: parsed.metadata.tags, art: art,
-        multiValued: try multiValuedFields(at: url))
+    do throws(ParseFailure) {
+        let source = try FileSource(path: path)
+        let reader = ByteReader(source)
+        let parsed = try parse(reader)
+        let art = try parsed.metadata.art.map { art throws(ParseFailure) in
+            try readArt(art, from: source)
+        }
+        return EditableTrack(
+            path: path, tags: parsed.metadata.tags, art: art,
+            multiValued: try multiValuedFields(in: reader))
+    } catch {
+        throw error.error(path: path)
+    }
 }

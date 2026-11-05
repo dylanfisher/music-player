@@ -20,11 +20,11 @@ let tagEditorBenchmarks = [
         }
         var read: (tracks: [EditableTrack], problems: [String])?
         let elapsed = seconds {
-            read = readEditableTracks(paths) { path in
+            read = readEditableTracks(paths, read: { path in
                 // Each open costs what an art read does on the slow NAS (ADR 0073).
                 Thread.sleep(forTimeInterval: Double(opensPerEditedFile) * nasArtReadSeconds)
                 return try readEditableTrack(path)
-            }
+            })
         }
         guard let read, !read.tracks.isEmpty else { throw BenchError.expected("tracks read") }
         return Measured(

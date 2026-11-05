@@ -13,25 +13,47 @@ private final class Gate: @unchecked Sendable {
     func open() { semaphore.signal() }
 }
 
-/// What the fakes saw, on the main actor.
-@MainActor
-private final class Seen {
-    var presented: [[String]] = []
-    var alerts: [String] = []
-    var confirmations: [String] = []
-    var written: [[String]] = []
+/// What the fakes saw, from any thread.
+private final class Seen: @unchecked Sendable {
+    // Every field is guarded by `lock`.
+    private let lock = NSLock()
+    private var _presented: [[String]] = []
+    private var _alerts: [String] = []
+    private var _confirmations: [String] = []
+    private var _written: [[String]] = []
+    private var _work: [String] = []
+    private var _reads: [[String]] = []
+
+    var presented: [[String]] { lock.withLock { _presented } }
+    var alerts: [String] { lock.withLock { _alerts } }
+    var confirmations: [String] { lock.withLock { _confirmations } }
+    var written: [[String]] { lock.withLock { _written } }
+    /// The writes and undos, in the order they ran.
+    var work: [String] { lock.withLock { _work } }
+    var reads: [[String]] { lock.withLock { _reads } }
+
+    func present(_ paths: [String]) { lock.withLock { _presented.append(paths) } }
+    func alert(_ message: String) { lock.withLock { _alerts.append(message) } }
+    func confirm(_ message: String) { lock.withLock { _confirmations.append(message) } }
+    func wrote(_ paths: [String]) { lock.withLock { _written.append(paths) } }
+    func ran(_ work: String) { lock.withLock { _work.append(work) } }
+    func read(_ paths: [String]) { lock.withLock { _reads.append(paths) } }
 }
 
-private func editable(_ path: String) -> EditableTrack {
-    EditableTrack(path: path, tags: TrackTags(), art: nil)
+private func editable(_ path: String, title: String? = nil) -> EditableTrack {
+    var tags = TrackTags()
+    tags.title = title
+    return EditableTrack(path: path, tags: tags, art: nil)
 }
+
+private typealias Read = @Sendable ([String], @escaping @Sendable () -> Bool) -> (
+    [EditableTrack], [String]
+)
 
 @MainActor
 private func makeEditing(
     _ seen: Seen,
-    read: @escaping @Sendable ([String]) -> ([EditableTrack], [String]) = {
-        ($0.map(editable), [])
-    },
+    read: @escaping Read = { paths, _ in (paths.map { editable($0) }, []) },
     write: @escaping @Sendable (TagEdit, [String]) -> TagWriteReport = { _, paths in
         var report = TagWriteReport()
         report.changed = paths
@@ -42,18 +64,26 @@ private func makeEditing(
 ) -> TagEditing {
     let editing = TagEditing(
         effects: .init(
-            read: {
-                let (tracks, problems) = read($0)
+            read: { paths, isStopped in
+                seen.read(paths)
+                let (tracks, problems) = read(paths, isStopped)
                 return (tracks, problems)
             },
-            write: write, undo: undo,
-            present: { sheet, _ in seen.presented.append(sheet.model.tracks.map(\.path)) },
+            write: { edit, paths in
+                seen.ran("write \(paths.joined(separator: " "))")
+                return write(edit, paths)
+            },
+            undo: {
+                seen.ran("undo")
+                return undo()
+            },
+            present: { editor, _ in seen.present(editor.paths) },
             confirm: { message, _, answer in
-                seen.confirmations.append(message.message)
+                seen.confirm(message.message)
                 answer(confirm)
             },
-            alert: { message, _, _ in seen.alerts.append(message) }))
-    editing.written = { seen.written.append($0) }
+            alert: { message, _, _ in seen.alert(message) }))
+    editing.written = { seen.wrote($0) }
     return editing
 }
 
@@ -67,21 +97,79 @@ private func eventually(_ condition: () -> Bool) async throws {
 private let window = MainActor.assumeIsolated { NSWindow() }
 
 @MainActor
-@Test func aSlowReadForAnEarlierOpenIsDropped() async throws {
+private func editor(_ editing: TagEditing, _ paths: [String]) -> TagEditorWindow? {
+    editing.editors.first { $0.paths == paths }
+}
+
+/// Get Info shows its window before the files are read, and opens and reads another window
+/// while a write is still running.
+@MainActor
+@Test func getInfoOpensAtOnceWhileAWriteRuns() async throws {
     let seen = Seen()
     let gate = Gate()
-    let editing = makeEditing(seen) { paths in
-        if paths == ["/a.flac"] { gate.wait() }
-        return (paths.map(editable), [])
-    }
+    let editing = makeEditing(
+        seen,
+        write: { _, paths in
+            gate.wait()
+            var report = TagWriteReport()
+            report.changed = paths
+            return report
+        })
     editing.open(["/a.flac"], over: window)
-    try await Task.sleep(nanoseconds: 50_000_000)
+    #expect(seen.presented == [["/a.flac"]], "shown before its files are read")
+    try await eventually { editor(editing, ["/a.flac"])?.isLoaded == true }
+    editor(editing, ["/a.flac"])?.saved(TagEdit(values: [.title: "New"]))
+    #expect(editing.isWriting)
+    #expect(editor(editing, ["/a.flac"]) == nil, "the window closes once the write is queued")
+
     editing.open(["/b.flac"], over: window)
-    try await eventually { seen.presented == [["/b.flac"]] }
+    #expect(seen.presented == [["/a.flac"], ["/b.flac"]])
+    try await eventually { editor(editing, ["/b.flac"])?.isLoaded == true }
+    #expect(editing.isWriting, "still writing /a.flac")
     gate.open()
-    try await Task.sleep(nanoseconds: 100_000_000)
-    #expect(seen.presented == [["/b.flac"]])
-    #expect(editing.isOpen)
+    try await eventually { !editing.isWriting }
+    #expect(seen.written == [["/a.flac"]])
+}
+
+/// Several windows open at once; Get Info on the tracks of an open one brings it forward.
+@MainActor
+@Test func severalInfoWindowsOpenAndTheSameTracksComeForward() async throws {
+    let seen = Seen()
+    let editing = makeEditing(seen)
+    editing.open(["/a.flac"], over: window)
+    editing.open(["/b.flac", "/c.flac"], over: window)
+    try await eventually { editing.editors.allSatisfy(\.isLoaded) }
+    #expect(editing.editors.map(\.paths) == [["/a.flac"], ["/b.flac", "/c.flac"]])
+    editing.open(["/a.flac"], over: window)
+    #expect(editing.editors.count == 2)
+    #expect(seen.presented.last == ["/a.flac"])
+    #expect(seen.reads.count == 2, "the open window isn't read again")
+}
+
+@MainActor
+@Test func writesAndUndosRunOneAtATimeInTheOrderAsked() async throws {
+    let seen = Seen()
+    let gate = Gate()
+    let editing = makeEditing(
+        seen,
+        write: { _, paths in
+            if paths == ["/a.flac"] { gate.wait() }
+            var report = TagWriteReport()
+            report.changed = paths
+            return report
+        })
+    editing.open(["/a.flac"], over: window)
+    editing.open(["/b.flac"], over: window)
+    try await eventually { editing.editors.allSatisfy(\.isLoaded) }
+    editor(editing, ["/a.flac"])?.saved(TagEdit(values: [.title: "A"]))
+    editor(editing, ["/b.flac"])?.saved(TagEdit(values: [.title: "B"]))
+    editing.undo(over: window)
+    #expect(editing.pendingWrites == 3)
+    try await Task.sleep(nanoseconds: 50_000_000)
+    #expect(seen.work == ["write /a.flac"])
+    gate.open()
+    try await eventually { !editing.isWriting }
+    #expect(seen.work == ["write /a.flac", "write /b.flac", "undo"])
 }
 
 @MainActor
@@ -89,54 +177,75 @@ private let window = MainActor.assumeIsolated { NSWindow() }
     let seen = Seen()
     let editing = makeEditing(seen)
     editing.open(["/a.flac"], over: window)
-    try await eventually { editing.isOpen }
-    editing.sheet?.saved(TagEdit(values: [.title: "New"]))
+    try await eventually { editor(editing, ["/a.flac"])?.isLoaded == true }
+    editor(editing, ["/a.flac"])?.saved(TagEdit(values: [.title: "New"]))
     #expect(!editing.isOpen)
     try await eventually { seen.written == [["/a.flac"]] }
     #expect(seen.confirmations.isEmpty)
 
     let declining = makeEditing(seen, confirm: false)
     declining.open(["/a.flac", "/b.flac"], over: window)
-    try await eventually { declining.isOpen }
-    declining.sheet?.saved(TagEdit(values: [.album: "Both"]))
+    try await eventually { declining.editors.first?.isLoaded == true }
+    declining.editors.first?.saved(TagEdit(values: [.album: "Both"]))
     #expect(seen.confirmations == ["Change the tags of 2 files?"])
+    #expect(declining.isOpen, "declined, so the window stays open with what was typed")
     try await Task.sleep(nanoseconds: 50_000_000)
     #expect(seen.written == [["/a.flac"]], "declined, so nothing more was written")
 }
 
+/// Closing a window that's still reading stops its read and drops what it read.
 @MainActor
-@Test func theEditorOpensAgainAfterItIsCancelled() async throws {
+@Test func closingAWindowThatIsReadingStopsTheRead() async throws {
     let seen = Seen()
-    let editing = makeEditing(seen)
-    editing.open(["/a.flac"], over: window)
-    try await eventually { editing.isOpen }
-    editing.sheet?.cancel()
-    #expect(!editing.isOpen)
-    editing.open(["/b.flac"], over: window)
-    try await eventually { seen.presented == [["/a.flac"], ["/b.flac"]] }
-}
-
-@MainActor
-@Test func nothingOpensOrUndoesWhileAWriteRuns() async throws {
-    let seen = Seen()
-    let gate = Gate()
+    let stopped = Titles()
     let editing = makeEditing(
         seen,
-        undo: {
-            gate.wait()
+        read: { paths, isStopped in
+            let deadline = Date().addingTimeInterval(2)
+            while !isStopped(), Date() < deadline { Thread.sleep(forTimeInterval: 0.005) }
+            if isStopped() { stopped.set("stopped", of: "read") }
+            return (paths.map { editable($0) }, [])
+        })
+    editing.open(["/a.flac"], over: window)
+    let opened = try #require(editor(editing, ["/a.flac"]))
+    opened.close()
+    #expect(!editing.isOpen)
+    try await eventually { stopped.title(of: "read") == "stopped" }
+    try await Task.sleep(nanoseconds: 50_000_000)
+    #expect(!opened.isLoaded)
+    #expect(seen.alerts.isEmpty)
+}
+
+/// A write to a file an open window shows reads that window's files again.
+@MainActor
+@Test func aWriteReadsAnOpenWindowOnItsFilesAgain() async throws {
+    let seen = Seen()
+    let titles = Titles()
+    let editing = makeEditing(
+        seen,
+        read: { paths, _ in (paths.map { editable($0, title: titles.title(of: $0)) }, []) },
+        write: { edit, paths in
+            for path in paths { titles.set(edit.values[.title] ?? "", of: path) }
             var report = TagWriteReport()
-            report.changed = ["/a.flac"]
+            report.changed = paths
             return report
         })
-    editing.undo(over: window)
-    #expect(editing.isBusy)
-    editing.open(["/b.flac"], over: window)
-    editing.undo(over: window)
-    try await Task.sleep(nanoseconds: 50_000_000)
-    #expect(seen.presented.isEmpty)
-    gate.open()
-    try await eventually { !editing.isBusy }
-    #expect(seen.written == [["/a.flac"]], "one undo ran")
+    editing.open(["/a.flac", "/b.flac"], over: window)
+    editing.open(["/a.flac"], over: window)
+    editing.open(["/c.flac"], over: window)
+    try await eventually { editing.editors.allSatisfy(\.isLoaded) }
+    editor(editing, ["/a.flac"])?.saved(TagEdit(values: [.title: "New"]))
+    let both = try #require(editor(editing, ["/a.flac", "/b.flac"]))
+    try await eventually { both.model?.tracks.first?.tags.title == "New" }
+    #expect(seen.reads.filter { $0 == ["/a.flac", "/b.flac"] }.count == 2)
+    #expect(seen.reads.filter { $0 == ["/c.flac"] }.count == 1, "another file's window isn't")
+}
+
+private final class Titles: @unchecked Sendable {
+    private let lock = NSLock()
+    private var titles: [String: String] = [:]
+    func title(of path: String) -> String? { lock.withLock { titles[path] } }
+    func set(_ title: String, of path: String) { lock.withLock { titles[path] = title } }
 }
 
 @MainActor
@@ -153,58 +262,23 @@ private let window = MainActor.assumeIsolated { NSWindow() }
             return report
         })
     editing.undo(over: window)
-    try await eventually { !editing.isBusy }
+    try await eventually { !editing.isWriting }
     #expect(seen.alerts == ["Couldn't undo the tag edit for 1 file"])
     #expect(seen.written.isEmpty)
 }
 
 @MainActor
-@Test func filesThatCantBeReadAreReportedAndTheEditorOpensOnTheRest() async throws {
+@Test func filesThatCantBeReadAreReportedAndTheWindowShowsTheRest() async throws {
     let seen = Seen()
-    let editing = makeEditing(seen) { _ in ([editable("/a.flac")], ["/b.flac: unreadable"]) }
+    let editing = makeEditing(seen) { _, _ in ([editable("/a.flac")], ["/b.flac: unreadable"]) }
     editing.open(["/a.flac", "/b.flac"], over: window)
-    try await eventually { editing.isOpen }
+    try await eventually { editing.editors.first?.isLoaded == true }
     #expect(seen.alerts == ["1 of 2 files can't be edited"])
-    #expect(seen.presented == [["/a.flac"]])
-}
+    #expect(editing.editors.first?.model?.tracks.map(\.path) == ["/a.flac"])
 
-@MainActor
-@Test func getInfoOnMoreFilesThanTheThresholdAsksBeforeReading() async throws {
-    let seen = Seen()
-    let reads = Counter()
-    let editing = makeEditing(
-        seen,
-        read: { paths in
-            reads.add()
-            return (paths.map(editable), [])
-        }, confirm: false)
-    let atThreshold = (0..<TagEditing.confirmReadAbove).map { "/\($0).flac" }
-    editing.open(atThreshold, over: window)
-    try await eventually { seen.presented.count == 1 }
-    #expect(seen.confirmations.isEmpty)
-
-    editing.sheet?.cancelled()
-    let over = atThreshold + ["/over.flac"]
-    editing.open(over, over: window)
-    #expect(seen.confirmations == ["Read the tags of \(over.count) files?"])
-    try await Task.sleep(nanoseconds: 50_000_000)
-    #expect(reads.value == 1)
-    #expect(seen.presented.count == 1)
-
-    let agreeing = makeEditing(
-        seen,
-        read: { paths in
-            reads.add()
-            return (paths.map(editable), [])
-        })
-    agreeing.open(over, over: window)
-    try await eventually { seen.presented.count == 2 }
-    #expect(reads.value == 2)
-}
-
-private final class Counter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var count = 0
-    func add() { lock.withLock { count += 1 } }
-    var value: Int { lock.withLock { count } }
+    let none = makeEditing(seen) { _, _ in ([], ["/c.flac: unreadable"]) }
+    none.open(["/c.flac"], over: window)
+    try await eventually { seen.alerts.count == 2 }
+    #expect(seen.alerts.last == "1 of 1 files can't be edited")
+    #expect(!none.isOpen, "nothing to edit, so the window closes")
 }

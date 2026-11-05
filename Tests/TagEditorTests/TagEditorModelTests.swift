@@ -117,7 +117,7 @@ private final class ReadCount: @unchecked Sendable {
 func filesAreReadAFewAtOnceAndKeepTheirOrder() {
     let paths = (0..<(filesReadAtOnce * 3)).map { $0 == 4 ? "\($0) bad" : "\($0)" }
     let count = ReadCount()
-    let (tracks, problems) = readEditableTracks(paths) { try count.read($0) }
+    let (tracks, problems) = readEditableTracks(paths, read: { try count.read($0) })
     #expect(count.most == min(filesReadAtOnce, paths.count))
     #expect(tracks.map(\.tags.title) == paths.filter { !$0.hasSuffix("bad") })
     #expect(problems.count == 1)
@@ -126,7 +126,7 @@ func filesAreReadAFewAtOnceAndKeepTheirOrder() {
 @Test func fewerFilesThanTheLimitAreEachReadOnce() {
     let paths = ["a", "b bad"]
     let count = ReadCount()
-    let (tracks, problems) = readEditableTracks(paths) { try count.read($0) }
+    let (tracks, problems) = readEditableTracks(paths, read: { try count.read($0) })
     #expect(count.most <= paths.count)
     #expect(count.reads == paths.count)
     #expect(tracks.map(\.tags.title) == ["a"])
@@ -135,7 +135,7 @@ func filesAreReadAFewAtOnceAndKeepTheirOrder() {
 
 @Test func noFilesReadNothing() {
     let count = ReadCount()
-    let (tracks, problems) = readEditableTracks([]) { try count.read($0) }
+    let (tracks, problems) = readEditableTracks([], read: { try count.read($0) })
     #expect(count.reads == 0)
     #expect(tracks.isEmpty && problems.isEmpty)
 }
@@ -152,4 +152,38 @@ func filesAreReadAFewAtOnceAndKeepTheirOrder() {
     #expect(
         model.collapseNote
             == "Artist holds several values in 1 file. Saving keeps only the value shown.")
+}
+
+@Test func aRereadKeepsWhatWasTypedAndShowsTheRestAsTheFilesHoldIt() throws {
+    var model = TagEditorModel(tracks: [
+        track("A", album: "Old", number: 1), track("B", album: "Old", number: 2),
+    ])
+    model.set(.title, "Typed")
+    model.removeArt()
+    model.reread([track("A", album: "New", number: 1), track("B", album: "New", number: 2)])
+    #expect(model.text(.title) == "Typed")
+    #expect(model.text(.album) == "New")
+    #expect(model.art == .removed)
+    #expect(try model.edit() == TagEdit(values: [.title: "Typed"], art: .remove))
+}
+
+@Test func aStoppedReadStartsNoMoreFiles() {
+    let paths = (0..<(filesReadAtOnce * 4)).map { "\($0)" }
+    let started = Started()
+    let (tracks, problems) = readEditableTracks(
+        paths, isStopped: { started.count >= 1 },
+        read: { path in
+            started.add()
+            return track(path, album: nil, number: nil)
+        })
+    #expect(started.count < paths.count)
+    #expect(tracks.count == started.count)
+    #expect(problems.isEmpty)
+}
+
+private final class Started: @unchecked Sendable {
+    private let lock = NSLock()
+    private var started = 0
+    func add() { lock.withLock { started += 1 } }
+    var count: Int { lock.withLock { started } }
 }
