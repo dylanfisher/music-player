@@ -1,6 +1,6 @@
 /// Sonos's ZoneGroupTopology service: which players play together, and the room each is in
 /// (ADR 0091). Every player answers for the whole household, so one reply names every group.
-public enum ZoneGroupTopology {
+enum ZoneGroupTopology {
     static let serviceType = "urn:schemas-upnp-org:service:ZoneGroupTopology:1"
 
     static var request: SOAPAction { SOAPAction(serviceType, "GetZoneGroupState") }
