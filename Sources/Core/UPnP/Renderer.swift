@@ -6,7 +6,7 @@ public struct Renderer: Equatable, Sendable {
     /// Its unique device name, `uuid:…`, which `output.renderer` stores.
     public let udn: String
     /// Display text, escaped. For a Sonos player, its room, or its group's name once the
-    /// topology has been read (ADR 0091).
+    /// topology has been read (ADR 0093).
     public internal(set) var name: String
     public let manufacturer: String
     public let model: String

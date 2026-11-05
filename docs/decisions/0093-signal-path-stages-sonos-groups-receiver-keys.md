@@ -1,4 +1,4 @@
-# 0091. Signal path stages, Sonos groups and one receiver switch
+# 0093. Signal path stages, Sonos groups and one receiver switch
 
 - **Date:** 2026-11-04
 - **Status:** accepted

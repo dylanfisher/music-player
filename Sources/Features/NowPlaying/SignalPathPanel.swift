@@ -11,7 +11,7 @@ public final class SignalPathPanel: NSViewController {
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
     /// The stage boxes and the arrows between them, made again for each path.
     let stages = NSStackView()
-    /// The receiver's volume, shown while receiver control is connected (ADR 0091).
+    /// The receiver's volume, shown while receiver control is connected (ADR 0093).
     let receiverRow = NSStackView()
     let receiverSlider = NSSlider(
         value: 0, minValue: SignalPathPanel.receiverRangeDecibels.lowerBound,

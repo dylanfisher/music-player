@@ -4708,7 +4708,7 @@ which fail the same on `main` in this environment.
       receiver, and the settings say so instead of looking required. The section reads as one
       choice: media keys control the receiver's volume while it's connected.
 
-Plan, part 41d (ADR 0091, amending 0035, 0039 and 0041):
+Plan, part 41d (ADR 0093, amending 0035, 0039 and 0041):
 - Probe (done before this plan): "Not bit-perfect" is one string, the signal path badge, and
   the owner's case gets it only for "the format is mixable" and "hog mode isn't held", which
   change nothing while no other app plays. The status line's
@@ -4759,7 +4759,7 @@ Plan, part 41d (ADR 0091, amending 0035, 0039 and 0041):
   rule, the disclosure, the schema.
 - Order: this plan, then each item through `./scripts/check`, then the ADR and the result.
 
-Result, part 41d: shipped 41d.1 to 41d.5 (ADR 0091, amending 0035, 0039 and 0041). The badge
+Result, part 41d: shipped 41d.1 to 41d.5 (ADR 0093, amending 0035, 0039 and 0041). The badge
 says "Not guaranteed bit-perfect" when the only changes are a mixable format and hog mode free;
 a change to the samples still says "Not bit-perfect" or "Converted". The signal path is a row of
 boxes joined by arrows, the file, the decoder only when it changes something, then the device or

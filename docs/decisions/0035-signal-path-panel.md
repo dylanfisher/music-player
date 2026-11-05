@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-01
 - **Status:** accepted
-- **Amended by:** [0091](0091-signal-path-stages-sonos-groups-receiver-keys.md): the stages as
+- **Amended by:** [0093](0093-signal-path-stages-sonos-groups-receiver-keys.md): the stages as
   boxes in plain words, and "Not guaranteed bit-perfect" for a shared device.
 
 ## Context

@@ -97,7 +97,7 @@ public final class ReceiverControl {
     }
 
     /// Whether receiver control runs, and with it the Mac's volume and mute keys drive the
-    /// receiver (ADR 0091): when `receiver.enabled` is on, and while the app plays to a Denon
+    /// receiver (ADR 0093): when `receiver.enabled` is on, and while the app plays to a Denon
     /// receiver as a renderer, whose volume is the receiver's own and set only here (ADR 0041).
     /// Choosing that renderer already put the app on the network.
     public nonisolated static func isWanted(enabled: Bool, playingTo renderer: Renderer?) -> Bool {
