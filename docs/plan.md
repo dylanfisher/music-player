@@ -5015,9 +5015,9 @@ them to Spaces by default; the owner turns those off if they clash.
 
 #### 42d. Library Health as a view
 
-- [ ] **42d.1 Out of the sidebar.** Library Health leaves the sidebar. It opens from a button in
+- [x] **42d.1 Out of the sidebar.** Library Health leaves the sidebar. It opens from a button in
       Settings ▸ Library and a menu item.
-- [ ] **42d.2 A health panel.** It shows the track table with a panel above it, placed like the
+- [x] **42d.2 A health panel.** It shows the track table with a panel above it, placed like the
       browser columns, listing the health filters (unreadable, warnings and the rest) with their
       counts; choosing one filters the tracks below.
 
@@ -5062,6 +5062,27 @@ Plan, part 42d (ADR 0099, amending 0034):
   health source loads the library; the Settings button calls its action.
 - Order: this plan, the sidebar and the command, the slot and the panel, settings, the ADR,
   `--snapshot` if it can show the panel, then the result.
+
+Result, part 42d: shipped 42d.1 and 42d.2 (ADR 0099, amending 0034 and 0042). Library Health
+left the sidebar, with its count cell. Show Library Health (`library.checkHealth`, the ID Check
+Library Health had, so a rebinding holds) is in the File menu where Check Library Health was,
+in the palette, on the command line, and a button at the end of Settings ▸ General ▸ Library;
+it brings the main window forward, shows the check shown or else Unreadable, and runs the
+report. The browser's split now starts with a slot that holds the browser columns or the
+source's panel, `LibraryBrowser.panel(for:)`, at the columns' height and divider, saved as
+theirs; a panel shows with Show Browser off too. The health panel has a header (when it was
+checked, or Checking…, and Check Again) over a tile per check, flowing at 180 points or more
+each, with the name, the count and what it finds; zero dims a tile, the shown check is filled
+with the accent color, and a click lists it. Showing a check selects All in the hidden columns.
+While a check shows no sidebar row is selected. A saved `health:<check>` source shows the
+library at launch, logged, and the rest of the play state reads as before; no key in either
+file changed. `--snapshot-of health` draws it. Checked in `--snapshot` against the 120-file
+fixture library: the tiles, counts and dimming, and a relaunch from a saved `health:unreadable`
+showing Music. Not checked on screen: dragging the divider under the panel, glass, dark mode,
+and macOS 12. `./scripts/check` passes, `theGlassHeadersAreFrosted` included this time; the
+LibraryBrowserTests process still exits partway through a full run (40d), so the new browser
+tests were also run by name, and pass. For the owner: Show Library Health from the menu and
+from Settings, click through the tiles, drag the divider, then click Music.
 
 #### 42e. Get Info speed and tag writes
 

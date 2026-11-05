@@ -7,6 +7,8 @@
   the sidebar, and folder browsing with them. [0050](0050-remove-from-library.md): a Removed
   check lists the tracks removed from the library. [0059](0059-problems-window-actions.md): the
   Problems window lists a row a line, with actions, and keeps what the user dismissed.
+  [0099](0099-library-health-panel.md): the checks left the sidebar for a panel over the track
+  table, opened by Show Library Health.
 
 ## Context
 

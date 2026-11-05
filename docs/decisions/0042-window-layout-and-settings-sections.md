@@ -4,7 +4,9 @@
 - **Status:** accepted
 - **Amends:** [0017](0017-settings-window.md) (the watched folders' row),
   [0034](0034-folders-and-library-health.md) (Folders)
-- **Amended by:** [0062](0062-rescan-chosen-folders.md): the pane's Rescan
+- **Amended by:** [0099](0099-library-health-panel.md): a source's panel takes the columns'
+  place, at their height, whatever Show Browser says.
+  [0062](0062-rescan-chosen-folders.md): the pane's Rescan
   Now is Rescan All, beside Rescan for the selected folders.
   [0067](0067-settings-layout-and-played-share.md): titled boxes, Sync and Network Folders
   sections, and the longest key prefix wins. [0067](0067-settings-layout-and-played-share.md):
