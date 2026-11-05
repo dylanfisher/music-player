@@ -126,14 +126,17 @@ public final class GeneralModel {
         settings: [SettingDescriptor], searcherInstalled: Bool, value: @escaping (String) -> Any?,
         set: @escaping (String, Any) throws -> Void, isBlocked: @escaping () -> Bool
     ) {
-        rows = settings.filter { Self.isShown($0.key, searcherInstalled: searcherInstalled) }
-            .map(Self.row)
+        rows = settings.filter {
+            $0.kind != .windowState && Self.isShown($0.key, searcherInstalled: searcherInstalled)
+        }
+        .map(Self.row)
         self.value = value
         self.set = set
         self.isBlocked = isBlocked
     }
 
-    /// Whether the window has a row for the setting. Network Scan Readers is a tuning number
+    /// Whether the window has a row for the setting. State the app writes, such as the play
+    /// state, has none (`.windowState`). Network Scan Readers is a tuning number
     /// few would understand, and File Viewer has nothing to pick without Searcher, so both stay
     /// in the config file (ADR 0067).
     private static func isShown(_ key: String, searcherInstalled: Bool) -> Bool {

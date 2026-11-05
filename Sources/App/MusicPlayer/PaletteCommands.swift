@@ -141,9 +141,10 @@ extension AppDelegate {
             }
             .map { ($0.command.id, $0.key) })
         // Settings that aren't commands: choosing one opens the Settings window at its row.
+        // State the app writes has no row to open.
         let settingItems = settings.schema.settings.filter {
             switch $0.kind {
-            case .bool, .choice: false
+            case .bool, .choice, .windowState: false
             default: true
             }
         }.map {

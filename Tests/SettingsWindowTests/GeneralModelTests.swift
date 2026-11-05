@@ -76,7 +76,9 @@ private var appearanceChoices: [SettingKind.Choice] {
         isBlocked: { false })
     #expect(
         model.rows.map(\.key)
-            == schema.settings.map(\.key).filter { $0 != schema.networkScanReaders.key })
+            == schema.settings.map(\.key).filter {
+                $0 != schema.networkScanReaders.key && $0 != schema.resume.key
+            })
     #expect(!model.rows.contains { $0.control == .readOnly })
     let appearance = model.rows.first { $0.key == AppSettings().appearance.key }
     #expect(appearance?.control == .popUp(appearanceChoices))
@@ -287,7 +289,8 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let windowTitle = model.rows.first { $0.key == schema.windowTitle.key }
     #expect(titleFormat?.control != nil && titleFormat?.control == windowTitle?.control)
     let listed = sections.flatMap(\.rows).map(\.key)
-    #expect(listed.count == AppSettings().settings.count - 3)
+    #expect(listed.count == AppSettings().settings.count - 4)
+    #expect(!listed.contains(AppSettings().resume.key))
     #expect(!listed.contains(AppSettings().watchedFolders.key))
     // The output device's row picks the renderer too.
     #expect(!listed.contains(AppSettings().outputRenderer.key))
