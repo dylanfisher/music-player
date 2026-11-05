@@ -94,3 +94,44 @@ func theBarDrawsSwinsiansColors(_ appearance: NSAppearance.Name) throws {
             == (NSColor.currentControlTint == .graphiteControlTint ? .darkGray : SeekBar.playedBlue)
     )
 }
+
+/// The box around the bar is lighter than the toolbar under it, with no border, as Swinsian's
+/// is: 250 on its 242 toolbar in light, and a step lighter in dark.
+@MainActor @Test(arguments: [NSAppearance.Name.aqua, .darkAqua])
+func theSeekBoxIsLighterThanTheToolbar(_ appearance: NSAppearance.Name) throws {
+    let dark = appearance == .darkAqua
+    let toolbar = NSBox(frame: NSRect(x: 0, y: 0, width: 320, height: 40))
+    toolbar.boxType = .custom
+    toolbar.borderWidth = 0
+    toolbar.titlePosition = .noTitle
+    toolbar.contentViewMargins = .zero
+    let swinsianToolbar = 242.0 / 255
+    toolbar.fillColor =
+        dark
+        ? .windowBackgroundColor
+        : NSColor(srgbRed: swinsianToolbar, green: swinsianToolbar, blue: swinsianToolbar, alpha: 1)
+    toolbar.appearance = NSAppearance(named: appearance)
+    let box = SeekBox(frame: NSRect(x: 10, y: 11, width: 300, height: SeekBox.heightPoints))
+    box.showTimes(elapsed: "1:10", total: "3:20")
+    toolbar.addSubview(box)
+    toolbar.layoutSubtreeIfNeeded()
+    let image = try #require(toolbar.bitmapImageRepForCachingDisplay(in: toolbar.bounds))
+    toolbar.cacheDisplay(in: toolbar.bounds, to: image)
+    let scale = Double(image.pixelsWide) / toolbar.bounds.width
+    func gray(atX x: Double, y: Double) throws -> Double {
+        let color = try #require(
+            image.colorAt(x: Int(x * scale), y: Int((toolbar.bounds.height - y) * scale))?
+                .usingColorSpace(.sRGB))
+        return color.greenComponent * 255
+    }
+    let under = try gray(atX: 5, y: 20)
+    // Inside the box before the elapsed time, and on its edge, where a border would be.
+    let inside = try gray(atX: 13, y: 20)
+    let edge = try gray(atX: 10.25, y: 20)
+    if dark {
+        #expect(inside - under > 4 && inside - under < 20, "\(inside) on \(under)")
+    } else {
+        #expect(abs(inside - 250) < 2, "\(inside) on \(under)")
+    }
+    #expect(edge >= under - 1, "\(edge) on \(under)")
+}

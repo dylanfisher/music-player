@@ -71,14 +71,17 @@ final class SeekBox: NSView {
         return hit === bar ? bar : self
     }
 
+    /// Lighter than the bar under it, without a border, as Swinsian's box is: white at 60% makes
+    /// its 250 on a 242 toolbar in light, and at 5% a step of about the same look in dark. White
+    /// over the bar rather than a color of its own, so it stays a step lighter on glass too.
+    static let fill = NSColor(name: nil) { appearance in
+        let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return NSColor(white: 1, alpha: dark ? 0.05 : 0.6)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        let box = bounds.insetBy(dx: 0.5, dy: 0.5)
-        let path = NSBezierPath(
-            roundedRect: box, xRadius: Self.cornerPoints, yRadius: Self.cornerPoints)
-        NSColor.labelColor.withAlphaComponent(0.06).setFill()
-        path.fill()
-        NSColor.separatorColor.setStroke()
-        path.lineWidth = 1
-        path.stroke()
+        Self.fill.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: Self.cornerPoints, yRadius: Self.cornerPoints)
+            .fill()
     }
 }
