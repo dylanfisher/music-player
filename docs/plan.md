@@ -4799,6 +4799,57 @@ this environment on `main` as well as here (it reads the screen); everything els
 - [ ] **41e.5 Appearance page.** The Appearance pane has grown to 20 rows in one box. Group it
       into sections a reader can scan.
 
+Plan, part 41e (ADR 0094):
+- Probes (done before this plan): the tokens popover is as tall as its label, 160 points for
+  160, with 10 points at each side: `NSPopover` takes the content view's frame, the label's,
+  and the stack's insets show only across. The status item, centered by AppKit
+  (`centeredItemIdentifier`), stays at its 280-point minimum alone in the toolbar or beside
+  fixed items, whatever its `maxSize`; it grows only to a `maxSize` that fits centered, the
+  560 it has beside a flexible space. Not centered, it fills the room, as a Custom Status item
+  does (1184 of a 1200-point window). A Custom Status item alone between flexible spaces stops
+  at 560. Scanning: every scan already removes the tracks of files gone from a walk that
+  finished and reads files whose size or mtime changed, unconditionally (ADR 0009). A folder
+  that is missing, lists nothing while the index holds its files, or vanishes or changes
+  device during the walk removes nothing; that stays whatever the settings say.
+- 41e.1: the popover's content view is sized to its fitting size before it shows, so the
+  12-point insets hold on all four sides. Test: the label's margins in the popover are equal.
+- 41e.3: a status item (the status or a Custom Status item with a flexible column) fills the
+  room when no flexible space is in the toolbar or when no other item but spaces is: no
+  `maxSize` cap, and the status isn't the centered item then, since AppKit won't widen a
+  centered item past what fits centered. With another item and a flexible space it stays at
+  most 560 and centered, as now. Tests in a window: the status alone, beside fixed items, and a
+  Custom Status item between flexible spaces fill the width; the default set keeps 560 and
+  centers.
+- 41e.2: `MainToolbar` watches its window's sheets; while `customizationPaletteIsRunning`, the
+  status's and each Custom Status item's view draw a 1-point rounded outline in the separator
+  color on their layer, gone when the sheet ends. Both are AppKit API since 10.x, so macOS 12
+  has them. The status bar isn't in the toolbar and keeps no outline. Test: run the palette on
+  a window, the items' views have the outline; end the sheet, they don't.
+- 41e.4: two settings, default on: `library.removeMissingTracks` ("Remove Missing Tracks")
+  and `library.rescanChangedFiles` ("Rescan Changed Files"), in a new "Folder Changes" box
+  above Network Folders in Settings ▸ Watched Folders. The scanner takes `ScanOptions`: with
+  removal off, a finished walk leaves the tracks of gone files in the index (no files are
+  touched in either case); with rescanning off, a known file whose size or mtime changed is
+  counted unchanged and keeps its stored size and mtime, so turning it on reads it at the next
+  scan. An unreadable file is still read again. The watcher's jobs carry the options: Rescan,
+  Rescan All and the tag editor's own writes read changed files whatever the setting, since
+  someone asked for them; removal follows the setting everywhere. A change of either restarts
+  the watcher, as the other library settings do. Tests: the scanner with each off; the watch
+  state's jobs with rescanning off (a launch scan and FSEvents don't read, an edit and a
+  Rescan do); the pane shows both rows.
+- 41e.5: Appearance splits into two panes. Appearance keeps "Theme" (Appearance, Window Glass)
+  and "Track Table" (lines, line colors, Playing Row Color, Alternating Rows, Row Height,
+  Album Art). A new Toolbar pane after it has "Titles" (Window Title, Toolbar Title Line),
+  "Toolbar Status" (Toolbar Status Layout, and the three Custom Status layouts on one row of
+  three buttons, Edit 1… to Edit 3…, under one label and summary) and "Status Bar" (style and
+  layout). Sections list their keys, as Network Folders does, since all share `appearance.`;
+  `appearance` itself makes Theme the place for a new appearance key. Summaries get shorter
+  where the title says it, and the color wells get a fixed width instead of stretching. Tests:
+  sections and their rows, the palette opens the Toolbar pane for its settings, the Custom
+  Status row's buttons each open their own builder, labels fit; snapshots of both panes.
+- Order: this plan, 41e.1, 41e.3, 41e.2, 41e.4, 41e.5, each through its tests,
+  `./scripts/check`, then the ADR and the result.
+
 #### 41f. Play state across quits
 
 - [x] **41f.1 Resume.** Quitting and opening the app again puts back the playing track and how
