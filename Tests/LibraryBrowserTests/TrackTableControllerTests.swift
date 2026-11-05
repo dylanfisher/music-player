@@ -324,11 +324,12 @@ import Testing
     await model.load(BrowserState(source: nil))
     let table = controller.table
     let rows = try index.rows(ids: model.trackIDs)
+    // The cell's mark and text as VoiceOver reads them.
     func shown(_ column: TrackColumn, _ row: Int) throws -> String {
         let index = table.column(withIdentifier: NSUserInterfaceItemIdentifier(column.rawValue))
         return try #require(
-            table.view(atColumn: index, row: row, makeIfNecessary: true) as? TextCell
-        ).text
+            (table.view(atColumn: index, row: row, makeIfNecessary: true) as? TextCell)?
+                .accessibilityValue() as? String)
     }
     let nowPlaying = try #require(
         table.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier("nowPlaying")))
@@ -350,6 +351,33 @@ import Testing
     controller.playingPath = rows[1].path
     #expect(try shown(.nowPlaying, 2).isEmpty)
     #expect(try shown(.nowPlaying, 1) == "\u{25B6}\u{FE0E}")
+}
+
+@MainActor @Test func theNowPlayingColumnCentersItsTriangle() throws {
+    let cell = TextCell(
+        NSUserInterfaceItemIdentifier("nowPlaying"), alignment: TrackColumn.nowPlaying.alignment)
+    cell.frame = NSRect(x: 0, y: 0, width: TrackColumn.nowPlaying.defaultWidth, height: 17)
+    cell.text = playingMark
+    let bitmap = try #require(cell.bitmapImageRepForCachingDisplay(in: cell.bounds))
+    cell.cacheDisplay(in: cell.bounds, to: bitmap)
+    let inked = (0..<bitmap.pixelsWide).filter { x in
+        (0..<bitmap.pixelsHigh).contains { y in
+            (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.3
+        }
+    }
+    let left = try #require(inked.first)
+    let right = bitmap.pixelsWide - 1 - inked.last!
+    #expect(abs(left - right) <= 2, "\(left) px left of the triangle, \(right) right")
+}
+
+@MainActor @Test func theTitlesPlayingMarkHasRoomAfterIt() {
+    let cell = TextCell(NSUserInterfaceItemIdentifier("title"), alignment: .left)
+    cell.text = "Jóga"
+    cell.mark = playingMark
+    let plain = NSAttributedString(
+        string: playingMark + " Jóga", attributes: [.font: cell.font])
+    #expect(abs(cell.markedLine.size().width - plain.size().width - TextCell.markGap) < 0.5)
+    #expect(TextCell.markGap == 4)
 }
 
 @MainActor @Test func theTableDrawsItsLinesAndRowsAsTheAppearanceSays() throws {
@@ -1123,7 +1151,7 @@ private func hoveredRescanTable() async throws -> (
         }
     }
     // The text stays centered in a taller row, and draws.
-    let cell = TextCell(NSUserInterfaceItemIdentifier("t"), numeric: true)
+    let cell = TextCell(NSUserInterfaceItemIdentifier("t"), alignment: .right)
     cell.frame = NSRect(x: 0, y: 0, width: 120, height: 40)
     #expect(abs(cell.textRect.midY - 20) <= 1)
     #expect(cell.textRect.width == 116)

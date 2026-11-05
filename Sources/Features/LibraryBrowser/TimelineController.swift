@@ -226,7 +226,7 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
         let column = TrackColumn(rawValue: tableColumn.identifier.rawValue)
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
-            as? TextCell ?? TextCell(tableColumn.identifier, numeric: column?.isNumeric == true)
+            as? TextCell ?? TextCell(tableColumn.identifier, alignment: column?.alignment ?? .left)
         let text: String
         switch (column, played?.track) {
         case (nil, _):

@@ -466,23 +466,25 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         }
         let cell =
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
-            as? TextCell ?? TextCell(tableColumn.identifier, numeric: column.isNumeric)
+            as? TextCell ?? TextCell(tableColumn.identifier, alignment: column.alignment)
         cell.font = font
         cell.text = text(column, row: row)
+        cell.mark = mark(column, row: row)
         rowsDrawn()
         return cell
     }
 
-    /// What `column` shows at `row`: the playing mark in Now Playing on the playing row, and
-    /// before its title while Now Playing is hidden, so the mark shows once.
+    /// What `column` shows at `row`: the playing mark in Now Playing on the playing row.
     func text(_ column: TrackColumn, row: Int) -> String {
         guard let track = trackRow(row) else { return "" }
-        let text = column.text(track, position: row)
-        switch column {
-        case .nowPlaying: return isPlaying(row) ? playingMark : ""
-        case .title where isPlaying(row) && !isShown(.nowPlaying): return playingMark + " " + text
-        default: return text
-        }
+        if column == .nowPlaying { return isPlaying(row) ? playingMark : "" }
+        return column.text(track, position: row)
+    }
+
+    /// The mark before `column`'s text at `row`: the playing mark before the playing track's
+    /// title while Now Playing is hidden, so the mark shows once.
+    func mark(_ column: TrackColumn, row: Int) -> String {
+        column == .title && isPlaying(row) && !isShown(.nowPlaying) ? playingMark : ""
     }
 
     private func isShown(_ column: TrackColumn) -> Bool {
