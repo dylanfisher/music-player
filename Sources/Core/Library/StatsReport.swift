@@ -168,11 +168,11 @@ public struct StatsReport: Equatable, Sendable {
         undatedPlays = scan.undatedPlays
         earliestPlay = firstPlays.earliest
         addTotals(scan.paths)
-        for ranking in Ranking.allCases {
-            top[ranking] = Dictionary(
-                uniqueKeysWithValues: List.allCases.map {
-                    ($0, Self.rank($0, scan.paths, by: ranking))
-                })
+        for list in List.allCases {
+            let entries = Self.entries(list, scan.paths)
+            for ranking in Ranking.allCases {
+                top[ranking, default: [:]][list] = Self.best(entries, by: ranking)
+            }
         }
         (firstAlbums, firstAlbumCount) = Self.firstPlayed(firstPlays.albums, \.albumID, scan)
         (firstArtists, firstArtistCount) = Self.firstPlayed(firstPlays.artists, \.artistID, scan)
@@ -210,12 +210,10 @@ public struct StatsReport: Equatable, Sendable {
         }
     }
 
-    /// The `listLength` entries of `list` with the most plays or hours, ties broken by the
-    /// other and then by ID. Tracks are paths, a missing one a row of its own; the other lists
-    /// add every path no longer in the library into one row with no ID.
-    private static func rank(_ list: List, _ paths: [PeriodScan.Path], by ranking: Ranking)
-        -> [Entry]
-    {
+    /// Every entry of `list` with its plays and hours. Tracks are paths, a missing one a row of
+    /// its own; the other lists add every path no longer in the library into one row with no
+    /// ID.
+    private static func entries(_ list: List, _ paths: [PeriodScan.Path]) -> [Entry] {
         var entries: [Int64?: Entry] = [:]
         for path in paths {
             let key: Int64?
@@ -235,7 +233,14 @@ public struct StatsReport: Equatable, Sendable {
             entries[key, default: Entry(id: key, inLibrary: path.inLibrary)].plays += path.plays
             entries[key]?.seconds += Double(path.plays) * (path.seconds ?? 0)
         }
-        let ordered = entries.values.sorted { left, right in
+        return Array(entries.values)
+    }
+
+    /// The `listLength` of `entries` with the most plays or hours, ties broken by the other
+    /// and then by ID. One pass that keeps the best so far, since a list can have tens of
+    /// thousands of entries and only its top shows.
+    private static func best(_ entries: [Entry], by ranking: Ranking) -> [Entry] {
+        func precedes(_ left: Entry, _ right: Entry) -> Bool {
             switch ranking {
             case .plays where left.plays != right.plays: return left.plays > right.plays
             case .hours where left.seconds != right.seconds: return left.seconds > right.seconds
@@ -244,7 +249,14 @@ public struct StatsReport: Equatable, Sendable {
             default: return (left.id ?? .max) < (right.id ?? .max)
             }
         }
-        return Array(ordered.prefix(listLength))
+        var best: [Entry] = []
+        best.reserveCapacity(listLength + 1)
+        for entry in entries {
+            if best.count == listLength, let last = best.last, !precedes(entry, last) { continue }
+            best.insert(entry, at: best.firstIndex { precedes(entry, $0) } ?? best.count)
+            if best.count > listLength { best.removeLast() }
+        }
+        return best
     }
 
     /// The albums or artists (by `key`) played in the scan's period whose first play in `first`
