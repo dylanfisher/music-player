@@ -14,7 +14,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     static let statusMinimumPoints = 280.0
     /// As wide as Swinsian's status, so flexible spaces beside it keep a share of the width.
     static let statusSharingPoints = 560.0
-    /// With no flexible space in the toolbar, the status takes all the room the others leave.
+    /// With no flexible space in the toolbar, or alone in it, a status takes all the room.
     static let statusMaximumPoints = 10_000.0
     static let volumePoints = 90.0
     let toolbar: NSToolbar
@@ -69,12 +69,18 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         toolbar.allowsUserCustomization = true
         toolbar.autosavesConfiguration = false
         toolbar.displayMode = .iconOnly
-        // AppKit centers the status on the window, whatever sits on either side, while it
-        // fits there at its width (ADR 0087).
+        centersStatus(true)
+    }
+
+    /// AppKit centers the status on the window, whatever sits on either side, while it fits
+    /// there at its width (ADR 0087). It never widens a centered item past what fits centered,
+    /// so a status that fills the toolbar isn't centered (ADR 0094).
+    private func centersStatus(_ centers: Bool) {
+        let identifier = centers ? ToolbarItem.status.identifier : nil
         if #available(macOS 13, *) {
-            toolbar.centeredItemIdentifiers = [ToolbarItem.status.identifier]
+            toolbar.centeredItemIdentifiers = Set(identifier.map { [$0] } ?? [])
         } else {
-            toolbar.centeredItemIdentifier = ToolbarItem.status.identifier
+            toolbar.centeredItemIdentifier = identifier
         }
     }
 
@@ -151,8 +157,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     }
 
     /// Sizes the status's and the Custom Status items again: each view's layout sets its
-    /// height, and its width or, for a flexible one, whether a flexible space shares the
-    /// toolbar its widest.
+    /// height, and its width or, for a flexible one, whether it fills the toolbar.
     func resizeStatus() {
         for shown in toolbar.items {
             guard let item = ToolbarItem(shown.itemIdentifier), layout(of: item) != nil else {
@@ -160,19 +165,27 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
             }
             size(shown, item)
         }
+        centersStatus(!(items.contains(.status) && fills(.status)))
+    }
+
+    /// Whether a flexible status item takes all the room the other items leave: when no
+    /// flexible space shares the toolbar, or when nothing but spaces is beside it (ADR 0094).
+    func fills(_ item: ToolbarItem) -> Bool {
+        let items = items
+        return !items.contains(.flexibleSpace)
+            || items.allSatisfy { [item, .space, .flexibleSpace].contains($0) }
     }
 
     /// A Custom Status item whose columns are all fixed is as wide as they are (ADR 0089).
     /// Any other takes the room the other items leave, as the status does, up to
-    /// `statusSharingPoints` when a flexible space takes the rest, at its view's height. The
-    /// toolbar measures a view at its fitting size, so constraints can't widen it; `minSize`
-    /// and `maxSize`, deprecated in macOS 12 with no replacement for a flexible width, can. KVC
-    /// sets them without the deprecation warning.
+    /// `statusSharingPoints` when a flexible space and another item share the toolbar, at its
+    /// view's height. The toolbar measures a view at its fitting size, so constraints can't
+    /// widen it; `minSize` and `maxSize`, deprecated in macOS 12 with no replacement for a
+    /// flexible width, can. KVC sets them without the deprecation warning.
     private func size(_ shown: NSToolbarItem, _ item: ToolbarItem) {
         let height = shown.view?.fittingSize.height ?? 0
-        let shares = toolbar.items.contains { $0.itemIdentifier == .flexibleSpace }
         var narrowest = Self.statusMinimumPoints
-        var widest = shares ? Self.statusSharingPoints : Self.statusMaximumPoints
+        var widest = fills(item) ? Self.statusMaximumPoints : Self.statusSharingPoints
         if item != .status, let layout = layout(of: item),
             let width = HeaderStatus.fixedWidthPoints(of: layout)
         {

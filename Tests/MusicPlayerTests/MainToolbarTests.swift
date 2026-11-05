@@ -342,3 +342,44 @@ func theStatusCentersOnTheWindow(_ fullSize: Bool) throws {
     #expect(try size(.customStatus2, "maxSize") == NSSize(width: width, height: 48))
     #expect(try size(.customStatus1, "maxSize").width == MainToolbar.statusSharingPoints)
 }
+
+/// A status with a flexible column fills the toolbar when nothing but spaces is beside it, or
+/// when no flexible space shares the toolbar: the status, which AppKit only widens while it
+/// isn't centered, and a Custom Status item between flexible spaces. Beside other items and a
+/// flexible space the status keeps Swinsian's width, centered.
+@MainActor @Test func aStatusAloneFillsTheToolbar() throws {
+    let fills: [([ToolbarItem], ToolbarItem)] = [
+        ([.status], .status), ([.flexibleSpace, .status, .flexibleSpace], .status),
+        ([.transport, .status, .search], .status), ([.customStatus1], .customStatus1),
+        ([.flexibleSpace, .customStatus1, .flexibleSpace], .customStatus1),
+    ]
+    let shares: [([ToolbarItem], ToolbarItem)] = [
+        (ToolbarItem.defaultItems, .status),
+        ([.transport, .flexibleSpace, .customStatus1, .flexibleSpace], .customStatus1),
+    ]
+    for (items, item) in fills + shares {
+        let header = HeaderStatus()
+        let slots = ToolbarItem.customStatuses.map { _ in HeaderStatus() }
+        let made = MainToolbar(
+            identifier: UUID().uuidString, transport: NSView(), status: header.view,
+            customStatuses: slots.map(\.view), search: NSSearchField(),
+            dispatcher: try dispatcher(), items: items)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 400),
+            styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.toolbarStyle = .expanded
+        made.attach(to: window)
+        window.orderFront(nil)
+        window.layoutIfNeeded()
+        let view = item == .status ? header.view : slots[0].view
+        let width = view.convert(view.bounds, to: nil).width
+        if fills.contains(where: { $0.0 == items }) {
+            // All but the search field's 220 points and the toolbar's margins.
+            #expect(width > 1200 - MainToolbar.searchPoints - 100, "\(items): \(width)")
+        } else {
+            #expect(abs(width - MainToolbar.statusSharingPoints) < 0.5, "\(items): \(width)")
+        }
+    }
+}
