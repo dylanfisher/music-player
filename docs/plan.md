@@ -5424,6 +5424,75 @@ See phase 43.
       next to the field it sorts; credits; more info (key, language, dates, mood, work and
       movement); rights and label; URLs; lyrics; artwork; and a read-only audio summary.
 
+Plan, part 42g (ADR 0101):
+- Probe: the reader already reads 16 fields beyond the editor's (grouping, BPM, key, conductor,
+  lyricist, label, copyright, encoded by, description, disc subtitle, work, movement and its
+  name, original date, catalog number, barcode) and the index stores them all; Get Info shows
+  and the writer writes only title, artist, album, album artist, genre, date, composer,
+  comment, track and disc with their totals, compilation, and the front cover. The writer's
+  read-back check compares every field of `TrackTags`, so a field added there is covered by it.
+- Audit. "Read" is what the reader reads and the index stores today; "Info" what Get Info
+  shows; "Write" what this part makes the writer write, in FLAC (Vorbis comments), MP4 (`ilst`)
+  and ID3v2.3 and 2.4 (MP3, AIFF, WAV). Keys follow MusicBrainz Picard as ADR 0006 does, and
+  Mp3tag's where Picard has none (the `WWW…` URLs); ADR 0101 lists every key.
+
+  | YATE field | Read | Info | Write in this part |
+  |---|---|---|---|
+  | Title, Artist, Album Artist, Album, Year, Track n of m, Disc n of m, Composer, Genre, Comments, Compilation | yes | yes | as before |
+  | Grouping, BPM | yes | no | yes |
+  | Rating | app's own (ADR 0068) | no | omitted: ratings are the app's state in the index, and a file write per star click is the opposite |
+  | Skip When Shuffling | no | no | omitted: iTunes database only |
+  | Artwork: pictures, primary, type, description | front cover | front cover | as before: the front cover replaced or removed; the tab shows its type, pixels and size. Other pictures are kept byte for byte, not listed |
+  | Sort Title, Sort Artist, Sort Album Artist, Sort Album, Sort Composer | no | no | yes (`TSOT`…`TSOC`, `…SORT`, `sonm`…`soco`) |
+  | Lyrics | no | no | yes (`USLT`, `LYRICS`, `©lyr`) |
+  | Encoded By | yes | no | yes |
+  | Media Type | no | no | yes, as Picard's Media (`TMED`, `MEDIA`), free text such as "CD" |
+  | File Type, Bit Rate, Sample Rate, Channels, Time, File Size, Tag Scheme, Mod Date | from the file | no | read-only in the File tab |
+  | Encoder Settings, Encoding Time, Tagging Time, Music CD Identifier | no | no | omitted: set by the encoder or tagger, not edited by hand; no MP4 key |
+  | Play Count, Playlist Delay, Reverb, Start Time, Stop Time, Volume Adjustment, Remember Position | no | no | omitted: iTunes database or player settings, not tags the library owner edits |
+  | ISRC | no | no | yes (`TSRC`, `ISRC`) |
+  | Conductor, Lyricist | yes | no | yes |
+  | Remixer, Original Artist | no | no | yes (`TPE4`, `TOPE`) |
+  | Original Lyricist | no | no | omitted: rare; `TOLY` has no Vorbis or MP4 key in use |
+  | Involved People, Musician Credits | no | no | omitted: one ID3 frame of role and name pairs against a key per role in Vorbis and MP4, so no field maps onto all three; a follow-up could add Producer, Engineer and Mixer as fields |
+  | Initial Key, Release Date (our Date), Original Release Date, Description, Set Subtitle, Work Name, Movement Name, Movement n | yes | no | yes |
+  | Movement of m | no | no | yes (`MVIN` n/m, `MOVEMENTTOTAL`, `©mvc`) |
+  | Language, Mood, Original Album | no | no | yes (`TLAN`, `TMOO`, `TOAL`) |
+  | Content Advisory, Category, Show Work Name, Original Filename | no | no | omitted: iTunes and podcast items with no Vorbis key |
+  | User Defined Text Info Items | no | no | omitted for now: a list editor of free keys, whose mixed values across a selection need a design of their own; the named fields cover the TXXX and freeform keys Picard writes |
+  | Copyright, Label (with Publisher), Catalog Number | yes | no | yes; Label and Publisher are one field, as in the reader since phase 16 |
+  | Barcode | yes | no | yes |
+  | Owner, Purchase Date, Price Paid, Seller, Radio Station, Station Owner, Produced Notice, Terms of Use | no | no | omitted: ID3-only frames (or iTunes store data) with no Vorbis or MP4 key |
+  | Artist, Audio File, Audio Source, Commercial, Copyright, Payment, Publisher, Radio Station webpages | no | no | yes (`WOAR`…, `WWW…`, `----:WWW…`); ID3 URL frames hold Latin-1 only, so other text is refused there |
+  | Podcast URL, User Defined URLs | no | no | omitted: podcasts; free keys as above |
+
+- Index: no schema change. A change to the index part's SQL drops and rebuilds that part, which
+  means reading every file again (an hour or more over the NAS), while plays, history, ratings
+  and playlists are kept by path ID (the stats part). Nothing here needs a column or a search,
+  so the new fields live only in the files: the reader reads them into `TrackTags` and the
+  index stores the same columns as before. A text frame the reader now maps (`TXXX:DESCRIPTION`,
+  `TXXX:MOOD`, `TXXX:ORIGINALDATE`) shows in a column once its file is next rescanned.
+- Writer: the fields become table-driven: each text field names its `TrackTags` property and
+  its key in each format, next to the reader's maps in `Metadata`, so the reader and the writer
+  read one table. ID3 learns to write `TXXX` by description, `USLT` like `COMM`, and URL frames;
+  MP4 learns iTunes freeform (`----`) items by name and 16-bit integers (`tmpo`, `©mvi`,
+  `©mvc`); the layout and the several-values check name those blocks' fields too, so the round
+  trip's untouched-block check covers them. 2.4-only frames use 2.3's spelling in a 2.3 tag:
+  mood and disc subtitle as `TXXX`, an original date as `TORY` when it's a year, else `TXXX`.
+  Grouping is written to `GRP1` when the file has one (iTunes's grouping), else `TIT1`.
+- Get Info: a tab view, with Info (YATE's compact layout: title; artist and date; album artist
+  and track; album and disc; grouping and BPM; composer; genre; comment beside the art;
+  compilation), Sorting (each sort field above the field it sorts, the latter editable there
+  too), Credits, Details (YATE's More Info), Rights & Label, URLs, Lyrics, Artwork (a large
+  preview, its type, pixels and bytes, Replace and Remove) and File (read-only). Every field
+  shows Mixed across a selection as before, and a dot by its label once it's edited.
+- Tests: per format (FLAC, MP4, MP3 2.3 and 2.4, AIFF, WAV) every new field written, read back,
+  found in the key the ADR names, and undone; clearing; 2.3's spellings; URL refusal; grouping
+  into `GRP1`; the editor model's mixed and edited state for the new fields; the reader reading
+  the new keys. Bench rows of 42e re-run; the window checked with `--snapshot-of tags`.
+- Order: this plan, the table-driven fields, the writer's new keys, the editor's tabs, the
+  snapshot pass, the ADR and the result.
+
 ### 43. Listening Stats
 
 Part 42f. A Stats source for the owner's listening history, with the visual panel above the
