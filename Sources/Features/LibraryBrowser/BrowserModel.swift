@@ -62,6 +62,9 @@ public final class BrowserModel {
     private var names: (applied: Int, list: [TrackName])?
     /// The sources the sidebar showed and the plays from the browser, for Back and Forward.
     private(set) var history = StepHistory(start: WindowPlace(filter: TrackFilter()))
+    /// The source the track of the play state saved at quit was played from, which stands for
+    /// a play's until the history has one (ADR 0092).
+    var resumedFrom: TrackFilter?
     /// The track table's selections, for Undo Selection and Redo Selection.
     private(set) var selections = SelectionHistory()
     /// The shown list's selected tracks and scroll, which a step keeps with the filter.
@@ -214,6 +217,20 @@ public final class BrowserModel {
         case .history: (.lastPlayed, false)
         case .timeline, .health, nil: nil
         }
+    }
+
+    /// What the browser showed when the playback in place started, which Show Current Track
+    /// goes back to: the history's latest play at or before its place, else the resumed one's.
+    var playSource: TrackFilter? { history.playSource ?? resumedFrom }
+
+    /// The order `source` lists its tracks in for a queue: its own sort, or else the table's,
+    /// never the playlist order a playlist shown now has.
+    func queueSort(for source: BrowserSource?) -> (column: TrackColumn, ascending: Bool) {
+        if let sort = defaultSort(source) { return sort }
+        let sort = sortBeforeDefault ?? (sortColumn, ascending)
+        guard sort.column == .playlistOrder else { return sort }
+        let table = AppState().trackTable.defaultValue
+        return (table.sortColumn, table.sortAscending)
     }
 
     /// What the table says in place of rows: History's before anything has played. Nil while

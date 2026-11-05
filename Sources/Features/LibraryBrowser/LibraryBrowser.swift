@@ -72,6 +72,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var messagesShown = 0
     public var browserHeightChanged: (Int) -> Void = { _ in }
     public var stateChanged: (BrowserState) -> Void = { _ in }
+    /// Called after the track table's selection changed, which the play state keeps.
+    public var selectionChanged: () -> Void = {}
     /// Called after each refresh for a library change, so other views can read their rows again.
     public var libraryRefreshed: () -> Void = {}
     /// The sidebar's context menu: ask before deleting this playlist, and open its rules.
@@ -102,7 +104,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     let reader: LibraryReader
-    private let index: LibraryIndex
+    let index: LibraryIndex
     let table: TrackTableController
     let timelineModel: TimelineModel
     /// Shown in place of the panes and the track table while the timeline is the source.
@@ -193,6 +195,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         table.selectionChanged = {
             owner?.readSelectionTotals()
             owner?.recordSelection()
+            owner?.selectionChanged()
         }
         table.rateClicked = { id, stars in
             owner?.edit("couldn't rate the track") { try await model.rate([id], stars: stars) }
@@ -363,8 +366,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         split.setPosition(CGFloat(browserHeight), ofDividerAt: 0)
     }
 
-    /// Loads everything, selecting what `saved` names where it still exists.
-    public func load(_ saved: BrowserState) async {
+    /// Loads everything, selecting what `saved` names where it still exists. A play state
+    /// saved at quit, `resume`, gives the source in place of `saved`'s, and its selected track
+    /// and first visible row (ADR 0092).
+    public func load(_ saved: BrowserState, resume: ResumePoint? = nil) async {
+        var saved = saved
+        let resumed = resume.map(resumedWindow)
+        if let resumed {
+            saved.source = resumed.source
+            model.resumedFrom = resumed.from
+        }
         await model.load(saved)
         // Handed over before anything else waits, so no row can draw first.
         if let firstRowsDrawn {
@@ -376,6 +387,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 firstRowsDrawn()
             }
         }
+        if let resumed { await show(resumed) }
         do {
             // Forgotten only once shown, so a crash before then shows them next time.
             let discards = try await reader.discards()
@@ -1260,7 +1272,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// The track table's selected tracks and first visible track, which a step keeps. The
     /// timeline's rows are plays, and it loads afresh each time it shows, so it keeps neither.
-    private func listPlace() -> (selection: Set<Int64>, scroll: WindowPlace.Scroll?) {
+    func listPlace() -> (selection: Set<Int64>, scroll: WindowPlace.Scroll?) {
         guard !showsTimeline else { return ([], nil) }
         let anchor = table.scrollAnchor(in: model.trackIDs)
         return (
@@ -1674,7 +1686,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func showCurrentTrack(playingPath: String?) async {
         guard let playingPath else { return showSelectedTrack() }
         guard let id = trackID(path: playingPath) else { return }
-        if await reveal(trackID: id, in: model.history.playSource) { return }
+        if await reveal(trackID: id, in: model.playSource) { return }
         await reveal(trackID: id)
     }
 
@@ -1748,7 +1760,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// The ID of the track at `path`; nil when the library has none, or after reporting why it
     /// couldn't be read.
-    private func trackID(path: String) -> Int64? {
+    func trackID(path: String) -> Int64? {
         do {
             return try index.track(path: path)?.id
         } catch {
