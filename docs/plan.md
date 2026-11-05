@@ -4517,6 +4517,16 @@ run by name. Not checked in the running app with a real output device.
 
 ### 41. Owner feedback, 2026-11-04 night
 
+**Done; owner check pending.** All six parts are on main (ADRs 0091 to 0095). The parallel
+parts each took the next free ADR number, and the rebase renumbered them 0092, 0093 and 0095.
+`./scripts/check` on main fails only tests that don't come from this phase:
+`theGlassHeadersAreFrosted` reads the screen and fails on `main` before 41b too, from the
+second run of the night on, likely because the display slept.
+`aPeerOfAnotherUserIsRefusedBeforeItsRequestIsRead` failed once in the final run with "Broken pipe" in place of "closed" and passed five times
+run by name; nothing in phase 41 touches LocalSocket. Upgrading resets the window layout
+once: `browser.source` left state.json for `playback.resume` (41f), and a state file of
+the old shape is discarded.
+
 The owner's feedback from trying phase 40. The screenshots weren't kept; what they showed is
 written into each item. Part 41a runs on main first. Parts 41b, 41c and 41d then run in parallel
 worktrees and rebase onto main in order b, c, d. Parts 41e and 41f run after them, also in
