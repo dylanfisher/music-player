@@ -44,7 +44,7 @@ enum DeviceOutputError: Error, CustomStringConvertible {
                 }()
         case .noDoPLayout(let format):
             "DoP needs a \(dopWordBits)-bit integer device format; this one is \(format.formatID)"
-                + " \(format.bitsPerChannel ?? 0)-bit\(format.isFloat ? " float" : "")"
+                + " \(depthText(bits: format.bitsPerChannel ?? 0, isFloat: format.isFloat))"
         case .noChannelMix(let from, let to):
             "the device's format has \(to) channels for this \(from)-channel track, and only"
                 + " stereo and mono get a downmix"

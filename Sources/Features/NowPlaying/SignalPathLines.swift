@@ -214,7 +214,7 @@ private func channels(_ count: UInt32) -> String {
 
 /// `24-bit` or `32-bit float`.
 private func depth(_ format: SignalFormat) -> String {
-    bitDepth(format.bitsPerChannel ?? 0) + (format.isFloat ? " float" : "")
+    depthText(bits: format.bitsPerChannel ?? 0, isFloat: format.isFloat)
 }
 
 private func name(of kind: VolumeControl.Kind) -> String {

@@ -58,7 +58,6 @@ literal "magnifyingglass" | files Sources/App/MusicPlayer/MainToolbar.swift Sour
 literal "music.note" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Features/LibraryBrowser/SidebarController.swift Sources/Features/Palette/PaletteRow.swift | the now-playing item in the toolbar's customization sheet, the sidebar's library and a track in the palette
 literal "repeat" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Core/Scripting/ScriptStatus.swift | the repeat button's symbol and the status key the music-player tool reads
 literal "Search" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Features/LibraryBrowser/LibraryBrowser.swift | the search item's label in the toolbar's customization sheet and the search field's placeholder
-literal "Volume" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Features/NowPlaying/SignalPathLines.swift | the volume slider's label in the toolbar and the signal path's volume row
 literal "MusicPlayer" | files Sources/Core/Log/ModuleLogger.swift Sources/Tools/Bench/WindowBenchmarks.swift | the executable Bench launches, named by Package.swift, and the app's data folder, named in Log
 literal "name" | files Sources/Core/Metadata/MP4.swift Sources/Core/UPnP/AVTransport.swift | MP4's name atom of a freeform item and the element a UPnP service description names an action in
 literal "none" | files Sources/App/MusicPlayer/ScanCommand.swift Sources/Tools/TagCorpus/Survey.swift | --scan's summary with no issues and the tag corpus survey's empty column
