@@ -47,19 +47,7 @@ final class HealthPanel: NSViewController, SourcePanel {
             tiles[check] = tile
             flow.addSubview(tile)
         }
-        let scroll = NSScrollView()
-        scroll.documentView = flow
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        scroll.drawsBackground = false
-        flow.translatesAutoresizingMaskIntoConstraints = false
-        let clip = scroll.contentView
-        NSLayoutConstraint.activate([
-            flow.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
-            flow.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
-            flow.topAnchor.constraint(equalTo: clip.topAnchor),
-            flow.height,
-        ])
+        let scroll = verticalScroll(flow, height: flow.height)
 
         // No background of its own: the window's, or its glass, shows around the tiles, so the
         // panel reads apart from the table's rows.

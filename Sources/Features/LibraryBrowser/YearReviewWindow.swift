@@ -9,6 +9,7 @@ import Settings
 /// shows for that year; its rows and bars act as the panel's do.
 @MainActor
 final class YearReviewWindow: NSWindowController {
+    static let title = "Year in Review"
     let cards = StatsCards(listLength: 10, listHeightPoints: 248)
     let highlights = StatsFigures()
     let months = StatsBarChart()
@@ -20,7 +21,8 @@ final class YearReviewWindow: NSWindowController {
     private let highlightsCard: StatsCard
 
     init() {
-        monthsCard = StatsCard(title: "Plays per Month", body: months, columns: 2, heightPoints: 200)
+        monthsCard = StatsCard(
+            title: barsTitle(.month), body: months, columns: 2, heightPoints: 200)
         highlightsCard = StatsCard(
             title: "Highlights", body: highlights, columns: 2, heightPoints: 80)
         let window = NSWindow(
@@ -29,7 +31,7 @@ final class YearReviewWindow: NSWindowController {
             defer: false)
         window.minSize = NSSize(width: 420, height: 400)
         window.isReleasedWhenClosed = false
-        window.setFrameAutosaveName("Year in Review")
+        window.setFrameAutosaveName(Self.title)
         super.init(window: window)
         build(in: window)
     }
@@ -39,7 +41,7 @@ final class YearReviewWindow: NSWindowController {
 
     private func build(in window: NSWindow) {
         yearLabel.font = .systemFont(ofSize: 44, weight: .bold)
-        let caption = NSTextField(labelWithString: "Year in Review")
+        let caption = NSTextField(labelWithString: Self.title)
         caption.font = .systemFont(ofSize: 20, weight: .medium)
         caption.textColor = .secondaryLabelColor
         summaryLabel.font = .systemFont(ofSize: NSFont.systemFontSize + 1)
@@ -71,18 +73,10 @@ final class YearReviewWindow: NSWindowController {
             view.translatesAutoresizingMaskIntoConstraints = false
             page.addSubview(view)
         }
-        let scroll = NSScrollView()
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
+        let scroll = verticalScroll(page)
         scroll.drawsBackground = true
         scroll.backgroundColor = .windowBackgroundColor
-        scroll.documentView = page
-        page.translatesAutoresizingMaskIntoConstraints = false
-        let clip = scroll.contentView
         NSLayoutConstraint.activate([
-            page.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
-            page.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
-            page.topAnchor.constraint(equalTo: clip.topAnchor),
             header.leadingAnchor.constraint(equalTo: page.leadingAnchor, constant: 22),
             header.trailingAnchor.constraint(lessThanOrEqualTo: page.trailingAnchor, constant: -22),
             header.topAnchor.constraint(equalTo: page.topAnchor, constant: 18),
@@ -98,11 +92,11 @@ final class YearReviewWindow: NSWindowController {
     /// Fills the page from `year`'s report and titles the window for it.
     func show(_ report: StatsReport, year: Int, ranking: StatsReport.Ranking) {
         self.year = year
-        window?.title = "Year in Review \(year)"
+        window?.title = "\(Self.title) \(year)"
         yearLabel.stringValue = String(year)
         summaryLabel.stringValue =
-            count(report.plays, "play") + " · " + approximateDuration(report.seconds) + " · "
-            + count(report.artists, "artist") + " · " + count(report.albums, "album")
+            plays(report.plays) + " · " + approximateDuration(report.seconds) + " · "
+            + artists(report.artists) + " · " + albums(report.albums)
         cards.show(report, ranking: ranking)
         highlights.figures = Self.highlights(report, calendar: cards.calendar)
         months.bars = report.months
@@ -118,11 +112,12 @@ final class YearReviewWindow: NSWindowController {
                 value: report.busiestMonth.map { barTitle($0, unit: .month, calendar: calendar) }
                     ?? "–",
                 name: "Busiest Month"
-                    + (report.busiestMonth.map { ", " + count($0.plays, "play") } ?? "")),
+                    + (report.busiestMonth.map { ", " + plays($0.plays) } ?? "")),
             .init(
                 value: report.busiestDay.map { shortDate($0.span.start, calendar: calendar) }
                     ?? "–",
-                name: "Busiest Day" + (report.busiestDay.map { ", " + count($0.plays, "play") } ?? ""),
+                name: "Busiest Day"
+                    + (report.busiestDay.map { ", " + plays($0.plays) } ?? ""),
                 help: report.busiestDay.map { dayTitle($0.span, calendar: calendar) }),
             .init(value: number(report.firstAlbumCount), name: "New Albums"),
             .init(value: number(report.firstArtistCount), name: "New Artists"),

@@ -94,7 +94,8 @@ public func parseScriptArguments(_ arguments: [String], names: CommandNames)
         }
         if period != nil {
             guard command.id == .showStats else {
-                throw fail("\(ScriptFlag.period.rawValue) only goes with \(names.name(of: .showStats))")
+                throw fail(
+                    "\(ScriptFlag.period.rawValue) only goes with \(names.name(of: .showStats))")
             }
             guard rest.isEmpty else { throw fail("\(shown) takes a period once") }
         }

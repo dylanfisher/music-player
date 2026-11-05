@@ -46,7 +46,9 @@ private func scan(
 @Test func totalsCountThePeriodsPlaysAndThoseNoLongerInTheLibrary() {
     let paths = [
         path(1, plays: 3, artist: 10, album: 20, genre: 30, seconds: 100),
-        path(2, plays: 1, artist: 10, album: 21, genre: 30, seconds: 300, codec: "dsd", rate: 2_822_400),
+        path(
+            2, plays: 1, artist: 10, album: 21, genre: 30, seconds: 300, codec: "dsd",
+            rate: 2_822_400),
         path(3, plays: 2, artist: 11, album: 22, seconds: 60, codec: "aac", rate: 44_100),
         path(4, plays: 4, seconds: 50, codec: "flac", rate: 96_000, inLibrary: false),
     ]
@@ -75,7 +77,8 @@ private func scan(
         path(3, plays: 1, artist: 11, album: 21, genre: 31, seconds: 100),
         path(4, plays: 3, seconds: 10, inLibrary: false),
     ]
-    let report = StatsReport(scan(nil, paths: paths), firstPlays: FirstPlays(), calendar: calendar())
+    let report = StatsReport(
+        scan(nil, paths: paths), firstPlays: FirstPlays(), calendar: calendar())
     // A tie on plays goes to the one with more hours.
     #expect(report.list(.artists, by: .plays).map(\.id) == [10, 11, nil])
     #expect(report.list(.artists, by: .plays).map(\.plays) == [5, 3, 3])
@@ -91,7 +94,8 @@ private func scan(
 
 @Test func namesFillTheListsAndSayWhatIsMissing() {
     let paths = [path(1, plays: 1, artist: 10, album: 20), path(4, plays: 1, inLibrary: false)]
-    var report = StatsReport(scan(nil, paths: paths), firstPlays: FirstPlays(), calendar: calendar())
+    var report = StatsReport(
+        scan(nil, paths: paths), firstPlays: FirstPlays(), calendar: calendar())
     #expect(report.namedIDs[.artists] == [10])
     #expect(report.namedIDs[.tracks] == [1, 4])
     report.name([
@@ -116,7 +120,9 @@ private func scan(
     #expect(report.barUnit == .day)
     #expect(report.bars.count == 7)
     #expect(report.bars.map(\.plays) == [0, 1, 2, 0, 0, 0, 0])
-    #expect(report.bars[1].span == PlaySpan(start: seconds(calendar, 2026, 3, 2), end: seconds(calendar, 2026, 3, 3)))
+    #expect(
+        report.bars[1].span
+            == PlaySpan(start: seconds(calendar, 2026, 3, 2), end: seconds(calendar, 2026, 3, 3)))
     // Monday 23:00 and Tuesday 00:00, weekdays 2 and 3.
     #expect(report.weekdayHours[1][23] == 1)
     #expect(report.weekdayHours[2][0] == 2)
@@ -154,7 +160,8 @@ private func scan(
     #expect(bucketSeconds(in: calendar().timeZone, around: nil, now: now) == 3600)
     // 00:15 in Kolkata is 18:45 UTC the day before: the bucket must not cross local midnight.
     let play = seconds(india, 2026, 6, 2, 0, 15)
-    let report = StatsReport(scan(nil, times: [play], bucket: 900), firstPlays: FirstPlays(), calendar: india)
+    let report = StatsReport(
+        scan(nil, times: [play], bucket: 900), firstPlays: FirstPlays(), calendar: india)
     #expect(report.weekdayHours[2][0] == 1)
     #expect(report.busiestDay?.span.start == seconds(india, 2026, 6, 2))
 }
@@ -225,10 +232,12 @@ private func scan(
     try index.recordPlay("/elsewhere/never-indexed.flac", at: thisMonth + 900)
     // An import's plays, which have no history rows.
     try index.database.execute(
-        "INSERT OR IGNORE INTO plays (path_id, play_count, skip_count) VALUES (\(rows[2].id), 4, 0)")
+        "INSERT OR IGNORE INTO plays (path_id, play_count, skip_count) VALUES (\(rows[2].id), 4, 0)"
+    )
 
     let reader = try StatsReader(databaseURL: library.databaseURL)
-    let month = try await reader.report(.month, groupByAlbumArtist: false, now: now, calendar: calendar)
+    let month = try await reader.report(
+        .month, groupByAlbumArtist: false, now: now, calendar: calendar)
     #expect(month.plays == 4)
     #expect(month.tracks == 3)
     #expect(month.missingPlays == 1)
@@ -256,7 +265,8 @@ private func scan(
 
     // A new play, through another connection, is in the next report.
     try index.recordPlay(rows[3].path, at: thisMonth + 1200)
-    let again = try await reader.report(.month, groupByAlbumArtist: false, now: now, calendar: calendar)
+    let again = try await reader.report(
+        .month, groupByAlbumArtist: false, now: now, calendar: calendar)
     #expect(again.plays == 5)
 }
 
@@ -272,20 +282,26 @@ private func scan(
     let thisYear = try index.trackIDs(
         TrackFilter(source: .stats(.year)), sortedBy: .path, ascending: true)
     #expect(Set(thisYear) == [rows[1].id, rows[2].id])
-    let allTime = try index.trackIDs(TrackFilter(source: .stats(.all)), sortedBy: .path, ascending: true)
+    let allTime = try index.trackIDs(
+        TrackFilter(source: .stats(.all)), sortedBy: .path, ascending: true)
     #expect(Set(allTime) == [rows[0].id, rows[1].id, rows[2].id])
     #expect(throws: LibraryError.self) {
         try index.trackIDs(
-            TrackFilter(source: .plays(PlaySpan(start: 0, end: 1))), sortedBy: .path, ascending: true)
+            TrackFilter(source: .plays(PlaySpan(start: 0, end: 1))), sortedBy: .path,
+            ascending: true)
     }
 
     let span = PlaySpan(start: Int64(now) - 100, end: Int64(now))
     let page = try index.timeline(before: nil, limit: 200, in: span)
     #expect(page.map(\.trackID) == [rows[2].id, rows[1].id])
-    #expect(try index.timeline(before: page.first?.id, limit: 200, in: span).map(\.trackID) == [rows[1].id])
+    #expect(
+        try index.timeline(before: page.first?.id, limit: 200, in: span).map(\.trackID) == [
+            rows[1].id
+        ])
     #expect(try index.playCount(in: span) == 2)
     try index.recordPlay(rows[3].path, at: now - 10_000)
     try index.recordPlay(rows[4].path, at: now - 5)
-    #expect(try index.timeline(after: try #require(page.first?.id), limit: 200, in: span).map(\.trackID)
-        == [rows[4].id])
+    #expect(
+        try index.timeline(after: try #require(page.first?.id), limit: 200, in: span).map(\.trackID)
+            == [rows[4].id])
 }

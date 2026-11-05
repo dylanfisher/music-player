@@ -58,7 +58,8 @@ private func date(_ seconds: Int64) -> Date { Date(timeIntervalSince1970: TimeIn
     let now = date(seconds(calendar, 2026, 1, 1, 0, 1))
     let span = StatsPeriod.week.span(now: now, calendar: calendar)
     #expect(
-        span == PlaySpan(start: seconds(calendar, 2025, 12, 28), end: seconds(calendar, 2026, 1, 4)))
+        span == PlaySpan(start: seconds(calendar, 2025, 12, 28), end: seconds(calendar, 2026, 1, 4))
+    )
     // A minute before midnight on New Year's Eve is in last year, not this one.
     let eve = seconds(calendar, 2025, 12, 31, 23, 59)
     #expect(span?.contains(eve) == true)

@@ -44,16 +44,13 @@ final class StatsBarChart: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        for area in trackingAreas { removeTrackingArea(area) }
-        addTrackingArea(
-            NSTrackingArea(
-                rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow,
-                    .inVisibleRect], owner: self))
+        trackMouseMoves()
     }
 
     /// The area the bars are drawn in, above the axis labels.
     private var plot: NSRect {
-        NSRect(x: 0, y: 12, width: bounds.width, height: max(0, bounds.height - 12 - Self.axisPoints))
+        NSRect(
+            x: 0, y: 12, width: bounds.width, height: max(0, bounds.height - 12 - Self.axisPoints))
     }
 
     /// The bar whose column holds `point`, in the view's coordinates.
@@ -98,14 +95,17 @@ final class StatsBarChart: NSView {
             let solid = place == hovered || place == marked
             if place == hovered {
                 NSColor.selectedContentBackgroundColor.withAlphaComponent(0.12).setFill()
-                NSRect(x: CGFloat(place) * step, y: plot.minY, width: step, height: plot.height).fill()
+                NSRect(x: CGFloat(place) * step, y: plot.minY, width: step, height: plot.height)
+                    .fill()
             }
             guard bar.plays > 0 else { continue }
             accent.withAlphaComponent(solid ? 1 : 0.6).setFill()
             let radius = min(2, frame.width / 2)
             NSBezierPath(roundedRect: frame, xRadius: radius, yRadius: radius).fill()
         }
-        let attributes: [NSAttributedString.Key: Any] = [.font: small, .foregroundColor: labelColor]
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: small, .foregroundColor: labelColor,
+        ]
         let first = NSAttributedString(
             string: barTitle(bars[0], unit: unit, calendar: calendar), attributes: attributes)
         first.draw(at: NSPoint(x: 0, y: plot.maxY + 3))
@@ -123,7 +123,7 @@ final class StatsBarChart: NSView {
     override func accessibilityLabel() -> String? {
         let busiest = bars.max { $0.plays < $1.plays }
         return busiest.map {
-            "\(barsTitle(unit)): most in \(barTitle($0, unit: unit, calendar: calendar)), \(count($0.plays, "play"))"
+            "\(barsTitle(unit)): most in \(barTitle($0, unit: unit, calendar: calendar)), \(plays($0.plays))"
         }
     }
 }

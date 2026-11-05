@@ -160,7 +160,7 @@ public enum AppCommands {
     /// How far Seek Forward and Back 5% move, as a percentage of the track's duration.
     public static let seekStepPercent = 5
     /// Show Listening Stats' argument, as `StatsPeriod(text:)` reads it.
-    public static let statsPeriodArgument = StatsPeriod.textHelp
+    private static let statsPeriodArgument = StatsPeriod.textHelp
 
     /// The commands written here, without the ones generated from settings.
     static let fixedSet: [Command] =

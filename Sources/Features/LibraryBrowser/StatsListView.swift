@@ -30,7 +30,7 @@ final class StatsListView: NSView {
     var barColor = NSColor.controlAccentColor
     var clicked: (Int) -> Void = { _ in }
     /// The text shown when there are no rows.
-    var emptyText = "No plays"
+    var emptyText = noPlaysText
     private(set) var hovered: Int? {
         didSet { if hovered != oldValue { needsDisplay = true } }
     }
@@ -54,11 +54,7 @@ final class StatsListView: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        for area in trackingAreas { removeTrackingArea(area) }
-        addTrackingArea(
-            NSTrackingArea(
-                rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow,
-                    .inVisibleRect], owner: self))
+        trackMouseMoves()
     }
 
     /// The row at `point`, in the view's coordinates; nil between rows' ends.
@@ -94,12 +90,14 @@ final class StatsListView: NSView {
         let height = Self.rowHeightPoints
         let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize + 1)
         let small = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-        let digits = NSFont.monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        let digits = NSFont.monospacedDigitSystemFont(
+            ofSize: NSFont.smallSystemFontSize, weight: .regular)
         let rankWidth: CGFloat = rows.count >= 10 ? 22 : 16
         let truncating = NSMutableParagraphStyle()
         truncating.lineBreakMode = .byTruncatingTail
         for (place, row) in rows.enumerated() {
-            let frame = NSRect(x: 0, y: CGFloat(place) * height, width: bounds.width, height: height)
+            let frame = NSRect(
+                x: 0, y: CGFloat(place) * height, width: bounds.width, height: height)
             guard frame.intersects(dirtyRect) else { continue }
             if place == hovered {
                 NSColor.selectedContentBackgroundColor.withAlphaComponent(0.18).setFill()
@@ -151,7 +149,8 @@ final class StatsListView: NSView {
         element.setAccessibilityLabel(row.fullText)
         element.setAccessibilityParent(self)
         element.setAccessibilityFrameInParentSpace(
-            NSRect(x: 0, y: bounds.height - CGFloat(place + 1) * Self.rowHeightPoints,
+            NSRect(
+                x: 0, y: bounds.height - CGFloat(place + 1) * Self.rowHeightPoints,
                 width: bounds.width, height: Self.rowHeightPoints))
         return element
     }
@@ -164,3 +163,6 @@ extension StatsListView.Row {
             .joined(separator: " ")
     }
 }
+
+/// What a list or the clock says when the period has no plays.
+let noPlaysText = "No plays"

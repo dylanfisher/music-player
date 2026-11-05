@@ -12,3 +12,24 @@ protocol SourcePanel: NSViewController {
     /// shown, which is one `panel(for:)` gave this panel for.
     func sourceShown(_ source: BrowserSource)
 }
+
+/// `document` in a scroll view that scrolls it up and down, as wide as the view and as tall as
+/// `height` makes it or its own size does, drawing no background: the panels' content and the
+/// Listening Stats lists.
+@MainActor
+func verticalScroll(_ document: NSView, height: NSLayoutConstraint? = nil) -> NSScrollView {
+    let scroll = NSScrollView()
+    scroll.documentView = document
+    scroll.hasVerticalScroller = true
+    scroll.autohidesScrollers = true
+    scroll.drawsBackground = false
+    document.translatesAutoresizingMaskIntoConstraints = false
+    let clip = scroll.contentView
+    NSLayoutConstraint.activate(
+        [
+            document.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
+            document.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
+            document.topAnchor.constraint(equalTo: clip.topAnchor),
+        ] + (height.map { [$0] } ?? []))
+    return scroll
+}

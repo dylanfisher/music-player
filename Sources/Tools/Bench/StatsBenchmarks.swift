@@ -35,7 +35,11 @@ let statsBenchmarks = [
         for _ in 0..<4 {
             for period in periods {
                 times[period, default: []] += try millisecondSamples([
-                    { _ = try blocking { try await reader.report(period, groupByAlbumArtist: false) } }
+                    {
+                        _ = try blocking {
+                            try await reader.report(period, groupByAlbumArtist: false)
+                        }
+                    }
                 ])
             }
         }

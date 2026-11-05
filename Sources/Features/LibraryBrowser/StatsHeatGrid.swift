@@ -61,11 +61,7 @@ final class StatsHeatGrid: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        for area in trackingAreas { removeTrackingArea(area) }
-        addTrackingArea(
-            NSTrackingArea(
-                rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow,
-                    .inVisibleRect], owner: self))
+        trackMouseMoves()
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -118,8 +114,9 @@ final class StatsHeatGrid: NSView {
                 best = (weekday, hour, weekdayHours[weekday - 1][hour])
             }
         }
-        guard best.plays > 0 else { return "No plays" }
-        return "Most plays on \(calendar.weekdaySymbols[best.weekday - 1]) at \(hourName(best.hour))"
+        guard best.plays > 0 else { return noPlaysText }
+        return
+            "Most plays on \(calendar.weekdaySymbols[best.weekday - 1]) at \(hourName(best.hour))"
     }
 
     /// "18:00" or "6 PM", as the locale writes an hour.

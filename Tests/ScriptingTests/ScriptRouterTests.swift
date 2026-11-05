@@ -178,5 +178,7 @@ private final class Recorder {
     let data = try JSONEncoder().encode(request)
     #expect(try JSONDecoder().decode(ScriptRequest.self, from: data) == request)
     let plain = ScriptRequest.report(.showStats, argument: nil, json: false)
-    #expect(try JSONDecoder().decode(ScriptRequest.self, from: try JSONEncoder().encode(plain)) == plain)
+    #expect(
+        try JSONDecoder().decode(ScriptRequest.self, from: try JSONEncoder().encode(plain)) == plain
+    )
 }

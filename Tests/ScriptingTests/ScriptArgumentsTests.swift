@@ -105,10 +105,14 @@ private func problem(_ arguments: String...) -> String? {
     #expect(
         try parse("stats", "--period", "2024", "--json").action
             == .request(.report(.showStats, argument: "2024", json: true)))
-    #expect(try parse("stats", "week").action == .request(.report(.showStats, argument: "week", json: false)))
+    #expect(
+        try parse("stats", "week").action
+            == .request(.report(.showStats, argument: "week", json: false)))
     #expect(try parse("stats", "--json").json)
     #expect(problem("stats", "--period") == "--period needs a period: \(StatsPeriod.textHelp)")
-    #expect(problem("stats", "--period", "decade") == "--period takes \(StatsPeriod.textHelp), not decade")
+    #expect(
+        problem("stats", "--period", "decade")
+            == "--period takes \(StatsPeriod.textHelp), not decade")
     #expect(problem("stats", "--period", "week", "--period", "all") == "--period is given twice")
     #expect(problem("stats", "week", "--period", "all") == "stats takes a period once")
     #expect(problem("next", "--period", "week") == "--period only goes with stats")

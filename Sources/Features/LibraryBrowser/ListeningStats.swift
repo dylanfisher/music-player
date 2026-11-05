@@ -74,7 +74,8 @@ extension LibraryBrowser {
     /// Opens Year in Review for `year`, or the year Stats shows, else this one.
     public func showYearInReview(_ year: Int? = nil) {
         let year =
-            year ?? statsModel.period.reviewYear() ?? Calendar.current.component(.year, from: Date())
+            year ?? statsModel.period.reviewYear()
+            ?? Calendar.current.component(.year, from: Date())
         Task {
             do {
                 let report = try await readStats(.chosenYear(year))
@@ -114,14 +115,15 @@ extension LibraryBrowser {
     /// named for the list and the period, and shows it.
     private func saveStatsList(_ list: StatsReport.List) {
         guard let report = statsModel.report else { return }
-        let entries = Array(report.list(list, by: statsModel.ranking).prefix(StatsReport.listLength))
+        let entries = Array(
+            report.list(list, by: statsModel.ranking).prefix(StatsReport.listLength))
         let ids = report.trackIDs(of: entries, in: list)
         guard !ids.isEmpty else {
             NSSound.beep()
             return
         }
         let name = list.title + ", " + statsPlaylistPeriod(statsModel.period, report.span)
-        edit("couldn't make the playlist \"\(name)\"", entriesChange: true) {
+        edit(playlistFailure(name), entriesChange: true) {
             try await self.model.createPlaylist(named: name, rules: nil, trackIDs: ids)
         }
     }
@@ -135,7 +137,12 @@ extension LibraryBrowser {
 func statsPlaylistPeriod(_ period: StatsPeriod, _ span: PlaySpan?) -> String {
     switch period {
     case .week, .month: span?.title() ?? period.title
-    case .year, .chosenYear: span.map { String(Calendar.current.component(.year, from: Date(timeIntervalSince1970: TimeInterval($0.start)))) } ?? period.title
+    case .year, .chosenYear:
+        span.map {
+            String(
+                Calendar.current.component(
+                    .year, from: Date(timeIntervalSince1970: TimeInterval($0.start))))
+        } ?? period.title
     case .all: period.title
     }
 }

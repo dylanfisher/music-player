@@ -7,11 +7,11 @@ import Settings
 /// one scan of the whole history, until another connection commits a change.
 public actor StatsReader {
     private let index: LibraryIndex
-    private var firstPlays: (version: Int, groupByAlbumArtist: Bool, plays: FirstPlays)?
+    private var firstPlays: (version: [Int], groupByAlbumArtist: Bool, plays: FirstPlays)?
 
     public init(databaseURL: URL) throws {
         index = try LibraryIndex(at: databaseURL)
-        try index.database.execute("PRAGMA query_only = ON")
+        try index.database.execute(queryOnlySQL)
     }
 
     /// The report of `period` at `now` in `calendar`, its artists grouped as the Artists
@@ -36,7 +36,7 @@ public actor StatsReader {
     /// The first plays, read again when the library changed since they were or the artists
     /// are grouped another way.
     private func firstPlays(groupByAlbumArtist: Bool) throws -> FirstPlays {
-        let version = try index.dataVersion()
+        let version = try index.changeStamp()
         if let firstPlays, firstPlays.version == version,
             firstPlays.groupByAlbumArtist == groupByAlbumArtist
         {

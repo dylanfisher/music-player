@@ -23,6 +23,13 @@ public struct StatsReport: Equatable, Sendable {
     /// What the top lists are ordered by.
     public enum Ranking: String, CaseIterable, Sendable, Codable {
         case plays, hours
+
+        public var title: String {
+            switch self {
+            case .plays: TrackColumn.playCount.title
+            case .hours: "Hours"
+            }
+        }
     }
 
     /// A row of a top list or of what was first played. `id` is the artist's, album's, genre's
@@ -73,7 +80,7 @@ public struct StatsReport: Equatable, Sendable {
     }
 
     /// The formats plays are grouped in by sample rate.
-    public enum RateGroup: String, CaseIterable, Sendable, Codable {
+    enum RateGroup: String, CaseIterable, Sendable, Codable {
         /// Lossless PCM at 48 kHz or less.
         case cdQuality
         /// Lossless PCM above 48 kHz.
@@ -82,7 +89,7 @@ public struct StatsReport: Equatable, Sendable {
         /// AAC and MP3, at any rate.
         case lossy
 
-        public var title: String {
+        var title: String {
             switch self {
             case .cdQuality: "CD quality"
             case .hiRes: "Hi-res PCM"
@@ -295,7 +302,9 @@ public struct StatsReport: Equatable, Sendable {
         }
         barUnit = .fitting(days: (range.end - range.start) / 86_400)
         bars = Self.bars(barUnit, over: range, calendar: calendar, scan.buckets)
-        months = barUnit == .month ? bars : Self.bars(.month, over: range, calendar: calendar, scan.buckets)
+        months =
+            barUnit == .month
+            ? bars : Self.bars(.month, over: range, calendar: calendar, scan.buckets)
         busiestMonth = Self.busiest(months)
         var clock = LocalClock(zone: calendar.timeZone)
         var days: [Int64: Int] = [:]
@@ -326,7 +335,8 @@ public struct StatsReport: Equatable, Sendable {
             let span = PlaySpan(interval)
             bars.append(
                 Bar(
-                    span: PlaySpan(start: max(span.start, range.start), end: min(span.end, range.end)),
+                    span: PlaySpan(
+                        start: max(span.start, range.start), end: min(span.end, range.end)),
                     plays: 0))
             date = interval.end
         }
@@ -353,7 +363,9 @@ public struct StatsReport: Equatable, Sendable {
     var namedIDs: [List: Set<Int64>] {
         var ids: [List: Set<Int64>] = [:]
         for lists in top.values {
-            for (list, entries) in lists { ids[list, default: []].formUnion(entries.compactMap(\.id)) }
+            for (list, entries) in lists {
+                ids[list, default: []].formUnion(entries.compactMap(\.id))
+            }
         }
         ids[.albums, default: []].formUnion(firstAlbums.compactMap(\.id))
         ids[.artists, default: []].formUnion(firstArtists.compactMap(\.id))
@@ -440,7 +452,8 @@ struct LocalClock {
     func noon(ofDay day: Int64) -> Date {
         let local = day * 86_400 + 43_200
         let guess = Date(timeIntervalSince1970: TimeInterval(local))
-        return Date(timeIntervalSince1970: TimeInterval(local - Int64(zone.secondsFromGMT(for: guess))))
+        return Date(
+            timeIntervalSince1970: TimeInterval(local - Int64(zone.secondsFromGMT(for: guess))))
     }
 }
 

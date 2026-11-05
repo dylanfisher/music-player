@@ -18,7 +18,7 @@ extension LibraryIndex {
             ? "SELECT path_id, count(*) AS n FROM history GROUP BY path_id"
             : "SELECT path_id, count(*) AS n FROM history NOT INDEXED"
                 + " WHERE played_at >= ?1 AND played_at < ?2 GROUP BY path_id"
-        let artist = groupByAlbumArtist ? "group_artist_id" : "artist_id"
+        let artist = artistColumn(TrackFilter(groupByAlbumArtist: groupByAlbumArtist))
         let bounds: [(any SQLiteValue)?] = span.map { [$0.start, $0.end] } ?? []
         let paths = try statement(
             """
@@ -49,7 +49,7 @@ extension LibraryIndex {
         ).map(binding: bucketValues) {
             PeriodScan.Bucket(start: try $0.int64(0), plays: try $0.int(1))
         }
-        let libraryTracks = try statement("SELECT count(*) FROM tracks").map { try $0.int(0) }[0]
+        let libraryTracks = try trackCount()
         var undated = 0
         if span == nil {
             let counted = try statement("SELECT ifnull(sum(play_count), 0) FROM plays").map {
@@ -65,7 +65,7 @@ extension LibraryIndex {
     /// When each album and artist still in the library was first played, and the first play of
     /// all, from every history row: one scan of the whole table.
     func firstPlays(groupByAlbumArtist: Bool) throws -> FirstPlays {
-        let artist = groupByAlbumArtist ? "group_artist_id" : "artist_id"
+        let artist = artistColumn(TrackFilter(groupByAlbumArtist: groupByAlbumArtist))
         var first = FirstPlays()
         try statement(
             """
@@ -98,19 +98,21 @@ extension LibraryIndex {
                 switch list {
                 case .artists: { "SELECT id, name, NULL, NULL FROM artists WHERE id IN (\($0))" }
                 case .genres: { "SELECT id, name, NULL, NULL FROM genres WHERE id IN (\($0))" }
-                case .albums: {
-                    """
-                    SELECT al.id, al.title, ar.name, NULL FROM albums al
-                    LEFT JOIN artists ar ON ar.id = al.artist_id WHERE al.id IN (\($0))
-                    """
-                }
-                case .tracks: {
-                    """
-                    SELECT p.id, t.title, ar.name, p.path FROM paths p
-                    LEFT JOIN tracks t ON t.file_id = p.id
-                    LEFT JOIN artists ar ON ar.id = t.artist_id WHERE p.id IN (\($0))
-                    """
-                }
+                case .albums:
+                    {
+                        """
+                        SELECT al.id, al.title, ar.name, NULL FROM albums al
+                        LEFT JOIN artists ar ON ar.id = al.artist_id WHERE al.id IN (\($0))
+                        """
+                    }
+                case .tracks:
+                    {
+                        """
+                        SELECT p.id, t.title, ar.name, p.path FROM paths p
+                        LEFT JOIN tracks t ON t.file_id = p.id
+                        LEFT JOIN artists ar ON ar.id = t.artist_id WHERE p.id IN (\($0))
+                        """
+                    }
                 }
             let rows = try inChunks(Array(ids).sorted(), sql) { row in
                 (
@@ -125,11 +127,6 @@ extension LibraryIndex {
         return names
     }
 
-    /// SQLite's count of changes other connections committed, which tells a cached read it's
-    /// out of date.
-    func dataVersion() throws -> Int {
-        try statement("PRAGMA data_version").map { try $0.int(0) }[0]
-    }
 }
 
 /// How long a bucket of plays is in `zone` around `span`: an hour, unless one of the zone's

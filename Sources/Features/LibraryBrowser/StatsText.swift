@@ -5,13 +5,20 @@ import Settings
 // How Listening Stats writes its numbers and spans, in the panel, Year in Review and the
 // command line alike.
 
-/// "about 82 hours", "about 40 minutes": a total of track lengths, which is approximate since a
-/// play counts once most of a track was heard.
+/// "about 3 days 10 hours", "about 40 minutes": a total of track lengths to the hour, or to the
+/// minute under an hour, which is approximate since a play counts once most of a track was
+/// heard.
 func approximateDuration(_ seconds: Double) -> String {
-    seconds >= 3600
-        ? "about " + count(Int((seconds / 3600).rounded()), "hour")
-        : "about " + count(Int((seconds / 60).rounded()), "minute")
+    let unit = seconds >= 3600 ? 3600.0 : 60
+    return "about " + spokenDuration((seconds / unit).rounded() * unit)
 }
+
+/// "+12 imported plays without dates", which no period ranks.
+func undatedText(_ plays: Int) -> String { "+" + count(plays, "imported play") + " without dates" }
+
+func albums(_ value: Int) -> String { count(value, "album") }
+
+func artists(_ value: Int) -> String { count(value, "artist") }
 
 /// A list row's hours: "12.5 h", or minutes under an hour.
 func hoursValue(_ seconds: Double) -> String {
@@ -92,17 +99,17 @@ func statsSummary(_ report: StatsReport, period: StatsPeriod, ranking: StatsRepo
 {
     var lines = [
         period.title + (report.span.map { " (\($0.title()))" } ?? ""),
-        count(report.plays, "play") + ", " + approximateDuration(report.seconds),
+        plays(report.plays) + ", " + approximateDuration(report.seconds),
         [
-            tracks(report.tracks), count(report.artists, "artist"), count(report.albums, "album"),
+            tracks(report.tracks), artists(report.artists), albums(report.albums),
             percentText(report.libraryShare) + " of the library",
         ].joined(separator: ", "),
     ]
     if report.missingPlays > 0 {
-        lines.append(count(report.missingPlays, "play") + " " + missingText.lowercased())
+        lines.append(plays(report.missingPlays) + " " + missingText.lowercased())
     }
     if report.undatedPlays > 0 {
-        lines.append("+" + count(report.undatedPlays, "imported play") + " without dates")
+        lines.append(undatedText(report.undatedPlays))
     }
     for list in StatsReport.List.allCases {
         let entries = report.list(list, by: ranking).prefix(10)
@@ -110,7 +117,7 @@ func statsSummary(_ report: StatsReport, period: StatsPeriod, ranking: StatsRepo
         lines.append("")
         lines.append(list.title + (ranking == .hours ? " by Hours" : ""))
         for (place, entry) in entries.enumerated() {
-            let value = ranking == .plays ? count(entry.plays, "play") : hoursValue(entry.seconds)
+            let value = ranking == .plays ? plays(entry.plays) : hoursValue(entry.seconds)
             let detail = entry.detail.map { " – " + $0 } ?? ""
             lines.append("  \(place + 1). \(entry.name)\(detail) (\(value))")
         }

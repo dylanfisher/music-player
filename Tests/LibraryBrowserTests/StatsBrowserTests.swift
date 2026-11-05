@@ -46,7 +46,9 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     let now = Date().timeIntervalSince1970
     let album = rows.filter { $0.albumID == rows[0].albumID }
     for (place, row) in album.enumerated() {
-        for play in 0..<3 { try index.recordPlay(row.path, at: now - Double(600 * (place * 3 + play) + 60)) }
+        for play in 0..<3 {
+            try index.recordPlay(row.path, at: now - Double(600 * (place * 3 + play) + 60))
+        }
     }
     try index.recordPlay(rows[rows.count - 1].path, at: now - 86_400 * 400)
     try index.recordPlay("/elsewhere/gone.flac", at: now - 30)
@@ -72,7 +74,9 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     let slot = split.arrangedSubviews[0]
     browser.statsHeight = 320
     browser.showStats(.all)
-    try await waitFor("the report") { browser.statsModel.report != nil && !browser.statsModel.isLoading }
+    try await waitFor("the report") {
+        browser.statsModel.report != nil && !browser.statsModel.isLoading
+    }
     window.layoutIfNeeded()
     #expect(browser.shownPanel === browser.statsPanel)
     #expect(browser.statsPanel.view.isDescendant(of: slot))
@@ -86,7 +90,9 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     #expect(cards.totalsCard.detailLabel.stringValue.contains("1 play not in the library"))
     #expect(cards.lists[.albums]?.rows.first?.name == album[0].album)
     #expect(cards.lists[.tracks]?.rows.contains { $0.dimmed && $0.name == "gone" } == true)
-    #expect(browser.statsPanel.periods.selectedSegment == StatsPanel.segmentPeriods.firstIndex(of: .all))
+    #expect(
+        browser.statsPanel.periods.selectedSegment == StatsPanel.segmentPeriods.firstIndex(of: .all)
+    )
     // The table lists the tracks played in the period.
     let played = Set(report.paths.filter(\.inLibrary).map(\.id))
     #expect(played.count == album.count + 1)
@@ -94,7 +100,9 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
 
     // This Week leaves out last year's play; the sidebar's row keeps the period.
     browser.statsPanel.choosePeriod(.week)
-    try await waitFor("the week") { browser.statsModel.report?.span != nil && !browser.statsModel.isLoading }
+    try await waitFor("the week") {
+        browser.statsModel.report?.span != nil && !browser.statsModel.isLoading
+    }
     #expect(browser.statsModel.report?.plays == album.count * 3 + 1)
     #expect(sidebar.selectedSource == .stats(.week))
     try await waitFor("the week's tracks") { Set(browser.model.trackIDs) == Set(album.map(\.id)) }
@@ -113,7 +121,9 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
 @MainActor @Test func aBarShowsItsSpansPlaysAndARowGoesToItsAlbum() async throws {
     let (browser, _, _, album) = try await playedBrowser()
     browser.showStats(.month)
-    try await waitFor("the report") { browser.statsModel.report != nil && !browser.statsModel.isLoading }
+    try await waitFor("the report") {
+        browser.statsModel.report != nil && !browser.statsModel.isLoading
+    }
     let cards = browser.statsPanel.cards
     let bars = try #require(browser.statsModel.report?.bars)
     let today = try #require(bars.lastIndex { $0.plays > 0 })
@@ -140,9 +150,13 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
 @MainActor @Test func aTopListIsSavedAsAPlaylistOfItsPlayedTracks() async throws {
     let (browser, _, _, album) = try await playedBrowser()
     browser.showStats(.week)
-    try await waitFor("the report") { browser.statsModel.report != nil && !browser.statsModel.isLoading }
+    try await waitFor("the report") {
+        browser.statsModel.report != nil && !browser.statsModel.isLoading
+    }
     browser.statsPanel.cards.actions.savePlaylist(.artists)
-    try await waitFor("the playlist") { browser.playlists.contains { $0.name.hasPrefix("Top Artists, ") } }
+    try await waitFor("the playlist") {
+        browser.playlists.contains { $0.name.hasPrefix("Top Artists, ") }
+    }
     let playlist = try #require(browser.playlists.first { $0.name.hasPrefix("Top Artists, ") })
     try await waitFor("its tracks") { browser.model.filter.source == .playlist(playlist.id) }
     try await waitFor("its rows") { Set(browser.model.trackIDs) == Set(album.map(\.id)) }

@@ -318,8 +318,10 @@ extension LibraryIndex {
     public func timeline(before id: Int64?, limit: Int, in span: PlaySpan? = nil) throws
         -> [PlayEntry]
     {
-        try statement(timelineSelect + " WHERE id < ?\(spanCondition(span)) ORDER BY id DESC LIMIT ?")
-            .map(binding: [id ?? Int64.max] + spanValues(span) + [limit], row: playEntry)
+        try statement(
+            timelineSelect + " WHERE id < ?\(spanCondition(span)) ORDER BY id DESC LIMIT ?"
+        )
+        .map(binding: [id ?? Int64.max] + spanValues(span) + [limit], row: playEntry)
     }
 
     /// Up to `limit` of the plays logged after the play `id`, the newest first, only those in
@@ -327,14 +329,18 @@ extension LibraryIndex {
     public func timeline(after id: Int64, limit: Int, in span: PlaySpan? = nil) throws
         -> [PlayEntry]
     {
-        try statement(timelineSelect + " WHERE id > ?\(spanCondition(span)) ORDER BY id DESC LIMIT ?")
-            .map(binding: [id] + spanValues(span) + [limit], row: playEntry)
+        try statement(
+            timelineSelect + " WHERE id > ?\(spanCondition(span)) ORDER BY id DESC LIMIT ?"
+        )
+        .map(binding: [id] + spanValues(span) + [limit], row: playEntry)
     }
 
     /// How many plays `span` holds: a scan of the history.
     public func playCount(in span: PlaySpan) throws -> Int {
-        try statement("SELECT count(*) FROM history NOT INDEXED WHERE played_at >= ? AND played_at < ?")
-            .map(span.start, span.end) { try $0.int(0) }[0]
+        try statement(
+            "SELECT count(*) FROM history NOT INDEXED WHERE played_at >= ? AND played_at < ?"
+        )
+        .map(span.start, span.end) { try $0.int(0) }[0]
     }
 
     /// The file and, where the index still has it, the track of each of the paths `ids`.

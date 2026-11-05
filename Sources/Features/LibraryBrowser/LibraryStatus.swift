@@ -60,7 +60,7 @@ struct LibraryStatus: Equatable, Sendable {
         playCount: Int? = nil, playSpan: PlaySpan? = nil
     ) -> String {
         var parts = [
-            playCount.map { count($0, "play") + (playSpan.map { ", " + $0.title() } ?? "") }
+            playCount.map { plays($0) + (playSpan.map { ", " + $0.title() } ?? "") }
                 ?? totals(list, selection, shown)
         ]
         if !notices.isEmpty { parts.append("earlier play counts and playlists discarded") }
@@ -149,6 +149,9 @@ func number(_ value: Int) -> String {
 
 /// "1 track", "1,204 tracks": the one spelling of the noun every count of tracks uses.
 func tracks(_ value: Int) -> String { count(value, "track") }
+
+/// "1 play", "1,204 plays", as the timeline and Listening Stats count them.
+func plays(_ value: Int) -> String { count(value, "play") }
 
 func count(_ value: Int, _ noun: String) -> String {
     "\(number(value)) \(noun)\(value == 1 ? "" : "s")"

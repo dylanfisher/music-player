@@ -25,7 +25,10 @@ extension StatsReport: Encodable {
         // Keyed by the enums' names: a dictionary with enum keys would encode as an array.
         let lists = Dictionary(
             uniqueKeysWithValues: top.map { ranking, lists in
-                (ranking.rawValue, Dictionary(uniqueKeysWithValues: lists.map { ($0.key.rawValue, $0.value) }))
+                (
+                    ranking.rawValue,
+                    Dictionary(uniqueKeysWithValues: lists.map { ($0.key.rawValue, $0.value) })
+                )
             })
         try container.encode(lists, forKey: .top)
         try container.encode(barUnit, forKey: .barUnit)

@@ -22,8 +22,9 @@ final class StatsPanel: NSViewController, SourcePanel {
         action: nil)
     let years = NSPopUpButton(frame: .zero, pullsDown: false)
     let rankings = NSSegmentedControl(
-        labels: ["Plays", "Hours"], trackingMode: .selectOne, target: nil, action: nil)
-    let reviewButton = NSButton(title: "Year in Review", target: nil, action: nil)
+        labels: StatsReport.Ranking.allCases.map(\.title), trackingMode: .selectOne, target: nil,
+        action: nil)
+    let reviewButton = NSButton(title: YearReviewWindow.title, target: nil, action: nil)
     let statusLabel = NSTextField(labelWithString: "")
     private let flow = StatsFlowView()
     private(set) var period = StatsPeriod.month
@@ -74,19 +75,7 @@ final class StatsPanel: NSViewController, SourcePanel {
         header.setHuggingPriority(.defaultLow, for: .horizontal)
 
         flow.cards = cards.all
-        let scroll = NSScrollView()
-        scroll.documentView = flow
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        scroll.drawsBackground = false
-        flow.translatesAutoresizingMaskIntoConstraints = false
-        let clip = scroll.contentView
-        NSLayoutConstraint.activate([
-            flow.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
-            flow.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
-            flow.topAnchor.constraint(equalTo: clip.topAnchor),
-            flow.height,
-        ])
+        let scroll = verticalScroll(flow, height: flow.height)
         // No background of its own, as the health panel: the window's shows around the cards.
         let panel = NSView()
         for view in [header, scroll] {

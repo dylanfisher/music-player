@@ -49,7 +49,7 @@ extension LibraryIndex {
 
     /// Changes whenever a connection commits a change to the index: another connection through
     /// `data_version`, this one through `total_changes()`.
-    private func changeStamp() throws -> [Int] {
+    func changeStamp() throws -> [Int] {
         [try statement("PRAGMA data_version").map { try $0.int(0) }[0], try totalChanges()]
     }
 

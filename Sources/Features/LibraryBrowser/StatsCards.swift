@@ -60,7 +60,7 @@ final class StatsCards {
         firstKind.controlSize = .small
         firstKind.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         firstCard = StatsCard(
-            title: "First Played", body: Self.scrolling(firstList), accessory: firstKind,
+            title: "First Played", body: verticalScroll(firstList), accessory: firstKind,
             heightPoints: listHeightPoints)
         let formats = NSView()
         for view in [shares, codecList] {
@@ -82,7 +82,8 @@ final class StatsCards {
             lists[list] = view
             let save = NSButton(
                 image: NSImage(
-                    systemSymbolName: "text.badge.plus", accessibilityDescription: "Save as Playlist")
+                    systemSymbolName: "text.badge.plus",
+                    accessibilityDescription: "Save as Playlist")
                     ?? NSImage(),
                 target: target, action: #selector(ControlTarget.act(_:)))
             save.bezelStyle = .inline
@@ -91,7 +92,7 @@ final class StatsCards {
             save.toolTip = "Save as a playlist of the tracks played"
             saveButtons[list] = save
             listCards[list] = StatsCard(
-                title: list.title, body: Self.scrolling(view), accessory: save,
+                title: list.title, body: verticalScroll(view), accessory: save,
                 heightPoints: listHeightPoints)
         }
         wire()
@@ -118,7 +119,8 @@ final class StatsCards {
         }
         firstList.clicked = { [weak self] row in
             guard let self, firstEntries.indices.contains(row) else { return }
-            actions.showEntry(firstKind.selectedSegment == 0 ? .albums : .artists, firstEntries[row])
+            actions.showEntry(
+                firstKind.selectedSegment == 0 ? .albums : .artists, firstEntries[row])
         }
         target.handlers[ObjectIdentifier(firstKind)] = { [weak self] in self?.showFirstPlayed() }
         firstKind.target = target
@@ -128,23 +130,6 @@ final class StatsCards {
                 self?.actions.savePlaylist(list)
             }
         }
-    }
-
-    /// A list in a scroll view of its own, as wide as the card.
-    private static func scrolling(_ list: StatsListView) -> NSScrollView {
-        let scroll = NSScrollView()
-        scroll.drawsBackground = false
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        scroll.documentView = list
-        list.translatesAutoresizingMaskIntoConstraints = false
-        let clip = scroll.contentView
-        NSLayoutConstraint.activate([
-            list.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
-            list.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
-            list.topAnchor.constraint(equalTo: clip.topAnchor),
-        ])
-        return scroll
     }
 
     /// Fills every card from `report`, the top lists ranked by `ranking`.
@@ -170,7 +155,8 @@ final class StatsCards {
         let mostCodec = Double(report.codecs.first?.plays ?? 1)
         codecList.rows = report.codecs.map {
             StatsListView.Row(
-                name: $0.name, value: number($0.plays) + " · "
+                name: $0.name,
+                value: number($0.plays) + " · "
                     + percentText(Double($0.plays) / Double(max(1, report.plays))),
                 fraction: Double($0.plays) / mostCodec)
         }
@@ -179,10 +165,11 @@ final class StatsCards {
 
     private func showFirstPlayed() {
         guard let report else { return }
-        let albums = firstKind.selectedSegment == 0
-        firstEntries = Array((albums ? report.firstAlbums : report.firstArtists).prefix(listLength))
+        let showsAlbums = firstKind.selectedSegment == 0
+        firstEntries = Array(
+            (showsAlbums ? report.firstAlbums : report.firstArtists).prefix(listLength))
         firstCard.detailLabel.stringValue =
-            count(report.firstAlbumCount, "album") + ", " + count(report.firstArtistCount, "artist")
+            albums(report.firstAlbumCount) + ", " + artists(report.firstArtistCount)
         let most = Double(firstEntries.map(\.plays).max() ?? 1)
         firstList.rows = firstEntries.map { entry in
             StatsListView.Row(
@@ -190,7 +177,9 @@ final class StatsCards {
                 value: entry.firstPlayed.map { shortDate($0, calendar: calendar) } ?? "",
                 fraction: Double(entry.plays) / max(1, most))
         }
-        firstList.emptyText = albums ? "No album played for the first time" : "No artist played for the first time"
+        firstList.emptyText =
+            showsAlbums
+            ? "No album played for the first time" : "No artist played for the first time"
     }
 
     private func showChartDetail(_ place: Int?) {
@@ -199,12 +188,12 @@ final class StatsCards {
             let bar = report.bars[place]
             chartCard.detailLabel.stringValue =
                 barTitle(bar, unit: report.barUnit, calendar: calendar) + " · "
-                + count(bar.plays, "play")
+                + plays(bar.plays)
         } else {
             chartCard.detailLabel.stringValue =
                 report.busiestDay.map {
                     "Busiest day: " + shortDate($0.span.start, calendar: calendar) + " · "
-                        + count($0.plays, "play")
+                        + plays($0.plays)
                 } ?? ""
         }
     }
@@ -214,7 +203,7 @@ final class StatsCards {
         if let cell {
             clockCard.detailLabel.stringValue =
                 calendar.weekdaySymbols[cell.weekday - 1] + " " + grid.hourName(cell.hour)
-                + " · " + count(report.weekdayHours[cell.weekday - 1][cell.hour], "play")
+                + " · " + plays(report.weekdayHours[cell.weekday - 1][cell.hour])
         } else {
             clockCard.detailLabel.stringValue = ""
         }
@@ -223,7 +212,7 @@ final class StatsCards {
     /// The totals: plays, approximate hours, tracks, artists, albums and the library's share.
     static func figures(_ report: StatsReport) -> [StatsFigures.Figure] {
         [
-            .init(value: number(report.plays), name: "Plays"),
+            .init(value: number(report.plays), name: StatsReport.Ranking.plays.title),
             .init(
                 value: "≈ " + number(Int((report.seconds / 3600).rounded())),
                 name: "Hours, approx.",
@@ -244,10 +233,11 @@ final class StatsCards {
         var notes: [String] = []
         if let span = report.span { notes.append(span.title()) }
         if report.missingPlays > 0 {
-            notes.append(count(report.missingPlays, "play") + " " + missingText.lowercased())
+            notes.append(plays(report.missingPlays) + " " + missingText.lowercased())
         }
         if report.undatedPlays > 0 {
-            notes.append("+" + count(report.undatedPlays, "imported play") + " without dates, not ranked")
+            notes.append(
+                undatedText(report.undatedPlays) + ", not ranked")
         }
         if report.plays == 0 { notes.append("No plays in this period") }
         return notes.joined(separator: " · ")

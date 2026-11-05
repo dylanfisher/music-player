@@ -1372,9 +1372,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Makes a playlist, smart when `rules` are given, holding the selected tracks when
     /// `withSelection` is set, and shows it.
     public func createPlaylist(named name: String, rules: SmartRules?, withSelection: Bool) {
-        let failure = "couldn't make the playlist \"\(name)\""
+        let failure = playlistFailure(name)
         guard let ids = withSelection ? selectedTrackIDs(else: failure) : [] else { return }
-        edit("couldn't make the playlist \"\(name)\"", entriesChange: true) {
+        edit(failure, entriesChange: true) {
             try await self.model.createPlaylist(named: name, rules: rules, trackIDs: ids)
         }
     }
@@ -2053,6 +2053,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         panelSlot.isHidden
     }
 }
+
+/// What the bar says when the playlist `name` couldn't be made.
+func playlistFailure(_ name: String) -> String { "couldn't make the playlist \"\(name)\"" }
 
 private func problemsUnreadable(_ error: any Error) -> String {
     "couldn't read the library's problems: \(error)"

@@ -20,7 +20,7 @@ public actor LibraryReader {
     /// Read-only, so nothing written on it can race the edits on the first connection.
     private init(refreshing databaseURL: URL) throws {
         index = try LibraryIndex(at: databaseURL)
-        try index.database.execute("PRAGMA query_only = ON")
+        try index.database.execute(queryOnlySQL)
         self.databaseURL = databaseURL
         refreshConnection = nil
     }
@@ -230,3 +230,6 @@ public actor LibraryReader {
 
     public func forgetDiscards(_ ids: [Int64]) throws { try index.forgetDiscards(ids) }
 }
+
+/// Makes a connection read-only, so nothing written on it can race another's edits.
+let queryOnlySQL = "PRAGMA query_only = ON"

@@ -22,8 +22,9 @@ private func decode(_ json: String) throws -> BrowserSource {
     #expect(try decode(#""health:noArt""#) == .health(.noArt))
     #expect(try decode(#""stats:month""#) == .stats(.month))
     #expect(try decode(#""stats:2019""#) == .stats(.chosenYear(2019)))
-    #expect(try decode(#""plays:1700000000-1700086400""#)
-        == .plays(PlaySpan(start: 1_700_000_000, end: 1_700_086_400)))
+    #expect(
+        try decode(#""plays:1700000000-1700086400""#)
+            == .plays(PlaySpan(start: 1_700_000_000, end: 1_700_086_400)))
     #expect(BrowserSource.plays(PlaySpan(start: 1, end: 2)).listsPlays)
     #expect(BrowserSource.timeline.listsPlays)
     #expect(!BrowserSource.stats(.all).listsPlays)
