@@ -3,6 +3,8 @@
 - **Date:** 2026-11-01
 - **Status:** accepted
 - **Amends:** [0025](0025-threat-model.md) (rows 28 and 29), [0039](0039-network-control.md)
+- **Amended by:** [0091](0091-signal-path-stages-sonos-groups-receiver-keys.md): Sonos players
+  named by room and group, and `receiver.volumeKeys` folded into `receiver.enabled`.
 
 ## Context
 

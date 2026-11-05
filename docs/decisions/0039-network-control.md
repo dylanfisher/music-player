@@ -3,6 +3,8 @@
 - **Date:** 2026-11-01
 - **Status:** accepted
 - **Amends:** [0025](0025-threat-model.md) (rows 28 to 30)
+- **Amended by:** [0091](0091-signal-path-stages-sonos-groups-receiver-keys.md):
+  `receiver.enabled` also takes the volume keys, and the address sits under a disclosure.
 
 ## Context
 

@@ -4693,18 +4693,18 @@ which fail the same on `main` in this environment.
 
 #### 41d. Signal path, outputs and receiver
 
-- [ ] **41d.1 Wording.** Where the signal path says "not bit perfect" while streaming to a DAC,
+- [x] **41d.1 Wording.** Where the signal path says "not bit perfect" while streaming to a DAC,
       it says "not guaranteed bit perfect": usually only this app plays, and then it is.
-- [ ] **41d.2 A plainer signal path.** The signal path is still hard to read. No device IDs,
+- [x] **41d.2 A plainer signal path.** The signal path is still hard to read. No device IDs,
       four-character codes or sample formats in raw form (it showed `44.1 kHz 16-bit PCM →
       ADI-2 DAC (57850288): 'lpcm' 2 ch 32-bit int @ 44.1 kHz`). Friendly names, and a more
       graphical layout of the stages.
-- [ ] **41d.3 Sonos names.** The output menu names Sonos players and groups as the Sonos app
+- [x] **41d.3 Sonos names.** The output menu names Sonos players and groups as the Sonos app
       does: a group that plays on two players shows as one entry with its group name (the
       owner's phone and Spotify show "Top Floor").
-- [ ] **41d.4 Receiver volume.** In signal mode, with a receiver connected, a volume slider
+- [x] **41d.4 Receiver volume.** In signal mode, with a receiver connected, a volume slider
       sets the receiver's volume.
-- [ ] **41d.5 Receiver settings.** The address is a fallback for when the search can't find the
+- [x] **41d.5 Receiver settings.** The address is a fallback for when the search can't find the
       receiver, and the settings say so instead of looking required. The section reads as one
       choice: media keys control the receiver's volume while it's connected.
 
@@ -4758,6 +4758,32 @@ Plan, part 41d (ADR 0091, amending 0035, 0039 and 0041):
   `receiver.volumeKeys` is skipped as an unknown key, which Remove Obsolete Setting takes out. Tests: the keys'
   rule, the disclosure, the schema.
 - Order: this plan, then each item through `./scripts/check`, then the ADR and the result.
+
+Result, part 41d: shipped 41d.1 to 41d.5 (ADR 0091, amending 0035, 0039 and 0041). The badge
+says "Not guaranteed bit-perfect" when the only changes are a mixable format and hog mode free;
+a change to the samples still says "Not bit-perfect" or "Converted". The signal path is a row of
+boxes joined by arrows, the file, the decoder only when it changes something, then the device or
+renderer, each with "44.1 kHz · 16-bit" and a short note, tinted where the samples change; no
+codes, channel counts in raw form, format lists or PIDs. The status line reads
+`44.1 kHz 16-bit FLAC → ADI-2 DAC: 44.1 kHz · 32-bit`. The `(57850288)` was the RME DAC's own
+name, its serial, not an ID the app appended; a trailing serial of six or more digits is
+dropped unless another output device would then read the same. Sonos players are named by room
+and groups as the Sonos app names them (a pair's room, else "Kitchen + 1"), offered once by the
+coordinator, and a member picked earlier plays to its coordinator; `--capture-renderers` saves
+the topology reply. With receiver control connected, the panel has a slider from −80 to 0 dB
+that follows the receiver's `MV` lines; a drag sends one level per 50 ms. `receiver.volumeKeys`
+is folded into `receiver.enabled`, "Control the Receiver with the Volume Keys": while receiver
+control runs, the volume keys go to the receiver, now also with the DAC into the receiver.
+Breaking: `receiver.volumeKeys` in a config file is skipped as an unknown key until Remove
+Obsolete Setting takes it out. The address sits under "Can't find the receiver?", open when set.
+Looked at: the panel drawn by a throwaway test, light and dark, with the receiver row, and
+`--snapshot-of settings` for the Receiver box. Checked by tests only: the status line with a
+real device, the Sonos rule (against replies in Sonos's documented shape, not the owner's
+players), the slider against a real receiver, the disclosure's click. For the owner: the panel
+on the 2015 MacBook Pro, whether "Top Floor" shows as one entry (if not, send the
+`<n>-zonegroupstate.xml` from `--capture-renderers`), the slider with the receiver on, and that
+the volume keys reach the receiver with the setting on. `theGlassHeadersAreFrosted` fails in
+this environment on `main` as well as here (it reads the screen); everything else passes.
 
 #### 41e. Toolbar status and Settings
 
