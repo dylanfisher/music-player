@@ -115,6 +115,9 @@ public enum RendererCapture {
             if let why = renderer.formatsProblem {
                 result.failures.append("\(number)-protocolinfo.xml: \(why)")
             }
+            if let topology = renderer.sonos?.topology {
+                await captureTopology(topology, number: number, fetcher: live, into: &result)
+            }
         case .failure(let problem):
             result.failures.append("\(problem)")
         }
@@ -131,6 +134,24 @@ public enum RendererCapture {
         if let protocolInfo {
             result.files.append(
                 CaptureFile(name: "\(number)-protocolinfo.xml", bytes: protocolInfo))
+        }
+    }
+
+    /// A Sonos player's `GetZoneGroupState` reply, which names its household's groups.
+    private static func captureTopology(
+        _ control: LocalURL, number: Int, fetcher: Fetcher, into result: inout Result
+    ) async {
+        let file = "\(number)-zonegroupstate.xml"
+        let request = ZoneGroupTopology.request
+        do {
+            let bytes = try await fetcher.post(control, request.fields, request.body)
+            result.files.append(CaptureFile(name: file, bytes: bytes))
+        } catch let LocalNetworkError.statusReply(status, raw) {
+            result.files.append(
+                CaptureFile(name: "\(number)-zonegroupstate-\(status).txt", bytes: raw))
+            result.failures.append("\(file): the reply's status is \(status)")
+        } catch {
+            result.failures.append("\(file): \(error)")
         }
     }
 

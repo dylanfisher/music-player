@@ -1,9 +1,10 @@
 import Foundation
 
 /// An XML element as a description or a SOAP reply has it: the local name without its
-/// namespace, its own text, and its children.
+/// namespace, its attributes, its own text, and its children.
 struct XMLTree: Equatable {
     var name: String
+    var attributes: [String: String] = [:]
     var text = ""
     var children: [XMLTree] = []
 
@@ -124,7 +125,7 @@ private final class TreeReader: NSObject, XMLParserDelegate {
         count += 1
         guard count <= XMLTree.elementCap else { return stop(parser, .tooManyElements) }
         guard open.count < XMLTree.depthCap else { return stop(parser, .tooDeep) }
-        open.append(XMLTree(name: name))
+        open.append(XMLTree(name: name, attributes: attributes))
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {

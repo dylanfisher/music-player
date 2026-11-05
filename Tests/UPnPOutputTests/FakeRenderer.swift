@@ -31,6 +31,8 @@ final class FakeRenderer: @unchecked Sendable {
     let description: String
     let scpd: String
     let protocolInfo: String
+    /// The `ZoneGroup` elements a Sonos answers `GetZoneGroupState` with.
+    let zoneGroups: String
     private(set) var server: LoopbackServer!
     private let lock = NSLock()
 
@@ -64,8 +66,10 @@ final class FakeRenderer: @unchecked Sendable {
     private var setURIs: [(uri: String, stateBefore: State)] = []
 
     init(
-        description: String, scpd: String, protocolInfo: String, trackSeconds: Double = 60
+        description: String, scpd: String, protocolInfo: String, trackSeconds: Double = 60,
+        zoneGroups: String = ""
     ) async throws {
+        self.zoneGroups = zoneGroups
         self.description = description
         self.scpd = scpd
         self.protocolInfo = protocolInfo
@@ -83,11 +87,20 @@ final class FakeRenderer: @unchecked Sendable {
             protocolInfo: try captured("denon-protocolinfo.xml"), trackSeconds: trackSeconds)
     }
 
-    static func sonos() async throws -> FakeRenderer {
+    /// The captured Sonos, alone in its group unless `zoneGroups` says otherwise. `player` and
+    /// `room` replace the capture's player ID and room, for a second player.
+    static func sonos(
+        player: String = capturedSonosPlayer, room: String = "Test Room",
+        zoneGroups: String? = nil
+    ) async throws -> FakeRenderer {
         try await FakeRenderer(
-            description: try captured("sonos-description.xml"),
+            description: try captured("sonos-description.xml")
+                .replacingOccurrences(of: capturedSonosPlayer, with: player)
+                .replacingOccurrences(of: "Test Room", with: room),
             scpd: try captured("sonos-avtransport-scpd.xml"),
-            protocolInfo: try captured("sonos-protocolinfo.xml"))
+            protocolInfo: try captured("sonos-protocolinfo.xml"),
+            zoneGroups: zoneGroups
+                ?? zoneGroup(coordinator: player, members: [(player, room, true)]))
     }
 
     var port: UInt16 { server.port }
@@ -238,6 +251,8 @@ final class FakeRenderer: @unchecked Sendable {
                 try await connection.send(ok(path.contains("AVTransport") ? scpd : description))
             } else if path.contains("ConnectionManager") {
                 try await connection.send(ok(protocolInfo))
+            } else if path.contains("ZoneGroupTopology") {
+                try await connection.send(ok(zoneGroupStateReply(zoneGroups)))
             } else {
                 let action =
                     lines.first { $0.hasPrefix("SOAPACTION: ") }
@@ -407,6 +422,37 @@ private func response(_ action: String, _ body: String) -> String {
     <u:\(action)Response xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">\(body)\
     </u:\(action)Response></s:Body></s:Envelope>
     """
+}
+
+/// The player ID in the captured Sonos's description.
+let capturedSonosPlayer = "RINCON_00005E00530101400"
+
+/// A `ZoneGroup` element as Sonos writes one: each member's ID, room and whether it's shown.
+func zoneGroup(coordinator: String, members: [(id: String, room: String, visible: Bool)])
+    -> String
+{
+    "<ZoneGroup Coordinator=\"\(coordinator)\" ID=\"\(coordinator):42\">"
+        + members.map { member in
+            "<ZoneGroupMember UUID=\"\(member.id)\" Location=\"http://192.0.2.88:1400/xml/"
+                + "device_description.xml\" ZoneName=\"\(member.room)\""
+                + (member.visible ? "" : " Invisible=\"1\"") + " SoftwareVersion=\"97.2-81220\"/>"
+        }.joined() + "</ZoneGroup>"
+}
+
+/// A `GetZoneGroupState` reply in the shape Sonos documents and its players send (not a
+/// capture): the state is a document of its own, escaped inside the reply.
+func zoneGroupStateReply(_ zoneGroups: String) -> String {
+    let state =
+        "<ZoneGroupState><ZoneGroups>\(zoneGroups)</ZoneGroups>"
+        + "<VanishedDevices></VanishedDevices></ZoneGroupState>"
+    let escaped = state.replacingOccurrences(of: "&", with: "&amp;")
+        .replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+        .replacingOccurrences(of: "\"", with: "&quot;")
+    return "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/"
+        + "envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\"><s:Body>"
+        + "<u:GetZoneGroupStateResponse xmlns:u=\"urn:schemas-upnp-org:service:"
+        + "ZoneGroupTopology:1\"><ZoneGroupState>\(escaped)</ZoneGroupState>"
+        + "</u:GetZoneGroupStateResponse></s:Body></s:Envelope>"
 }
 
 func ok(_ body: String) -> String {

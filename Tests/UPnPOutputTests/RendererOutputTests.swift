@@ -29,15 +29,23 @@ private struct FakeSSDP: SSDPTransport {
 
 /// The renderer as discovery finds it from the fake's SSDP reply.
 private func discovered(_ fake: FakeRenderer) async throws -> Renderer {
-    let reply = SSDPDatagram(
-        bytes: Array(
-            ("HTTP/1.1 200 OK\r\nLOCATION: \(fake.location)\r\n"
-                + "ST: urn:schemas-upnp-org:device:MediaRenderer:1\r\nUSN: uuid:x\r\n\r\n").utf8),
-        source: IPAddress("127.0.0.1")!)
+    try #require(try await discovered([fake]).first)
+}
+
+/// What one search finds of `fakes`, sorted by name as discovery sorts them.
+private func discovered(_ fakes: [FakeRenderer]) async throws -> [Renderer] {
+    let replies = fakes.map { fake in
+        SSDPDatagram(
+            bytes: Array(
+                ("HTTP/1.1 200 OK\r\nLOCATION: \(fake.location)\r\n"
+                    + "ST: urn:schemas-upnp-org:device:MediaRenderer:1\r\nUSN: uuid:\(fake.port)\r\n\r\n")
+                    .utf8),
+            source: IPAddress("127.0.0.1")!)
+    }
     let outcome = try await RendererDiscovery.discover(
-        transport: FakeSSDP(datagrams: [reply]), subnets: LocalSubnets([subnet]), seconds: 0.1)
+        transport: FakeSSDP(datagrams: replies), subnets: LocalSubnets([subnet]), seconds: 0.1)
     #expect(outcome.problems == [])
-    return try #require(outcome.renderers.first)
+    return outcome.renderers
 }
 
 /// Ten seconds of 16/44.1 silence in each container, made once per run.
@@ -168,6 +176,34 @@ private func output(
     let sonos = try await discovered(try await FakeRenderer.sonos())
     #expect(!sonos.isDenonReceiver)
     #expect(sonos.transport?.control.target == "/MediaRenderer/AVTransport/Control")
+    #expect(sonos.name == "Test Room")
+    #expect(!sonos.isGroupMember)
+}
+
+@Test func aSonosGroupIsOfferedOnceByItsCoordinatorUnderItsName() async throws {
+    let kitchen = "RINCON_00005E00530201400"
+    let groups = zoneGroup(
+        coordinator: capturedSonosPlayer,
+        members: [(capturedSonosPlayer, "Test Room", true), (kitchen, "Kitchen", true)])
+    let leader = try await FakeRenderer.sonos(zoneGroups: groups)
+    let member = try await FakeRenderer.sonos(player: kitchen, room: "Kitchen", zoneGroups: groups)
+    let found = try await discovered([leader, member])
+    #expect(found.map(\.name) == ["Test Room + 1", "Test Room + 1"])
+    let offered = RendererChoice.choices(found)
+    #expect(offered.map(\.udn) == ["uuid:\(capturedSonosPlayer)_MR"])
+    // A pick of the member, from before it joined the group, plays to the coordinator.
+    #expect(try RendererChoice.renderer("uuid:\(kitchen)_MR", in: found) == offered[0])
+    // Without its coordinator, the member is offered, so the group can still be picked.
+    #expect(RendererChoice.choices(found.filter(\.isGroupMember)).count == 1)
+}
+
+@Test func aStereoPairIsNamedAsItsRoom() async throws {
+    let right = "RINCON_00005E00530301400"
+    let groups = zoneGroup(
+        coordinator: capturedSonosPlayer,
+        members: [(capturedSonosPlayer, "Top Floor", true), (right, "Top Floor", false)])
+    let found = try await discovered([try await FakeRenderer.sonos(zoneGroups: groups)])
+    #expect(found.map(\.name) == ["Top Floor"])
 }
 
 @Test func theSettingsRendererIsFoundByUDNOrTheOnesFoundAreNamed() async throws {
@@ -179,8 +215,7 @@ private func output(
     } throws: { error in
         "\(error)"
             == "no renderer uuid:gone answered on the local network; these did:"
-            + " Test Room - Sonos Era 100 Media Renderer - RINCON_00005E00530101400"
-            + " (uuid:RINCON_00005E00530101400_MR), Denon AVR-X1800H"
+            + " Test Room (uuid:RINCON_00005E00530101400_MR), Denon AVR-X1800H"
             + " (uuid:00000000-0000-4000-8000-000000000002)"
     }
     let report = RendererChoice.report([denon])
@@ -236,7 +271,7 @@ private func output(
         try RendererTrack.read(audio["dsf"]!, for: sonos)
     } throws: { error in
         "\(error)".hasPrefix(
-            "Test Room - Sonos Era 100 Media Renderer - RINCON_00005E00530101400 doesn't take DSF (DSD) files"
+            "Test Room doesn't take DSF (DSD) files"
         )
     }
 }

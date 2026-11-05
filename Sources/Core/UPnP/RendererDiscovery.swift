@@ -34,12 +34,10 @@ public enum RendererDiscovery {
         var outcome = Outcome()
         for problem in search.problems { outcome.add(.search(problem)) }
         outcome.moreProblems += search.moreProblems
+        let fetcher = Fetcher.live(timeoutSeconds: fetchTimeoutSeconds)
         let found = await withTaskGroup(of: Result<Renderer, RendererProblem>.self) { group in
             for reply in search.replies {
-                group.addTask {
-                    await renderer(
-                        at: reply.location, fetcher: .live(timeoutSeconds: fetchTimeoutSeconds))
-                }
+                group.addTask { await renderer(at: reply.location, fetcher: fetcher) }
             }
             var found: [Result<Renderer, RendererProblem>] = []
             for await result in group { found.append(result) }
@@ -53,10 +51,28 @@ public enum RendererDiscovery {
             }
         }
         let (kept, conflicts) = oneEachByUDN(renderers)
-        outcome.renderers = kept
+        outcome.renderers = await grouped(kept, fetcher: fetcher, problems: &outcome)
         for conflict in conflicts { outcome.add(conflict) }
         outcome.renderers.sort { ($0.name, $0.udn) < ($1.name, $1.udn) }
         return outcome
+    }
+
+    /// `renderers` with each Sonos player named as its group and pointed at its coordinator,
+    /// from the first player whose topology answers; every player answers for the whole
+    /// household. When none does, each keeps its room's name, and the failure is reported.
+    static func grouped(
+        _ renderers: [Renderer], fetcher: Fetcher, problems: inout Outcome
+    ) async -> [Renderer] {
+        let request = ZoneGroupTopology.request
+        for topology in renderers.compactMap(\.sonos?.topology) {
+            do {
+                let reply = try await fetcher.post(topology, request.fields, request.body)
+                return ZoneGroupTopology.apply(try ZoneGroupTopology.groups(reply), to: renderers)
+            } catch {
+                problems.add(.topology(topology, "\(error)"))
+            }
+        }
+        return renderers
     }
 
     /// One renderer per UDN, the first found. A UDN is one device, so one given from two
@@ -121,11 +137,29 @@ public enum RendererDiscovery {
         } else {
             transportProblem = "it has no AVTransport"
         }
+        let sonos = sonosPlayer(description, at: location)
         return .success(
             Renderer(
-                udn: device.udn, name: device.name, manufacturer: device.manufacturer,
-                model: device.model, location: location, sinkFormats: formats,
-                formatsProblem: problem, transport: transport, transportProblem: transportProblem))
+                udn: device.udn, name: sonos?.room ?? device.name,
+                manufacturer: device.manufacturer, model: device.model, location: location,
+                sinkFormats: formats, formatsProblem: problem, transport: transport,
+                transportProblem: transportProblem, sonos: sonos?.player))
+    }
+
+    /// A Sonos player's room and topology service, which its root device lists; nil for any
+    /// other device, or one whose topology URL leaves its host.
+    private static func sonosPlayer(_ description: DeviceDescription, at location: LocalURL)
+        -> (room: String, player: Renderer.Sonos)?
+    {
+        guard let root = description.devices.first, let room = root.room, !room.isEmpty,
+            root.udn.hasPrefix("uuid:"),
+            let service = root.service(ofType: ZoneGroupTopology.serviceType),
+            let control = try? location.resolving(service.controlURL)
+        else { return nil }
+        return (
+            room,
+            Renderer.Sonos(playerID: String(root.udn.dropFirst("uuid:".count)), topology: control)
+        )
     }
 }
 
@@ -156,6 +190,8 @@ public enum RendererProblem: Error, Equatable, Sendable, CustomStringConvertible
     case description(LocalURL, String)
     /// Devices at more than one address gave the same UDN.
     case conflictingUDN(String, [String])
+    /// A Sonos player's `GetZoneGroupState` failed, so its groups aren't known.
+    case topology(LocalURL, String)
 
     public var description: String {
         switch self {
@@ -163,6 +199,7 @@ public enum RendererProblem: Error, Equatable, Sendable, CustomStringConvertible
         case .description(let url, let why): "the description at \(url) was ignored: \(why)"
         case .conflictingUDN(let udn, let addresses):
             "\(udn) answered from \(addresses.joined(separator: " and ")), so neither is used"
+        case .topology(let url, let why): "the Sonos groups at \(url) weren't read: \(why)"
         }
     }
 }

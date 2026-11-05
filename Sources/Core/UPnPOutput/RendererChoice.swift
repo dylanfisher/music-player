@@ -3,14 +3,27 @@ import UPnP
 /// Finding the renderer `output.renderer` names, and listing the ones found.
 public enum RendererChoice {
     /// The renderer whose UDN is `udn` among those discovery found; throws, naming the ones
-    /// that did answer, when it isn't one of them.
+    /// that did answer, when it isn't one of them. A Sonos player that has joined another's
+    /// group since it was picked gives way to that group's coordinator, which plays for it.
     public static func renderer(_ udn: String, in found: [Renderer]) throws(RendererOutputError)
         -> Renderer
     {
         guard let renderer = found.first(where: { $0.udn == udn }) else {
             throw .notFound(udn: udn, found: found.map { "\($0.name) (\($0.udn))" })
         }
-        return renderer
+        return coordinator(of: renderer, in: found) ?? renderer
+    }
+
+    /// The renderers the output picker offers: each Sonos group once, by its coordinator and
+    /// its name, and everything else as found. A member stays when its coordinator didn't
+    /// answer, so the group can still be picked.
+    public static func choices(_ found: [Renderer]) -> [Renderer] {
+        found.filter { coordinator(of: $0, in: found) == nil }
+    }
+
+    private static func coordinator(of renderer: Renderer, in found: [Renderer]) -> Renderer? {
+        guard renderer.isGroupMember, let leader = renderer.sonos?.coordinator else { return nil }
+        return found.first { $0.sonos?.playerID == leader }
     }
 
     /// `--list-devices`'s renderers, or why the search for them failed: the devices are

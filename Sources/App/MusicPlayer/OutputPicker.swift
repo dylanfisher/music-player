@@ -4,6 +4,7 @@ import HALOutput
 import Log
 import Palette
 import Settings
+import UPnPOutput
 
 private let logger = moduleLogger()
 
@@ -71,7 +72,9 @@ extension AppDelegate {
         outputSearch = Task { [weak self] in
             do {
                 let found = try await searchRenderers()
-                self?.foundRenderers = found.map { FoundOutput(id: $0.udn, name: $0.name) }
+                self?.foundRenderers = RendererChoice.choices(found).map {
+                    FoundOutput(id: $0.udn, name: $0.name)
+                }
                 self?.outputsChanged()
             } catch {
                 logger.error("the renderer search for the output picker failed: \(error)")

@@ -5,8 +5,9 @@ import LocalNetwork
 public struct Renderer: Equatable, Sendable {
     /// Its unique device name, `uuid:…`, which `output.renderer` stores.
     public let udn: String
-    /// Display text, escaped.
-    public let name: String
+    /// Display text, escaped. For a Sonos player, its room, or its group's name once the
+    /// topology has been read (ADR 0091).
+    public internal(set) var name: String
     public let manufacturer: String
     public let model: String
     /// Where its description is; its host is the renderer's address.
@@ -18,6 +19,26 @@ public struct Renderer: Equatable, Sendable {
     /// `transportProblem` says why.
     package let transport: Transport?
     public let transportProblem: String?
+    /// Nil for anything but a Sonos player.
+    package internal(set) var sonos: Sonos?
+
+    /// What a Sonos player's description and the household's topology say about it.
+    package struct Sonos: Equatable, Sendable {
+        /// `RINCON_…`, its root device's UDN without `uuid:`, as the topology names it.
+        package let playerID: String
+        /// Its ZoneGroupTopology control URL, on the renderer's host.
+        let topology: LocalURL
+        /// The player that plays for its group, by player ID; nil until the topology has been
+        /// read, or when the player isn't in it.
+        package internal(set) var coordinator: String?
+    }
+
+    /// A Sonos player whose group another player leads, which plays for it: it isn't offered
+    /// as an output, and a track for it goes to the coordinator.
+    package var isGroupMember: Bool {
+        guard let sonos, let coordinator = sonos.coordinator else { return false }
+        return coordinator != sonos.playerID
+    }
 
     /// AVTransport's control URL and its service description's, each on the renderer's host.
     package struct Transport: Equatable, Sendable {
@@ -29,7 +50,7 @@ public struct Renderer: Equatable, Sendable {
     init(
         udn: String, name: String, manufacturer: String, model: String, location: LocalURL,
         sinkFormats: [ProtocolInfo], formatsProblem: String? = nil, transport: Transport? = nil,
-        transportProblem: String? = nil
+        transportProblem: String? = nil, sonos: Sonos? = nil
     ) {
         self.udn = udn
         self.name = name
@@ -40,6 +61,7 @@ public struct Renderer: Equatable, Sendable {
         self.formatsProblem = formatsProblem
         self.transport = transport
         self.transportProblem = transportProblem
+        self.sonos = sonos
     }
 
     public var address: IPAddress { location.host }

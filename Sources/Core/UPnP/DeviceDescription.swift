@@ -9,6 +9,8 @@ public struct DeviceDescription: Equatable, Sendable {
         public var name: String
         public var manufacturer: String
         public var model: String
+        /// The room a Sonos player is in, which its root device names; nil for other devices.
+        var room: String?
         var udn: String
         var services: [Service]
     }
@@ -58,7 +60,8 @@ public struct DeviceDescription: Equatable, Sendable {
                     deviceType: element.value("deviceType") ?? "",
                     name: shown(element.value("friendlyName")),
                     manufacturer: shown(element.value("manufacturer")),
-                    model: shown(element.value("modelName")), udn: shown(element.value("UDN")),
+                    model: shown(element.value("modelName")),
+                    room: element.value("roomName").map(shown), udn: shown(element.value("UDN")),
                     services: Array(services)))
             for child in element.child("deviceList")?.children ?? [] where child.name == "device" {
                 visit(child)
