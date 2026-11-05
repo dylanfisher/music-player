@@ -32,7 +32,7 @@ import Testing
     #expect(TrackColumn.size.text(row, position: 0) == "4.2 MB")
     #expect(TrackColumn.loved.text(row, position: 0) == "\u{2665}")
     #expect(!TrackColumn.rowNumber.isSortable)
-    #expect(TrackColumn.allCases.filter { !$0.isSortable } == [.rowNumber])
+    #expect(TrackColumn.allCases.filter { !$0.isSortable } == [.rowNumber, .nowPlaying])
 }
 
 @MainActor @Test func aDSDRateShowsAsItsMultiple() {

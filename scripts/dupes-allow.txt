@@ -101,3 +101,4 @@ literal "Stereo" | files Sources/Core/Library/BrowserGroupingSQL.swift Sources/C
 literal "Controls" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Core/Commands/AppMenus.swift | the toolbar item of the previous, play and next buttons, as Swinsian names it, and the menu of every playback command
 literal "Title" | files Sources/Core/Library/TrackColumnTitle.swift Sources/Core/Settings/HeaderPart.swift | the track table's column and the toolbar status's part, two lists that each name the track's title
 literal "second" | files Sources/Core/Settings/BarLayout.swift Sources/Features/LibraryBrowser/TrackTotals.swift | the ordinal naming a bar column ("the second column on the left") and the unit of a duration in the totals, two different words
+literal "Now Playing" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Core/Library/TrackColumnTitle.swift | the toolbar status item's label and the track table's playing-mark column, two things named alike
