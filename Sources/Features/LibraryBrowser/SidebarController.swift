@@ -7,8 +7,8 @@ import Settings
 
 /// The source list: the library, History, the timeline and the health checks, and the playlists.
 /// Tracks dragged from the table onto a manual playlist are added to it; playlist files dropped
-/// anywhere on it are imported. A playlist's name is edited in its row, after a click on the
-/// selected row's name or Return, and its context menu renames, copies or deletes it. The
+/// anywhere on it are imported. A playlist's name is edited in its row after its context menu's
+/// Rename or Return; a click only selects it. The context menu also copies or deletes it. The
 /// watched folders are in Settings.
 @MainActor
 final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate,
@@ -38,11 +38,6 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     /// The playlist whose name is being edited in its row, and whether Esc ended the edit.
     private var renaming: Playlist?
     private var renameCancelled = false
-    /// The row selected before the latest click, so a click on it can start a rename; nil
-    /// when that click selected it.
-    private var selectedBeforeClick: Int?
-    /// Counts clicks, so a rename waiting out a double-click knows another came.
-    private var clicks = 0
 
     init(
         selectSource: @escaping (BrowserSource?) -> Void,
@@ -87,8 +82,6 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.dataSource = self
         outline.delegate = self
         outline.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
-        outline.target = self
-        outline.action = #selector(rowClicked)
         let menu = NSMenu()
         menu.delegate = self
         outline.menu = menu
@@ -339,8 +332,6 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     }
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
-        selectedBeforeClick =
-            NSApp.currentEvent?.type == .leftMouseDown ? nil : outline.selectedRow
         guard !applying else { return }
         switch selectedNode?.kind {
         case .library: selectSource(nil)
@@ -369,37 +360,6 @@ extension SidebarController {
 
     /// Whether a playlist's name is being edited, for tests.
     var isRenaming: Bool { renaming != nil }
-
-    /// A click on the name of a playlist that was already selected renames it, once the time
-    /// for a double-click has passed with no second click, as Finder does.
-    @objc fileprivate func rowClicked() {
-        clicks += 1
-        let row = outline.clickedRow
-        let wasSelected = row >= 0 && row == selectedBeforeClick
-        selectedBeforeClick = outline.selectedRow
-        guard wasSelected, renaming == nil, NSApp.currentEvent?.clickCount == 1,
-            let event = NSApp.currentEvent, isOnName(event, row: row)
-        else { return }
-        let click = clicks
-        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval) {
-            [weak self] in
-            guard let self, clicks == click, outline.selectedRow == row else { return }
-            beginRename(row: row)
-        }
-    }
-
-    /// Whether `event` is over the name's text in `row`, not the space after it.
-    private func isOnName(_ event: NSEvent, row: Int) -> Bool {
-        guard
-            let field =
-                (outline.view(atColumn: 0, row: row, makeIfNecessary: false)
-                as? NSTableCellView)?.textField
-        else { return false }
-        let point = field.convert(event.locationInWindow, from: nil)
-        let width = field.attributedStringValue.size().width + 4
-        return point.x >= 0 && point.x <= min(width, field.bounds.width)
-            && field.bounds.minY...field.bounds.maxY ~= point.y
-    }
 
     /// Esc puts the name back; Return ends the edit as the field does by default.
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector)
