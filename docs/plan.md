@@ -5138,6 +5138,57 @@ rebuilding. `./scripts/check` passes; one run before the last failed
 - [ ] **42c.7 App icon.** The ember icon (`music-player-icon-ember.svg`, from the owner) is the
       app icon.
 
+Plan, part 42c (ADR 0098, amending 0037, 0038 and 0043):
+- Probes (done before this plan): the badge and the reasons are one row (`verdict`) above the
+  stages. Change… opens an `NSOpenPanel` with no `directoryURL`, so it opens where the last
+  panel did. The receiver feature speaks Denon's line protocol on port 23; the search keeps
+  only renderers whose manufacturer says Denon and whose model says AVR, and the address
+  fallback connects to whatever answers there, so a Marantz (same protocol) works only by
+  address. The Receiver box's pane measures 141 points closed and 191 open, and 141 again
+  after closing, but in a window the window stays 191 tall: it grows to fit a taller pane and
+  never shrinks back, so the stack spreads the rows over the old height. `output.hogMode`
+  defaults to true, and a device seen for the first time hogs when it's on USB, Thunderbolt,
+  FireWire, PCI or AVB whatever the setting; the owner's config sets it false. The machine ID
+  is 32 random hex digits minted by the SQL of the database's `sync` part in
+  `~/Library/Application Support/MusicPlayer/library.sqlite`. The owner's two logs (read
+  only): `030d…` is this Mac's (its `sync_state` names it, and the file is exactly the
+  outbox's 16,762,794 bytes); `bae0…` is the other Mac's, read here to its last line. Both
+  have sequence numbers 1 to N with no gap. Of 98,431 and 98,190 lines, `added` is 86,750 and
+  86,644 (14.3 MB of 16.7 MB, 165 bytes a line): each file twice, once from the first scan
+  (43,382 and 43,329 files, `at` the scan time) and once from the Swinsian import (an earlier
+  date). `counts` is 11,191 and 11,268 lines (2.4 MB, 212 bytes); plays 111 and 10, about 150
+  bytes. The new icon's tile clip path is at 0,0 inside a `translate(100 100)`, so
+  `icon-mask.swift`, which reads the clip's rect as canvas coordinates, would cut the wrong
+  square.
+- 42c.1 (NowPlaying): the badge goes first in a row with the stage boxes; the reasons, when
+  there are any, go on a line under it. Test: the badge and the first stage share a row.
+- 42c.2 (App): Change… finds where the sync folder is now, as Open does, off the main thread,
+  and opens the panel there; a folder that can't be found opens it where macOS would. Test: the
+  panel's `directoryURL` is the folder.
+- 42c.3 (Settings): "While a receiver is connected, the volume keys set its volume." plus that
+  the search finds Denon receivers and a Marantz or other receiver on Denon's protocol needs
+  its address; the address row says so too. Problem lines that say "no Denon receiver
+  answered" are accurate and stay. Test: the summary names no single make as the only one.
+- 42c.4 (SettingsWindow): opening or closing a disclosure sets the window to the pane's
+  fitting height, keeping its top. Test: in a window, the pane's height after open and close is
+  its closed height, and the window's top hasn't moved.
+- 42c.5 (Settings): `output.hogMode` defaults to false, and a device seen for the first time
+  hogs only when the setting is on and its kind allows it, so hog mode is off unless asked
+  for. The owner's `false` stays. Tests: the default, and an unseen USB device with the setting
+  off.
+- 42c.6 (Library): a scan batch's new paths log one `addedFiles` event per folder, with the
+  folder's sync path, the file names and one `at`, the batch's time, which the rows here take
+  too; at most 500 names an event, the batch size. The import keeps `added`, one date per file,
+  and `added` lines in the owner's logs read as before. On the owner's logs grouping cuts the
+  scan's 7.1 MB to 2.2 MB (51 bytes a file). Tests: the line reads back, a bad name is
+  refused, a batch logs one event per folder, and the other machine gets every file's date.
+- 42c.7: `Support/AppIcon.svg` is the owner's SVG, with the tile clip path moved to canvas
+  coordinates (100, 100) and the group it clips outside the translate, so `icon-mask.swift`
+  cuts the right square; nothing else changes. Check: Quick Look's 1024 px master and the
+  masked one look the same inside the tile, and the SVG refers to nothing outside itself.
+- Order: this plan, each item through its tests, `./scripts/check`, then the ADR and the
+  result.
+
 #### 42d. Library Health as a view
 
 - [x] **42d.1 Out of the sidebar.** Library Health leaves the sidebar. It opens from a button in
