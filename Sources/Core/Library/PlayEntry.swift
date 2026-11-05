@@ -18,3 +18,7 @@ public struct PlayedTrack: Equatable, Sendable {
     /// The track's title, or for a file no longer in the index, its file name.
     public var title: String { track?.title ?? displayName(path) }
 }
+
+/// What the timeline's Artist column and Listening Stats say for plays of a path whose file is
+/// no longer in the index.
+public let missingText = "Not in the library"

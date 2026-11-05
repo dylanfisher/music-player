@@ -40,6 +40,12 @@ public actor LibraryReader {
         return try await Task.detached { try LibraryIndex(at: url).healthReport() }.value
     }
 
+    /// A connection for Listening Stats' reads, opened off the main thread.
+    public nonisolated func statsReader() async throws -> StatsReader {
+        let url = databaseURL
+        return try await Task.detached { try StatsReader(databaseURL: url) }.value
+    }
+
     /// Lists `report`'s tracks for the `.health` sources.
     public func showHealth(_ report: HealthReport) throws { try index.showHealth(report) }
 
@@ -172,15 +178,22 @@ public actor LibraryReader {
         try index.toggle(opinion, trackIDs: trackIDs)
     }
 
-    public func timeline(before id: Int64?, limit: Int) throws -> [PlayEntry] {
-        try index.timeline(before: id, limit: limit)
+    public func timeline(before id: Int64?, limit: Int, in span: PlaySpan? = nil) throws
+        -> [PlayEntry]
+    {
+        try index.timeline(before: id, limit: limit, in: span)
     }
 
-    public func timeline(after id: Int64, limit: Int) throws -> [PlayEntry] {
-        try index.timeline(after: id, limit: limit)
+    public func timeline(after id: Int64, limit: Int, in span: PlaySpan? = nil) throws
+        -> [PlayEntry]
+    {
+        try index.timeline(after: id, limit: limit, in: span)
     }
 
-    public func loggedPlayCount() throws -> Int { try index.loggedPlayCount() }
+    /// How many plays the timeline lists: every logged play, or those in `span`.
+    public func playCount(in span: PlaySpan?) throws -> Int {
+        try span.map { try index.playCount(in: $0) } ?? index.loggedPlayCount()
+    }
 
     public func lostFiles() throws -> [LostFile] { try index.lostFiles() }
 

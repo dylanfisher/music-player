@@ -276,6 +276,3 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
 
     func tableViewSelectionDidChange(_ notification: Notification) { selectionDidChange() }
 }
-
-/// What the Artist column says for a play whose file is no longer in the index.
-let missingText = "Not in the library"

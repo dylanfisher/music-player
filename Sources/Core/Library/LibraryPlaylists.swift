@@ -1,5 +1,6 @@
 import Foundation
 import SQLite
+import Settings
 
 /// Loves one path; loving a loved one changes nothing.
 let insertLovedSQL = "INSERT OR IGNORE INTO \(lovedTable) (path_id) VALUES (?)"
@@ -310,17 +311,30 @@ extension LibraryIndex {
 
     // MARK: The play timeline
 
-    /// Up to `limit` plays logged before the play `id`, or the latest for nil, newest first.
-    /// Paged by key, so a page costs the same at any depth and new plays don't shift it.
-    public func timeline(before id: Int64?, limit: Int) throws -> [PlayEntry] {
-        try statement(timelineSelect + " WHERE id < ? ORDER BY id DESC LIMIT ?").map(
-            id ?? Int64.max, limit, row: playEntry)
+    /// Up to `limit` plays logged before the play `id`, or the latest for nil, newest first,
+    /// only those played in `span` when one is given. Paged by key, so a page costs the same at
+    /// any depth and new plays don't shift it; a span far back walks the newer rows once, for
+    /// its first page.
+    public func timeline(before id: Int64?, limit: Int, in span: PlaySpan? = nil) throws
+        -> [PlayEntry]
+    {
+        try statement(timelineSelect + " WHERE id < ?\(spanCondition(span)) ORDER BY id DESC LIMIT ?")
+            .map(binding: [id ?? Int64.max] + spanValues(span) + [limit], row: playEntry)
     }
 
-    /// Up to `limit` of the plays logged after the play `id`, the newest first.
-    public func timeline(after id: Int64, limit: Int) throws -> [PlayEntry] {
-        try statement(timelineSelect + " WHERE id > ? ORDER BY id DESC LIMIT ?").map(
-            id, limit, row: playEntry)
+    /// Up to `limit` of the plays logged after the play `id`, the newest first, only those in
+    /// `span` when one is given.
+    public func timeline(after id: Int64, limit: Int, in span: PlaySpan? = nil) throws
+        -> [PlayEntry]
+    {
+        try statement(timelineSelect + " WHERE id > ?\(spanCondition(span)) ORDER BY id DESC LIMIT ?")
+            .map(binding: [id] + spanValues(span) + [limit], row: playEntry)
+    }
+
+    /// How many plays `span` holds: a scan of the history.
+    public func playCount(in span: PlaySpan) throws -> Int {
+        try statement("SELECT count(*) FROM history NOT INDEXED WHERE played_at >= ? AND played_at < ?")
+            .map(span.start, span.end) { try $0.int(0) }[0]
     }
 
     /// The file and, where the index still has it, the track of each of the paths `ids`.
@@ -342,6 +356,15 @@ extension LibraryIndex {
 }
 
 private let timelineSelect = "SELECT id, path_id, played_at FROM history"
+
+/// What narrows the timeline to `span`, after its key's condition.
+private func spanCondition(_ span: PlaySpan?) -> String {
+    span == nil ? "" : " AND played_at >= ? AND played_at < ?"
+}
+
+private func spanValues(_ span: PlaySpan?) -> [(any SQLiteValue)?] {
+    span.map { [$0.start, $0.end] } ?? []
+}
 
 private func playEntry(_ row: Row) throws -> PlayEntry {
     PlayEntry(id: try row.int64(0), trackID: try row.int64(1), playedSeconds: try row.int(2))

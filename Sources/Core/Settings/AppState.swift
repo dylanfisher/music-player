@@ -19,6 +19,10 @@ public struct AppState: SettingsSchema {
         range: browserHeightRange,
         "Height of the browser's columns above the track table, in points. 0 hides"
             + " them.")
+    public let statsHeight = Setting(
+        "window.statsHeight", title: "Listening Stats Height", default: 380,
+        range: browserHeightRange,
+        "Height of the Listening Stats panel above the track table, in points.")
     public let browserVisible = Setting(
         "window.browserVisible", title: "Show Browser", default: true,
         "Show the browser's columns above the track table.")

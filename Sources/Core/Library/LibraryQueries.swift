@@ -371,7 +371,18 @@ extension LibraryIndex {
                 "t.file_id IN (SELECT file_id FROM \(healthTracksTable) WHERE check_name = ?)",
                 [check.rawValue]
             )
-        case .timeline:
+        case .stats(let period):
+            // The tracks played in the period, whose stats the panel above them shows. A
+            // scan of the table, as Listening Stats' own reads are (ADR 0102).
+            guard let span = period.span() else {
+                return ("t.file_id IN (SELECT path_id FROM \(recordedTable))", [])
+            }
+            return (
+                "t.file_id IN (SELECT path_id FROM history NOT INDEXED"
+                    + " WHERE played_at >= ? AND played_at < ?)",
+                [span.start, span.end]
+            )
+        case .timeline, .plays:
             // The timeline pages through plays with `timeline(before:limit:)` instead.
             throw LibraryError.playsNotTracks
         }
