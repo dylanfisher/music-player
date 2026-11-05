@@ -41,6 +41,26 @@ public final class GeneralModel {
         /// For a fallback few need: the line whose disclosure triangle shows the row, which
         /// stays hidden under it until opened or given a value.
         var disclosure: String? = nil
+        /// The line the row shares with the rows of the same group, which the pane shows under
+        /// the group's title and summary, each row a button of its own.
+        var group: RowGroup? = nil
+    }
+
+    /// Rows of one kind shown on one line, under one label and summary, as the Custom Status
+    /// layouts are: each row is a button titled with its number, counted from 1.
+    struct RowGroup: Equatable {
+        var title: String
+        var summary: String
+        var number: Int
+
+        var buttonTitle: String { "Edit \(number)…" }
+
+        /// The Custom Status layouts' group, for the setting at `position` among them.
+        static func customStatus(_ position: Int) -> RowGroup {
+            RowGroup(
+                title: "Custom Status Layouts", summary: "What each Custom Status item shows.",
+                number: position + 1)
+        }
     }
 
     /// The panes' groups of rows, each in a titled box, by what the setting's key starts with.
@@ -50,7 +70,10 @@ public final class GeneralModel {
         case library, sync, receiver
         /// Shown under the Watched Folders pane's list, as Swinsian has them.
         case folderChanges, networkFolders
-        case appearance
+        /// The Appearance pane's.
+        case theme, trackTable
+        /// The Toolbar pane's, in the window's order from its top.
+        case titles, toolbarStatus, statusBar
         /// A key no section claims; a test keeps the app's settings out of it.
         case other
 
@@ -63,7 +86,11 @@ public final class GeneralModel {
             case .receiver: "Receiver"
             case .folderChanges: "Folder Changes"
             case .networkFolders: "Network Folders"
-            case .appearance: AppSettings().appearance.title
+            case .theme: "Theme"
+            case .trackTable: AppState().trackTable.title
+            case .titles: "Titles"
+            case .toolbarStatus: "Toolbar Status"
+            case .statusBar: AppSettings().statusBarStyle.title
             case .other: "Other"
             }
         }
@@ -80,7 +107,20 @@ public final class GeneralModel {
             case .folderChanges: [schema.removeMissingTracks.key, schema.rescanModifiedFiles.key]
             case .networkFolders:
                 [schema.pausePollingDuringPlayback.key, schema.rescanNetworkFoldersAtLaunch.key]
-            case .appearance: [schema.appearance.key]
+            // `appearance` is every appearance key's prefix, so a new one shows here until it's
+            // given a section.
+            case .theme: [schema.appearance.key, schema.glass.key]
+            case .trackTable:
+                [
+                    schema.columnLines.key, schema.rowLines.key, schema.albumLines.key,
+                    schema.rowLineColor.key, schema.albumLineColor.key,
+                    schema.playingRowColor.key, schema.alternatingRows.key, schema.rowHeight.key,
+                    schema.artSize.key,
+                ]
+            case .titles: [schema.windowTitle.key, schema.headerTitleFormat.key]
+            case .toolbarStatus:
+                [schema.headerStatusLayout.key] + schema.customStatusLayouts.map(\.key)
+            case .statusBar: [schema.statusBarStyle.key, schema.statusBarLayout.key]
             case .other: []
             }
         }
@@ -177,7 +217,9 @@ public final class GeneralModel {
             key: setting.key, title: setting.title, summary: setting.summary, control: control,
             unit: setting.key == schema.playedPercent.key ? "%" : nil,
             disclosure: setting.key == schema.receiverAddress.key
-                ? "Can't find the receiver?" : nil)
+                ? "Can't find the receiver?" : nil,
+            group: schema.customStatusLayouts.firstIndex { $0.key == setting.key }.map(
+                RowGroup.customStatus))
     }
 
     /// Whether a row can be changed now: not while its section's switch is off.

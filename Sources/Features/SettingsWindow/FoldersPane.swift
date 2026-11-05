@@ -52,7 +52,7 @@ final class FoldersPane: NSViewController, NSTableViewDataSource, NSTableViewDel
         self.actions = actions
         settings = GeneralPane(
             model: model, configPath: nil, actions: actions,
-            sections: [.folderChanges, .networkFolders])
+            sections: SettingsWindowController.Pane.folders.sections)
         super.init(nibName: nil, bundle: nil)
     }
 

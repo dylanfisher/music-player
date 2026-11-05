@@ -63,64 +63,68 @@ public struct AppSettings: SettingsSchema {
         "Light or dark windows; Auto follows the system.")
     public let columnLines = Setting(
         "appearance.columnLines", title: "Column Lines", default: false,
-        "Draw a thin line between the track table's columns.")
+        "A thin line between the columns.")
     public let rowLines = Setting(
         "appearance.rowLines", title: "Row Lines", default: false,
-        "Draw a thin line between the track table's rows.")
+        "A thin line between the rows.")
     public let albumLines = Setting(
         "appearance.albumLines", title: "Album Lines", default: false,
-        "Draw a line where one album ends and the next begins.")
+        "A line where one album ends and the next begins.")
     public let rowLineColor = Setting<HexColor?>(
         "appearance.rowLineColor", title: "Row Line Color", default: nil,
-        "The row and column lines' color; none uses the system's grid color.")
+        "Colors the column lines too; Default is the system's grid color.")
     public let albumLineColor = Setting<HexColor?>(
         "appearance.albumLineColor", title: "Album Line Color", default: nil,
-        "The album lines' color; none uses the system's grid color.")
+        "Default is the system's grid color.")
     public let playingRowColor = Setting<HexColor?>(
         "appearance.playingRowColor", title: "Playing Row Color", default: nil,
-        "The playing track's row color; none uses a light gray.")
+        "Default is a light gray.")
     public let alternatingRows = Setting(
         "appearance.alternatingRows", title: "Alternating Rows", default: true,
-        "Shade every other row of the track table.")
+        "Shade every other row.")
     public let rowHeight = Setting(
         "appearance.rowHeight", title: "Row Height", default: RowHeight.regular,
-        "How tall the track table's rows are.")
+        "Compact fits more tracks; Large is easier to read.")
     public let artSize = Setting(
         "appearance.artSize", title: "Album Art", default: ArtSize.fit,
-        "Art scaled to its album's rows, or always the column's width.")
+        "Scaled to its album's rows, or always the column's width.")
     public let glass = Setting(
         "appearance.glass", title: "Window Glass", default: false,
-        "Turns the whole player into translucent glass, with the desktop showing through.")
+        "Translucent windows, with the desktop showing through.")
     public let windowTitle = Setting(
         "appearance.windowTitle", title: "Window Title", default: TitleTemplate.windowTitle,
-        "The window's title, with the playing track's fields in braces.")
+        "The playing track's fields go in braces.")
     public let headerStatusLayout = Setting(
         "appearance.headerStatusLayout", title: "Toolbar Status Layout",
         default: BarLayout.defaultHeaderStatus,
-        "What the toolbar's now-playing status shows, in columns that stack their parts.")
+        "What the toolbar's Now Playing item shows.")
     public let customStatus1Layout = Setting(
         "appearance.customStatus1Layout", title: ToolbarItem.customStatusTitle(1) + " Layout",
         default: BarLayout.defaultCustomStatus,
-        "What the toolbar's Custom Status 1 item shows, in columns of parts.")
+        "What the toolbar's Custom Status 1 item shows.")
     public let customStatus2Layout = Setting(
         "appearance.customStatus2Layout", title: ToolbarItem.customStatusTitle(2) + " Layout",
         default: BarLayout.defaultCustomStatus,
-        "What the toolbar's Custom Status 2 item shows, in columns of parts.")
+        "What the toolbar's Custom Status 2 item shows.")
     public let customStatus3Layout = Setting(
         "appearance.customStatus3Layout", title: ToolbarItem.customStatusTitle(3) + " Layout",
         default: BarLayout.defaultCustomStatus,
-        "What the toolbar's Custom Status 3 item shows, in columns of parts.")
+        "What the toolbar's Custom Status 3 item shows.")
+    /// The Custom Status items' layouts, in `ToolbarItem.customStatuses`' order.
+    public var customStatusLayouts: [Setting<BarLayout<HeaderPart>>] {
+        [customStatus1Layout, customStatus2Layout, customStatus3Layout]
+    }
     public let headerTitleFormat = Setting(
         "appearance.headerTitleFormat", title: "Toolbar Title Line",
         default: TitleTemplate.titleLine,
-        "The Title Line's text, with the playing track's fields in braces.")
+        "The Title Line part's text; fields go in braces.")
     public let statusBarStyle = Setting(
         "appearance.statusBarStyle", title: "Status Bar", default: StatusBarStyle.minimal,
         "One line at the header's height, or two with larger art.")
     public let statusBarLayout = Setting(
         "appearance.statusBarLayout", title: "Status Bar Layout",
         default: BarLayout.defaultStatusBar,
-        "What the status bar shows, in columns around its centered middle.")
+        "What the status bar shows, around its centered middle.")
 
     public func conflicts(_ values: [String: any SettingValue]) -> [SettingConflict] {
         guard let sync = values[syncFolder.key] as? SyncFolder,

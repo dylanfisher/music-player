@@ -3,19 +3,31 @@ import Commands
 import Settings
 
 /// The Settings window: one window with a toolbar of panes, General, Playback, Appearance,
-/// Watched Folders and Shortcuts. Made on first use and kept.
+/// Toolbar, Watched Folders and Shortcuts. Made on first use and kept.
 @MainActor
 public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     public enum Pane: String, CaseIterable {
-        case general, playback, appearance, folders, shortcuts
+        case general, playback, appearance, toolbar, folders, shortcuts
 
         var title: String {
             switch self {
             case .general: "General"
             case .playback: "Playback"
             case .appearance: AppSettings().appearance.title
+            case .toolbar: "Toolbar"
             case .folders: AppSettings().watchedFolders.title
             case .shortcuts: "Shortcuts"
+            }
+        }
+
+        /// The sections of settings the pane shows; General shows those no other pane does.
+        var sections: [GeneralModel.Section] {
+            switch self {
+            case .general, .shortcuts: []
+            case .playback: [.output, .playCounts]
+            case .appearance: [.theme, .trackTable]
+            case .toolbar: [.titles, .toolbarStatus, .statusBar]
+            case .folders: [.folderChanges, .networkFolders]
             }
         }
 
@@ -24,6 +36,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .general: "gearshape"
             case .playback: "speaker.wave.2"
             case .appearance: "paintbrush"
+            case .toolbar: "menubar.rectangle"
             case .folders: "folder"
             case .shortcuts: "keyboard"
             }
@@ -36,6 +49,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     private let general: GeneralPane
     private let playback: GeneralPane
     private let appearance: GeneralPane
+    private let toolbarPane: GeneralPane
     private let folders: FoldersPane
     private let shortcuts: ShortcutsPane
     private var centered = false
@@ -46,17 +60,16 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
     ) {
         model = general
         self.actions = actions
-        let playbackSections: [GeneralModel.Section] = [.output, .playCounts]
+        let others = Pane.allCases.flatMap(\.sections)
         self.general = GeneralPane(
             model: general, configPath: configPath, actions: actions,
-            sections: GeneralModel.Section.allCases.filter {
-                !playbackSections.contains($0)
-                    && ![.appearance, .folderChanges, .networkFolders].contains($0)
-            })
+            sections: GeneralModel.Section.allCases.filter { !others.contains($0) })
         playback = GeneralPane(
-            model: general, configPath: nil, actions: actions, sections: playbackSections)
+            model: general, configPath: nil, actions: actions, sections: Pane.playback.sections)
         appearance = GeneralPane(
-            model: general, configPath: nil, actions: actions, sections: [.appearance])
+            model: general, configPath: nil, actions: actions, sections: Pane.appearance.sections)
+        toolbarPane = GeneralPane(
+            model: general, configPath: nil, actions: actions, sections: Pane.toolbar.sections)
         folders = FoldersPane(model: general, actions: actions)
         self.shortcuts = ShortcutsPane(model: shortcuts)
         window = NSWindow(
@@ -89,28 +102,22 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         guard model.rows.contains(where: { $0.key == key }) else {
             return actions.openConfigFile()
         }
-        switch GeneralModel.Section(key: key) {
-        case .output, .playCounts:
-            show(.playback)
-            playback.focus(key)
-        case .appearance:
-            show(.appearance)
-            appearance.focus(key)
-        case .folderChanges, .networkFolders:
-            show(.folders)
+        let section = GeneralModel.Section(key: key)
+        let pane = Pane.allCases.first { $0.sections.contains(section) } ?? .general
+        show(pane)
+        if pane == .folders {
             folders.focus(key)
-        default:
-            show(.general)
-            general.focus(key)
+        } else {
+            (controller(pane) as? GeneralPane)?.focus(key)
         }
     }
 
-    /// Opens the bar builder on the bar layout setting `key`, from Settings ▸ Appearance.
-    public func showBarBuilder(_ key: String) { appearance.showBarBuilder(key) }
+    /// Opens the bar builder on the bar layout setting `key`, from Settings ▸ Toolbar.
+    public func showBarBuilder(_ key: String) { toolbarPane.showBarBuilder(key) }
 
     /// The bar builder's window for `key`, once opened.
     public func barBuilderWindow(_ key: String) -> NSWindow? {
-        appearance.barBuilders[key]?.window
+        toolbarPane.barBuilders[key]?.window
     }
 
     /// Shows the settings and shortcuts as they are now, after any change.
@@ -118,21 +125,25 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
         general.reload()
         playback.reload()
         appearance.reload()
+        toolbarPane.reload()
         if folders.isViewLoaded { folders.reload() }
         shortcuts.model.update(bindings)
         if shortcuts.isViewLoaded { shortcuts.reload() }
     }
 
+    private func controller(_ pane: Pane) -> NSViewController {
+        switch pane {
+        case .general: general
+        case .playback: playback
+        case .appearance: appearance
+        case .toolbar: toolbarPane
+        case .folders: folders
+        case .shortcuts: shortcuts
+        }
+    }
+
     private func select(_ pane: Pane) {
-        let controller: NSViewController =
-            switch pane {
-            case .general: general
-            case .playback: playback
-            case .appearance: appearance
-            case .folders: folders
-            case .shortcuts: shortcuts
-            }
-        window.contentViewController = controller
+        window.contentViewController = controller(pane)
         window.title = pane.title
         window.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(pane.rawValue)
     }

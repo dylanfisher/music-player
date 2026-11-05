@@ -11,8 +11,8 @@ let noValueText = "None"
 /// Settings ▸ General: the config file's place and buttons, then the settings from the schema,
 /// a titled box for each section. A checkbox carries its setting's title on its right; a pop-up
 /// or a field has the title on its left, in one column for the whole pane. Each setting's
-/// summary is under it. Settings ▸ Appearance is one too, with its section alone and no config
-/// file, and the Watched Folders pane holds one for its section.
+/// summary is under it. Settings ▸ Playback, Appearance and Toolbar are one too, with their
+/// sections and no config file, and the Watched Folders pane holds one for its sections.
 @MainActor
 final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     static let width = 640.0
@@ -32,6 +32,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     private static let checkboxIndent = 20.0
     /// The widest a summary is, so the boxes keep the pane's width.
     private static let summaryWidth = 400.0
+    /// A color well's width, which otherwise stretches across the row.
+    private static let colorWellWidth = 44.0
 
     private let model: GeneralModel
     /// Nil for a pane without the config file's place and buttons.
@@ -62,6 +64,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     /// the disclosures' triangles.
     private(set) var fallbackRows: [String: NSGridRow] = [:]
     private(set) var disclosures: [String: NSButton] = [:]
+    /// Each row group's line of buttons, by the group's title, which its later rows join.
+    private var groupButtons: [String: NSStackView] = [:]
     /// The bar builders opened from this pane, by key, kept so a reopen shows the same one.
     private(set) var barBuilders: [String: BarBuilderWindow] = [:]
     /// The tokens' popover while it shows, for tests.
@@ -183,17 +187,29 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     private func addRow(_ row: GeneralModel.Row, to grid: NSGridView) {
-        let summary = NSTextField(wrappingLabelWithString: row.summary)
+        if let group = row.group, let buttons = groupButtons[group.title] {
+            let control = makeControl(row)
+            controls[row.key] = control
+            buttons.addArrangedSubview(control)
+            return
+        }
+        let summary = NSTextField(wrappingLabelWithString: row.group?.summary ?? row.summary)
         summary.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         summary.textColor = .secondaryLabelColor
         summary.preferredMaxLayoutWidth = Self.summaryWidth
         summaries[row.key] = summary
         let control = makeControl(row)
         controls[row.key] = control
+        var shown = control
+        if let group = row.group {
+            let buttons = NSStackView(views: [control])
+            groupButtons[group.title] = buttons
+            shown = buttons
+        }
         // A checkbox's summary sits under its title, not under the box itself.
         let indented = NSStackView(views: [summary])
         indented.edgeInsets.left = row.control == .checkbox ? Self.checkboxIndent : 0
-        let cell = NSStackView(views: [control, indented])
+        let cell = NSStackView(views: [shown, indented])
         cell.orientation = .vertical
         cell.alignment = .leading
         cell.spacing = 2
@@ -212,7 +228,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             grid.addRow(with: [NSGridCell.emptyContentView, cell])
             return
         }
-        let label = NSTextField(labelWithString: row.title + ":")
+        let label = NSTextField(labelWithString: (row.group?.title ?? row.title) + ":")
         label.alignment = .right
         labels[row.key] = label
         grid.addRow(with: [label, cell])
@@ -341,7 +357,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         case .renderer:
             preconditionFailure("the output device's row lists \(row.key)")
         case .barLayout:
-            let edit = button("Edit Layout…", #selector(editBarLayout(_:)))
+            let edit = button(
+                row.group?.buttonTitle ?? "Edit Layout…", #selector(editBarLayout(_:)))
             edit.identifier = NSUserInterfaceItemIdentifier(row.key)
             edit.setAccessibilityLabel(row.title)
             return edit
@@ -353,6 +370,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             // A well that isn't continuous gets the panel's color but sends no action at all.
             well.isContinuous = true
             well.setAccessibilityLabel(row.title)
+            well.translatesAutoresizingMaskIntoConstraints = false
+            well.widthAnchor.constraint(equalToConstant: Self.colorWellWidth).isActive = true
             NSColorPanel.shared.showsAlpha = true
             colorWells[row.key] = well
             guard optional else { return well }

@@ -269,7 +269,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(
         sections.map(\.section) == [
             .output, .playCounts, .library, .sync, .receiver, .folderChanges, .networkFolders,
-            .appearance,
+            .theme, .trackTable, .titles, .toolbarStatus, .statusBar,
         ])
     #expect(
         sections.first { $0.section == .networkFolders }?.rows.map(\.key) == [
@@ -281,14 +281,21 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
         ])
     #expect(
         sections.first { $0.section == .playCounts }?.rows.map(\.key) == [schema.playedPercent.key])
-    // The toolbar is above the status bar in the window, so its layout's row comes first.
-    let appearance = sections.first { $0.section == .appearance }?.rows.map(\.key) ?? []
+    func keys(_ section: GeneralModel.Section) -> [String] {
+        sections.first { $0.section == section }?.rows.map(\.key) ?? []
+    }
+    #expect(keys(.theme) == [schema.appearance.key, schema.glass.key])
     #expect(
-        appearance.suffix(7) == [
-            schema.headerStatusLayout.key, schema.customStatus1Layout.key,
-            schema.customStatus2Layout.key, schema.customStatus3Layout.key,
-            schema.headerTitleFormat.key, schema.statusBarStyle.key, schema.statusBarLayout.key,
+        keys(.trackTable) == [
+            schema.columnLines.key, schema.rowLines.key, schema.albumLines.key,
+            schema.rowLineColor.key, schema.albumLineColor.key, schema.playingRowColor.key,
+            schema.alternatingRows.key, schema.rowHeight.key, schema.artSize.key,
         ])
+    #expect(keys(.titles) == [schema.windowTitle.key, schema.headerTitleFormat.key])
+    #expect(
+        keys(.toolbarStatus)
+            == [schema.headerStatusLayout.key] + schema.customStatusLayouts.map(\.key))
+    #expect(keys(.statusBar) == [schema.statusBarStyle.key, schema.statusBarLayout.key])
     let titleFormat = model.rows.first { $0.key == schema.headerTitleFormat.key }
     // It's a template like the window's title, with the same tokens.
     let windowTitle = model.rows.first { $0.key == schema.windowTitle.key }
@@ -428,7 +435,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(model.rows.first { $0.key == key }?.control == .color(optional: true))
     #expect(model.color(key) == nil)
     let pane = GeneralPane(
-        model: model, configPath: nil, actions: actions(), sections: [.appearance])
+        model: model, configPath: nil, actions: actions(), sections: [.trackTable])
     pane.reload()
     let well = try #require(view(key, in: pane.view) as? NSColorWell)
     let reset = try #require(button("Default", in: pane.view))
@@ -474,7 +481,7 @@ private func waitFor(_ condition: () -> Bool) async throws {
             pane?.reload()
         }, isBlocked: { false })
     pane = GeneralPane(
-        model: model, configPath: nil, actions: actions(), sections: [.appearance])
+        model: model, configPath: nil, actions: actions(), sections: [.trackTable])
     let shown = try #require(pane)
     let window = NSWindow(contentViewController: shown)
     window.makeKeyAndOrderFront(nil)
@@ -636,7 +643,10 @@ private func waitFor(_ condition: () -> Bool) async throws {
         }
     }
     let appearanceKeys = Set(
-        schema.settings.map(\.key).filter { GeneralModel.Section(key: $0) == .appearance })
+        schema.settings.map(\.key).filter {
+            SettingsWindowController.Pane.appearance.sections.contains(
+                GeneralModel.Section(key: $0))
+        })
     #expect(appearanceKeys.contains(schema.rowHeight.key))
     #expect(appearanceKeys.contains(schema.appearance.key))
     #expect(appearanceKeys.contains(schema.artSize.key))
@@ -646,6 +656,19 @@ private func waitFor(_ condition: () -> Bool) async throws {
     let appearance = try #require(controller.window.contentViewController?.view)
     #expect(keys(appearance).isSuperset(of: appearanceKeys))
     #expect(!keys(appearance).contains(schema.hogMode.key))
+    #expect(!keys(appearance).contains(schema.windowTitle.key))
+
+    // The toolbar's and the status bar's settings have a pane of their own after it.
+    controller.show(setting: schema.customStatus2Layout.key)
+    #expect(controller.window.title == "Toolbar")
+    let toolbar = try #require(controller.window.contentViewController?.view)
+    #expect(
+        keys(toolbar).isSuperset(
+            of: [
+                schema.windowTitle.key, schema.headerTitleFormat.key, schema.headerStatusLayout.key,
+                schema.statusBarStyle.key, schema.statusBarLayout.key,
+            ] + schema.customStatusLayouts.map(\.key)))
+    #expect(keys(toolbar).isDisjoint(with: appearanceKeys))
 
     controller.show(.general)
     let general = try #require(controller.window.contentViewController?.view)
@@ -735,7 +758,7 @@ private func helpButton(in view: NSView) -> NSButton? {
     #expect(saved[key] as? String == "{album} — {title}")
 
     let pane = GeneralPane(
-        model: model, configPath: nil, actions: actions(), sections: [.appearance])
+        model: model, configPath: nil, actions: actions(), sections: [.titles])
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 700, height: 700), styleMask: [.titled],
         backing: .buffered, defer: false)
@@ -782,7 +805,7 @@ func aTemplateRowSavesAsItsTyped(key: String) throws {
             saves += 1
         }, isBlocked: { false })
     let pane = GeneralPane(
-        model: model, configPath: nil, actions: actions(), sections: [.appearance])
+        model: model, configPath: nil, actions: actions(), sections: [.titles])
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 700, height: 700), styleMask: [.titled],
         backing: .buffered, defer: false)
@@ -828,4 +851,33 @@ private func visibleLabels(in view: NSView) -> [String] {
     guard !view.isHidden else { return [] }
     return ((view as? NSTextField).map { [$0.stringValue] } ?? [])
         + view.subviews.flatMap(visibleLabels)
+}
+
+/// The three Custom Status layouts share one row: one label and summary, and a button each
+/// that opens its own setting's builder.
+@MainActor @Test func theCustomStatusLayoutsShareARow() throws {
+    let schema = AppSettings()
+    let layout = try JSONSerialization.jsonObject(
+        with: JSONEncoder().encode(BarLayout.defaultCustomStatus))
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { _ in layout },
+        set: { _, _ in }, isBlocked: { false })
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.toolbarStatus])
+    _ = pane.view
+    let shown = labels(in: pane.view)
+    #expect(shown.contains("Custom Status Layouts:"))
+    #expect(shown.contains("What each Custom Status item shows."))
+    #expect(!shown.contains { $0.hasPrefix(ToolbarItem.customStatusTitle(1)) })
+    defer { for builder in pane.barBuilders.values { builder.window.close() } }
+    for (position, setting) in schema.customStatusLayouts.enumerated() {
+        let edit = try #require(view(setting.key, in: pane.view) as? NSButton)
+        #expect(edit.title == "Edit \(position + 1)…")
+        #expect(edit.accessibilityLabel() == setting.title)
+        edit.performClick(nil)
+        #expect(pane.barBuilders[setting.key]?.window.title.contains(setting.title) == true)
+    }
+    // All three on the line the first one starts.
+    let buttons = schema.customStatusLayouts.compactMap { view($0.key, in: pane.view) }
+    #expect(Set(buttons.map { $0.superview.map(ObjectIdentifier.init) }).count == 1)
 }
