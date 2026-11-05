@@ -263,12 +263,15 @@ private final class QueueTable: NSTableView {
     }
 }
 
-/// A queue row: title over "artist — album", the length on the right, bold when current.
-private final class QueueCell: NSTableCellView {
+/// A queue row: title over "artist — album", and the length at the row's right edge on the
+/// title's line, in the detail's font; bold when current.
+final class QueueCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("QueueCell")
-    private let title = NSTextField(labelWithString: "")
-    private let detail = NSTextField(labelWithString: "")
-    private let length = NSTextField(labelWithString: "")
+    /// The space between the text and the row's edges, and between the title and the length.
+    static let inset: CGFloat = 4
+    let title = NSTextField(labelWithString: "")
+    let detail = NSTextField(labelWithString: "")
+    let length = NSTextField(labelWithString: "")
 
     init() {
         super.init(frame: .zero)
@@ -278,22 +281,31 @@ private final class QueueCell: NSTableCellView {
         length.font = .monospacedDigitSystemFont(
             ofSize: NSFont.smallSystemFontSize, weight: .regular)
         length.textColor = .secondaryLabelColor
+        length.alignment = .right
         for label in [title, detail] {
             label.lineBreakMode = .byTruncatingTail
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
+        length.setContentCompressionResistancePriority(.required, for: .horizontal)
+        length.setContentHuggingPriority(.required, for: .horizontal)
         let text = NSStackView(views: [title, detail])
         text.orientation = .vertical
         text.alignment = .leading
         text.spacing = 0
-        let row = NSStackView(views: [text, length])
-        row.edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
-        row.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(row)
+        for view in [text, length] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+        }
+        // The length is pinned to the edge, not placed after the title, so it lines up from
+        // row to row; the title truncates before it, and the detail runs on under it.
         NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: leadingAnchor),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor),
-            row.centerYAnchor.constraint(equalTo: centerYAnchor),
+            text.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.inset),
+            text.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.inset),
+            text.centerYAnchor.constraint(equalTo: centerYAnchor),
+            length.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.inset),
+            length.firstBaselineAnchor.constraint(equalTo: title.firstBaselineAnchor),
+            title.trailingAnchor.constraint(
+                lessThanOrEqualTo: length.leadingAnchor, constant: -Self.inset),
         ])
         textField = title
     }
