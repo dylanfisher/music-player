@@ -21,8 +21,8 @@ struct WindowSettings {
     var tableAppearance: TableAppearance
     var statusBar: StatusBarLayout
     var headerStatus: BarLayout<HeaderPart>
-    var windowTitle: WindowTitle
-    var headerTitleFormat: TitleFormat
+    var windowTitle: TitleTemplate
+    var headerTitleFormat: TitleTemplate
 
     @MainActor init(_ settings: ConfigStore<AppSettings>, state: StateStore<AppState>) {
         frame = state[\.windowFrame]

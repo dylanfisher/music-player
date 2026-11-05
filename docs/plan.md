@@ -4221,6 +4221,11 @@ braces, empty formats and lines, and the sheet's drawing ignoring the owner's fo
 Line layout, the Appearance pane) before the review round; the Title Line with a track playing
 was checked by tests, not on screen.
 
+After the rebase onto phase 38, `TitleFormat` went: the Title Line is a `TitleTemplate`, the
+window title's type (ADR 0087), with its ten tokens, its help button and one rule for empty
+fields, the text before a field being the field's. The window title changed with it: a run of
+empty fields now keeps the separator before the next field shown, not the one after the last.
+
 #### 39c. Layout builder
 
 - [x] **39c.1 Colors.** The preview's columns and parts are too dark (`s4118`). They take the

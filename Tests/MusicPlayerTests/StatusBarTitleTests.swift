@@ -68,7 +68,7 @@ func theWindowIsTitledByThePlayingTrack(_ glass: Bool) async throws {
     #expect(window.titleVisibility == .visible)
     fixture.window.setGlass(!glass)
     #expect(window.title == "Come Together" && window.titleVisibility == .visible)
-    fixture.nowPlaying.windowTitle = WindowTitle("♪ {title}")
+    fixture.nowPlaying.windowTitle = TitleTemplate("♪ {title}")
     #expect(window.title == "♪ Come Together")
     state.currentIndex = nil
     fixture.nowPlaying.apply(PlaybackUpdate(state: state, event: .stopped))

@@ -213,31 +213,15 @@ sheet's drawing keeps its placeholder track.
 
 **The Title Line (phase 39b).** A `titleLine` part, "Title Line", shows one semibold line, as
 Swinsian's toolbar does ("FI3AC2384210 by Aleksi Perälä from Alithia E'"), built from
-`appearance.headerTitleFormat`, a `TitleFormat` in Settings whose default is
-`{title} by {artist} from {album}`. The fields are the title, the artist and the album, the
-text the status's other lines already show; the format line and the times are left out, since
-they have parts of their own and change as the track plays.
-
-A field is empty when its value is blank, spaces and newlines included. The fields with values
-are joined by the text just before each, so an empty field takes the text before it along; the
-text before the first field stays only when that field has a value, and the text after the
-last only when that one does, so nothing dangles at either end. With the default, no artist
-reads "Song from Album", no album "Song by Artist", and neither "Song"; `{artist} - {title}`
-with no artist, `{title} ({album})` and `({album}) {title}` with no album all read "Song". The
-line is trimmed of spaces and newlines, and a line that comes out empty hides the part, so its
-column has no blank line. One case the rule doesn't cover: text that wraps a field in the
-middle, such as the `]` in `[{artist}] {title} ({album})` with only the artist, belongs to the
-next field and goes with it, leaving "[Artist".
-
-`{{` and `}}` write a brace. A field the format doesn't know, `{year}` say, a brace without its
-pair, or an empty or blank format is a problem with the setting, which applies nothing and the
-banner shows, as for any setting (ADR 0082). The format is read on Unicode scalars, so a brace
-followed by a combining mark is still a brace. The setting is a string, so Settings ▸
-Appearance gives it a text row like the receiver's address, with no code of its own. The part
-starts in the tray; the default layout is unchanged. It truncates at its tail, and its tooltip
-has the whole line. The customize sheet draws it with the owner's format. A field's value comes
-from a `switch` over the fields, so a new field doesn't compile until the bar and the sheet's
-drawing give it one.
+`appearance.headerTitleFormat`, a `TitleTemplate` whose default is
+`{title} by {artist} from {album}`. It's the window title's template type (0087): the same ten
+tokens, the same rule for empty fields and brackets, the same problems, and the same text field
+with a help button in Settings ▸ Appearance. With the default, no artist reads "Song from
+Album", no album "Song by Artist", and neither "Song". A line that comes out empty hides the
+part, so its column has no blank line. The part starts in the tray; the default layout is
+unchanged. It truncates at its tail, and its tooltip has the whole line. The customize sheet
+draws it with the owner's template and a placeholder track, whose values come from a `switch`
+over the tokens, so a new token doesn't compile until the sheet's drawing gives it one.
 
 **Order (phase 39b).** Settings ▸ Appearance lists its rows in the schema's order, so the
 toolbar status's layout and title format come before the status bar's style and layout, as
@@ -261,8 +245,11 @@ the toolbar is above the status bar in the window.
   column is a fixed or flexible gap, which the owner wants to save.
 - **Dropping "Not Playing" from the model (phase 39b).** Rejected: the dock menu, Now Playing
   info and the status bar show it; only the toolbar's status is meant to be empty.
-- **A title line with every column the track table has (phase 39b).** Not now: the three fields
-  cover Swinsian's line, and each field added is one more name to keep in step with the table.
+- **A title line with every column the track table has (phase 39b).** Not now: the window
+  title's ten tokens cover Swinsian's line, and each field added is one more name to keep in
+  step with the table.
+- **A format type of its own for the Title Line (phase 39b's first cut).** Replaced by
+  `TitleTemplate`: two parsers for the same braces would drift apart.
 - **Dropping the text after an empty field instead of before it.** Rejected: in
   `{title} by {artist} from {album}` the word that belongs to a field comes before it.
 - **Dropping only the text before an empty field (phase 39b's first cut).** Replaced: at the

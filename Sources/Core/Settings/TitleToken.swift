@@ -1,4 +1,4 @@
-/// A field of the playing track that `appearance.windowTitle` names in braces, as `{artist}`.
+/// A field of the playing track that a `TitleTemplate` names in braces, as `{artist}`.
 /// The names are the track table's columns' where they share one.
 public enum TitleToken: String, CaseIterable, Sendable {
     case title, artist, album, albumArtist, composer, genre, year, trackNumber, discNumber,

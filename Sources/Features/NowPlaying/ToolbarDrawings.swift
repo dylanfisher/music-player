@@ -20,7 +20,7 @@ extension NowPlayingBar {
     /// placeholder track, its title line as `titleFormat` writes it, and a seek bar part played,
     /// at the width the toolbar shows it at its narrowest.
     public static func statusDrawing(
-        _ layout: BarLayout<HeaderPart>, titleFormat: TitleFormat
+        _ layout: BarLayout<HeaderPart>, titleFormat: TitleTemplate
     ) -> NSView {
         guard
             let note = NSImage(
@@ -31,16 +31,19 @@ extension NowPlayingBar {
         drawing.art.image = note
         drawing.art.contentTintColor = .secondaryLabelColor
         let title = "Song Title"
+        let format = "44.1 kHz 16-bit FLAC"
         drawing.titleLabel.stringValue = title
-        drawing.titleLineLabel.stringValue = titleFormat.line { field in
-            switch field {
+        drawing.titleLineLabel.stringValue = titleFormat.fill { token in
+            switch token {
             case .title: title
             case .artist: "The Artist"
             case .album: "The Album"
+            case .format: format
+            case .albumArtist, .composer, .genre, .year, .trackNumber, .discNumber: nil
             }
         }
         drawing.subtitleLabel.stringValue = "Artist — Album"
-        drawing.formatLabel.stringValue = "44.1 kHz 16-bit FLAC"
+        drawing.formatLabel.stringValue = format
         drawing.seekBox.bar.fraction = 0.35
         drawing.seekBox.showTimes(elapsed: "1:10", total: "3:20")
         // Drawn smaller, since the sheet's default set is about as tall as a button's row.

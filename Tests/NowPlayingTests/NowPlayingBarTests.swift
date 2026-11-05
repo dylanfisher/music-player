@@ -194,7 +194,7 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     var titles: [String?] = []
     bar.windowTitleChanged = { titles.append($0) }
     bar.apply(update(.trackStarted(index: 0), duration: 100))
-    bar.windowTitle = WindowTitle("{format}: {title}")
+    bar.windowTitle = TitleTemplate("{format}: {title}")
     bar.apply(update(.stopped, current: nil, duration: nil))
     #expect(titles == ["Song", "44.1 kHz 16-bit FLAC: Song", nil])
 }
@@ -226,7 +226,7 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     let unavailable = bar()
     unavailable.showUnavailable("No output device")
     for redraw in [
-        { unavailable.libraryChanged() }, { unavailable.titleFormat = .defaultHeaderTitle },
+        { unavailable.libraryChanged() }, { unavailable.titleFormat = .titleLine },
     ] {
         redraw()
         #expect(unavailable.header.showsParts)
@@ -242,7 +242,7 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     bar.apply(update(.trackStarted(index: 0), duration: 100))
     // The track has no artist or album.
     #expect(bar.header.titleLineLabel.stringValue == "Song")
-    bar.titleFormat = TitleFormat("Now: {title}")
+    bar.titleFormat = TitleTemplate("Now: {title}")
     #expect(bar.header.titleLineLabel.stringValue == "Now: Song")
     #expect(bar.header.titleLineLabel.toolTip == "Now: Song")
 }
@@ -253,8 +253,8 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     bar.apply(update(.trackStarted(index: 0), duration: 100))
     #expect(!bar.header.titleLineLabel.isHidden)
     // The track has no artist.
-    bar.titleFormat = TitleFormat("{artist}")
+    bar.titleFormat = TitleTemplate("{artist}")
     #expect(bar.header.titleLineLabel.stringValue == "" && bar.header.titleLineLabel.isHidden)
-    bar.titleFormat = .defaultHeaderTitle
+    bar.titleFormat = .titleLine
     #expect(!bar.header.titleLineLabel.isHidden)
 }

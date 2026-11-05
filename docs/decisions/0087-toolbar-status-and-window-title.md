@@ -47,19 +47,22 @@ windows had no sidebar.
 **`appearance.windowTitle` is a template.** `TitleToken` lists the fields a template can name,
 with a help line each: title, artist, album, album artist, composer, genre, year, track and
 disc number, and the file's format. Their names follow the track table's columns. The default
-is `{title} — {artist}`. Braces hold only a token, so an unknown name, `{}` or a stray brace is
-the value's problem, refused at load and in Settings like any other, with every token in the
-message; an empty template is refused too, rather than meaning the app's name. NowPlaying fills
-the template from the playing track, each field exactly as tagged, so a title ending in a comma
-or a colon keeps it. First, a `(` or `[` and its matching closer around tokens that are all
-empty go whole, with the spaces before them (after them at the start), so `{artist} ({year})
-{album}` without a year is "A Album"; a bracket with no match, or with no token inside, is plain
-text. Then text between two tokens shows only when the token before it has a value and
-a later one does: a run of empty fields keeps the one separator after the last field shown, so
-`{title} — {artist} — {album}` without an artist is "T — Album", and `{artist} ({year})` without
-a year is "A". Text before the first token shows only when that token has a value, and text
-after the last only when that one does. With nothing playing, or with every named field empty,
-the window takes the app's name. The title updates on a track change, a rescan of its tags and a change of
+is `{title} — {artist}`. `{{` and `}}` write a brace; any other brace holds a token, so an
+unknown name, `{}` or a lone brace is the value's problem, refused at load and in Settings like
+any other, with every token in the message. The template is read on Unicode scalars, so a brace
+followed by a combining mark is still a brace. An empty or blank template is refused too,
+rather than meaning the app's name. NowPlaying fills the template from the playing track, each
+field exactly as tagged, so a title ending in a comma or a colon keeps it; a blank field is
+empty. First, a `(` or `[` and its matching closer around tokens that are all empty go whole,
+with the spaces before them (after them at the start), so `{artist} ({year}) {album}` without a
+year is "A Album"; a bracket with no match, or with no token inside, is plain text. Then the
+text before each token belongs to it: the tokens with values are joined by the text just before
+each, so an empty one takes the text before it along, and `{title} — {artist} · {album}` without
+an artist is "T · Album". Closing brackets right after a token that close one the line has open
+stay, so `[{artist}] {title}` with only the artist is "[A]". Text before the first token shows
+only when that token has a value, and text after the last only when that one does. The result
+is trimmed. With nothing playing, or with every named field empty, the window takes the app's
+name. The type is `TitleTemplate`, which the toolbar's Title Line uses too (0085). The title updates on a track change, a rescan of its tags and a change of
 the setting. Settings ▸ Appearance shows a text field and a help button whose tooltip and
 popover list the tokens, from the setting's kind, a new `SettingKind.template`. The window's
 title shows over the expanded toolbar with the glass on and off; the glass makes the title bar
@@ -85,6 +88,9 @@ off puts the original header view back with whatever menu was set meanwhile.
 - **Plain text with `%artist%` tokens, or the track table's 50 columns as tokens.** Rejected:
   braces are what the owner wrote, and the columns' text lives in LibraryBrowser, which
   NowPlaying can't import; the ten fields cover what a title shows.
+- **Keeping the separator after an empty field instead of the one before it.** Replaced when
+  the Title Line moved onto `TitleTemplate`: in `{title} by {artist} from {album}` the word that
+  belongs to a field comes before it, and for plain separators either one reads the same.
 - **Unknown tokens left as typed.** Rejected: a typo would show in every window title with no
   report.
 - **A clearer header without a tint.** Rejected: the titles would float over the rows scrolling

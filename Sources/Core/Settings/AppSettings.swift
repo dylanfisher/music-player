@@ -83,7 +83,7 @@ public struct AppSettings: SettingsSchema {
         "appearance.glass", title: "Window Glass", default: false,
         "Turns the whole player into translucent glass, with the desktop showing through.")
     public let windowTitle = Setting(
-        "appearance.windowTitle", title: "Window Title", default: WindowTitle.default,
+        "appearance.windowTitle", title: "Window Title", default: TitleTemplate.windowTitle,
         "The window's title, with the playing track's fields in braces.")
     public let headerStatusLayout = Setting(
         "appearance.headerStatusLayout", title: "Toolbar Status Layout",
@@ -91,8 +91,8 @@ public struct AppSettings: SettingsSchema {
         "What the toolbar's now-playing status shows, in columns that stack their parts.")
     public let headerTitleFormat = Setting(
         "appearance.headerTitleFormat", title: "Toolbar Title Line",
-        default: TitleFormat.defaultHeaderTitle,
-        "The Title Line's text; an empty field drops the words around it.")
+        default: TitleTemplate.titleLine,
+        "The Title Line's text, with the playing track's fields in braces.")
     public let statusBarStyle = Setting(
         "appearance.statusBarStyle", title: "Status Bar", default: StatusBarStyle.minimal,
         "One line at the header's height, or two with larger art.")

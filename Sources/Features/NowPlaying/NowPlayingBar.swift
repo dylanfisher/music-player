@@ -26,13 +26,13 @@ public final class NowPlayingBar: NSObject {
     public let header = HeaderStatus()
     public var status: NSView { header.view }
     /// What the status's Title Line says.
-    public var titleFormat = TitleFormat.defaultHeaderTitle {
+    public var titleFormat = TitleTemplate.titleLine {
         didSet { show() }
     }
     /// The status bar's art, track, format and seek bar.
     public let statusBar = StatusBarParts()
     /// What the window's title says while a track plays.
-    public var windowTitle = WindowTitle.default {
+    public var windowTitle = TitleTemplate.windowTitle {
         didSet { show() }
     }
     /// Called with the window's title as the track or its tags change: nil for the app's name.
@@ -179,13 +179,7 @@ public final class NowPlayingBar: NSObject {
         header.showsParts =
             model.currentURL != nil || model.message != nil || unavailableReason != nil
         header.titleLabel.stringValue = model.title
-        header.titleLineLabel.stringValue = titleFormat.line { [model] field in
-            switch field {
-            case .title: model.title
-            case .artist: model.track?.artist
-            case .album: model.track?.album
-            }
-        }
+        header.titleLineLabel.stringValue = titleFormat.fill(model.value(of:))
         // The line truncates at its tail, so the tooltip has all of it.
         header.titleLineLabel.toolTip = header.titleLineLabel.stringValue
         // An empty line leaves no blank line in its column.

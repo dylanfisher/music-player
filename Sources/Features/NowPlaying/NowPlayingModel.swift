@@ -93,13 +93,14 @@ public final class NowPlayingModel {
 
     /// The window's title, `template` filled from the current track: nil with nothing playing,
     /// or when the fields it names are all empty, for the app's name instead.
-    func windowTitle(_ template: WindowTitle) -> String? {
+    func windowTitle(_ template: TitleTemplate) -> String? {
         guard currentURL != nil else { return nil }
         let title = template.fill(value(of:))
         return title.isEmpty ? nil : title
     }
 
-    private func value(of token: TitleToken) -> String? {
+    /// The current track's value for `token`.
+    func value(of token: TitleToken) -> String? {
         switch token {
         case .title: title
         case .artist: track?.artist

@@ -97,7 +97,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
 
     /// Titles the window from now on as `nowPlaying` fills `template`, the app's name with
     /// nothing playing.
-    func showTitles(of nowPlaying: NowPlayingBar, _ template: WindowTitle) {
+    func showTitles(of nowPlaying: NowPlayingBar, _ template: TitleTemplate) {
         nowPlaying.windowTitleChanged = { [weak self] in self?.window.title = $0 ?? appName }
         nowPlaying.windowTitle = template
     }

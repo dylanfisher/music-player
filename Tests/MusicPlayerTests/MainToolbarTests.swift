@@ -241,7 +241,7 @@ func theStatusCentersOnTheWindow(_ fullSize: Bool) throws {
     let made = toolbar([.status], try dispatcher())
     made.statusLayout = BarLayout(
         center: BarColumn(parts: [.titleLine], width: .flexible, alignment: .leading))
-    made.titleFormat = TitleFormat("{artist}: {title}")
+    made.titleFormat = TitleTemplate("{artist}: {title}")
     func texts(_ view: NSView) -> [String] {
         ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(texts)
     }

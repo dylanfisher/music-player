@@ -282,7 +282,9 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
             schema.statusBarLayout.key,
         ])
     let titleFormat = model.rows.first { $0.key == schema.headerTitleFormat.key }
-    #expect(titleFormat?.control == .text(optional: false))
+    // It's a template like the window's title, with the same tokens.
+    let windowTitle = model.rows.first { $0.key == schema.windowTitle.key }
+    #expect(titleFormat?.control != nil && titleFormat?.control == windowTitle?.control)
     let listed = sections.flatMap(\.rows).map(\.key)
     #expect(listed.count == AppSettings().settings.count - 3)
     #expect(!listed.contains(AppSettings().watchedFolders.key))

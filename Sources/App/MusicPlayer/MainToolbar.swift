@@ -28,7 +28,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     /// The now-playing status's layout, which its drawing in the customization sheet shows.
     var statusLayout = BarLayout.defaultHeaderStatus
     /// The status's title line format, which its drawing in the customization sheet shows.
-    var titleFormat = TitleFormat.defaultHeaderTitle
+    var titleFormat = TitleTemplate.titleLine
     /// Called with the toolbar's items after the user adds, removes or moves one.
     var itemsChanged: ([ToolbarItem]) -> Void = { _ in }
     private let views: [ToolbarItem: NSView]
