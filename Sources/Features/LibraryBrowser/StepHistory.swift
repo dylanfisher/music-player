@@ -17,7 +17,7 @@ struct WindowPlace: Equatable, Sendable {
 }
 
 /// Back and Forward's steps, oldest first: each source the sidebar showed and each play from the
-/// browser, and where Back and Forward are in them (ADR 0089).
+/// browser, and where Back and Forward are in them (ADR 0090).
 ///
 /// Each step keeps the window as it was when last left, so Back over a step shows the window
 /// as it was just before that step, and Forward as Back left it. A play also keeps the

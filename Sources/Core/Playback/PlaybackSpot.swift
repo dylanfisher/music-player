@@ -2,7 +2,7 @@ import Foundation
 
 /// Where playback stood, for putting it back: the queue, the entry playing or paused in it, how
 /// far in, and whether it played. `PlaybackEngine.spot()` reads one and `restore(_:)` puts it
-/// back, for Back and Forward over a play (ADR 0089).
+/// back, for Back and Forward over a play (ADR 0090).
 public struct PlaybackSpot: Equatable, Sendable {
     public var queue: [URL]
     /// Into `queue`; nil for an empty queue.

@@ -1156,7 +1156,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var canGoForward: Bool { model.history.canGoForward }
 
     /// Undoes the last step: shows the window as the step before had it, and puts back the
-    /// playback a play replaced (ADR 0089).
+    /// playback a play replaced (ADR 0090).
     public func back() { inTurn { [weak self] in await self?.step(back: true) } }
 
     public func forward() { inTurn { [weak self] in await self?.step(back: false) } }

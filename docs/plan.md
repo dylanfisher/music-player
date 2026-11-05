@@ -4446,7 +4446,7 @@ The slots with a track playing were checked by tests, not on screen. `./scripts/
       playing if it was playing, and the window as it was. Forward redoes it. So an accidental
       play is undone with ⌘[.
 
-Plan, part 40d (ADR 0089):
+Plan, part 40d (ADR 0090):
 - Probe (done before this plan): `PlayCommand` is the `--play` terminal player; the window's
   plays reach the engine through `LibraryBrowser.play` and `playStart`, which the app wires to
   `PlaybackEngine.play(starting:)`. Those come from a double-click or Return in the track table
@@ -4493,7 +4493,7 @@ Plan, part 40d (ADR 0089):
 - Order: the engine's spot and restore, the history and the browser together (one change,
   since `SourceHistory` goes), the app's wiring, then the ADR and the result.
 
-Result, part 40d: shipped 40d.1 (ADR 0089). ⌘[ and ⌘] step through one history of sources
+Result, part 40d: shipped 40d.1 (ADR 0090). ⌘[ and ⌘] step through one history of sources
 shown and plays from the browser: a double-click or Return in the track table or the timeline,
 Play, and `music-player play`. Track ends, Next, Previous, the media keys and queue panel jumps
 fold into the play that started the queue, so Back over a play puts back whatever was playing
