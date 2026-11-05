@@ -18,6 +18,8 @@ struct WindowSettings {
     var trackTable: TrackTableLayout
     var timelineTable: TimelineLayout?
     var browser: BrowserState
+    /// The play state saved at quit, whose source the window shows (ADR 0092).
+    var resume: ResumePoint
     var groupByAlbumArtist: Bool
     var tableAppearance: TableAppearance
     var statusBar: StatusBarLayout
@@ -40,7 +42,8 @@ struct WindowSettings {
         queueWidth = state[\.queueWidth]
         trackTable = state[\.trackTable]
         timelineTable = state[\.timelineTable]
-        browser = BrowserState(source: state[\.source], columns: state[\.browserColumns])
+        browser = BrowserState(source: nil, columns: state[\.browserColumns])
+        resume = settings[\.resume]
         groupByAlbumArtist = settings[\.groupByAlbumArtist]
         tableAppearance = TableAppearance(settings)
         statusBar = StatusBarLayout(settings)

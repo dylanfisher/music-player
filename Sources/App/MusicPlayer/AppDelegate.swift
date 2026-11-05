@@ -44,6 +44,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// How long quitting waits for the outputs to close: longer than a device takes to restore
     /// its format, which it waits up to 3 s for.
     static let closeWaitSeconds = 6.0
+    /// How long quitting waits for the engine's place, for the play state.
+    static let resumeWaitSeconds = 1.0
     private(set) var settings: ConfigStore<AppSettings>?
     let banner = ConfigBanner()
     private(set) var state: StateStore<AppState>?
@@ -58,6 +60,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Looks a track up by path, for counting plays toward frecency.
     private(set) var trackLookup: ((String) throws -> TrackRow?)?
     private(set) var saver: LayoutSaver?
+    /// The play state saved at quit, read at launch, and what saves it once that's put back
+    /// (ADR 0092).
+    private var launchResume = ResumePoint()
+    private(set) var resumeSaver: ResumeSaver?
+    /// Set once quitting has gone on, so the play state's wait replies once.
+    private var quitReplied = false
     private(set) var window: MainWindow?
     private(set) var browser: LibraryBrowser?
     private(set) var nowPlaying: NowPlayingBar?
@@ -282,10 +290,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 saver.set(\.browserHeight, height)
             }
         }
-        browser.stateChanged = { state in
-            saver.set(\.source, state.source)
+        browser.stateChanged = { [weak self] state in
             saver.set(\.browserColumns, state.columns)
+            self?.resumeSaver?.changed()
         }
+        browser.selectionChanged = { [weak self] in self?.resumeSaver?.changed() }
         makeGoToListings(browser)
         browser.libraryRefreshed = { [weak self] in
             self?.goToEntries?.libraryChanged()
@@ -315,7 +324,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         window.show()
         NSApp.activate(ignoringOtherApps: true)
-        Task { await browser.load(layout.browser) }
+        launchResume = layout.resume
+        Task { await browser.load(layout.browser, resume: layout.resume) }
         if let aside = index.movedAside { showMovedAside(aside, in: window.window) }
     }
 
@@ -342,6 +352,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startServices(_ settings: ConfigStore<AppSettings>) {
         startPlayback(settings)
+        resumePlayback(settings)
         applyRendererSetting()
         thumbnails.trimInBackground()
         startScripting()
@@ -418,6 +429,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyVolumeKeys()
     }
 
+    /// Saves the play state before quitting, waiting up to `resumeWaitSeconds` for the engine's
+    /// place.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let resumeSaver else { return .terminateNow }
+        Task { [weak self] in
+            await resumeSaver.save()
+            self?.replyToQuit(sender)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.resumeWaitSeconds) {
+            [weak self] in
+            guard let self, !quitReplied else { return }
+            logger.error("the play state wasn't read within \(Self.resumeWaitSeconds) s; quitting")
+            replyToQuit(sender)
+        }
+        return .terminateLater
+    }
+
+    private func replyToQuit(_ sender: NSApplication) {
+        guard !quitReplied else { return }
+        quitReplied = true
+        sender.reply(toApplicationShouldTerminate: true)
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         volumeKeyTap?.stop()
         scriptServer?.stop()
@@ -451,6 +485,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: Playback
+
+    /// Cues the track of the play state saved at quit, paused where it was, then starts saving
+    /// the play state (ADR 0092). Saving waits for the cue, so a save before it can't replace
+    /// the saved track with nothing.
+    private func resumePlayback(_ settings: ConfigStore<AppSettings>) {
+        guard let browser else { return }
+        let saver = ResumeSaver(settings) { [weak self] in await self?.currentResumePoint() }
+        let resume = launchResume
+        Task { [weak self] in
+            if let engine = self?.engine, let resumed = await browser.resumedPlayback(resume) {
+                await engine.cue(resumed.spot, durationSeconds: resumed.durationSeconds)
+            }
+            self?.resumeSaver = saver
+        }
+    }
+
+    /// Where playback and the window are, for the play state. Without an output nothing can
+    /// have played, so the saved track stays.
+    private func currentResumePoint() async -> ResumePoint? {
+        guard let browser, let settings else { return nil }
+        guard let engine else {
+            let saved = settings[\.resume]
+            var point = browser.resumePoint(playing: nil)
+            point?.track = saved.track
+            point?.seconds = saved.seconds
+            point?.from = saved.from
+            return point
+        }
+        let spot = await engine.spot()
+        let playing = spot.index.flatMap { index in
+            spot.status == .stopped ? nil : (spot.queue[index].path, spot.seconds)
+        }
+        return browser.resumePoint(playing: playing)
+    }
 
     /// Opens nothing yet: the device is held only once something plays.
     func startPlayback(_ settings: ConfigStore<AppSettings>) {
@@ -491,6 +559,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.playTracker?.handle(update)
                     if case .trackStarted(let index) = update.event {
                         self?.countPlay(update.state.queue[index].path)
+                    }
+                    switch update.event {
+                    case .trackStarted, .paused, .stopped, .seeked, .finished:
+                        self?.resumeSaver?.changed()
+                    default: break
                     }
                 }
             }

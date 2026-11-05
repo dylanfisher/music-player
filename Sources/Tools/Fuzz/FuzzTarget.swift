@@ -197,7 +197,6 @@ private let state = FuzzTarget(
         let url = work.appendingPathComponent(inputFileName)
         let store = try StateStore(AppState(), fileURL: url)
         try store.set(\.sidebarWidth, to: 200)
-        try store.set(\.source, to: .playlist(3))
         var columns = BrowserColumn.defaults
         columns[0].selection = "Seed Genre"
         try store.set(\.browserColumns, to: columns)
