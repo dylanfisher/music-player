@@ -50,7 +50,7 @@ extension RowHeight {
     /// Compact is Swinsian's row height.
     var points: CGFloat {
         switch self {
-        case .compact: 17
+        case .compact: 16
         case .regular: RowListController.rowHeight
         case .large: 22
         }

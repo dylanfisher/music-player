@@ -343,7 +343,7 @@ import Testing
     // The rows draw every line themselves.
     #expect(controller.table.gridStyleMask == [])
     #expect(!controller.table.usesAlternatingRowBackgroundColors)
-    #expect(controller.table.rowHeight == 17)
+    #expect(controller.table.rowHeight == 16)
     controller.apply(
         TableAppearance(
             columnLines: true, rowLines: false, albumLines: false, rowLineColor: nil,
