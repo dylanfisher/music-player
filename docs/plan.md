@@ -4564,6 +4564,50 @@ access conflict detected" on the old code.
       forward. Each step is the selection and the view it was in. ⌘L is a step: play a track,
       click another, ⌘L, then ⌘U selects the clicked one again.
 
+Plan, part 41c (ADR 0091):
+- Probe (done before this plan): Show Current Track (`view.showCurrentTrack`, ⌘L) calls
+  `reveal(trackID:)`, which selects the track in whatever the table lists, and shows the whole
+  library only when the source, a pane or the search hides it. The browser's plays (track
+  table, timeline, Play, `music-player play`) all pass `recordPlay`, which takes a step in
+  `StepHistory` with the window it was started from; that window is overwritten when the step
+  is left (ADR 0090), so the source a play came from isn't kept anywhere. Selection changes
+  aren't kept either. ⌘U and ⌘⇧U are bound to nothing; ⌥⌘U is Show Queue.
+- 41c.1, where a play came from: `StepHistory.Play` keeps the filter it was started from
+  (source, search, column selections), and `playSource` is that of the latest play at or
+  before the history's place, so Back over a play gives the one before it. ⌘L, with a track
+  playing, goes there: the track's row where the window shows that source and lists it;
+  otherwise the source with the play's search and column selections; otherwise the source
+  alone; otherwise, or when the playlist is gone or no play was recorded, the whole library,
+  as now. On the timeline, the newest loaded play of the track, after the timeline's load;
+  when it lists none, the library. Tests: a track played in a playlist and also in the
+  library: ⌘L from the library shows the playlist, and played from the library, ⌘L from the
+  playlist shows the library; a play's search comes back; the track taken out of the playlist,
+  or the playlist deleted, falls back to the library; Back over a play makes ⌘L follow the
+  play before; a play from the timeline goes back to the timeline's row.
+- 41c.2, soft undo: `SelectionHistory` (LibraryBrowser), in memory, holds `WindowPlace`s, the
+  same capture Back uses. A step is recorded when the track table's selection changes to a
+  non-empty one that differs from the current step's selection or source. An unchanged
+  selection under a new search or pane keeps its step as it was. Consecutive moves by key
+  (the selection commands: arrows, Shift-arrows, ten rows, page, first and last) in one source
+  coalesce into one step, as in Sublime; a click, ⌘L, a reveal or a jump each start a step. A
+  new step after undo drops the redo steps; 100 steps at most, the oldest dropped. ⌘U first
+  returns to the current step when the window has moved off it (another source shown, the
+  selection cleared), else the one before; the step left keeps the window as it was left, so
+  ⌘⇧U returns there. Restoring shows the step's filter, selection and scroll through the code
+  Back uses (one `show(_ place:)` in `LibraryBrowser`, which part 41f can call), records
+  nothing, and runs in turn with Back and Forward. Playback is never touched. Steps of a
+  deleted playlist go, as Back's do. The timeline's rows are plays, which a place doesn't
+  keep, so its selections aren't steps.
+- Commands: `go.undoSelection` "Undo Selection" ⌘U and `go.redoSelection` "Redo Selection"
+  ⌘⇧U, in the View menu after Back and Forward, rebindable in Settings ▸ Shortcuts as every
+  command is; not from links, since they need the window.
+- Tests: `SelectionHistory` as values (recording, coalescing, the cap, dropping redo, moving
+  off a step, removal); in the browser: the owner's example (play, click, ⌘L, ⌘U selects the
+  clicked track, ⌘⇧U the playing one again), a run of arrow keys undone in one step, a step
+  from another source shows that source again, undo leaves playback alone; the commands' chords
+  and menu places.
+- Order: this plan, 41c.1, 41c.2 with its commands, then the ADR and the result.
+
 #### 41d. Signal path, outputs and receiver
 
 - [ ] **41d.1 Wording.** Where the signal path says "not bit perfect" while streaming to a DAC,
