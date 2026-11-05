@@ -226,15 +226,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         trackLookup = lookup
         let nowPlaying = NowPlayingBar(model: NowPlayingModel(lookup: lookup), artwork: artwork)
         nowPlaying.header.apply(layout.headerStatus)
+        for (item, header) in zip(ToolbarItem.customStatuses, nowPlaying.customStatuses) {
+            if let slot = layout.customStatuses[item] { header.apply(slot) }
+        }
         nowPlaying.titleFormat = layout.headerTitleFormat
         makeMediaControls(dispatcher, lookup: lookup)
         let queue = QueuePanel(model: QueueModel(lookup: lookup))
         let signalPath = SignalPathPanel()
         let toolbar = MainToolbar(
             identifier: String(describing: MainWindow.self), transport: nowPlaying.transport,
-            status: nowPlaying.status, search: browser.searchField, dispatcher: dispatcher,
-            items: state[\.toolbarItems])
+            status: nowPlaying.status, customStatuses: nowPlaying.customStatuses.map(\.view),
+            search: browser.searchField, dispatcher: dispatcher, items: state[\.toolbarItems])
         toolbar.statusLayout = layout.headerStatus
+        toolbar.customStatusLayouts = layout.customStatuses
         toolbar.titleFormat = layout.headerTitleFormat
         toolbar.itemsChanged = { items in
             saver.set(\.toolbarItems, items)

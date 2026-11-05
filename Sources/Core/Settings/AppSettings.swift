@@ -89,6 +89,18 @@ public struct AppSettings: SettingsSchema {
         "appearance.headerStatusLayout", title: "Toolbar Status Layout",
         default: BarLayout.defaultHeaderStatus,
         "What the toolbar's now-playing status shows, in columns that stack their parts.")
+    public let customStatus1Layout = Setting(
+        "appearance.customStatus1Layout", title: ToolbarItem.customStatusTitle(1) + " Layout",
+        default: BarLayout.defaultCustomStatus,
+        "What the toolbar's Custom Status 1 item shows, in columns of parts.")
+    public let customStatus2Layout = Setting(
+        "appearance.customStatus2Layout", title: ToolbarItem.customStatusTitle(2) + " Layout",
+        default: BarLayout.defaultCustomStatus,
+        "What the toolbar's Custom Status 2 item shows, in columns of parts.")
+    public let customStatus3Layout = Setting(
+        "appearance.customStatus3Layout", title: ToolbarItem.customStatusTitle(3) + " Layout",
+        default: BarLayout.defaultCustomStatus,
+        "What the toolbar's Custom Status 3 item shows, in columns of parts.")
     public let headerTitleFormat = Setting(
         "appearance.headerTitleFormat", title: "Toolbar Title Line",
         default: TitleTemplate.titleLine,

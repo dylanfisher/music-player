@@ -25,7 +25,10 @@ public final class NowPlayingBar: NSObject {
     /// columns the user lays out.
     public let header = HeaderStatus()
     public var status: NSView { header.view }
-    /// What the status's Title Line says.
+    /// The toolbar's Custom Status items, one per `ToolbarItem.customStatuses` slot, each with
+    /// its own views and layout, showing the same track as the status (ADR 0089).
+    public let customStatuses = ToolbarItem.customStatuses.map { _ in HeaderStatus() }
+    /// What the Title Line says, in the status and in each Custom Status item.
     public var titleFormat = TitleTemplate.titleLine {
         didSet { show() }
     }
@@ -175,31 +178,34 @@ public final class NowPlayingBar: NSObject {
     }
 
     private func show() {
-        // A message says what went wrong even with nothing playing.
-        header.showsParts =
-            model.currentURL != nil || model.message != nil || unavailableReason != nil
-        header.titleLabel.stringValue = model.title
-        header.titleLineLabel.stringValue = titleFormat.fill(model.value(of:))
-        // The line truncates at its tail, so the tooltip has all of it.
-        header.titleLineLabel.toolTip = header.titleLineLabel.stringValue
-        // An empty line leaves no blank line in its column.
-        header.titleLineLabel.isHidden = header.titleLineLabel.stringValue.isEmpty
-        header.subtitleLabel.stringValue = model.subtitle
-        header.formatLabel.stringValue = unavailableReason ?? model.message ?? model.formatLine
-        header.formatLabel.textColor =
+        let titleLine = titleFormat.fill(model.value(of:))
+        let format = unavailableReason ?? model.message ?? model.formatLine
+        let formatColor: NSColor =
             unavailableReason != nil
             ? .systemRed : model.message != nil ? .systemOrange : .secondaryLabelColor
-        header.formatLabel.toolTip = header.formatLabel.stringValue
+        for header in headers {
+            // A message says what went wrong even with nothing playing.
+            header.showsParts =
+                model.currentURL != nil || model.message != nil || unavailableReason != nil
+            header.titleLabel.stringValue = model.title
+            header.titleLineLabel.stringValue = titleLine
+            // The line truncates at its tail, so the tooltip has all of it.
+            header.titleLineLabel.toolTip = titleLine
+            // An empty line leaves no blank line in its column.
+            header.titleLineLabel.isHidden = titleLine.isEmpty
+            header.subtitleLabel.stringValue = model.subtitle
+            header.formatLabel.stringValue = format
+            header.formatLabel.textColor = formatColor
+            header.formatLabel.toolTip = format
+        }
         // With nothing playing the art keeps its place unseen, so nothing beside it moves
         // when a track starts.
-        for art in [header.art, statusBar.art] {
+        for art in headers.map(\.art) + [statusBar.art] {
             art.alphaValue = model.currentURL == nil ? 0 : 1
         }
         statusBar.show(title: model.title, subtitle: model.subtitle)
         windowTitleChanged(model.windowTitle(windowTitle))
-        statusBar.show(
-            format: header.formatLabel.stringValue,
-            color: header.formatLabel.textColor ?? .labelColor)
+        statusBar.show(format: format, color: formatColor)
         let playing = model.isPlaying
         let title = AppCommands.title(of: playing ? .pause : .play)
         playButton.image = NSImage(
@@ -235,13 +241,16 @@ public final class NowPlayingBar: NSObject {
     }
 
     private func showTimes(_ times: (elapsed: String, total: String)) {
-        for box in [header.seekBox, statusBar.seekBox] {
+        for box in headers.map(\.seekBox) + [statusBar.seekBox] {
             box.showTimes(elapsed: times.elapsed, total: times.total)
         }
     }
 
+    /// The toolbar's status and its Custom Status items, which show the same track.
+    private var headers: [HeaderStatus] { [header] + customStatuses }
+
     /// The toolbar's and the status bar's.
-    private var seekBars: [SeekBar] { [header.seekBox.bar, statusBar.seekBox.bar] }
+    private var seekBars: [SeekBar] { headers.map(\.seekBox.bar) + [statusBar.seekBox.bar] }
 
     private func loadArt() {
         showArt(nil)
@@ -266,7 +275,7 @@ public final class NowPlayingBar: NSObject {
     }
 
     private func showArt(_ image: NSImage?, toolTip: String? = nil) {
-        for view in [header.art, statusBar.art] {
+        for view in headers.map(\.art) + [statusBar.art] {
             view.image = image
             view.toolTip = toolTip
         }

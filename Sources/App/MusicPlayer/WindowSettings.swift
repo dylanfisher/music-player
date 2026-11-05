@@ -21,6 +21,7 @@ struct WindowSettings {
     var tableAppearance: TableAppearance
     var statusBar: StatusBarLayout
     var headerStatus: BarLayout<HeaderPart>
+    var customStatuses: [ToolbarItem: BarLayout<HeaderPart>]
     var windowTitle: TitleTemplate
     var headerTitleFormat: TitleTemplate
 
@@ -42,6 +43,10 @@ struct WindowSettings {
         tableAppearance = TableAppearance(settings)
         statusBar = StatusBarLayout(settings)
         headerStatus = settings[\.headerStatusLayout]
+        customStatuses = Dictionary(
+            uniqueKeysWithValues: ToolbarItem.customStatuses.compactMap { item in
+                item.customStatusSetting.map { (item, settings[$0]) }
+            })
         windowTitle = settings[\.windowTitle]
         headerTitleFormat = settings[\.headerTitleFormat]
     }

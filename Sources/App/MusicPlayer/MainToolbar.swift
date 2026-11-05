@@ -27,7 +27,11 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     var setVolume: (_ decibels: Double, _ done: Bool) -> Void = { _, _ in }
     /// The now-playing status's layout, which its drawing in the customization sheet shows.
     var statusLayout = BarLayout.defaultHeaderStatus
-    /// The status's title line format, which its drawing in the customization sheet shows.
+    /// Each Custom Status item's layout, which sizes its item and its drawing shows.
+    var customStatusLayouts = Dictionary(
+        uniqueKeysWithValues: ToolbarItem.customStatuses.map { ($0, BarLayout.defaultCustomStatus) }
+    )
+    /// The title line format, which the drawings of the status and the Custom Status items show.
     var titleFormat = TitleTemplate.titleLine
     /// Called with the toolbar's items after the user adds, removes or moves one.
     var itemsChanged: ([ToolbarItem]) -> Void = { _ in }
@@ -39,14 +43,23 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     /// The items to show once the toolbar is in a window.
     private let savedItems: [ToolbarItem]
 
-    /// `transport`, `status` and `search` are the views those items show. AppKit keeps the
-    /// items of every toolbar with the same `identifier` the same.
+    /// `transport`, `status` and `search` are the views those items show, and `customStatuses`
+    /// the Custom Status items', one per slot in `ToolbarItem.customStatuses`' order. AppKit
+    /// keeps the items of every toolbar with the same `identifier` the same.
     init(
-        identifier: String, transport: NSView, status: NSView, search: NSView,
-        dispatcher: CommandDispatcher, items: [ToolbarItem]
+        identifier: String, transport: NSView, status: NSView, customStatuses: [NSView],
+        search: NSView, dispatcher: CommandDispatcher, items: [ToolbarItem]
     ) {
+        precondition(
+            customStatuses.count == ToolbarItem.customStatuses.count,
+            "\(customStatuses.count) views for \(ToolbarItem.customStatuses.count) Custom Status items"
+        )
         toolbar = NSToolbar(identifier: identifier)
-        views = [.transport: transport, .status: status, .search: search]
+        var views: [ToolbarItem: NSView] = [
+            .transport: transport, .status: status, .search: search,
+        ]
+        for (item, view) in zip(ToolbarItem.customStatuses, customStatuses) { views[item] = view }
+        self.views = views
         self.dispatcher = dispatcher
         savedItems = items
         super.init()
@@ -110,7 +123,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         if flag, let view = views[item] {
             let shown = NSToolbarItem(itemIdentifier: identifier)
             shown.view = view
-            if item == .status { size(shown) }
+            if layout(of: item) != nil { size(shown, item) }
             label(shown, item)
             return shown
         }
@@ -124,33 +137,49 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
             let output = NSMenuToolbarItem(itemIdentifier: identifier)
             output.menu = outputMenu
             made = output
-        case .transport, .status, .search, .flexibleSpace, .space:
+        case .transport, .status, .customStatus1, .customStatus2, .customStatus3, .search,
+            .flexibleSpace, .space:
             made = NSToolbarItem(itemIdentifier: identifier)
         }
         label(made, item)
         return made
     }
 
-    /// Sizes the status's item again: its view's layout sets its height, and whether a
-    /// flexible space shares the toolbar its widest.
+    /// The layout of the status or a Custom Status item, or nil for any other item.
+    func layout(of item: ToolbarItem) -> BarLayout<HeaderPart>? {
+        item == .status ? statusLayout : customStatusLayouts[item]
+    }
+
+    /// Sizes the status's and the Custom Status items again: each view's layout sets its
+    /// height, and its width or, for a flexible one, whether a flexible space shares the
+    /// toolbar its widest.
     func resizeStatus() {
-        for shown in toolbar.items where ToolbarItem(shown.itemIdentifier) == .status {
-            size(shown)
+        for shown in toolbar.items {
+            guard let item = ToolbarItem(shown.itemIdentifier), layout(of: item) != nil else {
+                continue
+            }
+            size(shown, item)
         }
     }
 
-    /// The status takes the room the other items leave, up to `statusSharingPoints` when a
-    /// flexible space takes the rest, at its view's height. The toolbar measures a view at its
-    /// fitting size, so constraints can't widen it; `minSize` and `maxSize`, deprecated in
-    /// macOS 12 with no replacement for a flexible width, can. KVC sets them without the
-    /// deprecation warning.
-    private func size(_ shown: NSToolbarItem) {
+    /// A Custom Status item whose columns are all fixed is as wide as they are (ADR 0089).
+    /// Any other takes the room the other items leave, as the status does, up to
+    /// `statusSharingPoints` when a flexible space takes the rest, at its view's height. The
+    /// toolbar measures a view at its fitting size, so constraints can't widen it; `minSize`
+    /// and `maxSize`, deprecated in macOS 12 with no replacement for a flexible width, can. KVC
+    /// sets them without the deprecation warning.
+    private func size(_ shown: NSToolbarItem, _ item: ToolbarItem) {
         let height = shown.view?.fittingSize.height ?? 0
         let shares = toolbar.items.contains { $0.itemIdentifier == .flexibleSpace }
-        let widest = shares ? Self.statusSharingPoints : Self.statusMaximumPoints
-        shown.setValue(
-            NSValue(size: NSSize(width: Self.statusMinimumPoints, height: height)),
-            forKey: "minSize")
+        var narrowest = Self.statusMinimumPoints
+        var widest = shares ? Self.statusSharingPoints : Self.statusMaximumPoints
+        if item != .status, let layout = layout(of: item),
+            let width = HeaderStatus.fixedWidthPoints(of: layout)
+        {
+            narrowest = width
+            widest = width
+        }
+        shown.setValue(NSValue(size: NSSize(width: narrowest, height: height)), forKey: "minSize")
         shown.setValue(NSValue(size: NSSize(width: widest, height: height)), forKey: "maxSize")
     }
 
@@ -161,7 +190,11 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     func drawing(of item: ToolbarItem) -> NSView? {
         switch item {
         case .transport: return NowPlayingBar.transportDrawing()
-        case .status: return NowPlayingBar.statusDrawing(statusLayout, titleFormat: titleFormat)
+        case .status, .customStatus1, .customStatus2, .customStatus3:
+            guard let layout = layout(of: item) else {
+                preconditionFailure("\(item) has no layout")
+            }
+            return NowPlayingBar.statusDrawing(layout, titleFormat: titleFormat)
         case .search:
             let field = NSSearchField()
             field.translatesAutoresizingMaskIntoConstraints = false
@@ -225,6 +258,9 @@ extension ToolbarItem {
         case .transport: "Controls"
         case .volume: "Volume"
         case .status: "Now Playing"
+        case .customStatus1: ToolbarItem.customStatusTitle(1)
+        case .customStatus2: ToolbarItem.customStatusTitle(2)
+        case .customStatus3: ToolbarItem.customStatusTitle(3)
         case .search: "Search"
         case .shuffle: AppCommands.title(of: .shuffle)
         case .repeat: AppMenus.repeatMenuTitle
@@ -242,6 +278,7 @@ extension ToolbarItem {
         case .transport: "playpause.fill"
         case .volume: "speaker.wave.2.fill"
         case .status: "music.note"
+        case .customStatus1, .customStatus2, .customStatus3: "rectangle.split.3x1"
         case .search: "magnifyingglass"
         case .shuffle: "shuffle"
         case .repeat: "repeat"
@@ -249,6 +286,16 @@ extension ToolbarItem {
         case .output: "hifispeaker.2"
         case .signalPath: "waveform.path"
         case .flexibleSpace, .space: ""
+        }
+    }
+
+    /// The setting a Custom Status item's layout comes from, or nil for any other item.
+    var customStatusSetting: KeyPath<AppSettings, Setting<BarLayout<HeaderPart>>>? {
+        switch self {
+        case .customStatus1: \.customStatus1Layout
+        case .customStatus2: \.customStatus2Layout
+        case .customStatus3: \.customStatus3Layout
+        default: nil
         }
     }
 

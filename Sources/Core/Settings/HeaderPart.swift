@@ -39,4 +39,10 @@ extension BarLayout where Part == HeaderPart {
         center: BarColumn(
             parts: [.title, .subtitle, .format, .seek], width: .flexible, alignment: .leading,
             stacks: true))
+
+    /// The Title Line centered over the seek bar, as Swinsian's toolbar shows the track: the
+    /// default for each Custom Status item.
+    public static let defaultCustomStatus = BarLayout(
+        center: BarColumn(
+            parts: [.titleLine, .seek], width: .flexible, alignment: .center, stacks: true))
 }

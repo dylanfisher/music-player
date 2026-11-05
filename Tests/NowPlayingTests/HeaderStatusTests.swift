@@ -167,3 +167,28 @@ private func frame(_ view: NSView, in root: NSView) -> NSRect {
     #expect(line.minX == 48 + HeaderStatus.spacingPoints && line.maxX <= width + 0.5, "\(line)")
     #expect(line.height < 2 * status.titleLineLabel.intrinsicContentSize.height)
 }
+
+/// A layout of fixed columns is as wide as the columns and the spacing between them, and lays
+/// out at that width with each column in its place; a flexible column leaves the width to the
+/// room the status is given.
+@MainActor @Test func aFixedLayoutIsAsWideAsItsColumns() {
+    let spacing = HeaderStatus.spacingPoints
+    let layout = BarLayout<HeaderPart>(
+        leading: [BarColumn(parts: [.art], width: .fixed(48), alignment: .leading)],
+        center: BarColumn(parts: [.seek], width: .fixed(200), alignment: .center),
+        trailing: [BarColumn(parts: [], width: .fixed(60), alignment: .leading)])
+    let points = 48 + 200 + 60 + 2 * spacing
+    #expect(HeaderStatus.fixedWidthPoints(of: layout) == points)
+    let alone = BarLayout<HeaderPart>(
+        center: BarColumn(parts: [.titleLine], width: .fixed(300), alignment: .center))
+    #expect(HeaderStatus.fixedWidthPoints(of: alone) == 300)
+    #expect(HeaderStatus.fixedWidthPoints(of: .defaultHeaderStatus) == nil)
+    #expect(HeaderStatus.fixedWidthPoints(of: .defaultCustomStatus) == nil)
+    let status = HeaderStatus()
+    status.apply(layout)
+    status.view.frame = NSRect(x: 0, y: 0, width: points, height: status.view.fittingSize.height)
+    status.view.layoutSubtreeIfNeeded()
+    #expect(frame(status.art, in: status.view).minX == 0)
+    let seek = frame(status.seekBox, in: status.view)
+    #expect(abs(seek.minX - 48 - spacing) < 0.5 && seek.width == 200, "\(seek)")
+}

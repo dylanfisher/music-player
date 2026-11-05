@@ -113,6 +113,12 @@ extension AppDelegate {
         if keys.contains(schema.headerStatusLayout.key) {
             applyHeaderStatus(settings[\.headerStatusLayout])
         }
+        for item in ToolbarItem.customStatuses {
+            guard let setting = item.customStatusSetting,
+                keys.contains(schema[keyPath: setting].key)
+            else { continue }
+            applyCustomStatus(item, settings[setting])
+        }
         if keys.contains(schema.windowTitle.key) {
             nowPlaying?.windowTitle = settings[\.windowTitle]
         }
@@ -151,6 +157,16 @@ extension AppDelegate {
     func applyHeaderStatus(_ layout: BarLayout<HeaderPart>) {
         nowPlaying?.header.apply(layout)
         toolbar?.statusLayout = layout
+        toolbar?.resizeStatus()
+    }
+
+    /// Lays out a Custom Status item, sizes it again and updates its drawing.
+    func applyCustomStatus(_ item: ToolbarItem, _ layout: BarLayout<HeaderPart>) {
+        guard let index = ToolbarItem.customStatuses.firstIndex(of: item) else {
+            preconditionFailure("\(item) isn't a Custom Status item")
+        }
+        nowPlaying?.customStatuses[index].apply(layout)
+        toolbar?.customStatusLayouts[item] = layout
         toolbar?.resizeStatus()
     }
 

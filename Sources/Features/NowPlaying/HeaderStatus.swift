@@ -100,6 +100,18 @@ public final class HeaderStatus {
         }
     }
 
+    /// How wide a status laid out as `layout` is when every column is fixed: the columns'
+    /// widths and the spacing between them. Nil when a column is flexible, so the status's
+    /// width is the room it's given.
+    public static func fixedWidthPoints(of layout: BarLayout<HeaderPart>) -> Double? {
+        var total = 0.0
+        for (_, column) in layout.columns {
+            guard case .fixed(let points) = column.width else { return nil }
+            total += Double(points)
+        }
+        return total + spacingPoints * Double(layout.columns.count - 1)
+    }
+
     /// Lays the status out as `layout` says.
     public func apply(_ layout: BarLayout<HeaderPart>) {
         self.layout = layout

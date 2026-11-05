@@ -258,3 +258,30 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     bar.titleFormat = .titleLine
     #expect(!bar.header.titleLineLabel.isHidden)
 }
+
+/// Each Custom Status item has its own views, laid out its own way, and shows the same track
+/// as the status at the same time: the lines, the art and a seek bar that's on.
+@MainActor @Test func theCustomStatusesShowTheSameTrackAsTheStatus() {
+    let bar = bar()
+    #expect(bar.customStatuses.count == ToolbarItem.customStatuses.count)
+    let views = [bar.header.view] + bar.customStatuses.map(\.view)
+    #expect(Set(views.map(ObjectIdentifier.init)).count == views.count)
+    bar.customStatuses[0].apply(.defaultCustomStatus)
+    bar.customStatuses[1].apply(
+        BarLayout(
+            center: BarColumn(parts: [.title, .format], width: .flexible, alignment: .center)))
+    let headers = [bar.header] + bar.customStatuses
+    #expect(headers.allSatisfy { !$0.showsParts })
+    bar.titleFormat = TitleTemplate("Now: {title}")
+    bar.apply(update(.trackStarted(index: 0), duration: 100))
+    for header in headers {
+        #expect(header.showsParts)
+        #expect(header.titleLabel.stringValue == "Song")
+        #expect(header.titleLineLabel.stringValue == "Now: Song")
+        #expect(header.formatLabel.stringValue == bar.header.formatLabel.stringValue)
+        #expect(header.art.alphaValue == 1)
+        #expect(header.seekBox.bar.isEnabled)
+    }
+    bar.apply(update(.stopped, current: nil, duration: nil))
+    #expect(headers.allSatisfy { !$0.showsParts && $0.art.alphaValue == 0 })
+}

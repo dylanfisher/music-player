@@ -50,3 +50,31 @@ private func decode(_ json: String) -> Result<BarLayout<HeaderPart>, SettingProb
             parts: [.art, .title], width: .flexible, alignment: .leading, stacks: true))
     #expect(stacked.problems == [.stackedPartFillsHeight("Art", .center)])
 }
+
+/// Each Custom Status item has its own layout of the header's parts, checked as the status's
+/// is, and starts as Swinsian's centered title line over the seek bar.
+@Test func eachCustomStatusHasItsOwnCheckedLayout() throws {
+    let schema = AppSettings()
+    let slots = [
+        schema.customStatus1Layout, schema.customStatus2Layout, schema.customStatus3Layout,
+    ]
+    #expect(Set(slots.map(\.key)).count == 3)
+    #expect(slots.map(\.title) == (1...3).map { "Custom Status \($0) Layout" })
+    for slot in slots {
+        #expect(slot.defaultValue == .defaultCustomStatus)
+        #expect(slot.kind == setting.kind)
+        let repeated =
+            #"{"leading": [], "center": {"parts": ["seek", "seek"], "width": "flexible", "alignment": "center", "stacks": true}, "trailing": []}"#
+        let json = try JSONSerialization.jsonObject(with: Data(repeated.utf8))
+        guard case .failure(.invalid) = slot.decode(json: json) else {
+            Issue.record("\(slot.key) accepted a part twice")
+            continue
+        }
+    }
+    let layout = BarLayout<HeaderPart>.defaultCustomStatus
+    #expect(layout.leading.isEmpty && layout.trailing.isEmpty && layout.problems.isEmpty)
+    #expect(
+        layout.center
+            == BarColumn(
+                parts: [.titleLine, .seek], width: .flexible, alignment: .center, stacks: true))
+}

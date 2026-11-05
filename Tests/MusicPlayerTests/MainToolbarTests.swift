@@ -13,12 +13,20 @@ private func dispatcher() throws -> CommandDispatcher {
             AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App")))
 }
 
-/// A toolbar of stand-in views in a window, showing `items`.
+/// A view for each Custom Status item.
 @MainActor
-private func toolbar(_ items: [ToolbarItem], _ dispatcher: CommandDispatcher) -> MainToolbar {
+private func slots() -> [NSView] { ToolbarItem.customStatuses.map { _ in NSView() } }
+
+/// A toolbar of stand-in views in a window, showing `items`; `customStatuses` are the Custom
+/// Status items' views.
+@MainActor
+private func toolbar(
+    _ items: [ToolbarItem], _ dispatcher: CommandDispatcher, customStatuses: [NSView] = slots()
+) -> MainToolbar {
     let toolbar = MainToolbar(
         identifier: UUID().uuidString, transport: NSView(), status: NSView(),
-        search: NSSearchField(), dispatcher: dispatcher, items: items)
+        customStatuses: customStatuses, search: NSSearchField(), dispatcher: dispatcher,
+        items: items)
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 1200, height: 400), styleMask: [.titled],
         backing: .buffered, defer: false)
@@ -98,6 +106,7 @@ private func nextTurn() async {
     let header = HeaderStatus()
     let made = MainToolbar(
         identifier: UUID().uuidString, transport: NSView(), status: header.view,
+        customStatuses: slots(),
         search: NSSearchField(), dispatcher: try dispatcher(), items: [.status])
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 1200, height: 400), styleMask: [.titled],
@@ -216,6 +225,7 @@ func theStatusCentersOnTheWindow(_ fullSize: Bool) throws {
         let header = HeaderStatus()
         let made = MainToolbar(
             identifier: UUID().uuidString, transport: NSView(), status: header.view,
+            customStatuses: slots(),
             search: NSSearchField(), dispatcher: try dispatcher(), items: items)
         var style: NSWindow.StyleMask = [.titled, .resizable]
         if fullSize { style.insert(.fullSizeContentView) }
@@ -247,4 +257,88 @@ func theStatusCentersOnTheWindow(_ fullSize: Bool) throws {
     }
     let drawing = try #require(made.drawing(of: .status))
     #expect(texts(drawing).contains("The Artist: Song Title"), "\(texts(drawing))")
+}
+
+/// Customize Toolbar offers the three Custom Status items beside the status, none of them in
+/// the default set, and only the status is centered.
+@MainActor @Test func theCustomStatusesAreOfferedButNotInTheDefaultSet() throws {
+    let made = toolbar([], try dispatcher())
+    let allowed = made.toolbarAllowedItemIdentifiers(made.toolbar)
+    let status = try #require(allowed.firstIndex(of: ToolbarItem.status.identifier))
+    #expect(
+        Array(allowed[(status + 1)...].prefix(3))
+            == ToolbarItem.customStatuses.map(\.identifier))
+    #expect(ToolbarItem.customStatuses.allSatisfy { !ToolbarItem.defaultItems.contains($0) })
+    #expect(
+        ToolbarItem.customStatuses.map(\.label) == [
+            "Custom Status 1", "Custom Status 2", "Custom Status 3",
+        ])
+    #expect(made.toolbar.centeredItemIdentifiers == [ToolbarItem.status.identifier])
+}
+
+/// The status and the Custom Status items can all be in the toolbar at once, anywhere in it,
+/// each showing its own view, and a saved toolbar with them comes back whole.
+@MainActor @Test func theCustomStatusesGoAnywhereBesideTheStatus() throws {
+    let views = slots()
+    let saved: [ToolbarItem] = [
+        .customStatus2, .transport, .flexibleSpace, .status, .flexibleSpace, .customStatus1,
+        .search, .customStatus3,
+    ]
+    let made = toolbar(saved, try dispatcher(), customStatuses: views)
+    #expect(made.items == saved)
+    for (item, view) in zip(ToolbarItem.customStatuses, views) {
+        let shown = made.toolbar.items.first { ToolbarItem($0.itemIdentifier) == item }
+        #expect(shown?.view === view, "\(item)")
+    }
+}
+
+/// The sheet draws each Custom Status item from its own layout, with the owner's title format.
+@MainActor @Test func theSheetDrawsEachCustomStatusFromItsLayout() throws {
+    let made = toolbar([], try dispatcher())
+    made.titleFormat = TitleTemplate("{artist}: {title}")
+    made.customStatusLayouts[.customStatus2] = BarLayout(
+        center: BarColumn(parts: [.format], width: .flexible, alignment: .center))
+    func texts(_ view: NSView) -> [String] {
+        // Only what shows: a layout leaves its other parts out of the view tree.
+        ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(texts)
+    }
+    let first = try #require(made.drawing(of: .customStatus1))
+    #expect(texts(first).contains("The Artist: Song Title"), "\(texts(first))")
+    #expect(!texts(first).contains("44.1 kHz 16-bit FLAC"))
+    let second = try #require(made.drawing(of: .customStatus2))
+    #expect(texts(second).contains("44.1 kHz 16-bit FLAC"), "\(texts(second))")
+    #expect(!texts(second).contains("The Artist: Song Title"))
+    // Fixed columns are drawn at their width, as the item is sized.
+    made.customStatusLayouts[.customStatus3] = BarLayout(
+        center: BarColumn(parts: [.titleLine], width: .fixed(300), alignment: .center))
+    let third = try #require(made.drawing(of: .customStatus3))
+    #expect(
+        abs(third.fittingSize.width - 300 * NowPlayingBar.drawingScale) < 0.5,
+        "\(third.fittingSize)")
+}
+
+/// A Custom Status item of fixed columns is as wide as they are; with a flexible column it's
+/// sized as the status is. A layout change sizes it again, height and width.
+@MainActor @Test func aCustomStatusTakesItsLayoutsWidth() throws {
+    let headers = ToolbarItem.customStatuses.map { _ in HeaderStatus() }
+    let made = toolbar(
+        [.flexibleSpace, .customStatus1, .customStatus2], try dispatcher(),
+        customStatuses: headers.map(\.view))
+    func size(_ item: ToolbarItem, _ key: String) throws -> NSSize {
+        let shown = try #require(
+            made.toolbar.items.first { ToolbarItem($0.itemIdentifier) == item })
+        return try #require((shown.value(forKey: key) as? NSValue)?.sizeValue)
+    }
+    #expect(try size(.customStatus1, "minSize").width == MainToolbar.statusMinimumPoints)
+    #expect(try size(.customStatus1, "maxSize").width == MainToolbar.statusSharingPoints)
+    let fixed = BarLayout<HeaderPart>(
+        leading: [BarColumn(parts: [.art], width: .fixed(48), alignment: .leading)],
+        center: BarColumn(parts: [.titleLine], width: .fixed(180), alignment: .leading))
+    headers[1].apply(fixed)
+    made.customStatusLayouts[.customStatus2] = fixed
+    made.resizeStatus()
+    let width = 48 + 180 + HeaderStatus.spacingPoints
+    #expect(try size(.customStatus2, "minSize").width == width)
+    #expect(try size(.customStatus2, "maxSize") == NSSize(width: width, height: 48))
+    #expect(try size(.customStatus1, "maxSize").width == MainToolbar.statusSharingPoints)
 }

@@ -65,8 +65,8 @@ struct MainWindowFixture {
                 AppCommands.all(), overrides: [:], rules: AppMenus.rules(appName: "App")))
         let toolbar = MainToolbar(
             identifier: UUID().uuidString, transport: nowPlaying.transport,
-            status: nowPlaying.status, search: browser.searchField, dispatcher: dispatcher,
-            items: ToolbarItem.defaultItems)
+            status: nowPlaying.status, customStatuses: nowPlaying.customStatuses.map(\.view),
+            search: browser.searchField, dispatcher: dispatcher, items: ToolbarItem.defaultItems)
         window = MainWindow(
             settings: layout, banner: ConfigBanner().view, browser: browser, toolbar: toolbar,
             signalPath: SignalPathPanel(), queue: QueuePanel(model: QueueModel(lookup: lookup)),
