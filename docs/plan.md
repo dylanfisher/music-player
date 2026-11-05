@@ -4544,16 +4544,16 @@ access conflict detected" on the old code.
 
 #### 41b. Track table rows
 
-- [ ] **41b.1 Shorter compact rows.** Compact rows are 17 pt apart (34 px at 2x); Swinsian's
+- [x] **41b.1 Shorter compact rows.** Compact rows are 17 pt apart (34 px at 2x); Swinsian's
       are 16 pt (32 px). Text stays centered.
-- [ ] **41b.2 Album lines across the art.** The album line runs under the Album Art column too,
+- [x] **41b.2 Album lines across the art.** The album line runs under the Album Art column too,
       the only line that does, so albums stand apart; with art hovered, the line stays under
       the art.
-- [ ] **41b.3 Playing triangle.** A play triangle before the playing track's title.
-- [ ] **41b.4 Now Playing column.** An optional narrow column, empty except on the playing
+- [x] **41b.3 Playing triangle.** A play triangle before the playing track's title.
+- [x] **41b.4 Now Playing column.** An optional narrow column, empty except on the playing
       track, which shows a play triangle.
-- [ ] **41b.5 Playing row color.** A setting for the playing track's row background.
-- [ ] **41b.6 Timeline columns.** The timeline shows the library's columns, with Played first,
+- [x] **41b.5 Playing row color.** A setting for the playing track's row background.
+- [x] **41b.6 Timeline columns.** The timeline shows the library's columns, with Played first,
       until the owner changes the timeline's own columns.
 
 Plan, part 41b:
@@ -4594,6 +4594,28 @@ Plan, part 41b:
   album art column, a duplicate and a bad width.
 - Order: this plan, then 41b.1, 41b.2, 41b.3 with 41b.4, 41b.5, 41b.6, each through the tests,
   `./scripts/check` at the end, then the result.
+
+Result, part 41b: shipped 41b.1 to 41b.6 (ADR 0091, amending 0088). Compact rows are 16 points;
+the 11 pt text is 14 pt tall and stays centered. The album line runs on across the Album Art
+column, drawn by the art cell over its art where its row ends an album; row and column lines
+still stay out of the column, and the hover, over the row views, covers the line. The playing
+track's Title starts with `▶`. Now Playing is a track column, off by default, in the header's
+menu, 20 points wide with an empty header, not sortable, showing `▶` on the playing row only;
+while it's shown the Title drops its mark, so the mark shows once. `appearance.playingRowColor`
+(Playing Row Color, after Album Line Color in Settings ▸ Appearance, with Default) colors the
+playing row; null keeps the gray, and the bar at the row's edge stays. The timeline shows Played
+and then the track table's columns, without Album Art, Order and Now Playing, following its
+changes, until the owner shows, hides, moves or resizes a column in the timeline's header; that
+saves `browser.timelineTable` and the timeline keeps it from then. Null is the "follow" state,
+so there's no flag. A resize from the window's width doesn't count, and Played stays first.
+Checked by tests only, nothing on screen: the row pitch, the line over the art and under the
+hover, the triangle's look (a text triangle, `U+25B6 U+FE0E`, in the cell's font), the playing
+row color and the timeline's header menu, drag and resize. For the owner: Compact against
+Swinsian, album lines with art hovered, whether the triangle reads well at 11 pt, and that a
+window resize leaves the timeline following the library. `./scripts/check` passes except two
+tests that read a window on screen, `theGlassHeadersAreFrosted` and
+`theArtHoverDrawsOnTopAndEndsAtItsAlbumsLastRow`, which fail the same way on `main` in this
+session.
 
 #### 41c. Navigation
 
