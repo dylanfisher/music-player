@@ -54,10 +54,12 @@ public struct AppSettings: SettingsSchema {
         "Where Reveal in Finder shows tracks; without Searcher, it uses Finder.")
     public let receiverEnabled = Setting(
         "receiver.enabled", title: "Control the Receiver with the Volume Keys", default: false,
-        "While the Denon receiver is connected, the volume keys set its volume.")
+        "While the receiver is connected, the volume keys set its volume. It must speak Denon's"
+            + " control protocol, as Denon and Marantz receivers do.")
     public let receiverAddress = Setting<ReceiverAddress?>(
         "receiver.address", title: "Receiver Address", default: nil,
-        "Only for when the search can't find the receiver: its IP address.")
+        "Only for when the search can't find the receiver: its IP address. The search finds"
+            + " Denon receivers only.")
     public let appearance = Setting(
         "appearance", title: "Appearance", default: Appearance.auto,
         "Light or dark windows; Auto follows the system.")

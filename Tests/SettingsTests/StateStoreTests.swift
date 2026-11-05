@@ -221,6 +221,14 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(setting.summary.contains("ends bit-perfect output"))
 }
 
+@Test func theReceiverSettingsSayWhichReceiversTheyWorkWith() {
+    let schema = AppSettings()
+    // The address reaches any receiver on Denon's protocol; only the search is Denon's alone.
+    #expect(!schema.receiverEnabled.summary.contains("the Denon receiver"))
+    #expect(schema.receiverEnabled.summary.contains("Marantz"))
+    #expect(schema.receiverAddress.summary.contains("Denon receivers only"))
+}
+
 @Test func theTrackTableAppearanceDefaultsToTheTableAsItWas() throws {
     let settings = try StateStore(AppSettings(), fileURL: temporaryFile())
     #expect(settings[\.columnLines] == false)
