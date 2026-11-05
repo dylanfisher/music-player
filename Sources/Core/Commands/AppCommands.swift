@@ -54,6 +54,8 @@ extension CommandID {
 
     public static let addFolder = CommandID("library.addFolder")
     public static let showWatchedFolders = CommandID("library.showWatchedFolders")
+    /// Shows Library Health over the track table; the ID is the one it had as Check Library
+    /// Health, so a saved shortcut still holds.
     public static let checkHealth = CommandID("library.checkHealth")
     public static let rescanNow = CommandID("library.rescanNow")
     public static let resolveLostStats = CommandID("library.resolveLostStats")
@@ -202,7 +204,7 @@ public enum AppCommands {
 
             Command(.addFolder, "Add Watched Folder…", [.init("o", cmd)]),
             Command(.showWatchedFolders, "Watched Folders…"),
-            Command(.checkHealth, "Check Library Health"),
+            Command(.checkHealth, "Show Library Health"),
             // Not from links: it ignores the playback pause, so a page could keep the NAS busy.
             Command(.rescanNow, "Rescan All"),
             Command(.resolveLostStats, "Resolve Lost Stats…"),

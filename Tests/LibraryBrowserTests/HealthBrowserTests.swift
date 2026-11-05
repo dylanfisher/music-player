@@ -84,31 +84,134 @@ private func report(_ id: Int64) -> HealthReport {
     #expect(!model.isRunning)
 }
 
-@MainActor @Test func aSavedCheckRunsTheReportAndListsItsTracks() async throws {
+/// A browser over the shared library in a window, its split laid out, the library loaded.
+@MainActor
+private func browserInWindow(browserHeight: Int = 150) async throws -> (
+    LibraryBrowser, NSWindow, NSSplitView
+) {
     let databaseURL = try browserLibrary.get().databaseURL
-    let index = try LibraryIndex(at: databaseURL)
-    let expected = Set(
-        try index.paths(ids: try index.healthReport()[.noAlbumArtist].trackIDs).values)
-    try #require(!expected.isEmpty)
     let browser = LibraryBrowser(
-        reader: try LibraryReader(databaseURL: databaseURL), index: index,
-        layout: AppState().trackTable.defaultValue, browserHeight: 100, groupByAlbumArtist: false,
-        thumbnails: nil)
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: browserHeight, groupByAlbumArtist: false, thumbnails: nil)
+    _ = browser.sidebar.view
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+        styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.contentView = browser.content.view
+    window.layoutIfNeeded()
+    browser.restoreSplit()
+    await browser.load(BrowserState(source: nil))
+    let split = try #require(browser.content.view.subviews.first?.subviews.first as? NSSplitView)
+    return (browser, window, split)
+}
+
+@MainActor @Test func showLibraryHealthPutsItsPanelInTheColumnsPlace() async throws {
+    let (browser, window, split) = try await browserInWindow()
     let sidebar = try #require(browser.sidebar as? SidebarController)
-    _ = sidebar.view
-    await browser.load(
-        BrowserState(source: .health(.noAlbumArtist)))
-    #expect(sidebar.selectedSource == .health(.noAlbumArtist))
-    try await waitFor("the report's tracks") {
+    let slot = split.arrangedSubviews[0]
+    browser.checkHealth()
+    try await waitFor("the report") { browser.health.report != nil }
+    try await waitFor("the first check") { browser.model.filter.source == .health(.unreadable) }
+    window.layoutIfNeeded()
+    let panel = browser.healthPanel
+    #expect(browser.shownPanel === panel)
+    #expect(panel.view.isDescendant(of: slot))
+    #expect(!browser.showsColumns)
+    #expect(!browser.focusAreas.contains { $0.isDescendant(of: slot) })
+    #expect(abs(slot.frame.height - 150) <= 1)
+    // No sidebar row stands for it, so none is selected.
+    #expect(sidebar.outline.selectedRow == -1)
+    let report = try #require(browser.health.report)
+    #expect(panel.tiles.count == HealthCheck.allCases.count)
+    for (check, tile) in panel.tiles {
+        #expect(tile.countLabel.stringValue == number(report[check].count), "\(check)")
+        #expect(tile.isSelected == (check == .unreadable), "\(check)")
+    }
+    #expect(panel.statusLabel.stringValue.hasPrefix("Checked at "))
+
+    // A tile lists its check's tracks below.
+    let expected = Set(try browser.index.paths(ids: report[.noAlbumArtist].trackIDs).values)
+    try #require(!expected.isEmpty)
+    try #require(panel.tiles[.noAlbumArtist]).clicked()
+    try await waitFor("the check's tracks") {
         browser.selectAllTracks()
         return Set(try await browser.selectedPaths()) == expected
     }
-    #expect(browser.health.report != nil)
-    let row = sidebar.outline.selectedRow
-    let cell = sidebar.outlineView(
-        sidebar.outline, viewFor: nil, item: try #require(sidebar.outline.item(atRow: row)))
-    let texts = (cell?.subviews ?? []).compactMap { ($0 as? NSTextField)?.stringValue }
-    #expect(texts == ["No Album Artist", number(expected.count)])
+    #expect(panel.tiles[.noAlbumArtist]?.isSelected == true)
+    #expect(panel.tiles[.unreadable]?.isSelected == false)
+
+    // Another source puts the columns back.
+    browser.show(nil)
+    try await waitFor("the library") { browser.model.filter.source == nil }
+    window.layoutIfNeeded()
+    #expect(browser.shownPanel == nil)
+    #expect(panel.view.superview == nil)
+    #expect(browser.showsColumns)
+    #expect(abs(slot.frame.height - 150) <= 1)
+    #expect(sidebar.selectedSource == nil && sidebar.outline.selectedRow >= 0)
+}
+
+@MainActor @Test func aTileTakesTheClickOnItsLabels() throws {
+    let panel = HealthPanel()
+    _ = panel.view
+    var selected: [HealthCheck] = []
+    panel.select = { selected.append($0) }
+    let tile = try #require(panel.tiles[.warnings])
+    tile.frame = NSRect(x: 0, y: 0, width: 200, height: 46)
+    tile.layoutSubtreeIfNeeded()
+    // In the superview's coordinates, over the title.
+    #expect(tile.titleLabel.frame.contains(NSPoint(x: 12, y: 30)))
+    #expect(tile.hitTest(NSPoint(x: 12, y: 30)) === tile)
+    #expect(tile.hitTest(NSPoint(x: 300, y: 30)) == nil)
+    tile.mouseDown(with: NSEvent())
+    #expect(selected == [.warnings])
+}
+
+@MainActor @Test func thePanelShowsWithTheBrowserHidden() async throws {
+    let (browser, window, split) = try await browserInWindow(browserHeight: 180)
+    let slot = split.arrangedSubviews[0]
+    browser.toggleBrowser()
+    #expect(slot.isHidden)
+    browser.checkHealth()
+    try await waitFor("the panel") { browser.shownPanel != nil }
+    window.layoutIfNeeded()
+    #expect(!slot.isHidden)
+    #expect(!browser.splitView(split, shouldHideDividerAt: 0))
+    #expect(abs(slot.frame.height - 180) <= 1)
+    #expect(!browser.isBrowserVisible)
+    browser.show(.history)
+    try await waitFor("History") { browser.shownPanel == nil }
+    #expect(slot.isHidden)
+    #expect(browser.splitView(split, shouldHideDividerAt: 0))
+    #expect(!browser.showsColumns)
+}
+
+@MainActor @Test func showingACheckSelectsAllInTheHiddenColumns() async throws {
+    let (browser, _, _) = try await browserInWindow()
+    var states: [BrowserState] = []
+    browser.stateChanged = { states.append($0) }
+    let genre = try #require(try browser.index.genres().first)
+    await browser.showOnly(.genre, id: genre.id)
+    #expect(states.last?.columns[0].selection != nil)
+    browser.checkHealth()
+    try await waitFor("the check, at All") {
+        states.last?.source == .health(.unreadable) && states.last?.columns[0].selection == nil
+    }
+}
+
+@MainActor @Test func aSavedCheckShowsTheLibrary() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, groupByAlbumArtist: false, thumbnails: nil)
+    let sidebar = try #require(browser.sidebar as? SidebarController)
+    _ = sidebar.view
+    await browser.load(BrowserState(source: .health(.noAlbumArtist)))
+    #expect(browser.model.filter.source == nil)
+    #expect(browser.shownPanel == nil)
+    #expect(sidebar.selectedSource == nil && sidebar.outline.selectedRow >= 0)
 }
 
 @MainActor @Test func deletingAPlaylistRunsTheReportAgain() async throws {

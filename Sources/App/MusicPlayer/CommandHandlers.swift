@@ -25,6 +25,8 @@ extension AppDelegate {
             self?.settingsWindowController()?.show(.folders)
         }
         dispatcher.handle(.checkHealth, enabled: hasWindow) { [weak self] in
+            // From Settings too, which is in front then.
+            self?.window?.window.makeKeyAndOrderFront(nil)
             self?.browser?.checkHealth()
         }
         dispatcher.handle(

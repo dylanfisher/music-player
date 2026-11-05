@@ -142,7 +142,10 @@ private func row(of playlist: Playlist, in sidebar: SidebarController) throws ->
         #expect(cell.textField?.toolTip == cell.toolTip, "\(name)")
         tips[name] = cell.toolTip
     }
-    for name in ["LIBRARY", "Music", "History", "Timeline", "Library Health", "PLAYLISTS"] {
+    for name in ["LIBRARY", "Music", "History", "Timeline", "PLAYLISTS"] {
         #expect(tips[name]?.isEmpty == false, "\(name)")
     }
+    // Library Health opens from its command, not from a row.
+    #expect(tips["Library Health"] == nil)
+    #expect(!tips.keys.contains { name in HealthCheck.allCases.contains { $0.title == name } })
 }

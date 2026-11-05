@@ -1,3 +1,4 @@
+import Foundation
 import Library
 
 /// Runs the library health report on request and when a scan ends, never on a timer, and keeps
@@ -7,6 +8,8 @@ import Library
 @MainActor
 final class HealthModel {
     private(set) var report: HealthReport?
+    /// When `report` was shown.
+    private(set) var checkedAt: Date?
     /// Whether a run is going, so showing a check before the first report starts only one.
     private(set) var isRunning = false
     /// Called once a run's report is shown.
@@ -38,6 +41,7 @@ final class HealthModel {
             // The table lists it now, so `report` follows even when a newer run has started:
             // that run replaces both, or, if it fails, leaves the two agreeing.
             self.report = report
+            checkedAt = Date()
             if mine == session { isRunning = false }
             changed()
         } catch {

@@ -117,6 +117,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private let panes: PanesController
     private let sidebarController: SidebarController
     private let split = NSSplitView()
+    /// The split's first subview: the browser columns, or in their place the shown source's
+    /// panel (ADR 0099). Hidden, with its divider, while neither shows.
+    private let panelSlot = NSView()
+    /// The panel in the slot, nil while the columns are there.
+    private(set) var shownPanel: (any SourcePanel)?
+    /// Library Health's panel, shown while a health check is the source.
+    let healthPanel = HealthPanel()
     /// The scan progress and the leading columns, the center column centered on the window,
     /// and the trailing columns and the problems button, each edge in a stack so what's hidden
     /// takes no width.
@@ -284,14 +291,21 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
         timelineModel.failed = { [weak self] message in self?.show(failure: message) }
         health.changed = { [weak self] in self?.healthChanged() }
-        health.failed = { [weak self] message in self?.report(message) }
+        health.failed = { [weak self] message in
+            self?.report(message)
+            self?.showHealthCounts()
+        }
+        healthPanel.select = { [weak self] check in self?.show(.health(check)) }
+        healthPanel.checkAgain = { [weak self] in self?.runHealth() }
+        content.addChild(healthPanel)
     }
 
     private func makeContent() -> NSView {
         split.isVertical = false
         split.dividerStyle = .thin
         split.delegate = self
-        split.addArrangedSubview(panes.view)
+        fill(panelSlot, with: panes.view)
+        split.addArrangedSubview(panelSlot)
         split.addArrangedSubview(table.view)
         split.setHoldingPriority(.defaultLow, forSubviewAt: 1)
 
@@ -490,10 +504,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     // MARK: Library health
 
-    /// Runs the health report again, from Check Library Health, and opens its rows.
+    /// Shows Library Health, from Show Library Health, at the check shown or else the first,
+    /// and runs the report again.
     public func checkHealth() {
-        sidebarController.openHealth()
-        show(failure: "Checking the library's health…")
+        let shown: HealthCheck? =
+            if case .health(let check) = model.filter.source { check } else { nil }
+        show(.health(shown ?? HealthCheck.allCases[0]))
         runHealth()
     }
 
@@ -613,12 +629,19 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     private func runHealth() {
         Task { await health.run() }
+        healthPanel.show(report: health.report, checkedAt: health.checkedAt, running: true)
     }
 
-    /// A newer report: the sidebar counts it, and a check shown lists it.
+    /// The panel's counts and when they're from, as the health model has them now.
+    private func showHealthCounts() {
+        healthPanel.show(
+            report: health.report, checkedAt: health.checkedAt, running: health.isRunning)
+    }
+
+    /// A newer report: the panel counts it, and a check shown lists it.
     private func healthChanged() {
-        guard let report = health.report else { return }
-        sidebarController.show(health: report)
+        guard health.report != nil else { return }
+        showHealthCounts()
         if case .health = model.filter.source {
             Task {
                 await model.refresh()
@@ -681,6 +704,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             if change.showsEverythingAgain { selectPlayingTrack() }
         }
         showTimelineIfItIsTheSource()
+        showPanelOfTheSource()
         runHealthIfShownFirst()
         readTotals(
             of: model.trackIDs, into: \.listTotals,
@@ -994,7 +1018,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// track table.
     public var focusAreas: [NSView] {
         if showsTimeline { return [sidebarController.outline, timeline.table] }
-        let shownPanes = isBrowserVisible ? panes.tables : []
+        let shownPanes = showsColumns ? panes.tables : []
         return [sidebarController.outline] + shownPanes + [table.table]
     }
 
@@ -1012,7 +1036,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Focuses the next pane to the right (or left), from the genre pane to the track table.
     public func focusPane(forward: Bool) {
         // The timeline has no panes, and hidden ones take no keys.
-        guard !showsTimeline, isBrowserVisible else {
+        guard !showsTimeline, showsColumns else {
             focusTracks()
             return
         }
@@ -1557,7 +1581,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         runHealth()
     }
 
-    public var isBrowserVisible: Bool { !panes.view.isHidden }
+    /// Whether Show Browser is on. The columns show while it is, unless a source's panel is
+    /// in their place.
+    public private(set) var isBrowserVisible = true
+
+    /// Whether the browser columns are on screen.
+    var showsColumns: Bool { !panes.view.isHidden }
 
     /// Hides or shows the browser's columns; they come back at their saved height.
     /// Hiding them selects All in each first, since a hidden selection would narrow the table
@@ -1565,10 +1594,61 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public func toggleBrowser() {
         if isBrowserVisible { Task { await model.clearPanes() } }
         let paneHadKeys = if case .pane = focusedList { true } else { false }
-        panes.view.isHidden.toggle()
-        split.adjustSubviews()
-        if isBrowserVisible { split.setPosition(CGFloat(browserHeight), ofDividerAt: 0) }
+        isBrowserVisible.toggle()
+        fillPanelSlot()
         if paneHadKeys { focusTracks() }
+    }
+
+    /// The panel shown over the track table in the columns' place while `source` shows; nil
+    /// for the sources that show the columns (ADR 0099).
+    func panel(for source: BrowserSource?) -> (any SourcePanel)? {
+        switch source {
+        case .health: healthPanel
+        case .playlist, .history, .timeline, nil: nil
+        }
+    }
+
+    /// Puts the source's panel in the slot, or the columns back, and tells the panel what
+    /// shows.
+    private func showPanelOfTheSource() {
+        let source = model.filter.source
+        let panel = panel(for: source)
+        if panel !== shownPanel {
+            let panelHadKeys =
+                shownPanel.map { panel in
+                    (table.table.window?.firstResponder as? NSView)?.isDescendant(of: panel.view)
+                        == true
+                } ?? false
+            shownPanel?.view.removeFromSuperview()
+            if let panel { fill(panelSlot, with: panel.view) }
+            shownPanel = panel
+            fillPanelSlot()
+            if panelHadKeys { focusTracks() }
+        }
+        if let panel, let source { panel.sourceShown(source) }
+    }
+
+    /// Shows the panel or else the columns, as Show Browser says, in the slot, at the saved
+    /// height; hides the slot and its divider when neither shows.
+    private func fillPanelSlot() {
+        panes.view.isHidden = shownPanel != nil || !isBrowserVisible
+        let shows = shownPanel != nil || isBrowserVisible
+        guard shows == panelSlot.isHidden else { return }
+        panelSlot.isHidden = !shows
+        split.adjustSubviews()
+        if shows { split.setPosition(CGFloat(browserHeight), ofDividerAt: 0) }
+    }
+
+    /// Adds `view` to `slot`, filling it.
+    private func fill(_ slot: NSView, with view: NSView) {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        slot.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: slot.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: slot.trailingAnchor),
+            view.topAnchor.constraint(equalTo: slot.topAnchor),
+            view.bottomAnchor.constraint(equalTo: slot.bottomAnchor),
+        ])
     }
 
     /// Marks the row of the track at `path`, the one playing or paused, in the track table;
@@ -1878,7 +1958,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     // MARK: Split view
 
     public func splitViewDidResizeSubviews(_ notification: Notification) {
-        guard let window = split.window, window.isVisible, isBrowserVisible else { return }
+        guard let window = split.window, window.isVisible, !panelSlot.isHidden else { return }
         let height = Int(split.subviews[0].frame.height.rounded())
         guard height != browserHeight else { return }
         browserHeight = height
@@ -1895,7 +1975,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// A hidden pane's divider would still draw as a line over the table.
     public func splitView(_ splitView: NSSplitView, shouldHideDividerAt dividerIndex: Int) -> Bool {
-        !isBrowserVisible
+        panelSlot.isHidden
     }
 }
 

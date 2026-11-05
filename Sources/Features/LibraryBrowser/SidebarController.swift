@@ -5,7 +5,8 @@ import KeyChord
 import Library
 import Settings
 
-/// The source list: the library, History, the timeline and the health checks, and the playlists.
+/// The source list: the library, History and the timeline, and the playlists. Library Health
+/// isn't here: it opens from a command, and while it shows no row is selected.
 /// Tracks dragged from the table onto a manual playlist are added to it; playlist files dropped
 /// anywhere on it are imported. A playlist's name is edited in its row after its context menu's
 /// Rename or Return; a click only selects it. The context menu also copies or deletes it. The
@@ -16,8 +17,6 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 {
     let outline = KeyOutlineView()
     private let library = SidebarNode(.library, title: "Music")
-    /// Opens into one row per health check; not a source itself.
-    private let health = SidebarNode(.health, title: "Library Health")
     private let groups: [SidebarNode]
     private let playlistGroup = SidebarNode(.group, title: "Playlists")
     private let selectSource: (BrowserSource?) -> Void
@@ -48,22 +47,14 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         let libraryGroup = SidebarNode(.group, title: "Library")
         let history = SidebarNode(.history, title: "History")
         let timeline = SidebarNode(.timeline, title: "Timeline")
-        libraryGroup.children = [library, history, timeline, health]
-        libraryGroup.toolTip = "The whole library, what you've played, and its problems."
+        libraryGroup.children = [library, history, timeline]
+        libraryGroup.toolTip = "The whole library and what you've played."
         library.toolTip =
             "Every track in the library. The columns above the tracks and the search narrow it."
         history.toolTip = "Each track you've played, once, the latest played first."
         timeline.toolTip = "Every play, one row each, the latest first."
-        health.toolTip =
-            "Checks the library for problems, such as missing files or tags. Opens into a list"
-            + " for each check."
         playlistGroup.toolTip =
             "Your playlists and smart playlists. Drop playlist files here to import them."
-        health.children = HealthCheck.allCases.map { check in
-            let node = SidebarNode(.check(check), title: check.title)
-            node.toolTip = check.summary
-            return node
-        }
         groups = [libraryGroup, playlistGroup]
         super.init(nibName: nil, bundle: nil)
     }
@@ -97,7 +88,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         for group in groups { outline.expandItem(group) }
     }
 
-    /// Lists `playlists` and selects `source`, the library for nil.
+    /// Lists `playlists` and selects `source`, the library for nil. A source with no row, a
+    /// health check, selects none.
     func show(playlists: [Playlist], source: BrowserSource?) {
         self.playlists = playlists
         applying = true
@@ -111,6 +103,10 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.reloadData()
         for group in groups { outline.expandItem(group) }
         for node in open { outline.expandItem(node) }
+        if case .health = source {
+            outline.deselectAll(nil)
+            return
+        }
         let selected = source.flatMap(row(for:)) ?? outline.row(forItem: library)
         outline.selectRowIndexes([selected], byExtendingSelection: false)
         outline.scrollRowToVisible(selected)
@@ -121,28 +117,10 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         show(playlists: playlists, source: source)
     }
 
-    /// Shows what each health check found, as a count after its name.
-    func show(health report: HealthReport) {
-        for node in health.children {
-            guard case .check(let check) = node.kind else { continue }
-            node.count = number(report[check].count)
-        }
-        // Only the rows' text, so the selection stays; closed rows read it when they open.
-        let rows = health.children.map { outline.row(forItem: $0) }.filter { $0 >= 0 }
-        outline.reloadData(forRowIndexes: IndexSet(rows), columnIndexes: [0])
-    }
-
-    /// Opens the health checks' rows.
-    func openHealth() { outline.expandItem(health) }
-
     /// The row showing `source`, opening the rows above it; nil when there's none.
     private func row(for source: BrowserSource) -> Int? {
-        var node = groups.lazy.flatMap(\.children).first { $0.source == source }
-        if case .health = source {
-            outline.expandItem(health)
-            node = health.children.first { $0.source == source }
-        }
-        guard let node else { return nil }
+        guard let node = groups.lazy.flatMap(\.children).first(where: { $0.source == source })
+        else { return nil }
         let row = outline.row(forItem: node)
         return row >= 0 ? row : nil
     }
@@ -194,8 +172,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
         guard let node = item as? SidebarNode else { return false }
         switch node.kind {
-        case .group, .health: return true
-        case .library, .history, .timeline, .playlist, .check: return false
+        case .group: return true
+        case .library, .history, .timeline, .playlist: return false
         }
     }
 
@@ -205,17 +183,6 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
         guard let node = item as? SidebarNode else { return false }
-        if node.kind == .health {
-            // A click opens or closes it, as its triangle does; the keys pass over it.
-            if NSApp.currentEvent?.type == .leftMouseDown {
-                if outlineView.isItemExpanded(node) {
-                    outlineView.collapseItem(node)
-                } else {
-                    outlineView.expandItem(node)
-                }
-            }
-            return false
-        }
         return node.kind != .group
     }
 
@@ -237,18 +204,14 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         cell.imageView?.image = node.symbol.flatMap {
             NSImage(systemSymbolName: $0, accessibilityDescription: nil)
         }
-        // A row without a symbol gives its width to the name.
-        (cell as? CountCell)?.imageWidth?.constant = node.symbol == nil ? 0 : 16
         // On the name too, which covers most of the row.
         cell.toolTip = node.toolTip
         cell.textField?.toolTip = node.toolTip
-        (cell as? CountCell)?.count.stringValue = node.count ?? ""
         return cell
     }
 
     private func makeCell(_ identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
-        let isData = identifier.rawValue == "DataCell"
-        let cell = isData ? CountCell() : NSTableCellView()
+        let cell = NSTableCellView()
         cell.identifier = identifier
         let text = NSTextField(labelWithString: "")
         text.lineBreakMode = .byTruncatingMiddle
@@ -264,32 +227,13 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             NSLayoutConstraint.activate([
                 image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
                 image.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                image.widthAnchor.constraint(equalToConstant: 16),
             ])
-            let width = image.widthAnchor.constraint(equalToConstant: 16)
-            width.isActive = true
-            (cell as? CountCell)?.imageWidth = width
             leading = image.trailingAnchor
-        }
-        var trailing = cell.trailingAnchor
-        if let cell = cell as? CountCell {
-            // The count keeps its width; the name is cut short first.
-            let count = cell.count
-            count.textColor = .secondaryLabelColor
-            count.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-            count.alignment = .right
-            count.translatesAutoresizingMaskIntoConstraints = false
-            count.setContentCompressionResistancePriority(.required, for: .horizontal)
-            text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            cell.addSubview(count)
-            NSLayoutConstraint.activate([
-                count.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
-                count.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-            ])
-            trailing = count.leadingAnchor
         }
         NSLayoutConstraint.activate([
             text.leadingAnchor.constraint(equalTo: leading, constant: 4),
-            text.trailingAnchor.constraint(equalTo: trailing, constant: -2),
+            text.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
             text.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])
         return cell
@@ -335,8 +279,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         guard !applying else { return }
         switch selectedNode?.kind {
         case .library: selectSource(nil)
-        case .group, .health, nil: break
-        case .history, .timeline, .playlist, .check: selectSource(selectedNode?.source)
+        case .group, nil: break
+        case .history, .timeline, .playlist: selectSource(selectedNode?.source)
         }
     }
 }
@@ -463,16 +407,13 @@ func playlistFileURLs(_ pasteboard: NSPasteboard) -> [URL] {
 /// A row of the source list. A class, since NSOutlineView tells items apart by identity.
 private final class SidebarNode {
     enum Kind: Equatable {
-        case group, library, history, timeline, health
+        case group, library, history, timeline
         case playlist(Playlist)
-        case check(HealthCheck)
     }
 
     let kind: Kind
     let title: String
     var toolTip: String?
-    /// A health check's count, shown at the row's end.
-    var count: String?
     var children: [SidebarNode] = []
 
     /// What selecting the row shows; nil for the library and the group headings.
@@ -481,8 +422,7 @@ private final class SidebarNode {
         case .playlist(let playlist): .playlist(playlist.id)
         case .history: .history
         case .timeline: .timeline
-        case .check(let check): .health(check)
-        case .group, .library, .health: nil
+        case .group, .library: nil
         }
     }
 
@@ -493,9 +433,6 @@ private final class SidebarNode {
         case .library: "music.note"
         case .history: "clock"
         case .timeline: "list.bullet"
-        case .health: "stethoscope"
-        // The checks' names need the room for their counts.
-        case .check: nil
         case .playlist(let playlist):
             switch playlist.kind {
             case .manual: SymbolName.playlist
@@ -509,10 +446,4 @@ private final class SidebarNode {
         self.kind = kind
         self.title = title
     }
-}
-
-/// A row with a count at its end, empty for rows that have none.
-private final class CountCell: NSTableCellView {
-    let count = NSTextField(labelWithString: "")
-    var imageWidth: NSLayoutConstraint?
 }

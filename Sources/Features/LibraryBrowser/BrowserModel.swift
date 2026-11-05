@@ -125,9 +125,14 @@ public final class BrowserModel {
     }
 
     /// Loads the playlists, panes and tracks, selecting what `saved` names where it still
-    /// exists.
+    /// exists. A saved health check shows the library: Library Health opens from its command,
+    /// not at launch (ADR 0099).
     public func load(_ saved: BrowserState) async {
         var saved = saved
+        if case .health = saved.source {
+            logger.notice("the saved source is a health check; showing the library")
+            saved.source = nil
+        }
         do {
             playlists = try await reader.playlists()
             if case .playlist(let id) = saved.source, !playlists.contains(where: { $0.id == id }) {
@@ -430,6 +435,9 @@ public final class BrowserModel {
 
     private func showSource(_ source: BrowserSource?) async {
         changeSort(from: pending.source, to: source)
+        // A health check's panel takes the columns' place, and hidden columns would narrow it
+        // with nothing on screen saying why.
+        if case .health = source { pending.selections = [:] }
         pending.source = source
         await reload(panesFrom: 0, reason: .user)
     }
