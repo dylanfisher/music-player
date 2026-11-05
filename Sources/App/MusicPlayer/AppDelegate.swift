@@ -267,6 +267,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let engine = self?.engine else { return }
             Task { await engine.playNext(urls) }
         }
+        browser.currentPlayback = { [weak self] in await self?.engine?.spot() }
+        browser.restorePlayback = { [weak self] spot in await self?.engine?.restore(spot) }
         browser.addToQueue = { [weak self] urls in
             guard let engine = self?.engine else { return }
             Task { await engine.addToQueue(urls) }
