@@ -311,14 +311,17 @@ public final class LibraryIndex {
     private func storeBatch(_ files: [ScannedFile]) throws {
         try database.transaction {
             let roots = try syncRoots()
-            for file in files { try store(file, roots) }
+            // One time for the batch's new paths, so a folder's take one line of the log.
+            var added = SyncAdded(at: Date().timeIntervalSince1970)
+            for file in files { try store(file, roots, &added) }
+            for event in added.events { try logSync(event) }
         }
     }
 
-    private func store(_ file: ScannedFile, _ roots: SyncRoots) throws {
+    private func store(_ file: ScannedFile, _ roots: SyncRoots, _ added: inout SyncAdded) throws {
         switch file.outcome {
         case .success(let parsed):
-            let id = try upsertFile(file, failure: nil, roots)
+            let id = try upsertFile(file, failure: nil, roots, &added)
             try clearTrack(id)
             try insertTrack(id, path: file.path, parsed.metadata)
             try recordFacts(id, parsed.metadata)
@@ -337,15 +340,16 @@ public final class LibraryIndex {
                 ).run(error.kind.rawValue, error.offset, error.detail, known.id)
                 return
             }
-            let id = try upsertFile(file, failure: error, roots)
+            let id = try upsertFile(file, failure: error, roots, &added)
             try clearTrack(id)
         }
     }
 
-    /// A new path's Date Added goes in the sync log.
-    private func upsertFile(_ file: ScannedFile, failure: MetadataError?, _ roots: SyncRoots)
-        throws -> Int64
-    {
+    /// A new path's Date Added is `added`'s time, and goes in the sync log with it.
+    private func upsertFile(
+        _ file: ScannedFile, failure: MetadataError?, _ roots: SyncRoots,
+        _ added: inout SyncAdded
+    ) throws -> Int64 {
         let values: [(any SQLiteValue)?] = [
             file.sizeBytes, file.modifiedSeconds, file.createdSeconds, failure?.kind.rawValue,
             failure?.offset, failure?.detail,
@@ -363,14 +367,13 @@ public final class LibraryIndex {
         // An upsert, since another scan (the command line beside the app) may have added the
         // path since this one listed what the index knew. The ID is the path's for good, so a
         // conflict on it is the same file.
-        let seen = Date().timeIntervalSince1970
         let nfc = file.path.precomposedStringWithCanonicalMapping
         let id: Int64
         if let known = try existingPathID(nfc) {
             id = known
         } else {
-            id = try insertPath(nfc, seenAt: seen)
-            if let path = roots.syncPath(nfc) { try logSync(.added(path: path, at: seen)) }
+            id = try insertPath(nfc, seenAt: added.at)
+            if let path = roots.syncPath(nfc) { added.add(path) }
         }
         try statement(
             """

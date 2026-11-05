@@ -16,6 +16,7 @@ private let everyEvent: [SyncEvent] = [
     .loved(path: "music/line\nbreak.flac", loved: true),
     .disliked(path: "music/a.flac"),
     .added(path: "music/a.flac", at: 0),
+    .addedFiles(folder: "music/b", names: ["1.flac", "Caf\u{e9} \"q\".flac"], at: 1_700_000_000.5),
     .move(from: "music/a.flac", to: "music/b/\u{1F3B5}.flac"),
     .playlistCreate(playlist: playlist, name: "Mix", rules: nil),
     .playlistCreate(
@@ -95,6 +96,11 @@ private func problem(_ line: String) -> String? {
             #"{\#(head),"event":"playlistEntries","playlist":"\#(playlist)","paths":["/a"]}"#,
             "relative path"
         ),
+        (#"{\#(head),"event":"addedFiles","folder":"m","names":[],"at":1}"#, "no names"),
+        (#"{\#(head),"event":"addedFiles","folder":"m","names":["a/b"],"at":1}"#, "with a /"),
+        (#"{\#(head),"event":"addedFiles","folder":"m","names":[".."],"at":1}"#, "relative"),
+        (#"{\#(head),"event":"addedFiles","folder":"/m","names":["a"],"at":1}"#, "relative"),
+        (#"{\#(head),"event":"addedFiles","folder":"m","names":["a"]}"#, #"has no "at""#),
     ]
     for (line, expected) in refused {
         let found = problem(line)
@@ -379,4 +385,13 @@ private func record(_ seq: Int64, _ event: SyncEvent) -> String {
     let report = try index.sync(folder: "sync", at: sync.path)
     #expect(report.problems.contains { $0.contains("waits for its own scan") })
     #expect(try index.track(path: path) != nil)
+}
+
+@Test func anAddedFilesEventListsOnlySoManyNames() {
+    let names = (0...SyncRecord.maximumAddedNames).map { "\($0).flac" }
+    let line =
+        SyncRecord(
+            seq: 1, clock: clock, event: .addedFiles(folder: "music", names: names, at: 1)
+        ).line
+    #expect(problem(line)?.contains("over \(SyncRecord.maximumAddedNames)") == true)
 }

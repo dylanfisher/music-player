@@ -73,6 +73,13 @@ extension LibraryIndex {
         case .added(let path, let at):
             guard let id = try mergedPathID(path, seenAt: at, &merge) else { return nil }
             try statement(earliestAddedSQL).run(at, id)
+        case .addedFiles(let folder, let names, let at):
+            let earliest = try statement(earliestAddedSQL)
+            for name in names {
+                guard let id = try mergedPathID(folder + "/" + name, seenAt: at, &merge)
+                else { continue }
+                try earliest.run(at, id)
+            }
         case .move(let from, let to):
             return try mergeMove(from: from, to: to, &merge)
         case .playlistCreate(let syncID, let name, let rules):

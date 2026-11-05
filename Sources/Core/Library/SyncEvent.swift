@@ -13,8 +13,11 @@ enum SyncEvent: Equatable, Sendable {
     /// Liked, or no opinion: the latest of this and `disliked` is the path's opinion.
     case loved(path: String, loved: Bool)
     case disliked(path: String)
-    /// When a machine first saw the path: Date Added.
+    /// When a machine first saw the path: Date Added. An import's, one date per path.
     case added(path: String, at: Double)
+    /// When a machine's scan first saw the files `names` in the folder `folder`: Date Added
+    /// for each, one line for a scan batch's new files in one folder (ADR 0098).
+    case addedFiles(folder: String, names: [String], at: Double)
     case move(from: String, to: String)
     /// `rules` is a smart playlist's `SmartRules` JSON; nil for a manual playlist.
     case playlistCreate(playlist: String, name: String, rules: String?)
@@ -44,6 +47,9 @@ package struct SyncRecord: Equatable, Sendable {
     static let maximumPathBytes = 4096
     /// Entries one playlist event lists at most; a longer playlist isn't synced.
     static let maximumEntries = 100_000
+    /// Names one `addedFiles` event lists at most: a scan batch's, so a line of names as long
+    /// as a path may be stays under `maximumLineBytes`.
+    static let maximumAddedNames = 500
 
     /// The line, without its line break: a JSON object with its keys in a fixed order.
     package var line: String {
@@ -90,9 +96,13 @@ extension SyncEvent {
         opinion == .disliked ? .disliked(path: path) : .loved(path: path, loved: opinion == .liked)
     }
 
-    /// What applying the event costs, toward a sync's batch: one, or one per entry.
+    /// What applying the event costs, toward a sync's batch: one, or one per entry or name.
     var work: Int {
-        if case .playlistEntries(_, let paths) = self { max(1, paths.count) } else { 1 }
+        switch self {
+        case .playlistEntries(_, let paths): max(1, paths.count)
+        case .addedFiles(_, let names, _): names.count
+        default: 1
+        }
     }
 
     var name: SyncEventName {
@@ -104,6 +114,7 @@ extension SyncEvent {
         case .loved: .loved
         case .disliked: .disliked
         case .added: .added
+        case .addedFiles: .addedFiles
         case .move: .move
         case .playlistCreate: .playlistCreate
         case .playlistRename: .playlistRename
@@ -129,6 +140,8 @@ extension SyncEvent {
         case .loved(let path, let loved): [(.path, .string(path)), (.loved, .bool(loved))]
         case .disliked(let path): [(.path, .string(path))]
         case .added(let path, let at): [(.path, .string(path)), (.at, .number(at))]
+        case .addedFiles(let folder, let names, let at):
+            [(.folder, .string(folder)), (.names, .strings(names)), (.at, .number(at))]
         case .move(let from, let to): [(.from, .string(from)), (.to, .string(to))]
         case .playlistCreate(let playlist, let name, let rules):
             [
@@ -151,11 +164,12 @@ enum SyncKey: String {
     case seq, ms, n, event, path, at, player, plays, skips, lastPlayed, stars, loved, from, to
     case playlist
     case name, rules, paths
+    case folder, names
 }
 
 /// What `event` names in a log line.
 enum SyncEventName: String {
-    case play, skip, counts, rating, loved, disliked, added, move, playlistCreate
+    case play, skip, counts, rating, loved, disliked, added, addedFiles, move, playlistCreate
     case playlistRename
     case playlistRules, playlistEntries, playlistDelete
 }
@@ -210,6 +224,25 @@ extension SyncEvent {
         case .disliked: self = .disliked(path: try fields.path(.path))
         case .added:
             self = .added(path: try fields.path(.path), at: try fields.take(.at).seconds(.at))
+        case .addedFiles:
+            let folder = try fields.path(.folder)
+            guard case .strings(let names) = try fields.take(.names) else {
+                throw .bad(.names, "isn't a list of strings")
+            }
+            guard (1...SyncRecord.maximumAddedNames).contains(names.count) else {
+                throw .bad(.names, "lists no names or over \(SyncRecord.maximumAddedNames)")
+            }
+            var checked: [String] = []
+            for name in names {
+                guard !name.contains("/") else { throw .bad(.names, "holds a name with a /") }
+                // The whole path is checked, as a path's would be. NFC leaves the folder and
+                // the slash as they are, so the name is what follows them.
+                let path = try SyncJSON.string(folder + "/" + name).path(.names)
+                checked.append(
+                    String(decoding: path.utf8.dropFirst(folder.utf8.count + 1), as: UTF8.self))
+            }
+            self = .addedFiles(
+                folder: folder, names: checked, at: try fields.take(.at).seconds(.at))
         case .move: self = .move(from: try fields.path(.from), to: try fields.path(.to))
         case .playlistCreate:
             let rules = try fields.take(.rules)

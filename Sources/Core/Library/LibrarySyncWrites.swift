@@ -21,6 +21,37 @@ enum SyncField: String {
     case rating, loved, playlistName, playlistRules, playlistEntries
 }
 
+/// A scan batch's new sync paths, which the log takes as one `addedFiles` event a folder, in
+/// the order the folders came, at most `maximumAddedNames` names each (ADR 0098).
+struct SyncAdded {
+    /// When the batch saw them: their Date Added.
+    let at: Double
+    private var folders: [String] = []
+    private var names: [String: [String]] = [:]
+    /// Sync paths with no folder, which can't be grouped.
+    private var loose: [String] = []
+
+    init(at: Double) { self.at = at }
+
+    mutating func add(_ syncPath: String) {
+        guard let slash = syncPath.lastIndex(of: "/") else { return loose.append(syncPath) }
+        let folder = String(syncPath[..<slash])
+        if names[folder] == nil { folders.append(folder) }
+        names[folder, default: []].append(String(syncPath[syncPath.index(after: slash)...]))
+    }
+
+    var events: [SyncEvent] {
+        let cap = SyncRecord.maximumAddedNames
+        return folders.flatMap { folder in
+            let all = names[folder] ?? []
+            return stride(from: 0, to: all.count, by: cap).map {
+                SyncEvent.addedFiles(
+                    folder: folder, names: Array(all[$0..<min($0 + cap, all.count)]), at: at)
+            }
+        } + loose.map { .added(path: $0, at: at) }
+    }
+}
+
 /// This machine's log (ADR 0038): each change appends its event in the transaction that makes
 /// it, so the event is stored exactly when the change is, by any connection.
 extension LibraryIndex {

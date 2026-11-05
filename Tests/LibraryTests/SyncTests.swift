@@ -518,6 +518,27 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(try a.track("x.flac")?.addedSeconds == first)
 }
 
+@Test func aScanBatchLogsOneLineAFolderAndEachFileGetsItsDateAdded() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    let names = ["A/1.flac", "A/2.flac", "B/1.flac", "A/3.flac"]
+    try a.index.store(names.map { Crafted(path: a.path($0), title: $0).scanned })
+    let lines = try a.index.database.prepare("SELECT line FROM sync_outbox ORDER BY seq").map {
+        try $0.text(0)
+    }
+    let events = try lines.map { try SyncRecord(line: Array($0.utf8)[...]).event }
+    let added = try #require(try a.track("A/1.flac")).addedSeconds
+    #expect(
+        events == [
+            .addedFiles(folder: "music/library/A", names: ["1.flac", "2.flac", "3.flac"], at: added),
+            .addedFiles(folder: "music/library/B", names: ["1.flac"], at: added),
+        ])
+    Thread.sleep(forTimeInterval: 0.01)
+    try b.index.store(names.map { Crafted(path: b.path($0), title: $0).scanned })
+    try syncAll([a, b])
+    for name in names { #expect(try b.track(name)?.addedSeconds == added) }
+}
+
 @Test func aPathOutsideThisMachinesFoldersIsCountedNotKept() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair
