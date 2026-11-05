@@ -40,6 +40,9 @@ package struct WriteFaults: Sendable {
     /// Runs once the temp file is written and checked, before the original is checked for
     /// changes and replaced. A throw stops the write the way a failure there would.
     package var beforeReplacing: (@Sendable (_ original: String, _ temp: String) throws -> Void)?
+    /// Runs right after the temp file is closed, where an SMB server sets the mtime of a file
+    /// written through the handle. A throw stops the write the way a failure there would.
+    var whenTempCloses: (@Sendable (_ temp: String) throws -> Void)?
     /// Stops right before the rename and leaves the temp file, as a crash there would.
     package var crashBeforeRename = false
 
@@ -110,8 +113,10 @@ private let copyBytes = 4 * 1024 * 1024
 /// (SMB), it's written whole. Then it takes the original's mode, flags, ACL, extended
 /// attributes (Finder tags among them) and creation date; its mtime is new. Temp files an
 /// earlier write left are removed first.
-func writeTemp(_ segments: [Segment], from original: String, identity: FileIdentity)
-    throws(TagWriteError) -> TempFile
+func writeTemp(
+    _ segments: [Segment], from original: String, identity: FileIdentity,
+    faults: WriteFaults = WriteFaults()
+) throws(TagWriteError) -> TempFile
 {
     let leftovers: [String]
     do {
@@ -169,7 +174,8 @@ func writeTemp(_ segments: [Segment], from original: String, identity: FileIdent
         throw error
     }
     do throws(TagWriteError) {
-        defer { close(destination) }
+        var isOpen = true
+        defer { if isOpen { close(destination) } }
         try requireOwnTemp(destination, name, in: folder, device: info.st_dev, original)
         if cloned {
             guard ftruncate(destination, off_t(total)) == 0 else {
@@ -196,7 +202,30 @@ func writeTemp(_ segments: [Segment], from original: String, identity: FileIdent
         guard fstat(destination, &written) == 0 else {
             throw systemError(original, .writeFailed, "can't stat the temp file")
         }
-        return TempFile(path: temp, identity: FileIdentity(written))
+        // An SMB server sets a written file's mtime when its handle closes (MS-FSA 2.1.5.4), so
+        // the identity the rename is checked against is taken after the close, by name, once
+        // the name is known to still hold the file written here.
+        isOpen = false
+        guard close(destination) == 0 else {
+            throw systemError(original, .writeFailed, "can't close the temp file")
+        }
+        if let hook = faults.whenTempCloses {
+            do {
+                try hook(temp)
+            } catch {
+                throw TagWriteError(path: original, kind: .writeFailed, detail: "\(error)")
+            }
+        }
+        var closed = stat()
+        guard fstatat(folder, name, &closed, AT_SYMLINK_NOFOLLOW) == 0 else {
+            throw systemError(original, .writeFailed, "can't stat the temp file")
+        }
+        guard closed.st_mode & S_IFMT == S_IFREG, closed.st_nlink == 1,
+            closed.st_dev == written.st_dev, closed.st_ino == written.st_ino
+        else {
+            throw TagWriteError(path: original, kind: .changedDuringWrite, detail: tempSwapDetail)
+        }
+        return TempFile(path: temp, identity: FileIdentity(closed))
     } catch {
         unlinkat(folder, name, 0)
         throw error
@@ -238,8 +267,15 @@ func requireUnchanged(_ temp: TempFile, _ original: String) throws(TagWriteError
     }
     guard info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1,
         FileIdentity(info) == temp.identity
-    else { throw TagWriteError(path: original, kind: .changedDuringWrite, detail: tempSwapDetail) }
+    else {
+        logger.error(
+            "the temp file of \(original) was \(String(describing: temp.identity)) once written and is \(String(describing: FileIdentity(info))), \(info.st_nlink) links, before the rename"
+        )
+        throw TagWriteError(path: original, kind: .changedDuringWrite, detail: tempChangedDetail)
+    }
 }
+
+let tempChangedDetail = "something else changed the temp file before it replaced the original"
 
 private func writeAll(
     _ bytes: [UInt8], to descriptor: Int32, at offset: Int, _ path: String

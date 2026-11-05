@@ -159,7 +159,7 @@ public struct TagWriter: Sendable {
                 throw TagWriteError(path: path, kind: .writeFailed, detail: "\(error)")
             }
         }
-        let temp = try writeTemp(segments, from: path, identity: before)
+        let temp = try writeTemp(segments, from: path, identity: before, faults: faults)
         var handle: TagUndoJournal.Handle?
         var record: TagUndoJournal.FileRecord
         do throws(TagWriteError) {
@@ -224,7 +224,7 @@ public struct TagWriter: Sendable {
             case .edited(let lower, let upper): return .original(lower..<upper)
             }
         }
-        let temp = try writeTemp(segments, from: path, identity: before)
+        let temp = try writeTemp(segments, from: path, identity: before, faults: faults)
         do throws(TagWriteError) {
             let restored = try fileHashes(temp.path, payload: [])
             guard restored.full == Array(record.originalSHA256) else {

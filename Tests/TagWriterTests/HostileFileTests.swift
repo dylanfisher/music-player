@@ -113,9 +113,65 @@ func aTempFileSwappedBeforeTheRenameIsRefused(_ swap: String) throws {
     }
     let report = writer.write(titleEdit, to: [url.path])
     #expect(report.failures.map(\.kind) == [.changedDuringWrite], "\(swap)")
-    #expect(report.failures.first?.detail == tempSwapDetail, "\(swap)")
+    #expect(report.failures.first?.detail == tempChangedDetail, "\(swap)")
     #expect(try Data(contentsOf: url) == original, "\(swap)")
     #expect(try Data(contentsOf: other) == otherBytes, "\(swap)")
+}
+
+/// A temp file whose mtime moves when its handle closes, as an SMB server sets a written file's
+/// last write time at close (MS-FSA 2.1.5.4): the write goes through, and undo still finds it.
+@Test(arguments: [Sample.flac, Sample.mp4, Sample.mp3v24])
+func aTempFileWhoseMtimeMovesAtItsCloseIsWritten(_ sample: Sample) throws {
+    let url = try sample.copy()
+    let original = try Data(contentsOf: url)
+    var writer = scratchWriter()
+    writer.faults.whenTempCloses = { temp in
+        var info = stat()
+        guard lstat(temp, &info) == 0 else { throw POSIXError(.EIO) }
+        var times = [
+            info.st_atimespec,
+            timespec(tv_sec: info.st_mtimespec.tv_sec + 2, tv_nsec: info.st_mtimespec.tv_nsec),
+        ]
+        guard utimensat(AT_FDCWD, temp, &times, AT_SYMLINK_NOFOLLOW) == 0 else {
+            throw POSIXError(.EIO)
+        }
+    }
+    let report = writer.write(titleEdit, to: [url.path])
+    #expect(report.failures.isEmpty, "\(report.failures)")
+    #expect(report.changed == [url.path])
+    #expect(try tags(url).title == "Edited")
+    #expect(try leftoverTemps(for: url.path).isEmpty)
+    #expect(writer.undoLast().changed == [url.path])
+    #expect(try Data(contentsOf: url) == original)
+}
+
+/// Another file put at the temp file's name as the temp file closes is refused, and so is a
+/// change to the temp file after that, before the rename.
+@Test(arguments: ["swapped at the close", "changed before the rename"])
+func aTempFileReplacedAfterItClosesIsRefused(_ change: String) throws {
+    let url = try Sample.flac.copy()
+    let original = try Data(contentsOf: url)
+    var writer = scratchWriter()
+    if change == "swapped at the close" {
+        writer.faults.whenTempCloses = { temp in
+            let copy = temp + ".copy"
+            try FileManager.default.copyItem(atPath: temp, toPath: copy)
+            guard rename(copy, temp) == 0 else { throw POSIXError(.EIO) }
+        }
+    } else {
+        writer.faults.beforeReplacing = { _, temp in
+            let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: temp))
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data([0]))
+            try handle.close()
+        }
+    }
+    let report = writer.write(titleEdit, to: [url.path])
+    #expect(report.failures.map(\.kind) == [.changedDuringWrite], "\(change)")
+    let expected = change == "swapped at the close" ? tempSwapDetail : tempChangedDetail
+    #expect(report.failures.first?.detail == expected, "\(change)")
+    #expect(try Data(contentsOf: url) == original, "\(change)")
+    #expect(try leftoverTemps(for: url.path).isEmpty, "\(change)")
 }
 
 /// The original swapped after it's read and before the temp file is made from it: the temp
