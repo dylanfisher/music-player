@@ -4984,14 +4984,14 @@ them to Spaces by default; the owner turns those off if they clash.
 
 #### 42b. Rows and the queue
 
-- [ ] **42b.1 Centered triangle.** The Now Playing column centers its play triangle.
-- [ ] **42b.2 Room after the Title's triangle.** With the Now Playing column hidden, about 4 pt
+- [x] **42b.1 Centered triangle.** The Now Playing column centers its play triangle.
+- [x] **42b.2 Room after the Title's triangle.** With the Now Playing column hidden, about 4 pt
       more space between the Title's triangle and the title.
-- [ ] **42b.3 Readable playing row.** When the playing row color is dark enough, the row's text
+- [x] **42b.3 Readable playing row.** When the playing row color is dark enough, the row's text
       turns white.
-- [ ] **42b.4 Queue times.** A queue row's time is in the small font (as the artist and album
+- [x] **42b.4 Queue times.** A queue row's time is in the small font (as the artist and album
       line), aligned to the top of the row and right-aligned against the row's right edge.
-- [ ] **42b.5 Enter on the next track.** Enter or a double-click on a track starts it without
+- [x] **42b.5 Enter on the next track.** Enter or a double-click on a track starts it without
       rebuilding the queue when the queue already holds it in the same order (for example the
       track after the playing one), as Next does.
 
@@ -5032,6 +5032,30 @@ Plan, part 42b (ADR 0097):
   second play from the same list carries the queue, and a re-sort doesn't.
 - Order: this plan, then 42b.1 with 42b.2, 42b.3, 42b.4, 42b.5, each through the tests,
   `./scripts/check` at the end, then the result.
+
+Result, part 42b: shipped 42b.1 to 42b.5 (ADR 0097, amending 0092). Text cells take their
+column's alignment, and Now Playing's is centered. The Title's playing mark is the cell's mark
+now, not part of its text, drawn with a space 4 points wider than a plain one; VoiceOver still
+reads the mark and the title. A Playing Row Color whose WCAG contrast with white beats black's
+(laid over the controls' background when it has opacity) gives the row's cells the emphasized
+style, as a selection with the keys does, so every column's text draws white, whatever its
+own color; a selected row keeps its selection's style, and the default gray changes nothing.
+AppKit didn't pass the style on when the selection or the mark changed, so the row restyles
+its cells itself. The queue row's length is pinned to the row's right edge, on the title's
+baseline, in the detail line's size, and the title truncates before it. It was already 11 pt
+in code, so what looked large was likely its place halfway down beside the 13 pt title. A
+play from the track table keeps the queue when the list (its track IDs in play order) is the
+one the last play queued and the engine's queue is still that queue, unedited:
+`PlaybackEngine.play(entry:ifQueueIs:)` plays the entry as Next does, keeping the shuffle,
+and the device output takes the load from its open next track. Anything else replaces the
+queue as before, and a library change forgets the kept list. The first play after a launch
+still builds the queue, since the model keeps no list until it has queued one. No state or
+config key changed. Checked by tests only, nothing on screen: the triangle's centering, the
+gap, the white text, the queue rows and the play in place. For the owner: whether 4 points
+reads right at each row height, a dark and a light playing color in light and dark mode, the
+queue's lengths lining up, and Enter on the next track continuing without the queue panel
+rebuilding. `./scripts/check` passes; one run before the last failed
+`aColorRowIsAWellWithADefaultButton` on its 5 s wait, which passes alone and in the final run.
 
 #### 42c. Settings, sync and the icon
 
