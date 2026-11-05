@@ -4982,6 +4982,44 @@ them to Spaces by default; the owner turns those off if they clash.
 - [ ] **42a.5 Seek keys.** Ctrl+Left and Ctrl+Right seek back and forward 10 s; Ctrl+Shift+Left
       and Ctrl+Shift+Right by 5% of the track's length. Commands in the registry, rebindable.
 
+Plan, part 42a (ADR 0096):
+- Probe (done before this plan): Tab is Focus Next Area (`focus.nextArea`), which the lists
+  (sidebar, panes, track table, timeline, queue) take from their key presses and pass to the
+  registry; its handler in `CommandHandlers` builds the order (the browser's `focusAreas`, less
+  the sidebar when hidden, plus the queue when shown) and steps forward, starting at the first
+  area from anywhere else. ⇧Tab is bound to nothing, so the lists hand it to AppKit, whose
+  automatic key-view loop walks every view that can take the keys, scroll views and the
+  toolbar's controls among them, in its own order: from the second column it lands on a view
+  that shows no focus before the first column. Showing the columns leaves the keys where they
+  were. After a column change that drops the selected track (the playing one, selected from
+  All), the track table reloads with nothing selected; Tab does give it the keys, but a table
+  with no selection and no focus ring shows nothing, so focus looks lost. Seek Forward and Seek
+  Back step 10 s on ⌥⌘→ and ⌥⌘←; nothing seeks by a share of the track.
+- 42a.1 and 42a.2: one ordered list. `MainWindow.focusAreas` is the order Tab walks (sidebar
+  when shown, columns when shown, track table or timeline, queue when shown), and one
+  `focusArea(after:of:forward:)` steps it either way, wrapping, so ⇧Tab is the same list
+  backward by construction. A new command, Focus Previous Area (`focus.previousArea`, ⇧Tab),
+  in the View menu after Focus Next Area, rebindable as every command is. From outside the
+  list Tab enters at the first area and ⇧Tab at the last, the search field included (its Tab
+  and ⇧Tab go to the commands instead of AppKit's loop).
+- 42a.3: showing the columns gives the first column the keys, unless the timeline shows.
+- 42a.4: an area given the keys by Tab or ⇧Tab that has rows and no selection selects its
+  first row, so the move shows.
+- 42a.5: Ctrl+Right and Ctrl+Left become Seek Forward's and Seek Back's second chords (10 s,
+  the same commands). New commands Seek Forward 5% and Seek Back 5%
+  (`playback.seekForwardPercent`, `playback.seekBackPercent`) on ⌃⇧→ and ⌃⇧←, in the Controls
+  menu after Seek Back, from links as the other seeks are, a twentieth of the playing track's
+  duration; nothing with no known duration. Rows in ADR 0012's table.
+- No state or config key changes; a shortcut override in `config.json` still names commands
+  by the same IDs.
+- Tests: the order walked forward then backward visits the same views reversed, with the
+  sidebar, columns and queue each shown and hidden; ⇧Tab from the second column gives the
+  first column the keys at once; the search field's Tab and ⇧Tab; showing the columns focuses
+  the first; Tab into a track table left with no selection by a column change selects its first
+  row; the commands' chords, menu places and link set; the seek step for 5% of a duration.
+- Order: this plan, the focus order and Focus Previous Area, showing the columns, the
+  selection on Tab, the seek commands, then the ADR and the result.
+
 #### 42b. Rows and the queue
 
 - [x] **42b.1 Centered triangle.** The Now Playing column centers its play triangle.
