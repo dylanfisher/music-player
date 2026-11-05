@@ -4995,6 +4995,44 @@ them to Spaces by default; the owner turns those off if they clash.
       rebuilding the queue when the queue already holds it in the same order (for example the
       track after the playing one), as Next does.
 
+Plan, part 42b (ADR 0097):
+- Probe (done before this plan): `TextCell` draws one line, left-aligned or right for numbers,
+  and the Now Playing cell is a left-aligned `TextCell`; the Title's mark is the text
+  `▶︎ ` before the title. `MarkedRowView` fills the playing row with `markTint` and leaves the
+  cells' `backgroundStyle` to AppKit, which sets `.emphasized` only on a selection the table
+  has the keys for; `TextCell` draws white then. The queue's `QueueCell` puts the title and
+  detail stack and the length in a horizontal stack centered on the row, so the length follows
+  the text's width and sits halfway down. A play from the track table goes through
+  `PlayStart` and `PlaybackEngine.play(starting:completing:)`, which replaces the queue every
+  time; Next goes through `move(to:)` and `load`, and the device output reuses an open track,
+  the next one among them, whose URL matches the load (`openTrack`), so a load of the next
+  track keeps its prebuffer.
+- 42b.1: `TextCell` takes an alignment, and Now Playing's is centered. Test: the triangle's ink
+  is as far from the cell's left edge as from its right.
+- 42b.2: `TextCell.mark`, drawn before the text with a space 4 points wider than a plain one;
+  the Title gets the playing mark there instead of in its text. Test: the drawn line is 4
+  points wider than the mark, a space and the title.
+- 42b.3: `MarkedRowView` reports `.emphasized` as its cells' style while it's marked with a
+  `markTint` dark enough for white text, by WCAG contrast (white's against the tint over the
+  table's background beats black's), and not while it's selected. Every `TextCell` draws white
+  for `.emphasized`, whatever its own color, so every column follows. Tests: a dark tint makes
+  every text cell on the playing row draw white and a light one doesn't; a selected playing
+  row keeps the selection's style; the contrast function's threshold.
+- 42b.4: `QueueCell` lays out by constraints: the length is pinned to the row's right edge,
+  in the detail line's font, on the title's baseline, and the title truncates before it. Test:
+  short and long titles put the length's right edge at the same place, on the title's
+  baseline, in the detail's font size.
+- 42b.5: `BrowserModel` keeps the list its last play queued (the track IDs in play order) and
+  that queue. A play from the same IDs in the same order returns a `PlayStart` that carries
+  the queue; the app then asks the engine to play that entry in place
+  (`PlaybackEngine.play(entry:ifQueueIs:)`), which does what Next does when the engine's queue
+  is that queue, unedited, and otherwise refuses, and the app replaces the queue as before.
+  A library change forgets the kept list. Tests: the engine plays the entry in place, keeps
+  the queue and hands over the next track, and refuses an edited or other queue; the model's
+  second play from the same list carries the queue, and a re-sort doesn't.
+- Order: this plan, then 42b.1 with 42b.2, 42b.3, 42b.4, 42b.5, each through the tests,
+  `./scripts/check` at the end, then the result.
+
 #### 42c. Settings, sync and the icon
 
 - [ ] **42c.1 Bit-perfect badge in line.** Signal path shows the bit-perfect badge as the first
