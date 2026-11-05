@@ -85,14 +85,15 @@ let historyBenchmarks = [
 
 /// A copy of the scanned fixture library with `syntheticPlayCount` plays logged, beside the
 /// fixtures, so the generated data stays out of git and the user's folders.
-private struct PlayedLibrary: @unchecked Sendable {
+struct PlayedLibrary: @unchecked Sendable {
     var index: LibraryIndex
     /// A second connection, for what `LibraryIndex` doesn't offer, such as page sizes.
     var database: Database
     var paths: [String]
+    var databaseURL: URL
 }
 
-private let playedLibrary = Result { () throws -> PlayedLibrary in
+let playedLibrary = Result { () throws -> PlayedLibrary in
     let source = try scannedLibrary.get().databaseURL
     let directory = try emptyCacheDirectory("bench-plays")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -125,5 +126,6 @@ private let playedLibrary = Result { () throws -> PlayedLibrary in
         try database.execute(fillRecordedSQL)
     }
     try index.checkpoint()
-    return PlayedLibrary(index: index, database: database, paths: rows.map(\.path))
+    return PlayedLibrary(
+        index: index, database: database, paths: rows.map(\.path), databaseURL: databaseURL)
 }
