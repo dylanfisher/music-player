@@ -912,10 +912,13 @@ private func visibleLabels(in view: NSView) -> [String] {
     let model = GeneralModel(
         settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
         set: { _, _ in }, isBlocked: { false })
-    let pane = GeneralPane(model: model, configPath: nil, actions: actions())
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.receiver])
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled],
         backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
     window.contentViewController = pane
     window.layoutIfNeeded()
     let triangle = try #require(pane.disclosures[key])
