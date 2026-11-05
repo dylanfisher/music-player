@@ -120,7 +120,8 @@ The player's own:
 | Play the selection | Return, alternate ⌘↓ | ⌘↓ is Searcher's Open |
 | Play Next | ⌥Return | |
 | Next / Previous Track | ⌘→ / ⌘← | A field being edited takes ⌘ or ⌥ with ←, → or ⌫ (± ⇧) before the menu, in every window, as Searcher's filter field takes its own keys (0037). A test checks it |
-| Seek Forward / Back | ⌥⌘→ / ⌥⌘← | |
+| Seek Forward / Back | ⌥⌘→ / ⌥⌘←, alternate ⌃→ / ⌃← | 10 s. ⌃→ and ⌃← are macOS's Spaces keys by default; the owner turns those off (0096) |
+| Seek Forward / Back 5% | ⌃⇧→ / ⌃⇧← | A twentieth of the track (0096) |
 | Volume Up / Down | ⌃⌘↑ / ⌃⌘↓ | Enabled only while digital volume is on |
 | Show Current Track | ⌘L | |
 | Show Selected Track | ⇧⌘L | Centers the selection whatever plays (0088) |
@@ -132,6 +133,7 @@ The player's own:
 | Remove from Queue or Playlist | ⌘⌫ | Never touches files (AGENTS.md) |
 | Focus the next or previous browser pane | → / ← | Genre, artist, album, then the track table |
 | Next focus area | Tab | Sidebar, panes, track table, queue |
+| Previous focus area | ⇧Tab | The same areas in reverse (0096) |
 | Close Window | ⌘W | The standard item |
 | Stop, Shuffle, Repeat | none | The palette and the Controls menu run them |
 

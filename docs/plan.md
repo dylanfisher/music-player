@@ -4972,14 +4972,14 @@ them to Spaces by default; the owner turns those off if they clash.
 
 #### 42a. Focus and seek keys
 
-- [ ] **42a.1 Shift-Tab back a column.** From the second browser column, Shift-Tab focuses the
+- [x] **42a.1 Shift-Tab back a column.** From the second browser column, Shift-Tab focuses the
       first column at once; today focus leaves the columns and a second Shift-Tab is needed.
-- [ ] **42a.2 Tab and Shift-Tab are inverses.** Shift-Tab visits the same views as Tab, in the
+- [x] **42a.2 Tab and Shift-Tab are inverses.** Shift-Tab visits the same views as Tab, in the
       reverse order, everywhere in the main window.
-- [ ] **42a.3 Columns open focused.** Showing the browser columns focuses the first column.
-- [ ] **42a.4 Tab into the filtered tracks.** With a track playing from All Tracks and another
+- [x] **42a.3 Columns open focused.** Showing the browser columns focuses the first column.
+- [x] **42a.4 Tab into the filtered tracks.** With a track playing from All Tracks and another
       column item selected, Tab from the columns still reaches the track table below.
-- [ ] **42a.5 Seek keys.** Ctrl+Left and Ctrl+Right seek back and forward 10 s; Ctrl+Shift+Left
+- [x] **42a.5 Seek keys.** Ctrl+Left and Ctrl+Right seek back and forward 10 s; Ctrl+Shift+Left
       and Ctrl+Shift+Right by 5% of the track's length. Commands in the registry, rebindable.
 
 Plan, part 42a (ADR 0096):
@@ -5019,6 +5019,31 @@ Plan, part 42a (ADR 0096):
   row; the commands' chords, menu places and link set; the seek step for 5% of a duration.
 - Order: this plan, the focus order and Focus Previous Area, showing the columns, the
   selection on Tab, the seek commands, then the ADR and the result.
+
+Result, part 42a: shipped 42a.1 to 42a.5 (ADR 0096). Tab and ⇧Tab walk one list,
+`MainWindow.focusAreas` (sidebar, columns, track table or timeline, queue, each while shown),
+through one step function, so ⇧Tab is Tab reversed by construction; Focus Previous Area
+(`focus.previousArea`, ⇧Tab) is a new command after Focus Next Area in the View menu,
+rebindable like every command. The search field's Tab and ⇧Tab enter the list at its first and
+last areas instead of AppKit's loop. Showing the columns gives the first column the keys, except
+on the timeline. An area Tab or ⇧Tab reaches with rows and no selection selects its first row:
+42a.4 turned out to be a table left with no selection after the column change dropped the
+playing track, which Tab did reach but which showed nothing. ⌃→ and ⌃← are second chords of
+Seek Forward and Seek Back (10 s); Seek Forward 5% and Seek Back 5%
+(`playback.seekForwardPercent`, `playback.seekBackPercent`) are new on ⌃⇧→ and ⌃⇧←, after Seek
+Back in the Controls menu and from links; rows in ADR 0012's table. No state or config key
+changed. Checked by tests only: the list walked both ways with each part shown and hidden, ⇧Tab
+from the second column, the search field's keys, showing the columns, Tab into a table emptied
+by a column change, the chords, menu places and link set, and the 5% step. For the owner: ⇧Tab
+from the second column and around the whole window with the queue open, ⌘B to show the
+columns, Tab into the track table after picking an album that doesn't hold the playing track,
+and ⌃→ once the Spaces shortcuts are off. `./scripts/check` passes but for its test step, where
+window tests (`noStatusBarPartResizesTheWindowOrItsSplits`,
+`glassOnThenOffLeavesTheWindowAsAFreshOne`, `aColorRowIsAWellWithADefaultButton`) fail in the
+full run on a loaded machine and pass when MusicPlayerTests and SettingsWindowTests run alone.
+LibraryBrowserTests, run by name in chunks of 15 as in 41c, all pass but
+`aRefreshKeepsTheSelectedRowsByID`, `aSavedCheckRunsTheReportAndListsItsTracks` and
+`theArtHoverDrawsOnTopAndEndsAtItsAlbumsLastRow`, 41c's three, which fail the same on `main`.
 
 #### 42b. Rows and the queue
 
