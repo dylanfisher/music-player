@@ -166,10 +166,6 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
         let entries = model.entries[column]
         cell.textField?.stringValue =
             row == 0 ? model.columns[column].allTitle(entries.count) : entries[row - 1].name
-        cell.textField?.font =
-            row == 0
-            ? .boldSystemFont(ofSize: NSFont.smallSystemFontSize)
-            : .systemFont(ofSize: NSFont.smallSystemFontSize)
         return cell
     }
 
