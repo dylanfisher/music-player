@@ -376,7 +376,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func snapshot(to url: URL) {
         let target: () -> NSWindow? =
             switch snapshotOf {
-            case .main: { [weak self] in self?.window?.window }
+            case .main, .health: { [weak self] in self?.window?.window }
             case .palette: { [weak self] in self?.palette?.window }
             case .playlist: { [weak self] in self?.ruleEditor?.window }
             case .tags: { [weak self] in self?.tagEditing.sheet?.window }
@@ -396,6 +396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let wait = snapshotOf == .main ? 0 : snapshotOf == .tags ? 3.0 : 1.0
         switch snapshotOf {
         case .main: break
+        case .health: dispatcher?.run(.checkHealth)
         case .palette: dispatcher?.run(.showPalette)
         case .playlist: dispatcher?.run(.newSmartPlaylist)
         case .tags:
