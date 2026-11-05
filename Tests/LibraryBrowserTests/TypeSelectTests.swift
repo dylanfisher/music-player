@@ -9,7 +9,7 @@ private final class Clock {
 
 @Test func aPauseStartsANewQuery() {
     let clock = Clock()
-    var select = TypeSelect(now: { clock.seconds })
+    let select = TypeSelect(now: { clock.seconds })
     #expect(select.add("b") == "b")
     clock.seconds += 0.5
     #expect(select.add("e") == "be")

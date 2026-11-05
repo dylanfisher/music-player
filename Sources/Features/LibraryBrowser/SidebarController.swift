@@ -178,7 +178,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         {
             return false
         }
-        return routeKey(event, typeSelect: &typeSelect, keyCommand: keyCommand) { _ in }
+        return routeKey(event, typeSelect: typeSelect, keyCommand: keyCommand) { _ in }
     }
 
     private var selectedNode: SidebarNode? {

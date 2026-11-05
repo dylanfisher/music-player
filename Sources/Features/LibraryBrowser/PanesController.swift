@@ -97,7 +97,7 @@ final class PanesController: NSViewController, NSTableViewDataSource, NSTableVie
             focusPane(chord.key == .right)
             return true
         }
-        return routeKey(event, typeSelect: &typeSelect, keyCommand: keyCommand) {
+        return routeKey(event, typeSelect: typeSelect, keyCommand: keyCommand) {
             [weak self] query in
             guard let self else { return }
             // Row 0 is All.

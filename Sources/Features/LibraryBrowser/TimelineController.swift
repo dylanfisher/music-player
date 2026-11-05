@@ -140,7 +140,7 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
 
     /// Every key goes through the registry; there's no sort column to type into.
     private func takeKey(_ event: NSEvent) -> Bool {
-        routeKey(event, typeSelect: &typeSelect, keyCommand: keyCommand) { _ in }
+        routeKey(event, typeSelect: typeSelect, keyCommand: keyCommand) { _ in }
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) { selectionDidChange() }

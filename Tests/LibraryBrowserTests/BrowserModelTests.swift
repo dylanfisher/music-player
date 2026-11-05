@@ -501,6 +501,34 @@ private func loadedModel(
     #expect(panes.tables[1].numberOfRows == model.entries[1].count + 1)
 }
 
+// A key command that moves a column's selection runs while the key is routed, and the
+// selection change resets type-to-select; that overlap once stopped the app.
+@MainActor @Test func aKeyCommandThatMovesAColumnSelectsTheNextEntry() async throws {
+    let (model, _) = try await loadedModel()
+    var panes: PanesController?
+    var selected: [BrowserValue?] = []
+    panes = PanesController(
+        model: model, select: { selected.append($1) }, setGrouping: { _, _ in },
+        keyCommand: { _ in
+            panes?.move(.down, in: 0)
+            return .ran
+        }, focusPane: { _ in })
+    let controller = try #require(panes)
+    _ = controller.view
+    let table = controller.tables[0]
+    let down = try #require(
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+            context: nil, characters: String(UnicodeScalar(NSDownArrowFunctionKey)!),
+            charactersIgnoringModifiers: String(UnicodeScalar(NSDownArrowFunctionKey)!),
+            isARepeat: false, keyCode: 125))
+    #expect(table.takeKey(down))
+    #expect(table.selectedRow == 0)
+    #expect(table.takeKey(down))
+    #expect(table.selectedRow == 1)
+    #expect(selected.last == model.entries[0].first?.value)
+}
+
 @Test func aTagGroupingListsEachTextOnceIgnoringCaseAndLeavesOutEmptyOnes() throws {
     let databaseURL = try writableBrowserDatabase()
     let index = try LibraryIndex(at: databaseURL)

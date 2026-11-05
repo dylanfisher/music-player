@@ -7,7 +7,7 @@ import KeyChord
 /// own key bindings, and a printable key types to select. False leaves the key to AppKit.
 @MainActor
 func routeKey(
-    _ event: NSEvent, typeSelect: inout TypeSelect?,
+    _ event: NSEvent, typeSelect: TypeSelect?,
     keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome, select: (String) -> Void
 ) -> Bool {
     let chords = KeyChord.candidates(for: event)

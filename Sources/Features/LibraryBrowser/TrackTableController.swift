@@ -827,7 +827,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     // MARK: Keys
 
     private func takeKey(_ event: NSEvent) -> Bool {
-        routeKey(event, typeSelect: &typeSelect, keyCommand: actions.keyCommand) {
+        routeKey(event, typeSelect: typeSelect, keyCommand: actions.keyCommand) {
             [weak self] query in
             self?.typeToSelect(query)
         }

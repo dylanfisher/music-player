@@ -2,8 +2,10 @@ import Foundation
 
 /// Type-to-select: the text typed into a list since the last pause, and the row it picks. A key
 /// a second or more after the last one starts a new query, as does any command or a change of
-/// list. A repeated letter doesn't cycle: "rr" looks for "rr".
-struct TypeSelect {
+/// list. A repeated letter doesn't cycle: "rr" looks for "rr". A class, so a key command run
+/// while a key is routed can reset it from the list's selection change without overlapping an
+/// access to the list's own copy.
+final class TypeSelect {
     static let resetSeconds = 1.0
 
     private(set) var query = ""
@@ -19,7 +21,7 @@ struct TypeSelect {
     var isTyping: Bool { !query.isEmpty && now() - lastKey < Self.resetSeconds }
 
     /// Adds `text` and returns the whole query.
-    mutating func add(_ text: String) -> String {
+    func add(_ text: String) -> String {
         let time = now()
         if time - lastKey >= Self.resetSeconds { query = "" }
         lastKey = time
@@ -27,7 +29,7 @@ struct TypeSelect {
         return query
     }
 
-    mutating func reset() {
+    func reset() {
         query = ""
         lastKey = -.infinity
     }
