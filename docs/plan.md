@@ -4342,10 +4342,10 @@ drag the opacity, press Default, and type a title template with an open brace on
 
 #### 40b. Progress box and glass headers
 
-- [ ] **40b.1 A lighter progress box.** The box around the toolbar status's seek bar is lighter
+- [x] **40b.1 A lighter progress box.** The box around the toolbar status's seek bar is lighter
       than the toolbar, as Swinsian's is (250 on 242 in light), not darker; dark mode gets the
       same relation.
-- [ ] **40b.2 Frosted glass headers.** On window glass the table headers are now fully
+- [x] **40b.2 Frosted glass headers.** On window glass the table headers are now fully
       transparent. They get a frosted backdrop, blurring what scrolls under them, as Finder's do.
 
 Plan, part 40b:
@@ -4368,6 +4368,18 @@ Plan, part 40b:
   too; the header and its menu back after.
 - Checks: `./scripts/check`, `--snapshot` light and dark, glass on and off (the box against
   the screenshot), the live resize bench by name with the glass on, against main.
+
+Result, part 40b: shipped 40b.1 and 40b.2 (ADR 0087 amended). The seek box is white at 60% in
+light and 5% in dark, with no border; `--snapshot` measures 250 on the 243 toolbar in light,
+Swinsian's 250 on 242, and 66 on 53 in dark, the same on glass, with the track still 231. The
+status bar's box is the same view and lightened with it. On glass each list's header holds a
+header material within the window under a titles view; read off the screen over red, the
+header comes out 0.99/0.87/0.86 in light and 0.35/0.20/0.18 in dark, neither the red nor
+opaque. An inactive window's header is a flat color, white in light, as the glass's backdrop
+goes flat. `--snapshot` draws the material flat, so the blur itself waits for the owner's eye.
+`./scripts/check` passes; live resize with the glass on, p95 20.9, 8.0 and 16.9 ms against
+main's 18.0, 17.2 and 17.1 (budget 35), with a few slowest frames over 100 ms against main's 37
+at most. The 2015 MacBook Pro and macOS 12 to 15 wait for the owner check.
 
 #### 40c. Builder items in Customize Toolbar
 
