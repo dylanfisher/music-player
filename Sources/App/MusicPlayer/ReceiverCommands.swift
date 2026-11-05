@@ -80,13 +80,13 @@ extension AppDelegate {
     }
 
     /// Shows the receiver's volume in the signal path while it's connected.
-    private func receiverChanged(_ control: ReceiverControl) {
-        let connected = if case .connected = control.status { true } else { false }
-        signalPath?.showReceiver(connected: connected, decibels: control.state.volume?.decibels)
+    private func receiverChanged(_ running: ReceiverControl) {
+        let connected = if case .connected = running.status { true } else { false }
+        signalPath?.showReceiver(connected: connected, decibels: running.state.volume?.decibels)
     }
 
     private func makeReceiverControl() -> ReceiverControl {
-        let control = ReceiverControl(
+        let made = ReceiverControl(
             discover: {
                 try await RendererDiscovery.discover(
                     transport: UDPSearchTransport(
@@ -101,10 +101,10 @@ extension AppDelegate {
                 case .ignored: logger.notice("\(problem)")
                 }
             })
-        control.changed = { [weak self, weak control] in
-            if let control { self?.receiverChanged(control) }
+        made.changed = { [weak self, weak made] in
+            if let made { self?.receiverChanged(made) }
         }
-        return control
+        return made
     }
 
     func registerReceiverCommands(_ dispatcher: CommandDispatcher) {
