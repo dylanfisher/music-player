@@ -1,24 +1,6 @@
 import Foundation
 import Metadata
 
-/// The frame each group is written as. A 2.3 date is split across `TYER`, `TDAT` and `TIME`
-/// by `v23DateFrames`.
-private func frameID(_ group: TagGroup) -> String {
-    switch group {
-    case .title: ID3FrameID.title
-    case .artist: ID3FrameID.artist
-    case .album: ID3FrameID.album
-    case .albumArtist: ID3FrameID.albumArtist
-    case .genre: ID3FrameID.genre
-    case .date: ID3FrameID.date
-    case .composer: ID3FrameID.composer
-    case .comment: ID3FrameID.comment
-    case .track: ID3FrameID.track
-    case .disc: ID3FrameID.disc
-    case .compilation: ID3FrameID.compilation
-    }
-}
-
 /// 2.3 and 2.4's picture frame; the reader also takes 2.2's three-letter one.
 private let pictureFrameID = id3PictureFrameIDs.first { $0.count == 4 }!
 /// The language a new comment gets when the old one gave none.
@@ -34,38 +16,69 @@ extension ID3Tag {
     ) throws(ParseFailure) {
         if let art { try applyArt(art, artOffset: artOffset) }
         for group in groups {
-            let ids = Set(group.readerFields.flatMap { id3FrameIDs(for: $0) })
-            let replaced: (ID3Frame) -> Bool =
-                group == .comment
-                ? { [version] in $0.isUserComment(version: version) } : { ids.contains($0.id) }
-            let language =
-                group == .comment
-                ? frames.first(where: replaced).map { Array($0.body.dropFirst().prefix(3)) }
-                : nil
-            replace(where: replaced, with: try frames(group, tags, language: language))
+            var replaced = { [version] (frame: ID3Frame) in frame.group(version: version) == group }
+            var writtenID: String?
+            // iTunes's grouping frame wins over `TIT1` and leaves `TIT1` to the work, so an edit
+            // of a tag that has one stays in it.
+            if group == .text(.grouping),
+                frames.contains(where: { $0.id == ID3FrameID.iTunesGrouping })
+            {
+                replaced = { $0.id == ID3FrameID.iTunesGrouping }
+                writtenID = ID3FrameID.iTunesGrouping
+            }
+            let language = frames.first(where: replaced).flatMap { [version] frame in
+                frame.isUndescribed(version: version)
+                    ? Array(frame.body.dropFirst().prefix(3)) : nil
+            }
+            replace(
+                where: replaced,
+                with: try frames(group, tags, language: language, writtenID: writtenID))
         }
     }
 
-    private func frames(_ group: TagGroup, _ tags: TrackTags, language: [UInt8]?)
-        throws(ParseFailure) -> [ID3Frame]
-    {
+    private func frames(
+        _ group: TagGroup, _ tags: TrackTags, language: [UInt8]?, writtenID: String?
+    ) throws(ParseFailure) -> [ID3Frame] {
         let text = group.isPair ? numberPairText(group.numbers(in: tags)) : group.text(in: tags)
         guard let text else { return [] }
-        if group == .date, version == 3 { return try v23DateFrames(text) }
-        var body: [UInt8]
-        switch group {
-        case .comment:
-            let encoding = textEncoding(text)
-            body = [encoding] + (language ?? defaultCommentLanguage) + terminator(encoding)
-            body += encode(text, encoding)
-        case .genre:
-            // A leading "(" would read as an ID3v1 genre reference; "((" escapes it.
-            let escaped = text.hasPrefix("(") ? "(" + text : text
-            body = [textEncoding(escaped)] + encode(escaped, textEncoding(escaped))
-        default:
-            body = [textEncoding(text)] + encode(text, textEncoding(text))
+        if group == .text(.date), version == 3 { return try v23DateFrames(text) }
+        let field = group.readerFields[0]
+        guard var key = id3WrittenKey(for: field, version: version) else {
+            preconditionFailure("\(field) has no ID3 frame")
         }
-        return [try ID3Frame(id: frameID(group), body: body, version: version)]
+        if group == .text(.originalDate), version == 3, text.count == 4,
+            text.allSatisfy({ $0.isASCII && $0.isNumber })
+        {
+            key = .text(id3v23OriginalYearFrameID)
+        }
+        if let writtenID { key = .text(writtenID) }
+        switch key {
+        case .text(let id):
+            // A leading "(" would read as an ID3v1 genre reference; "((" escapes it.
+            let value = group == .text(.genre) && text.hasPrefix("(") ? "(" + text : text
+            let encoding = textEncoding(value)
+            return [
+                try ID3Frame(id: id, body: [encoding] + encode(value, encoding), version: version)
+            ]
+        case .userText(let description):
+            let encoding = textEncoding(description + text)
+            let body =
+                [encoding] + encode(description, encoding) + terminator(encoding)
+                + encode(text, encoding)
+            return [try ID3Frame(id: id3UserTextFrameID, body: body, version: version)]
+        case .described(let id):
+            let encoding = textEncoding(text)
+            var body = [encoding] + (language ?? defaultCommentLanguage) + terminator(encoding)
+            body += encode(text, encoding)
+            return [try ID3Frame(id: id, body: body, version: version)]
+        case .url(let id):
+            guard text.unicodeScalars.allSatisfy({ $0.value < 0x100 }) else {
+                throw .unsupported(
+                    at: nil, "an ID3 URL frame holds Latin-1 text only; \"\(text)\" doesn't fit")
+            }
+            let body = text.unicodeScalars.map { UInt8($0.value) }
+            return [try ID3Frame(id: id, body: body, version: version)]
+        }
     }
 
     /// "1997", "1997-05-12" or "1997-05-12T14:30" as 2.3's year, DDMM day and HHMM time.

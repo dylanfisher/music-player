@@ -169,12 +169,41 @@ private func newestEntry(_ journal: TagUndoJournal) throws -> URL {
     }
 }
 
-/// Each group's keys are the reader's, so what the writer removes is all the reader reads.
+/// Each group's fields have a key the writer writes in every format, and the reader reads that
+/// key as the field, so what the writer removes is all the reader reads.
 @Test func everyGroupHasKeysInEveryFormat() {
     for group in TagGroup.allCases {
-        let fields = group.readerFields
-        #expect(!fields.flatMap { id3FrameIDs(for: $0) }.isEmpty, "\(group) in ID3")
-        #expect(!fields.flatMap { mp4ItemTypes(for: $0) }.isEmpty, "\(group) in MP4")
-        #expect(!fields.flatMap { vorbisKeys(for: $0) }.isEmpty, "\(group) in Vorbis")
+        // A pair's total shares its number's frame in ID3.
+        for field in group.isPair ? [group.readerFields[0]] : group.readerFields {
+            for version: UInt8 in [3, 4] {
+                switch id3WrittenKey(for: field, version: version) {
+                case .text(let id), .described(let id), .url(let id):
+                    #expect(id3FrameIDs(for: field).contains(id), "\(field) in ID3v2.\(version)")
+                case .userText(let description):
+                    #expect(
+                        id3UserTextDescriptions(for: field).contains(description),
+                        "\(field) in ID3v2.\(version)")
+                case nil: Issue.record("\(field) has no ID3v2.\(version) key")
+                }
+            }
+        }
+        switch group {
+        case .track, .disc, .compilation:
+            // Items of their own kind, a number and its total in one.
+            #expect(!mp4ItemTypes(for: group.readerFields[0]).isEmpty, "\(group) in MP4")
+        default:
+            for field in group.readerFields {
+                switch mp4WrittenKey(for: field) {
+                case .item(let type): #expect(mp4ItemTypes(for: field).contains(type), "\(field)")
+                case .freeform(let name):
+                    #expect(mp4FreeformNames(for: field).contains(name.uppercased()), "\(field)")
+                case nil: Issue.record("\(field) has no MP4 key")
+                }
+            }
+        }
+        for field in group.readerFields {
+            let key = vorbisWrittenKey(for: field)
+            #expect(key.map { vorbisKeys(for: field).contains($0) } == true, "\(field) in Vorbis")
+        }
     }
 }

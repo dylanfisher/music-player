@@ -1,36 +1,60 @@
-/// The Vorbis comment keys the reader and the tag writer both name.
-package enum VorbisKey {
-    package static let title = "TITLE"
-    package static let artist = "ARTIST"
-    package static let album = "ALBUM"
-    package static let albumArtist = "ALBUMARTIST"
-    package static let genre = "GENRE"
-    package static let date = "DATE"
-    package static let trackNumber = "TRACKNUMBER"
-    package static let trackTotal = "TRACKTOTAL"
-    package static let discNumber = "DISCNUMBER"
-    package static let discTotal = "DISCTOTAL"
-    package static let compilation = "COMPILATION"
-    package static let composer = "COMPOSER"
-    package static let comment = "COMMENT"
+/// The Vorbis comment keys of the fields the tag editor first wrote.
+enum VorbisKey {
+    static let title = "TITLE"
+    static let artist = "ARTIST"
+    static let album = "ALBUM"
+    static let albumArtist = "ALBUMARTIST"
+    static let genre = "GENRE"
+    static let date = "DATE"
+    static let trackNumber = "TRACKNUMBER"
+    static let trackTotal = "TRACKTOTAL"
+    static let discNumber = "DISCNUMBER"
+    static let discTotal = "DISCTOTAL"
+    static let compilation = "COMPILATION"
+    static let composer = "COMPOSER"
+    static let comment = "COMMENT"
 }
 
-/// Vorbis comment keys, compared uppercased, and the fields they set. Several taggers' spellings
-/// of the same field are listed.
-private let vorbisFields: [String: TagField] = [
-    VorbisKey.title: .title, VorbisKey.artist: .artist, VorbisKey.album: .album,
-    VorbisKey.albumArtist: .albumArtist, "ALBUM ARTIST": .albumArtist, VorbisKey.genre: .genre,
-    VorbisKey.date: .date, VorbisKey.trackNumber: .track, VorbisKey.trackTotal: .trackTotal,
-    "TOTALTRACKS": .trackTotal, VorbisKey.discNumber: .disc, VorbisKey.discTotal: .discTotal,
-    "TOTALDISCS": .discTotal, VorbisKey.compilation: .compilation,
-    VorbisKey.composer: .composer, VorbisKey.comment: .comment, "GROUPING": .grouping,
-    SharedTagName.catalogNumber: .catalogNumber, SharedTagName.barcode: .barcode, "BPM": .bpm,
-    "KEY": .key, SharedTagName.conductor: .conductor, SharedTagName.lyricist: .lyricist,
-    SharedTagName.label: .publisher, "PUBLISHER": .publisher, "COPYRIGHT": .copyright,
-    "ENCODEDBY": .encoder, "DESCRIPTION": .description,
-    SharedTagName.discSubtitle: .discSubtitle, SharedTagName.work: .work, "MOVEMENT": .movement,
-    "MOVEMENTNAME": .movementName, SharedTagName.originalDate: .originalDate,
+/// The key the tag writer writes each field as, which the reader also reads. A number and its
+/// total are two keys: `.track` and `.trackTotal`.
+private let vorbisWrittenKeys: [TagField: String] = [
+    .title: VorbisKey.title, .artist: VorbisKey.artist, .album: VorbisKey.album,
+    .albumArtist: VorbisKey.albumArtist, .genre: VorbisKey.genre, .date: VorbisKey.date,
+    .track: VorbisKey.trackNumber, .trackTotal: VorbisKey.trackTotal,
+    .disc: VorbisKey.discNumber, .discTotal: VorbisKey.discTotal,
+    .compilation: VorbisKey.compilation, .composer: VorbisKey.composer,
+    .comment: VorbisKey.comment, .grouping: "GROUPING",
+    .catalogNumber: SharedTagName.catalogNumber, .barcode: SharedTagName.barcode, .bpm: "BPM",
+    .key: "KEY", .conductor: SharedTagName.conductor, .lyricist: SharedTagName.lyricist,
+    .publisher: SharedTagName.label, .copyright: "COPYRIGHT", .encoder: "ENCODEDBY",
+    .description: SharedTagName.description, .discSubtitle: SharedTagName.discSubtitle,
+    .work: SharedTagName.work, .movement: "MOVEMENT", .movementTotal: "MOVEMENTTOTAL",
+    .movementName: "MOVEMENTNAME", .originalDate: SharedTagName.originalDate,
+    .titleSort: "TITLESORT", .artistSort: "ARTISTSORT", .albumSort: "ALBUMSORT",
+    .albumArtistSort: "ALBUMARTISTSORT", .composerSort: "COMPOSERSORT",
+    .remixer: SharedTagName.remixer, .originalArtist: SharedTagName.originalArtist,
+    .originalAlbum: SharedTagName.originalAlbum, .isrc: SharedTagName.isrc,
+    .language: SharedTagName.language, .mood: SharedTagName.mood, .media: SharedTagName.media,
+    .lyrics: "LYRICS", .artistURL: SharedTagName.artistURL,
+    .audioFileURL: SharedTagName.audioFileURL, .audioSourceURL: SharedTagName.audioSourceURL,
+    .commercialURL: SharedTagName.commercialURL, .copyrightURL: SharedTagName.copyrightURL,
+    .paymentURL: SharedTagName.paymentURL, .publisherURL: SharedTagName.publisherURL,
+    .radioStationURL: SharedTagName.radioStationURL,
 ]
+
+/// Vorbis comment keys, compared uppercased, and the fields they set: the written keys and other
+/// taggers' spellings of the same fields.
+private let vorbisFields: [String: TagField] = Dictionary(
+    uniqueKeysWithValues: vorbisWrittenKeys.map { ($0.value, $0.key) }
+).merging(
+    [
+        "ALBUM ARTIST": .albumArtist, "TOTALTRACKS": .trackTotal, "TOTALDISCS": .discTotal,
+        "PUBLISHER": .publisher, "UNSYNCEDLYRICS": .lyrics,
+    ],
+    uniquingKeysWith: { written, _ in written })
+
+/// The key the tag writer writes `field` as; nil for none.
+package func vorbisWrittenKey(for field: TagField) -> String? { vorbisWrittenKeys[field] }
 
 /// The keys, uppercased, that the reader maps onto `field`, so a writer replaces exactly those.
 package func vorbisKeys(for field: TagField) -> Set<String> {

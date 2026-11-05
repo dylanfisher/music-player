@@ -25,6 +25,9 @@ package enum FileFailure {
 /// the bytes asked for, and by default no read-ahead and no caching (ADR 0010).
 package final class FileSource: ByteSource {
     package let size: Int
+    /// The file's modification and creation times from the open's `fstat`.
+    package let modified: Date
+    package let created: Date
     let descriptor: Int32
 
     /// Opened without blocking and without following a link, which the scanner never follows
@@ -57,6 +60,8 @@ package final class FileSource: ByteSource {
         if hints == .all { _ = fcntl(descriptor, F_NOCACHE, 1) }
         self.descriptor = descriptor
         size = Int(info.st_size)
+        modified = date(info.st_mtimespec)
+        created = date(info.st_birthtimespec)
     }
 
     deinit { close(descriptor) }
@@ -104,6 +109,10 @@ package final class FileSource: ByteSource {
         }
         return nil
     }
+}
+
+private func date(_ time: timespec) -> Date {
+    Date(timeIntervalSince1970: Double(time.tv_sec) + Double(time.tv_nsec) / 1e9)
 }
 
 /// A failed system call, with `errno`'s message.

@@ -178,18 +178,38 @@ struct MP4Box {
 /// The type of an `ilst` item and, for a `----` item, its `mean` and `name`.
 func mp4ItemKey(_ item: MP4Box) -> String {
     guard item.type == MP4ItemType.freeform else { return item.type }
-    var parts: [String] = []
-    var cursor = 0
-    while cursor + 8 <= item.body.count {
-        let size = Int(bigEndianValue(item.body[cursor..<cursor + 4]))
-        let type = String(decoding: item.body[cursor + 4..<cursor + 8], as: Unicode.ASCII.self)
-        guard size >= 8, cursor + size <= item.body.count else { break }
-        if type == MP4Type.mean || type == MP4Type.name, size >= 12 {
-            parts.append(latin1(item.body[cursor + 12..<cursor + size]))
+    return ([item.type] + item.freeformParts.map(\.text)).joined(separator: ":")
+}
+
+extension MP4Box {
+    /// A `----` item's `mean` and `name` atoms' text, in file order.
+    fileprivate var freeformParts: [(type: String, text: String)] {
+        var parts: [(String, String)] = []
+        var cursor = 0
+        while cursor + 8 <= body.count {
+            let size = Int(bigEndianValue(body[cursor..<cursor + 4]))
+            let type = String(decoding: body[cursor + 4..<cursor + 8], as: Unicode.ASCII.self)
+            guard size >= 8, cursor + size <= body.count else { break }
+            if type == MP4Type.mean || type == MP4Type.name, size >= 12 {
+                parts.append((type, latin1(body[cursor + 12..<cursor + size])))
+            }
+            cursor += size
         }
-        cursor += size
+        return parts
     }
-    return ([item.type] + parts).joined(separator: ":")
+
+    /// The group whose edit replaces this `ilst` item, as the reader reads it: by its type, or
+    /// an iTunes freeform item by its `name`.
+    var group: TagGroup? {
+        guard type == MP4ItemType.freeform else {
+            return TagGroup.of(matching: { mp4ItemTypes(for: $0).contains(type) })
+        }
+        let parts = freeformParts
+        guard parts.first(where: { $0.type == MP4Type.mean })?.text == iTunesMean,
+            let name = parts.first(where: { $0.type == MP4Type.name })?.text.uppercased()
+        else { return nil }
+        return TagGroup.of(matching: { mp4FreeformNames(for: $0).contains(name) })
+    }
 }
 
 func bigEndianValue(_ bytes: some Collection<UInt8>) -> UInt64 {

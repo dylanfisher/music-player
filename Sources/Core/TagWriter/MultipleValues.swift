@@ -15,8 +15,26 @@ func multiValuedFields(at url: URL) throws(MetadataError) -> Set<TagEditField> {
 
 /// `multiValuedFields` through a reader already open on the file, as the one a parse of its
 /// tags read, so its first bytes aren't read twice.
-package func multiValuedFields(in reader: ByteReader) throws(ParseFailure) -> Set<TagEditField> {
+func multiValuedFields(in reader: ByteReader) throws(ParseFailure) -> Set<TagEditField> {
+    try multiValuedFields(in: TagFile(reader))
+}
+
+/// The fields holding several values, as `multiValuedFields`, and the kind of tag the file
+/// holds, such as "ID3v2.4", from one parse of its layout.
+package func editorTagFacts(in reader: ByteReader) throws(ParseFailure)
+    -> (multiValued: Set<TagEditField>, tagScheme: String)
+{
     let file = try TagFile(reader)
+    let scheme: String =
+        switch file {
+        case .id3(let id3): id3.tag.byteCount == 0 ? "No tag" : id3VersionName(id3.tag.version)
+        case .mp4: "iTunes MP4"
+        case .flac: "Vorbis comment"
+        }
+    return (try multiValuedFields(in: file), scheme)
+}
+
+private func multiValuedFields(in file: TagFile) throws(ParseFailure) -> Set<TagEditField> {
     var groups = Set<TagGroup>()
     switch file {
     case .id3(let id3):

@@ -10,11 +10,14 @@ private let alphabet = Array("ab Zé日本🎵-/'\"%_\\")
 /// A value an editor could send for `field`: text, a number, or empty to clear it.
 private func randomValue(_ field: TagEditField, _ random: inout SplitMix64) -> String {
     if random.chance(0.15) { return "" }
+    if field.numberProperty != nil { return String(Int.random(in: 1...99, using: &random)) }
     switch field {
-    case .trackNumber, .trackTotal, .discNumber, .discTotal:
-        return String(Int.random(in: 1...99, using: &random))
     case .compilation: return random.pick(["0", "1"])
-    case .date: return String(Int.random(in: 1900...2030, using: &random))
+    case .date, .originalDate: return String(Int.random(in: 1900...2030, using: &random))
+    case .artistURL, .audioFileURL, .audioSourceURL, .commercialURL, .copyrightURL, .paymentURL,
+        .publisherURL, .radioStationURL:
+        // ID3's URL frames hold Latin-1 only.
+        return "https://example.com/\(Int.random(in: 1...999, using: &random))"
     default:
         let length = Int.random(in: 1...40, using: &random)
         return String((0..<length).map { _ in random.pick(alphabet) })

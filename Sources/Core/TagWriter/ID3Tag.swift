@@ -148,13 +148,9 @@ struct ID3Tag {
         return blocks
     }
 
-    /// The fields an edit replaces this frame for. A described comment is a player's own data.
+    /// The fields an edit replaces this frame for.
     private func id3Fields(of frame: ID3Frame) -> Set<TagEditField> {
-        guard
-            let group = TagGroup.of(matching: { id3FrameIDs(for: $0).contains(frame.id) })
-        else { return [] }
-        if group == .comment, !frame.isUserComment(version: version) { return [] }
-        return Set(group.fields)
+        Set(frame.group(version: version)?.fields ?? [])
     }
 }
 
@@ -182,28 +178,66 @@ struct ID3Frame: Equatable {
     var body: ArraySlice<UInt8> { raw[Self.headerBytes...] }
 
     /// A `COMM` frame whose description is empty, which the reader takes as the comment.
-    /// Frames whose format flags change their body (2.3: compressed, encrypted, grouped; 2.4:
-    /// grouped, compressed, encrypted, unsynchronised, with a length) aren't looked into, so
-    /// they never count.
     func isUserComment(version: UInt8) -> Bool {
-        let bodyFlags: UInt8 = version == 3 ? 0xE0 : 0x4F
-        guard id3FrameIDs(for: .comment).contains(id), raw[9] & bodyFlags == 0 else {
-            return false
-        }
-        let body = Array(self.body)
-        guard body.count >= 4 else { return false }
-        let wide = body[0] == 1 || body[0] == 2
-        let terminator: [UInt8] = wide ? [0, 0] : [0]
-        var index = 4
-        while index + terminator.count <= body.count {
-            if Array(body[index..<index + terminator.count]) == terminator {
-                let description = body[4..<index]
-                return description.isEmpty || description.elementsEqual([0xFF, 0xFE])
-                    || description.elementsEqual([0xFE, 0xFF])
+        id3FrameIDs(for: .comment).contains(id) && isUndescribed(version: version)
+    }
+
+    /// The group whose edit replaces this frame, as the reader reads it: a frame of the group's
+    /// fields, a `TXXX` by its description, and of `COMM` and `USLT` only the one without a
+    /// description, since players keep their own data in described ones.
+    func group(version: UInt8) -> TagGroup? {
+        if id == id3UserTextFrameID {
+            guard let description = userTextDescription(version: version)?.uppercased() else {
+                return nil
             }
-            index += terminator.count
+            return TagGroup.of(matching: { id3UserTextDescriptions(for: $0).contains(description) })
         }
-        return false
+        guard let group = TagGroup.of(matching: { id3FrameIDs(for: $0).contains(id) }) else {
+            return nil
+        }
+        if group == .text(.comment) || group == .text(.lyrics) {
+            return isUndescribed(version: version) ? group : nil
+        }
+        return group
+    }
+
+    /// The body unless format flags change it (2.3: compressed, encrypted, grouped; 2.4:
+    /// grouped, compressed, encrypted, unsynchronised, with a length): such frames aren't looked
+    /// into, so they never count as a field's.
+    private func plainBody(version: UInt8) -> [UInt8]? {
+        let bodyFlags: UInt8 = version == 3 ? 0xE0 : 0x4F
+        return raw[9] & bodyFlags == 0 ? Array(body) : nil
+    }
+
+    /// Where the terminator after the text starting at `start` is, in an encoding byte's width.
+    private func terminatorIndex(in body: [UInt8], from start: Int) -> (Int, width: Int)? {
+        guard let encoding = body.first else { return nil }
+        let width = encoding == 1 || encoding == 2 ? 2 : 1
+        var index = start
+        while index + width <= body.count {
+            if body[index..<index + width].allSatisfy({ $0 == 0 }) { return (index, width) }
+            index += width
+        }
+        return nil
+    }
+
+    /// A frame with an encoding, a language and an empty description before its text, as
+    /// `COMM` and `USLT` are laid out.
+    func isUndescribed(version: UInt8) -> Bool {
+        guard let body = plainBody(version: version), body.count >= 4,
+            let (end, _) = terminatorIndex(in: body, from: 4)
+        else { return false }
+        let description = body[4..<end]
+        return description.isEmpty || description.elementsEqual([0xFF, 0xFE])
+            || description.elementsEqual([0xFE, 0xFF])
+    }
+
+    /// A `TXXX` frame's description, read as the reader reads it; nil when it can't be.
+    private func userTextDescription(version: UInt8) -> String? {
+        guard let body = plainBody(version: version),
+            let (end, _) = terminatorIndex(in: body, from: 1)
+        else { return nil }
+        return id3Decoded(Array(body[1..<end]), encoding: body[0])
     }
 }
 

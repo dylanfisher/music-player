@@ -151,32 +151,16 @@ struct FLACFile {
     private func vorbisValues(_ group: TagGroup, _ tags: TrackTags) -> [(
         key: String, value: String
     )] {
-        switch group {
-        case .track, .disc:
-            let (number, total) = group.numbers(in: tags)
-            let keys =
-                group == .track
-                ? (VorbisKey.trackNumber, VorbisKey.trackTotal)
-                : (VorbisKey.discNumber, VorbisKey.discTotal)
-            return [number.map { (keys.0, "\($0)") }, total.map { (keys.1, "\($0)") }]
-                .compactMap { $0 }
-        default:
-            guard let text = group.text(in: tags) else { return [] }
-            let key: String =
-                switch group {
-                case .title: VorbisKey.title
-                case .artist: VorbisKey.artist
-                case .album: VorbisKey.album
-                case .albumArtist: VorbisKey.albumArtist
-                case .genre: VorbisKey.genre
-                case .date: VorbisKey.date
-                case .composer: VorbisKey.composer
-                case .comment: VorbisKey.comment
-                case .compilation: VorbisKey.compilation
-                case .track, .disc: preconditionFailure("handled above")
-                }
-            return [(key, text)]
+        let keys = group.readerFields.map { field in
+            guard let key = vorbisWrittenKey(for: field) else {
+                preconditionFailure("\(field) has no Vorbis key")
+            }
+            return key
         }
+        guard group.isPair else { return group.text(in: tags).map { [(keys[0], $0)] } ?? [] }
+        let (number, total) = group.numbers(in: tags)
+        return [number.map { (keys[0], "\($0)") }, total.map { (keys[1], "\($0)") }]
+            .compactMap { $0 }
     }
 
     private func emptyVorbisComment() -> [UInt8] {

@@ -33,7 +33,32 @@ public struct TrackTags: Equatable, Sendable {
     public var discSubtitle: String?
     public var work: String?
     public var movementNumber: Int?
+    public var movementTotal: Int?
     public var movementName: String?
     /// As written, like `date`.
     public var originalDate: String?
+    public var titleSort: String?
+    public var artistSort: String?
+    public var albumSort: String?
+    public var albumArtistSort: String?
+    public var composerSort: String?
+    public var remixer: String?
+    public var originalArtist: String?
+    public var originalAlbum: String?
+    public var isrc: String?
+    /// As written, usually an ISO 639-2 code such as "eng".
+    public var language: String?
+    public var mood: String?
+    /// The release's medium as written, such as "CD" or "Digital Media".
+    public var media: String?
+    /// Unsynchronized lyrics, lines separated by newlines.
+    public var lyrics: String?
+    public var artistURL: String?
+    public var audioFileURL: String?
+    public var audioSourceURL: String?
+    public var commercialURL: String?
+    public var copyrightURL: String?
+    public var paymentURL: String?
+    public var publisherURL: String?
+    public var radioStationURL: String?
 }

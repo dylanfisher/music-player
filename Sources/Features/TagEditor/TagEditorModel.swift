@@ -10,13 +10,29 @@ package struct EditableTrack: Equatable, Sendable {
     var art: Data?
     /// Fields whose frame or item holds several values, of which the editor shows the first.
     var multiValued: Set<TagEditField>
+    /// What the File tab shows; nil when not read, as in tests.
+    var file: FileFacts?
 
-    init(path: String, tags: TrackTags, art: Data?, multiValued: Set<TagEditField> = []) {
+    init(
+        path: String, tags: TrackTags, art: Data?, multiValued: Set<TagEditField> = [],
+        file: FileFacts? = nil
+    ) {
         self.path = path
         self.tags = tags
         self.art = art
         self.multiValued = multiValued
+        self.file = file
     }
+}
+
+/// A file's format, size and dates, which Get Info shows and doesn't edit.
+struct FileFacts: Equatable, Sendable {
+    var audio: TrackAudio
+    var sizeBytes: Int
+    /// "ID3v2.4", "Vorbis comment" and the like.
+    var tagScheme: String
+    var modified: Date
+    var created: Date
 }
 
 /// The tag editor's state for one track or many: each field's value where the tracks agree or
@@ -48,6 +64,11 @@ public struct TagEditorModel: Equatable, Sendable {
     }
 
     func isTyped(_ field: TagEditField) -> Bool { typed[field] != nil }
+
+    /// Whether saving would change the field: it was typed differently from what it showed.
+    func isEdited(_ field: TagEditField) -> Bool {
+        typed[field].map { $0 != shared(field) } ?? false
+    }
 
     /// The field's text in every track, or nil when they differ. Empty when none has it.
     public func shared(_ field: TagEditField) -> String? {
@@ -128,23 +149,11 @@ public struct TagEditorModel: Equatable, Sendable {
     }
 
     private func text(_ field: TagEditField, in tags: TrackTags) -> String {
-        let value: String? =
-            switch field {
-            case .title: tags.title
-            case .artist: tags.artist
-            case .album: tags.album
-            case .albumArtist: tags.albumArtist
-            case .genre: tags.genre
-            case .date: tags.date
-            case .composer: tags.composer
-            case .comment: tags.comment
-            case .trackNumber: tags.trackNumber.map(String.init)
-            case .trackTotal: tags.trackTotal.map(String.init)
-            case .discNumber: tags.discNumber.map(String.init)
-            case .discTotal: tags.discTotal.map(String.init)
-            case .compilation: tags.compilation ? "1" : ""
-            }
-        return value ?? ""
+        if let property = field.textField?.textProperty { return tags[keyPath: property] ?? "" }
+        if let property = field.numberProperty {
+            return tags[keyPath: property].map(String.init) ?? ""
+        }
+        return tags.compilation ? "1" : ""
     }
 }
 
@@ -212,9 +221,14 @@ package func readEditableTrack(_ path: String) throws -> EditableTrack {
         let art = try parsed.metadata.art.map { art throws(ParseFailure) in
             try readArt(art, from: source)
         }
+        let facts = try editorTagFacts(in: reader)
+        // The dates come from the open descriptor's stat, so they cost no extra round trip.
+        let file = FileFacts(
+            audio: parsed.metadata.audio, sizeBytes: reader.size, tagScheme: facts.tagScheme,
+            modified: source.modified, created: source.created)
         return EditableTrack(
-            path: path, tags: parsed.metadata.tags, art: art,
-            multiValued: try multiValuedFields(in: reader))
+            path: path, tags: parsed.metadata.tags, art: art, multiValued: facts.multiValued,
+            file: file)
     } catch {
         throw error.error(path: path)
     }

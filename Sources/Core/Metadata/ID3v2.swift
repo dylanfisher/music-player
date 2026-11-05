@@ -13,8 +13,11 @@ private enum FrameKind {
     case text(TagField)
     /// `TCON`, which may refer to the ID3v1 list.
     case genre
-    /// `COMM`; only the one with an empty description is the user's comment.
-    case comment
+    /// `COMM` or `USLT`: a language and a description before the text. Only the one with an
+    /// empty description is the user's; players store their own data in described ones.
+    case described(TagField)
+    /// A `W` frame: Latin-1 text with no encoding byte.
+    case url(TagField)
     case picture
     /// 2.3's `TDAT` (DDMM) and `TIME` (HHMM), which refine `TYER` into a full date.
     case day, time
@@ -38,38 +41,112 @@ package enum ID3FrameID {
     package static let compilation = "TCMP"
     package static let composer = "TCOM"
     package static let comment = "COMM"
+    package static let grouping = "TIT1"
+    /// iTunes's grouping, which wins over `TIT1` when a tag has both.
+    package static let iTunesGrouping = "GRP1"
+}
+
+/// Where the tag writer writes a field in an ID3v2.3 or 2.4 tag. The reader reads each.
+package enum ID3Key: Hashable, Sendable {
+    /// A text frame: an encoding byte, then the text.
+    case text(String)
+    /// `TXXX` with this description.
+    case userText(String)
+    /// A frame with a language and an empty description before the text: `COMM` and `USLT`.
+    case described(String)
+    /// A URL frame: Latin-1 text with no encoding byte.
+    case url(String)
+}
+
+/// The frame ID and how the reader reads it, for a key that's a frame of its own.
+private func frameKind(_ key: ID3Key, _ field: TagField) -> (String, FrameKind)? {
+    switch key {
+    case .text(let id): (id, .text(field))
+    case .described(let id): (id, .described(field))
+    case .url(let id): (id, .url(field))
+    case .userText: nil
+    }
+}
+
+/// The frame each field is written as in 2.4, and in 2.3 unless `id3v23WrittenKeys` names it. A
+/// 2.3 date is split across `TYER`, `TDAT` and `TIME` by the writer.
+private let id3WrittenKeys: [TagField: ID3Key] = [
+    .title: .text(ID3FrameID.title), .artist: .text(ID3FrameID.artist),
+    .album: .text(ID3FrameID.album), .albumArtist: .text(ID3FrameID.albumArtist),
+    .genre: .text(ID3FrameID.genre), .date: .text(ID3FrameID.date),
+    .track: .text(ID3FrameID.track), .disc: .text(ID3FrameID.disc),
+    .compilation: .text(ID3FrameID.compilation), .composer: .text(ID3FrameID.composer),
+    .comment: .described(ID3FrameID.comment), .grouping: .text(ID3FrameID.grouping),
+    .catalogNumber: .userText(SharedTagName.catalogNumber),
+    .barcode: .userText(SharedTagName.barcode), .bpm: .text("TBPM"), .key: .text("TKEY"),
+    .conductor: .text("TPE3"), .lyricist: .text("TEXT"), .publisher: .text("TPUB"),
+    .copyright: .text("TCOP"), .encoder: .text("TENC"),
+    .description: .userText(SharedTagName.description), .discSubtitle: .text("TSST"),
+    .work: .userText(SharedTagName.work), .movement: .text("MVIN"),
+    .movementName: .text("MVNM"), .originalDate: .text("TDOR"), .titleSort: .text("TSOT"),
+    .artistSort: .text("TSOP"), .albumSort: .text("TSOA"), .albumArtistSort: .text("TSO2"),
+    .composerSort: .text("TSOC"), .remixer: .text("TPE4"), .originalArtist: .text("TOPE"),
+    .originalAlbum: .text("TOAL"), .isrc: .text("TSRC"), .language: .text("TLAN"),
+    .mood: .text("TMOO"), .media: .text("TMED"), .lyrics: .described("USLT"),
+    .artistURL: .url("WOAR"), .audioFileURL: .url("WOAF"), .audioSourceURL: .url("WOAS"),
+    .commercialURL: .url("WCOM"), .copyrightURL: .url("WCOP"), .paymentURL: .url("WPAY"),
+    .publisherURL: .url("WPUB"), .radioStationURL: .url("WORS"),
+]
+
+/// 2.3's spelling of fields whose frames are 2.4's alone, as Picard writes them. An original date
+/// that is a year goes in `TORY`, which the writer decides.
+private let id3v23WrittenKeys: [TagField: ID3Key] = [
+    .discSubtitle: .userText(SharedTagName.discSubtitle), .mood: .userText(SharedTagName.mood),
+    .originalDate: .userText(SharedTagName.originalDate),
+]
+
+/// The key the tag writer writes `field` as in a tag of `version`; nil for none. The movement's
+/// total shares `.movement`'s frame, as the track's does `.track`'s.
+package func id3WrittenKey(for field: TagField, version: UInt8) -> ID3Key? {
+    (version == 3 ? id3v23WrittenKeys[field] : nil) ?? id3WrittenKeys[field]
 }
 
 /// ID3v2.2 has three-character IDs, 2.3 and 2.4 four. `TDRC` is 2.4's date and `TYER` 2.3's year;
-/// taggers mix them, so both are read in every version.
-private let frameKinds: [String: FrameKind] = [
-    "TT2": .text(.title), "TP1": .text(.artist), "TAL": .text(.album),
-    "TP2": .text(.albumArtist), "TCO": .genre, "TYE": .text(.date), "TRK": .text(.track),
-    "TPA": .text(.disc), "TCP": .text(.compilation), "TCM": .text(.composer), "COM": .comment,
-    "PIC": .picture,
-    ID3FrameID.title: .text(.title), ID3FrameID.artist: .text(.artist),
-    ID3FrameID.album: .text(.album), ID3FrameID.albumArtist: .text(.albumArtist),
-    ID3FrameID.genre: .genre, ID3FrameID.date: .text(.date), id3v23YearFrameID: .text(.date),
-    ID3FrameID.track: .text(.track), ID3FrameID.disc: .text(.disc),
-    ID3FrameID.compilation: .text(.compilation), ID3FrameID.composer: .text(.composer),
-    ID3FrameID.comment: .comment, "APIC": .picture,
-    id3v23DayFrameID: .day, id3v23TimeFrameID: .time,
-    // Fields the tag writer doesn't edit, by MusicBrainz Picard's mapping (ADR 0006).
-    "TT1": .text(.grouping), "TBP": .text(.bpm), "TKE": .text(.key), "TP3": .text(.conductor),
-    "TXT": .text(.lyricist), "TPB": .text(.publisher), "TCR": .text(.copyright),
-    "TEN": .text(.encoder), "TOR": .text(.originalDate), "TXX": .userText,
-    "TIT1": .text(.grouping), "GRP1": .iTunesGrouping, "TBPM": .text(.bpm), "TKEY": .text(.key),
-    "TPE3": .text(.conductor), "TEXT": .text(.lyricist), "TPUB": .text(.publisher),
-    "TCOP": .text(.copyright), "TENC": .text(.encoder), "TSST": .text(.discSubtitle),
-    "MVIN": .text(.movement), "MVNM": .text(.movementName), "TDOR": .text(.originalDate),
-    "TORY": .text(.originalDate), "TXXX": .userText,
-]
+/// taggers mix them, so both are read in every version. The written frames come first, then
+/// other spellings of the same fields.
+private let frameKinds: [String: FrameKind] = Dictionary(
+    uniqueKeysWithValues: (Array(id3WrittenKeys) + Array(id3v23WrittenKeys)).compactMap {
+        field, key in frameKind(key, field)
+    }
+).merging(
+    [
+        "TT2": .text(.title), "TP1": .text(.artist), "TAL": .text(.album),
+        "TP2": .text(.albumArtist), "TCO": .genre, "TYE": .text(.date), "TRK": .text(.track),
+        "TPA": .text(.disc), "TCP": .text(.compilation), "TCM": .text(.composer),
+        "COM": .described(.comment), "PIC": .picture, ID3FrameID.genre: .genre,
+        id3v23YearFrameID: .text(.date), "APIC": .picture, id3v23DayFrameID: .day,
+        id3v23TimeFrameID: .time, "TT1": .text(.grouping), "TBP": .text(.bpm),
+        "TKE": .text(.key), "TP3": .text(.conductor), "TXT": .text(.lyricist),
+        "TPB": .text(.publisher), "TCR": .text(.copyright), "TEN": .text(.encoder),
+        "TOR": .text(.originalDate), "TXX": .userText, ID3FrameID.iTunesGrouping: .iTunesGrouping,
+        id3v23OriginalYearFrameID: .text(.originalDate), id3UserTextFrameID: .userText,
+    ],
+    // The genre's frame is read as a genre, which may refer to the ID3v1 list.
+    uniquingKeysWith: { _, other in other })
 
 /// `TXXX` descriptions, compared uppercased, and the fields they set.
-private let userTextFields: [String: TagField] = [
-    SharedTagName.catalogNumber: .catalogNumber, SharedTagName.barcode: .barcode,
-    SharedTagName.work: .work, SharedTagName.discSubtitle: .discSubtitle,
-]
+private let userTextFields: [String: TagField] = Dictionary(
+    uniqueKeysWithValues: (Array(id3WrittenKeys) + Array(id3v23WrittenKeys)).compactMap {
+        field, key in
+        if case .userText(let description) = key { (description, field) } else { nil }
+    })
+
+/// The `TXXX` descriptions, uppercased, the reader maps onto `field`, so a writer replaces
+/// exactly those.
+package func id3UserTextDescriptions(for field: TagField) -> Set<String> {
+    Set(userTextFields.compactMap { description, each in each == field ? description : nil })
+}
+
+/// 2.3's original release year, which 2.4 replaced with `TDOR`.
+package let id3v23OriginalYearFrameID = "TORY"
+
+/// User-defined text: a description naming the field, then its value.
+package let id3UserTextFrameID = "TXXX"
 
 /// ID3v2.3 holds a date as `TYER`, `TDAT` and `TIME`.
 package let id3v23YearFrameID = "TYER"
@@ -83,7 +160,7 @@ package func id3FrameIDs(for field: TagField) -> Set<String> {
             switch kind {
             case .text(let each): each == field ? id : nil
             case .genre: field == .genre ? id : nil
-            case .comment: field == .comment ? id : nil
+            case .described(let each), .url(let each): each == field ? id : nil
             case .day, .time: field == .date ? id : nil
             case .iTunesGrouping: field == .grouping ? id : nil
             case .picture, .userText: nil
@@ -257,9 +334,12 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
             case .genre:
                 field = .genre
                 text = try genre(try textFrame(bytes, &reader.warnings), version, at: offset)
-            case .comment:
-                field = .comment
+            case .described(let describedField):
+                field = describedField
                 text = try commentFrame(bytes, &reader.warnings)
+            case .url(let urlField):
+                field = urlField
+                text = latin1(bytes.array.prefix { $0 != 0 })
             case .day:
                 if day == nil { day = (try textFrame(bytes, &reader.warnings), offset) }
                 return
@@ -346,6 +426,13 @@ private func extendedHeaderSize(_ area: FrameArea, at cursor: Int, version: UInt
             "ID3v2 extended header of \(size) bytes runs past the end of its tag")
     }
     return size
+}
+
+/// `bytes` read in the encoding an ID3 encoding byte names, as the reader reads a description,
+/// for the tag writer to match a `TXXX` by; nil for an unknown encoding.
+package func id3Decoded(_ bytes: [UInt8], encoding byte: UInt8) -> String? {
+    var warnings: [MetadataWarning] = []
+    return (try? encoding(byte, at: 0))?.decode(bytes, at: 0, warnings: &warnings)
 }
 
 private func encoding(_ byte: UInt8, at offset: Int) throws(ParseFailure) -> TextEncoding {

@@ -28,10 +28,11 @@ private let expected: TrackTags = {
     return tags
 }()
 
-/// The fields ID3 has no Picard key for.
+/// The fields ID3 has no Picard key for, and `MVIN`'s total, which the frame below gives.
 private var expectedID3: TrackTags {
     var tags = expected
     tags.description = nil
+    tags.movementTotal = 4
     return tags
 }
 
@@ -119,7 +120,7 @@ private func id3Frames(version: UInt8) -> [Data] {
 
 @Test func id3SkipsUnknownUserTextAndWarnsOnOneWithoutATerminator() throws {
     let frames = [
-        id3Frame("TXXX", Data([0]) + ascii("MOOD\0calm")),
+        id3Frame("TXXX", Data([0]) + ascii("RELEASETYPE\0album")),
         id3Frame("TXXX", Data([0]) + ascii("BARCODE")),
         id3Frame("TXXX", Data([0]) + ascii("Barcode\0123")),
     ]
@@ -207,4 +208,35 @@ private func id3Frames(version: UInt8) -> [Data] {
     let parsed = try parse(flac([(0, streamInfo()), (4, comments)]))
     #expect(parsed.metadata.tags == TrackTags())
     #expect(parsed.warnings.map(\.kind) == [.badNumber, .badNumber])
+}
+
+// The fields added in part 42g, from other taggers' spellings and frame shapes than the writer's.
+
+@Test func vorbisReadsMp3tagsLyricsKeyAndTheMovementTotal() throws {
+    let comments = vorbisComment([
+        "UNSYNCEDLYRICS=One\nTwo", "MOVEMENT=2", "MOVEMENTTOTAL=4", "TITLESORT=Title, The",
+        "WWWARTIST=https://example.com",
+    ])
+    let tags = try parse(flac([(0, streamInfo()), (4, comments)])).metadata.tags
+    #expect(tags.lyrics == "One\nTwo")
+    #expect(tags.movementNumber == 2)
+    #expect(tags.movementTotal == 4)
+    #expect(tags.titleSort == "Title, The")
+    #expect(tags.artistURL == "https://example.com")
+}
+
+@Test func id3ReadsUTF16LyricsURLFramesAndMoodInTXXX() throws {
+    let utf16 = { (text: String) in
+        Data([0xFF, 0xFE] + text.utf16.flatMap { [UInt8($0 & 0xFF), UInt8($0 >> 8)] })
+    }
+    let lyrics = Data([1]) + ascii("eng") + utf16("") + Data([0, 0]) + utf16("Rivi\nkaksi")
+    let frames = [
+        id3Frame("USLT", lyrics), id3Frame("WOAR", ascii("https://example.com/a\0")),
+        id3Frame("TXXX", Data([0]) + ascii("MOOD\0calm")), id3Frame("TPE4", id3Text("Remixer")),
+    ]
+    let tags = try parse(id3Tag(frames) + mp3Rest).metadata.tags
+    #expect(tags.lyrics == "Rivi\nkaksi")
+    #expect(tags.artistURL == "https://example.com/a")
+    #expect(tags.mood == "calm")
+    #expect(tags.remixer == "Remixer")
 }

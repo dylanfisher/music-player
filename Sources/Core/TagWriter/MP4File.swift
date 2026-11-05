@@ -58,10 +58,10 @@ struct MP4File {
         var ilst = moov[path]
         if let art { applyArt(art, to: &ilst) }
         for group in groups {
-            let types = Set(group.readerFields.flatMap { mp4ItemTypes(for: $0) })
-            let new = item(group, tags).map { [$0] } ?? []
-            let first = ilst.children!.firstIndex { types.contains($0.type) }
-            ilst.children!.removeAll { types.contains($0.type) }
+            let isReplaced = { (item: MP4Box) in item.group == group }
+            let new = items(group, tags)
+            let first = ilst.children!.firstIndex(where: isReplaced)
+            ilst.children!.removeAll(where: isReplaced)
             ilst.children!.insert(
                 contentsOf: new, at: min(first ?? ilst.children!.count, ilst.children!.count))
         }
@@ -161,46 +161,56 @@ struct MP4File {
         }
     }
 
-    /// An item for `group` with its value in `tags`, or nil to leave none.
-    private func item(_ group: TagGroup, _ tags: TrackTags) -> MP4Box? {
-        let type: String
-        let dataType: UInt32
-        let value: [UInt8]
+    /// The items for `group` with its values in `tags`; none to leave none.
+    private func items(_ group: TagGroup, _ tags: TrackTags) -> [MP4Box] {
         switch group {
         case .track, .disc:
             let (number, total) = group.numbers(in: tags)
-            guard number != nil || total != nil else { return nil }
-            type = group == .track ? MP4ItemType.track : MP4ItemType.disc
-            dataType = 0
-            value =
+            guard number != nil || total != nil else { return [] }
+            let value =
                 [0, 0] + bigEndianBytes(number ?? 0, 2) + bigEndianBytes(total ?? 0, 2)
                 + (group == .track ? [0, 0] : [])
+            let type = group == .track ? MP4ItemType.track : MP4ItemType.disc
+            return [MP4Box(type: type, body: dataAtom(0, value))]
         case .compilation:
-            guard tags.compilation else { return nil }
-            type = MP4ItemType.compilation
-            dataType = 21
-            value = [1]
-        default:
-            guard let text = group.text(in: tags) else { return nil }
-            type = textItemType(group)
-            dataType = 1
-            value = Array(text.utf8)
+            guard tags.compilation else { return [] }
+            return [MP4Box(type: MP4ItemType.compilation, body: dataAtom(signedIntegerType, [1]))]
+        case .movement:
+            // iTunes keeps the movement and its count in items of their own.
+            let (number, total) = group.numbers(in: tags)
+            return zip(group.readerFields, [number, total]).compactMap { field, value in
+                value.map { integerItem(field, $0) }
+            }
+        case .bpm:
+            return tags.bpm.map { [integerItem(.bpm, $0)] } ?? []
+        case .text(let field):
+            guard let text = group.text(in: tags) else { return [] }
+            switch writtenKey(field) {
+            case .item(let type):
+                return [MP4Box(type: type, body: dataAtom(utf8TextType, Array(text.utf8)))]
+            case .freeform(let name):
+                let body =
+                    fullAtom(MP4Type.mean, Array(iTunesMean.utf8))
+                    + fullAtom(MP4Type.name, Array(name.utf8))
+                    + dataAtom(utf8TextType, Array(text.utf8))
+                return [MP4Box(type: MP4ItemType.freeform, body: body)]
+            }
         }
-        return MP4Box(type: type, body: dataAtom(dataType, value))
     }
 
-    private func textItemType(_ group: TagGroup) -> String {
-        switch group {
-        case .title: MP4ItemType.title
-        case .artist: MP4ItemType.artist
-        case .album: MP4ItemType.album
-        case .albumArtist: MP4ItemType.albumArtist
-        case .genre: MP4ItemType.genre
-        case .date: MP4ItemType.date
-        case .composer: MP4ItemType.composer
-        case .comment: MP4ItemType.comment
-        case .track, .disc, .compilation: preconditionFailure("\(group) isn't text")
+    /// A 16-bit integer item, as iTunes writes `tmpo`, `©mvi` and `©mvc`.
+    private func integerItem(_ field: TagField, _ value: Int) -> MP4Box {
+        guard case .item(let type) = writtenKey(field) else {
+            preconditionFailure("\(field) is an integer item")
         }
+        return MP4Box(type: type, body: dataAtom(signedIntegerType, bigEndianBytes(value, 2)))
+    }
+
+    private func writtenKey(_ field: TagField) -> MP4Key {
+        guard let key = mp4WrittenKey(for: field) else {
+            preconditionFailure("\(field) has no MP4 item")
+        }
+        return key
     }
 
     /// Replaces the first `data` atom of `covr`, which is the one the reader shows, or removes
@@ -269,11 +279,10 @@ struct MP4File {
             }
             if path.hasPrefix("moov/udta/meta/ilst/") {
                 if box.type == mp4CoverItemType { return [TagBlock(path, range, .art)] }
-                let group = TagGroup.of(matching: { mp4ItemTypes(for: $0).contains(box.type) })
                 return [
                     TagBlock(
                         String(path.dropLast(box.type.count)) + mp4ItemKey(box), range, .field,
-                        fields: Set(group?.fields ?? []))
+                        fields: Set(box.group?.fields ?? []))
                 ]
             }
             return [TagBlock(path, range, .other)]
@@ -294,10 +303,19 @@ struct MP4File {
     }
 }
 
+/// `data` atom type codes: UTF-8 text, and a big-endian signed integer.
+private let utf8TextType: UInt32 = 1
+private let signedIntegerType: UInt32 = 21
+
 /// A `data` atom: a type code, a zero locale, then the value.
 private func dataAtom(_ type: UInt32, _ value: [UInt8]) -> [UInt8] {
     MP4Box(type: MP4Type.data, body: bigEndianBytes(Int(type), 4) + [0, 0, 0, 0] + value)
         .serialized()
+}
+
+/// A freeform item's `mean` or `name`: a zero version and flags, then the text.
+private func fullAtom(_ type: String, _ value: [UInt8]) -> [UInt8] {
+    MP4Box(type: type, body: [0, 0, 0, 0] + value).serialized()
 }
 
 func zeros(_ count: Int) -> [UInt8] { [UInt8](repeating: 0, count: max(0, count)) }

@@ -10,10 +10,68 @@ package enum TagField: String, CaseIterable, Sendable {
     case compilation
     case grouping, catalogNumber, barcode, key, conductor, lyricist, publisher, copyright,
         encoder, description, discSubtitle, work, movementName, originalDate
+    case titleSort, artistSort, albumSort, albumArtistSort, composerSort
+    case remixer, originalArtist, originalAlbum, isrc, language, mood, media, lyrics
+    /// Webpages, which ID3 holds in URL frames.
+    case artistURL, audioFileURL, audioSourceURL, commercialURL, copyrightURL, paymentURL,
+        publisherURL, radioStationURL
     /// "128" or "127.9".
     case bpm
-    /// "2" or "2/4"; the total isn't kept.
+    /// "2" or "2/4".
     case movement
+    case movementTotal
+
+    /// The property a field of plain text sets; nil for numbers and the compilation flag.
+    package var textProperty: WritableKeyPath<TrackTags, String?>? {
+        switch self {
+        case .title: \.title
+        case .artist: \.artist
+        case .album: \.album
+        case .albumArtist: \.albumArtist
+        case .genre: \.genre
+        case .date: \.date
+        case .composer: \.composer
+        case .comment: \.comment
+        case .grouping: \.grouping
+        case .catalogNumber: \.catalogNumber
+        case .barcode: \.barcode
+        case .key: \.key
+        case .conductor: \.conductor
+        case .lyricist: \.lyricist
+        case .publisher: \.publisher
+        case .copyright: \.copyright
+        case .encoder: \.encoder
+        case .description: \.description
+        case .discSubtitle: \.discSubtitle
+        case .work: \.work
+        case .movementName: \.movementName
+        case .originalDate: \.originalDate
+        case .titleSort: \.titleSort
+        case .artistSort: \.artistSort
+        case .albumSort: \.albumSort
+        case .albumArtistSort: \.albumArtistSort
+        case .composerSort: \.composerSort
+        case .remixer: \.remixer
+        case .originalArtist: \.originalArtist
+        case .originalAlbum: \.originalAlbum
+        case .isrc: \.isrc
+        case .language: \.language
+        case .mood: \.mood
+        case .media: \.media
+        case .lyrics: \.lyrics
+        case .artistURL: \.artistURL
+        case .audioFileURL: \.audioFileURL
+        case .audioSourceURL: \.audioSourceURL
+        case .commercialURL: \.commercialURL
+        case .copyrightURL: \.copyrightURL
+        case .paymentURL: \.paymentURL
+        case .publisherURL: \.publisherURL
+        case .radioStationURL: \.radioStationURL
+        case .track, .disc, .trackTotal, .discTotal, .compilation, .bpm, .movement,
+            .movementTotal:
+            nil
+        }
+    }
 }
 
 /// Names that Vorbis comment keys, ID3 `TXXX` descriptions and MP4 freeform `name` atoms spell
@@ -27,6 +85,23 @@ enum SharedTagName {
     static let discSubtitle = "DISCSUBTITLE"
     static let work = "WORK"
     static let originalDate = "ORIGINALDATE"
+    static let description = "DESCRIPTION"
+    static let mood = "MOOD"
+    static let remixer = "REMIXER"
+    static let originalArtist = "ORIGINALARTIST"
+    static let originalAlbum = "ORIGINALALBUM"
+    static let isrc = "ISRC"
+    static let language = "LANGUAGE"
+    static let media = "MEDIA"
+    /// Mp3tag's names for ID3's URL frames, which Picard doesn't map.
+    static let artistURL = "WWWARTIST"
+    static let audioFileURL = "WWWAUDIOFILE"
+    static let audioSourceURL = "WWWAUDIOSOURCE"
+    static let commercialURL = "WWWCOMMERCIALINFO"
+    static let copyrightURL = "WWWCOPYRIGHT"
+    static let paymentURL = "WWWPAYMENT"
+    static let publisherURL = "WWWPUBLISHER"
+    static let radioStationURL = "WWWRADIOPAGE"
 }
 
 extension TrackTags {
@@ -49,32 +124,16 @@ extension TrackTags {
             text = String(text[..<nul])
         }
         guard !text.isEmpty else { return }
+        if let property = field.textProperty {
+            self[keyPath: property] = self[keyPath: property] ?? text
+            return
+        }
         switch field {
-        case .title: title = title ?? text
-        case .artist: artist = artist ?? text
-        case .album: album = album ?? text
-        case .albumArtist: albumArtist = albumArtist ?? text
-        case .genre: genre = genre ?? text
-        case .date: date = date ?? text
-        case .composer: composer = composer ?? text
-        case .comment: comment = comment ?? text
-        case .grouping: grouping = grouping ?? text
-        case .catalogNumber: catalogNumber = catalogNumber ?? text
-        case .barcode: barcode = barcode ?? text
-        case .key: key = key ?? text
-        case .conductor: conductor = conductor ?? text
-        case .lyricist: lyricist = lyricist ?? text
-        case .publisher: publisher = publisher ?? text
-        case .copyright: copyright = copyright ?? text
-        case .encoder: encoder = encoder ?? text
-        case .description: description = description ?? text
-        case .discSubtitle: discSubtitle = discSubtitle ?? text
-        case .work: work = work ?? text
-        case .movementName: movementName = movementName ?? text
-        case .originalDate: originalDate = originalDate ?? text
         case .bpm: bpm = bpm ?? beatsPerMinute(text, at: offset, &warnings)
         case .movement:
-            movementNumber = movementNumber ?? numberPair(text, field, at: offset, &warnings).0
+            let (number, total) = numberPair(text, field, at: offset, &warnings)
+            movementNumber = movementNumber ?? number
+            movementTotal = movementTotal ?? total
         case .track:
             let (number, total) = numberPair(text, field, at: offset, &warnings)
             trackNumber = trackNumber ?? number
@@ -87,6 +146,8 @@ extension TrackTags {
             trackTotal = trackTotal ?? wholeNumber(text, field, at: offset, &warnings)
         case .discTotal:
             discTotal = discTotal ?? wholeNumber(text, field, at: offset, &warnings)
+        case .movementTotal:
+            movementTotal = movementTotal ?? wholeNumber(text, field, at: offset, &warnings)
         case .compilation:
             switch text {
             case "1": compilation = true
@@ -97,23 +158,19 @@ extension TrackTags {
                         kind: .badValue, offset: offset,
                         detail: "compilation flag \"\(text)\" isn't 1 or 0; ignored"))
             }
+        default: preconditionFailure("\(field) is text, set above")
         }
     }
 
     /// Fields this lacks, taken from `other`.
     func filling(from other: TrackTags) -> TrackTags {
         var result = self
-        let texts: [WritableKeyPath<TrackTags, String?>] = [
-            \.title, \.artist, \.album, \.albumArtist, \.genre, \.date, \.composer, \.comment,
-            \.grouping, \.catalogNumber, \.barcode, \.key, \.conductor, \.lyricist, \.publisher,
-            \.copyright, \.encoder, \.description, \.discSubtitle, \.work, \.movementName,
-            \.originalDate,
-        ]
-        for field in texts {
+        for field in TagField.allCases.compactMap(\.textProperty) {
             result[keyPath: field] = self[keyPath: field] ?? other[keyPath: field]
         }
         let numbers: [WritableKeyPath<TrackTags, Int?>] = [
             \.trackNumber, \.trackTotal, \.discNumber, \.discTotal, \.bpm, \.movementNumber,
+            \.movementTotal,
         ]
         for field in numbers {
             result[keyPath: field] = self[keyPath: field] ?? other[keyPath: field]

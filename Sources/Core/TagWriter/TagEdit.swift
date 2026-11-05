@@ -7,9 +7,38 @@ public enum TagEditField: String, CaseIterable, Sendable {
     case trackNumber, trackTotal, discNumber, discTotal
     /// "1" sets the flag; empty text or "0" clears it.
     case compilation
+    case grouping, bpm, key, conductor, lyricist, remixer, originalArtist
+    /// The record label.
+    case publisher
+    case copyright, catalogNumber, barcode, isrc, encoder, description, discSubtitle, work
+    case movementNumber, movementTotal, movementName, originalDate, originalAlbum, language,
+        mood, media, lyrics
+    case titleSort, artistSort, albumSort, albumArtistSort, composerSort
+    case artistURL, audioFileURL, audioSourceURL, commercialURL, copyrightURL, paymentURL,
+        publisherURL, radioStationURL
 
-    /// The largest track or disc number every format holds: MP4 stores them in 16 bits.
+    /// The largest number every format holds: MP4 stores them in 16 bits.
     static let maximumNumber = Int(UInt16.max)
+
+    /// The reader's field for a field of plain text, which is spelled the same; nil for numbers
+    /// and the compilation flag.
+    package var textField: TagField? {
+        TagField(rawValue: rawValue).flatMap { $0.textProperty == nil ? nil : $0 }
+    }
+
+    /// The property a field that's a number sets; nil for text and the compilation flag.
+    package var numberProperty: WritableKeyPath<TrackTags, Int?>? {
+        switch self {
+        case .trackNumber: \.trackNumber
+        case .trackTotal: \.trackTotal
+        case .discNumber: \.discNumber
+        case .discTotal: \.discTotal
+        case .movementNumber: \.movementNumber
+        case .movementTotal: \.movementTotal
+        case .bpm: \.bpm
+        default: nil
+        }
+    }
 }
 
 /// New art for a file, or none.
@@ -40,20 +69,12 @@ public struct TagEdit: Equatable, Sendable {
             guard !text.unicodeScalars.contains(where: { $0.value == 0 }) else {
                 throw TagValueError(field: field, text: text, detail: "can't hold a NUL character")
             }
-            switch field {
-            case .title: result.title = text.nilIfEmpty
-            case .artist: result.artist = text.nilIfEmpty
-            case .album: result.album = text.nilIfEmpty
-            case .albumArtist: result.albumArtist = text.nilIfEmpty
-            case .genre: result.genre = text.nilIfEmpty
-            case .date: result.date = text.nilIfEmpty
-            case .composer: result.composer = text.nilIfEmpty
-            case .comment: result.comment = text.nilIfEmpty
-            case .trackNumber: result.trackNumber = try number(field, text)
-            case .trackTotal: result.trackTotal = try number(field, text)
-            case .discNumber: result.discNumber = try number(field, text)
-            case .discTotal: result.discTotal = try number(field, text)
-            case .compilation:
+            if let property = field.textField?.textProperty {
+                result[keyPath: property] = text.nilIfEmpty
+            } else if let property = field.numberProperty {
+                result[keyPath: property] = try number(field, text)
+            } else {
+                precondition(field == .compilation, "\(field) is text, a number or the flag")
                 switch text {
                 case "1": result.compilation = true
                 case "", "0": result.compilation = false

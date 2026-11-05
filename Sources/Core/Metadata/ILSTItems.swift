@@ -34,29 +34,78 @@ package enum MP4ItemType {
     package static let freeform = "----"
 }
 
-private let itemKinds: [String: ItemKind] = [
-    MP4ItemType.title: .text(.title), MP4ItemType.artist: .text(.artist),
-    MP4ItemType.album: .text(.album), MP4ItemType.albumArtist: .text(.albumArtist),
-    MP4ItemType.genre: .text(.genre), MP4ItemType.date: .text(.date),
-    MP4ItemType.composer: .text(.composer), MP4ItemType.comment: .text(.comment),
-    MP4ItemType.track: .track, MP4ItemType.disc: .disc, MP4ItemType.compilation: .compilation,
-    "gnre": .genreIndex, MP4ItemType.freeform: .freeform, "covr": .cover,
-    // Fields the tag writer doesn't edit, by MusicBrainz Picard's mapping (ADR 0006).
-    "\u{A9}grp": .text(.grouping), "cprt": .text(.copyright), "\u{A9}too": .text(.encoder),
-    "desc": .text(.description), "\u{A9}wrk": .text(.work), "\u{A9}mvn": .text(.movementName),
-    "tmpo": .integer(.bpm), "\u{A9}mvi": .integer(.movement),
+/// Where the tag writer writes a field in `ilst`. The reader reads each.
+package enum MP4Key: Hashable, Sendable {
+    /// An item by type: text, or a big-endian integer for a field that isn't text.
+    case item(String)
+    /// An iTunes freeform item (`----`, `mean` com.apple.iTunes) by `name`, holding text.
+    case freeform(String)
+}
+
+/// The item each text or number field is written as. A track, disc and compilation have item
+/// kinds of their own, in `itemKinds`.
+private let mp4WrittenKeys: [TagField: MP4Key] = [
+    .title: .item(MP4ItemType.title), .artist: .item(MP4ItemType.artist),
+    .album: .item(MP4ItemType.album), .albumArtist: .item(MP4ItemType.albumArtist),
+    .genre: .item(MP4ItemType.genre), .date: .item(MP4ItemType.date),
+    .composer: .item(MP4ItemType.composer), .comment: .item(MP4ItemType.comment),
+    .grouping: .item("\u{A9}grp"), .copyright: .item("cprt"), .encoder: .item("\u{A9}too"),
+    .description: .item("desc"), .work: .item("\u{A9}wrk"), .movementName: .item("\u{A9}mvn"),
+    .bpm: .item("tmpo"), .movement: .item("\u{A9}mvi"), .movementTotal: .item("\u{A9}mvc"),
+    .titleSort: .item("sonm"), .artistSort: .item("soar"), .albumSort: .item("soal"),
+    .albumArtistSort: .item("soaa"), .composerSort: .item("soco"), .lyrics: .item("\u{A9}lyr"),
+    .catalogNumber: .freeform(SharedTagName.catalogNumber),
+    .barcode: .freeform(SharedTagName.barcode),
+    // Picard's spelling; names are compared uppercased.
+    .key: .freeform("initialkey"), .conductor: .freeform(SharedTagName.conductor),
+    .lyricist: .freeform(SharedTagName.lyricist), .publisher: .freeform(SharedTagName.label),
+    .discSubtitle: .freeform(SharedTagName.discSubtitle),
+    .originalDate: .freeform(SharedTagName.originalDate),
+    .remixer: .freeform(SharedTagName.remixer),
+    .originalArtist: .freeform(SharedTagName.originalArtist),
+    .originalAlbum: .freeform(SharedTagName.originalAlbum), .isrc: .freeform(SharedTagName.isrc),
+    .language: .freeform(SharedTagName.language), .mood: .freeform(SharedTagName.mood),
+    .media: .freeform(SharedTagName.media), .artistURL: .freeform(SharedTagName.artistURL),
+    .audioFileURL: .freeform(SharedTagName.audioFileURL),
+    .audioSourceURL: .freeform(SharedTagName.audioSourceURL),
+    .commercialURL: .freeform(SharedTagName.commercialURL),
+    .copyrightURL: .freeform(SharedTagName.copyrightURL),
+    .paymentURL: .freeform(SharedTagName.paymentURL),
+    .publisherURL: .freeform(SharedTagName.publisherURL),
+    .radioStationURL: .freeform(SharedTagName.radioStationURL),
 ]
+
+/// The key the tag writer writes `field` as; nil for the track, disc and compilation, which
+/// have items of their own.
+package func mp4WrittenKey(for field: TagField) -> MP4Key? { mp4WrittenKeys[field] }
+
+private let itemKinds: [String: ItemKind] = Dictionary(
+    uniqueKeysWithValues: mp4WrittenKeys.compactMap { field, key in
+        guard case .item(let type) = key else { return nil }
+        return (type, field.textProperty == nil ? ItemKind.integer(field) : .text(field))
+    }
+).merging(
+    [
+        MP4ItemType.track: .track, MP4ItemType.disc: .disc,
+        MP4ItemType.compilation: .compilation, "gnre": .genreIndex,
+        MP4ItemType.freeform: .freeform, "covr": .cover,
+    ],
+    uniquingKeysWith: { written, _ in written })
 
 /// The `mean` of the iTunes freeform items.
-private let iTunesMean = "com.apple.iTunes"
+package let iTunesMean = "com.apple.iTunes"
 
 /// iTunes freeform item names, compared uppercased, and the fields they set.
-private let freeformFields: [String: TagField] = [
-    SharedTagName.catalogNumber: .catalogNumber, SharedTagName.barcode: .barcode,
-    "INITIALKEY": .key, SharedTagName.conductor: .conductor, SharedTagName.lyricist: .lyricist,
-    SharedTagName.label: .publisher, SharedTagName.discSubtitle: .discSubtitle,
-    SharedTagName.originalDate: .originalDate,
-]
+private let freeformFields: [String: TagField] = Dictionary(
+    uniqueKeysWithValues: mp4WrittenKeys.compactMap { field, key in
+        if case .freeform(let name) = key { (name.uppercased(), field) } else { nil }
+    })
+
+/// The freeform names, uppercased, the reader maps onto `field`, so a writer replaces exactly
+/// those.
+package func mp4FreeformNames(for field: TagField) -> Set<String> {
+    Set(freeformFields.compactMap { name, each in each == field ? name : nil })
+}
 
 /// `data` atom type codes for integers: "implicit" and big-endian signed.
 private let integerTypes: Set<UInt32> = [0, 21]
@@ -66,12 +115,12 @@ package func mp4ItemTypes(for field: TagField) -> Set<String> {
     Set(
         itemKinds.compactMap { type, kind in
             switch kind {
-            case .text(let each): each == field ? type : nil
+            case .text(let each), .integer(let each): each == field ? type : nil
             case .track: field == .track ? type : nil
             case .disc: field == .disc ? type : nil
             case .compilation: field == .compilation ? type : nil
             case .genreIndex: field == .genre ? type : nil
-            case .freeform, .cover, .integer: nil
+            case .freeform, .cover: nil
             }
         })
 }
