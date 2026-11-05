@@ -11,6 +11,19 @@ public final class SignalPathPanel: NSViewController {
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
     /// The stage boxes and the arrows between them, made again for each path.
     let stages = NSStackView()
+    /// The receiver's volume, shown while receiver control is connected (ADR 0091).
+    let receiverRow = NSStackView()
+    let receiverSlider = NSSlider(
+        value: 0, minValue: SignalPathPanel.receiverRangeDecibels.lowerBound,
+        maxValue: SignalPathPanel.receiverRangeDecibels.upperBound, target: nil, action: nil)
+    let receiverLevel = NSTextField(labelWithString: "")
+    private let receiverCell = TrackingSliderCell()
+    /// Called with the level in decibels as the slider moves.
+    public var setReceiverVolume: (Double) -> Void = { _ in }
+
+    /// The slider stops at 0 dB, reference level, so a slip can't take the receiver to its
+    /// +18 dB top; a level above it, set on the receiver, shows at the end.
+    static let receiverRangeDecibels = -80.0...0.0
 
     public init() { super.init(nibName: nil, bundle: nil) }
 
@@ -37,7 +50,24 @@ public final class SignalPathPanel: NSViewController {
         verdict.spacing = 6
         stages.alignment = .centerY
         stages.spacing = 6
-        let stack = NSStackView(views: [verdict, stages])
+        let receiverTitle = NSTextField(labelWithString: "Receiver")
+        receiverTitle.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
+        receiverSlider.cell = receiverCell
+        receiverSlider.minValue = Self.receiverRangeDecibels.lowerBound
+        receiverSlider.maxValue = Self.receiverRangeDecibels.upperBound
+        receiverSlider.controlSize = .small
+        receiverSlider.isContinuous = true
+        receiverSlider.target = self
+        receiverSlider.action = #selector(slid(_:))
+        receiverSlider.setAccessibilityLabel("Receiver volume")
+        receiverSlider.widthAnchor.constraint(equalToConstant: 180).isActive = true
+        receiverLevel.font = .monospacedDigitSystemFont(
+            ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        receiverLevel.textColor = .secondaryLabelColor
+        receiverRow.setViews([receiverTitle, receiverSlider, receiverLevel], in: .leading)
+        receiverRow.spacing = 8
+        receiverRow.isHidden = true
+        let stack = NSStackView(views: [verdict, stages, receiverRow])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
@@ -77,6 +107,33 @@ public final class SignalPathPanel: NSViewController {
             views.append(box(stage))
         }
         stages.setViews(views, in: .leading)
+    }
+
+    /// Shows the slider at `decibels` while the receiver is connected, and hides it otherwise.
+    /// A connected receiver that hasn't said its level yet has the slider disabled. A level
+    /// that comes while the slider is dragged is left for the drag's own.
+    public func showReceiver(connected: Bool, decibels: Double?) {
+        _ = view
+        receiverRow.isHidden = !connected
+        receiverSlider.isEnabled = decibels != nil
+        guard let decibels, !receiverCell.isTracking else {
+            receiverLevel.stringValue = decibels.map(Self.levelText) ?? ""
+            return
+        }
+        receiverSlider.doubleValue = decibels
+        receiverLevel.stringValue = Self.levelText(decibels)
+    }
+
+    @objc private func slid(_ slider: NSSlider) {
+        let decibels = (slider.doubleValue * 2).rounded() / 2
+        receiverLevel.stringValue = Self.levelText(decibels)
+        setReceiverVolume(decibels)
+    }
+
+    /// `-35.5 dB`, `0.0 dB`, `+3.0 dB` as the receiver's display has it.
+    static func levelText(_ decibels: Double) -> String {
+        // A drag rounded to a half step can give -0, which would print as "-0.0".
+        String(format: decibels > 0 ? "+%.1f dB" : "%.1f dB", decibels == 0 ? 0 : decibels)
     }
 
     /// A stage's title over its value and note, on a rounded fill, tinted where the samples
@@ -123,6 +180,25 @@ public final class SignalPathPanel: NSViewController {
         arrow.contentTintColor = .tertiaryLabelColor
         arrow.setContentHuggingPriority(.required, for: .horizontal)
         return arrow
+    }
+}
+
+/// A slider cell that says when the mouse holds it, so a status line doesn't move the knob
+/// from under a drag.
+final class TrackingSliderCell: NSSliderCell {
+    private(set) var isTracking = false
+
+    override func startTracking(at startPoint: NSPoint, in controlView: NSView) -> Bool {
+        isTracking = true
+        return super.startTracking(at: startPoint, in: controlView)
+    }
+
+    override func stopTracking(
+        last lastPoint: NSPoint, current stopPoint: NSPoint, in controlView: NSView,
+        mouseIsUp flag: Bool
+    ) {
+        isTracking = false
+        super.stopTracking(last: lastPoint, current: stopPoint, in: controlView, mouseIsUp: flag)
     }
 }
 

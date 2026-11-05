@@ -75,8 +75,21 @@ extension AppDelegate {
             enabled: settings?[\.receiverEnabled] == true, playingTo: rendererOutput?.renderer)
     }
 
+    /// Sends the signal path slider's level to the receiver, which says it back in a status
+    /// line.
+    func slideReceiverVolume(_ decibels: Double) {
+        guard let volume = ReceiverVolume(decibels: decibels) else { return }
+        receiver?.run(.setVolume(volume))
+    }
+
+    /// Shows the receiver's volume in the signal path while it's connected.
+    private func receiverChanged(_ control: ReceiverControl) {
+        let connected = if case .connected = control.status { true } else { false }
+        signalPath?.showReceiver(connected: connected, decibels: control.state.volume?.decibels)
+    }
+
     private func makeReceiverControl() -> ReceiverControl {
-        ReceiverControl(
+        let control = ReceiverControl(
             discover: {
                 try await RendererDiscovery.discover(
                     transport: UDPSearchTransport(
@@ -91,6 +104,10 @@ extension AppDelegate {
                 case .ignored: logger.notice("\(problem)")
                 }
             })
+        control.changed = { [weak self, weak control] in
+            if let control { self?.receiverChanged(control) }
+        }
+        return control
     }
 
     func registerReceiverCommands(_ dispatcher: CommandDispatcher) {

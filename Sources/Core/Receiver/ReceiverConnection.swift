@@ -7,7 +7,8 @@ import Network
 ///
 /// Lines out are spaced `commandGapSeconds` apart, and `powerOnGapSeconds` after power on, as
 /// the spec asks. A line equal to the last one waiting is dropped, so a held key moves the
-/// volume a step per gap and stops when it's let go. Lines in are cut at `lineCap` bytes
+/// volume a step per gap and stops when it's let go, and a volume level replaces a level still
+/// waiting, so a dragged slider sends a level per gap and ends on the last. Lines in are cut at `lineCap` bytes
 /// without a carriage return, past which the connection is dropped. A refused, failed or
 /// closed connection ends it, and it never connects again on its own.
 final class ReceiverConnection: @unchecked Sendable {
@@ -121,17 +122,28 @@ final class ReceiverConnection: @unchecked Sendable {
     }
 
     /// Queues `line` to go out after the lines before it. A repeat of the last waiting line is
-    /// dropped quietly, and counts as queued.
+    /// dropped quietly, and counts as queued; a volume level takes the place of a level waiting
+    /// last.
     @discardableResult
     func send(_ line: [UInt8]) -> Sending {
         queue.sync {
             guard !isEnded else { return .ended }
             if waiting.last == line { return .queued }
+            if let last = waiting.last, isVolumeLevel(last), isVolumeLevel(line) {
+                waiting[waiting.count - 1] = line
+                return .queued
+            }
             guard waiting.count < Self.waitingCap else { return .full }
             waiting.append(line)
             drain()
             return .queued
         }
+    }
+
+    /// `MV` and a level's digits, as `ReceiverCommand.setVolume` sends; not `MVUP` or `MVDOWN`.
+    private func isVolumeLevel(_ line: [UInt8]) -> Bool {
+        line.count > 2 && line[0] == UInt8(ascii: "M") && line[1] == UInt8(ascii: "V")
+            && (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(line[2])
     }
 
     /// Closes the connection without an update.

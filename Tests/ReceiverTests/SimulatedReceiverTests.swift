@@ -437,6 +437,25 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     #expect(sender.sentTimes.count == times.count)
 }
 
+@Test func aDraggedLevelReplacesTheOneWaitingAndEndsOnTheLast() async throws {
+    let receiver = try await SimulatedReceiver()
+    defer { receiver.stop() }
+    let sender = connection(receiver)
+    defer { sender.stop() }
+    let peer = try await receiver.peer()
+    try await peer.send("PWON\r")
+    // Power on holds the next line back a second, so every level below waits behind it.
+    sender.send(ReceiverCommand.power(true).line)
+    for halfSteps in 60...90 {
+        sender.send(ReceiverCommand.setVolume(ReceiverVolume(halfSteps: halfSteps)!).line)
+    }
+    sender.send(ReceiverCommand.volumeUp.line)
+    sender.send(ReceiverCommand.setVolume(ReceiverVolume(halfSteps: 20)!).line)
+    #expect(try await peer.lines(4, seconds: 3) == ["PWON", "MV45", "MVUP", "MV10"])
+    try await Task.sleep(nanoseconds: 200_000_000)
+    #expect(sender.sentTimes.count == 4)
+}
+
 @Test func commandsAreSpacedAndWaitASecondAfterPowerOn() async throws {
     let receiver = try await SimulatedReceiver()
     defer { receiver.stop() }
@@ -463,7 +482,7 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     try await receiver.peer().send("PWON\r")
     sender.send(ReceiverCommand.power(true).line)
     let accepted = (0..<40).map { index in
-        sender.send(ReceiverCommand.setVolume(ReceiverVolume(halfSteps: index)!).line)
+        sender.send(ReceiverCommand.mute(index % 2 == 0).line)
     }
     #expect(accepted.filter { $0 == .queued }.count >= ReceiverConnection.waitingCap)
     #expect(accepted.contains(.full))

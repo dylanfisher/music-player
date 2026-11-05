@@ -80,6 +80,14 @@ private func volume(_ halfSteps: Int) -> ReceiverEvent {
     }
 }
 
+@Test func aSlidersValueRoundsToTheNearestHalfDecibel() {
+    #expect(ReceiverVolume(decibels: -35.3)?.decibels == -35.5)
+    #expect(ReceiverVolume(decibels: -35.2)?.decibels == -35)
+    #expect(ReceiverVolume(decibels: -80.2)?.decibels == -80)
+    #expect(ReceiverVolume(decibels: -81) == nil)
+    #expect(ReceiverVolume(decibels: .nan) == nil)
+}
+
 @Test func theModelTakesOnlyWhatTheReceiverReports() {
     var state = ReceiverState()
     state.apply(.power(true))

@@ -234,6 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         makeMediaControls(dispatcher, lookup: lookup)
         let queue = QueuePanel(model: QueueModel(lookup: lookup))
         let signalPath = SignalPathPanel()
+        signalPath.setReceiverVolume = { [weak self] in self?.slideReceiverVolume($0) }
         let toolbar = MainToolbar(
             identifier: String(describing: MainWindow.self), transport: nowPlaying.transport,
             status: nowPlaying.status, customStatuses: nowPlaying.customStatuses.map(\.view),

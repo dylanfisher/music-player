@@ -286,3 +286,25 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
             "the decoder downmixes 6 channels to 2; the file doesn't name its channels, so the"
                 + " downmix assumes the WAV default order"))
 }
+
+@MainActor @Test func aConnectedReceiversVolumeShowsOnASliderThatSetsIt() {
+    let panel = SignalPathPanel()
+    var sent: [Double] = []
+    panel.setReceiverVolume = { sent.append($0) }
+    panel.show(path(device()))
+    #expect(panel.receiverRow.isHidden)
+    panel.showReceiver(connected: true, decibels: nil)
+    #expect(!panel.receiverRow.isHidden && !panel.receiverSlider.isEnabled)
+    panel.showReceiver(connected: true, decibels: -35.5)
+    #expect(panel.receiverSlider.isEnabled && panel.receiverSlider.doubleValue == -35.5)
+    #expect(panel.receiverLevel.stringValue == "-35.5 dB")
+    panel.receiverSlider.doubleValue = -20.3
+    panel.receiverSlider.sendAction(panel.receiverSlider.action, to: panel.receiverSlider.target)
+    #expect(sent == [-20.5])
+    #expect(panel.receiverLevel.stringValue == "-20.5 dB")
+    // A level set on the receiver beyond the slider's top still reads as it is.
+    panel.showReceiver(connected: true, decibels: 3)
+    #expect(panel.receiverLevel.stringValue == "+3.0 dB")
+    panel.showReceiver(connected: false, decibels: nil)
+    #expect(panel.receiverRow.isHidden)
+}

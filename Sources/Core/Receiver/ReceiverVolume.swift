@@ -38,6 +38,13 @@ public struct ReceiverVolume: Equatable, Sendable {
         self.init(halfSteps: Int(value * 2) + 160)
     }
 
+    /// The nearest half decibel to `value`, as the signal path's slider gives it; nil outside
+    /// −80 to +18 dB.
+    public init?(decibels value: Double) {
+        guard value.isFinite else { return nil }
+        self.init(halfSteps: Int((value * 2).rounded()) + 160)
+    }
+
     /// The `MV` parameter that sets it.
     var parameter: String {
         let whole = halfSteps / 2
