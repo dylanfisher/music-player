@@ -1,6 +1,7 @@
 import Foundation
 import Library
 import Log
+import Settings
 
 private let logger = moduleLogger()
 
@@ -23,8 +24,11 @@ final class TimelineModel {
     private(set) var entries: [PlayEntry] = []
     /// Whether the oldest play is loaded.
     private(set) var reachedEnd = false
-    /// How many plays the history holds, loaded or not.
+    /// How many plays the history holds, or `span` does, loaded or not.
     private(set) var playCount = 0
+    /// The span whose plays the timeline lists, a bar's of Listening Stats; nil for every play.
+    /// Set before `load`.
+    var span: PlaySpan?
     /// Whether the newest page has been read since the timeline last showed.
     private(set) var isLoaded = false
     /// Called after the rows or what they show change, with the history IDs shown before, so
@@ -58,8 +62,8 @@ final class TimelineModel {
         session += 1
         let mine = session
         do {
-            let page = try await reader.timeline(before: nil, limit: Self.pageSize)
-            let count = try await reader.loggedPlayCount()
+            let page = try await reader.timeline(before: nil, limit: Self.pageSize, in: span)
+            let count = try await reader.playCount(in: span)
             guard mine == session else { return }
             reachedEnd = page.count < Self.pageSize
             playCount = count
@@ -85,7 +89,7 @@ final class TimelineModel {
         loadingMore = mine
         defer { if loadingMore == mine { loadingMore = nil } }
         do {
-            let page = try await reader.timeline(before: last.id, limit: Self.pageSize)
+            let page = try await reader.timeline(before: last.id, limit: Self.pageSize, in: span)
             guard mine == session else { return }
             if page.count < Self.pageSize { reachedEnd = true }
             // Rows that arrived meanwhile are only ever above, so the oldest is still last.
@@ -105,8 +109,8 @@ final class TimelineModel {
         }
         let mine = session
         do {
-            let page = try await reader.timeline(after: newest.id, limit: Self.pageSize)
-            let count = try await reader.loggedPlayCount()
+            let page = try await reader.timeline(after: newest.id, limit: Self.pageSize, in: span)
+            let count = try await reader.playCount(in: span)
             guard mine == session else { return }
             guard page.count < Self.pageSize else {
                 await load()

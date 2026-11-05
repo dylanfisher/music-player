@@ -54,12 +54,15 @@ struct LibraryStatus: Equatable, Sendable {
     /// "1,204 tracks, 5.1 GiB, 3 days 2 hours · 2 tracks not in the library": what the list shown
     /// holds, with the totals of `selection` as `shown` asks. `missingCount` is how many of a
     /// playlist's tracks aren't in the library. `playCount` is set on the timeline, which counts
-    /// plays instead of tracks.
+    /// plays instead of tracks, and `playSpan` when it lists only a span's.
     func summary(
         list: TrackTotals, selection: TrackTotals, shown: StatusTotals, missingCount: Int = 0,
-        playCount: Int? = nil
+        playCount: Int? = nil, playSpan: PlaySpan? = nil
     ) -> String {
-        var parts = [playCount.map { count($0, "play") } ?? totals(list, selection, shown)]
+        var parts = [
+            playCount.map { count($0, "play") + (playSpan.map { ", " + $0.title() } ?? "") }
+                ?? totals(list, selection, shown)
+        ]
         if !notices.isEmpty { parts.append("earlier play counts and playlists discarded") }
         if missingCount > 0 { parts.append(tracks(missingCount) + " not in the library") }
         if healthOtherCount > 0 {

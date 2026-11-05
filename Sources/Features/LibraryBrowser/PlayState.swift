@@ -85,7 +85,7 @@ extension LibraryBrowser {
             }
             let from = model.resumedFrom?.source
             var ids = [id]
-            if from != .timeline {
+            if from?.listsPlays != true {
                 let sort = model.queueSort(for: from)
                 let listed = try await reader.trackIDs(
                     TrackFilter(source: from, groupByAlbumArtist: model.filter.groupByAlbumArtist),

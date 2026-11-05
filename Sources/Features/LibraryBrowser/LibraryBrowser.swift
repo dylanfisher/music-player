@@ -71,6 +71,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// the message showing.
     private var messagesShown = 0
     public var browserHeightChanged: (Int) -> Void = { _ in }
+    /// The Listening Stats panel's height, each time the user drags it (ADR 0102).
+    public var statsHeightChanged: (Int) -> Void = { _ in }
     public var stateChanged: (BrowserState) -> Void = { _ in }
     /// Called after the track table's selection changed, which the play state keeps.
     public var selectionChanged: () -> Void = {}
@@ -115,7 +117,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// while a step is being shown, which records nothing.
     private var selectionCause: SelectionHistory.Cause? = .jump
     private let panes: PanesController
-    private let sidebarController: SidebarController
+    let sidebarController: SidebarController
     private let split = NSSplitView()
     /// The split's first subview: the browser columns, or in their place the shown source's
     /// panel (ADR 0099). Hidden, with its divider, while neither shows.
@@ -124,6 +126,21 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private(set) var shownPanel: (any SourcePanel)?
     /// Library Health's panel, shown while a health check is the source.
     let healthPanel = HealthPanel()
+    /// Listening Stats' panel, shown while Stats is the source, and its model (ADR 0102).
+    let statsPanel = StatsPanel()
+    let statsModel: StatsModel
+    /// The period whose report was read since Stats last showed; nil while it doesn't.
+    var statsShownPeriod: StatsPeriod?
+    /// Listening Stats' own connection, opened the first time Stats shows.
+    var statsReader: StatsReader?
+    var yearReview: YearReviewWindow?
+    /// The panel slot's height while Stats shows, apart from the columns' (ADR 0102).
+    public var statsHeight = AppState().statsHeight.defaultValue
+    /// The slot's height as last placed or dragged, so a change of panel moves the divider
+    /// only when the heights differ, and set while the divider is placed, whose resizes are
+    /// the browser's, not the user's.
+    private var placedHeight: Int?
+    private var placingDivider = false
     /// The scan progress and the leading columns, the center column centered on the window,
     /// and the trailing columns and the problems button, each edge in a stack so what's hidden
     /// takes no width.
@@ -264,6 +281,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         content = NSViewController()
         health = HealthModel(
             build: { try await reader.healthReport() }, show: { try await reader.showHealth($0) })
+        statsModel = StatsModel { period in
+            guard let owner else { throw CancellationError() }
+            return try await owner.readStats(period)
+        }
         let (events, continuation) = AsyncStream.makeStream(of: WatcherEvent.self)
         watcherEvents = { continuation.yield($0) }
         super.init()
@@ -298,6 +319,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         healthPanel.select = { [weak self] check in self?.show(.health(check)) }
         healthPanel.checkAgain = { [weak self] in self?.runHealth() }
         content.addChild(healthPanel)
+        wireStats()
+        content.addChild(statsPanel)
     }
 
     private func makeContent() -> NSView {
@@ -376,9 +399,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Lays out the panes at their saved height. Call once the window has its size.
     public func restoreSplit() {
+        placingDivider = true
+        defer { placingDivider = false }
         split.adjustSubviews()
-        split.setPosition(CGFloat(browserHeight), ofDividerAt: 0)
+        split.setPosition(CGFloat(slotHeight), ofDividerAt: 0)
+        placedHeight = slotHeight
     }
+
+    /// The slot's height for what it holds: the Stats panel's own, or the columns' (which the
+    /// health panel shares).
+    var slotHeight: Int { shownPanel === statsPanel ? statsHeight : browserHeight }
 
     /// Loads everything, selecting what `saved` names where it still exists. A play state
     /// saved at quit, `resume`, gives the source in place of `saved`'s, and its selected track
@@ -711,6 +741,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
         showTimelineIfItIsTheSource()
         showPanelOfTheSource()
+        readStatsIfShownFirst()
         runHealthIfShownFirst()
         readTotals(
             of: model.trackIDs, into: \.listTotals,
@@ -720,7 +751,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Whether the sidebar shows the play timeline, which lists plays instead of tracks.
-    var showsTimeline: Bool { model.filter.source == .timeline }
+    var showsTimeline: Bool { model.filter.source?.listsPlays == true }
 
     /// Whether the sort commands apply: not on the timeline, whose order is the log's.
     public var canSort: Bool { !showsTimeline }
@@ -729,12 +760,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// changes. The timeline loads afresh each time it shows.
     private func showTimelineIfItIsTheSource() {
         let shows = showsTimeline
-        guard timeline.view.isHidden == shows else { return }
+        let span: PlaySpan? = if case .plays(let span) = model.filter.source { span } else { nil }
+        guard timeline.view.isHidden == shows || (shows && timelineModel.span != span) else {
+            return
+        }
         let hadKeys = focusedList != nil
         split.isHidden = shows
         timeline.view.isHidden = !shows
         searchField.isEnabled = !shows
         if shows {
+            timelineModel.span = span
             timelineLoad = Task { await timelineModel.load() }
         } else {
             timelineModel.clear()
@@ -752,7 +787,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusLabel.stringValue = status.summary(
             list: listTotals, selection: selectionTotals,
             shown: statusTotals, missingCount: model.missingTracks,
-            playCount: showsTimeline ? timelineModel.playCount : nil)
+            playCount: showsTimeline ? timelineModel.playCount : nil,
+            playSpan: showsTimeline ? timelineModel.span : nil)
         statusLabel.toolTip = nil
         statusLabel.isHidden = !statusLayout.showsTotals
         fitStatusBarHeight()
@@ -1564,7 +1600,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Runs an edit, then lists the playlists and selects the source as they now are. A failure
     /// is logged and shown in the status bar. `entriesChange` says the edit can add or drop
     /// playlist entries, which the health report counts.
-    private func edit(
+    func edit(
         _ failure: String, entriesChange: Bool = false,
         _ body: @escaping @MainActor () async throws -> Void
     ) {
@@ -1617,7 +1653,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     func panel(for source: BrowserSource?) -> (any SourcePanel)? {
         switch source {
         case .health: healthPanel
-        case .playlist, .history, .timeline, nil: nil
+        case .stats: statsPanel
+        case .playlist, .history, .timeline, .plays, nil: nil
         }
     }
 
@@ -1646,10 +1683,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private func fillPanelSlot() {
         panes.view.isHidden = shownPanel != nil || !isBrowserVisible
         let shows = shownPanel != nil || isBrowserVisible
-        guard shows == panelSlot.isHidden else { return }
+        let height = slotHeight
+        guard shows == panelSlot.isHidden || (shows && placedHeight != height) else { return }
+        placingDivider = true
+        defer { placingDivider = false }
         panelSlot.isHidden = !shows
         split.adjustSubviews()
-        if shows { split.setPosition(CGFloat(browserHeight), ofDividerAt: 0) }
+        guard shows else { return }
+        split.setPosition(CGFloat(height), ofDividerAt: 0)
+        placedHeight = height
     }
 
     /// Adds `view` to `slot`, filling it.
@@ -1789,7 +1831,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// the track.
     private func reveal(trackID id: Int64, in start: TrackFilter?) async -> Bool {
         guard let start, model.exists(start.source) else { return false }
-        if start.source == .timeline { return await revealPlay(ofTrack: id) }
+        if start.source?.listsPlays == true { return await revealPlay(ofTrack: id) }
         if model.filter.source == start.source, let row = model.rows(holding: [id]).first {
             showRow(row)
             return true
@@ -1983,11 +2025,19 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     // MARK: Split view
 
     public func splitViewDidResizeSubviews(_ notification: Notification) {
-        guard let window = split.window, window.isVisible, !panelSlot.isHidden else { return }
+        guard let window = split.window, window.isVisible, !panelSlot.isHidden, !placingDivider
+        else { return }
         let height = Int(split.subviews[0].frame.height.rounded())
-        guard height != browserHeight else { return }
-        browserHeight = height
-        browserHeightChanged(height)
+        placedHeight = height
+        if shownPanel === statsPanel {
+            guard height != statsHeight else { return }
+            statsHeight = height
+            statsHeightChanged(height)
+        } else {
+            guard height != browserHeight else { return }
+            browserHeight = height
+            browserHeightChanged(height)
+        }
     }
 
     public func splitView(

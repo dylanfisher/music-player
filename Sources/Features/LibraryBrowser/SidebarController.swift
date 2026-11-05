@@ -5,8 +5,9 @@ import KeyChord
 import Library
 import Settings
 
-/// The source list: the library, History and the timeline, and the playlists. Library Health
-/// isn't here: it opens from a command, and while it shows no row is selected.
+/// The source list: the library, History, the timeline and Listening Stats, and the playlists.
+/// Library Health isn't here: it opens from a command, and while it or a span of the timeline
+/// shows no row is selected.
 /// Tracks dragged from the table onto a manual playlist are added to it; playlist files dropped
 /// anywhere on it are imported. A playlist's name is edited in its row after its context menu's
 /// Rename or Return; a click only selects it. The context menu also copies or deletes it. The
@@ -37,6 +38,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     /// The playlist whose name is being edited in its row, and whether Esc ended the edit.
     private var renaming: Playlist?
     private var renameCancelled = false
+    /// The period Stats showed last, which its row shows again.
+    private(set) var statsPeriod = StatsPeriod.month
 
     init(
         selectSource: @escaping (BrowserSource?) -> Void,
@@ -47,12 +50,14 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         let libraryGroup = SidebarNode(.group, title: "Library")
         let history = SidebarNode(.history, title: "History")
         let timeline = SidebarNode(.timeline, title: "Timeline")
-        libraryGroup.children = [library, history, timeline]
+        let stats = SidebarNode(.stats, title: "Stats")
+        libraryGroup.children = [library, history, timeline, stats]
         libraryGroup.toolTip = "The whole library and what you've played."
         library.toolTip =
             "Every track in the library. The columns above the tracks and the search narrow it."
         history.toolTip = "Each track you've played, once, the latest played first."
         timeline.toolTip = "Every play, one row each, the latest first."
+        stats.toolTip = "What you've played most, and when, by week, month or year."
         playlistGroup.toolTip =
             "Your playlists and smart playlists. Drop playlist files here to import them."
         groups = [libraryGroup, playlistGroup]
@@ -103,9 +108,12 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.reloadData()
         for group in groups { outline.expandItem(group) }
         for node in open { outline.expandItem(node) }
-        if case .health = source {
+        switch source {
+        case .health, .plays:
             outline.deselectAll(nil)
             return
+        case .stats(let period): statsPeriod = period
+        case .playlist, .history, .timeline, nil: break
         }
         let selected = source.flatMap(row(for:)) ?? outline.row(forItem: library)
         outline.selectRowIndexes([selected], byExtendingSelection: false)
@@ -119,7 +127,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 
     /// The row showing `source`, opening the rows above it; nil when there's none.
     private func row(for source: BrowserSource) -> Int? {
-        guard let node = groups.lazy.flatMap(\.children).first(where: { $0.source == source })
+        let stats = if case .stats = source { true } else { false }
+        guard
+            let node = groups.lazy.flatMap(\.children).first(where: {
+                stats ? $0.kind == .stats : $0.source == source
+            })
         else { return nil }
         let row = outline.row(forItem: node)
         return row >= 0 ? row : nil
@@ -156,8 +168,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.item(atRow: outline.selectedRow) as? SidebarNode
     }
 
-    /// What the selected row shows; nil for the library.
-    var selectedSource: BrowserSource? { selectedNode?.source }
+    /// What the selected row shows; nil for the library. The Stats row shows the period it
+    /// showed last.
+    var selectedSource: BrowserSource? {
+        selectedNode?.kind == .stats ? .stats(statsPeriod) : selectedNode?.source
+    }
 
     // MARK: Data source and delegate
 
@@ -173,7 +188,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         guard let node = item as? SidebarNode else { return false }
         switch node.kind {
         case .group: return true
-        case .library, .history, .timeline, .playlist: return false
+        case .library, .history, .timeline, .stats, .playlist: return false
         }
     }
 
@@ -280,7 +295,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         switch selectedNode?.kind {
         case .library: selectSource(nil)
         case .group, nil: break
-        case .history, .timeline, .playlist: selectSource(selectedNode?.source)
+        case .history, .timeline, .stats, .playlist: selectSource(selectedSource)
         }
     }
 }
@@ -407,7 +422,7 @@ func playlistFileURLs(_ pasteboard: NSPasteboard) -> [URL] {
 /// A row of the source list. A class, since NSOutlineView tells items apart by identity.
 private final class SidebarNode {
     enum Kind: Equatable {
-        case group, library, history, timeline
+        case group, library, history, timeline, stats
         case playlist(Playlist)
     }
 
@@ -416,13 +431,14 @@ private final class SidebarNode {
     var toolTip: String?
     var children: [SidebarNode] = []
 
-    /// What selecting the row shows; nil for the library and the group headings.
+    /// What selecting the row shows; nil for the library and the group headings, and for
+    /// Stats, whose period the controller keeps.
     var source: BrowserSource? {
         switch kind {
         case .playlist(let playlist): .playlist(playlist.id)
         case .history: .history
         case .timeline: .timeline
-        case .group, .library: nil
+        case .group, .library, .stats: nil
         }
     }
 
@@ -433,6 +449,7 @@ private final class SidebarNode {
         case .library: "music.note"
         case .history: "clock"
         case .timeline: "list.bullet"
+        case .stats: "chart.bar"
         case .playlist(let playlist):
             switch playlist.kind {
             case .manual: SymbolName.playlist

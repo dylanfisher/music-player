@@ -225,7 +225,9 @@ public final class BrowserModel {
         case .playlist(let id):
             playlists.first { $0.id == id }?.isManual == true ? (.playlistOrder, true) : nil
         case .history: (.lastPlayed, false)
-        case .timeline, .health, nil: nil
+        // The tracks played most first, as the panel ranks them.
+        case .stats: (.playCount, false)
+        case .timeline, .plays, .health, nil: nil
         }
     }
 
@@ -721,7 +723,7 @@ public final class BrowserModel {
         let reader = reason == .libraryChanged ? reader.refreshes : reader
         do {
             // The timeline lists plays, which its own model pages through.
-            let tracks = next.source != .timeline
+            let tracks = next.source?.listsPlays != true
             for column in (first ?? BrowserColumn.count)..<BrowserColumn.count {
                 let grouping = columns[column]
                 // The selections of this column and those to its right don't narrow it.
