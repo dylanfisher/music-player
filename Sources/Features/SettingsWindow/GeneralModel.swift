@@ -38,6 +38,9 @@ public final class GeneralModel {
         var control: Control
         /// What a number field's value is in, shown after the field.
         var unit: String? = nil
+        /// For a fallback few need: the line whose disclosure triangle shows the row, which
+        /// stays hidden under it until opened or given a value.
+        var disclosure: String? = nil
     }
 
     /// The panes' groups of rows, each in a titled box, by what the setting's key starts with.
@@ -167,7 +170,9 @@ public final class GeneralModel {
             }
         return Row(
             key: setting.key, title: setting.title, summary: setting.summary, control: control,
-            unit: setting.key == schema.playedPercent.key ? "%" : nil)
+            unit: setting.key == schema.playedPercent.key ? "%" : nil,
+            disclosure: setting.key == schema.receiverAddress.key
+                ? "Can't find the receiver?" : nil)
     }
 
     /// Whether a row can be changed now: not while its section's switch is off.

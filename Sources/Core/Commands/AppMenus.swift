@@ -190,8 +190,7 @@ public enum AppMenus {
                     .submenu(
                         "Receiver",
                         [
-                            .setting(settings.receiverEnabled.key),
-                            .setting(settings.receiverVolumeKeys.key), .separator,
+                            .setting(settings.receiverEnabled.key), .separator,
                             .command(.receiverVolumeUp), .command(.receiverVolumeDown),
                             .command(.receiverMute), .separator,
                         ] + ReceiverSoundMode.allCases.map { .command(.receiverSoundMode($0)) }

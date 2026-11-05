@@ -58,6 +58,10 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     /// Counts each color row's changes, so a save waiting out the pause knows a newer one
     /// replaced it.
     private var colorGenerations: [String: Int] = [:]
+    /// The fallback rows, hidden under their disclosures until opened or given a value, and
+    /// the disclosures' triangles.
+    private(set) var fallbackRows: [String: NSGridRow] = [:]
+    private(set) var disclosures: [String: NSButton] = [:]
     /// The bar builders opened from this pane, by key, kept so a reopen shows the same one.
     private(set) var barBuilders: [String: BarBuilderWindow] = [:]
     /// The tokens' popover while it shows, for tests.
@@ -193,6 +197,17 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         cell.orientation = .vertical
         cell.alignment = .leading
         cell.spacing = 2
+        if let disclosure = row.disclosure {
+            grid.addRow(with: [NSGridCell.emptyContentView, disclosureLine(disclosure, row.key)])
+        }
+        defer {
+            if row.disclosure != nil {
+                let added = grid.row(at: grid.numberOfRows - 1)
+                added.isHidden = model.text(row.key).isEmpty
+                fallbackRows[row.key] = added
+                disclosures[row.key]?.state = added.isHidden ? .off : .on
+            }
+        }
         guard row.control != .checkbox else {
             grid.addRow(with: [NSGridCell.emptyContentView, cell])
             return
@@ -201,6 +216,24 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
         label.alignment = .right
         labels[row.key] = label
         grid.addRow(with: [label, cell])
+    }
+
+    /// A disclosure triangle and `title`, which show and hide the row `key` under them.
+    private func disclosureLine(_ title: String, _ key: String) -> NSView {
+        let triangle = NSButton(title: "", target: self, action: #selector(disclose(_:)))
+        triangle.bezelStyle = .disclosure
+        triangle.setButtonType(.pushOnPushOff)
+        triangle.setAccessibilityLabel(title)
+        disclosures[key] = triangle
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        label.textColor = .secondaryLabelColor
+        return NSStackView(views: [triangle, label])
+    }
+
+    @objc private func disclose(_ triangle: NSButton) {
+        guard let key = disclosures.first(where: { $0.value === triangle })?.key else { return }
+        fallbackRows[key]?.isHidden = triangle.state == .off
     }
 
     private func button(_ title: String, _ action: Selector) -> NSButton {
@@ -343,6 +376,11 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             labels[row.key]?.textColor = enabled ? .labelColor : .disabledControlTextColor
             summaries[row.key]?.textColor =
                 enabled ? .secondaryLabelColor : .disabledControlTextColor
+            // A value set in the config file opens its fallback row, so it's never hidden.
+            if let fallback = fallbackRows[row.key], !model.text(row.key).isEmpty {
+                fallback.isHidden = false
+                disclosures[row.key]?.state = .on
+            }
         }
     }
 

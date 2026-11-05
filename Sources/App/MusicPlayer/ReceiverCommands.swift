@@ -26,14 +26,11 @@ extension AppDelegate {
         applyReceiverSetting()
     }
 
-    /// Takes the Mac's volume and mute keys for the receiver while the app plays to it, and
-    /// gives them back otherwise. Without Accessibility permission there's no tap: the system
-    /// is asked once a launch to prompt for it, and the keys stay the Mac's.
+    /// Takes the Mac's volume and mute keys for the receiver while receiver control runs, and
+    /// gives them back otherwise (ADR 0091). Without Accessibility permission there's no tap:
+    /// the system is asked once a launch to prompt for it, and the keys stay the Mac's.
     func applyVolumeKeys() {
-        let wanted = ReceiverControl.takesVolumeKeys(
-            setting: settings?[\.receiverVolumeKeys] == true, controlRunning: receiver != nil,
-            playingTo: rendererOutput?.renderer)
-        guard wanted else {
+        guard receiver != nil else {
             volumeKeyTap?.stop()
             volumeKeyTap = nil
             return

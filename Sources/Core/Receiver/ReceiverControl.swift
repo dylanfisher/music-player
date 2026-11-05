@@ -96,20 +96,12 @@ public final class ReceiverControl {
         self.port = port
     }
 
-    /// Whether receiver control runs: when `receiver.enabled` is on, and while the app plays to
-    /// a Denon receiver as a renderer, whose volume is the receiver's own and set only here
-    /// (ADR 0041). Choosing that renderer already put the app on the network.
+    /// Whether receiver control runs, and with it the Mac's volume and mute keys drive the
+    /// receiver (ADR 0091): when `receiver.enabled` is on, and while the app plays to a Denon
+    /// receiver as a renderer, whose volume is the receiver's own and set only here (ADR 0041).
+    /// Choosing that renderer already put the app on the network.
     public nonisolated static func isWanted(enabled: Bool, playingTo renderer: Renderer?) -> Bool {
         enabled || renderer?.isDenonReceiver == true
-    }
-
-    /// Whether the Mac's volume and mute keys drive the receiver: only while receiver control
-    /// runs, the app plays to that Denon, and `receiver.volumeKeys` is on. Otherwise they're the
-    /// Mac's, as ever.
-    public nonisolated static func takesVolumeKeys(
-        setting: Bool, controlRunning: Bool, playingTo renderer: Renderer?
-    ) -> Bool {
-        setting && controlRunning && renderer?.isDenonReceiver == true
     }
 
     /// What to do for volume keys that are wanted: tap them with permission; without it, show

@@ -568,16 +568,3 @@ private func connection(_ receiver: SimulatedReceiver) -> ReceiverConnection {
     #expect(
         ReceiverControl.accessibilityHint.contains("Security & Privacy › Privacy › Accessibility"))
 }
-
-@Test func theVolumeKeysDriveTheReceiverOnlyWhilePlayingToIt() {
-    #expect(
-        ReceiverControl.takesVolumeKeys(setting: true, controlRunning: true, playingTo: denon()))
-    #expect(
-        !ReceiverControl.takesVolumeKeys(setting: false, controlRunning: true, playingTo: denon()))
-    #expect(
-        !ReceiverControl.takesVolumeKeys(setting: true, controlRunning: false, playingTo: denon()))
-    #expect(!ReceiverControl.takesVolumeKeys(setting: true, controlRunning: true, playingTo: nil))
-    #expect(
-        !ReceiverControl.takesVolumeKeys(
-            setting: true, controlRunning: true, playingTo: denon(model: "Denon Home 150")))
-}

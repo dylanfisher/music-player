@@ -367,23 +367,47 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
         set: { key, json in stored[key] = json }, isBlocked: { false })
     #expect(model.isEnabled(schema.receiverEnabled.key))
     #expect(!model.isEnabled(schema.receiverAddress.key))
-    #expect(!model.isEnabled(schema.receiverVolumeKeys.key))
     #expect(model.isEnabled(schema.hogMode.key))
     let receiverRows = model.sections.first { $0.section == .receiver }?.rows.map(\.key)
-    #expect(receiverRows?.first == schema.receiverEnabled.key, "the switch comes first")
+    #expect(receiverRows == [schema.receiverEnabled.key, schema.receiverAddress.key])
 
     let pane = GeneralPane(
         model: model, configPath: nil, actions: actions(), sections: [.receiver])
+    _ = pane.view
+    pane.disclosures[schema.receiverAddress.key]?.performClick(nil)
     let address = try #require(view(schema.receiverAddress.key, in: pane.view) as? NSTextField)
-    let volumeKeys = try #require(
-        view(schema.receiverVolumeKeys.key, in: pane.view) as? NSButton)
     #expect(!address.isEnabled)
-    #expect(!volumeKeys.isEnabled)
     let toggle = try #require(view(schema.receiverEnabled.key, in: pane.view) as? NSButton)
     toggle.performClick(nil)
     #expect(stored[schema.receiverEnabled.key] as? Bool == true)
     #expect(address.isEnabled)
-    #expect(volumeKeys.isEnabled)
+}
+
+@MainActor @Test func theReceiverAddressWaitsUnderItsDisclosureUntilItHasAValue() throws {
+    let schema = AppSettings()
+    let key = schema.receiverAddress.key
+    var stored: [String: Any] = [schema.receiverEnabled.key: true, key: NSNull()]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
+        set: { key, json in stored[key] = json }, isBlocked: { false })
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.receiver])
+    _ = pane.view
+    let row = try #require(pane.fallbackRows[key])
+    let triangle = try #require(pane.disclosures[key])
+    #expect(row.isHidden)
+    triangle.performClick(nil)
+    #expect(!row.isHidden)
+    triangle.performClick(nil)
+    #expect(row.isHidden)
+    // An address in the config file shows the row open.
+    stored[key] = "192.0.2.45"
+    pane.reload()
+    #expect(!row.isHidden && triangle.state == .on)
+    let opened = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.receiver])
+    _ = opened.view
+    #expect(opened.fallbackRows[key]?.isHidden == false)
 }
 
 @MainActor @Test func aColorRowIsAWellWithADefaultButton() async throws {

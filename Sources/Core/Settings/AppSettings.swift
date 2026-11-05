@@ -44,14 +44,11 @@ public struct AppSettings: SettingsSchema {
         "library.fileViewer", title: "File Viewer", default: FileViewer.searcher,
         "Where Reveal in Finder shows tracks; without Searcher, it uses Finder.")
     public let receiverEnabled = Setting(
-        "receiver.enabled", title: "Receiver Control", default: false,
-        "Control a Denon receiver's volume, input and power over the network.")
+        "receiver.enabled", title: "Control the Receiver with the Volume Keys", default: false,
+        "While the Denon receiver is connected, the volume keys set its volume.")
     public let receiverAddress = Setting<ReceiverAddress?>(
         "receiver.address", title: "Receiver Address", default: nil,
-        "The receiver's IP address, for when the search can't find it.")
-    public let receiverVolumeKeys = Setting(
-        "receiver.volumeKeys", title: "Volume Keys Control the Receiver", default: true,
-        "Volume keys set the receiver's volume; needs Accessibility permission.")
+        "Only for when the search can't find the receiver: its IP address.")
     public let appearance = Setting(
         "appearance", title: "Appearance", default: Appearance.auto,
         "Light or dark windows; Auto follows the system.")
