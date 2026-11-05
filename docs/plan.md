@@ -4281,6 +4281,9 @@ Plan: written by the orchestrator under each part before it runs, as in phase 37
 
 ### 40. Owner feedback, 2026-11-04 evening
 
+**Done; owner check pending.** `./scripts/check` passes clean on main after all four parts.
+Parts 40c and 40d each wrote an ADR 0089; 40d's became 0090 in the rebase.
+
 The owner's feedback from trying phases 38 and 39. The two progress bar screenshots are in
 `~/.claude/projects/-Users-dylanfisher-projects-music-player/feedback-2026-11-04/`. The four
 parts run in parallel worktrees and rebase onto main in order a, b, c, d.
