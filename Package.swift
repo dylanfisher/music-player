@@ -144,7 +144,7 @@ let package = Package(
             name: "LibraryBrowser",
             dependencies: [
                 "Artwork", "BarView", "Commands", "DisplayText", "KeyChord", "Library", "Log",
-                "Metadata", "Settings",
+                "Metadata", "Playback", "Settings",
             ],
             path: "Sources/Features/LibraryBrowser",
             swiftSettings: strictSwift
@@ -322,7 +322,7 @@ let package = Package(
             name: "LibraryBrowserTests",
             dependencies: [
                 "Artwork", "DisplayText", "Fixtures", "KeyChord", "Library", "LibraryBrowser",
-                "Metadata", "SQLite", "Settings",
+                "Metadata", "Playback", "SQLite", "Settings",
             ],
             swiftSettings: strictSwift
         ),

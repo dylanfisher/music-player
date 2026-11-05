@@ -1,6 +1,7 @@
 import Foundation
 import Library
 import Log
+import Playback
 import Settings
 
 private let logger = moduleLogger()
@@ -59,8 +60,10 @@ public final class BrowserModel {
     /// Counts applied changes, so names read for one list aren't used for the next.
     private var applied = 0
     private var names: (applied: Int, list: [TrackName])?
-    /// The sources the sidebar showed, for Back and Forward.
-    public private(set) var history = SourceHistory()
+    /// The sources the sidebar showed and the plays from the browser, for Back and Forward.
+    private(set) var history = StepHistory(start: WindowPlace(filter: TrackFilter()))
+    /// The shown list's selected tracks and scroll, which a step keeps with the filter.
+    var listPlace: () -> (selection: Set<Int64>, scroll: WindowPlace.Scroll?) = { ([], nil) }
     /// The source a change not yet applied visits, so History records only sources that showed.
     private var pendingVisit: BrowserSource?? = .none
     /// The sort the table had before a source with its own sort replaced it, to go back to.
@@ -131,7 +134,10 @@ public final class BrowserModel {
             logger.error("couldn't read the playlists: \(error)")
             failed("couldn't read the playlists: \(error)")
         }
-        history = SourceHistory(start: saved.source)
+        history = StepHistory(
+            start: WindowPlace(
+                filter: TrackFilter(
+                    source: saved.source, groupByAlbumArtist: pending.groupByAlbumArtist)))
         pending = TrackFilter(
             source: saved.source, search: pending.search,
             groupByAlbumArtist: pending.groupByAlbumArtist)
@@ -350,17 +356,35 @@ public final class BrowserModel {
         await refresh()
     }
 
-    /// Shows the source before the current one; false when there is none.
-    public func back() async -> Bool {
-        guard let source = history.back() else { return false }
-        await showSource(source)
-        return true
+    /// The window as it is now, as a step keeps it.
+    var place: WindowPlace {
+        let list = listPlace()
+        return WindowPlace(filter: filter, selection: list.selection, scroll: list.scroll)
     }
 
-    public func forward() async -> Bool {
-        guard let source = history.forward() else { return false }
-        await showSource(source)
-        return true
+    /// Takes a step for a play started from the window, replacing `replaced`.
+    func recordPlay(_ played: PlaybackSpot, replacing replaced: PlaybackSpot) {
+        history.play(played, replacing: replaced, from: place)
+    }
+
+    /// Moves to the step before, leaving the current one as the window and `playing` have it.
+    /// Nil at the first step. `show` then shows the move's window.
+    func back(playing: PlaybackSpot?) -> StepHistory.Move? {
+        history.back(leaving: place, playing: playing)
+    }
+
+    func forward(playing: PlaybackSpot?) -> StepHistory.Move? {
+        history.forward(leaving: place, playing: playing)
+    }
+
+    /// Shows a step's source, search and column selections, leaving out the selections of
+    /// groupings no column shows now, which would narrow the table unseen.
+    func show(_ window: WindowPlace) async {
+        changeSort(from: pending.source, to: window.filter.source)
+        pending.source = window.filter.source
+        pending.search = window.filter.search
+        pending.selections = window.filter.selections.filter { pendingColumns.contains($0.key) }
+        await reload(panesFrom: 0, reason: .user)
     }
 
     private func showSource(_ source: BrowserSource?) async {
@@ -630,7 +654,9 @@ public final class BrowserModel {
                 missing = try await reader.missingEntryCount(id)
             }
             guard mine == generation else { return }
-            if case .some(let source) = pendingVisit { history.visit(source) }
+            if case .some = pendingVisit {
+                history.visit(WindowPlace(filter: next), leaving: place)
+            }
             pendingVisit = .none
             missingTracks = missing
             let previousIDs = trackIDs
@@ -693,54 +719,6 @@ public final class BrowserModel {
         // The entry's spelling, which can change within a group that ignores case.
         guard let value else { return nil }
         return entries.first { grouping.sameEntry($0.value, value) }?.value
-    }
-}
-
-/// The sources shown, oldest first, and where Back and Forward are in them. Nil is the whole
-/// library.
-public struct SourceHistory: Equatable, Sendable {
-    private(set) var visited: [BrowserSource?]
-    private(set) var position = 0
-
-    init(start: BrowserSource? = nil) {
-        visited = [start]
-    }
-
-    public var canGoBack: Bool { position > 0 }
-    public var canGoForward: Bool { position < visited.count - 1 }
-
-    /// A new source drops the ones Forward would have gone to; the source already shown adds
-    /// nothing.
-    mutating func visit(_ source: BrowserSource?) {
-        guard source != visited[position] else { return }
-        visited = Array(visited[...position]) + [source]
-        position += 1
-    }
-
-    /// Forgets the sources `gone` picks, such as deleted playlists, and the repeats that
-    /// leaves, keeping the place at the nearest source before it that stays.
-    mutating func remove(_ gone: (BrowserSource?) -> Bool) {
-        var kept: [BrowserSource?] = []
-        var place = 0
-        for (index, source) in visited.enumerated() where !gone(source) {
-            if kept.last != .some(source) { kept.append(source) }
-            if index <= position { place = kept.count - 1 }
-        }
-        visited = kept.isEmpty ? [nil] : kept
-        position = place
-    }
-
-    /// The source to show, or nil at the start.
-    mutating func back() -> BrowserSource?? {
-        guard canGoBack else { return nil }
-        position -= 1
-        return .some(visited[position])
-    }
-
-    mutating func forward() -> BrowserSource?? {
-        guard canGoForward else { return nil }
-        position += 1
-        return .some(visited[position])
     }
 }
 

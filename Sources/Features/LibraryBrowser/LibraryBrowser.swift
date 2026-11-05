@@ -6,6 +6,7 @@ import DisplayText
 import KeyChord
 import Library
 import Log
+import Playback
 import Settings
 
 private let logger = moduleLogger()
@@ -35,6 +36,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var playStart: (PlayStart) -> Void = { _ in }
     /// Queue these files after the current track.
     public var playNext: ([URL]) -> Void = { _ in }
+    /// Where playback stands, which a play's step keeps to put back; nil without an output.
+    public var currentPlayback: () async -> PlaybackSpot? = { nil }
+    /// Puts playback back where Back or Forward over a play found it.
+    public var restorePlayback: (PlaybackSpot) async -> Void = { _ in }
+    /// The last of Back, Forward and plays' steps, each of which runs after the one before, so
+    /// a second ⌘[ reads the playback the first put back.
+    private(set) var stepping: Task<Void, Never>?
     /// Queue these files after the last track.
     public var addToQueue: ([URL]) -> Void = { _ in }
     /// The context menu of the track table and the timeline. A right-click selects the row it's
@@ -190,7 +198,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                         let request = try timelineModel.playRequest(
                             selected: rows, clicked: clicked)
                     else { return }
-                    owner?.play(request)
+                    owner?.start(request)
                 } catch {
                     owner?.reportCommand("couldn't play the selection", error)
                 }
@@ -254,6 +262,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         searchField.delegate = self
 
         model.changed = { [weak self] change in self?.apply(change) }
+        model.listPlace = { [weak self] in self?.listPlace() ?? ([], nil) }
         model.failed = { [weak self] message in self?.show(failure: message) }
         timelineModel.changed = { [weak self] previous in
             self?.timeline.reload(previousIDs: previous)
@@ -804,9 +813,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private func playRows(_ rows: IndexSet, clicked: Int) {
         Task {
             do {
-                if let start = try await model.playStart(selected: rows, clicked: clicked) {
-                    playStart(start)
-                }
+                guard let start = try await model.playStart(selected: rows, clicked: clicked)
+                else { return }
+                let played = PlaybackSpot(
+                    queue: [start.url], index: 0, seconds: 0, status: .playing)
+                recordPlay(played) { self.playStart(start) }
             } catch {
                 report("couldn't read the tracks to play: \(error)")
             }
@@ -1144,9 +1155,68 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var canGoBack: Bool { model.history.canGoBack }
     public var canGoForward: Bool { model.history.canGoForward }
 
-    public func back() { Task { if await model.back() { showSource() } } }
+    /// Undoes the last step: shows the window as the step before had it, and puts back the
+    /// playback a play replaced (ADR 0089).
+    public func back() { inTurn { [weak self] in await self?.step(back: true) } }
 
-    public func forward() { Task { if await model.forward() { showSource() } } }
+    public func forward() { inTurn { [weak self] in await self?.step(back: false) } }
+
+    private func step(back: Bool) async {
+        let playing = await currentPlayback()
+        guard let move = back ? model.back(playing: playing) : model.forward(playing: playing)
+        else { return }
+        if let playback = move.playback { await restorePlayback(playback) }
+        await model.show(move.window)
+        searchField.stringValue = model.filter.search
+        showSource()
+        guard !showsTimeline else { return }
+        let rows = model.rows(holding: move.window.selection)
+        table.select(rows)
+        if let scroll = move.window.scroll {
+            table.restore((scroll.id, scroll.offset), row: model.rows(holding: [scroll.id]).first)
+        } else if let first = rows.first {
+            table.center(first)
+        }
+    }
+
+    /// Runs `work` after the steps before it.
+    private func inTurn(_ work: @escaping @MainActor () async -> Void) {
+        let previous = stepping
+        stepping = Task {
+            await previous?.value
+            await work()
+        }
+    }
+
+    /// Takes a play's step, keeping the playback it replaces, then plays. Without an output
+    /// nothing plays, so no step is taken.
+    private func recordPlay(_ played: PlaybackSpot, then play: @escaping @MainActor () -> Void) {
+        inTurn { [weak self] in
+            guard let self else { return }
+            if let replaced = await currentPlayback() {
+                model.recordPlay(played, replacing: replaced)
+            }
+            play()
+        }
+    }
+
+    /// Plays `request` as a step Back can undo.
+    private func start(_ request: PlayRequest) {
+        let played = PlaybackSpot(
+            queue: request.urls, index: request.first, seconds: 0, status: .playing)
+        recordPlay(played) { [weak self] in self?.play(request) }
+    }
+
+    /// The track table's selected tracks and first visible track, which a step keeps. The
+    /// timeline's rows are plays, and it loads afresh each time it shows, so it keeps neither.
+    private func listPlace() -> (selection: Set<Int64>, scroll: WindowPlace.Scroll?) {
+        guard !showsTimeline else { return ([], nil) }
+        let anchor = table.scrollAnchor(in: model.trackIDs)
+        return (
+            Set(model.ids(ofRows: table.table.selectedRowIndexes)),
+            anchor.map { WindowPlace.Scroll(id: $0.id, offset: $0.offset) }
+        )
+    }
 
     /// Selects the model's source in the sidebar, listing the playlists as they are now.
     private func showSource() {
@@ -1617,7 +1687,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         if case .entry = query { searchField.stringValue = "" }
         showSource()
         focusTracks()
-        play(request)
+        start(request)
         return "Playing \(tracks(request.urls.count))"
     }
 

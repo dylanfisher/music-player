@@ -182,7 +182,8 @@ func writableModel(
     await model.setSource(.history)
     try await model.deletePlaylist(gone)
     // Back goes past where the playlist was, straight to the library.
-    #expect(await model.back())
+    let move = try #require(model.back(playing: nil))
+    await model.show(move.window)
     #expect(model.filter.source == nil)
     #expect(!model.history.canGoBack)
 }
