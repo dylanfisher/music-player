@@ -300,7 +300,7 @@ public actor PlaybackEngine {
     }
 
     public func seek(toSeconds seconds: Double) {
-        guard currentItem != nil else { return }
+        guard currentItem != nil || resumeSeconds != nil else { return }
         let seconds = max(0, seconds)
         if resumeSeconds != nil {
             resumeSeconds = seconds
@@ -425,7 +425,23 @@ public actor PlaybackEngine {
     public func spot() -> PlaybackSpot {
         PlaybackSpot(
             queue: state.queue, index: state.currentIndex,
-            seconds: currentItem == nil ? 0 : position() ?? 0, status: state.status)
+            seconds: currentItem == nil && resumeSeconds == nil ? 0 : position() ?? 0,
+            status: state.status)
+    }
+
+    /// Replaces the queue with `spot`'s and points it at its entry, paused at its seconds,
+    /// without loading anything: no device opens and no file is read until Play, which loads
+    /// the entry there. For the play state saved at quit (ADR 0092). `durationSeconds`, from
+    /// the index, shows the track's length meanwhile. Ignored once a queue is set, so a play
+    /// the user started first stays.
+    public func cue(_ spot: PlaybackSpot, durationSeconds: Double?) {
+        guard state.queue.isEmpty, let index = spot.index, spot.queue.indices.contains(index)
+        else { return }
+        replaceQueue(spot.queue, first: index)
+        resumeSeconds = spot.seconds
+        state.durationSeconds = durationSeconds
+        state.status = .paused
+        publish(.paused)
     }
 
     /// Replaces the queue with `spot`'s and loads its entry at its seconds, playing or paused as

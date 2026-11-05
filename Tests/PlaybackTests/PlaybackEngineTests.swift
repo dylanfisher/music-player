@@ -251,6 +251,40 @@ private func playing(_ urls: [URL], _ output: FakeOutput) async -> PlaybackEngin
         await engine.spot() == PlaybackSpot(queue: [], index: nil, seconds: 0, status: .stopped))
 }
 
+@Test func aCuedSpotLoadsNothingUntilPlayLoadsItAtItsSeconds() async {
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output, shuffled: { $0 })
+    await engine.cue(
+        PlaybackSpot(queue: urls, index: 1, seconds: 83, status: .paused), durationSeconds: 200)
+    #expect(output.takeCalls().isEmpty)
+    #expect(await engine.state.status == .paused)
+    #expect(await engine.state.currentIndex == 1)
+    #expect(await engine.state.durationSeconds == 200)
+    #expect(await engine.position() == 83)
+    #expect(
+        await engine.spot() == PlaybackSpot(queue: urls, index: 1, seconds: 83, status: .paused))
+
+    await engine.seek(toSeconds: 90)
+    #expect(output.takeCalls().isEmpty)
+    await engine.play()
+    #expect(
+        output.takeCalls() == [
+            .load(1, urls[1], startSeconds: 90, playing: true), .setNext(2, urls[2]),
+        ])
+    #expect(await engine.state.status == .playing)
+}
+
+@Test func aCueAfterAQueueWasSetChangesNothing() async {
+    let output = FakeOutput()
+    let engine = await playing([urls[2]], output)
+    _ = output.takeCalls()
+    await engine.cue(
+        PlaybackSpot(queue: urls, index: 0, seconds: 5, status: .paused), durationSeconds: nil)
+    #expect(output.takeCalls().isEmpty)
+    #expect(await engine.state.queue == [urls[2]])
+    #expect(await engine.state.status == .playing)
+}
+
 @Test func repeatOneHandsOverTheSameTrackAgain() async {
     let output = FakeOutput()
     let engine = await playing(urls, output)
