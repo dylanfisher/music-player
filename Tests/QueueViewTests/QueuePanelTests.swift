@@ -41,7 +41,8 @@ import Testing
             albumID: nil, albumArtist: nil, genre: nil, date: nil, trackNumber: nil,
             discNumber: nil, codec: "flac", sampleRateHz: 44100, bitsPerSample: 16,
             durationSeconds: seconds, addedSeconds: 0, art: nil)
-        cell.show(QueueItem(url: URL(fileURLWithPath: row.path, isDirectory: false), row: row),
+        cell.show(
+            QueueItem(url: URL(fileURLWithPath: row.path, isDirectory: false), row: row),
             current: current)
         cell.layoutSubtreeIfNeeded()
         return cell
