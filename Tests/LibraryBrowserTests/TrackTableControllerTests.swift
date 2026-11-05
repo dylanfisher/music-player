@@ -303,6 +303,55 @@ import Testing
     #expect(marked().isEmpty)
 }
 
+/// The playing track's title starts with the play triangle, which moves to the Now Playing
+/// column while that's shown, and the cells on screen follow at once.
+@MainActor @Test func thePlayingMarkGoesBeforeTheTitleOrInNowPlaying() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
+    let index = try LibraryIndex(at: databaseURL)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in },
+        sort: { _, _ in },
+        layoutChanged: { _ in },
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { try index.rows(ids: $0) },
+        layout: AppState().trackTable.defaultValue, actions: actions, thumbnails: nil)
+    controller.view.frame = NSRect(x: 0, y: 0, width: 800, height: 300)
+    model.changed = { controller.reload($0) }
+    await model.load(BrowserState(source: nil))
+    let table = controller.table
+    let rows = try index.rows(ids: model.trackIDs)
+    func shown(_ column: TrackColumn, _ row: Int) throws -> String {
+        let index = table.column(withIdentifier: NSUserInterfaceItemIdentifier(column.rawValue))
+        return try #require(
+            table.view(atColumn: index, row: row, makeIfNecessary: true) as? TextCell
+        ).text
+    }
+    let nowPlaying = try #require(
+        table.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier("nowPlaying")))
+    #expect(nowPlaying.isHidden, "off by default")
+    #expect(nowPlaying.title.isEmpty)
+    #expect(!TrackColumn.nowPlaying.isSortable)
+    #expect(try shown(.title, 2) == rows[2].title)
+
+    controller.playingPath = rows[2].path
+    #expect(try shown(.title, 2) == "\u{25B6}\u{FE0E} " + rows[2].title)
+    #expect(try shown(.title, 1) == rows[1].title)
+
+    var layout = controller.layout
+    layout.columns.insert(ColumnLayout(column: .nowPlaying, width: 20), at: 0)
+    controller.showColumns(layout)
+    #expect(try shown(.title, 2) == rows[2].title, "the mark shows once")
+    #expect(try shown(.nowPlaying, 2) == "\u{25B6}\u{FE0E}")
+    #expect(try shown(.nowPlaying, 1).isEmpty)
+    controller.playingPath = rows[1].path
+    #expect(try shown(.nowPlaying, 2).isEmpty)
+    #expect(try shown(.nowPlaying, 1) == "\u{25B6}\u{FE0E}")
+}
+
 @MainActor @Test func theTableDrawsItsLinesAndRowsAsTheAppearanceSays() throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let model = BrowserModel(

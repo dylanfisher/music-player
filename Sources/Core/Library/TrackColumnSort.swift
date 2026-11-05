@@ -9,6 +9,7 @@ extension TrackColumn {
     var expression: String {
         switch self {
         case .rowNumber: preconditionFailure("the row number can't be sorted by")
+        case .nowPlaying: preconditionFailure("Now Playing can't be sorted by")
         case .art: "t.art_offset IS NOT NULL"
         case .title: "t.sort_title"
         case .artist: "ar.sort_name"

@@ -22,6 +22,8 @@ extension TrackColumn {
     public var defaultWidth: Double {
         switch self {
         case .rowNumber: 30
+        // The playing mark and the insets beside it; the narrowest a column may be.
+        case .nowPlaying: 20
         case .trackNumber, .discNumber, .year, .channels, .bpm, .playCount, .skipCount, .loved,
             .compilation, .art:
             34
@@ -39,12 +41,13 @@ extension TrackColumn {
     }
 
     /// What the column shows for `row`, the table's row `position`. Empty where the tags and
-    /// stats say nothing, and for Album Art, which is an image.
+    /// stats say nothing, for Album Art, which is an image, and for Now Playing, which the
+    /// table fills on the playing row.
     @MainActor func text(_ row: TrackRow, position: Int) -> String {
         switch self {
         // The row's place in the list, which is the playlist's order when sorted by it.
         case .rowNumber, .playlistOrder: String(position + 1)
-        case .art: ""
+        case .art, .nowPlaying: ""
         case .title: row.title
         case .artist: row.artist ?? ""
         case .album: row.album ?? ""

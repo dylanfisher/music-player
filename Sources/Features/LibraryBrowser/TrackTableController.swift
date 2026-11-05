@@ -75,6 +75,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             table.enumerateAvailableRowViews { rowView, row in
                 (rowView as? MarkedRowView)?.isMarked = isPlaying(row)
             }
+            redrawPlayingMarks()
         }
     }
 
@@ -155,7 +156,9 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         let order = shown + TrackColumn.allCases.filter { !shown.contains($0) }
         for column in order {
             let tableColumn = NSTableColumn(identifier: columnIdentifier(column))
-            tableColumn.title = column.title
+            // Now Playing is too narrow for its name, which the menu and the tooltip give.
+            tableColumn.title = column == .nowPlaying ? "" : column.title
+            tableColumn.headerToolTip = column.title
             tableColumn.width =
                 layout.columns.first { $0.column == column }?.width
                 ?? column.defaultWidth
@@ -464,9 +467,37 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             tableView.makeView(withIdentifier: tableColumn.identifier, owner: nil)
             as? TextCell ?? TextCell(tableColumn.identifier, numeric: column.isNumeric)
         cell.font = font
-        cell.text = trackRow(row).map { column.text($0, position: row) } ?? ""
+        cell.text = text(column, row: row)
         rowsDrawn()
         return cell
+    }
+
+    /// What `column` shows at `row`: the playing mark in Now Playing on the playing row, and
+    /// before its title while Now Playing is hidden, so the mark shows once.
+    func text(_ column: TrackColumn, row: Int) -> String {
+        guard let track = trackRow(row) else { return "" }
+        let text = column.text(track, position: row)
+        switch column {
+        case .nowPlaying: return isPlaying(row) ? playingMark : ""
+        case .title where isPlaying(row) && !isShown(.nowPlaying): return playingMark + " " + text
+        default: return text
+        }
+    }
+
+    private func isShown(_ column: TrackColumn) -> Bool {
+        table.tableColumn(withIdentifier: columnIdentifier(column))?.isHidden == false
+    }
+
+    /// Redraws the cells that show the playing mark, after the track playing changed or Now
+    /// Playing was shown or hidden.
+    private func redrawPlayingMarks() {
+        var rows = IndexSet()
+        table.enumerateAvailableRowViews { _, row in rows.insert(row) }
+        let columns = IndexSet(
+            [TrackColumn.title, .nowPlaying].map {
+                table.column(withIdentifier: columnIdentifier($0))
+            }.filter { $0 >= 0 })
+        table.reloadData(forRowIndexes: rows, columnIndexes: columns)
     }
 
     // MARK: Album art
@@ -791,6 +822,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
             if index != place { table.moveColumn(index, toColumn: place) }
         }
         redrawRowViews()
+        redrawPlayingMarks()
         centerSelection()
     }
 
@@ -837,6 +869,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         else { return }
         tableColumn.isHidden.toggle()
         redrawRowViews()
+        redrawPlayingMarks()
         actions.layoutChanged(layout)
         centerSelection()
     }
@@ -889,6 +922,9 @@ func typeSelectText(_ name: TrackName, sortedBy column: TrackColumn) -> String {
     default: name.title
     }
 }
+
+/// The playing track's mark. The variation selector asks for the text triangle, not the emoji.
+let playingMark = "\u{25B6}\u{FE0E}"
 
 private func columnIdentifier(_ column: TrackColumn) -> NSUserInterfaceItemIdentifier {
     NSUserInterfaceItemIdentifier(column.rawValue)
