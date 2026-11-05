@@ -226,7 +226,7 @@ private func problems(_ json: String) -> [SettingProblem] {
     // The address reaches any receiver on Denon's protocol; only the search is Denon's alone.
     #expect(!schema.receiverEnabled.summary.contains("the Denon receiver"))
     #expect(schema.receiverEnabled.summary.contains("Marantz"))
-    #expect(schema.receiverAddress.summary.contains("Denon receivers only"))
+    #expect(schema.receiverAddress.summary.contains("Marantz"))
 }
 
 @Test func theTrackTableAppearanceDefaultsToTheTableAsItWas() throws {
