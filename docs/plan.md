@@ -5021,6 +5021,48 @@ them to Spaces by default; the owner turns those off if they clash.
       browser columns, listing the health filters (unreadable, warnings and the rest) with their
       counts; choosing one filters the tracks below.
 
+Plan, part 42d (ADR 0099, amending 0034):
+- Probe (done before this plan): each check is already a source, `.health(check)`, listed
+  through `temp.health_tracks` (ADR 0034), so the track table, search, sort, play, Get Info and
+  the status bar's problems work on it as on any source; only the sidebar's Library Health row
+  and its children reach it. Check Library Health (`library.checkHealth`) is in the File menu
+  with the other library items, in the palette and on the command line as `checkHealth`; it
+  runs the report and opens the sidebar's rows. Since 41f the window's source is saved as
+  `playback.resume.source`, a string read with `BrowserSource(text:)`, and a name that isn't a
+  source already shows the library without touching the rest of the file. The browser columns
+  are the first subview of the browser's split, at `window.browserHeight`; Show Browser hides
+  them. Settings ▸ General's Library section is the `library.` keys' box.
+- Commands: `library.checkHealth` keeps its ID, so a rebinding in the config file still holds,
+  and is titled Show Library Health: it shows the health view and runs the report again. The
+  menu item stays in File beside Watched Folders…; the palette and `music-player checkHealth`
+  come from the same entry. Settings ▸ General ▸ Library gets a Show Library Health button,
+  a `SettingsActions.showHealth` the app wires to the same command, which brings the main
+  window forward.
+- Sidebar: the Library Health row and its check rows go. While a health check shows, no
+  sidebar row is selected, so a click on Music leaves it.
+- The panel slot: the split's first subview becomes a slot that holds the browser columns or,
+  while the source has one, a source panel in their place, at the same height and divider,
+  resized and saved as the columns are. A panel is an `NSViewController` the browser names for
+  a source (`panel(for:)`); the slot shows it whether or not Show Browser is on, and the
+  columns come back as they were when another source shows. Phase 43's Stats panel is a second
+  case in `panel(for:)`.
+- The health panel: a header (Library Health, what the report is, Check Again) over a grid of
+  tiles that flows with the width, one per check in `HealthCheck` order, each with its name,
+  its count and what it finds; a check with nothing found is dimmed, the shown one is
+  highlighted. A click shows that check. Before a report the counts read "–". Showing a check
+  clears the column selections, since the hidden columns would narrow it with nothing on
+  screen saying why.
+- Saved state: a saved `health:<check>` source (the resume point's `source` or `from`) still
+  decodes. At launch the window shows the library in its place, logged; `from` keeps naming
+  the queue's source. No key changes in either file.
+- Tests: the sidebar lists no Library Health; Show Library Health shows the panel in the
+  columns' place with the report's counts, a tile's click lists its tracks and highlights it,
+  another source puts the columns back; the panel shows with Show Browser off; the divider
+  saves its height under the panel; showing a check clears the column selections; a saved
+  health source loads the library; the Settings button calls its action.
+- Order: this plan, the sidebar and the command, the slot and the panel, settings, the ADR,
+  `--snapshot` if it can show the panel, then the result.
+
 #### 42e. Get Info speed and tag writes
 
 - [ ] **42e.1 Get Info at any time.** Get Info opens at once on any track or selection,
