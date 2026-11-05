@@ -45,6 +45,9 @@ extension CommandID {
     public static let scrollDown = CommandID("view.scrollDown")
     public static let back = CommandID("go.back")
     public static let forward = CommandID("go.forward")
+    /// Steps back over the track table's selections, as Sublime Text's Undo Selection.
+    public static let undoSelection = CommandID("go.undoSelection")
+    public static let redoSelection = CommandID("go.redoSelection")
     public static let focusNextPane = CommandID("focus.nextPane")
     public static let focusPreviousPane = CommandID("focus.previousPane")
     public static let focusNextArea = CommandID("focus.nextArea")
@@ -190,6 +193,8 @@ public enum AppCommands {
             Command(.scrollDown, "Scroll Down", [.init(.down, [ctrl, opt])]),
             Command(.back, "Back", [.init("[", cmd)], links: true),
             Command(.forward, "Forward", [.init("]", cmd)], links: true),
+            Command(.undoSelection, "Undo Selection", [.init("u", cmd)]),
+            Command(.redoSelection, "Redo Selection", [.init("u", [cmd, shift])]),
             // The panes take ← and → for these themselves; everywhere else they skip tracks.
             Command(.focusNextPane, "Focus Next Pane"),
             Command(.focusPreviousPane, "Focus Previous Pane"),

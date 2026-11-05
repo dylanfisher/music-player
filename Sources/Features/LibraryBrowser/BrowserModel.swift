@@ -62,6 +62,8 @@ public final class BrowserModel {
     private var names: (applied: Int, list: [TrackName])?
     /// The sources the sidebar showed and the plays from the browser, for Back and Forward.
     private(set) var history = StepHistory(start: WindowPlace(filter: TrackFilter()))
+    /// The track table's selections, for Undo Selection and Redo Selection.
+    private(set) var selections = SelectionHistory()
     /// The shown list's selected tracks and scroll, which a step keeps with the filter.
     var listPlace: () -> (selection: Set<Int64>, scroll: WindowPlace.Scroll?) = { ([], nil) }
     /// The source a change not yet applied visits, so History records only sources that showed.
@@ -238,10 +240,12 @@ public final class BrowserModel {
     func reloadPlaylists() async throws {
         playlists = try await reader.playlists()
         let ids = Set(playlists.map(\.id))
-        history.remove { source in
+        let gone = { (source: BrowserSource?) in
             if case .playlist(let id) = source { return !ids.contains(id) }
             return false
         }
+        history.remove(gone)
+        selections.remove(gone)
         if case .playlist(let id) = pending.source, !ids.contains(id) {
             await setSource(nil)
         }
@@ -372,6 +376,18 @@ public final class BrowserModel {
     func recordPlay(_ played: PlaybackSpot, replacing replaced: PlaybackSpot) {
         history.play(played, replacing: replaced, from: place)
     }
+
+    /// Records the window as a selection step, after the track table's selection changed.
+    func recordSelection(_ cause: SelectionHistory.Cause) {
+        selections.record(place, cause: cause)
+    }
+
+    var canUndoSelection: Bool { selections.canUndo(from: place) }
+
+    /// The selection step to show for Undo Selection, nil when there's none.
+    func undoSelection() -> WindowPlace? { selections.undo(from: place) }
+
+    func redoSelection() -> WindowPlace? { selections.redo(from: place) }
 
     /// Moves to the step before, leaving the current one as the window and `playing` have it.
     /// Nil at the first step. `show` then shows the move's window.

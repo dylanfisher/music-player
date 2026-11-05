@@ -103,6 +103,27 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     #expect(ran == [.showSettings])
 }
 
+@MainActor @Test func undoAndRedoSelectionFollowForwardWithTheirChords() throws {
+    let (main, dispatcher) = try menu()
+    let view = items(main.bar).filter { $0.1 == "View" }.map(\.0)
+    let forward = try #require(
+        view.firstIndex { ($0.representedObject as? CommandID) == .forward })
+    let next = view[(forward + 1)...].filter { !$0.isHidden }.prefix(2)
+    #expect(next.map(\.title) == ["Undo Selection", "Redo Selection"])
+    #expect(next.map(\.keyEquivalent) == ["u", "u"])
+    #expect(next.map(\.keyEquivalentModifierMask) == [.command, [.command, .shift]])
+    let registry = dispatcher.bindings.registry
+    #expect(registry.command(for: KeyChord("u", .command)) == .undoSelection)
+    #expect(registry.command(for: KeyChord("u", [.command, .shift])) == .redoSelection)
+    // Rebindable as every command is.
+    let (rebound, _) = try menu([
+        CommandID.undoSelection.rawValue: ShortcutOverride(primary: .chord(KeyChord("z", .control)))
+    ])
+    let item = try #require(
+        items(rebound.bar).first { ($0.0.representedObject as? CommandID) == .undoSelection })
+    #expect(item.0.keyEquivalent == "z" && item.0.keyEquivalentModifierMask == .control)
+}
+
 @MainActor @Test func theTrackMenuRunsAndValidatesItsCommandsThroughTheDispatcher() throws {
     let (menu, dispatcher) = try menu()
     var ran: [CommandID] = []

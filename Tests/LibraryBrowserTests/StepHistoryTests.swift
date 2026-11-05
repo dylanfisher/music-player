@@ -361,3 +361,64 @@ private func standWithPlaylist() async throws -> (
     #expect(stand.model.filter.source == .timeline)
     #expect(browser.timeline.table.selectedRowIndexes == [2])
 }
+
+// MARK: Undo Selection
+
+@MainActor @Test func undoSelectionAfterShowCurrentTrackSelectsTheClickedTrack() async throws {
+    let stand = try await Stand()
+    let browser = stand.browser
+    let model = stand.model
+    #expect(!browser.canUndoSelection)
+    try await stand.play(row: 10, top: 0)
+    let playing = model.trackIDs[10]
+    let path = try #require(try await browser.selectedPaths().first)
+    browser.table.table.selectRowIndexes([20], byExtendingSelection: false)
+    let clicked = model.trackIDs[20]
+    await browser.showCurrentTrack(playingPath: path)
+    #expect(stand.selectedIDs == [playing])
+
+    #expect(browser.canUndoSelection)
+    browser.undoSelection()
+    await browser.stepping?.value
+    #expect(stand.selectedIDs == [clicked])
+    #expect(browser.canRedoSelection)
+    browser.redoSelection()
+    await browser.stepping?.value
+    #expect(stand.selectedIDs == [playing])
+    #expect(!browser.canRedoSelection)
+    // Playback is left alone.
+    #expect(stand.plays == 1)
+    #expect(stand.restores == 0)
+}
+
+@MainActor @Test func aRunOfArrowKeysIsUndoneInOneStep() async throws {
+    let stand = try await Stand()
+    let browser = stand.browser
+    browser.focusTracks()
+    browser.table.table.selectRowIndexes([5], byExtendingSelection: false)
+    for _ in 0..<3 { #expect(browser.moveSelection(.down, extending: false)) }
+    #expect(browser.moveSelection(.down, extending: true))
+    #expect(browser.table.table.selectedRowIndexes == [8, 9])
+    browser.undoSelection()
+    await browser.stepping?.value
+    #expect(browser.table.table.selectedRowIndexes == [5])
+}
+
+@MainActor @Test func undoSelectionShowsTheSourceItsStepWasIn() async throws {
+    let (stand, playlist, _, _) = try await standWithPlaylist()
+    let browser = stand.browser
+    let model = stand.model
+    let inLibrary = model.trackIDs[40]
+    browser.table.table.selectRowIndexes([40], byExtendingSelection: false)
+    await model.setSource(.playlist(playlist))
+    browser.table.table.selectRowIndexes([0], byExtendingSelection: false)
+    let inPlaylist = model.trackIDs[0]
+    browser.undoSelection()
+    await browser.stepping?.value
+    #expect(model.filter.source == nil)
+    #expect(stand.selectedIDs == [inLibrary])
+    browser.redoSelection()
+    await browser.stepping?.value
+    #expect(model.filter.source == .playlist(playlist))
+    #expect(stand.selectedIDs == [inPlaylist])
+}

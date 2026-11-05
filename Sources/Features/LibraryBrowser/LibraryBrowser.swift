@@ -107,6 +107,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     let timeline: TimelineController
     /// The timeline's load since it last showed, which Show Current Track waits for.
     private var timelineLoad: Task<Void, Never>?
+    /// What is changing the track table's selection now, for Undo Selection's steps; nil
+    /// while a step is being shown, which records nothing.
+    private var selectionCause: SelectionHistory.Cause? = .jump
     private let panes: PanesController
     private let sidebarController: SidebarController
     private let split = NSSplitView()
@@ -185,7 +188,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound })
         table = TrackTableController(
             model: model, cache: cache, layout: layout, actions: actions, thumbnails: thumbnails)
-        table.selectionChanged = { owner?.readSelectionTotals() }
+        table.selectionChanged = {
+            owner?.readSelectionTotals()
+            owner?.recordSelection()
+        }
         table.rateClicked = { id, stars in
             owner?.edit("couldn't rate the track") { try await model.rate([id], stars: stars) }
         }
@@ -655,8 +661,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     private func apply(_ change: BrowserChange) {
         if change.panes { panes.reload() }
-        table.reload(change)
-        if change.showsEverythingAgain { selectPlayingTrack() }
+        selecting(.reload) {
+            table.reload(change)
+            if change.showsEverythingAgain { selectPlayingTrack() }
+        }
         showTimelineIfItIsTheSource()
         runHealthIfShownFirst()
         readTotals(
@@ -978,7 +986,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Moves the selection of the list with the keys; false when none of them has the keys.
     public func moveSelection(_ move: RowMove, extending: Bool) -> Bool {
         switch focusedList {
-        case .tracks: table.move(move, extending: extending)
+        case .tracks: selecting(.key) { table.move(move, extending: extending) }
         case .pane(let column): panes.move(move, in: column)
         case .timeline: timeline.move(move, extending: extending)
         case nil: return false
@@ -1168,17 +1176,55 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         guard let move = back ? model.back(playing: playing) : model.forward(playing: playing)
         else { return }
         if let playback = move.playback { await restorePlayback(playback) }
-        await model.show(move.window)
+        await show(move.window)
+    }
+
+    /// Shows `place`: its source, search and column selections, then its selected tracks and
+    /// its first visible track where it was, or else the first selected row centered. The
+    /// timeline shows its source only. `visiting` makes a new source a step Back can undo.
+    func show(_ place: WindowPlace, visiting: Bool = false) async {
+        if place.filter != model.filter { await model.show(place, visiting: visiting) }
         searchField.stringValue = model.filter.search
         showSource()
         guard !showsTimeline else { return }
-        let rows = model.rows(holding: move.window.selection)
+        let rows = model.rows(holding: place.selection)
         table.select(rows)
-        if let scroll = move.window.scroll {
-            table.restore((scroll.id, scroll.offset), row: model.rows(holding: [scroll.id]).first)
+        if let scroll = place.scroll, let row = model.rows(holding: [scroll.id]).first {
+            table.restore((scroll.id, scroll.offset), row: row)
         } else if let first = rows.first {
             table.center(first)
         }
+    }
+
+    public var canUndoSelection: Bool { model.canUndoSelection }
+    public var canRedoSelection: Bool { model.selections.canRedo }
+
+    /// Undo Selection: the track table's selection before, in the window it was made in
+    /// (ADR 0091). Playback is left alone.
+    public func undoSelection() { inTurn { [weak self] in await self?.stepSelection(back: true) } }
+
+    public func redoSelection() { inTurn { [weak self] in await self?.stepSelection(back: false) } }
+
+    private func stepSelection(back: Bool) async {
+        guard let place = back ? model.undoSelection() : model.redoSelection() else { return }
+        selectionCause = nil
+        await show(place, visiting: true)
+        selectionCause = .jump
+    }
+
+    /// Records the track table's selection as a step, unless a step is being shown.
+    private func recordSelection() {
+        guard let selectionCause else { return }
+        model.recordSelection(selectionCause)
+    }
+
+    /// Runs `change`, recording the selection changes it makes as `cause`'s, unless a step is
+    /// being shown.
+    private func selecting(_ cause: SelectionHistory.Cause, _ change: () -> Void) {
+        guard selectionCause != nil else { return change() }
+        selectionCause = cause
+        change()
+        selectionCause = .jump
     }
 
     /// Runs `work` after the steps before it.
@@ -1794,8 +1840,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             searchField.stringValue = ""
             searchChanged()
             focusTracks()
-        case #selector(NSResponder.moveUp(_:)): table.move(.up, extending: false)
-        case #selector(NSResponder.moveDown(_:)): table.move(.down, extending: false)
+        case #selector(NSResponder.moveUp(_:)):
+            selecting(.key) { table.move(.up, extending: false) }
+        case #selector(NSResponder.moveDown(_:)):
+            selecting(.key) { table.move(.down, extending: false) }
         default: return false
         }
         return true

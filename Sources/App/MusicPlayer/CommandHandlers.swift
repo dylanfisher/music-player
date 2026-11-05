@@ -183,6 +183,12 @@ extension AppDelegate {
         dispatcher.handle(
             .forward, enabled: { [weak self] in self?.browser?.canGoForward == true },
             run: { [weak self] in self?.browser?.forward() })
+        dispatcher.handle(
+            .undoSelection, enabled: { [weak self] in self?.browser?.canUndoSelection == true },
+            run: { [weak self] in self?.browser?.undoSelection() })
+        dispatcher.handle(
+            .redoSelection, enabled: { [weak self] in self?.browser?.canRedoSelection == true },
+            run: { [weak self] in self?.browser?.redoSelection() })
         dispatcher.handle(.focusNextPane, enabled: hasWindow) { [weak self] in
             self?.browser?.focusPane(forward: true)
         }
