@@ -4515,11 +4515,102 @@ too, so the gate doesn't see the rest; run alone, `aRefreshKeepsTheSelectedRowsB
 `main` (a sort reports `.sorted`, the test expects `.user`). The new browser tests pass when
 run by name. Not checked in the running app with a real output device.
 
+### 41. Owner feedback, 2026-11-04 night
+
+The owner's feedback from trying phase 40. The screenshots weren't kept; what they showed is
+written into each item. Part 41a runs on main first. Parts 41b, 41c and 41d then run in parallel
+worktrees and rebase onto main in order b, c, d. Parts 41e and 41f run after them, also in
+parallel. The owner's answers: Swinsian's Library Folder (copy added tracks, keep the folder
+organized, Move and Consolidate) is not built, since it would move and rename music files (see
+Later). Play state is restored paused, on every Mac. Sonos is the speaker family the output
+names come from. Soft undo steps over the selection and the view it was in.
+
+#### 41a. Crash and sidebar
+
+- [x] **41a.1 Crash in the browser.** An arrow key in a browser column stopped the app
+      (`MusicPlayer-2026-11-04-230450.ips`, an exclusivity violation in
+      `PanesController.tableViewSelectionDidChange`).
+- [x] **41a.2 Plain All rows.** The columns' All (1234) rows aren't bold.
+- [x] **41a.3 No rename on click.** A click on a selected playlist's name in the sidebar doesn't
+      start a rename; its context menu's Rename (or Return) does.
+
+Result, part 41a: shipped 41a.1 to 41a.3. Cause of 41a.1: `routeKey` took the list's
+`TypeSelect` as `inout` and ran the key command inside that access. The command moved the
+column's selection, and the selection change reset the same `TypeSelect`, a second access while
+the first was open. Any arrow key in a column did it, not a track change. `TypeSelect` is a class
+now, so the reset doesn't overlap anything. The track table had the same shape. Test: a key
+command that moves a column, routed through the column's key handler; it stops with "Fatal
+access conflict detected" on the old code.
+
+#### 41b. Track table rows
+
+- [ ] **41b.1 Shorter compact rows.** Compact rows are 17 pt apart (34 px at 2x); Swinsian's
+      are 16 pt (32 px). Text stays centered.
+- [ ] **41b.2 Album lines across the art.** The album line runs under the Album Art column too,
+      the only line that does, so albums stand apart; with art hovered, the line stays under
+      the art.
+- [ ] **41b.3 Playing triangle.** A play triangle before the playing track's title.
+- [ ] **41b.4 Now Playing column.** An optional narrow column, empty except on the playing
+      track, which shows a play triangle.
+- [ ] **41b.5 Playing row color.** A setting for the playing track's row background.
+- [ ] **41b.6 Timeline columns.** The timeline shows the library's columns, with Played first,
+      until the owner changes the timeline's own columns.
+
+#### 41c. Navigation
+
+- [ ] **41c.1 ⌘L to where it started.** Show Playing goes to the source the playing track was
+      started from (library, playlist, timeline), even when the current source lists it too.
+- [ ] **41c.2 Soft undo.** ⌘U steps back over selection changes, as in Sublime Text, and ⌘⇧U
+      forward. Each step is the selection and the view it was in. ⌘L is a step: play a track,
+      click another, ⌘L, then ⌘U selects the clicked one again.
+
+#### 41d. Signal path, outputs and receiver
+
+- [ ] **41d.1 Wording.** Where the signal path says "not bit perfect" while streaming to a DAC,
+      it says "not guaranteed bit perfect": usually only this app plays, and then it is.
+- [ ] **41d.2 A plainer signal path.** The signal path is still hard to read. No device IDs,
+      four-character codes or sample formats in raw form (it showed `44.1 kHz 16-bit PCM →
+      ADI-2 DAC (57850288): 'lpcm' 2 ch 32-bit int @ 44.1 kHz`). Friendly names, and a more
+      graphical layout of the stages.
+- [ ] **41d.3 Sonos names.** The output menu names Sonos players and groups as the Sonos app
+      does: a group that plays on two players shows as one entry with its group name (the
+      owner's phone and Spotify show "Top Floor").
+- [ ] **41d.4 Receiver volume.** In signal mode, with a receiver connected, a volume slider
+      sets the receiver's volume.
+- [ ] **41d.5 Receiver settings.** The address is a fallback for when the search can't find the
+      receiver, and the settings say so instead of looking required. The section reads as one
+      choice: media keys control the receiver's volume while it's connected.
+
+#### 41e. Toolbar status and Settings
+
+- [ ] **41e.1 Help popover padding.** The template rows' ? popover has top and bottom padding
+      equal to its side padding.
+- [ ] **41e.2 Outlined status items.** While the toolbar's customize sheet is open, each status
+      item has an outline, so an empty Custom Status item can be seen and removed.
+- [ ] **41e.3 One item fills the row.** In flexible width, a status item alone on its row (the
+      Now Playing bar, or any other) stretches to the full width.
+- [ ] **41e.4 Watched folder options.** Swinsian's two options, if we lack them: remove tracks
+      from the library when they disappear from watched folders, and rescan tags when files in
+      watched folders are modified.
+- [ ] **41e.5 Appearance page.** The Appearance pane has grown to 20 rows in one box. Group it
+      into sections a reader can scan.
+
+#### 41f. Play state across quits
+
+- [ ] **41f.1 Resume.** Quitting and opening the app again puts back the playing track and how
+      far it had played (paused), the source it was playing from, the selected item, and the
+      track list's scroll. Kept in the config so it syncs to other Macs, in as few keys as it
+      takes.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
 
 - **Mini player:** a small window with art, transport and seek.
+- **Library folder:** Swinsian's copy of newly added tracks into one folder, kept organized by
+  album artist when tags change, with Move and Consolidate Library. It moves and renames music
+  files, which AGENTS.md allows only `TagWriter` and Move to Trash to touch, so it needs an ADR
+  and the owner's go-ahead first. Watched folders cover adding music meanwhile.
 - **Library quality audit:** a background pass that finds upsampled "hi-res" files, lossy files
   transcoded to FLAC, clipping, true peak and a dynamic range score, stored in the index and
   usable in smart playlists. The same pass could draw a waveform for the seek bar.
