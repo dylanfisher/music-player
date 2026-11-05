@@ -4439,7 +4439,7 @@ The slots with a track playing were checked by tests, not on screen. `./scripts/
 
 #### 40d. Undo and redo plays
 
-- [ ] **40d.1 One history for plays and places.** ⌘[ and ⌘] (Back and Forward) step through
+- [x] **40d.1 One history for plays and places.** ⌘[ and ⌘] (Back and Forward) step through
       one history whose steps are the sources visited and the tracks played, each kept with
       the window's state at that moment: source, browse and search, selection and scroll. Back
       over a play puts the previous track back, at the position it had when it was replaced,
@@ -4492,6 +4492,25 @@ Plan, part 40d (ADR 0089):
   Forward; `canGoBack` and `canGoForward` follow plays too.
 - Order: the engine's spot and restore, the history and the browser together (one change,
   since `SourceHistory` goes), the app's wiring, then the ADR and the result.
+
+Result, part 40d: shipped 40d.1 (ADR 0089). ⌘[ and ⌘] step through one history of sources
+shown and plays from the browser: a double-click or Return in the track table or the timeline,
+Play, and `music-player play`. Track ends, Next, Previous, the media keys and queue panel jumps
+fold into the play that started the queue, so Back over a play puts back whatever was playing
+when it started, at the place it had reached, playing or paused as it was, and one ⌘[ undoes
+an accidental play however far it had advanced. Back over the first play of a session stops.
+Each step keeps the window as it was when last left (source, search, column selections,
+selected tracks, first visible track), so Back over a play shows the window as it was just
+before it, and a source shown again returns to where the user got to in it; the timeline keeps
+its source only. Forward plays an undone play again from where Back left it. A new step after
+Back drops the steps ahead. `PlaybackEngine.restore` loads the track at its place without
+closing the device; with shuffle on, the rest of the restored queue is shuffled again. The
+history is in memory only. Menu titles are unchanged; their enabling follows the merged
+history. `./scripts/check` passes. Found on the way, not fixed: the LibraryBrowserTests process
+exits with status 0 partway through a full run (about 70 of its 198 tests report), on `main`
+too, so the gate doesn't see the rest; run alone, `aRefreshKeepsTheSelectedRowsByID` fails on
+`main` (a sort reports `.sorted`, the test expects `.user`). The new browser tests pass when
+run by name. Not checked in the running app with a real output device.
 
 ## Later
 

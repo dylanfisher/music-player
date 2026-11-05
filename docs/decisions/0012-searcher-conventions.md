@@ -107,7 +107,7 @@ Kept from Searcher, the same job on the same key:
 | Toggle sidebar / focus sidebar | ⌃⌘S / ⌘0 |
 | Toggle status bar | ⌘/ |
 | Edit Tags… (Searcher's Get Info) / Reveal in Finder / Copy Path | ⌘I / ⇧⌘R (as Music and Swinsian), alternate ⌥⌘R / ⌥⌘C |
-| Back / forward through sidebar sources | ⌘[ / ⌘] |
+| Back / forward through sidebar sources and plays | ⌘[ / ⌘] (plays since 0089) |
 | Settings | ⌘, (a command since 0088, so ⌘K lists it) |
 | Open Config File, Copy Default Config | no chord; app menu and palette |
 
