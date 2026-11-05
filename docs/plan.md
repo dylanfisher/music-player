@@ -4558,9 +4558,9 @@ access conflict detected" on the old code.
 
 #### 41c. Navigation
 
-- [ ] **41c.1 ⌘L to where it started.** Show Playing goes to the source the playing track was
+- [x] **41c.1 ⌘L to where it started.** Show Playing goes to the source the playing track was
       started from (library, playlist, timeline), even when the current source lists it too.
-- [ ] **41c.2 Soft undo.** ⌘U steps back over selection changes, as in Sublime Text, and ⌘⇧U
+- [x] **41c.2 Soft undo.** ⌘U steps back over selection changes, as in Sublime Text, and ⌘⇧U
       forward. Each step is the selection and the view it was in. ⌘L is a step: play a track,
       click another, ⌘L, then ⌘U selects the clicked one again.
 
@@ -4607,6 +4607,28 @@ Plan, part 41c (ADR 0091):
   from another source shows that source again, undo leaves playback alone; the commands' chords
   and menu places.
 - Order: this plan, 41c.1, 41c.2 with its commands, then the ADR and the result.
+
+Result, part 41c: shipped 41c.1 and 41c.2 (ADR 0091). A play's step keeps the filter it was
+started from, and ⌘L goes there: the row in place when the window shows that source and lists
+the track, else the source with the play's search and column selections, else the source alone,
+else the library. A deleted playlist, a track taken out of it, or no recorded play ends at the
+library; a play from the timeline goes back to the timeline's newest loaded play of the track.
+Back over a play makes ⌘L follow the play before. Undo Selection (⌘U) and Redo Selection (⌘⇧U)
+are in the View menu after Back and Forward, rebindable like every command, with a row in ADR
+0012's table. A step is the track table's selection with its `WindowPlace`, restored through
+the one `LibraryBrowser.show(_:)` Back now uses too, which part 41f can call. Arrow and
+Shift-arrow runs in one source are one step; a reload's selection gives way to the next change,
+so ⌘L into another source is one step; empty selections and the timeline's aren't steps; 100
+steps, in memory; a new selection after undo drops redo; playback is never touched. Checked by
+tests only, nothing on screen: the owner's example (play, click, ⌘L, ⌘U, ⌘⇧U), a key run, a
+step in another source, ⌘L from a playlist, the library, a search and the timeline, and the
+fallbacks. For the owner: ⌘L after starting a track in a playlist and moving to the library and
+back, and ⌘U after a few clicks, a held arrow key and a source change. `./scripts/check` passes
+but for `theGlassHeadersAreFrosted`, which reads the screen and fails the same on `main` here.
+The LibraryBrowserTests process exits partway in a full run, as 40d found, so its tests were
+also run by name in chunks of 15: all pass but `aRefreshKeepsTheSelectedRowsByID` (40d's),
+`aSavedCheckRunsTheReportAndListsItsTracks` and `theArtHoverDrawsOnTopAndEndsAtItsAlbumsLastRow`,
+which fail the same on `main` in this environment.
 
 #### 41d. Signal path, outputs and receiver
 
