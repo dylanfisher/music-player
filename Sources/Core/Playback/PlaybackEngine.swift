@@ -420,6 +420,29 @@ public actor PlaybackEngine {
         if endsWindow { releaseHeld(skipping: false) }
     }
 
+    /// The queue, the current entry, how far into it, and whether it plays, as `restore` takes
+    /// them.
+    public func spot() -> PlaybackSpot {
+        PlaybackSpot(
+            queue: state.queue, index: state.currentIndex,
+            seconds: currentItem == nil ? 0 : position() ?? 0, status: state.status)
+    }
+
+    /// Replaces the queue with `spot`'s and loads its entry at its seconds, playing or paused as
+    /// it was. A stopped spot stops on its entry. A load replaces what the output plays, so the
+    /// device stays open, as in `play(starting:completing:)`.
+    public func restore(_ spot: PlaybackSpot) {
+        guard let index = spot.index, spot.status != .stopped else {
+            setQueue(spot.queue, first: spot.index ?? 0)
+            return
+        }
+        forgetLoaded()
+        replaceQueue(spot.queue, first: index)
+        load(cursor, startSeconds: spot.seconds, playing: spot.status == .playing)
+        state.status = spot.status
+        publish(spot.status == .playing ? .resumed : .paused)
+    }
+
     /// Linear amplitude from 0 to 1, for outputs that have a volume.
     public func setVolume(_ gain: Double) throws {
         guard output.hasVolume else { throw PlaybackError.noVolume }

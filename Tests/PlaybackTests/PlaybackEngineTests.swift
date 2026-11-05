@@ -212,6 +212,45 @@ private func playing(_ urls: [URL], _ output: FakeOutput) async -> PlaybackEngin
     #expect(await engine.state.device == .connected)
 }
 
+@Test func aSpotReadsThePlaceAndRestoringItLoadsThereWithoutStopping() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    await engine.handle(.trackStarted(1, info))
+    await engine.next()
+    output.setPosition(OutputPosition(item: 3, seconds: 42))
+    let spot = await engine.spot()
+    #expect(spot == PlaybackSpot(queue: urls, index: 1, seconds: 42, status: .playing))
+
+    await engine.setQueue([urls[2]])
+    await engine.play()
+    _ = output.takeCalls()
+    await engine.restore(spot)
+    // The load replaces what plays, so the device isn't stopped in between.
+    #expect(
+        output.takeCalls() == [
+            .load(6, urls[1], startSeconds: 42, playing: true), .setNext(7, urls[2]),
+        ])
+    #expect(await engine.state.queue == urls)
+    #expect(await engine.state.currentIndex == 1)
+    #expect(await engine.state.status == .playing)
+}
+
+@Test func aPausedSpotRestoresPausedAndAStoppedOneStops() async {
+    let output = FakeOutput()
+    let engine = await playing(urls, output)
+    _ = output.takeCalls()
+    await engine.restore(PlaybackSpot(queue: urls, index: 2, seconds: 7, status: .paused))
+    #expect(output.takeCalls() == [.load(3, urls[2], startSeconds: 7, playing: false)])
+    #expect(await engine.state.status == .paused)
+
+    await engine.restore(PlaybackSpot(queue: [], index: nil, seconds: 0, status: .stopped))
+    #expect(output.takeCalls() == [.stop])
+    #expect(await engine.state.status == .stopped)
+    #expect(await engine.state.queue.isEmpty)
+    #expect(
+        await engine.spot() == PlaybackSpot(queue: [], index: nil, seconds: 0, status: .stopped))
+}
+
 @Test func repeatOneHandsOverTheSameTrackAgain() async {
     let output = FakeOutput()
     let engine = await playing(urls, output)
