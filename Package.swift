@@ -163,7 +163,9 @@ let package = Package(
         ),
         .target(
             name: "TagEditor",
-            dependencies: ["Artwork", "Library", "Log", "Metadata", "Settings", "TagWriter"],
+            dependencies: [
+                "Artwork", "DisplayText", "Library", "Log", "Metadata", "Settings", "TagWriter",
+            ],
             path: "Sources/Features/TagEditor",
             swiftSettings: strictSwift
         ),

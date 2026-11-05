@@ -9,3 +9,5 @@ PaletteController.control | NSControlTextEditingDelegate
 RuleEditorSheet.controlTextDidChange | NSControlTextEditingDelegate
 SettingsWindowController.toolbarSelectableItemIdentifiers | NSToolbarDelegate
 TagEditorWindow.controlTextDidChange | NSControlTextEditingDelegate
+TagEditorWindow.textDidChange | NSTextDelegate
+TagEditorWindow.tabView | NSTabViewDelegate

@@ -1,13 +1,20 @@
 import AppKit
 import Artwork
+import DisplayText
+import Metadata
 import TagWriter
+import UniformTypeIdentifiers
 
-/// An info window: a field per tag, the art with Replace and Remove beside it, and Cancel and
-/// Save. It opens at once, before its files are read, saying so, and shows the fields once
-/// `load` hands it the tracks. Fields where the tracks differ show "Mixed" until typed in. It
-/// edits a `TagEditorModel` and hands back the checked edit. Several can be open at once.
+/// An info window: tabs of fields as `TagEditorTab` lays them out, the art with Replace and
+/// Remove, the file's format, and Cancel and Save. It opens at once, before its files are read,
+/// saying so, and shows the fields once `load` hands it the tracks. Fields where the tracks
+/// differ show "Mixed" until typed in, and a field typed differently from what it showed has a
+/// dot by its label. It edits a `TagEditorModel` and hands back the checked edit. Several can
+/// be open at once.
 @MainActor
-public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
+public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDelegate,
+    NSWindowDelegate
+{
     /// The files Get Info was asked for, in the selection's order.
     public let paths: [String]
     /// Nil until the files are read.
@@ -21,20 +28,35 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSWindowDeleg
     var replaceArtwork: () -> Void = {}
     var removeArtwork: () -> Void = {}
 
-    private var fields: [TagEditField: NSTextField] = [:]
+    /// A field can show on more than one tab, as the title does on Info and Sorting.
+    private var fields: [TagEditField: [NSTextField]] = [:]
+    private var areas: [TagEditField: NSTextView] = [:]
+    /// Shows "Mixed" in an empty text area, which has no placeholder of its own.
+    private var areaPlaceholders: [TagEditField: NSTextField] = [:]
+    private var labels: [TagEditField: [NSTextField]] = [:]
     private let compilationBox = NSButton(
         checkboxWithTitle: TagEditField.compilation.title, target: nil, action: nil)
+    private let tabs = NSTabView()
     private let artView = NSImageView()
+    private let largeArtView = NSImageView()
     private let artNote = NSTextField(labelWithString: "")
-    private let removeButton = NSButton(title: "Remove", target: nil, action: nil)
+    private let artDetails = NSTextField(labelWithString: "")
+    private var removeButtons: [NSButton] = []
+    private var fileValues: [FileRow: NSTextField] = [:]
     private let problemLabel = NSTextField(labelWithString: "")
     /// Says, as soon as such a field is edited, that saving keeps one of its several values.
     private let collapseLabel = NSTextField(wrappingLabelWithString: "")
     private var isClosed = false
 
-    static let width = 560.0
+    static let width = 660.0
     static let artPoints = 120.0
-    private static let numberWidth = 52.0
+    static let largeArtPoints = 300.0
+    /// The tab view's height, which the tallest tab fills.
+    private static let tabsHeight = 440.0
+    private static let numberWidth = 44.0
+    private static let shortWidth = 80.0
+    /// The tab last chosen, which the next window opens on.
+    private static var lastTab = TagEditorTab.info
     /// Where the next window opens, so each one opens down and to the right of the last.
     private static var nextTopLeft: NSPoint?
 
@@ -80,10 +102,11 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSWindowDeleg
             return
         }
         self.model = model
-        window.contentView = makeContent(model)
+        window.contentView = makeContent()
         if let content = window.contentView { window.setContentSize(content.fittingSize) }
         showValues()
-        window.makeFirstResponder(fields[.title])
+        tabs.selectTabViewItem(withIdentifier: Self.lastTab.rawValue)
+        focusFirstField()
     }
 
     func replaceArt(_ image: Data, mimeType: String) {
@@ -110,6 +133,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSWindowDeleg
         closed()
     }
 
+    // MARK: Layout
+
     private func makeReading() -> NSView {
         let spinner = NSProgressIndicator()
         spinner.style = .spinning
@@ -134,40 +159,18 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSWindowDeleg
         return label
     }
 
-    private func makeContent(_ model: TagEditorModel) -> NSView {
+    private func makeContent() -> NSView {
         let heading = headingLabel()
-        let textFields: [TagEditField] = [
-            .title, .artist, .album, .albumArtist, .genre, .date, .composer, .comment,
-        ]
-        var rows: [[NSView]] = textFields.map { [label($0.title), field($0)] }
-        let numbers = NSStackView(views: [
-            field(.trackNumber, width: Self.numberWidth), label(TagEditField.trackTotal.title),
-            field(.trackTotal, width: Self.numberWidth), label(TagEditField.discNumber.title),
-            field(.discNumber, width: Self.numberWidth), label(TagEditField.discTotal.title),
-            field(.discTotal, width: Self.numberWidth),
-        ])
-        rows.append([label(TagEditField.trackNumber.title), numbers])
-        compilationBox.allowsMixedState = true
-        compilationBox.target = self
-        compilationBox.action = #selector(compilationChanged)
-        rows.append([NSGridCell.emptyContentView, compilationBox])
-        let grid = NSGridView(views: rows)
-        grid.column(at: 0).xPlacement = .trailing
-        grid.rowSpacing = 6
-
-        artView.imageScaling = .scaleProportionallyUpOrDown
-        artView.imageFrameStyle = .grayBezel
-        artView.widthAnchor.constraint(equalToConstant: Self.artPoints).isActive = true
-        artView.heightAnchor.constraint(equalToConstant: Self.artPoints).isActive = true
-        artNote.textColor = .secondaryLabelColor
-        let replace = NSButton(title: "Replace…", target: self, action: #selector(replaceClicked))
-        removeButton.target = self
-        removeButton.action = #selector(removeClicked)
-        let artButtons = NSStackView(views: [artNote, replace, removeButton])
-        artButtons.orientation = .vertical
-        artButtons.alignment = .leading
-        let artRow = NSStackView(views: [artView, artButtons])
-        artRow.alignment = .top
+        for tab in TagEditorTab.allCases {
+            let item = NSTabViewItem(identifier: tab.rawValue)
+            item.label = tab.title
+            item.view = tabView(tab)
+            tabs.addTabViewItem(item)
+        }
+        // After the tabs are added, since adding the first selects it, which isn't a choice.
+        tabs.delegate = self
+        tabs.translatesAutoresizingMaskIntoConstraints = false
+        tabs.heightAnchor.constraint(equalToConstant: Self.tabsHeight).isActive = true
 
         problemLabel.textColor = .systemRed
         problemLabel.lineBreakMode = .byWordWrapping
@@ -181,12 +184,12 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
         collapseLabel.textColor = .systemOrange
         collapseLabel.isHidden = true
-        let stack = NSStackView(views: [heading, grid, artRow, collapseLabel, buttons])
+        let stack = NSStackView(views: [heading, tabs, collapseLabel, buttons])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 14
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-        for view in [heading, collapseLabel, buttons] {
+        stack.spacing = 12
+        stack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 20, right: 20)
+        for view in [heading, tabs, collapseLabel, buttons] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
         }
@@ -194,73 +197,342 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSWindowDeleg
         return stack
     }
 
-    private func label(_ text: String) -> NSTextField { NSTextField(labelWithString: text) }
+    /// A tab's view: its rows in a grid of a label column, a field column and, for a second
+    /// field, a label and a short field at the right, pinned to the tab's top.
+    private func tabView(_ tab: TagEditorTab) -> NSView {
+        let content: NSView =
+            switch tab {
+            case .artwork: artworkView()
+            case .file: fileView()
+            case .lyrics: areaView(.lyrics)
+            default: grid(tab.rows)
+            }
+        let container = NSView()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(content)
+        let inset = 16.0
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: container.topAnchor, constant: inset),
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: inset),
+            content.trailingAnchor.constraint(
+                equalTo: container.trailingAnchor, constant: -inset),
+            content.bottomAnchor.constraint(
+                lessThanOrEqualTo: container.bottomAnchor, constant: -inset),
+        ])
+        if tab == .lyrics {
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -inset)
+                .isActive = true
+        }
+        return container
+    }
 
-    private func field(_ field: TagEditField, width: Double? = nil) -> NSTextField {
+    private func grid(_ rows: [TagEditorRow]) -> NSGridView {
+        let empty = NSGridCell.emptyContentView
+        var cells: [[NSView]] = []
+        var spans: [Int] = []
+        var gaps: Set<Int> = []
+        for row in rows {
+            switch row {
+            case .wide(let field):
+                cells.append([label(field), self.field(field), empty, empty])
+                spans.append(cells.count - 1)
+            case .pair(let wide, let short):
+                cells.append([
+                    label(wide), field(wide), label(short),
+                    field(short, minimumWidth: Self.shortWidth),
+                ])
+            case .numbers(let wide, let number, let total):
+                let numbers = NSStackView(views: [
+                    field(number, width: Self.numberWidth), label(total),
+                    field(total, width: Self.numberWidth),
+                ])
+                cells.append([label(wide), field(wide), label(number), numbers])
+            case .commentAndArt:
+                artNote.textColor = .secondaryLabelColor
+                artNote.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+                let art = NSStackView(views: [artView, artNote, artButtons(size: .small)])
+                art.orientation = .vertical
+                art.alignment = .centerX
+                art.spacing = 4
+                let area = areaView(.comment)
+                area.heightAnchor.constraint(equalToConstant: Self.artPoints + 48).isActive = true
+                let row = NSStackView(views: [area, art])
+                row.alignment = .top
+                cells.append([label(.comment), row, empty, empty])
+                spans.append(cells.count - 1)
+            case .flag:
+                compilationBox.allowsMixedState = true
+                compilationBox.target = self
+                compilationBox.action = #selector(compilationChanged)
+                cells.append([empty, compilationBox, empty, empty])
+                spans.append(cells.count - 1)
+            case .area(let field):
+                cells.append([label(field), areaView(field), empty, empty])
+                spans.append(cells.count - 1)
+            case .gap:
+                gaps.insert(cells.count)
+            }
+        }
+        let grid = NSGridView(views: cells)
+        grid.rowSpacing = 6
+        grid.column(at: 0).xPlacement = .trailing
+        grid.column(at: 2).xPlacement = .trailing
+        grid.column(at: 1).xPlacement = .fill
+        // A short field takes the width of the number and its total below or above it.
+        grid.column(at: 3).xPlacement = .fill
+        for index in spans {
+            grid.row(at: index).mergeCells(in: NSRange(location: 1, length: 3))
+        }
+        for index in gaps where index < grid.numberOfRows {
+            grid.row(at: index).topPadding = 10
+        }
+        for index in 0..<grid.numberOfRows {
+            grid.row(at: index).yPlacement = .center
+        }
+        if let comment = rows.firstIndex(of: .commentAndArt) {
+            grid.row(at: comment).yPlacement = .top
+        }
+        // The labels and the number pairs keep their own widths, so the fields take the rest of
+        // the tab, not the label column.
+        for (column, merged) in [(0, false), (2, true), (3, true)] {
+            let widths = (0..<grid.numberOfRows).compactMap { row -> CGFloat? in
+                guard !(merged && spans.contains(row)) else { return nil }
+                return grid.cell(atColumnIndex: column, rowIndex: row).contentView?.fittingSize
+                    .width
+            }
+            grid.column(at: column).width = max(
+                widths.max() ?? 0, column == 3 ? Self.shortWidth : 0)
+        }
+        return grid
+    }
+
+    private func label(_ field: TagEditField) -> NSTextField {
+        let view = NSTextField(labelWithString: "")
+        // A label shows whole; the fields give up the width.
+        view.setContentCompressionResistancePriority(.required, for: .horizontal)
+        view.setContentHuggingPriority(.required, for: .horizontal)
+        labels[field, default: []].append(view)
+        showLabel(view, field, edited: false)
+        return view
+    }
+
+    /// The label with a dot before it when the field is edited. The dot is there, clear,
+    /// otherwise, so the label doesn't move.
+    private func showLabel(_ view: NSTextField, _ field: TagEditField, edited: Bool) {
+        let text = NSMutableAttributedString(
+            string: "● ",
+            attributes: [
+                .foregroundColor: edited ? NSColor.controlAccentColor : NSColor.clear,
+                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+            ])
+        text.append(
+            NSAttributedString(
+                string: field.title, attributes: [.font: NSFont.systemFont(ofSize: 0)]))
+        view.attributedStringValue = text
+    }
+
+    private func field(
+        _ field: TagEditField, width: Double? = nil, minimumWidth: Double = 160
+    ) -> NSTextField {
         let view = NSTextField()
         view.delegate = self
         view.lineBreakMode = .byTruncatingTail
+        view.cell?.usesSingleLineMode = true
+        if field.numberProperty != nil { view.alignment = .right }
         if let width {
-            view.alignment = .right
             view.widthAnchor.constraint(equalToConstant: width).isActive = true
         } else {
-            view.widthAnchor.constraint(greaterThanOrEqualToConstant: 380).isActive = true
+            view.widthAnchor.constraint(greaterThanOrEqualToConstant: minimumWidth).isActive = true
         }
-        fields[field] = view
+        fields[field, default: []].append(view)
         return view
     }
+
+    /// A text area of several lines, which Return breaks and Tab leaves.
+    private func areaView(_ field: TagEditField) -> NSScrollView {
+        let scroll = NSTextView.scrollableTextView()
+        scroll.borderType = .bezelBorder
+        scroll.hasVerticalScroller = true
+        let text = scroll.documentView as! NSTextView
+        text.delegate = self
+        text.isRichText = false
+        text.allowsUndo = true
+        text.font = .systemFont(ofSize: NSFont.systemFontSize)
+        text.textContainerInset = NSSize(width: 2, height: 4)
+        text.isAutomaticQuoteSubstitutionEnabled = false
+        text.isAutomaticDashSubstitutionEnabled = false
+        text.isAutomaticTextReplacementEnabled = false
+        let placeholder = NSTextField(labelWithString: mixedPlaceholder)
+        placeholder.textColor = .placeholderTextColor
+        placeholder.frame.origin = NSPoint(x: 6, y: 4)
+        placeholder.sizeToFit()
+        placeholder.isHidden = true
+        text.addSubview(placeholder)
+        areas[field] = text
+        areaPlaceholders[field] = placeholder
+        scroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
+        return scroll
+    }
+
+    private func artButtons(size: NSControl.ControlSize) -> NSStackView {
+        let replace = NSButton(title: "Replace…", target: self, action: #selector(replaceClicked))
+        let remove = NSButton(title: "Remove", target: self, action: #selector(removeClicked))
+        for button in [replace, remove] {
+            button.controlSize = size
+            button.font = .systemFont(ofSize: NSFont.systemFontSize(for: size))
+        }
+        removeButtons.append(remove)
+        return NSStackView(views: [replace, remove])
+    }
+
+    private func artworkView() -> NSView {
+        for (view, points) in [(artView, Self.artPoints), (largeArtView, Self.largeArtPoints)] {
+            view.imageScaling = .scaleProportionallyUpOrDown
+            view.imageFrameStyle = .grayBezel
+            view.widthAnchor.constraint(equalToConstant: points).isActive = true
+            view.heightAnchor.constraint(equalToConstant: points).isActive = true
+        }
+        artDetails.textColor = .secondaryLabelColor
+        artDetails.isSelectable = true
+        let stack = NSStackView(views: [largeArtView, artDetails, artButtons(size: .regular)])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 10
+        return stack
+    }
+
+    private func fileView() -> NSView {
+        let rows = FileRow.allCases.map { row -> [NSView] in
+            let title = NSTextField(labelWithString: row.title)
+            title.textColor = .secondaryLabelColor
+            let value = NSTextField(labelWithString: "")
+            value.isSelectable = true
+            value.lineBreakMode = .byTruncatingMiddle
+            value.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            fileValues[row] = value
+            return [title, value]
+        }
+        let grid = NSGridView(views: rows)
+        grid.rowSpacing = 6
+        grid.column(at: 0).xPlacement = .trailing
+        return grid
+    }
+
+    private func focusFirstField() {
+        let tab = TagEditorTab(rawValue: tabs.selectedTabViewItem?.identifier as? String ?? "")
+        guard let first = tab?.rows.flatMap(\.fields).first else { return }
+        if let area = areas[first] {
+            window.makeFirstResponder(area)
+        } else if let view = fields[first]?.last {
+            window.makeFirstResponder(view)
+        }
+    }
+
+    // MARK: Values
 
     /// Puts the model's values in the fields the user hasn't typed in, and the art.
     private func showValues() {
         guard let model else { return }
-        for (field, view) in fields where !model.isTyped(field) {
-            view.stringValue = model.text(field)
-            view.placeholderString = model.isMixed(field) ? mixedPlaceholder : nil
+        for (field, views) in fields where !model.isTyped(field) {
+            for view in views {
+                view.stringValue = model.text(field)
+                view.placeholderString = model.isMixed(field) ? mixedPlaceholder : nil
+            }
         }
+        for (field, view) in areas where !model.isTyped(field) {
+            view.string = model.text(field)
+        }
+        showAreaPlaceholders()
         if !model.isTyped(.compilation) {
             compilationBox.state =
                 model.isMixed(.compilation)
                 ? .mixed : model.text(.compilation) == "1" ? .on : .off
         }
         showArt()
-        showCollapse()
+        showFile()
+        showEdited()
+    }
+
+    private func showAreaPlaceholders() {
+        guard let model else { return }
+        for (field, placeholder) in areaPlaceholders {
+            placeholder.isHidden = !(model.isMixed(field) && areas[field]?.string.isEmpty == true)
+        }
+    }
+
+    private func showEdited() {
+        guard let model else { return }
+        for (field, views) in labels {
+            for view in views { showLabel(view, field, edited: model.isEdited(field)) }
+        }
+        let note = model.collapseNote
+        collapseLabel.stringValue = note ?? ""
+        collapseLabel.isHidden = note == nil
     }
 
     private func showArt() {
         guard let model else { return }
+        let art = model.shownArt
         // A Retina screen draws two pixels a point.
-        artView.image = model.shownArt
-            .flatMap { thumbnail(of: $0, maxPixelSize: Int(Self.artPoints) * 2) }
-            .map { NSImage(cgImage: $0, size: .zero) }
+        for (view, points) in [(artView, Self.artPoints), (largeArtView, Self.largeArtPoints)] {
+            view.image =
+                art
+                .flatMap { thumbnail(of: $0, maxPixelSize: Int(points) * 2) }
+                .map { NSImage(cgImage: $0, size: .zero) }
+        }
         artNote.stringValue =
             switch model.art {
             case .replaced: "New artwork"
             case .removed: "Artwork removed"
             case .unchanged:
-                model.isArtMixed ? mixedPlaceholder : model.shownArt == nil ? "No artwork" : ""
+                model.isArtMixed ? mixedPlaceholder : art == nil ? "No artwork" : ""
             }
-        removeButton.isEnabled = model.canRemoveArt
+        artDetails.stringValue =
+            art.map(imageDescription)
+            ?? (artNote.stringValue.isEmpty ? "No artwork" : artNote.stringValue)
+        for button in removeButtons { button.isEnabled = model.canRemoveArt }
     }
+
+    private func showFile() {
+        guard let model else { return }
+        for row in FileRow.allCases {
+            let values = Set(model.tracks.map { row.text($0) })
+            fileValues[row]?.stringValue =
+                row == .size
+                ? FileRow.sizeText(model.tracks.compactMap(\.file?.sizeBytes).reduce(0, +))
+                : values.count == 1 ? values.first! : mixedPlaceholder
+        }
+    }
+
+    // MARK: Editing
 
     public func controlTextDidChange(_ notification: Notification) {
         guard let view = notification.object as? NSTextField,
-            let field = fields.first(where: { $0.value === view })?.key
+            let field = fields.first(where: { $0.value.contains { $0 === view } })?.key
         else { return }
         model?.set(field, view.stringValue)
-        showCollapse()
+        // The same field on another tab shows what was typed.
+        for other in fields[field] ?? [] where other !== view {
+            other.stringValue = view.stringValue
+            other.placeholderString = nil
+        }
+        showEdited()
     }
 
-    private func showCollapse() {
-        let note = model?.collapseNote
-        collapseLabel.stringValue = note ?? ""
-        collapseLabel.isHidden = note == nil
+    public func textDidChange(_ notification: Notification) {
+        guard let view = notification.object as? NSTextView,
+            let field = areas.first(where: { $0.value === view })?.key
+        else { return }
+        model?.set(field, view.string)
+        showAreaPlaceholders()
+        showEdited()
     }
 
     @objc private func compilationChanged() {
         // The mixed state is only where it starts; a click sets the flag for every track.
         if compilationBox.state == .mixed { compilationBox.state = .on }
         model?.set(.compilation, compilationBox.state == .on ? "1" : "")
-        showCollapse()
+        showEdited()
     }
 
     @objc private func replaceClicked() { replaceArtwork() }
@@ -276,4 +548,32 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSWindowDeleg
             NSSound.beep()
         }
     }
+}
+
+extension TagEditorWindow: NSTabViewDelegate {
+    public func tabView(_ tabView: NSTabView, didSelect item: NSTabViewItem?) {
+        guard let id = item?.identifier as? String, let tab = TagEditorTab(rawValue: id) else {
+            return
+        }
+        Self.lastTab = tab
+    }
+}
+
+/// "JPEG, 700 × 700, 126 KB": the image's type, pixels and size.
+private func imageDescription(_ data: Data) -> String {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+        return FileRow.sizeText(data.count)
+    }
+    var parts: [String] = []
+    if let type = CGImageSourceGetType(source).flatMap({ UTType($0 as String) }) {
+        parts.append(type.preferredFilenameExtension?.uppercased() ?? type.identifier)
+    }
+    if let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+        let width = properties[kCGImagePropertyPixelWidth] as? Int,
+        let height = properties[kCGImagePropertyPixelHeight] as? Int
+    {
+        parts.append("\(width) × \(height)")
+    }
+    parts.append(FileRow.sizeText(data.count))
+    return parts.joined(separator: ", ")
 }
