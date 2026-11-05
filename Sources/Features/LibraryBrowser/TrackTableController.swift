@@ -394,22 +394,38 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// Marks `rowView` if it plays, gives it its line, and keeps the art column plain.
     private func decorate(_ rowView: MarkedRowView, row: Int) {
         rowView.isMarked = isPlaying(row)
-        rowView.bottomLine = line(below: row)
+        setLines(rowView, row: row)
         rowView.columnLines = appearance?.columnLines == true ? appearance?.rowLine : nil
         rowView.plainColumn = columnIdentifier(.art)
         // The row above may have been given its line before this row's page was read.
         guard row > 0,
             let above = table.rowView(atRow: row - 1, makeIfNecessary: false) as? MarkedRowView
         else { return }
-        above.bottomLine = line(below: row - 1)
+        setLines(above, row: row - 1)
+    }
+
+    /// Gives `rowView` its line, and its art cell the album line, which alone crosses the art.
+    private func setLines(_ rowView: MarkedRowView, row: Int) {
+        rowView.bottomLine = line(below: row)
+        // A row view still being made has no cells yet; `fill` gives its art cell the line.
+        let art = table.column(withIdentifier: columnIdentifier(.art))
+        guard art >= 0, art < rowView.numberOfColumns,
+            let cell = rowView.view(atColumn: art) as? AlbumArtCell
+        else { return }
+        cell.albumLine = albumLine(below: row)
     }
 
     /// The line under `row`: the album line where its album ends, else the row line, if the
     /// appearance has either.
     func line(below row: Int) -> NSColor? {
-        guard let appearance else { return nil }
-        if appearance.albumLines, endsAlbum(row) { return appearance.albumLine }
-        return appearance.rowLines ? appearance.rowLine : nil
+        if let album = albumLine(below: row) { return album }
+        return appearance?.rowLines == true ? appearance?.rowLine : nil
+    }
+
+    /// The album line under `row` where its album ends, if the appearance has album lines.
+    func albumLine(below row: Int) -> NSColor? {
+        guard let appearance, appearance.albumLines, endsAlbum(row) else { return nil }
+        return appearance.albumLine
     }
 
     /// Whether the row after `row` is another album's, by the album ID the art column groups
@@ -501,6 +517,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     private func fill(_ cell: AlbumArtCell, row: Int) {
         cell.rowPitch = rowPitch
         cell.size = artSize
+        cell.albumLine = albumLine(below: row)
         guard let start = artRow(row) else {
             cell.art = nil
             return

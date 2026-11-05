@@ -494,6 +494,51 @@ private let albumRed = HexColor("#FF0000")
     #expect(rowView?.bottomLine == nil)
 }
 
+/// The album line runs on across the Album Art column, over the art, while the row lines stay
+/// out of it. The cell draws it inside its row view, so the hover, which the table keeps over
+/// the row views, covers it.
+@MainActor @Test func albumLinesCrossTheArtColumnUnderTheHover() async throws {
+    let (controller, _, rows) = try await artTable(artWidth: 3 * RowListController.rowHeight)
+    let table = controller.table
+    let art = table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
+    let end = try #require(
+        rows.indices.dropLast().first { rows[$0].albumID != rows[$0 + 1].albumID })
+    func artCell(_ row: Int) throws -> AlbumArtCell {
+        try #require(table.view(atColumn: art, row: row, makeIfNecessary: true) as? AlbumArtCell)
+    }
+    controller.apply(
+        TableAppearance(
+            columnLines: false, rowLines: true, albumLines: false, rowLineColor: rowGray,
+            albumLineColor: albumRed, alternatingRows: true, rowHeight: .regular,
+            artSize: .fit, glass: false))
+    #expect(try artCell(end).albumLine == nil, "row lines stay out of the art column")
+    controller.apply(
+        TableAppearance(
+            columnLines: false, rowLines: true, albumLines: true, rowLineColor: rowGray,
+            albumLineColor: albumRed, alternatingRows: true, rowHeight: .regular,
+            artSize: .fit, glass: false))
+    let red = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)
+    #expect(try artCell(end).albumLine == red)
+    #expect(try artCell(end + 1).albumLine == nil)
+    #expect(try artCell(end).superview is MarkedRowView)
+    // Drawn over the art, which may reach the album's last row.
+    let cell = try artCell(end)
+    cell.art = NSImage(size: NSSize(width: 8, height: 8), flipped: false) { rect in
+        NSColor.blue.setFill()
+        rect.fill()
+        return true
+    }
+    cell.rowsDown = 0
+    cell.runRows = 1
+    let bitmap = try #require(cell.bitmapImageRepForCachingDisplay(in: cell.bounds))
+    cell.cacheDisplay(in: cell.bounds, to: bitmap)
+    let scale = CGFloat(bitmap.pixelsWide) / cell.bounds.width
+    let bottom = try #require(
+        bitmap.colorAt(x: Int(cell.bounds.midX * scale), y: bitmap.pixelsHigh - 1)?
+            .usingColorSpace(.sRGB))
+    #expect(bottom.redComponent > 0.9 && bottom.blueComponent < 0.1)
+}
+
 /// A row whose next row isn't read, or can't be, has no album line, and asking doesn't read it.
 @MainActor @Test func anAlbumLineWaitsForTheNextRowsPage() async throws {
     let databaseURL = try browserLibrary.get().databaseURL

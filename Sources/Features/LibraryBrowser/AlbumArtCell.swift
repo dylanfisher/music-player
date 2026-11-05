@@ -25,6 +25,12 @@ final class AlbumArtCell: NSView {
     var rowPitch: CGFloat = 0 {
         didSet { needsDisplay = true }
     }
+    /// The album line along the cell's bottom, over the art, where its row ends an album; nil
+    /// for none. The row view leaves the art column out of its lines, and the album line is the
+    /// one that crosses it, so albums stand apart beside their art.
+    var albumLine: NSColor? {
+        didSet { if albumLine != oldValue { needsDisplay = true } }
+    }
     override var isFlipped: Bool { true }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -42,9 +48,13 @@ final class AlbumArtCell: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let art else { return }
-        art.draw(
+        art?.draw(
             in: artRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true,
             hints: [.interpolation: NSImageInterpolation.high.rawValue])
+        if let albumLine {
+            albumLine.setFill()
+            NSRect(x: 0, y: bounds.maxY - 1, width: bounds.width, height: 1)
+                .fill(using: .sourceOver)
+        }
     }
 }
