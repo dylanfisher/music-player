@@ -9,7 +9,8 @@
   (the toolbar's default set and the status's width, phase 37b)
 - **Amended:** phase 39c (empty columns, the art alone in a stacked column, plain problems, a
   builder that refuses a problem, Reset to Default, live drags and column drags); phase 39b
-  (the toolbar's status empty with nothing playing, the Title Line part and its format)
+  (the toolbar's status empty with nothing playing, the Title Line part and its format); phase 40c
+  (the Custom Status items, each a toolbar status of its own layout, [0089](0089-custom-status-items.md))
 
 ## Context
 

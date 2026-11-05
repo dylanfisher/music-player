@@ -4383,7 +4383,7 @@ at most. The 2015 MacBook Pro and macOS 12 to 15 wait for the owner check.
 
 #### 40c. Builder items in Customize Toolbar
 
-- [ ] **40c.1 Custom status items.** Customize Toolbar offers Custom Status 1, 2 and 3 beside
+- [x] **40c.1 Custom status items.** Customize Toolbar offers Custom Status 1, 2 and 3 beside
       Status. Each is a now-playing bar with its own layout, built in the same builder from its
       own row in Settings ▸ Appearance, and can go anywhere in the toolbar. AppKit shows each
       custom item at most once, so there are numbered slots rather than one item added many
@@ -4420,6 +4420,22 @@ Plan, part 40c (ADR 0089, amending 0055 and 0085):
 - Order: settings and items, the bar's slots, the toolbar and app wiring, then the ADR,
   `--snapshot` of the sheet, the toolbar with slots placed and the slot's builder, and the
   result.
+
+Result, part 40c: shipped 40c.1 (ADR 0089, amending 0055 and 0085). Customize Toolbar offers
+Custom Status 1, 2 and 3 after Now Playing, none in the default set; each lays out from its own
+setting, `appearance.customStatus1Layout` to `3`, whose rows follow Toolbar Status Layout in
+Settings ▸ Appearance and open the same builder, unchanged. The default is the Title Line
+centered over the seek bar. Every slot's Title Line reads `appearance.headerTitleFormat`. The
+slots' views hang off the one `NowPlayingBar`, so one engine follower fills, ticks and seeks
+them all. A slot of fixed columns is exactly their width; one with a flexible column is sized
+as the status is. Only the status is centered. The sheet draws each slot from its layout, at its
+width when fixed, which now holds for the status's drawing too. In one commit rather than
+three, since `scripts/check`'s surface step fails a public setting no other module reads yet.
+`--snapshot-of` didn't gain the slot's builder: it is the same builder window as the status's,
+reached the same way. Checked in `--snapshot`: the sheet with all three slots drawn (the
+default, a fixed art beside title and format, and the default again), the Appearance pane's
+three new rows, and the window with two slots placed, empty since nothing plays in a snapshot.
+The slots with a track playing were checked by tests, not on screen. `./scripts/check` passes.
 
 #### 40d. Undo and redo plays
 

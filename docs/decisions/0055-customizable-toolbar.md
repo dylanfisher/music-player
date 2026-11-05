@@ -1,7 +1,7 @@
 # 0055. The header is a toolbar the user customizes
 
 - **Date:** 2026-11-02
-- **Status:** accepted; the status styles amended on 2026-11-02 (phase 29.2); Now Playing (Centered) removed by [0072](0072-window-chrome-and-status-bar.md) (phase 30c.2); the default set, the status's width and its layout amended by [0085](0085-status-bar-builder.md) (phase 37b)
+- **Status:** accepted; the status styles amended on 2026-11-02 (phase 29.2); Now Playing (Centered) removed by [0072](0072-window-chrome-and-status-bar.md) (phase 30c.2); the default set, the status's width and its layout amended by [0085](0085-status-bar-builder.md) (phase 37b); the Custom Status items added by [0089](0089-custom-status-items.md) (phase 40c)
 
 ## Context
 
