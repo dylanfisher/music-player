@@ -341,6 +341,60 @@ checkpoint compares flagged files with Spek.
       track and of 8 tracks at once while music plays; report the times and any dropout. Open a
       few flagged and unflagged files in Spek and say whether the verdicts agree.
 
+Implementation plan, part 45a (ADR 0115):
+
+1. **Promotion.** `SignalPathLines`' private codec name (`FLAC`, `PCM`, `DSD`) moves to
+   `Playback` as `SignalFormat.codecName`, so the Spectrum window's format line and the signal
+   path name a codec the same way. Its own commit.
+2. **Library (45a.6).** `FileMeasures`, the stored measures: the format as the decoder read it
+   (format ID, rate, stored bits, channels, float, length) and the measures, each nil where it
+   doesn't apply. A new `SchemaPart.measures` with its own `measures` table keyed by path,
+   with the file's size and modification time, as the walk reads them so 45b can compare them
+   with `files` without touching the NAS. Rebuilding it discards no stats. `MeasuresCache`, a
+   public actor on a connection of its own, as `StatsReader`: `measures(path:stamp:)` returns
+   a row only when the stamp matches, `store(_:path:stamp:)` replaces it. 45b reads the table.
+3. **Analysis module (45a.1–45a.3).** `Sources/Core/Analysis`, importing Accelerate, HALOutput
+   (`FileDecoder`, `FileLatency` and `SignalFormat(_:)` become `package`), Library, Playback,
+   Metadata. `analyzeFile(at:latency:progress:)` decodes in 4096-frame hops as Int32 for
+   FLAC, ALAC and integer PCM and as Float32 otherwise, keeps an 8192-frame window per
+   channel, and per hop: a Hann window and `vDSP_fft_zrip`, power averaged over channels, the
+   spectrogram cell maxima (at most 1,000 columns × 512 rows) and the average; the OR of every
+   integer sample (effective bits), left against right, clipped runs, the sample peak, the
+   true peak through a 4-phase, 48-tap interpolator with `vDSP_conv`, and 3-second blocks for
+   the DR score. `Task.isCancelled` is checked at every hop. DSD throws a skip that says so.
+   `Cutoff` finds the highest fall of `cutoffDropDB` across `cutoffSpanHz` in the average
+   spectrum, from 5 kHz up, and its steepness. `AnalysisRules` holds every threshold once;
+   `verdicts(_:)` turns measures into the five verdicts with their one line of text.
+4. **Spectrogram cache (45a.6).** `SpectrogramStore`, files in `Caches/MusicPlayer/Spectrograms`
+   (`AppPaths.spectrogramDirectory`): the 8-bit cells and the 512-row average, named by a hash
+   of the path, size and modification time, least recently used removed past 100 MB, as
+   `ThumbnailStore` does. `FileAnalyzer` puts the two caches in front of `analyzeFile`, at
+   utility priority, cancelled with the task that awaits it.
+5. **Command (45a.4, 45a.7).** `track.analyze`, "Show Spectrum", in the track menu and the
+   File menu after Get Info (and so the palette). `Command` gains `paths`: the command line
+   passes the words after its name as absolute paths, in a new `paths` key of a report
+   request, and waits `ScriptLimits.fileReplySeconds` for it, as files on the NAS take long.
+   `music-player analyze [<path>…] [--json]`: with no paths, the selection. It prints the
+   format line, measures and verdicts of each file, or JSON; it opens no window. Up to 8 files
+   in both, `AnalysisRules.comparedFiles`.
+6. **Spectrum feature (45a.4, 45a.5).** `Sources/Features/Spectrum`: `SpectrumModel` (no
+   AppKit) holds each file's progress, result or error, the frequency axis to the highest
+   Nyquist, the reference lines, the hover readout and the text lines; `SpectrogramView` and
+   `AverageSpectrumView` draw in AppKit as `StatsBarChart` does, with a dB color scale and
+   legend; `SpectrumWindow` stacks one row per file and cancels its tasks on close. The app
+   wires the command and the analyzer, at most two files at once.
+7. **Fixtures (45a.8).** `AnalysisFixtures` in `Fixtures`: broadband noise made by an inverse
+   FFT, so a low-pass is exact: full band 16/44.1, low-passed at 16 and 19 kHz, through AAC at
+   128 kbps with afconvert (AudioToolbox) and back into FLAC, 16/44.1 content in 24/96,
+   16 bits padded to 24, identical channels, clipped, and full band 24/96 (also 5 minutes
+   for the bench). Tests: each fixture's verdicts, each rule against measures just either side
+   of its threshold, the measures (effective bits, true peak, DR, clipped runs), cancellation,
+   DSD, both caches, the command line's parse and reply, the model's layout and text.
+8. **Bench (45a.9).** Analyze the 5-minute 24/96 fixture locally and on the slow simulated
+   NAS (`FileLatency` as the play latency rows use it), and the peak footprint it adds; the
+   soak gains a thread analyzing that fixture again and again. Budgets from the first run,
+   with room for the old Mac.
+
 #### 45b. The library pass
 
 - [ ] **45b.1 Analyze Library.** A command that analyzes every file not yet analyzed, or
