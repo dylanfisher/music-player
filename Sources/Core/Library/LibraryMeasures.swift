@@ -54,27 +54,96 @@ extension LibraryIndex {
         ).map { row in (try row.int64(0), try fileMeasures(row, from: 1)) }
     }
 
-    /// Every track's file with no measures made from it as the index has it, with that stamp,
-    /// in path order, so a pass over a share reads a folder at a time. DSD files are left out,
-    /// as analysis refuses them.
-    func filesToAnalyze() throws -> [(path: String, stamp: FileStamp)] {
-        try statement(
+    /// What Analyze Library has done of every track's file and what it has left. A file is done
+    /// when it has measures made from it as the index has it, at or after the run's start, so
+    /// a run again lists the files measured before it. DSD files are left out, as analysis
+    /// refuses them.
+    func analysisFiles() throws -> AnalysisFiles {
+        let files = try statement(
             """
-            SELECT f.path, f.size_bytes, f.modified_seconds FROM tracks t
-            JOIN files f ON f.id = t.file_id LEFT JOIN \(currentMeasuresJoin)
-            WHERE m.path IS NULL
+            SELECT f.path, f.size_bytes, f.modified_seconds,
+                m.path IS NOT NULL AND ifnull(a.measured_seconds, 0)
+                    >= ifnull((SELECT started_seconds FROM \(analysisRunTable)), 0),
+                x.path IS NOT NULL
+            FROM tracks t JOIN files f ON f.id = t.file_id
+            LEFT JOIN \(currentMeasuresJoin)
+            LEFT JOIN \(measuredAtTable) a ON a.path = m.path
+            LEFT JOIN \(analysisFailuresTable) x ON x.path = f.path
+                AND x.size_bytes = f.size_bytes AND x.modified_seconds = f.modified_seconds
             ORDER BY f.path
             """
         ).map { row in
             (
-                try row.text(0),
-                FileStamp(sizeBytes: try row.int(1), modifiedSeconds: try row.double(2))
+                path: try row.text(0),
+                stamp: FileStamp(sizeBytes: try row.int(1), modifiedSeconds: try row.double(2)),
+                done: try row.int(3) != 0, failed: try row.int(4) != 0
             )
         }.filter { !dsdFileExtensions.contains(($0.path as NSString).pathExtension.lowercased()) }
+        let finished = try statement("SELECT finished FROM \(analysisRunTable)").map {
+            try $0.int(0) != 0
+        }
+        let pending = files.filter { !$0.done }
+        return AnalysisFiles(
+            pending: pending.map { ($0.path, $0.stamp) }, done: files.count - pending.count,
+            failed: pending.filter(\.failed).count, unfinished: finished == [false])
     }
 
-    /// Keeps `measures` for `path` as `stamp` describes the file, replacing any row before.
-    func storeMeasures(_ measures: FileMeasures, path: String, stamp: FileStamp) throws {
+    /// Starts a run of Analyze Library: `again` from now, so every file measured before counts
+    /// as not done, and otherwise from where the last run started. Forgets the last run's
+    /// failures, which the run tries again.
+    func beginAnalysisRun(again: Bool, now: Date = Date()) throws {
+        try database.transaction {
+            if again {
+                try statement(
+                    """
+                    INSERT OR REPLACE INTO \(analysisRunTable) (one, started_seconds, finished)
+                    VALUES (1, ?, 0)
+                    """
+                ).run(now.timeIntervalSince1970)
+            } else {
+                try statement(
+                    """
+                    INSERT INTO \(analysisRunTable) (one, started_seconds, finished)
+                    VALUES (1, 0, 0) ON CONFLICT (one) DO UPDATE SET finished = 0
+                    """
+                ).run()
+            }
+            try statement("DELETE FROM \(analysisFailuresTable)").run()
+        }
+    }
+
+    /// The run went through every file it listed.
+    func finishAnalysisRun() throws {
+        try statement("UPDATE \(analysisRunTable) SET finished = 1").run()
+    }
+
+    /// The run couldn't analyze the file at `path` as `stamp` describes it, or store what it
+    /// measured.
+    func recordAnalysisFailure(path: String, stamp: FileStamp) throws {
+        try statement(
+            """
+            INSERT OR REPLACE INTO \(analysisFailuresTable) (path, size_bytes, modified_seconds)
+            VALUES (?, ?, ?)
+            """
+        ).run(path, stamp.sizeBytes, stamp.modifiedSeconds)
+    }
+
+    /// Keeps `measures` for `path` as `stamp` describes the file, replacing any row before, and
+    /// notes when, `now`.
+    func storeMeasures(
+        _ measures: FileMeasures, path: String, stamp: FileStamp, now: Date = Date()
+    ) throws {
+        try database.transaction {
+            try insertMeasures(measures, path: path, stamp: stamp)
+            try statement(
+                """
+                INSERT OR REPLACE INTO \(measuredAtTable) (path, measured_seconds) VALUES (?, ?)
+                """
+            ).run(path, now.timeIntervalSince1970)
+        }
+    }
+
+    private func insertMeasures(_ measures: FileMeasures, path: String, stamp: FileStamp) throws {
         try statement(
             """
             INSERT OR REPLACE INTO \(measuresTable) (

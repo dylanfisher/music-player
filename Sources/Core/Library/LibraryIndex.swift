@@ -163,9 +163,10 @@ public final class LibraryIndex {
             }
             // The sync part's rows are where reading the logs got to, which the next sync
             // reads again, not the owner's stats. The recorded part refills itself from history,
-            // and the measures are a cache.
+            // and the measures and their run are a cache.
             let discarded = rebuilt.filter {
-                stored[$0.rawValue] != nil && ![.sync, .scans, .recorded, .measures].contains($0)
+                stored[$0.rawValue] != nil
+                    && ![.sync, .scans, .recorded, .measures, .analysisRun].contains($0)
             }
             .compactMap(\.tables).reduce(into: Set<String>()) { $0.formUnion($1) }
             if !discarded.isEmpty { try recordDiscardedStats(discarded) }

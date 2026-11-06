@@ -78,7 +78,12 @@ private func eventually(_ condition: () -> Bool) async throws {
     let ended = await pass.start().value
     #expect(ended.stage == .finished)
     #expect(ended.analyzed == 3 && ended.total == 3 && ended.failed == 0)
-    #expect(heard.progress.map(\.analyzed) == [0, 1, 2, 3, 3])
+    // The fixtures take less than a report's interval, so the count goes out about once
+    // between the start and the end, with a file's name.
+    let counts = heard.progress.map(\.analyzed)
+    #expect(counts.first == 0 && counts.last == 3 && counts == counts.sorted())
+    #expect(heard.progress.count == 3 || heard.progress.count == 4)
+    #expect(heard.progress[1].file.map(\.isEmpty) == false && ended.file == nil)
     #expect(ended.text == "Library analyzed: 3 files")
 
     let index = try LibraryIndex(at: library.databaseURL)
@@ -86,16 +91,60 @@ private func eventually(_ condition: () -> Bool) async throws {
     #expect(rows.map { $0.cutoffHz.map { ($0 / 1000).rounded() } } == [16, nil, nil])
     #expect(rows.map(\.effectiveBits) == [16, 16, 16])
 
-    // A new pass, as after a relaunch, reads what the index holds and analyzes nothing.
+    // A new pass, as after a relaunch, reads what the index holds and analyzes nothing, and
+    // says only that it's done: no "0 of 0".
+    let relaunchedHeard = Heard()
+    let relaunched = LibraryAnalysis(
+        cache: try library.cache(),
+        analyze: { path in
+            heard.ask(path)
+            return clean
+        }, scanRunning: { false }, report: relaunchedHeard.report)
+    #expect(try await relaunched.standing() == .init(paused: nil, everyFileTried: true))
+    let again = await relaunched.start().value
+    #expect(again.analyzed == 3 && again.total == 3 && again.stage == .finished)
+    #expect(relaunchedHeard.progress == [again])
+    #expect(heard.paths.isEmpty)
+}
+
+/// Analyze Library Again reads every file, keeping each one's measures until its new ones are
+/// stored; paused and relaunched, it shows as paused and carries on with what it hadn't read.
+@Test func aRunAgainReadsEveryFileAndCarriesOnAfterARelaunch() async throws {
+    let library = try ScannedFixtures()
+    _ = await LibraryAnalysis(
+        cache: try library.cache(), scanRunning: { false }, report: { _ in }
+    ).start().value
+    let heard = Heard()
+    let pass = LibraryAnalysis(
+        cache: try library.cache(),
+        analyze: { path in
+            heard.ask(path)
+            if path == library.paths[1] { try await Task.sleep(nanoseconds: 60_000_000_000) }
+            return clean
+        }, filesAtOnce: 1, scanRunning: { false }, report: heard.report)
+    let run = await pass.start(again: true)
+    try await eventually { heard.paths.count == 2 }
+    await pass.pause()
+    let paused = await run.value
+    #expect(paused.stage == .paused && paused.analyzed == 1 && paused.total == 3)
+    let index = try LibraryIndex(at: library.databaseURL)
+    let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    // The first file's new measures replaced its 16 kHz cutoff; the others keep theirs.
+    #expect(rows[0].cutoffHz == nil && rows.allSatisfy { $0.effectiveBits != nil })
+
     let relaunched = LibraryAnalysis(
         cache: try library.cache(),
         analyze: { path in
             heard.ask(path)
             return clean
         }, scanRunning: { false }, report: { _ in })
-    let again = await relaunched.start().value
-    #expect(again.total == 0 && again.stage == .finished)
-    #expect(heard.paths.isEmpty)
+    let standing = try await relaunched.standing()
+    #expect(standing.paused?.text == "Library analysis paused: 1 of 3")
+    #expect(!standing.everyFileTried)
+    let ended = await relaunched.start().value
+    #expect(ended.stage == .finished && ended.analyzed == 3 && ended.total == 3)
+    #expect(heard.paths.dropFirst(2) == library.paths.dropFirst())
+    #expect(try await relaunched.standing() == .init(paused: nil, everyFileTried: true))
 }
 
 /// Two files at once: the second and third take until the run is paused, the first time, so
@@ -120,7 +169,7 @@ private func eventually(_ condition: () -> Bool) async throws {
     #expect(paused.text == "Library analysis paused: 1 of 3")
 
     let resumed = await pass.start().value
-    #expect(resumed.stage == .finished && resumed.analyzed == 2 && resumed.total == 2)
+    #expect(resumed.stage == .finished && resumed.analyzed == 3 && resumed.total == 3)
     #expect(heard.paths.prefix(3).sorted() == library.paths)
     #expect(heard.paths.dropFirst(3).sorted() == Array(library.paths.dropFirst()))
 }
@@ -211,7 +260,7 @@ private final class UnderWay: @unchecked Sendable {
     #expect(heard.paths.filter { $0 == "store " + library.paths[2] }.count == 3)
     #expect(ended.analyzed == 3 && ended.failed == 1 && ended.unstored == 1)
     #expect(ended.text == "Library analyzed: 3 files, 1 couldn't be stored; the log says why")
-    #expect(try await cache.filesToAnalyze().map(\.path) == [library.paths[2]])
+    #expect(try await cache.analysisFiles().pending.map(\.path) == [library.paths[2]])
 }
 
 private struct SQLiteBusy: Error {}
@@ -227,5 +276,5 @@ private struct SQLiteBusy: Error {}
     let ended = await pass.start().value
     #expect(ended.analyzed == 3 && ended.failed == 1)
     #expect(ended.text == "Library analyzed: 3 files, 1 couldn't be read; the log says why")
-    #expect(try await library.cache().filesToAnalyze().map(\.path) == [library.paths[1]])
+    #expect(try await library.cache().analysisFiles().pending.map(\.path) == [library.paths[1]])
 }
