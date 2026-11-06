@@ -46,11 +46,12 @@ enum PlaybackError: PlaybackFailure {
                 $0.message == track.problem.message && $0.fix == track.problem.fix
             }) {
                 causes[index].tracks.append(track.url)
+                causes[index].entries.append(track.entry)
             } else {
                 causes.append(
                     PlaybackProblem.Cause(
-                        message: track.problem.message, fix: track.problem.fix, tracks: [track.url]
-                    ))
+                        message: track.problem.message, fix: track.problem.fix, tracks: [track.url],
+                        entries: [track.entry]))
             }
         }
         return causes
@@ -60,5 +61,7 @@ enum PlaybackError: PlaybackFailure {
 /// A track that couldn't play, and why.
 struct FailedTrack: Sendable, Equatable {
     var url: URL
+    /// Its index into the queue.
+    var entry: Int
     var problem: PlaybackProblem
 }

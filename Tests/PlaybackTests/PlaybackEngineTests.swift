@@ -898,7 +898,10 @@ private func published(
     #expect(problem.message == "3 tracks in a row couldn't play: broken file")
     #expect(
         problem.causes
-            == [PlaybackProblem.Cause(message: "broken file", fix: nil, tracks: Array(five[..<3]))])
+            == [
+                PlaybackProblem.Cause(
+                    message: "broken file", fix: nil, tracks: Array(five[..<3]), entries: [0, 1, 2])
+            ])
     #expect(!events.contains(.finished))
 }
 
@@ -915,7 +918,10 @@ private struct Unplayable: PlaybackFailure {
     let urls = (0..<3).map { URL(fileURLWithPath: "/music/\($0).dsf", isDirectory: false) }
     let hog = Unplayable(why: "hog mode is off", fix: .turnOnHogMode(deviceUID: "ADI-2"))
     let one = PlaybackProblem(
-        PlaybackError.failedInARow(urls.map { FailedTrack(url: $0, problem: PlaybackProblem(hog)) })
+        PlaybackError.failedInARow(
+            urls.enumerated().map {
+                FailedTrack(url: $1, entry: $0, problem: PlaybackProblem(hog))
+            })
     )
     #expect(one.message == "3 tracks in a row couldn't play: hog mode is off")
     #expect(one.fix == .turnOnHogMode(deviceUID: "ADI-2"))
@@ -924,9 +930,9 @@ private struct Unplayable: PlaybackFailure {
     let damaged = PlaybackProblem(Unplayable(why: "the file is damaged"))
     let two = PlaybackProblem(
         PlaybackError.failedInARow([
-            FailedTrack(url: urls[0], problem: PlaybackProblem(hog)),
-            FailedTrack(url: urls[1], problem: damaged),
-            FailedTrack(url: urls[2], problem: PlaybackProblem(hog)),
+            FailedTrack(url: urls[0], entry: 0, problem: PlaybackProblem(hog)),
+            FailedTrack(url: urls[1], entry: 1, problem: damaged),
+            FailedTrack(url: urls[2], entry: 2, problem: PlaybackProblem(hog)),
         ]))
     #expect(two.message == "3 tracks in a row couldn't play, for 2 different reasons")
     #expect(two.fix == nil)
@@ -934,8 +940,8 @@ private struct Unplayable: PlaybackFailure {
         two.causes == [
             .init(
                 message: "hog mode is off", fix: .turnOnHogMode(deviceUID: "ADI-2"),
-                tracks: [urls[0], urls[2]]),
-            .init(message: "the file is damaged", fix: nil, tracks: [urls[1]]),
+                tracks: [urls[0], urls[2]], entries: [0, 2]),
+            .init(message: "the file is damaged", fix: nil, tracks: [urls[1]], entries: [1]),
         ])
     #expect(two.detail.contains("1.dsf: Unplayable(the file is damaged)"))
 
@@ -943,8 +949,8 @@ private struct Unplayable: PlaybackFailure {
     let other = Unplayable(why: "hog mode is off here", fix: .turnOnHogMode(deviceUID: "ADI-2"))
     let shared = PlaybackProblem(
         PlaybackError.failedInARow([
-            FailedTrack(url: urls[0], problem: PlaybackProblem(hog)),
-            FailedTrack(url: urls[1], problem: PlaybackProblem(other)),
+            FailedTrack(url: urls[0], entry: 0, problem: PlaybackProblem(hog)),
+            FailedTrack(url: urls[1], entry: 1, problem: PlaybackProblem(other)),
         ]))
     #expect(shared.causes.count == 2 && shared.fix == .turnOnHogMode(deviceUID: "ADI-2"))
 }

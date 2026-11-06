@@ -18,8 +18,8 @@ public final class PlaybackProblemWindow: NSObject {
     let details: NSTextView
     let copyButton = NSButton(title: "Copy Details", target: nil, action: nil)
     let fixButton = NSButton(title: "", target: nil, action: nil)
-    /// Called with the fix the button makes, and the track to play again once it's made.
-    public var fixRequested: (PlaybackFix, URL?) -> Void = { _, _ in }
+    /// Called with the fix the button makes and the problem it fixes, whose track may play again.
+    public var fixRequested: (PlaybackFix, ShownProblem) -> Void = { _, _ in }
     private(set) var report: ProblemReport?
     /// Where Copy puts the text; tests give it a pasteboard of their own.
     var pasteboard = NSPasteboard.general
@@ -100,7 +100,7 @@ public final class PlaybackProblemWindow: NSObject {
 
     @objc private func fix() {
         guard let shown = report?.shown, let fix = shown.problem.fix else { return }
-        fixRequested(fix, shown.track)
+        fixRequested(fix, shown)
     }
 
     @objc func copy(_ sender: Any?) {

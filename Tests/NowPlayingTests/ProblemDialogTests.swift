@@ -37,7 +37,7 @@ private func update(_ event: PlaybackEvent) -> PlaybackUpdate {
 
 @Test func aFixableProblemsDialogSaysWhyAndOffersTheFix() throws {
     let shown = ShownProblem(
-        problem: PlaybackProblem(NoHogMode()), track: urls[0], trackFormat: "DSD64",
+        problem: PlaybackProblem(NoHogMode()), track: urls[0], entry: 0, trackFormat: "DSD64",
         headline: "Couldn't play a.dsf")
     let dialog = try #require(ProblemDialog(shown))
     #expect(dialog.title == "DSD needs exclusive access to the device")
@@ -54,10 +54,12 @@ private func update(_ event: PlaybackEvent) -> PlaybackUpdate {
 }
 
 private func inARow(_ problems: [PlaybackProblem]) -> ShownProblem {
-    let tracks = zip(urls + urls, problems).map { FailedTrack(url: $0, problem: $1) }
+    let tracks = zip(urls + urls, problems).enumerated().map {
+        FailedTrack(url: $1.0, entry: $0 % urls.count, problem: $1.1)
+    }
     let problem = PlaybackProblem(PlaybackError.failedInARow(tracks))
     return ShownProblem(
-        problem: problem, track: urls[0], trackFormat: nil,
+        problem: problem, track: urls[0], entry: 0, trackFormat: nil,
         headline: "Playback stopped: \(problem.message)")
 }
 
@@ -106,9 +108,9 @@ private func inARow(_ problems: [PlaybackProblem]) -> ShownProblem {
     let bar = bar()
     var shown: [ProblemDialog] = []
     bar.showDialog = { shown.append($0) }
-    bar.apply(update(.trackFailed(urls[1], PlaybackProblem(Damaged()))))
+    bar.apply(update(.trackFailed(urls[1], entry: 1, PlaybackProblem(Damaged()))))
     #expect(shown.isEmpty)
-    bar.apply(update(.trackFailed(urls[0], PlaybackProblem(NoHogMode()))))
+    bar.apply(update(.trackFailed(urls[0], entry: 0, PlaybackProblem(NoHogMode()))))
     #expect(shown.map(\.shown.track) == [urls[0]])
     let stopped = inARow(Array(repeating: PlaybackProblem(Damaged()), count: 3))
     bar.apply(update(.failed(stopped.problem)))
@@ -119,18 +121,49 @@ private func inARow(_ problems: [PlaybackProblem]) -> ShownProblem {
 @MainActor @Test func theDetailsWindowOffersTheFixAsAButton() {
     let window = PlaybackProblemWindow()
     window.readLog = { [] }
-    var asked: [(PlaybackFix, URL?)] = []
+    var asked: [(PlaybackFix, ShownProblem)] = []
     window.fixRequested = { asked.append(($0, $1)) }
     let fixable = ShownProblem(
-        problem: PlaybackProblem(NoHogMode()), track: urls[0], trackFormat: "DSD64",
+        problem: PlaybackProblem(NoHogMode()), track: urls[0], entry: 0, trackFormat: "DSD64",
         headline: "Couldn't play a.dsf")
     window.show(ProblemReport(fixable, path: nil, hogMode: false))
     #expect(!window.fixButton.isHidden && window.fixButton.title == "Turn On Hog Mode")
     window.fixButton.performClick(nil)
-    #expect(asked.map(\.0) == [.turnOnHogMode(deviceUID: "ADI-2")] && asked.first?.1 == urls[0])
+    #expect(
+        asked.map(\.0) == [.turnOnHogMode(deviceUID: "ADI-2")] && asked.first?.1.track == urls[0])
     var damaged = fixable
     damaged.problem = PlaybackProblem(Damaged())
     window.show(ProblemReport(damaged, path: nil, hogMode: false))
     #expect(window.fixButton.isHidden)
     window.window.close()
+}
+
+/// A fix plays the track again only while the queue's current entry is still the one that
+/// failed, so it never interrupts what played since.
+@MainActor @Test func aFixPlaysTheTrackAgainOnlyWhileItsStillCurrent() throws {
+    let model = NowPlayingModel { _ in nil }
+    var state = update(.queueChanged).state
+    state.order = [1, 0]
+    state.currentIndex = 1
+    model.apply(
+        PlaybackUpdate(
+            state: state, event: .trackFailed(urls[1], entry: 1, PlaybackProblem(NoHogMode()))))
+    let shown = try #require(model.problem)
+    #expect(shown.entry == 1)
+    #expect(try shown.replayPosition(in: state) == 0)
+
+    var movedOn = state
+    movedOn.currentIndex = 0
+    #expect(throws: ReplayRefusal.movedOn(urls[1])) { try shown.replayPosition(in: movedOn) }
+    var replaced = state
+    replaced.queue = [urls[0], urls[0]]
+    #expect(throws: ReplayRefusal.movedOn(urls[1])) { try shown.replayPosition(in: replaced) }
+    var none = shown
+    none.entry = nil
+    #expect(throws: ReplayRefusal.noTrack) { try none.replayPosition(in: state) }
+
+    // Tracks failing in a row are about the first of them.
+    let stopped = inARow([PlaybackProblem(NoHogMode()), PlaybackProblem(NoHogMode())])
+    model.apply(update(.failed(stopped.problem)))
+    #expect(model.problem?.entry == 0 && model.problem?.track == urls[0])
 }

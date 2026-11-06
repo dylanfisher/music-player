@@ -1014,7 +1014,7 @@ private final class ShiftedClock: @unchecked Sendable {
     await engine.play()
     var reason: String?
     for await update in updates {
-        if case .trackFailed(_, let problem) = update.event { reason = problem.message }
+        if case .trackFailed(_, _, let problem) = update.event { reason = problem.message }
         if update.event == .finished { break }
     }
     // NowPlayingModel shows a trackFailed as "Couldn't play <file>: <message>".

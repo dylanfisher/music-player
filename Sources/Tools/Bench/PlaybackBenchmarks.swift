@@ -387,7 +387,7 @@ private final class Session: @unchecked Sendable {
         lock.withLock {
             updates.compactMap { update in
                 switch update.event {
-                case .trackFailed(let url, let problem):
+                case .trackFailed(let url, _, let problem):
                     "\(url.lastPathComponent): \(problem.detail)"
                 case .failed(let problem): problem.detail
                 default: nil

@@ -38,10 +38,10 @@ public final class NowPlayingModel {
         state = update.state
         switch update.event {
         case .trackStarted, .resumed: show(nil)
-        case .trackFailed(let url, let failure):
+        case .trackFailed(let url, let entry, let failure):
             show(
                 ShownProblem(
-                    problem: failure, track: url, trackFormat: format(of: url),
+                    problem: failure, track: url, entry: entry, trackFormat: format(of: url),
                     headline: "Couldn't play \(url.lastPathComponent): \(failure.message)"))
         case .deviceLost:
             show("The output device went away, so playback paused. Plug it back in to resume.")
@@ -49,10 +49,13 @@ public final class NowPlayingModel {
         case .failed(let failure):
             // The output stops on the track it was playing; tracks failing in a row are
             // about the first of them.
-            let track = failure.causes.first?.tracks.first ?? currentURL
+            let first = failure.causes.first
+            let track = first?.tracks.first ?? currentURL
             show(
                 ShownProblem(
-                    problem: failure, track: track, trackFormat: track.flatMap(format),
+                    problem: failure, track: track,
+                    entry: first?.entries.first ?? state.currentIndex,
+                    trackFormat: track.flatMap(format),
                     headline: "Playback stopped: \(failure.message)"))
         default: break
         }

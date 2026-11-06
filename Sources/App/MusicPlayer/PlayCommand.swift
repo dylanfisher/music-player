@@ -202,7 +202,7 @@ private final class Player: @unchecked Sendable {
                 let took = change.switchSeconds.map { " in \(ms($0)) ms\(steps ?? "")" } ?? ""
                 log("rate change: \(from) → \(change.to)\(took)")
             }
-        case .trackFailed(let url, let problem):
+        case .trackFailed(let url, _, let problem):
             log("✗ couldn't play \(url.path): \(problem.detail)")
         case .underrun(let frames): log("! underrun: \(frames) frames of silence")
         case .deviceLost:

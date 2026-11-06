@@ -9,6 +9,8 @@ public struct PlaybackProblem: Sendable, Equatable {
         public var message: String
         public var fix: PlaybackFix?
         public var tracks: [URL]
+        /// The tracks' indices into the queue, in the same order.
+        public var entries: [Int]
     }
 
     /// The error's `userMessage`, or its description for an error that isn't a

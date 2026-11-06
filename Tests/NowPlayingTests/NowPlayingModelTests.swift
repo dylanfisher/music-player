@@ -77,7 +77,7 @@ private func update(
     #expect(model.message?.contains("Press Play") == true)
     model.apply(update(.resumed))
     #expect(model.message == nil)
-    model.apply(update(.trackFailed(urls[1], PlaybackProblem(NotAudio()))))
+    model.apply(update(.trackFailed(urls[1], entry: 1, PlaybackProblem(NotAudio()))))
     #expect(model.message == "Couldn't play b.flac: not audio")
     model.apply(update(.trackStarted(index: 0)))
     #expect(model.message == nil)

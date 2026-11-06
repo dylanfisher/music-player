@@ -246,7 +246,8 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     let bar = bar()
     var opened: [ShownProblem] = []
     bar.problemOpened = { opened.append($0) }
-    bar.apply(update(.trackFailed(urls[1], PlaybackProblem(DeviceStopped())), duration: nil))
+    bar.apply(
+        update(.trackFailed(urls[1], entry: 1, PlaybackProblem(DeviceStopped())), duration: nil))
     #expect(!bar.statusBar.problemButton.isHidden)
     bar.statusBar.problemButton.performClick(nil)
     let format = try #require(bar.statusBar.view(for: .format) as? NSStackView)

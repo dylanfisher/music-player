@@ -11,7 +11,7 @@ private let logger = moduleLogger()
 extension AppDelegate {
     func makeProblemWindow() -> PlaybackProblemWindow {
         let window = PlaybackProblemWindow()
-        window.fixRequested = { [weak self] in self?.apply($0, replaying: $1) }
+        window.fixRequested = { [weak self] in self?.apply($0, for: $1) }
         return window
     }
 
@@ -24,8 +24,9 @@ extension AppDelegate {
                 hogMode: rendererOutput == nil ? settings?[\.hogMode] : nil))
     }
 
-    /// Makes `fix` through the settings the user would change, then plays `track` again.
-    func apply(_ fix: PlaybackFix, replaying track: URL?) {
+    /// Makes `fix` through the settings the user would change, then plays the problem's track
+    /// again if it's still the queue's current one.
+    func apply(_ fix: PlaybackFix, for shown: ShownProblem) {
         switch fix {
         case .turnOnHogMode(let uid):
             // The config's hog mode is the device in use's, so it fixes only that device.
@@ -39,13 +40,18 @@ extension AppDelegate {
                 return fail("Couldn't turn on hog mode", error)
             }
         }
-        guard let track, let engine else { return }
+        guard let engine else {
+            return logger.error(
+                "\(String(describing: fix)) is made, but there's no engine to play the track again")
+        }
         Task {
-            let state = await engine.state
-            guard let entry = state.queue.firstIndex(of: track),
-                let position = state.order.firstIndex(of: entry)
-            else { return }
-            await engine.play(at: position)
+            do {
+                await engine.play(at: try shown.replayPosition(in: await engine.state))
+            } catch {
+                logger.error(
+                    "\(String(describing: fix)) is made, but the track isn't played again: \(error)"
+                )
+            }
         }
     }
 }

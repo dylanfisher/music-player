@@ -269,7 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.nowPlaying = nowPlaying
         nowPlaying.follow(window.window)
         nowPlaying.problemOpened = { [weak self] in self?.showProblem($0) }
-        nowPlaying.fixRequested = { [weak self] in self?.apply($0, replaying: $1) }
+        nowPlaying.fixRequested = { [weak self] in self?.apply($0, for: $1) }
         window.showTitles(of: nowPlaying, layout.windowTitle)
         self.toolbar = toolbar
         self.signalPath = signalPath

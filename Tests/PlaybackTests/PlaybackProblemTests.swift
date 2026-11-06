@@ -15,7 +15,7 @@ private struct StandIn: Error, CustomStringConvertible {
         .failedInARow(
             [URL(fileURLWithPath: "/m/a.dsf", isDirectory: false)].map {
                 FailedTrack(
-                    url: $0,
+                    url: $0, entry: 0,
                     problem: PlaybackProblem(MetadataError(unreadable: $0.path, detail: "gone")))
             }),
         .startedTrackMissing(URL(fileURLWithPath: "/m/a.flac", isDirectory: false)),

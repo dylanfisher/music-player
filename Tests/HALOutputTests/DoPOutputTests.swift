@@ -168,7 +168,7 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     try await rig.wait { if case .failed = $0.event { true } else { false } }
 
     let refused = rig.events.compactMap { event -> (URL, String)? in
-        guard case .trackFailed(let url, let problem) = event else { return nil }
+        guard case .trackFailed(let url, _, let problem) = event else { return nil }
         return (url, problem.message)
     }
     #expect(refused.map(\.0) == album.prefix(PlaybackEngine.failureLimit).map(\.url))
@@ -219,7 +219,7 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     try await noHog.wait { if case .trackFailed = $0.event { true } else { false } }
     #expect(
         noHog.events.contains { event in
-            guard case .trackFailed(track.url, let problem) = event else { return false }
+            guard case .trackFailed(track.url, _, let problem) = event else { return false }
             return problem.message
                 == "DoP needs exclusive access, and hog mode is off for this device"
         })
@@ -238,7 +238,7 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     try await mixable.wait { if case .trackFailed = $0.event { true } else { false } }
     #expect(
         mixable.events.contains { event in
-            guard case .trackFailed(track.url, let problem) = event else { return false }
+            guard case .trackFailed(track.url, _, let problem) = event else { return false }
             return problem.message
                 == "null device can't play DSD64: none of its formats at 176.4 kHz can carry DoP"
                 && problem.detail.hasSuffix(
@@ -257,7 +257,7 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     await rig.engine.setQueue([track.url])
     await rig.engine.play()
     let failed = try await rig.wait { if case .trackFailed = $0.event { true } else { false } }
-    guard case .trackFailed(_, let problem) = failed.event else { return }
+    guard case .trackFailed(_, _, let problem) = failed.event else { return }
     #expect(problem.fix == .turnOnHogMode(deviceUID: rig.device.deviceUID))
     try await rig.wait(for: .finished)
 

@@ -579,10 +579,12 @@ public actor PlaybackEngine {
             } else {
                 return
             }
-            let track = FailedTrack(url: queue.url(at: failed), problem: PlaybackProblem(error))
+            let track = FailedTrack(
+                url: queue.url(at: failed), entry: queue.entry(at: failed),
+                problem: PlaybackProblem(error))
             failuresInARow.append(track)
             logger.error("\(track.url.path): \(error)")
-            publish(.trackFailed(track.url, track.problem))
+            publish(.trackFailed(track.url, entry: track.entry, track.problem))
             if id == nextItem?.id { skip(after: failed) }
         case .finished(let id):
             guard let currentItem, id == currentItem.id else { return }

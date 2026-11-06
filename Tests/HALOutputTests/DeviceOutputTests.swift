@@ -316,7 +316,7 @@ func theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost(
     try await rig.wait(for: .trackStarted(index: 1))
     #expect(
         rig.events.contains { event in
-            guard case .trackFailed(cut, let problem) = event else { return false }
+            guard case .trackFailed(cut, _, let problem) = event else { return false }
             return problem.message.contains(endedEarlyText)
         })
     let ended = try #require(await rig.engine.position())
@@ -361,7 +361,11 @@ private func silentMP3(stored: Int, stated: Int?) -> Data {
     await rig.engine.play()
     try await rig.wait(for: .finished)
     let failures = rig.events.compactMap { event -> (URL, String)? in
-        if case .trackFailed(let url, let problem) = event { (url, problem.message) } else { nil }
+        if case .trackFailed(let url, _, let problem) = event {
+            (url, problem.message)
+        } else {
+            nil
+        }
     }
     #expect(failures.map(\.0) == [partial])
     #expect(failures.first?.1.contains(endedEarlyText) == true)
@@ -378,7 +382,7 @@ private func silentMP3(stored: Int, stated: Int?) -> Data {
     await rig.engine.setQueue([broken, album.tracks[1]])
     await rig.engine.play()
     try await rig.wait(for: .finished)
-    #expect(rig.events.contains { if case .trackFailed(broken, _) = $0 { true } else { false } })
+    #expect(rig.events.contains { if case .trackFailed(broken, _, _) = $0 { true } else { false } })
     #expect(rig.events.contains(.trackStarted(index: 1)))
     #expect(!rig.events.contains(.trackStarted(index: 0)))
 }

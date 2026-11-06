@@ -13,7 +13,7 @@ private struct Refused: PlaybackFailure {
 private let track = URL(fileURLWithPath: "/m/Kind of Blue/So What.dsf", isDirectory: false)
 
 private let shown = ShownProblem(
-    problem: PlaybackProblem(Refused()), track: track, trackFormat: "DSD64",
+    problem: PlaybackProblem(Refused()), track: track, entry: 0, trackFormat: "DSD64",
     headline: "Couldn't play So What.dsf: DoP needs exclusive access, and hog mode is off for"
         + " this device")
 

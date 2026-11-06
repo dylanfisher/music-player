@@ -36,9 +36,8 @@ public final class NowPlayingBar: NSObject {
     public let statusBar = StatusBarParts()
     /// Called when the playback problem in the status bar is clicked.
     public var problemOpened: (ShownProblem) -> Void = { _ in }
-    /// Called with a fix the user chose for a problem, and the track to play again once it's
-    /// made.
-    public var fixRequested: (PlaybackFix, URL?) -> Void = { _, _ in }
+    /// Called with a fix the user chose and the problem it fixes, whose track may play again.
+    public var fixRequested: (PlaybackFix, ShownProblem) -> Void = { _, _ in }
     /// Shows a problem's dialog as a sheet over the window; tests replace it.
     var showDialog: (ProblemDialog) -> Void = { _ in }
     /// What the window's title says while a track plays.
@@ -201,7 +200,7 @@ public final class NowPlayingBar: NSObject {
                 response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
             guard let self, dialog.buttons.indices.contains(index) else { return }
             switch dialog.buttons[index] {
-            case .fix(let fix): fixRequested(fix, dialog.shown.track)
+            case .fix(let fix): fixRequested(fix, dialog.shown)
             case .details: problemOpened(dialog.shown)
             case .cancel, .ok: break
             }
