@@ -674,6 +674,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             let count = stream.writeChunk()
             written += count
             if count == 0 { return }
+            // The pass publishes the position only once the refill is done, which on a NAS is
+            // hundreds of milliseconds after a seek's audio, fading in, has started to play.
+            publishPosition()
             if limit == .max, condition.withLock({ !pending.isEmpty }) { return }
         }
     }
