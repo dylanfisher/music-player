@@ -4,6 +4,9 @@
 - **Status:** accepted
 - **Amends:** [0115](0115-spectrum-and-file-analysis.md) (the measures table, read by the
   library pass, the columns and Library Health)
+- **Amended by:** [0119](0119-analyze-library-at-once-again-and-pause-scan.md): two to four
+  files at once at utility priority, the count over the whole pass, Analyze Library Again, the
+  file under way in Library Health, and Pause Scan
 
 ## Context
 
