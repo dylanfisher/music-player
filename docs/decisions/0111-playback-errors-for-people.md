@@ -2,6 +2,9 @@
 
 - **Date:** 2026-11-06
 - **Status:** accepted
+- **Amended by:** [0118](0118-hog-mode-fix-plays-the-chosen-track-and-log-values.md): a fix
+  that can't play its track again says why in an alert, and the playback log's values are
+  public, paths hashed.
 
 ## Context
 
@@ -42,7 +45,8 @@ nothing offered to turn hog mode on, and tracks failing in a row ended on a coun
   profile and moves the output to it. It plays the failed queue entry again, which the event
   carries, while that entry still holds the track and is the current one or nothing plays,
   as after tracks fail in a row from mid-queue and the engine points back at its start. With
-  another track playing or paused, or the entry changed, it only logs why. A fix for a device that is no longer the output beeps. Hog mode held by another
+  another track playing or paused, or the entry changed, it logs why and, since ADR 0118, says
+  it in an alert. A fix for a device that is no longer the output beeps. Hog mode held by another
   app names that app, from its pid's process name, with no fix; a device that reads as held
   by no one after the app asked for it says so, naming no app.
 - **Tracks failing in a row say why.** `PlaybackError.failedInARow` carries each track and
