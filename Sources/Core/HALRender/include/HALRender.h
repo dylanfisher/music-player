@@ -74,8 +74,10 @@ uint32_t HALRenderFadeFrames(double sampleRateHz);
 
 /// Producer side. Silenced, the IO proc fades out over `HALRenderFadeFrames` and then writes
 /// silence without taking anything from `source`, so playback can stop where the fade ended.
-/// Not silenced, it fades back in from wherever the fade is. A layout it can't scale is never
-/// faded: it plays on until the device stops.
+/// Not silenced, it fades back in from wherever the fade is. An opaque stream is never faded: it
+/// plays on until the device stops, and reads as silent at once. The output never silences one,
+/// since it stops DoP straight away; this is a fail-safe, so a caller that did would neither
+/// corrupt DoP nor wait on a pause that never ends.
 void HALRenderSetSilenced(HALRender *render, bool silenced);
 
 /// Any thread. True once the IO proc has finished the fade the latest `HALRenderSetSilenced(true)`
