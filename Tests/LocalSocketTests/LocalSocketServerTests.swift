@@ -124,7 +124,14 @@ private final class HeldReplies: @unchecked Sendable {
         let fixture = try Fixture()
         let server = try fixture.server(allowedUID: geteuid() + 1)
         defer { server.stop() }
-        #expect(throws: LocalSocketError.closed) { try fixture.exchange("abc") }
+        // The server closes as soon as it sees the peer, so the client's write can find the
+        // socket already closed (EPIPE) instead of its read finding no reply.
+        do {
+            _ = try fixture.exchange("abc")
+            Issue.record("the other user's request was answered")
+        } catch let error as LocalSocketError {
+            #expect([.closed, .system("write", errno: EPIPE)].contains(error))
+        }
         #expect(try fixture.firstProblem() == .otherUser(geteuid()))
         #expect(fixture.requests.isEmpty)
     }
