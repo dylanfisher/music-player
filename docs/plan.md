@@ -236,7 +236,8 @@ order of the syncs changes the result, and a later import still adds only real g
       per path and player. The merge takes the maximum per player and path, so applying an
       event twice changes nothing. Amends ADR 0033 and ADR 0038.
 - [ ] **46.2 Existing data.** Pre-release, so there is no migration. The deltas already in the
-      logs and in `imported_plays` may be discarded and rebuilt, as long as the owner's stats
+      logs and in `imported_plays` may be discarded and rebuilt (old events ignored when read:
+      the app only appends its own log and never rewrites one, ADR 0038), as long as the owner's stats
       come out right without importing again on both Macs. The Result line says exactly what
       the owner has to do on each Mac.
 - [ ] **46.3 Tests** that fail without the fix: two machines import the same library in either
@@ -290,8 +291,10 @@ The parts, biggest gain first. ADR 0108 records them and amends ADR 0020 and 010
       round trips. The journal steps of 47.3 stay serial; only the writes and read-backs run in
       parallel.
 - [ ] **47.7 Probe: server-side copy.** Find out whether macOS's SMB server-side copy (copy-chunk
-      through `copyfile`) works against the owner's NAS. If it does, the temp file can be the new
-      header plus a server-side copy of the audio, which never crosses the network. If it
+      through `copyfile`) works against the owner's NAS. No agent or test touches the NAS
+      (AGENTS.md), so the agent writes the probe and the owner runs it on a scratch folder there,
+      as a pending checkpoint; the run goes on without it. If it works, the temp file can be the
+      new header plus a server-side copy of the audio, which never crosses the network. If it
       doesn't, record that and drop the part.
 - [ ] **47.8 Less bookkeeping.** `removeLeftoverTemps` lists the folder once per folder per
       batch, not once per file. `rescan(files:)` takes the tags the writer just parsed instead of
@@ -306,8 +309,9 @@ The parts, biggest gain first. ADR 0108 records them and amends ADR 0020 and 010
 
 ### 48. Owner feedback, 2026-11-05 (third round)
 
-Get Info and Listening Stats. Parts 48a and 48b touch different windows, so they can run in
-parallel worktrees and merge in order a, b. ADR 0109 is given to 48b if it needs one.
+Get Info, Listening Stats and playback errors. Parts 48a and 48b touch different windows, so
+they can run in parallel worktrees and merge in order a, b. ADR 0109 is given to 48b if it needs
+one.
 
 #### 48a. Get Info and Lost Stats
 
@@ -321,6 +325,14 @@ parallel worktrees and merge in order a, b. ADR 0109 is given to 48b if it needs
       (ADR 0026). With none to resolve it writes "No lost stats to resolve" in the status bar,
       which the owner didn't notice. Disable the command when there are none, and when it can't
       open the sheet, say why where the user is looking.
+- [ ] **48a.4 Get Info reads every file it can.** Get Info on a DSF file now fails with "files
+      can't be edited", because `TagFile` refuses to write DSF and DSDIFF tags and the read goes
+      through it (`TagFile.swift:17`). Get Info is for reading tags too: a file the app can read
+      but not write opens with its fields shown and read-only, and a line in the window says why
+      it can't be saved ("Tags in DSF files can't be written yet"). In a mixed selection, the
+      fields of the read-only files can't be changed, and Save writes only the others and says so.
+      Only a file that can't be read at all is left out with the alert. Tests: Get Info on a
+      generated DSF and DSDIFF fixture shows their tags, and Save never writes them.
 
 #### 48b. Listening Stats
 
@@ -332,6 +344,40 @@ parallel worktrees and merge in order a, b. ADR 0109 is given to 48b if it needs
 - [ ] **48b.3 Smaller cards wider.** The smaller cards' maximum width goes up slightly.
 - [ ] **48b.4 Save as Playlist asks first.** A sheet asks for the playlist's name, filled in with
       the name the current logic makes, and creates the playlist only on confirm.
+
+#### 48c. Playback errors that explain themselves
+
+When a track can't play, the status bar shows "Playback stopped: " and the error's
+`description`, which is often a type name or a code, and nothing more. The owner hit it playing
+a DSD file with hog mode off, where `DeviceOutput.swift:42` already has the clear reason. 48c
+touches playback and the status bar, not the windows of 48a and 48b, so it can run in a third
+worktree and merge after them. ADR 0111 records the error model if it needs one.
+
+- [ ] **48c.1 Messages people can read.** Every error that can stop playback gives a short
+      message for the user, defined once beside the error, such as "DoP needs exclusive access,
+      and hog mode is off for this device". The status bar shows that message, not the error's
+      `description`. A test walks every case of the playback, output and decoder errors and
+      checks that each has a message and that none prints a type name.
+- [ ] **48c.2 Details on click.** The playback stopped message in the status bar has a small
+      question mark icon and is clickable. It opens a Playback Problem window with the message,
+      the track and its format, the output device and its format, hog mode, the error's full
+      text, and the app's recent log lines about playback. A Copy button copies all of it as
+      text for a bug report.
+- [ ] **48c.3 Fixes offered.** An error the app knows how to fix carries its fix, and the
+      details window shows it as a button. The first is hog mode: playing DSD over DoP with hog
+      mode off shows a dialog at once, saying that DSD needs exclusive access to the device, with
+      a button that turns hog mode on for that device (the per-device setting, phase 22) and
+      plays the track again, and a Cancel button. Hog mode held by another app is a different
+      message, naming the app, with no button.
+- [ ] **48c.4 Every track failing.** When tracks fail in a row until playback stops
+      (`PlaybackError.failedInARow`), a dialog says why instead of the count alone: if every
+      failure has the same cause, that cause and its fix as in 48c.3; if not, the causes with
+      the number of tracks each, and a button that opens the details window.
+- [ ] **48c.5 Tests.** DSD on a null device with hog mode off gives the hog mode message and
+      fix, and the fix turns hog mode on and plays; tracks failing in a row with one cause give
+      that cause; the details window's text includes the device and the log lines.
+- [ ] **Owner check in the running app:** play a DSD file on the ADI-2 with hog mode off; turn
+      it on from the dialog and hear it play. Click the stopped message and copy its details.
 
 ### 49. Click-free play, pause and seek
 
