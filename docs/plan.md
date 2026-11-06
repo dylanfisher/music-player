@@ -309,6 +309,42 @@ ADR numbers: 0117 to 50a if it needs one, 0118 to 50b, 0119 to 50c, 0120 to 50d.
       `renderer.name`'s privacy consistent in `RendererSession`. Update ADR 0025's row 35 and
       its `rg` check.
 
+Plan, part 50b (ADR 0118, amending 0025 and 0111):
+- Probe: confirmed by a test before any fix. `play(starting:)` loads the one-track queue, and
+  `DeviceOutput.loadTrack` refuses DoP without hog mode synchronously, so `.trackFailed` goes
+  out with entry 0 and `.finished` is held for the queue. `complete()` moves the cursor to the
+  row, the held end skips on, the album's next two tracks fail too and the engine stops with
+  causes `[0, 3, 4]` and the cursor on entry 0. The dialog, shown for the first failure, keeps
+  entry 0, and `replayPosition` finds row 0's track there and refuses with `.gone`, which only
+  the log says.
+- 50b.1 (`Core/Playback`): while `completing`, a failure is recorded but its event is held,
+  as the end already is; `complete()` moves every failure recorded so far to the started
+  track's entry in the whole queue, and the held events go out first when the hold is
+  released, so the event, the dialog and the run's causes carry the row. Abandoned, they go out
+  with entry 0, right for the queue that stays. A run of failures that stops playback leaves
+  the cursor on its first track, not entry 0, so Play tries the chosen track again.
+  `replayPosition` is unchanged and still never plays a different track.
+- 50b.1 (`Features/NowPlaying`, `App`): `ReplayRefusal.notice(after:)` says, for a fix made
+  whose track isn't played again, why and what to do; the app shows it as an alert sheet on
+  the window the fix was asked from (the main window under the dialog, or the details window).
+- 50b.2 (`Core/Log`, `Core/Playback`, `Core/HALOutput`, `Core/UPnPOutput`): the decoder's and
+  DSD reader's errors (`MetadataError`) name the file's path in their description, so
+  `logText(_:without:)` in Log gives an error's text with the track's path replaced by "the
+  track's file", logged public beside the path logged with `.private(mask: .hash)`. Errors about no
+  track (HAL, OSStatus, SOAP, device description, DeviceOutput's and the renderer's) name no
+  path and are logged public, as are device names, UIDs, renderer names and addresses and
+  four-character codes. A run's line logs only its count, as a cause's message can be an
+  error's whole text; each track's own line has its error. `serving <renderer>: …` stays private: the HTTP server's problems can
+  name a served file's path. Every `renderer.name` in `RendererSession` and `RendererOutput`
+  is public.
+- Tests: `play(starting: urls[2])` with a gated fill and a refusal before the gate opens, then
+  two more refusals: the events and causes say entries 2, 3 and 4, the engine stops on entry
+  2, and playing it loads the chosen track; a failure before a queue that couldn't be read
+  still goes out, with entry 0; the refusal's notice; `logText` removes a `MetadataError`'s
+  path; and a line logged as the engine logs a failure reads back in `recentLogLines` with
+  the error and a hash, not the path or `<private>`.
+- Order: this plan, 50b.1's engine fix, its notice, 50b.2, the ADR and the result.
+
 #### 50c. Analyze Library and Scan Library
 
 - [ ] **50c.1 Two to four files at once.** The pass analyzes `min(4, max(2,
