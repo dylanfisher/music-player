@@ -272,6 +272,55 @@ The parts, biggest gain first. ADR 0108 records them and amends ADR 0020 and 010
 - [ ] **Hardware checkpoint (owner):** save a tag edit on a 20-track hi-res album on the NAS over
       Wi-Fi and over Ethernet; report the times. Then add art to a few tracks and edit them again.
 
+Plan (ADR 0108, amends 0020 and 0107). All in `Core/TagWriter` unless named; tests on
+generated fixtures and hand-built files only.
+- Bench first, so the rows have a before: `WriteFaults` gains a `package` hook told of each
+  file system call the writer makes on a music file, its temp file or its folder (metadata,
+  open, read and write with their bytes, flush, close, listing, clone), and of each read the
+  parsers make through a counting `ByteSource` around `FileSource`. The bench prices each call
+  at the slow simulated NAS's 10 ms and its bytes on one shared link at 57 MB/s (the owner's
+  40 MB in 0.7 s), and makes 20 copies of a fixture FLAC grown to 40 MB with audio bytes. Rows:
+  the batch in place and through the temp file, locally and on that NAS.
+- 47.1: the in-place path drops `fileHashes`. Before: the identity, the planned file read back
+  through `PlannedSource`, then `fstat` and the region's `pread` at the write, as now. After:
+  `FileSource` (which already sets `F_NOCACHE`) reads the region back against the new bytes,
+  then `checkParsed` reads the tags, format, art, chunk offsets and payload ranges.
+- 47.2: `FileRecord` holds either `originalSHA256` (temp-file writes, unchanged) or `inPlace`:
+  the region's offset, and the SHA-256 and length of its old and new bytes. The marker alone
+  says a write is unconfirmed. Recovery reads the region: new bytes keep the edit, old bytes
+  drop the record, neither puts the original back. Undo and put-back check the temp file's
+  region and size, and the journaled old bytes against their hash.
+- 47.3: `write(_:to:)` reads and plans every file first (in chunks bounded by files and
+  bytes, so a 1000-file art change doesn't hold all its plans), then for the chunk's in-place
+  files appends every record, old bytes and marker with `fsync`s and one `F_FULLFSYNC`; then
+  the writes with an `fsync` each; then one `F_FULLFSYNC` per volume written; then confirms
+  each record (no drive flush) and removes its marker. A lost confirmation leaves a marker
+  that recovery confirms. Temp-file files keep their own path. A fault stops the batch after
+  each step, for the crash tests.
+- 47.4: one `rewritePaddingBytes(tagBytes:)` replaces the three 2,048s: 64 KiB, or as much
+  again as the new tag when that's more, so a cover up to twice the old one's size fits.
+- 47.5: `InPlacePlan` takes a plan whose kept ranges stay put and which only grows past the old
+  end (MP4 `moov` last); `PlannedSource` serves the bytes past the end; recovery and undo take
+  the size between the old and the new. The corpus survey notes "moov last" for the count.
+- 47.6: the chunk's writes and read-backs run 4 at a time; journal steps stay serial.
+- 47.7: `scripts/smb-copy-probe.swift <scratch folder>` makes its own random files in a new
+  subfolder, times `clonefile`, `copyfile` with `COPYFILE_CLONE_FORCE` and `COPYFILE_DATA`, and
+  a read-write copy, compares them, counts the bytes the network interfaces moved, and removes
+  what it made. The owner runs it on the NAS; the temp-file path is unchanged until then.
+- 47.8: the batch lists each folder once for leftover temp files (`writeTemp` no longer
+  lists); `TagWriteReport.parsed` carries each written file's read-back parse, and
+  `LibraryScanner.rescan(files:parsed:)` stores it instead of reading the file again, through
+  `TagEditing.written` and `LibraryWatcher`.
+- 47.9: `write` reports `TagWriteProgress` (read, written, of total); `TagEditing.progress`
+  hands it to the main thread, and the app shows "Saving tags: 3 of 20" in the browser's
+  status bar beside the scan's text, with its bar.
+- Order: plan, bench and hook, 47.4, 47.1+47.2, 47.5, 47.3, 47.6, 47.8, 47.9, probe, ADR,
+  bench after, Result. Tests: reads bounded by the tag (47.1), the three recovery cases on the
+  region (47.2), a crash after each batch step leaving every file whole or edited (47.3), the
+  padding after a slow save and a second edit in place (47.4), moov-last growth with undo and a
+  torn growth (47.5), writes overlapping (47.6), one listing per folder and the parse handed on
+  (47.8), progress counts and the status text (47.9).
+
 ### 48. Owner feedback, 2026-11-05 (third round)
 
 Get Info, Listening Stats, playback errors, the state across a quit and the receiver moving
