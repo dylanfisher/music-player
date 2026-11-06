@@ -68,7 +68,7 @@ private func problem(_ arguments: String...) -> String? {
     #expect(problem("next", "--home") == "--home needs a folder")
     #expect(problem("next", "--home", "--json") == "--home needs a folder")
     #expect(problem("next", "--home", "a", "--home", "b") == "--home is given twice")
-    #expect(problem("next", "--json") == "--json only goes with status and stats")
+    #expect(problem("next", "--json") == "--json only goes with status, stats and analyze")
     #expect(problem("next", "x") == "next takes no argument")
     #expect(problem("play", "a", "b") == "play takes one argument; quote one with spaces")
     #expect(problem("help", "x") == "help takes no argument")
@@ -98,6 +98,29 @@ private func problem(_ arguments: String...) -> String? {
     }
     #expect(help.contains("  status [--json]"))
     #expect(help.contains("music-player://play?q=album:Kind%20of%20Blue"))
+}
+
+@Test func analyzeTakesPathsMadeAbsoluteAndWaitsForThem() throws {
+    let analyze = try parseScriptArguments(
+        ["analyze", "a.flac", "../b.flac", "/c/d.flac", "--json"], names: names,
+        currentDirectory: "/Music/x")
+    #expect(
+        analyze.action
+            == .request(
+                .report(
+                    .showSpectrum, argument: nil, json: true,
+                    paths: ["/Music/x/a.flac", "/Music/b.flac", "/c/d.flac"])))
+    #expect(analyze.replySeconds == ScriptLimits.fileReplySeconds)
+    // With none, the app takes the selected tracks.
+    let selection = try parse("analyze")
+    #expect(selection.action == .request(.report(.showSpectrum, argument: nil, json: false)))
+    #expect(try parse("stats").replySeconds == ScriptLimits.replySeconds)
+    #expect(problem("analyze", "/a\u{7}.flac") == "a path: the argument holds a control character")
+    let long = "/" + String(repeating: "x", count: 1000)
+    #expect(
+        problem("analyze", long, long, long, long, long)
+            == "the paths are over the 4096 bytes a request takes; give fewer")
+    #expect(scriptHelp(names).contains("analyze [<path>…] [--json]"))
 }
 
 @Test func statsTakesAPeriodAndJSON() throws {

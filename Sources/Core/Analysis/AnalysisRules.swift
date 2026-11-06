@@ -1,7 +1,7 @@
 /// Every threshold the analysis and its verdicts use, each defined once (ADR 0115). Set from
 /// the generated fixtures and the published cutoffs of common lossy encoders, as the owner has
 /// no files to tune them on.
-enum AnalysisRules {
+public enum AnalysisRules {
     /// A cutoff is a fall of at least this much in the average spectrum, from the half of
     /// `cutoffSpanHz` below a frequency to the half above it. Music rolls off far slower: even
     /// 12 dB an octave is under 1 dB across a kilohertz at 16 kHz.
@@ -31,5 +31,5 @@ enum AnalysisRules {
     static let dynamicRangeLoudestShare = 0.2
 
     /// The most files Show Spectrum compares, and `music-player analyze` takes.
-    static let comparedFiles = 8
+    public static let comparedFiles = 8
 }

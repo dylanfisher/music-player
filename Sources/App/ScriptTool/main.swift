@@ -43,7 +43,7 @@ let socket = scriptSocketPath(dataDirectory: paths.dataDirectory)
 
 /// The reply, or nil when nothing answers on the socket yet. While a started app comes up,
 /// `starting` also counts a connection it closes unanswered as not ready.
-func exchange(timeoutSeconds: Double = ScriptLimits.replySeconds, starting: Bool = false)
+func exchange(timeoutSeconds: Double = invocation.replySeconds, starting: Bool = false)
     -> ScriptReply?
 {
     do {
@@ -80,8 +80,12 @@ func launchAndWait() async -> ScriptReply {
     } catch {
         fail("couldn't start \(app.path): \(error)")
     }
+    // A command that reads files waits for them on top of the start.
+    let readingSeconds = invocation.replySeconds - ScriptLimits.replySeconds
     while case let left = deadline.timeIntervalSinceNow, left > 0 {
-        if let reply = exchange(timeoutSeconds: left, starting: true) { return reply }
+        if let reply = exchange(timeoutSeconds: left + readingSeconds, starting: true) {
+            return reply
+        }
         try? await Task.sleep(nanoseconds: UInt64(retrySeconds * 1e9))
     }
     fail("the app didn't answer at \(socket) within \(Int(launchWaitSeconds)) s of starting")

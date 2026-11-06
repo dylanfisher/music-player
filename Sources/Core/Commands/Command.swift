@@ -23,11 +23,16 @@ public struct Command: Sendable, Equatable {
     public let inPalette: Bool
     /// The command line prints what it found, as text or with `--json`.
     public let replies: Bool
+    /// The command line passes it the paths after its name, made absolute; with none it acts
+    /// on the selected tracks.
+    public let takesPaths: Bool
 
     init(
         _ id: CommandID, _ title: String, _ chords: [KeyChord] = [], links: Bool = false,
-        argument: String? = nil, menus: Bool = true, palette: Bool = false, replies: Bool = false
+        argument: String? = nil, menus: Bool = true, palette: Bool = false, replies: Bool = false,
+        paths: Bool = false
     ) {
+        precondition(!paths || replies, "\(id) takes paths but doesn't say what it found")
         precondition(chords.count <= 2, "\(id) has more than a primary and an alternate")
         precondition(Set(chords).count == chords.count, "\(id) lists one chord twice")
         self.id = id
@@ -38,6 +43,7 @@ public struct Command: Sendable, Equatable {
         runsFromMenus = menus && !palette
         inPalette = palette
         self.replies = replies
+        takesPaths = paths
     }
 
     /// The default chord at `position`.

@@ -1,3 +1,4 @@
+import Analysis
 import AppKit
 import Artwork
 import Commands
@@ -137,6 +138,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Logs the main thread's stalls over 100 ms, for the field data the benches can't give.
     /// The art column's thumbnails, kept between launches (ADR 0079).
     private lazy var thumbnails = ThumbnailStore(directory: paths.thumbnailDirectory)
+    /// The Spectrum window's spectrograms, kept beside the thumbnails (ADR 0115).
+    lazy var spectrograms = SpectrogramStore(directory: paths.spectrogramDirectory)
+    /// Made on first use by `fileAnalyzer()`.
+    var analyzer: FileAnalyzer?
     private let stalls = StallDetector { NSApp.currentEvent.map { eventName($0.type) } }
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.
@@ -361,6 +366,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         resumePlayback(settings)
         applyRendererSetting()
         thumbnails.trimInBackground()
+        spectrograms.trimInBackground()
         startScripting()
         applyReceiverSetting()
         startWatching(settings)

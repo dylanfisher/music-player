@@ -32,7 +32,8 @@ import Testing
     #expect(
         titles(AppMenus.trackMenu) == [
             "Play Next", "Add to Playback Queue", "Play Now", "-", "Show Album", "Show Artist",
-            "-", "Like", "Dislike", "-", "Rating ▸ 6", "-", "Get Info", "Reveal in Finder", "-",
+            "-", "Like", "Dislike", "-", "Rating ▸ 6", "-", "Get Info", "Show Spectrum",
+            "Reveal in Finder", "-",
             "Remove…", "-", "New Playlist with Selected Tracks", "Add to Playlist ▸",
             "Show in Playlist ▸",
         ])
@@ -51,7 +52,8 @@ import Testing
     #expect(
         AppCommands.all().filter { $0.argument != nil }.map(\.id)
             == [.showStats, .play, .receiverSetVolume])
-    #expect(AppCommands.all().filter(\.replies).map(\.id) == [.showStats])
+    #expect(AppCommands.all().filter(\.replies).map(\.id) == [.showStats, .showSpectrum])
+    #expect(AppCommands.all().filter(\.takesPaths).map(\.id) == [.showSpectrum])
 }
 
 @Test func everyReceiverInputAndSoundModeIsACommand() {

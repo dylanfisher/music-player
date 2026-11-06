@@ -201,7 +201,8 @@ let package = Package(
         .executableTarget(
             name: "MusicPlayer",
             dependencies: [
-                "Artwork", "Commands", "DisplayText", "HALOutput", "KeyChord", "Library",
+                "Analysis", "Artwork", "Commands", "DisplayText", "HALOutput", "KeyChord",
+                "Library",
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
                 "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Scripting",
                 "SQLite", "Settings", "SettingsWindow", "TagEditor", "TagWriter", "UPnP",

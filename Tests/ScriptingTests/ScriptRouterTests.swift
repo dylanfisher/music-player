@@ -29,11 +29,15 @@ private final class Recorder {
             },
         ],
         reports: [
-            .showStats: { [unowned self] text, json in
+            .showStats: { [unowned self] text, _, json in
                 arguments.append(text ?? "-")
                 if text == "fail" { throw Failure() }
                 return json ? "{}" : "stats \(text ?? "shown")"
-            }
+            },
+            .showSpectrum: { [unowned self] _, paths, json in
+                arguments += paths
+                return "\(json ? "json" : "text") of \(paths.count)"
+            },
         ], now: { [unowned self] in clock })
 
     struct Failure: Error, CustomStringConvertible {
@@ -173,6 +177,31 @@ private final class Recorder {
     #expect(recorder.ran == [.showStats])
 }
 
+@MainActor @Test func pathsGoOnlyToACommandThatTakesThem() async throws {
+    let recorder = try Recorder()
+    let router = recorder.router
+    #expect(
+        await router.handle(
+            .report(.showSpectrum, argument: nil, json: true, paths: ["/a.flac", "/b c.flac"]),
+            from: .commandLine) == .done("json of 2"))
+    #expect(
+        await router.handle(.report(.showSpectrum, argument: nil, json: false), from: .commandLine)
+            == .done("text of 0"))
+    #expect(
+        await router.handle(
+            .report(.showStats, argument: nil, json: false, paths: ["/a.flac"]),
+            from: .commandLine) == .failed("library.stats takes no paths"))
+    #expect(
+        await router.handle(
+            .report(.showSpectrum, argument: nil, json: false, paths: ["a.flac"]),
+            from: .commandLine) == .failed("a.flac isn't an absolute path"))
+    #expect(
+        await router.handle(
+            .report(.showSpectrum, argument: nil, json: false, paths: ["/a\u{1B}.flac"]),
+            from: .commandLine) == .failed("a path: the argument holds a control character"))
+    #expect(recorder.arguments == ["/a.flac", "/b c.flac"])
+}
+
 @Test func aReportRequestRoundTrips() throws {
     let request = ScriptRequest.report(.showStats, argument: "week", json: true)
     let data = try JSONEncoder().encode(request)
@@ -180,5 +209,9 @@ private final class Recorder {
     let plain = ScriptRequest.report(.showStats, argument: nil, json: false)
     #expect(
         try JSONDecoder().decode(ScriptRequest.self, from: try JSONEncoder().encode(plain)) == plain
+    )
+    let paths = ScriptRequest.report(.showSpectrum, argument: nil, json: false, paths: ["/a"])
+    #expect(
+        try JSONDecoder().decode(ScriptRequest.self, from: try JSONEncoder().encode(paths)) == paths
     )
 }

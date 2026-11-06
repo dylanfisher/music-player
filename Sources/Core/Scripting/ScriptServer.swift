@@ -37,12 +37,12 @@ private func send(_ reply: ScriptReply, _ connection: LocalSocketReply, _ proble
 }
 
 /// Sends `request` to the app at `path` and decodes its reply, waiting at most
-/// `timeoutSeconds`, and never longer than a reply may take.
+/// `timeoutSeconds`, and never longer than a reply that reads files may take.
 public func sendScriptRequest(
     _ request: ScriptRequest, path: String, timeoutSeconds: Double = ScriptLimits.replySeconds
 ) throws -> ScriptReply {
     let data = try localSocketExchange(
         path: path, request: try JSONEncoder().encode(request), replyCap: ScriptLimits.replyBytes,
-        timeoutSeconds: min(timeoutSeconds, ScriptLimits.replySeconds))
+        timeoutSeconds: min(timeoutSeconds, ScriptLimits.fileReplySeconds))
     return try JSONDecoder().decode(ScriptReply.self, from: data)
 }

@@ -12,8 +12,8 @@ public func scriptSocketPath(dataDirectory: URL) -> String {
     dataDirectory.appendingPathComponent("scripting").appendingPathComponent("socket").path
 }
 
-/// Caps on what crosses the socket. A request is a command ID and an argument; a reply is at
-/// most a status with one track's tags.
+/// Caps on what crosses the socket. A request is a command ID and an argument, or a few paths;
+/// a reply is at most a status with one track's tags, or a few files' measures.
 public enum ScriptLimits {
     static let requestBytes = 4096
     static let replyBytes = 65536
@@ -21,6 +21,9 @@ public enum ScriptLimits {
     static let socketTimeoutSeconds = 2.0
     /// How long the tool waits for a reply, which may follow a library query.
     public static let replySeconds = 10.0
+    /// How long it waits for a command that reads the files it's given (`Command.takesPaths`):
+    /// minutes for a few long hi-res files on the NAS, on the 2015 MacBook Pro.
+    static let fileReplySeconds = 600.0
     static let argumentBytes = 1024
     static let urlBytes = 2048
 }

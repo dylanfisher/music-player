@@ -38,6 +38,10 @@ enum SchemaPart: String, CaseIterable {
     /// The lines of the Problems window the user dismissed (ADR 0059). A part of its own for
     /// the same reason as `loved`.
     case dismissed
+    /// What analyzing each file measured (phase 45), keyed by path with the file's size and
+    /// modification time. A cache: rebuilding it discards nothing a new analysis can't measure
+    /// again.
+    case measures
 
     var sql: String {
         switch self {
@@ -52,6 +56,7 @@ enum SchemaPart: String, CaseIterable {
         case .removed: removedSchema
         case .recorded: recordedSchema
         case .dismissed: dismissedSchema
+        case .measures: measuresSchema
         }
     }
 
@@ -75,6 +80,7 @@ enum SchemaPart: String, CaseIterable {
         case .removed: [removedTable]
         case .recorded: [recordedTable]
         case .dismissed: [dismissedProblemsTable]
+        case .measures: [measuresTable]
         }
     }
 }
@@ -97,6 +103,7 @@ let scannedFoldersTable = "scanned_folders"
 let removedTable = "removed"
 let recordedTable = "recorded_paths"
 let dismissedProblemsTable = "dismissed_problems"
+let measuresTable = "measures"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let importedLastPlaysTable = "imported_last_plays"
@@ -317,6 +324,30 @@ private let dismissedSchema = """
     -- A row for each line of the Problems window the user dismissed, as the window showed it.
     CREATE TABLE \(dismissedProblemsTable) (
         line TEXT PRIMARY KEY
+    ) WITHOUT ROWID;
+    """
+
+private let measuresSchema = """
+    -- A row for each file analyzed, by path, with its size and modification time as the walk
+    -- reads them; a row whose file has changed since is ignored and replaced.
+    CREATE TABLE \(measuresTable) (
+        path TEXT PRIMARY KEY,
+        size_bytes INTEGER NOT NULL,
+        modified_seconds REAL NOT NULL,
+        format_id TEXT NOT NULL,
+        sample_rate_hz REAL NOT NULL,
+        stored_bits INTEGER,
+        channels INTEGER NOT NULL,
+        is_float INTEGER NOT NULL,
+        duration_seconds REAL NOT NULL,
+        cutoff_hz REAL,
+        cutoff_steepness_db_per_khz REAL,
+        effective_bits INTEGER,
+        identical_channels INTEGER,
+        peak_dbfs REAL,
+        true_peak_dbtp REAL,
+        clipped_runs INTEGER NOT NULL,
+        dynamic_range INTEGER
     ) WITHOUT ROWID;
     """
 

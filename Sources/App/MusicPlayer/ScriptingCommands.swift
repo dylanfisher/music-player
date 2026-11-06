@@ -32,10 +32,14 @@ extension AppDelegate {
                 .receiverSetVolume: { [weak self] text in try self?.setReceiverVolume(text) },
             ],
             reports: [
-                .showStats: { [weak self] text, json in
+                .showStats: { [weak self] text, _, json in
                     guard let self else { throw NoWindow() }
                     return try await statsReply(text, json: json)
-                }
+                },
+                .showSpectrum: { [weak self] _, paths, json in
+                    guard let self else { throw NoWindow() }
+                    return try await analysisReply(paths, json: json)
+                },
             ])
         scriptRouter = router
         do {

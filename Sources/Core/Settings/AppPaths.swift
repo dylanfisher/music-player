@@ -39,4 +39,6 @@ public struct AppPaths: Sendable {
     public var stateFile: URL { dataDirectory.appendingPathComponent("state.json") }
     /// The art column's thumbnails.
     public var thumbnailDirectory: URL { cacheDirectory.appendingPathComponent("Thumbnails") }
+    /// The Spectrum window's spectrograms (phase 45).
+    public var spectrogramDirectory: URL { cacheDirectory.appendingPathComponent("Spectrograms") }
 }

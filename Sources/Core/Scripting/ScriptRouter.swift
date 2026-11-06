@@ -14,9 +14,9 @@ public final class ScriptRouter {
 
     /// Runs a command's argument; each command declaring one has one.
     public typealias ArgumentHandler = (String) async throws -> String?
-    /// Runs a command that replies, with its argument if given and whether JSON is asked
-    /// for, and says what it found.
-    public typealias ReportHandler = (String?, Bool) async throws -> String
+    /// Runs a command that replies, with its argument if given, the paths it was given and
+    /// whether JSON is asked for, and says what it found.
+    public typealias ReportHandler = (String?, [String], Bool) async throws -> String
 
     private let dispatcher: CommandDispatcher
     private let status: () async -> ScriptStatus
@@ -85,7 +85,7 @@ public final class ScriptRouter {
             } catch {
                 return .failed("\(error)")
             }
-        case .report(let id, let argument, let json):
+        case .report(let id, let argument, let json, let paths):
             guard origin == .commandLine else { return .failed("a link can't ask for \(id)") }
             guard let report = reports[id] else {
                 return .failed("\(id) doesn't reply; run it without \(ScriptFlag.json.rawValue)")
@@ -93,8 +93,16 @@ public final class ScriptRouter {
             if let argument, let problem = ScriptRequest.argumentProblem(argument) {
                 return .failed(problem)
             }
+            if !paths.isEmpty {
+                guard dispatcher.bindings.defaults.command(id)?.takesPaths == true else {
+                    return .failed("\(id) takes no paths")
+                }
+                if let problem = paths.lazy.compactMap(ScriptRequest.pathProblem).first {
+                    return .failed(problem)
+                }
+            }
             do {
-                return .done(try await report(argument, json))
+                return .done(try await report(argument, paths, json))
             } catch {
                 return .failed("\(error)")
             }

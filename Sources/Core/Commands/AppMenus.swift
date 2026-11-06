@@ -66,7 +66,8 @@ public enum AppMenus {
         .command(.showAlbum), .command(.showArtist), .separator,
         .command(.toggleLoved), .command(.toggleDisliked), .separator,
         .submenu(ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
-        .separator, .command(.editTags), .command(.revealInFinder), .separator,
+        .separator, .command(.editTags), .command(.showSpectrum), .command(.revealInFinder),
+        .separator,
         .command(.removeTracks), .separator, .command(.newPlaylistFromSelection),
         .live(addToPlaylistMenuTitle),
         .live(showInPlaylistMenuTitle),
@@ -110,7 +111,7 @@ public enum AppMenus {
                     .separator, .command(.revealInFinder), .setting(settings.fileViewer.key),
                     .command(.copyPath), .command(.addToPlaylist), .command(.removeTracks),
                     .command(.showInPlaylist), .command(.showAlbum), .command(.showArtist),
-                    .separator, .command(.editTags),
+                    .separator, .command(.editTags), .command(.showSpectrum),
                     .command(.undoTagEdit), .command(.replaceArtwork), .command(.removeArtwork),
                     .submenu(
                         ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
