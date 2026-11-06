@@ -396,11 +396,11 @@ own deadline later while the receiver reports itself behind. The receiver also s
 `SetNextAVTransportURI`, so it never moves on by itself. 48e touches only `UPnPOutput`, so it
 runs in its own worktree. ADR 0112 records the new timing and amends ADR 0041.
 
-- [ ] **48e.1 Find out first.** Log, at notice level, each poll's transport state, position,
+- [x] **48e.1 Find out first.** Log, at notice level, each poll's transport state, position,
       duration and track URI in a track's last 15 s and the 15 s after, and whether a
       `SetNextAVTransportURI` was accepted. The owner's run on the Denon (checkpoint below)
       confirms the cause; the parts below don't wait for it.
-- [ ] **48e.2 The app's clock decides.** When the next track goes out is worked out from the
+- [x] **48e.2 The app's clock decides.** When the next track goes out is worked out from the
       app's own clock: started when the receiver first reports playing, paused and resumed
       with it, and set again by a seek. It no longer waits on a report of the end. A poll may
       move the end later only for a stall the polls show (the position not moving while the
@@ -408,14 +408,14 @@ runs in its own worktree. ADR 0112 records the new timing and amends ADR 0041.
       track, so a lagging receiver can't hold the next track back for good. A stop counts as
       the end when the app's clock is within the slack of it, whatever position was last
       polled.
-- [ ] **48e.3 A receiver that ignores the next URI.** After a track whose next URI was
+- [x] **48e.3 A receiver that ignores the next URI.** After a track whose next URI was
       accepted, if the receiver stops, or goes on playing the same URI past the end, instead
       of moving to the next one, the session marks that renderer as not honoring it
       (`RendererGapless.afterStop`, with the reason shown in the signal path) and from then
       on starts each track itself with `SetAVTransportURI` and Play at the clock's end. The
       choice is kept per renderer for the session, so the second track in a row doesn't stall
       too.
-- [ ] **48e.4 Tests,** with the fake renderer the UPnP output tests already use: one whose
+- [x] **48e.4 Tests,** with the fake renderer the UPnP output tests already use: one whose
       position lags 5 s and that never reports the end; one that accepts and ignores
       `SetNextAVTransportURI`; one that stalls mid-track for 4 s and then catches up (the end
       moves later, by no more than the cap); a renderer that honors the next URI still plays
@@ -456,7 +456,13 @@ Implementation plan (ADR 0112, amending 0041), all in `UPnPOutput` and its tests
    stall moves the end by its length, a long one by the cap, a renderer stuck past the end
    moves nothing, pause and resume, seeks.
 
-Result (draft, gate fixes in, before the rerun): shipped 48e.1 to 48e.4 as planned, checked
+Gate, part 48e: three review rounds; every finding above low fixed in its own commit (a
+buffering start or late resume taken as lag, the lead acting on the clock alone, then holds after
+each resume adding up); one finding left as it can't happen, since one loop runs the session
+(`RendererOutput.swift:97`). The audit's points fixed: the reason shown in the signal path, the
+renderer's name public in its log lines. `./scripts/check` passes.
+
+Result, part 48e: shipped 48e.1 to 48e.4 as planned, checked
 only against the fake renderer (ADR 0112). A track's end is the app's clock's: started by the
 first poll that finds the renderer playing, paused and resumed with it, set by a seek. A poll
 moves the end later only when the renderer falls further behind than its usual lag, and by
