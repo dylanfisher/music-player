@@ -56,9 +56,11 @@ import Testing
 }
 
 /// A browser over a copy of the shared library with plays today, 400 days ago and of a file
-/// no longer in the library, in a window, its split laid out, the library loaded.
+/// no longer in the library, in a window, its split laid out, `saved` loaded.
 @MainActor
-private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitView, [TrackRow]) {
+private func playedBrowser(_ saved: BrowserState = BrowserState(source: nil)) async throws -> (
+    LibraryBrowser, NSWindow, NSSplitView, [TrackRow]
+) {
     let databaseURL = try writableBrowserDatabase()
     let index = try LibraryIndex(at: databaseURL)
     let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
@@ -82,7 +84,7 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     window.contentView = browser.content.view
     window.layoutIfNeeded()
     browser.restoreSplit()
-    await browser.load(BrowserState(source: nil))
+    await browser.load(saved)
     let split = try #require(browser.content.view.subviews.first?.subviews.first as? NSSplitView)
     return (browser, window, split, album)
 }
@@ -147,6 +149,17 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     // Stats' row shows the week again.
     browser.showStats()
     try await waitFor("Stats again") { browser.model.filter.source == .stats(.week) }
+}
+
+@MainActor @Test func statsSavedAsTheSourceOpensInItsSortOverItsReportsDays() async throws {
+    let (browser, _, _, album) = try await playedBrowser(BrowserState(source: .stats(.week)))
+    try await waitFor("the week's report and tracks") {
+        browser.statsModel.periodReport?.span != nil
+            && Set(browser.model.trackIDs) == Set(album.map(\.id))
+    }
+    #expect(browser.model.filter.source == .stats(.week))
+    #expect(browser.model.sortColumn == .playCount && !browser.model.ascending)
+    #expect(browser.model.tableSort == (.artist, true))
 }
 
 @MainActor @Test func aPeriodsReportListsItsTableOnceWhenItsDaysAreTheTables() async throws {
