@@ -98,14 +98,26 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     #expect(played.count == album.count + 1)
     try await waitFor("the period's tracks") { Set(browser.model.trackIDs) == played }
 
-    // Past Week leaves out the play 400 days ago; the sidebar's row keeps the period.
+    // Past Week holds a play six days ago, before the calendar's week started on all but its
+    // last day, and leaves out one seven days ago and the one 400 days ago; the sidebar's row
+    // keeps the period.
+    let rows = try browser.index.rows(ids: try browser.index.trackIDs(sortedBy: .path))
+    let others = rows.filter { row in !album.contains { $0.id == row.id } }
+    let sixDaysAgo = try #require(others.first)
+    let calendar = Calendar.current
+    for (row, days) in [(sixDaysAgo, -6), (try #require(others.dropFirst().first), -7)] {
+        let day = try #require(calendar.date(byAdding: .day, value: days, to: Date()))
+        try browser.index.recordPlay(row.path, at: day.timeIntervalSince1970)
+    }
     browser.statsPanel.choosePeriod(.week)
     try await waitFor("the week") {
         browser.statsModel.report?.span != nil && !browser.statsModel.isLoading
     }
-    #expect(browser.statsModel.report?.plays == album.count * 3 + 1)
+    #expect(browser.statsModel.report?.plays == album.count * 3 + 2)
     #expect(sidebar.selectedSource == .stats(.week))
-    try await waitFor("the week's tracks") { Set(browser.model.trackIDs) == Set(album.map(\.id)) }
+    try await waitFor("the week's tracks") {
+        Set(browser.model.trackIDs) == Set(album.map(\.id) + [sixDaysAgo.id])
+    }
     // The table keeps to the days the report counted, once it has arrived.
     try await waitFor("the report's days") {
         browser.model.filter.statsSpan != nil
