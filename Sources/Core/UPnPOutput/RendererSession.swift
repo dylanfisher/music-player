@@ -393,22 +393,31 @@ actor RendererSession {
             current.clock.seconds(at: time) >= current.track.durationSeconds - Self.traceSeconds
         let afterChange = trackChangedAt.map { time - $0 < Self.traceSeconds } ?? false
         guard nearEnd || afterChange else { return }
-        let uri = position.trackURI
-        let which =
-            sameURI(uri, current.uri)
-            ? "the current track"
-            : next.map { sameURI(uri, $0.uri) } == true ? "the next track" : "another track"
-        func seconds(_ value: Double?) -> String {
+        let line = Self.traceLine(
+            state: "\(transport.state)", isOK: transport.isOK, seconds: position.seconds,
+            durationSeconds: position.durationSeconds, uri: position.trackURI,
+            currentURI: current.uri, nextURI: next?.uri, clock: current.clock, at: time)
+        logger.notice("\(self.renderer.name, privacy: .public) \(line, privacy: .public)")
+    }
+
+    /// What `trace` logs for one poll. The URI is logged only when it's the current or the next
+    /// track's, so another app's stream is named only as another track.
+    static func traceLine(
+        state: String, isOK: Bool, seconds: Double?, durationSeconds: Double?, uri: String,
+        currentURI: String, nextURI: String?, clock: RendererClock, at time: Double
+    ) -> String {
+        func shown(_ value: Double?) -> String {
             value.map { String(format: "%.1f", $0) } ?? "no time"
         }
-        let clock = current.clock
-        let line =
-            "polled near a track change: \(transport.state)" + (transport.isOK ? "" : " (error)")
-            + ", at \(seconds(position.seconds)) of \(seconds(position.durationSeconds)) s"
-            + " on \(which) \(uri); the app's clock at"
-            + " \(seconds(clock.seconds(at: time))) of \(seconds(clock.durationSeconds)) s,"
-            + " the end moved \(seconds(clock.stallSeconds)) s for stalls"
-        logger.notice("\(self.renderer.name, privacy: .public) \(line, privacy: .public)")
+        let track =
+            sameURI(uri, currentURI)
+            ? "the current track \(uri)"
+            : nextURI.map { sameURI(uri, $0) } == true ? "the next track \(uri)" : "another track"
+        return "polled near a track change: \(state)" + (isOK ? "" : " (error)")
+            + ", at \(shown(seconds)) of \(shown(durationSeconds)) s on \(track);"
+            + " the app's clock at \(shown(clock.seconds(at: time))) of"
+            + " \(shown(clock.durationSeconds)) s, the end moved \(shown(clock.stallSeconds)) s"
+            + " for stalls"
     }
 
     /// The renderer has the track: what waited for that goes out, and a renderer that plays

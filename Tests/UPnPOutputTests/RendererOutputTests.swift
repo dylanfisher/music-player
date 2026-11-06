@@ -764,6 +764,26 @@ private final class ShiftedClock: @unchecked Sendable {
     #expect(!sameURI("http://127.0.0.1/abc", "http://127.0.0.2/abc"))
 }
 
+@Test func theLogNamesOnlyTheAppsOwnURIs() {
+    var clock = RendererClock(durationSeconds: 60)
+    clock.set(50, at: 0, running: true)
+    func line(_ uri: String) -> String {
+        RendererSession.traceLine(
+            state: "playing", isOK: true, seconds: 49, durationSeconds: 60, uri: uri,
+            currentURI: "http://127.0.0.1:9/a", nextURI: "http://127.0.0.1:9/b", clock: clock,
+            at: 2)
+    }
+    #expect(
+        line("http://127.0.0.1:9/a")
+            == "polled near a track change: playing, at 49.0 of 60.0 s on the current track"
+            + " http://127.0.0.1:9/a; the app's clock at 52.0 of 60.0 s, the end moved 0.0 s"
+            + " for stalls")
+    #expect(line("http://127.0.0.1:9/b").contains("on the next track http://127.0.0.1:9/b;"))
+    let other = line("http://192.0.2.9/other")
+    #expect(other.contains("on another track;"))
+    #expect(!other.contains("192.0.2.9"))
+}
+
 @Test func aRefusedSeekTellsTheEngineWherePlaybackStayed() async throws {
     let fake = try await FakeRenderer.denon()
     fake.refuse("Seek", code: 711)
