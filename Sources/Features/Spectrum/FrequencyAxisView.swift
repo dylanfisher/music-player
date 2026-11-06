@@ -5,7 +5,7 @@ import DisplayText
 /// A chart with frequency up, linear from 0 to `topHz`, and dotted lines at `referenceHz`
 /// labeled at the left. Reports the pointer as shares of the plot across and up, from 0 to 1.
 class FrequencyAxisView: NSView {
-    var topHz = 22_050.0 {
+    var topHz = SpectrumModel.cdNyquistHz {
         didSet { needsDisplay = true }
     }
     var referenceHz: [Double] = [] {

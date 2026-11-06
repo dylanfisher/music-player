@@ -27,7 +27,9 @@ public final class SpectrumModel {
     }
 
     /// Frequencies lossy encoders and sample rates stop at, drawn as dotted lines.
-    static let referenceHz = [16_000.0, 19_000, 20_000, 22_050, 24_000]
+    static let referenceHz = [16_000.0, 19_000, 20_000, cdNyquistHz, 24_000]
+    /// A CD's Nyquist frequency: a reference line, and the axis's top before any file is analyzed.
+    static let cdNyquistHz = 22_050.0
     /// Files analyzed at once: two, so a second file's reads overlap the first's FFTs without
     /// taking every core of the 2015 MacBook Pro while music plays.
     static let filesAtOnce = 2
@@ -108,9 +110,9 @@ public final class SpectrumModel {
     }
 
     /// The top of the shared frequency axis: the highest Nyquist frequency analyzed so far, or
-    /// 22.05 kHz before any is.
+    /// a CD's before any is.
     var topHz: Double {
-        results.compactMap { $0?.spectrogram.nyquistHz }.max() ?? 22_050
+        results.compactMap { $0?.spectrogram.nyquistHz }.max() ?? Self.cdNyquistHz
     }
 
     /// The reference lines under the top of the axis.
