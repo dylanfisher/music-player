@@ -253,6 +253,44 @@ for seeking and for clicking in the progress bar.
       the pops are gone and it still feels immediate, and that the signal path panel still shows
       bit-perfect while playing.
 
+Implementation plan (ADR 0110):
+
+1. **HALRender.** The fade is a frame counter in the render state, IO proc only, from 0
+   (silence) to the fade length (full gain), which `HALRenderFadeFrames` derives from the
+   device rate and 5 ms, defined once in `HALRender.c`. At full gain the IO proc doesn't touch
+   a sample, so playback between fades stays bit-perfect; inside a fade it scales each frame
+   by the counter over the length, on top of the digital volume, through the same per-kind
+   sample code. `HALRenderCreate` takes the frame size and rate and allocates a buffer of one
+   fade's frames. New calls, all through atomics: `HALRenderSetSilenced` (a counter, odd while
+   silenced) makes the IO proc fade to silence and then write zeros without taking audio, so
+   the position stays where the pause was; `HALRenderIsSilent` says the IO proc has finished
+   that fade for the latest request; `HALRenderPrepareStart`, while stopped, sets whether the
+   next start fades in. A discard that drops what's playing (a seek, a track loaded over
+   another) moves what the fade-out needs of the old audio, as many frames as the counter
+   stands at, into that buffer at once and finishes the skip in the same cycle, as now; the IO
+   proc plays the held frames fading out, then the new audio fading in. A newer discard during
+   that fade carries on from the counter. A discard ahead of what's consumed (a gapless next
+   track replaced) doesn't fade. Opaque streams never fade: DoP, and device layouts the IO proc
+   can't scale, which now get the opaque kind instead of an Int32 stand-in.
+2. **HALOutput.** `DeviceOutput`'s pause sets the render silenced and leaves the device
+   running; the control thread's 10 ms tick stops it once the render is silent and the
+   device's latency has passed, so the fade has played. A play during that wait un-silences
+   and fades back in from where the gain is. A start fades in when the audio doesn't start at
+   a track's first frame (resume, a seek while paused, a load mid-track); a track from its
+   first frame, and a format switch between tracks, start at full gain. A load with playing
+   false fades out the same way as a pause. DoP and opaque streams stop at once, as before.
+3. **ADR 0110** says what fades and what doesn't: DoP doesn't fade or go through DoP silence
+   on a pause or seek, and why; a UPnP renderer does its own pausing and seeking, so no fade
+   applies there; a stop, a device switch and a double-click on a track of another rate still
+   cut, which this phase leaves.
+4. **Tests (49.3).** HALRenderTests: a sine paused and played has no step larger than the
+   fade allows; frames outside the fades match the source bit for bit, Int16, Int24, Int32 and
+   Float32; a seek during a fade-out and during a fade-in carries on from the counter; a
+   gapless discard doesn't fade; opaque bytes don't fade. HALOutputTests: pause, play and seek
+   on the null device keep every sample outside the fades in order; DoP keeps alternating
+   markers through pause, play and seek. Existing tests that expect a seek's first frame
+   untouched skip the fade-in. Bench: the seek rows and a soak.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
