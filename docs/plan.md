@@ -39,11 +39,10 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 ### Current run order
 
-Set by the owner on 2026-11-05. Earlier run orders are in the archive.
+Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 
-1. Phase 46 next, then 47, 48 and 49, in that order.
-2. Then phase 45: 45a, then 45b.
-3. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+1. Phase 50 next: its four parts in parallel worktrees, merged in order a, b, c, d.
+2. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -242,6 +241,135 @@ This table is the human copy. Each budget is defined in code next to its benchma
 ## Phases
 
 Phases 10 and 13 are from the original plan and haven't been built.
+
+### 50. Owner feedback, 2026-11-06
+
+Listening Stats, the import sheet, the hog mode fix, Analyze Library and Scan Library, the
+spectrum window and the log. The four parts touch mostly different modules, so they run in
+parallel worktrees and merge in order a, b, c, d; a later part rebases on the earlier ones.
+ADR numbers: 0117 to 50a if it needs one, 0118 to 50b, 0119 to 50c, 0120 to 50d.
+
+#### 50a. Library window
+
+- [ ] **50a.1 Stats never opens hidden.** Clicking Stats with Show Browser off showed the
+      panel at zero height; the owner had to drag it open. Probe: the panel slot is hidden
+      for sources without a panel, so the split collapses it, and `fillPanelSlot`
+      (`LibraryBrowser.swift`) calls `setPosition` straight after unhiding, with no layout
+      between, then records `placedHeight` whether or not it took. `statsHeight`'s range is
+      `0...2000`, so a 0 can be saved, and the split has no minimum. Give the stats height a
+      range with a real minimum (the header and one row of cards), place the divider after a
+      layout pass as `MainSplit.restore` does, set a minimum coordinate while a panel shows,
+      and record a height only from the user's drag, not from layout passes.
+- [ ] **50a.2 Stats keeps its height.** Moving to another source and back, or relaunching,
+      opens Stats at the height the user last dragged it to. Test: Show Browser off, Stats
+      shown at its saved height, a playlist, Stats again at the same height; and the same
+      with Show Browser on.
+- [ ] **50a.3 A lighter selected row in the Stats lists.** The marked row in Top Genres and the
+      other list cards is the selection color at 0.4 alpha (`StatsListView.swift`), too
+      dark. Lighter, still clearly above hover's 0.18.
+- [ ] **50a.4 No "discarded" text in the status bar.** "earlier play counts and playlists
+      discarded" leaves the status bar's totals (`LibraryStatus.summary`). The notices stay in
+      the Problems list and the problems button, where they already show.
+- [ ] **50a.5 The import sheet says what will change.** The top of the Import from Swinsian
+      sheet becomes a two-column table (`NSGridView`, as in Get Info's File tab): what
+      changes on the left, the count on the right, a heading line for how many tracks matched,
+      rows with nothing to change grouped in one dimmed line ("No change: last played, date
+      added, ratings, loved") instead of "later on 0 tracks", and the notes (playlists
+      skipped, rows merged) as a short line under the table. Same width, so it still fits
+      1440×900. Tests: the rows for a plan, and the sheet's fit test and its snapshot.
+- [ ] **50a.6 The stuck row line.** After hours of use a 1-point horizontal line stays at a fixed
+      height on screen, across the art column and the rows, while the rows scroll under it.
+      Not reproduced yet. Candidates, from reading the code: the split's divider over a panel
+      slot shown at 0 height (fixed by 50a.1); an album line set on an art cell drawn into its
+      row's layer (`canDrawSubviewsIntoLayer`) without redrawing the row, so a recycled row
+      keeps it; the status bar's border. Fix the first two, and try to reproduce with long
+      scrolls, source changes and Stats shown and hidden. Owner check: when it shows again,
+      whether View > Hide Status Bar or resizing the window clears it.
+
+#### 50b. Playback: the hog mode fix plays the track you chose; the log
+
+- [ ] **50b.1 Turn On plays the chosen track.** With hog mode off, double-clicking a DSD
+      track and choosing Turn On in the dialog started the first row instead. Probe:
+      `play(starting:)` plays a one-track queue until the full list arrives (ADR 0078), and
+      DoP's refusal comes before the full queue does, so `FailedTrack.entry` is 0, not the
+      clicked row's index. `complete()` moves the cursor to the row but never corrects
+      the failure's entry, the DSD album fails three times and stops at entry 0, the dialog's
+      replay finds a different track at 0 and only logs `.gone`, and the next Play starts row
+      0. Fix: failures recorded against the one-track queue move with it to the row in
+      `complete()`, so the event and the dialog carry the right entry; `replayPosition` still
+      never plays a different track; and a fix that can't replay says why where the user is
+      looking, not only in the log. Test: `play(starting: urls[2])` with a gated fill and a
+      refusal before the gate opens, then the fix replaying entry 2.
+- [ ] **50b.2 Log values in Copy Details.** The owner asked whether playback log lines should be
+      public so Copy Details shows their values instead of `<private>`. Decision (the owner can
+      overrule it): the log's values that are the app's own or the device's are public: errors,
+      OSStatus codes, formats, device and renderer names. Track paths stay private, logged
+      with `privacy: .private(mask: .hash)` so the lines about one file can be matched; Copy
+      Details already prints the failed track's path and error in plain text. Make
+      `renderer.name`'s privacy consistent in `RendererSession`. Update ADR 0025's row 35 and
+      its `rg` check.
+
+#### 50c. Analyze Library and Scan Library
+
+- [ ] **50c.1 Two to four files at once.** The pass analyzes `min(4, max(2,
+      activeProcessorCount / 2))` files at once, 2 on the 2015 MacBook Pro, as a sliding task
+      group (Spectrum's `filesAtOnce` loop is the pattern); only the pass's actor counts and
+      reports. Pause cancels every file under way, and each is read again next run; each file
+      is still read once per run. Files are still started in path order.
+- [ ] **50c.2 Utility priority.** Each file is decoded at `.utility`, not `.background`. Bench
+      rows rename "at background priority"; the 200-file row is measured again (the owner's
+      guess: 2 to 3 times faster on the NAS).
+- [ ] **50c.3 Progress in Library Health.** While the pass runs, Library Health shows a
+      progress bar with "Analyzing library: 1,240 of 43,368" and the file under way (the
+      newest started, its name only), and a Pause button beside it; paused, it shows Analyze
+      Library to carry on. The status bar shows the same Pause button beside its bar. Detail
+      comes from what the pass already knows, reported at most a few times a second; no new
+      reads.
+- [ ] **50c.4 Carry on after a quit.** A run already skips measured files; what's missing is
+      the count. The count is over the whole pass, not what's left: "1,240 of 43,368" after a
+      relaunch, the measured files counted as done. After a relaunch with a pass unfinished,
+      Library Health says "Library analysis paused: 1,240 of 43,368" and its Analyze Library
+      button carries on.
+- [ ] **50c.5 Start over once done.** Once every file is measured, Analyze Library reads
+      "Analyze Library Again" in the menu and Library Health, and asks first, since it reads
+      every file again. A run again keeps the measures it replaces until each file's new ones
+      are stored, and resumes after a quit the same way: the index records the time the run
+      started and each measure the time it was made, and a run lists files measured before
+      its start. Stored data has one shape: if the measures table changes, how the owner's
+      existing measures are kept, or why they can't be, goes in the ADR; prefer a side table
+      over a change that discards them.
+- [ ] **50c.6 Pause Scan Library.** A Pause button beside the scan's bar in the status bar,
+      and wherever scan progress shows (Settings > Folders), pauses the running scan with
+      `ScanControl.pause()`, which already exists; Resume carries on where it was. A
+      user's pause is held in `WatchState` so the watcher's own `resume()` calls don't undo
+      it, and the status bar says "Scan paused: …". While a scan is paused by the user, other
+      scans wait behind it as now, and Analyze Library doesn't wait for it (a paused scan
+      reads nothing). A pause doesn't outlast a quit; the next launch scans as usual. Tests in
+      `WatchState` and the watcher.
+- [ ] Amend ADR 0116 with ADR 0119.
+
+#### 50d. Spectrum window
+
+- [ ] **50d.1 Album and file size.** Each file's header names its album beside the title and
+      ends with the file's size ("So Many Questions — Album · PCM · 44.1 kHz · … · 4:16 ·
+      44.8 MB"); the window opens with the `TrackRow`s it already looks titles up in, the size
+      from the index, formatted as the track table's Size column formats it.
+- [ ] **50d.2 What differs, in words.** With two or more files, a "Differences" box under the
+      average spectrum explains how each file differs from the first, in plain sentences
+      for someone who doesn't read spectra, from the measures and the average spectra the
+      window already has, no new reads: a lower cutoff ("B stops at 16 kHz and A goes on to
+      22 kHz: B was probably made from an MP3 or AAC"), stored and effective bits ("B is
+      24-bit but holds 16 bits of detail: no more detail than A"), a level difference ("B is
+      about 3 dB louder overall"), a dynamic range difference ("B's DR is 6 against A's 11: B
+      is more compressed, typical of a loud remaster"), true peaks over 0 and clipping, more
+      bass or treble (band levels from the average spectrum, matched by frequency, not row),
+      length, and format and size. When nothing differs past the thresholds it says "These
+      files sound the same as far as these measures can tell" and that identical audio can't
+      be proved without comparing samples. Every threshold is one constant in
+      `AnalysisRules`; the sentences are built in Analysis's text, testable without a window.
+      Tests: the owner's case (a 16-bit WAV and a 24-bit FLAC of one master: format, bits
+      and size differ, a little more above 16 kHz in the WAV), a lossy-origin copy, a louder remaster.
+- [ ] Record ADR 0120, amending 0115.
 
 ### 10. Web remote
 
