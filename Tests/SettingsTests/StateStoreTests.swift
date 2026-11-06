@@ -489,3 +489,18 @@ private func problems(_ json: String) -> [SettingProblem] {
         #expect(discarded[\.sidebarWidth] == AppState().sidebarWidth.defaultValue)
     }
 }
+
+/// Get Info's place is saved and read back; a file from before it reads as none.
+@Test func getInfosPlaceIsSavedAndAnOlderFileHasNone() throws {
+    let url = temporaryFile()
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(#"{"window.sidebarWidth": 250}"#.utf8).write(to: url)
+    let state = try StateStore(AppState(), fileURL: url)
+    #expect(state.discardReason == nil)
+    #expect(state[\.infoPlace] == nil)
+    try state.set(\.infoPlace, to: InfoWindowPlace(x: 120.5, y: 880))
+    let read = try StateStore(AppState(), fileURL: url)
+    #expect(read[\.infoPlace] == InfoWindowPlace(x: 120.5, y: 880))
+    #expect(read[\.sidebarWidth] == 250)
+}

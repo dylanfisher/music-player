@@ -24,6 +24,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     var saved: (TagEdit) -> Void = { _ in }
     /// Called once when the window closes, by Cancel, its close button or `close()`.
     var closed: () -> Void = {}
+    /// Called with the window's top left corner when the user moves it.
+    var moved: (NSPoint) -> Void = { _ in }
     /// The art buttons, which run the registry's Replace Artwork… and Remove Artwork.
     var replaceArtwork: () -> Void = {}
     var removeArtwork: () -> Void = {}
@@ -47,6 +49,9 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// Says, as soon as such a field is edited, that saving keeps one of its several values.
     private let collapseLabel = NSTextField(wrappingLabelWithString: "")
     private var isClosed = false
+    /// The top left corner the window was last put at or moved to, so a resize that keeps the
+    /// corner isn't reported as a move.
+    private var placedAt: NSPoint?
 
     static let width = 660.0
     static let artPoints = 120.0
@@ -57,8 +62,11 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     private static let shortWidth = 80.0
     /// The tab last chosen, which the next window opens on.
     private static var lastTab = TagEditorTab.info
-    /// Where the next window opens, so each one opens down and to the right of the last.
-    private static var nextTopLeft: NSPoint?
+    /// How far from the main window's top left corner a window opens with no place saved.
+    private static let parentOffset = 40.0
+    /// How many steps down and to the right a window goes, at most, past windows already open
+    /// where it would open.
+    private static let cascadeSteps = 20
 
     init(paths: [String]) {
         precondition(!paths.isEmpty, "Get Info opens on at least one track")
@@ -81,15 +89,36 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     public var isLoaded: Bool { model != nil }
 
-    /// Shows the window in front, a step down and to the right of the last one opened.
-    func show(beside parent: NSWindow) {
+    /// The window's top left corner, as `moved` reports it.
+    var corner: NSPoint { NSPoint(x: window.frame.minX, y: window.frame.maxY) }
+
+    /// Shows the window in front. One not yet on screen opens with its top left corner at
+    /// `place`, where the user last moved an info window, or else near `parent`'s top left; a
+    /// step down and to the right for each window in `taken` already at that corner.
+    func show(beside parent: NSWindow, at place: NSPoint?, avoiding taken: [NSPoint]) {
         if !window.isVisible {
-            let start =
-                Self.nextTopLeft
-                ?? NSPoint(x: parent.frame.minX + 40, y: parent.frame.maxY - 40)
-            Self.nextTopLeft = window.cascadeTopLeft(from: start)
+            let start = Self.start(
+                place: place, parent: parent.frame, screens: NSScreen.screens.map(\.frame))
+            var next = window.cascadeTopLeft(from: start)
+            for _ in 0..<Self.cascadeSteps where taken.contains(corner) {
+                next = window.cascadeTopLeft(from: next)
+            }
+            placedAt = corner
         }
         window.makeKeyAndOrderFront(nil)
+    }
+
+    /// `place` while it's on one of `screens`, which a screen unplugged since may not be;
+    /// otherwise a little inside `parent`'s top left corner.
+    static func start(place: NSPoint?, parent: NSRect, screens: [NSRect]) -> NSPoint {
+        if let place,
+            screens.contains(where: {
+                ($0.minX..<$0.maxX).contains(place.x) && $0.minY < place.y && place.y <= $0.maxY
+            })
+        {
+            return place
+        }
+        return NSPoint(x: parent.minX + parentOffset, y: parent.maxY - parentOffset)
     }
 
     /// Shows the fields for `model`. A second call, after the files were read again, keeps what
@@ -139,6 +168,13 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     }
 
     public func windowWillClose(_ notification: Notification) { windowClosed() }
+
+    /// Placing the window happens before it shows, so a move before then is the app's own.
+    public func windowDidMove(_ notification: Notification) {
+        guard window.isVisible, corner != placedAt else { return }
+        placedAt = corner
+        moved(corner)
+    }
 
     private func windowClosed() {
         guard !isClosed else { return }

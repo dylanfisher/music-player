@@ -21,6 +21,11 @@ public final class TagEditing {
     /// Artwork.
     public var replaceArtwork: () -> Void = {}
     public var removeArtwork: () -> Void = {}
+    /// The top left corner the user last moved an info window to, where the next one opens;
+    /// nil opens it near the main window's top left.
+    public var place: NSPoint?
+    /// Called when the user moves an info window, with its new top left corner, to save it.
+    public var placeChanged: (NSPoint) -> Void = { _ in }
 
     /// What the editor does to the files and the screen, so tests can stand in for each.
     struct Effects {
@@ -32,8 +37,9 @@ public final class TagEditing {
             )
         var write: @Sendable (TagEdit, [String]) -> TagWriteReport
         var undo: @Sendable () -> TagWriteReport
-        /// Shows an info window in front, beside the main window.
-        var present: @MainActor (TagEditorWindow, NSWindow) -> Void
+        /// Shows an info window in front, beside the main window: at the place given, past the
+        /// other info windows' top left corners.
+        var present: @MainActor (TagEditorWindow, NSWindow, NSPoint?, [NSPoint]) -> Void
         /// Asks before a batch write, then calls back with the answer.
         var confirm:
             @MainActor (Confirmation, NSWindow, @escaping @MainActor (Bool) -> Void) -> Void
@@ -71,7 +77,7 @@ public final class TagEditing {
         effects = Effects(
             read: { readEditableTracks($0, isStopped: $1) },
             write: { writer.write($0, to: $1) }, undo: { writer.undoLast() },
-            present: { $0.show(beside: $1) }, confirm: ask, alert: showProblems)
+            present: { $0.show(beside: $1, at: $2, avoiding: $3) }, confirm: ask, alert: showProblems)
     }
 
     init(effects: Effects) {
@@ -94,7 +100,7 @@ public final class TagEditing {
     public func open(_ paths: [String], over window: NSWindow) {
         guard !paths.isEmpty else { return }
         if let open = editors.first(where: { $0.paths == paths }) {
-            effects.present(open, window)
+            present(open, over: window)
             return
         }
         let editor = TagEditorWindow(paths: paths)
@@ -109,9 +115,18 @@ public final class TagEditing {
             self.editors.removeAll { $0 === editor }
             self.reads.removeValue(forKey: ObjectIdentifier(editor))?.stop()
         }
+        editor.moved = { [weak self] corner in
+            self?.place = corner
+            self?.placeChanged(corner)
+        }
         editors.append(editor)
-        effects.present(editor, window)
+        present(editor, over: window)
         read(into: editor, over: window)
+    }
+
+    private func present(_ editor: TagEditorWindow, over window: NSWindow) {
+        let taken = editors.filter { $0 !== editor && $0.window.isVisible }.map(\.corner)
+        effects.present(editor, window, place, taken)
     }
 
     /// Reads the window's files and shows them in it; a window that already shows them keeps

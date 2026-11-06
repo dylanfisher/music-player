@@ -80,6 +80,10 @@ public struct AppState: SettingsSchema {
     public let palettePlace = Setting<PalettePlace?>(
         "palette.place", title: "Palette Place", default: nil,
         "Where the palette was dragged. Null opens it centered near the top of the screen.")
+    public let infoPlace = Setting<InfoWindowPlace?>(
+        "tagEditor.place", title: "Get Info Place", default: nil,
+        "Where a Get Info window was last moved to. Null opens it near the main window's top"
+            + " left.")
     public let deviceProfiles = Setting(
         "output.profiles", title: "Device Profiles", default: DeviceProfiles(profiles: []),
         "Each output device's hog mode, digital volume and volume, and the rates and formats it"

@@ -590,6 +590,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editing.written = { [weak self] paths in self?.watcher?.rescan(files: paths) }
         editing.replaceArtwork = { [weak self] in self?.dispatcher?.run(.replaceArtwork) }
         editing.removeArtwork = { [weak self] in self?.dispatcher?.run(.removeArtwork) }
+        editing.place = state?[\.infoPlace].map { NSPoint(x: $0.x, y: $0.y) }
+        editing.placeChanged = { [weak self] corner in
+            self?.saver?.set(\.infoPlace, InfoWindowPlace(x: corner.x, y: corner.y))
+        }
         return editing
     }
 

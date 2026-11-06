@@ -23,6 +23,7 @@ private final class Seen: @unchecked Sendable {
     private var _written: [[String]] = []
     private var _work: [String] = []
     private var _reads: [[String]] = []
+    private var _places: [NSPoint?] = []
 
     var presented: [[String]] { lock.withLock { _presented } }
     var alerts: [String] { lock.withLock { _alerts } }
@@ -31,8 +32,15 @@ private final class Seen: @unchecked Sendable {
     /// The writes and undos, in the order they ran.
     var work: [String] { lock.withLock { _work } }
     var reads: [[String]] { lock.withLock { _reads } }
+    /// Where each window was asked to open.
+    var places: [NSPoint?] { lock.withLock { _places } }
 
-    func present(_ paths: [String]) { lock.withLock { _presented.append(paths) } }
+    func present(_ paths: [String], at place: NSPoint?) {
+        lock.withLock {
+            _presented.append(paths)
+            _places.append(place)
+        }
+    }
     func alert(_ message: String) { lock.withLock { _alerts.append(message) } }
     func confirm(_ message: String) { lock.withLock { _confirmations.append(message) } }
     func wrote(_ paths: [String]) { lock.withLock { _written.append(paths) } }
@@ -78,7 +86,7 @@ private func makeEditing(
                 seen.ran("undo")
                 return undo()
             },
-            present: { editor, _ in seen.present(editor.paths) },
+            present: { editor, _, place, _ in seen.present(editor.paths, at: place) },
             confirm: { message, _, answer in
                 seen.confirm(message.message)
                 answer(confirm)
@@ -282,4 +290,21 @@ private final class Titles: @unchecked Sendable {
     try await eventually { seen.alerts.count == 2 }
     #expect(seen.alerts.last == "1 of 1 files can't be edited")
     #expect(!none.isOpen, "nothing to edit, so the window closes")
+}
+
+/// A window opens where the user last moved one, and a move is passed on to be saved.
+@MainActor
+@Test func aWindowOpensWhereTheLastOneWasMoved() throws {
+    let seen = Seen()
+    let editing = makeEditing(seen)
+    var saved: [NSPoint] = []
+    editing.placeChanged = { saved.append($0) }
+    editing.open(["/a.flac"], over: window)
+    #expect(seen.places == [nil], "nothing saved yet")
+    let moved = NSPoint(x: 300, y: 700)
+    try #require(editor(editing, ["/a.flac"])).moved(moved)
+    #expect(editing.place == moved)
+    #expect(saved == [moved])
+    editing.open(["/b.flac"], over: window)
+    #expect(seen.places == [nil, moved])
 }
