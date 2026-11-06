@@ -7,10 +7,10 @@ import UniformTypeIdentifiers
 
 /// An info window: tabs of fields as `TagEditorTab` lays them out, the art with Replace and
 /// Remove, the file's format, and Cancel and Save. It opens at once, before its files are read,
-/// at the size it keeps, saying so, and fills in the fields once `load` hands it the tracks. Fields where the tracks
-/// differ show "Mixed" until typed in, and a field typed differently from what it showed has a
-/// dot by its label. It edits a `TagEditorModel` and hands back the checked edit. Several can
-/// be open at once.
+/// at the size it keeps, saying so, and fills in the fields once `load` hands it the tracks.
+/// Fields where the tracks differ show "Mixed" until typed in, and a field typed differently
+/// from what it showed has a dot by its label. It edits a `TagEditorModel` and hands back the
+/// checked edit. Several can be open at once.
 @MainActor
 public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDelegate,
     NSWindowDelegate
