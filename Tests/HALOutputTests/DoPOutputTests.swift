@@ -168,8 +168,8 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     try await rig.wait { if case .failed = $0.event { true } else { false } }
 
     let refused = rig.events.compactMap { event -> (URL, String)? in
-        guard case .trackFailed(let url, let reason) = event else { return nil }
-        return (url, reason)
+        guard case .trackFailed(let url, let problem) = event else { return nil }
+        return (url, problem.message)
     }
     #expect(refused.map(\.0) == album.prefix(PlaybackEngine.failureLimit).map(\.url))
     #expect(
@@ -178,7 +178,7 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
         })
     #expect(
         rig.events.last
-            == .failed(reason: "\(PlaybackEngine.failureLimit) tracks in a row couldn't play"))
+            == .failed(PlaybackProblem(PlaybackError.failedInARow(PlaybackEngine.failureLimit))))
     #expect(rig.device.captured.isEmpty)
 }
 
@@ -190,11 +190,12 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     await noHog.engine.play()
     try await noHog.wait { if case .trackFailed = $0.event { true } else { false } }
     #expect(
-        noHog.events.contains(
-            .trackFailed(
-                track.url,
-                reason: "null device can't play DSD64: DoP needs exclusive access, and hog mode is"
-                    + " off for this device")))
+        noHog.events.contains { event in
+            guard case .trackFailed(track.url, let problem) = event else { return false }
+            return problem.message
+                == "null device can't play DSD64: DoP needs exclusive access, and hog mode is off"
+                + " for this device"
+        })
 
     let mixable = try await Rig()
     mixable.device.report(
@@ -209,11 +210,14 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     await mixable.engine.play()
     try await mixable.wait { if case .trackFailed = $0.event { true } else { false } }
     #expect(
-        mixable.events.contains(
-            .trackFailed(
-                track.url,
-                reason: "null device can't play DSD64: it has no non-mixable 24-bit integer format"
-                    + " at 176.4 kHz for DoP")))
+        mixable.events.contains { event in
+            guard case .trackFailed(track.url, let problem) = event else { return false }
+            return problem.message
+                == "null device can't play DSD64: none of its formats at 176.4 kHz can carry DoP"
+                && problem.detail.hasSuffix(
+                    "it has no non-mixable 24-bit integer format at"
+                        + " 176.4 kHz for DoP")
+        })
     #expect(noHog.device.captured.isEmpty && mixable.device.captured.isEmpty)
 }
 

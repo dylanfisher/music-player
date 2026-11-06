@@ -8,6 +8,12 @@ import Testing
 
 private let urls = ["/m/a.flac", "/m/b.flac"].map(URL.init(fileURLWithPath:))
 
+/// An error whose message differs from its description, so a test sees which one shows.
+private struct NotAudio: PlaybackFailure {
+    var description: String { "NotAudio: no audio chunk" }
+    var userMessage: String { "not audio" }
+}
+
 private func row(_ path: String) -> TrackRow {
     TrackRow(
         id: 1, path: path, title: "Come Together", artist: "The Beatles", album: "Abbey Road",
@@ -71,7 +77,7 @@ private func update(
     #expect(model.message?.contains("Press Play") == true)
     model.apply(update(.resumed))
     #expect(model.message == nil)
-    model.apply(update(.trackFailed(urls[1], reason: "not audio")))
+    model.apply(update(.trackFailed(urls[1], PlaybackProblem(NotAudio()))))
     #expect(model.message == "Couldn't play b.flac: not audio")
     model.apply(update(.trackStarted(index: 0)))
     #expect(model.message == nil)

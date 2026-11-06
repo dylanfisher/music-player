@@ -1,9 +1,10 @@
 import LocalNetwork
 import Metadata
+import Playback
 import UPnP
 
 /// Why a renderer couldn't play a track, or stopped playing one.
-public enum RendererOutputError: Error, CustomStringConvertible {
+public enum RendererOutputError: PlaybackFailure {
     /// The renderer has no AVTransport the app can reach.
     case cannotPlay(renderer: String, String)
     /// No renderer with the UDN answered; `found` names those that did.
@@ -43,6 +44,19 @@ public enum RendererOutputError: Error, CustomStringConvertible {
         case .stoppedOnRenderer(let renderer): "playback was stopped on \(renderer)"
         case .playingSomethingElse(let renderer):
             "\(renderer) is playing something else, so the app stopped sending to it"
+        }
+    }
+
+    public var userMessage: String {
+        switch self {
+        case .cannotPlay(let renderer, _): "\(renderer) can't be played to"
+        case .notFound: "the renderer didn't answer on the local network"
+        case .unreadable(let error): error.userMessage
+        case .server: "the app couldn't start sending files to the renderer"
+        case .refused(let renderer, _): "\(renderer) refused what the app asked of it"
+        case .unsupported, .stoppedWithoutPlaying, .transportError, .stoppedOnRenderer,
+            .playingSomethingElse:
+            description
         }
     }
 }

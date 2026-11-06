@@ -1,22 +1,34 @@
 import CoreAudio
+import Playback
 
 /// A failed HAL call, with the property it was reading.
-struct HALError: Error, CustomStringConvertible {
+struct HALError: PlaybackFailure {
     var selector: AudioObjectPropertySelector
     var status: OSStatus
 
     var description: String {
         "HAL property '\(fourCharCode(selector))' failed: '\(fourCharCode(UInt32(bitPattern: status)))' (\(status))"
     }
+
+    var userMessage: String { "the output device didn't answer the app" }
 }
 
 /// A failed CoreAudio call that isn't a property read or write.
-struct OSStatusError: Error, CustomStringConvertible {
+struct OSStatusError: PlaybackFailure {
     var operation: String
     var status: OSStatus
 
     var description: String {
         "\(operation) failed: '\(fourCharCode(UInt32(bitPattern: status)))' (\(status))"
+    }
+
+    /// By the API that failed: decoding the file, converting it, or the device.
+    var userMessage: String {
+        if operation.hasPrefix("ExtAudioFile") { return "macOS can't decode the file" }
+        if operation.hasPrefix("AudioConverter") {
+            return "the track couldn't be converted to the device's format"
+        }
+        return "the output device refused what the app asked of it"
     }
 }
 

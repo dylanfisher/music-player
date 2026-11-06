@@ -36,12 +36,12 @@ public final class NowPlayingModel {
         state = update.state
         switch update.event {
         case .trackStarted, .resumed: message = nil
-        case .trackFailed(let url, let reason):
-            message = "Couldn't play \(url.lastPathComponent): \(reason)"
+        case .trackFailed(let url, let problem):
+            message = "Couldn't play \(url.lastPathComponent): \(problem.message)"
         case .deviceLost:
             message = "The output device went away, so playback paused. Plug it back in to resume."
         case .deviceReturned: message = "The output device is back. Press Play to resume."
-        case .failed(let reason): message = "Playback stopped: \(reason)"
+        case .failed(let problem): message = "Playback stopped: \(problem.message)"
         default: break
         }
         guard currentURL != before else { return }

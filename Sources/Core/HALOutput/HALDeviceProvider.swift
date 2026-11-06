@@ -5,12 +5,18 @@ import Playback
 
 private let logger = moduleLogger()
 
-enum HALDeviceProviderError: Error, CustomStringConvertible {
+enum HALDeviceProviderError: PlaybackFailure {
     case noDefaultOutput
 
     var description: String {
         switch self {
         case .noDefaultOutput: "macOS has no default output device"
+        }
+    }
+
+    var userMessage: String {
+        switch self {
+        case .noDefaultOutput: description
         }
     }
 }

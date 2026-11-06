@@ -7,7 +7,7 @@ import Playback
 
 private let logger = moduleLogger()
 
-enum HALDeviceError: Error, CustomStringConvertible {
+enum HALDeviceError: PlaybackFailure {
     case hogModeHeld(by: pid_t)
     case noOutputStream
     case noBitPerfectFormat(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32)
@@ -25,6 +25,17 @@ enum HALDeviceError: Error, CustomStringConvertible {
                 + (bits > 0 ? " of \(bits) bits or more" : "") + " at \(kilohertz(rate)) kHz"
         case .noPCMFormat: "the device has no PCM format this app can convert to"
         case .didNotSettle(let what): "the device didn't switch to \(what) within 3 seconds"
+        }
+    }
+
+    var userMessage: String {
+        switch self {
+        case .hogModeHeld: "another app has the device to itself"
+        case .noOutputStream: "the device has no output"
+        case .noBitPerfectFormat(let rate, let channels, _):
+            "the device can't play \(channels) channels at \(kilohertz(rate)) kHz unchanged"
+        case .noPCMFormat: "the device has no format the app can play to"
+        case .didNotSettle: "the device didn't switch to the track's format in time"
         }
     }
 }

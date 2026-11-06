@@ -202,7 +202,8 @@ private final class Player: @unchecked Sendable {
                 let took = change.switchSeconds.map { " in \(ms($0)) ms\(steps ?? "")" } ?? ""
                 log("rate change: \(from) → \(change.to)\(took)")
             }
-        case .trackFailed(let url, let reason): log("✗ couldn't play \(url.path): \(reason)")
+        case .trackFailed(let url, let problem):
+            log("✗ couldn't play \(url.path): \(problem.detail)")
         case .underrun(let frames): log("! underrun: \(frames) frames of silence")
         case .deviceLost:
             log("device lost: paused. Plug it back in, then press space to resume.")
@@ -211,8 +212,8 @@ private final class Player: @unchecked Sendable {
         case .resumed: log("playing")
         case .repeatChanged: log("repeat: \(state.repeatMode.rawValue)")
         case .shuffleChanged: log("shuffle: \(state.shuffle ? "on" : "off")")
-        case .failed(let reason):
-            log("error: \(reason)")
+        case .failed(let problem):
+            log("error: \(problem.detail)")
             if beginQuitting() { finish(status: 1) }
         case .finished, .stopped:
             log(update.event == .finished ? "done" : "stopped")

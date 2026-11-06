@@ -581,7 +581,7 @@ public actor PlaybackEngine {
             }
             failuresInARow += 1
             logger.error("\(self.queue.url(at: failed).path): \(error)")
-            publish(.trackFailed(queue.url(at: failed), reason: "\(error)"))
+            publish(.trackFailed(queue.url(at: failed), PlaybackProblem(error)))
             if id == nextItem?.id { skip(after: failed) }
         case .finished(let id):
             guard let currentItem, id == currentItem.id else { return }
@@ -610,7 +610,7 @@ public actor PlaybackEngine {
             if failuresInARow >= Self.failureLimit {
                 let error = PlaybackError.failedInARow(failuresInARow)
                 logger.error("\(error)")
-                publish(.failed(reason: "\(error)"))
+                publish(.failed(PlaybackProblem(error)))
             } else {
                 publish(.finished)
             }
@@ -657,7 +657,7 @@ public actor PlaybackEngine {
             resumeSeconds = nil
             state.status = .stopped
             logger.error("output failed: \(error)")
-            publish(.failed(reason: "\(error)"))
+            publish(.failed(PlaybackProblem(error)))
         }
     }
 

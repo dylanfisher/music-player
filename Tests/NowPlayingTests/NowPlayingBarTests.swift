@@ -12,6 +12,11 @@ import Testing
 
 private let urls = ["/m/a.flac", "/m/b.flac"].map(URL.init(fileURLWithPath:))
 
+private struct DeviceStopped: PlaybackFailure {
+    var description: String { "DeviceStopped(status: -50)" }
+    var userMessage: String { "the device stopped" }
+}
+
 private func update(_ event: PlaybackEvent?, current: Int? = 0, duration: Double?)
     -> PlaybackUpdate
 {
@@ -219,7 +224,7 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
 /// What went wrong shows with nothing playing, in the format line.
 @MainActor @Test func aMessageShowsWithNothingPlaying() {
     let failed = bar()
-    failed.apply(update(.failed(reason: "the device stopped"), current: nil, duration: nil))
+    failed.apply(update(.failed(PlaybackProblem(DeviceStopped())), current: nil, duration: nil))
     #expect(failed.header.showsParts)
     #expect(failed.header.formatLabel.stringValue == "Playback stopped: the device stopped")
     // The reason stays through a rescan and a format change, which draw the status again.

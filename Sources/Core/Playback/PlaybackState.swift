@@ -55,12 +55,12 @@ public enum PlaybackEvent: Sendable, Equatable {
     case shuffleChanged
     case formatChanged(FormatChange)
     /// The track was skipped because it couldn't be played.
-    case trackFailed(URL, reason: String)
+    case trackFailed(URL, PlaybackProblem)
     case underrun(frames: Int)
     case deviceLost
     case deviceReturned
     /// The output stopped because of an error.
-    case failed(reason: String)
+    case failed(PlaybackProblem)
     /// The queue played to its end.
     case finished
 }

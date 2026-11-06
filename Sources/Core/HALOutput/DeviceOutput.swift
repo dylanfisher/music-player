@@ -9,7 +9,7 @@ import RingBuffer
 
 private let logger = moduleLogger()
 
-enum DeviceOutputError: Error, CustomStringConvertible {
+enum DeviceOutputError: PlaybackFailure {
     case outOfMemory
     case noVolumeForFormat(String)
     /// The file's audio stopped well before the length its header gives, as a partial file's
@@ -48,6 +48,19 @@ enum DeviceOutputError: Error, CustomStringConvertible {
         case .noChannelMix(let from, let to):
             "the device's format has \(to) channels for this \(from)-channel track, and only"
                 + " stereo and mono get a downmix"
+        }
+    }
+
+    var userMessage: String {
+        switch self {
+        case .outOfMemory: "the Mac is out of memory for playback"
+        case .noVolumeForFormat:
+            "the digital volume can't work in the device's format; turn it off to play"
+        case .cannotPlayDSD(let device, let dsd, let carrier, .noFormat):
+            "\(device) can't play \(sampleRateText(dsd)): none of its formats at"
+                + " \(kilohertz(carrier)) kHz can carry DoP"
+        case .noDoPLayout: "the device's format can't carry DSD as DoP"
+        case .endedEarly, .cannotPlayDSD, .noChannelMix: description
         }
     }
 }

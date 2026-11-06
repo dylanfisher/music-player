@@ -20,6 +20,16 @@ public struct MetadataError: Error, Equatable, CustomStringConvertible {
     public var description: String {
         "\(path): \(detail)" + byteNote(offset)
     }
+
+    /// For the user, by kind: the path and the detail are in `description`.
+    public var userMessage: String {
+        switch kind {
+        case .unreadable: "the file can't be read"
+        case .unrecognizedFormat: "it isn't in a format the app plays"
+        case .malformed: "the file is damaged"
+        case .unsupported: "it uses a feature the app doesn't read"
+        }
+    }
 }
 
 /// " (at byte 12)", or nothing without an offset, after a problem's detail.

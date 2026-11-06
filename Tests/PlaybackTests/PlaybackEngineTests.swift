@@ -890,7 +890,7 @@ private func published(
         if event == .stopped { break }
     }
     #expect(events.filter { if case .trackFailed = $0 { true } else { false } }.count == 3)
-    #expect(events.last == .failed(reason: "3 tracks in a row couldn't play"))
+    #expect(events.last == .failed(PlaybackProblem(PlaybackError.failedInARow(3))))
     #expect(!events.contains(.finished))
 }
 

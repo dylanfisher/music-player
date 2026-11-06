@@ -316,8 +316,8 @@ func theDeviceGoingAwayAtEachStepOfARateSwitchIsReportedLost(
     try await rig.wait(for: .trackStarted(index: 1))
     #expect(
         rig.events.contains { event in
-            guard case .trackFailed(cut, let reason) = event else { return false }
-            return reason.contains(endedEarlyText)
+            guard case .trackFailed(cut, let problem) = event else { return false }
+            return problem.message.contains(endedEarlyText)
         })
     let ended = try #require(await rig.engine.position())
     #expect(ended < 1, "the next track plays from its start")
@@ -361,7 +361,7 @@ private func silentMP3(stored: Int, stated: Int?) -> Data {
     await rig.engine.play()
     try await rig.wait(for: .finished)
     let failures = rig.events.compactMap { event -> (URL, String)? in
-        if case .trackFailed(let url, let reason) = event { (url, reason) } else { nil }
+        if case .trackFailed(let url, let problem) = event { (url, problem.message) } else { nil }
     }
     #expect(failures.map(\.0) == [partial])
     #expect(failures.first?.1.contains(endedEarlyText) == true)

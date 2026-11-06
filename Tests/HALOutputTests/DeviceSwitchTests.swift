@@ -105,7 +105,7 @@ private final class TwoDevices: @unchecked Sendable {
     rig.dac.refuse(.configure)
     rig.output.use(DeviceChoice(provider: rig.dac, digitalVolume: true, gain: 1, formats: nil))
     let failed = try await rig.wait { if case .failed = $0.event { true } else { false } }
-    #expect(failed.event == .failed(reason: "the null device refused configure"))
+    #expect(failed.event == .failed(PlaybackProblem(NullDevice.Refused(step: .configure))))
     #expect(failed.state.status == .stopped)
     #expect(failed.state.currentIndex == 0)
     // Long enough for a skip to the next track to have started it.
