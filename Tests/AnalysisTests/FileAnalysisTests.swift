@@ -123,6 +123,27 @@ private func floatWAV(_ samples: [Float]) throws -> URL {
     #expect(!readsIntegers(format("aac ", bits: nil)))
 }
 
+@Test(arguments: [0, 1, 300, 2500])
+func theColumnsSpanTheWholeFileWhateverLengthItStated(_ stated: Int) {
+    let windows = 2500
+    let spectrum = SpectrumAccumulator(channels: 1, expectedWindows: stated)
+    let silence = [Float](repeating: 0, count: SpectrumAccumulator.points)
+    let tone = (0..<SpectrumAccumulator.points).map { Float(0.5 * sin(Double($0) / 3)) }
+    // A tone in the first and last windows, silence between.
+    for index in 0..<windows {
+        spectrum.add([index == 0 || index == windows - 1 ? tone : silence])
+    }
+    let spectrogram = spectrum.spectrogram(nyquistHz: 22_050, durationSeconds: 60)
+    #expect(spectrogram.columns <= Spectrogram.maximumColumns)
+    #expect(spectrogram.columns >= Spectrogram.maximumColumns / 2)
+    func loudest(_ column: Int) -> Double {
+        (0..<Spectrogram.rows).map { spectrogram.level(column: column, row: $0) }.max()!
+    }
+    #expect(loudest(0) > -20)
+    #expect(loudest(spectrogram.columns - 1) > -20)
+    #expect(loudest(spectrogram.columns / 2) <= Spectrogram.floorDB)
+}
+
 @Test func aDSDFileIsSkippedAndSaysSo() throws {
     #expect(throws: AnalysisError.dsd) {
         try analyzeFile(at: URL(fileURLWithPath: "/x.dsf", isDirectory: false))

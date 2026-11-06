@@ -16,9 +16,10 @@ final class SpectrumAccumulator {
     private static let fullScalePower = Float(points / 2) * Float(points / 2)
 
     let channels: Int
-    let columns: Int
-    /// The windows the file's stated length makes, which the columns are spread over.
-    private let expectedWindows: Int
+    /// The windows each column holds the maxima of: enough for the windows the file's stated
+    /// length makes to fit the most columns, and doubled whenever more come, as from a VBR
+    /// MP3 whose length is an estimate, so the columns always span the whole file.
+    private var windowsPerColumn: Int
     private let setup: FFTSetup
     private var window = [Float](repeating: 0, count: points)
     private var windowed = [Float](repeating: 0, count: points)
@@ -33,8 +34,8 @@ final class SpectrumAccumulator {
 
     init(channels: Int, expectedWindows: Int) {
         self.channels = channels
-        self.expectedWindows = max(1, expectedWindows)
-        columns = min(Spectrogram.maximumColumns, self.expectedWindows)
+        let columns = Spectrogram.maximumColumns
+        windowsPerColumn = max(1, (expectedWindows + columns - 1) / columns)
         cellPower = [Float](repeating: 0, count: columns * Spectrogram.rows)
         guard let setup = vDSP_create_fftsetup(Self.log2Points, FFTRadix(kFFTRadix2)) else {
             preconditionFailure("vDSP couldn't set up an FFT of \(Self.points) points")
@@ -82,12 +83,29 @@ final class SpectrumAccumulator {
                     vDSP_Length(Self.binsPerRow))
             }
         }
-        let column = min(columns - 1, windows * columns / expectedWindows)
+        if windows / windowsPerColumn == Spectrogram.maximumColumns { fold() }
+        let column = windows / windowsPerColumn
         cellPower.withUnsafeMutableBufferPointer { cells in
             let cell = cells.baseAddress! + column * Spectrogram.rows
             vDSP_vmax(rowPower, 1, cell, 1, cell, 1, vDSP_Length(Spectrogram.rows))
         }
         windows += 1
+    }
+
+    /// Halves the columns, each new one the maxima of two, for twice the windows a column.
+    private func fold() {
+        let rows = Spectrogram.rows
+        cellPower.withUnsafeMutableBufferPointer { cells in
+            let base = cells.baseAddress!
+            for column in 0..<Spectrogram.maximumColumns / 2 {
+                vDSP_vmax(
+                    base + 2 * column * rows, 1, base + (2 * column + 1) * rows, 1,
+                    base + column * rows, 1, vDSP_Length(rows))
+            }
+            let kept = Spectrogram.maximumColumns / 2 * rows
+            vDSP_vclr(base + kept, 1, vDSP_Length(cells.count - kept))
+        }
+        windowsPerColumn *= 2
     }
 
     /// Each row's average power in dB, from the lowest row up.
@@ -102,11 +120,9 @@ final class SpectrumAccumulator {
         }
     }
 
-    /// The spectrogram, without the columns a file shorter than it stated never reached.
+    /// The spectrogram, as far as the windows reached.
     func spectrogram(nyquistHz: Double, durationSeconds: Double) -> Spectrogram {
-        let reached =
-            windows >= expectedWindows
-            ? columns : max(1, min(columns, (windows - 1) * columns / expectedWindows + 1))
+        let reached = max(1, (windows + windowsPerColumn - 1) / windowsPerColumn)
         let cells = cellPower.prefix(reached * Spectrogram.rows).map {
             Spectrogram.cell(decibels(Double($0)))
         }
