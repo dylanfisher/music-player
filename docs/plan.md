@@ -456,6 +456,43 @@ paste.
 - [ ] **Hardware checkpoint (owner):** run Analyze Library on the real library from the DAC
       Mac; report the time, the counts per tile, and a handful of flagged files checked by eye.
 
+Implementation plan, part 45b (ADR 0116):
+
+1. **Columns and fields (45b.3).** `trackJoins` gains `measures m`, joined by path, size and
+   modification time, so a row whose file changed reads as not analyzed. `TrackColumn` and
+   `SmartField` gain `cutoff`, `effectiveBits`, `dynamicRange` and `truePeak`, each with its
+   expression, title and text once; `TrackRow` reads them in the same select. Cutoff compares
+   in hertz as the sample rate does; true peak may be negative and compares unrounded, so
+   "is more than 0" finds overs. Tests: each column's sort and text, each field's rule, a
+   changed file's row reading as none.
+2. **The pending list (45b.1).** `MeasuresCache.filesToAnalyze()`: each track's path and the
+   index's stamp for it, with no current measures row, in path order (a folder at a time on
+   the NAS), DSD left out. The stamp comes from the index, so the pass stats nothing on the
+   NAS, and its row joins the files row it was made for.
+3. **The pass (45b.1).** `LibraryAnalysis`, an actor in Analysis: one file at a time, decoded
+   at background priority, its measures stored and no spectrogram (100 MB of them would churn
+   through the cache). Before each file it asks whether a scan runs and waits a second at a
+   time while one does. `pause()` cancels the file under way, which the next run reads again.
+   Progress: analyzed, total, failed, waiting or paused, and the status line's text. A file
+   that fails is logged and counted, and tried again next run. Tests: pending list, pause and
+   resume, a run after a relaunch skipping what's stored, waiting for a scan, a failure.
+4. **Command and status (45b.1).** `library.analyzeLibrary` "Analyze Library" and
+   `library.pauseAnalysis` "Pause Library Analysis" in the File menu after Show Library
+   Health, so in the palette and on the command line; neither from links. The app wires the
+   pass to the browser's scan state and to a status part beside the scans and the tag save:
+   "Analyzing library: 40 of 1,200". The browser refreshes as during a scan, and refreshes and
+   reruns Library Health when the pass ends or pauses.
+5. **Library Health (45b.2).** `HealthCheck` gains `lossyOrigin`, `upsampled`, `paddedBits`,
+   `fakeStereo` and `clipped`; `healthReport(measuredChecks:)` reads every current measures
+   row and asks Analysis's verdicts which checks each earns, so the rules stay in
+   `AnalysisRules`. The report counts the files analyzed, and each of those tiles says it:
+   "of 1,204 files analyzed". Tests: each tile's tracks from crafted measures, a stale row
+   ignored, the count.
+6. **Bench and soak (45b.4).** A row analyzing 200 fixture files (no DSD, none malformed) on
+   the slow simulated NAS through the pass, budget from the first run with room for the old
+   Mac; a reader row for search keystrokes while the pass writes to the same library; the
+   soak runs the pass over a copy of the fixture library beside its other load.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
