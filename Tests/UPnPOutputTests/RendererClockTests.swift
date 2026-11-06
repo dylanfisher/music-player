@@ -69,7 +69,7 @@ private let margin = RendererClock.leadMarginSeconds
 }
 
 @Test func stallsBeforeAndAfterAPauseAddUp() {
-    // Three seconds' stall, a pause, then two more; the lag is measured again after the pause.
+    // Three seconds' stall, a pause, then two more.
     var clock = polled(to: 20) { $0 <= 5 ? $0 : max(5, $0 - 3) }
     #expect(clock.stallSeconds == 3)
     clock.pause(at: 20)
@@ -95,4 +95,22 @@ private let margin = RendererClock.leadMarginSeconds
     // One poll still reports where it was before the seek, then it reports where it went.
     clock = polled(from: 41, to: 59, clock) { $0 == 41 ? 41 : $0 - 30 }
     #expect(clock.stallSeconds == 0)
+}
+
+@Test func holdsAfterEachResumeAddUpToAStall() {
+    // Paused for a second at 10, 20 and 30, it holds 1.4 s after each resume, under the
+    // tolerance each time.
+    var clock = polled(to: 10) { $0 }
+    var played = 10.0
+    for pause in [10.0, 20.0, 30.0] {
+        clock.pause(at: pause)
+        clock.resume(at: pause + 1)
+        let resumed = played
+        clock = polled(from: Int(pause) + 2, to: Int(pause) + 10, clock) { time in
+            max(resumed, resumed + (time - pause - 1) - 1.4)
+        }
+        played = resumed + 9 - 1.4
+    }
+    #expect(clock.stallSeconds > 4)
+    #expect(clock.stallSeconds <= 4.2 + 1)
 }

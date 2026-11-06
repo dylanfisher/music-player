@@ -532,6 +532,30 @@ private final class ShiftedClock: @unchecked Sendable {
     #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 2)
 }
 
+@Test func aRendererThatHoldsAfterEachResumeStaysGaplessAndPlaysToTheEnd() async throws {
+    let fake = try await FakeRenderer.denon(trackSeconds: 5)
+    fake.holdsOnResume(1.4)
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    output.load(item(1, "medium"), startSeconds: 0, playing: true)
+    output.setNext(item(2))
+    await eventually("the next track handed over") { fake.nextTrackURI != "" }
+    await eventually("the position to move") { fake.playedSeconds > 0.5 }
+    for _ in 0..<3 {
+        output.pause()
+        await eventually("a pause") { fake.transportState == .paused }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        output.play()
+        await eventually("play again") { fake.transportState == .playing }
+        // Past the hold, with a few polls that see it.
+        try await Task.sleep(nanoseconds: 1_800_000_000)
+    }
+    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 15)
+    // It went on to the next track by itself, at its end.
+    #expect(fake.setTransportURIs.count == 1)
+    #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 1)
+}
+
 @Test func aRendererStoppedOnlyAroundATrackChangeStaysGapless() async throws {
     let fake = try await FakeRenderer.denon(trackSeconds: 1)
     fake.changesTracksThroughStops()

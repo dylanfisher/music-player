@@ -25,7 +25,7 @@ struct RendererClock {
     private var isRunning = false
     /// How much later than the track's length stalls have moved the end.
     private(set) var stallSeconds = 0.0
-    /// `stallSeconds` when the lag was last measured from scratch, after a pause.
+    /// `stallSeconds` when the lag was last measured from scratch, after a jump back.
     private var stallBeforeSeconds = 0.0
     /// The least the renderer has been behind the clock since the lag was measured from
     /// scratch.
@@ -68,8 +68,6 @@ struct RendererClock {
         anchorSeconds = seconds(at: now)
         anchorTime = now
         isRunning = false
-        // The renderer's lag may differ once it plays again, so it's measured again.
-        measureAgain()
     }
 
     private mutating func measureAgain() {
@@ -98,7 +96,9 @@ struct RendererClock {
         }
         lastPolledSeconds = polledSeconds
         let clockSeconds = seconds(at: now)
-        // Behind the clock as stalls before a pause had already moved it.
+        // Behind the clock as stalls before a jump back had already moved it. The lag is kept
+        // across a pause, so a renderer that holds a moment after each resume adds the holds
+        // up as a stall instead of having each taken for its lag.
         let behind = clockSeconds - stallBeforeSeconds - polledSeconds
         // The first poll measured may already be behind, as after a resume, by no more than a
         // poll's noise: a renderer held at where it started for longer is buffering, and the

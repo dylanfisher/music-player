@@ -49,6 +49,7 @@ final class FakeRenderer: @unchecked Sendable {
     private var hangs = false
     private var stalePausedPosition = false
     private var lagSeconds = 0.0
+    private var resumeHoldSeconds = 0.0
     private var changesTracksSlowly = false
     /// The states it reports, one a GetTransportInfo, at a track's end before it plays the next.
     private var betweenTracks: [State]?
@@ -141,6 +142,8 @@ final class FakeRenderer: @unchecked Sendable {
     /// Playing, it reports a position `seconds` behind what it plays, as the Denon is thought
     /// to, so its last report before it stops at the end is that far short.
     func lagsBy(_ seconds: Double) { lock.withLock { lagSeconds = seconds } }
+    /// Played again after a pause, it says it plays but holds its position for `seconds`.
+    func holdsOnResume(_ seconds: Double) { lock.withLock { resumeHoldSeconds = seconds } }
     /// At a track's end with a next one, it reports stopped, transitioning, stopped again and
     /// playing the old track, one poll each, before it plays the next.
     func changesTracksThroughStops() { lock.withLock { changesTracksSlowly = true } }
@@ -332,8 +335,8 @@ final class FakeRenderer: @unchecked Sendable {
             case "Play":
                 reportedWhilePaused = nil
                 if startsPlaying, !uri.isEmpty, state != .playing {
+                    since = now + (state == .paused ? resumeHoldSeconds : 0)
                     state = .playing
-                    since = now
                 }
             case "Pause":
                 seconds = position
