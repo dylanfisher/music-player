@@ -95,6 +95,17 @@ public struct SignalFormat: Sendable, Equatable {
         self.channels = channels
         self.isFloat = isFloat
     }
+
+    /// `FLAC`, `MP3`, `PCM` for uncompressed samples, or `DSD`.
+    public var codecName: String {
+        switch formatID {
+        case linearPCMFormatID: "PCM"
+        case dsdFormatID: "DSD"
+        default:
+            formatID.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
+                .uppercased()
+        }
+    }
 }
 
 /// An output device, and the gain the output applies before it.

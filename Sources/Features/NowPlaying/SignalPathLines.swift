@@ -50,7 +50,7 @@ func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
         lines.stages.append(
             .init(
                 title: "File", value: value(of: track.file),
-                note: note([codec(track.file), channels(track.file.channels)]),
+                note: note([track.file.codecName, channels(track.file.channels)]),
                 changes: false))
     }
     switch path.sink {
@@ -184,17 +184,6 @@ private func value(of format: SignalFormat) -> String {
     default:
         formatText(
             rateHz: format.sampleRateHz, bits: format.bitsPerChannel, isFloat: format.isFloat)
-    }
-}
-
-/// `FLAC`, `MP3`, `PCM` for uncompressed samples, or `DSD`.
-private func codec(_ format: SignalFormat) -> String {
-    switch format.formatID {
-    case linearPCMFormatID: "PCM"
-    case dsdFormatID: "DSD"
-    default:
-        format.formatID.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
-            .uppercased()
     }
 }
 
