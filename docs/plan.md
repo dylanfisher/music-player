@@ -421,8 +421,8 @@ each threshold either side, padded bits, rates, a lossy file, mono and silence, 
 16/44.1 noise against its 96 kHz upsampling (the same level once matched by frequency), the
 model's names and comparison, and the window with 8 files (picture in
 `.build/snapshots/spectrum-window.png`). Owner steps: select the WAV and the FLAC of "So Many
-Questions" (the WAV first, as it's the one compared against), Show Spectrum, and read the
-Differences box; say whether each sentence matches what you hear, and whether the thresholds
+Questions", Show Spectrum, and read the
+Differences box (each file against the top one); say whether each sentence matches what you hear, and whether the thresholds
 (1 dB level and bands, DR 2, 1 kHz cutoff) say too much or too little. Then try a remaster
 against its original.
 
