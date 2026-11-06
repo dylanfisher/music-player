@@ -60,6 +60,9 @@ actor RendererSession {
         /// When the track is over by the app's own clock, from its length in the file, with a
         /// margin; nil while it isn't playing. Past it, the app moves on by itself.
         var deadline: Double?
+        /// `deadline` as the app's clock alone sets it, which a renderer that falls behind
+        /// doesn't move.
+        var clockDeadline: Double?
         /// Polls in a row that found the renderer behind the app's clock.
         var behindPolls = 0
         /// The track's length as the renderer last gave it, which decides whether a stop came
@@ -500,7 +503,13 @@ actor RendererSession {
             emit(.finished(current.item.id))
             return release()
         }
-        guard elapsed + Self.endSlackSeconds >= current.durationSeconds else {
+        // The renderer's position can lag what it plays: the Denon stops about 6 s short of
+        // the end by its own count. So the app's clock can also say the track played out.
+        let byClock = current.clockDeadline.map {
+            now() + Self.endSlackSeconds >= $0 - Self.leadMarginSeconds
+        }
+        guard byClock == true || elapsed + Self.endSlackSeconds >= current.durationSeconds
+        else {
             emit(
                 .failed(
                     current.item.id, RendererOutputError.stoppedOnRenderer(renderer: renderer.name))
@@ -509,7 +518,13 @@ actor RendererSession {
         }
         // Given the next track, a renderer that stops at the end may be on its way to it; the
         // app's own clock decides when it has waited long enough.
-        guard next?.sent != true else { return }
+        guard next?.sent != true else {
+            // A stopped renderer isn't re-buffering, so it doesn't wait out a held-back end.
+            if let clock = current.clockDeadline, let deadline = current.deadline {
+                current.deadline = min(deadline, clock)
+            }
+            return
+        }
         await ended(current)
     }
 
@@ -700,6 +715,7 @@ actor RendererSession {
             advancing
             ? time + max(0, loaded.track.durationSeconds - seconds) + Self.leadMarginSeconds
             : nil
+        loaded.clockDeadline = loaded.deadline
     }
 }
 

@@ -410,6 +410,22 @@ private func output(
     #expect(fake.setTransportURIs.map(\.stateBefore) == [.stopped, .stopped])
 }
 
+@Test func aRendererThatStopsShortByItsOwnCountGetsTheNextTrackSoon() async throws {
+    let fake = try await FakeRenderer.denon(trackSeconds: 5)
+    fake.ignoresNext()
+    fake.reportsBehind(seconds: 3.5)
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    let started = ProcessInfo.processInfo.systemUptime
+    output.load(item(1, "medium"), startSeconds: 0, playing: true)
+    output.setNext(item(2))
+    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 15)
+    // The app's clock ends the track 7 s in; the end held back for the lagging position would
+    // be about 10.5 s.
+    let took = ProcessInfo.processInfo.systemUptime - started
+    #expect(took < 9.5, "\(took) s")
+}
+
 @Test func aRendererStuckAtTheEndIsMovedOnByTheApp() async throws {
     let fake = try await FakeRenderer.denon(trackSeconds: 1)
     fake.ignoresNext()

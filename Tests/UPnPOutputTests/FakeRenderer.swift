@@ -47,6 +47,7 @@ final class FakeRenderer: @unchecked Sendable {
     private var buffersLikeHEOS = false
     private var hangs = false
     private var stalePausedPosition = false
+    private var lagSeconds = 0.0
     /// Fetches it owes, made as soon as the action that queued them has its answer ready.
     private var owedFetches: [(uri: String, range: String)] = []
     /// What it last reported while paused, for one that keeps reporting it.
@@ -131,6 +132,9 @@ final class FakeRenderer: @unchecked Sendable {
     /// At a track's end with nothing it'll move on to, it keeps playing the end, as the Denon
     /// stuttering on the last seconds does, instead of stopping.
     func hangsAtEnd() { lock.withLock { hangs = true } }
+    /// Reports its position `seconds` behind what it has played, as the Denon does: it stops
+    /// at a track's end while saying it's 6 s short of it.
+    func reportsBehind(seconds: Double) { lock.withLock { lagSeconds = seconds } }
     /// Paused, it reports where it was paused until it plays again, whatever a seek did.
     func reportsStalePositionWhilePaused() { lock.withLock { stalePausedPosition = true } }
 
@@ -367,7 +371,7 @@ final class FakeRenderer: @unchecked Sendable {
         if stalePausedPosition, state == .paused, let reportedWhilePaused {
             return reportedWhilePaused
         }
-        return position
+        return max(0, position - lagSeconds)
     }
 
     /// Fetches `range` of `uri` as a renderer buffering a stream would. Anything but a 206,
