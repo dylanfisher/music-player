@@ -277,7 +277,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AnalysisTests",
-            dependencies: ["Analysis", "Fixtures", "Library", "Metadata"],
+            dependencies: ["Analysis", "Fixtures", "Library", "Metadata", "Playback"],
             swiftSettings: strictSwift
         ),
         .testTarget(

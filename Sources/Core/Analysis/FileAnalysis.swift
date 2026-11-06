@@ -47,8 +47,7 @@ public func analyzeFile(
     let decoder = try FileDecoder(url: url, latency: latency)
     let format = SignalFormat(decoder.fileFormat)
     let channels = Int(format.channels)
-    let integer = losslessFormatIDs.contains(format.formatID) && !format.isFloat
-    // A lossless integer format always states its depth; nil means float, or lossy.
+    let integer = readsIntegers(format)
     let storedBits = format.bitsPerChannel.map(Int.init)
     try decoder.setOutputFormat(
         clientFormat(rateHz: format.sampleRateHz, channels: channels, integer: integer))
@@ -133,6 +132,14 @@ public func analyzeFile(
     return AnalysisResult(
         measures: measures,
         spectrogram: spectrum.spectrogram(nyquistHz: nyquistHz, durationSeconds: durationSeconds))
+}
+
+/// Whether `format`'s samples are read as integers, for exact effective bits: a lossless
+/// integer format that states its depth. One that doesn't, as a FLAC or ALAC whose flags name
+/// no source depth, is read as float, with no effective bits.
+func readsIntegers(_ format: SignalFormat) -> Bool {
+    losslessFormatIDs.contains(format.formatID) && !format.isFloat
+        && format.bitsPerChannel != nil
 }
 
 /// Interleaved 32-bit samples at the file's rate: signed integers, which hold a lossless

@@ -1,4 +1,5 @@
 import Foundation
+import Playback
 import Testing
 
 @testable import Analysis
@@ -106,6 +107,20 @@ private func floatWAV(_ samples: [Float]) throws -> URL {
     #expect(throws: AnalysisError.nonFiniteSample) { try analyzeFile(at: try floatWAV(samples)) }
     samples[1001] = 0
     #expect(throws: AnalysisError.nonFiniteSample) { try analyzeFile(at: try floatWAV(samples)) }
+}
+
+@Test func onlyALosslessIntegerFormatWithAStatedDepthIsReadAsIntegers() {
+    func format(_ id: String, bits: UInt32?, isFloat: Bool = false) -> SignalFormat {
+        SignalFormat(
+            formatID: id, sampleRateHz: 44_100, bitsPerChannel: bits, channels: 2,
+            isFloat: isFloat)
+    }
+    #expect(readsIntegers(format("flac", bits: 24)))
+    #expect(readsIntegers(format("lpcm", bits: 16)))
+    // A FLAC whose flags name no source depth would have no full-scale code for clipping.
+    #expect(!readsIntegers(format("flac", bits: nil)))
+    #expect(!readsIntegers(format("lpcm", bits: 32, isFloat: true)))
+    #expect(!readsIntegers(format("aac ", bits: nil)))
 }
 
 @Test func aDSDFileIsSkippedAndSaysSo() throws {
