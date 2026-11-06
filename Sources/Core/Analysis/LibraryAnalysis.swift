@@ -7,13 +7,16 @@ import Metadata
 
 private let logger = moduleLogger()
 
-/// Analyze Library (ADR 0116): the measures of every track's file the index has none for, or
-/// whose file changed since, one file at a time at background priority. It runs only when
-/// started, waits while a scan runs, and stops when paused; a run started later lists what's
-/// left from the index, so it carries on from there after a relaunch too. Each file is read
-/// once, and its measures stored with the index's stamp, so nothing but the read touches the
-/// share. No spectrogram is kept: the cache holds a few hundred, not a library.
+/// Analyze Library (ADR 0116, 0119): the measures of every track's file the index has none
+/// for, or whose file changed since, `filesAtOnce` files at a time at utility priority. It
+/// runs only when started, waits while a scan runs, and stops when paused; a run started later
+/// lists what's left from the index, so it carries on from there after a relaunch too. Each
+/// file is read once, and its measures stored with the index's stamp, so nothing but the read
+/// touches the share. No spectrogram is kept: the cache holds a few hundred, not a library.
 public actor LibraryAnalysis {
+    /// Files analyzed at once, so one file's reads overlap another's FFTs: two on the 2015
+    /// MacBook Pro's four cores, so playback and the window keep the rest, and four at most.
+    public static let filesAtOnce = min(4, max(2, ProcessInfo.processInfo.activeProcessorCount / 2))
     /// How long the pass waits before asking again whether a scan still runs.
     static let scanWaitSeconds = 1.0
     /// How often the pass tries to store a file's measures, and how long it waits between
@@ -68,6 +71,8 @@ public actor LibraryAnalysis {
     private let store: @Sendable (FileMeasures, String, FileStamp) async throws -> Void
     private let scanRunning: @Sendable () async -> Bool
     private let report: @Sendable (Progress) -> Void
+    /// Files under way at once: `filesAtOnce`, or a test's own.
+    private let atOnce: Int
     /// The run going, by the number it was started as.
     private var run: (number: Int, task: Task<Progress, Never>)?
     private var runsStarted = 0
@@ -82,7 +87,7 @@ public actor LibraryAnalysis {
         self.init(
             cache: cache,
             analyze: { path in
-                try await offMain(priority: .background) {
+                try await offMain(priority: .utility) {
                     try analyzeFile(
                         at: URL(fileURLWithPath: path, isDirectory: false), latency: latency
                     ).measures
@@ -94,10 +99,12 @@ public actor LibraryAnalysis {
     init(
         cache: MeasuresCache, analyze: @escaping @Sendable (String) async throws -> FileMeasures,
         store: (@Sendable (FileMeasures, String, FileStamp) async throws -> Void)? = nil,
+        filesAtOnce: Int = LibraryAnalysis.filesAtOnce,
         scanRunning: @escaping @Sendable () async -> Bool,
         report: @escaping @Sendable (Progress) -> Void
     ) {
         self.cache = cache
+        atOnce = filesAtOnce
         self.analyze = analyze
         self.store = store ?? { try await cache.store($0, path: $1, stamp: $2) }
         self.scanRunning = scanRunning
@@ -145,48 +152,90 @@ public actor LibraryAnalysis {
             report(progress)
             return progress
         }
-        for file in files {
-            while await scanRunning() {
-                if progress.stage != .waitingForScan {
-                    progress.stage = .waitingForScan
-                    report(progress)
-                }
-                do {
-                    try await Task.sleep(nanoseconds: UInt64(Self.scanWaitSeconds * 1e9))
-                } catch {
-                    return paused()
-                }
-            }
-            if Task.isCancelled { return paused() }
-            if progress.stage != .analyzing {
-                progress.stage = .analyzing
-                report(progress)
-            }
-            do {
-                let measures = try await analyze(file.path)
-                if !(await stored(measures, file)) {
-                    progress.failed += 1
-                    progress.unstored += 1
-                }
-            } catch {
-                if Task.isCancelled { return paused() }
-                logger.error("Analyze Library couldn't analyze \(file.path): \(error)")
-                progress.failed += 1
-            }
-            progress.analyzed += 1
-            report(progress)
-        }
+        let stopped: Bool
+        (progress, stopped) = await analyze(files, from: progress)
+        if stopped { return paused() }
         progress.stage = .finished
         report(progress)
         return progress
     }
 
+    /// Analyzes `files`, `atOnce` at a time, started in path order so a share is still read
+    /// about a folder at a time. Returns where the run got to, and whether it was paused.
+    private func analyze(_ files: [(path: String, stamp: FileStamp)], from start: Progress) async
+        -> (Progress, stopped: Bool)
+    {
+        let analyze = analyze
+        let store = store
+        let scanRunning = scanRunning
+        let report = report
+        let atOnce = atOnce
+        return await withTaskGroup(of: FileOutcome.self) { group in
+            var progress = start
+            var underWay = 0
+            for file in files {
+                if underWay == atOnce, let outcome = await group.next() {
+                    underWay -= 1
+                    if progress.count(outcome) { report(progress) }
+                }
+                while !Task.isCancelled, await scanRunning() {
+                    if progress.stage != .waitingForScan {
+                        progress.stage = .waitingForScan
+                        report(progress)
+                    }
+                    do {
+                        try await Task.sleep(nanoseconds: UInt64(Self.scanWaitSeconds * 1e9))
+                    } catch {
+                        break
+                    }
+                }
+                if Task.isCancelled { break }
+                if progress.stage != .analyzing {
+                    progress.stage = .analyzing
+                    report(progress)
+                }
+                group.addTask { await Self.analyzed(file, analyze: analyze, store: store) }
+                underWay += 1
+            }
+            for await outcome in group where progress.count(outcome) { report(progress) }
+            return (progress, Task.isCancelled)
+        }
+    }
+
+    /// What became of one file.
+    fileprivate enum FileOutcome: Sendable {
+        case stored
+        /// Analyzed, but every try to store its measures failed.
+        case unstored
+        case failed
+        /// Paused before it was done: the next run reads it again.
+        case cancelled
+    }
+
+    /// Analyzes `file` and stores its measures, on a child task of the run.
+    private static func analyzed(
+        _ file: (path: String, stamp: FileStamp),
+        analyze: @Sendable (String) async throws -> FileMeasures,
+        store: @Sendable (FileMeasures, String, FileStamp) async throws -> Void
+    ) async -> FileOutcome {
+        let measures: FileMeasures
+        do {
+            measures = try await analyze(file.path)
+        } catch {
+            if Task.isCancelled { return .cancelled }
+            logger.error("Analyze Library couldn't analyze \(file.path): \(error)")
+            return .failed
+        }
+        return await stored(measures, file, store) ? .stored : .unstored
+    }
+
     /// Stores `measures` for `file`, trying again a few times, so a scan holding the index
     /// doesn't cost another read of the file. False when every try failed; a pause during the
     /// waits doesn't skip the tries left.
-    private func stored(_ measures: FileMeasures, _ file: (path: String, stamp: FileStamp)) async
-        -> Bool
-    {
+    private static func stored(
+        _ measures: FileMeasures, _ file: (path: String, stamp: FileStamp),
+        _ store: @Sendable (FileMeasures, String, FileStamp) async throws -> Void
+    ) async -> Bool {
         for attempt in 1...Self.storeAttempts {
             do {
                 try await store(measures, file.path, file.stamp)
@@ -209,5 +258,21 @@ public actor LibraryAnalysis {
             }
         }
         return false
+    }
+}
+
+extension LibraryAnalysis.Progress {
+    /// Counts a file done; false for one paused before it was, which counts nothing.
+    fileprivate mutating func count(_ outcome: LibraryAnalysis.FileOutcome) -> Bool {
+        switch outcome {
+        case .stored: break
+        case .unstored:
+            failed += 1
+            unstored += 1
+        case .failed: failed += 1
+        case .cancelled: return false
+        }
+        analyzed += 1
+        return true
     }
 }

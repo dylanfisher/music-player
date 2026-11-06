@@ -236,7 +236,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | The same on the slow simulated NAS: 23 ms to open, 10 ms a 1 MB block (phase 45a); the old Mac figure is an estimate until its checkpoint | < 6 s | < 20 s |
 | Memory that analysis adds at its peak (phase 45a) | < 10 MB | < 10 MB |
 | The second of two search keystrokes 50 ms apart, as above, while Analyze Library runs over every fixture file and the browser refreshes every 2 s (p95; phase 45b); the old Mac figure is an estimate until its checkpoint | < 20 ms | < 80 ms |
-| Analyze Library over 200 fixture files on the slow simulated NAS, at background priority (phase 45b); the old Mac figure is an estimate until its checkpoint | < 15 s | < 40 s |
+| Analyze Library over 200 fixture files on the slow simulated NAS, two to four files at once at utility priority (phase 45b, 50c); the old Mac figure is an estimate until its checkpoint | < 15 s | < 40 s |
 
 ## Phases
 

@@ -98,21 +98,22 @@ private func eventually(_ condition: () -> Bool) async throws {
     #expect(heard.paths.isEmpty)
 }
 
-@Test func pausingStopsAtOnceAndTheNextRunReadsTheStoppedFileAgain() async throws {
+/// Two files at once: the second and third take until the run is paused, the first time, so
+/// the pause stops both, and the next run reads each of them once more.
+@Test func pausingStopsEveryFileUnderWayAndTheNextRunReadsThemAgain() async throws {
     let library = try ScannedFixtures()
     let heard = Heard()
     let pass = LibraryAnalysis(
         cache: try library.cache(),
         analyze: { path in
             heard.ask(path)
-            // The second file takes until the run is paused, the first time.
-            if path == library.paths[1], heard.paths.filter({ $0 == path }).count == 1 {
+            if path != library.paths[0], heard.paths.filter({ $0 == path }).count == 1 {
                 try await Task.sleep(nanoseconds: 60_000_000_000)
             }
             return clean
-        }, scanRunning: { false }, report: heard.report)
+        }, filesAtOnce: 2, scanRunning: { false }, report: heard.report)
     let run = await pass.start()
-    try await eventually { heard.paths.count == 2 }
+    try await eventually { heard.paths.count == 3 }
     await pass.pause()
     let paused = await run.value
     #expect(paused.stage == .paused && paused.analyzed == 1 && paused.total == 3)
@@ -120,8 +121,47 @@ private func eventually(_ condition: () -> Bool) async throws {
 
     let resumed = await pass.start().value
     #expect(resumed.stage == .finished && resumed.analyzed == 2 && resumed.total == 2)
-    #expect(
-        heard.paths == [library.paths[0], library.paths[1], library.paths[1], library.paths[2]])
+    #expect(heard.paths.prefix(3).sorted() == library.paths)
+    #expect(heard.paths.dropFirst(3).sorted() == Array(library.paths.dropFirst()))
+}
+
+/// Files under way at a time, and the most there were.
+private final class UnderWay: @unchecked Sendable {
+    private let lock = NSLock()
+    private var now = 0
+    private var most = 0
+
+    func started() {
+        lock.withLock {
+            now += 1
+            most = max(most, now)
+        }
+    }
+    func ended() { lock.withLock { now -= 1 } }
+    var highest: Int { lock.withLock { most } }
+}
+
+@Test func aRunAnalyzesSoManyFilesAtOnceStartedInPathOrderEachOnce() async throws {
+    #expect((2...4).contains(LibraryAnalysis.filesAtOnce))
+    let library = try ScannedFixtures()
+    let heard = Heard()
+    let underWay = UnderWay()
+    let pass = LibraryAnalysis(
+        cache: try library.cache(),
+        analyze: { path in
+            underWay.started()
+            defer { underWay.ended() }
+            heard.ask(path)
+            // The first file is slow, so the second and the third overlap it in turn.
+            try await Task.sleep(nanoseconds: path == library.paths[0] ? 300_000_000 : 50_000_000)
+            return clean
+        }, filesAtOnce: 2, scanRunning: { false }, report: heard.report)
+    let ended = await pass.start().value
+    #expect(ended.stage == .finished && ended.analyzed == 3 && ended.failed == 0)
+    #expect(underWay.highest == 2)
+    // The first two start together, in either order; the third once the second is done.
+    #expect(heard.paths.prefix(2).sorted() == Array(library.paths.prefix(2)))
+    #expect(heard.paths.last == library.paths[2] && heard.paths.count == 3)
 }
 
 @Test func aRunWaitsWhileAScanRunsAndGoesOnWhenItEnds() async throws {
@@ -142,7 +182,7 @@ private func eventually(_ condition: () -> Bool) async throws {
     heard.scanRuns = false
     let ended = await run.value
     #expect(ended.stage == .finished && ended.analyzed == 3)
-    #expect(heard.paths == library.paths)
+    #expect(heard.paths.sorted() == library.paths)
 }
 
 /// A store that fails is tried again without reading the file again; one that keeps failing
@@ -167,7 +207,7 @@ private func eventually(_ condition: () -> Bool) async throws {
             try await cache.store(measures, path: path, stamp: stamp)
         }, scanRunning: { false }, report: { _ in })
     let ended = await pass.start().value
-    #expect(heard.paths.filter { !$0.hasPrefix("store ") } == library.paths, "read once")
+    #expect(heard.paths.filter { !$0.hasPrefix("store ") }.sorted() == library.paths, "read once")
     #expect(heard.paths.filter { $0 == "store " + library.paths[2] }.count == 3)
     #expect(ended.analyzed == 3 && ended.failed == 1 && ended.unstored == 1)
     #expect(ended.text == "Library analyzed: 3 files, 1 couldn't be stored; the log says why")

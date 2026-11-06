@@ -123,8 +123,9 @@ let analysisBenchmarks = [
                 value: elapsed,
                 notes: [
                     String(
-                        format: "%d failed; %.0f ms a file, at background priority",
-                        ended.failed, elapsed * 1000 / Double(passFileCount))
+                        format: "%d failed; %.0f ms a file, %d files at once at utility priority",
+                        ended.failed, elapsed * 1000 / Double(passFileCount),
+                        LibraryAnalysis.filesAtOnce)
                 ])
         }
     },
