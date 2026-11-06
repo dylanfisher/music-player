@@ -118,15 +118,21 @@ final class HealthPanel: NSViewController, SourcePanel {
     /// on; or, nil, the button alone.
     func showAnalysis(_ progress: LibraryAnalysis.Progress?, analyzeTitle: String) {
         _ = view
-        let running = [.analyzing, .waitingForScan].contains(progress?.stage)
+        let running = progress?.stage.isRunning == true
         analysisBar.isHidden = progress == nil
         analysisBar.doubleValue = progress?.fraction ?? 0
         analysisLabel.isHidden = progress == nil
         analysisLabel.stringValue =
             ([progress?.text] + [running ? progress?.file : nil]).compactMap { $0 }
             .joined(separator: " · ")
-        analysisCommand = running ? .pauseLibraryAnalysis : .analyzeLibrary
+        analysisCommand = Self.analysisCommand(for: progress?.stage)
         analysisButton.title = running ? AppCommands.title(of: analysisCommand) : analyzeTitle
+    }
+
+    /// What a button for Analyze Library runs, here and in the status bar: Pause Library
+    /// Analysis while a run goes, and Analyze Library while it's paused or none is.
+    static func analysisCommand(for stage: LibraryAnalysis.Progress.Stage?) -> CommandID {
+        stage?.isRunning == true ? .pauseLibraryAnalysis : .analyzeLibrary
     }
 
     @objc private func analysisClicked() { runCommand(analysisCommand) }

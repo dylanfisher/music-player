@@ -34,6 +34,9 @@ public actor LibraryAnalysis {
             case waitingForScan
             case paused
             case finished
+
+            /// Whether a run is under way, analyzing or waiting for a scan, so Pause stops it.
+            public var isRunning: Bool { self == .analyzing || self == .waitingForScan }
         }
 
         public var stage: Stage

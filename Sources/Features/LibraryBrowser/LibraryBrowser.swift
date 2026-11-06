@@ -964,11 +964,6 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var showsScan: Bool { status.scanText != nil }
     public var scanIsPaused: Bool { status.scanIsPaused }
 
-    /// Whether Analyze Library is running, not paused, as last shown.
-    private var analysisRuns: Bool {
-        [.analyzing, .waitingForScan].contains(analysisProgress?.stage)
-    }
-
     /// The activity line: the scans and a save, then Analyze Library, each with its button,
     /// and their bar.
     private func showActivity() {
@@ -978,8 +973,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         analysisLabel.isHidden = status.analysisText == nil
         scanButtonCommand =
             status.scanText == nil ? nil : status.scanIsPaused ? .resumeScan : .pauseScan
-        analysisButtonCommand =
-            analysisProgress == nil ? nil : analysisRuns ? .pauseLibraryAnalysis : .analyzeLibrary
+        analysisButtonCommand = analysisProgress.map { HealthPanel.analysisCommand(for: $0.stage) }
         show(scanPauseButton, scanButtonCommand)
         show(analysisPauseButton, analysisButtonCommand)
         showScanProgress()

@@ -23,9 +23,7 @@ extension AppDelegate {
             run: { [weak self] in self?.analyzeLibrary() })
         dispatcher.handle(
             .pauseLibraryAnalysis,
-            enabled: { [weak self] in
-                [.analyzing, .waitingForScan].contains(self?.libraryAnalysisStage)
-            },
+            enabled: { [weak self] in self?.libraryAnalysisStage?.isRunning == true },
             run: { [weak self] in
                 guard let pass = self?.libraryAnalysis else { return }
                 Task { await pass.pause() }
