@@ -92,7 +92,7 @@ private func makeEditing(
                 answer(confirm)
             },
             alert: { message, _, _ in seen.alert(message) }))
-    editing.written = { seen.wrote($0) }
+    editing.written = { seen.wrote($0.changed) }
     return editing
 }
 

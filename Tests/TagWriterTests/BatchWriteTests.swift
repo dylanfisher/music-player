@@ -112,6 +112,21 @@ func aBatchCrashedAfterEachStepIsPutRight(_ step: BatchStep) throws {
     for url in urls { #expect(try leftoverTemps(for: url.path).isEmpty) }
 }
 
+/// The report carries what the reader read back from each file written, in place or through
+/// the temp file, so the library can store it without reading the file again (ADR 0108).
+@Test(arguments: [true, false])
+func aWriteReportsWhatItReadBack(_ fits: Bool) throws {
+    let url = try Sample.flac.copy()
+    let before = try identity(url)
+    let title = fits ? "Edited" : String(repeating: "Long ", count: 20_000)
+    let report = scratchWriter().write(TagEdit(values: [.title: title]), to: [url.path])
+    expectChanged(report, [url])
+    #expect((try identity(url).inode == before.inode) == fits, "in place or through the temp file")
+    let read = try readMetadata(at: url)
+    #expect(report.parsed[url.path]?.metadata == read.metadata)
+    #expect(report.parsed[url.path]?.warnings == read.warnings)
+}
+
 private final class FlushCount: @unchecked Sendable {
     // `value` is guarded by `lock`.
     private let lock = NSLock()

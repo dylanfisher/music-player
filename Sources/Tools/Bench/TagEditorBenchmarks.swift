@@ -181,7 +181,7 @@ private func writeAndRescanRuns(inPlace: Bool) throws -> (write: [Double], resca
         guard (try fileNumber() as? Int == before) == inPlace else {
             throw BenchError.expected(inPlace ? "the title written in place" : "a new file")
         }
-        guard try scanner.rescan(files: [path]).read == 1 else {
+        guard try scanner.rescan(files: [path], parsed: report.parsed).read == 1 else {
             throw BenchError.expected("the file read again")
         }
         let read = DispatchTime.now().uptimeNanoseconds

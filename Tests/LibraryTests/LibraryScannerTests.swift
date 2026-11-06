@@ -663,3 +663,25 @@ private struct RetitledReads: ScanFileAccess {
     #expect(after.read == 0, "the folder scan finds the edited file unchanged")
     #expect(try library.index().track(path: edited)?.title == "Edited")
 }
+
+/// The tag writer hands the rescan what it read back, which is stored without reading the
+/// file again; a file it doesn't hand over is read as before (ADR 0108).
+@Test func aRescanStoresWhatTheWriterReadBack() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let files = library.manifest.files.filter { $0.malformation == nil }
+    let given = library.path(files[0])
+    let read = library.path(files[1])
+    var parsed = try readMetadata(at: URL(fileURLWithPath: given, isDirectory: false))
+    parsed.metadata.tags.title = "Read back"
+    let scanner = LibraryScanner(
+        databaseURL: library.databaseURL,
+        access: RetitledReads(edited: given, title: "Read again"))
+
+    let summary = try scanner.rescan(files: [given, read], parsed: [given: parsed])
+    #expect(summary.read == 2)
+    #expect(try library.index().track(path: given)?.title == "Read back")
+    let readTitle = try readMetadata(at: URL(fileURLWithPath: read, isDirectory: false))
+        .metadata.tags.title
+    #expect(try library.index().track(path: read)?.title == readTitle)
+}

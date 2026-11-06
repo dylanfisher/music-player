@@ -598,7 +598,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeTagEditing() -> TagEditing {
         let editing = TagEditing(
             writer: TagWriter(journal: TagUndoJournal(dataDirectory: paths.dataDirectory)))
-        editing.written = { [weak self] paths in self?.watcher?.rescan(files: paths) }
+        editing.written = { [weak self] report in
+            self?.watcher?.rescan(files: report.changed, parsed: report.parsed)
+        }
         editing.replaceArtwork = { [weak self] in self?.dispatcher?.run(.replaceArtwork) }
         editing.removeArtwork = { [weak self] in self?.dispatcher?.run(.removeArtwork) }
         editing.place = state?[\.infoPlace].map { NSPoint(x: $0.x, y: $0.y) }

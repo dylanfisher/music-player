@@ -1,5 +1,5 @@
 /// A file's metadata, the fields that couldn't be read as written, and what reading it cost.
-public struct ParsedFile: Sendable {
+public struct ParsedFile: Equatable, Sendable {
     public var metadata: TrackMetadata
     /// In the order they were found. Empty when every field read cleanly.
     public var warnings: [MetadataWarning]

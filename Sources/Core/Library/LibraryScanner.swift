@@ -171,11 +171,18 @@ public struct LibraryScanner: Sendable {
     /// Reads the files at `paths` again and stores what they hold now, whatever their size and
     /// mtime say: the tag editor just wrote them, and a folder scan would wait behind other
     /// scans and, on a network volume, for playback. A file the index doesn't hold is skipped,
-    /// since only a folder scan knows whether its folder includes it. Blocks, so call it off
-    /// the main thread and outside Swift concurrency's threads.
-    public func rescan(files paths: [String]) throws -> ScanSummary {
+    /// since only a folder scan knows whether its folder includes it. A file in `parsed`, as
+    /// the tag writer read it back, is stored from that rather than read again; on a NAS that
+    /// saves its opens and reads. Blocks, so call it off the main thread and outside Swift
+    /// concurrency's threads.
+    public func rescan(files paths: [String], parsed: [String: ParsedFile] = [:]) throws
+        -> ScanSummary
+    {
         let index = try LibraryIndex(at: databaseURL)
         var summary = ScanSummary()
+        let given = Dictionary(
+            parsed.map { (canonicalPath($0.key), $0.value) },
+            uniquingKeysWith: { first, _ in first })
         var targets: [(path: String, known: KnownFile)] = []
         for path in paths.map(canonicalPath) {
             guard let known = try index.knownFile(at: path) else {
@@ -188,7 +195,7 @@ public struct LibraryScanner: Sendable {
         let results = RescanResults(count: found.count)
         DispatchQueue.concurrentPerform(iterations: found.count) { position in
             let (path, known) = found[position]
-            results.store(scannedAgain(path, known: known), at: position)
+            results.store(scannedAgain(path, known: known, parsed: given[path]), at: position)
         }
         var files: [ScannedFile] = []
         for result in results.all {
@@ -212,9 +219,9 @@ public struct LibraryScanner: Sendable {
         return summary
     }
 
-    /// The file at `path` read again, with its size and mtime as a directory listing gives
-    /// them, so the next folder scan finds it unchanged.
-    private func scannedAgain(_ path: String, known: KnownFile) -> Rescanned {
+    /// The file at `path` read again, or as `parsed` says it reads, with its size and mtime as
+    /// a directory listing gives them, so the next folder scan finds it unchanged.
+    private func scannedAgain(_ path: String, known: KnownFile, parsed: ParsedFile?) -> Rescanned {
         let values: URLResourceValues
         do {
             values = try URL(fileURLWithPath: path, isDirectory: false).resourceValues(forKeys: [
@@ -232,7 +239,8 @@ public struct LibraryScanner: Sendable {
                 path: path, sizeBytes: size, modifiedSeconds: modified.timeIntervalSince1970,
                 createdSeconds: values.creationDate?.timeIntervalSince1970, known: known,
                 outcome: Result { () throws(MetadataError) -> ParsedFile in
-                    try access.readMetadata(at: path)
+                    if let parsed { return parsed }
+                    return try access.readMetadata(at: path)
                 }))
     }
 }

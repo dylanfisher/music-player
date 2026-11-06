@@ -15,8 +15,8 @@ private let logger = moduleLogger()
 public final class TagEditing {
     /// The info windows open, in the order they opened.
     public private(set) var editors: [TagEditorWindow] = []
-    /// Called on the main thread with the files a write or undo changed, for the rescan.
-    public var written: ([String]) -> Void = { _ in }
+    /// Called on the main thread with what a write or undo changed, for the rescan.
+    public var written: (TagWriteReport) -> Void = { _ in }
     /// What an info window's art buttons run: the registry's Replace Artwork… and Remove
     /// Artwork.
     public var replaceArtwork: () -> Void = {}
@@ -85,7 +85,7 @@ public final class TagEditing {
             let report = writer.recoverInterrupted()
             guard !report.changed.isEmpty else { return }
             DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.written(report.changed) }
+                MainActor.assumeIsolated { self?.written(report) }
             }
         }
     }
@@ -247,7 +247,7 @@ public final class TagEditing {
         pendingWrites -= 1
         guard let (action, window) = alertWindows.removeValue(forKey: number) else { return }
         if !report.changed.isEmpty {
-            written(report.changed)
+            written(report)
             let changed = Set(report.changed)
             for editor in editors where !changed.isDisjoint(with: editor.paths) {
                 read(into: editor, over: window)

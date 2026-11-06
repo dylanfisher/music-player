@@ -94,17 +94,18 @@ extension TagWriter {
         var results: [JobResult] = []
         for (index, job) in jobs.enumerated() {
             switch flushed[index] {
-            case .written(_, let identity):
+            case .written(let parsed, let identity):
                 logger.notice("wrote tags in place to \(job.path)")
                 records[index].setEdited(identity)
                 do throws(TagWriteError) {
                     try journal.confirm(records[index], at: handles[index])
-                    results.append(.success(.changed(problem: nil)))
+                    results.append(.success(.changed(parsed, problem: nil)))
                 } catch {
                     logger.error("\(error.description)")
                     results.append(
                         .success(
                             .changed(
+                                parsed,
                                 problem: TagWriteError(
                                     path: job.path, kind: .journal,
                                     detail: "written, but its undo record couldn't be confirmed:"

@@ -87,8 +87,9 @@ public struct TagWriter: Sendable {
         for (index, result) in results.prefix(reached).enumerated() {
             switch result {
             case .success(.unchanged): report.unchanged.append(paths[index])
-            case .success(.changed(let problem)):
+            case .success(.changed(let parsed, let problem)):
                 report.changed.append(paths[index])
+                report.parsed[paths[index]] = parsed
                 if let problem { report.failures.append(problem) }
             case .failure(let error): report.failures.append(error)
             case nil: preconditionFailure("every file up to the stop has a result")
@@ -166,8 +167,9 @@ public struct TagWriter: Sendable {
 
     enum Outcome {
         case unchanged
-        /// Written; `problem` is set when its undo record couldn't be brought up to date.
-        case changed(problem: TagWriteError?)
+        /// Written and read back as the reader reads it; `problem` is set when its undo record
+        /// couldn't be brought up to date.
+        case changed(ParsedFile, problem: TagWriteError?)
     }
 
     /// What one file of a batch needs once it's read.
@@ -249,8 +251,9 @@ public struct TagWriter: Sendable {
         let temp = try writeTemp(segments, from: path, identity: before, faults: faults)
         var handle: TagUndoJournal.Handle?
         var record: TagUndoJournal.FileRecord
+        let parsed: ParsedFile
         do throws(TagWriteError) {
-            _ = try checkEdited(
+            parsed = try checkEdited(
                 temp.path, original: file, path: path, hashes: hashes, expected: expected)
             record = TagUndoJournal.FileRecord(
                 path: path, edited: try identity(temp.path), original: before,
@@ -279,11 +282,12 @@ public struct TagWriter: Sendable {
                 record.setEdited(final)
                 try journal.update(record, at: handle!)
             }
-            return .done(.changed(problem: nil))
+            return .done(.changed(parsed, problem: nil))
         } catch {
             logger.error("\(error.description)")
             return .done(
                 .changed(
+                    parsed,
                     problem: TagWriteError(
                         path: path, kind: .journal,
                         detail: "written, but its undo record couldn't be updated: \(error.detail)")
@@ -658,6 +662,9 @@ public struct TagWriteReport: Equatable, Sendable {
     public var nothingToUndo = false
     /// The files a batch didn't reach because it stopped (a full disk, a broken journal).
     public var notWritten: [String] = []
+    /// What the reader read back from each file a write changed, so the library can store it
+    /// without reading the file again (ADR 0108). Undo and recovery leave it empty.
+    public var parsed: [String: ParsedFile] = [:]
 
     init() {}
 }
