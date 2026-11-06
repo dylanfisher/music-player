@@ -73,6 +73,8 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
     status.apply(.scanned(folder: "/Volumes/music/library", ScanSummary()))
     status.apply(.scanPaused(folder: "/Volumes/music/other", true))
     #expect(status.scanText == "Scan paused: other: 0 files checked")
+    // Its bar stands still, empty, rather than moving on its own.
+    #expect(status.scanFraction == 0 && status.activityFraction == 0)
     status.apply(.scanFailed(folder: "/Volumes/music/other", reason: "gone"))
     #expect(!status.scanIsPaused && status.scanText == nil)
 }

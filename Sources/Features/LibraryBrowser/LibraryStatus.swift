@@ -139,11 +139,13 @@ struct LibraryStatus: Equatable, Sendable {
     var scanIsPaused: Bool { pausedScan != nil }
 
     /// How much of what the scans have to read they've read, from 0 to 1. Nil while nothing
-    /// scans, or while a scan is still listing folders, since what it has to read still grows.
+    /// scans, or while a scan is still listing folders, since what it has to read still grows;
+    /// 0 for that while the scan shown is paused, so its bar stands still, empty.
     var scanFraction: Double? {
-        guard !scanning.isEmpty,
-            scanning.values.allSatisfy({ $0.stage == .reading && $0.toRead > 0 })
-        else { return nil }
+        guard !scanning.isEmpty else { return nil }
+        guard scanning.values.allSatisfy({ $0.stage == .reading && $0.toRead > 0 }) else {
+            return isScanning ? nil : 0
+        }
         let values = scanning.values
         return Double(values.map(\.read).reduce(0, +)) / Double(values.map(\.toRead).reduce(0, +))
     }
