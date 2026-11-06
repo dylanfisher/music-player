@@ -251,7 +251,7 @@ ADR numbers: 0117 to 50a if it needs one, 0118 to 50b, 0119 to 50c, 0120 to 50d.
 
 #### 50a. Library window
 
-- [ ] **50a.1 Stats never opens hidden.** Clicking Stats with Show Browser off showed the
+- [x] **50a.1 Stats never opens hidden.** Clicking Stats with Show Browser off showed the
       panel at zero height; the owner had to drag it open. Probe: the panel slot is hidden
       for sources without a panel, so the split collapses it, and `fillPanelSlot`
       (`LibraryBrowser.swift`) calls `setPosition` straight after unhiding, with no layout
@@ -260,24 +260,24 @@ ADR numbers: 0117 to 50a if it needs one, 0118 to 50b, 0119 to 50c, 0120 to 50d.
       range with a real minimum (the header and one row of cards), place the divider after a
       layout pass as `MainSplit.restore` does, set a minimum coordinate while a panel shows,
       and record a height only from the user's drag, not from layout passes.
-- [ ] **50a.2 Stats keeps its height.** Moving to another source and back, or relaunching,
+- [x] **50a.2 Stats keeps its height.** Moving to another source and back, or relaunching,
       opens Stats at the height the user last dragged it to. Test: Show Browser off, Stats
       shown at its saved height, a playlist, Stats again at the same height; and the same
       with Show Browser on.
-- [ ] **50a.3 A lighter selected row in the Stats lists.** The marked row in Top Genres and the
+- [x] **50a.3 A lighter selected row in the Stats lists.** The marked row in Top Genres and the
       other list cards is the selection color at 0.4 alpha (`StatsListView.swift`), too
       dark. Lighter, still clearly above hover's 0.18.
-- [ ] **50a.4 No "discarded" text in the status bar.** "earlier play counts and playlists
+- [x] **50a.4 No "discarded" text in the status bar.** "earlier play counts and playlists
       discarded" leaves the status bar's totals (`LibraryStatus.summary`). The notices stay in
       the Problems list and the problems button, where they already show.
-- [ ] **50a.5 The import sheet says what will change.** The top of the Import from Swinsian
+- [x] **50a.5 The import sheet says what will change.** The top of the Import from Swinsian
       sheet becomes a two-column table (`NSGridView`, as in Get Info's File tab): what
       changes on the left, the count on the right, a heading line for how many tracks matched,
       rows with nothing to change grouped in one dimmed line ("No change: last played, date
       added, ratings, loved") instead of "later on 0 tracks", and the notes (playlists
       skipped, rows merged) as a short line under the table. Same width, so it still fits
       1440×900. Tests: the rows for a plan, and the sheet's fit test and its snapshot.
-- [ ] **50a.6 The stuck row line.** After hours of use a 1-point horizontal line stays at a fixed
+- [x] **50a.6 The stuck row line.** After hours of use a 1-point horizontal line stays at a fixed
       height on screen, across the art column and the rows, while the rows scroll under it.
       Not reproduced yet. Candidates, from reading the code: the split's divider over a panel
       slot shown at 0 height (fixed by 50a.1); an album line set on an art cell drawn into its
@@ -308,7 +308,8 @@ Plan, part 50a (ADR 0117):
   to change in one "No change:" line, and notes (ratings kept, playlists skipped, rows merged,
   tracks with no file, problems). The sheet shows the heading, an `NSGridView` of the rows,
   the dimmed line and the notes in one wrapping line, at the same width. Tests: the rows for
-  a plan from each player; the fit test with the table and the dimmed line, and its snapshot.
+  a plan from each player; the fit test with the table and the dimmed line, and the snapshot
+  it writes.
 - 50a.6 (`Features/LibraryBrowser`): the first candidate is 50a.1's fix. For the second, a
   probe drew an art cell in a row view that draws its subviews into its layer: setting the
   album line redraws the row's layer, and clearing it clears the line, so there is nothing to
@@ -316,6 +317,40 @@ Plan, part 50a (ADR 0117):
   screen has its own row's line and its art cell its own album line.
 - Order: this plan, 50a.4, 50a.3, 50a.1 and 50a.2 with the ADR, 50a.6's test, 50a.5, the
   result.
+
+Gate, part 50a: the review found nothing above low. Fixed: Stats' least height gives way
+when the window leaves the table less room, so the split's minimum never passes its maximum;
+the "No change" names come from the rows' own words, which also cleared the single-source
+check's three new repeated literals ("ratings", "loved", "playlists"), with Loved taking the
+track column's title; a comment rewrapped. Left: tests of the columns' height saved only from
+a drag (the same code path as Stats', covered by the window state test's drag) and of a
+Ratings row of one. One full run failed on two tests outside this part, a window centered
+on another screen and a Settings wait timing out under load; both pass alone, and the next
+run passed. `./scripts/check` passes.
+
+Result, part 50a: shipped 50a.1 to 50a.6 (ADR 0117). Stats opened at 0 after the timeline,
+which hides the whole split: the divider was placed in the split's hidden bounds, and the
+next layout pass saved the 0. The divider is now placed after a layout pass, a height is
+saved only while the user drags the divider (`DividerDragSplitView`), the columns' too, and
+`window.statsHeight` takes `130...2000`, the panel's header and Totals card, which the divider
+keeps while Stats shows; a saved 0 is discarded and Stats opens at 380 once. The Stats lists'
+marked row is at 0.28 alpha, hover's 0.18 kept. The status bar no longer says "earlier play
+counts and playlists discarded"; the Problems list does. The import sheet shows a heading of
+how many tracks matched, a two-column table of what changes and how many, "No change: …" in
+one dimmed line, and what's left out in a line under it, at the same 640 points; Skip counts
+show for iTunes only. The stuck line wasn't reproduced: a probe shows an art cell's album
+line redraws its row's layer, and a test of long scrolls both ways and a change of order finds
+every row view with its own lines; the 0-height panel's divider, the first candidate, is gone
+with 50a.1. Tests: Stats at its height after a playlist, the timeline and a playlist again
+with Show Browser on and off; a drag saved and stopped at the least height, layout passes
+and a window resize saving nothing; the header and Totals card inside the least height; the
+marked row's alpha drawn; the status summary without the notice; the preview's rows for
+Swinsian and iTunes; the sheet's fit test with the table, and its snapshot. Owner check: (1)
+with Show Browser off, open History's timeline, then Stats: it opens at the height last
+dragged; drag it, go to a playlist and back, and relaunch: the same height; (2) Import from
+Swinsian: the table at the top, nothing listed as "on 0 tracks"; (3) the marked row in Top
+Genres reads lighter; (4) when the stuck line shows again, whether View > Hide Status Bar or
+resizing the window clears it, and whether the timeline or Stats was shown before.
 
 #### 50b. Playback: the hog mode fix plays the track you chose; the log
 
