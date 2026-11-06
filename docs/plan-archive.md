@@ -6553,3 +6553,88 @@ and send back `~/Desktop/denon-track-changes.txt` with the timings. The lines th
 "polled near a track change" (state, the Denon's position and URI, and the app's clock),
 "took SetNextAVTransportURI", "hadn't moved on by the track's end", "each track now starts
 after the last" with its reason, and "a gap of".
+
+### 49. Click-free play, pause and seek
+
+The owner hears a pop when they play and pause quickly, and asks for the slight fade other
+players use, keeping the response immediate and bit-perfect playback unchanged. The same goes
+for seeking and for clicking in the progress bar.
+
+- [x] **49.1 Short fades.** Pause fades out and play fades in over a few milliseconds (one
+      length, defined once, about 5 ms), as do both sides of a seek and a click in the progress
+      bar. The fade runs in the C render path (`HALRender`), with no allocation, locks or
+      logging. Every sample outside a fade is passed through unchanged, so playback between
+      fades stays bit-perfect; gapless track changes don't fade.
+- [x] **49.2 DoP.** A fade would corrupt the DoP markers, so DSD over DoP doesn't fade. Say in
+      ADR 0110 how it goes quiet instead (for example DoP silence), or that it doesn't.
+- [x] **49.3 Tests.** A sine paused and played has no step larger than the fade allows; the
+      samples outside the fades match the file bit for bit; a seek during a fade goes on from
+      where the gain is. The seek rows in the budgets still pass, and the soak shows no
+      underruns.
+- [ ] **Hardware checkpoint (owner):** play, pause and seek quickly on the ADI-2 and say whether
+      the pops are gone and it still feels immediate, and that the signal path panel still shows
+      bit-perfect while playing.
+
+Implementation plan (ADR 0110):
+
+1. **HALRender.** The fade is a frame counter in the render state, IO proc only, from 0
+   (silence) to the fade length (full gain), which `HALRenderFadeFrames` derives from the
+   device rate and 5 ms, defined once in `HALRender.c`. At full gain the IO proc doesn't touch
+   a sample, so playback between fades stays bit-perfect; inside a fade it scales each frame
+   by the counter over the length, on top of the digital volume, through the same per-kind
+   sample code. `HALRenderCreate` takes the frame size and rate and allocates a buffer of one
+   fade's frames. New calls, all through atomics: `HALRenderSetSilenced` (a counter, odd while
+   silenced) makes the IO proc fade to silence and then write zeros without taking audio, so
+   the position stays where the pause was; `HALRenderIsSilent` says the IO proc has finished
+   that fade for the latest request; `HALRenderPrepareStart`, while stopped, sets whether the
+   next start fades in. A discard that drops what's playing (a seek, a track loaded over
+   another) moves what the fade-out needs of the old audio, as many frames as the counter
+   stands at, into that buffer at once and finishes the skip in the same cycle, as now; the IO
+   proc plays the held frames fading out, then the new audio fading in. A newer discard during
+   that fade carries on from the counter. A discard ahead of what's consumed (a gapless next
+   track replaced) doesn't fade. Opaque streams never fade: DoP, and device layouts the IO proc
+   can't scale, which now get the opaque kind instead of an Int32 stand-in.
+2. **HALOutput.** `DeviceOutput`'s pause sets the render silenced and leaves the device
+   running; the control thread's 10 ms tick stops it once the render is silent and the
+   device's latency has passed, so the fade has played. A play during that wait un-silences
+   and fades back in from where the gain is. A start fades in when the audio doesn't start at
+   a track's first frame (resume, a seek while paused, a load mid-track); a track from its
+   first frame, and a format switch between tracks, start at full gain. A load with playing
+   false fades out the same way as a pause. DoP and opaque streams stop at once, as before.
+3. **ADR 0110** says what fades and what doesn't: DoP doesn't fade or go through DoP silence
+   on a pause or seek, and why; a UPnP renderer does its own pausing and seeking, so no fade
+   applies there; a stop, a device switch and a double-click on a track of another rate still
+   cut, which this phase leaves.
+4. **Tests (49.3).** HALRenderTests: a sine paused and played has no step larger than the
+   fade allows; frames outside the fades match the source bit for bit, Int16, Int24, Int32 and
+   Float32; a seek during a fade-out and during a fade-in carries on from the counter; a
+   gapless discard doesn't fade; opaque bytes don't fade. HALOutputTests: pause, play and seek
+   on the null device keep every sample outside the fades in order; DoP keeps alternating
+   markers through pause, play and seek. Existing tests that expect a seek's first frame
+   untouched skip the fade-in. Bench: the seek rows and a soak.
+
+Gate: the real-time audit passed (C only from the IO proc, no allocation, locks, logging or
+Swift, every loop bounded, the hold buffer sized by its own stream). The review's low-medium (a
+pause with less than a fade queued never went silent and later played a blip) and low (a
+position past a track's end at a gapless change inside a refill) fixed in their own commits; the
+audit's two notes done. Scrub seek 6.45 ms against phase 35's 4.3 ms: the old audio's 5 ms
+fade-out plays first. 20 s soak: 0 underruns, −0.21 MB. `./scripts/check` passes but for
+`WindowGlassTests.theGlassHeadersAreFrosted`, which fails on main too with this Mac's display
+asleep.
+
+Result: shipped as planned (ADR 0110). Pause, play, a seek and a click
+in the bar fade over 5 ms (`HALRenderFadeFrames`: 221 frames at 44.1 kHz, 960 at 192 kHz) in the
+IO proc; frames at full gain are untouched, checked bit for bit in Int16, Int24, Int32 and
+Float32. A pause stops the device once the fade has played, a few tens of ms later. DoP doesn't
+fade and stops at once, as before, with its markers in order through pause, play and seek. The
+fade-out delayed a seek's first audio by up to 5 ms, which made the scrub row's published
+position wait for the refill (153 ms median, bimodal); the position is now published after each
+chunk a refill writes. Bench: seek while decoded 6.6 ms, seek after decoding moved on 5.5 ms, a
+seek during the refill after another 6.5 ms (4.3 ms in phase 35: the 5 ms fade-out of the old
+audio comes first), Next 11.5 ms, double-click same rate 57 ms, other rate 162 ms; 20 s soak 0
+underruns, memory −0.21 MB; CPU at 24/192 1.19%; gaps 0 samples. Deferred: a stop, a device
+switch and a double-click on a track of another rate still cut. Owner checkpoint: on the ADI-2,
+play and pause quickly, seek with Option-arrow and click and drag in the progress bar, with
+PCM at 44.1 and 192 kHz: say whether the pops are gone and it still feels immediate, and that
+the signal path panel shows bit-perfect while playing; then the same with a DSD track, which
+doesn't fade, to say whether its pause or seek clicks.
