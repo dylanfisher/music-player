@@ -199,6 +199,34 @@ import Testing
     #expect(refreshes == 1)
 }
 
+/// Analyze Library stopping refreshes the table once, at once, in place of the refresh its
+/// progress had scheduled.
+@MainActor @Test func analysisStoppingRefreshesOnce() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, groupByAlbumArtist: false, thumbnails: nil)
+    await browser.load(BrowserState(source: nil))
+    var refreshes = 0
+    browser.libraryRefreshed = { refreshes += 1 }
+    func waitForRefreshes(_ count: Int) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while refreshes < count, Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+    // The first progress refreshes at once and the next waits its interval.
+    browser.showAnalysis(("Analyzing library: 0 of 2", 0), stopped: false)
+    try await waitForRefreshes(1)
+    browser.showAnalysis(("Analyzing library: 1 of 2", 0.5), stopped: false)
+    browser.showAnalysis(("Library analysis paused: 1 of 2", 0.5), stopped: true)
+    try await waitForRefreshes(2)
+    try await Task.sleep(
+        nanoseconds: UInt64((LibraryBrowser.refreshIntervalSeconds + 0.5) * 1e9))
+    #expect(refreshes == 2)
+}
+
 @MainActor @Test func leftAndRightMoveBetweenThePanesAndGoToTheRegistryElsewhere() throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let browser = LibraryBrowser(

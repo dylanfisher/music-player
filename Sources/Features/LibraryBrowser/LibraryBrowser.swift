@@ -749,6 +749,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         let wait = max(0, Self.refreshIntervalSeconds - Date().timeIntervalSince(lastRefresh))
         refreshPending = true
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+            // A refresh at once since, as at a scan's end, read the same.
+            guard self?.refreshPending == true else { return }
             self?.refreshNow()
         }
     }
@@ -889,20 +891,19 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Shows what Analyze Library says while it runs or is paused, and how far along it is,
-    /// beside the scans' line; nil once it's done. The table refreshes as during a scan, so its
-    /// measure columns fill in.
-    public func showAnalysis(_ progress: (text: String, fraction: Double)?) {
+    /// beside the scans' line; nil once it's done. While it runs the table refreshes as during
+    /// a scan, so its measure columns fill in; once it has `stopped`, at its end or paused, the
+    /// table refreshes at once and Library Health counts the measures.
+    public func showAnalysis(_ progress: (text: String, fraction: Double)?, stopped: Bool) {
         status.analysisText = progress?.text
         status.analysisFraction = progress?.fraction ?? 0
         showActivity()
-        scheduleRefresh()
-    }
-
-    /// Analyze Library stopped, at its end or paused: the table shows its last measures, and
-    /// Library Health counts them.
-    public func analysisStopped() {
-        refreshNow()
-        runHealth()
+        if stopped {
+            refreshNow()
+            runHealth()
+        } else {
+            scheduleRefresh()
+        }
     }
 
     /// Whether a scan is under way, as the status bar shows it.

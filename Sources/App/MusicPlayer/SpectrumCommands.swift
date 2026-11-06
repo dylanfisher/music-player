@@ -105,17 +105,13 @@ extension AppDelegate {
 
     private func libraryAnalysisReported(_ progress: LibraryAnalysis.Progress) {
         switch progress.stage {
-        case .analyzing, .waitingForScan:
+        case .analyzing, .waitingForScan, .paused:
             libraryAnalysisStage = progress.stage
-            browser?.showAnalysis((progress.text, progress.fraction))
-        case .paused:
-            libraryAnalysisStage = .paused
-            browser?.showAnalysis((progress.text, progress.fraction))
-            browser?.analysisStopped()
+            browser?.showAnalysis(
+                (progress.text, progress.fraction), stopped: progress.stage == .paused)
         case .finished:
             libraryAnalysisStage = nil
-            browser?.showAnalysis(nil)
-            browser?.analysisStopped()
+            browser?.showAnalysis(nil, stopped: true)
             // A run that read every file says nothing more: Library Health counts what it found.
             if progress.failed > 0 || progress.problem != nil { browser?.report(progress.text) }
         }
