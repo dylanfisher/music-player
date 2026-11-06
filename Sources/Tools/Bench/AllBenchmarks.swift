@@ -9,4 +9,4 @@ let benchmarks =
     + scrollBenchmarks + artworkBenchmarks + selectionBenchmarks + queueBenchmarks
     + paletteBenchmarks
     + playbackBenchmarks + playLatencyBenchmarks + timeToSoundBenchmarks + scrubBenchmarks
-    + tagWriterBenchmarks + tagEditorBenchmarks
+    + tagWriterBenchmarks + tagEditorBenchmarks + tagBatchBenchmarks

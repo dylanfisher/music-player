@@ -133,11 +133,11 @@ public struct TagWriter: Sendable {
     private func write(_ edit: TagEdit, to path: String, entry: TagUndoJournal.Entry)
         throws(TagWriteError) -> Outcome
     {
-        let before = try FileIdentity(path: path)
-        try requireWritable(path)
+        let before = try identity(path)
+        try requireWritable(path, faults)
         // One open for the tags, the layout, the replaced bytes and the art: on a NAS each open
         // is a few round trips.
-        let source: FileSource
+        let source: MeteredSource
         let current: ParsedFile
         let file: TagFile
         do throws(MetadataError) {
@@ -168,7 +168,8 @@ public struct TagWriter: Sendable {
                 segments, size: before.size, source: source, payload: file.payload, path: path)
             : nil
         let hashes = try fileHashes(
-            path, payload: file.payload, replacing: plan.map { ($0.offset, $0.newBytes) })
+            path, payload: file.payload, faults: faults,
+            replacing: plan.map { ($0.offset, $0.newBytes) })
         let expected = Expected(
             tags: target, audio: current.metadata.audio,
             art: try expectedArt(art, current, source, path))
@@ -194,7 +195,7 @@ public struct TagWriter: Sendable {
             _ = try checkEdited(
                 temp.path, original: file, path: path, hashes: hashes, expected: expected)
             record = TagUndoJournal.FileRecord(
-                path: path, edited: try FileIdentity(path: temp.path), original: before,
+                path: path, edited: try identity(temp.path), original: before,
                 originalSHA256: Data(hashes.full), restore: restore)
             handle = try journal.append(record, oldBytes: oldBytes, to: entry)
             try finish(path, temp: temp, before: before)
@@ -215,7 +216,7 @@ public struct TagWriter: Sendable {
         // Undo compares against the file as it is now; a volume may round the mtime or change
         // the inode on the rename.
         do throws(TagWriteError) {
-            let final = try FileIdentity(path: path)
+            let final = try identity(path)
             if !record.isEdited(final) {
                 record.setEdited(final)
                 try journal.update(record, at: handle!)
@@ -235,7 +236,7 @@ public struct TagWriter: Sendable {
     /// flushed before the original is touched; the file is read back after. A failure once the
     /// write has started puts the original back from the journal.
     private func writeInPlace(
-        _ plan: InPlacePlan, path: String, before: FileIdentity, source: FileSource,
+        _ plan: InPlacePlan, path: String, before: FileIdentity, source: MeteredSource,
         original: TagFile, hashes: FileHashes, expected: Expected, entry: TagUndoJournal.Entry
     ) throws(TagWriteError) -> Outcome {
         _ = try checkParsed(
@@ -248,7 +249,7 @@ public struct TagWriter: Sendable {
                     detail: "the audio in the new file isn't where the original's is")
             }
         }
-        try removeLeftoverTemps(for: path)
+        try removeLeftoverTemps(for: path, faults)
         var record = TagUndoJournal.FileRecord(
             path: path, edited: before, original: before, originalSHA256: Data(hashes.full),
             restore: plan.restore(size: before.size),
@@ -303,7 +304,7 @@ public struct TagWriter: Sendable {
         }
         logger.notice("wrote tags in place to \(path)")
         do throws(TagWriteError) {
-            record.setEdited(try FileIdentity(path: path))
+            record.setEdited(try identity(path))
             try journal.confirm(record, at: handle)
             return .changed(problem: nil)
         } catch {
@@ -351,7 +352,7 @@ public struct TagWriter: Sendable {
                 path: path, kind: .changedSinceEdit,
                 detail: "the file whose tags were being written in place is gone")
         }
-        let current = try FileIdentity(path: path)
+        let current = try identity(path)
         guard current.inode == record.originalInode, current.size == record.originalSize else {
             try journal.remove(handle)
             throw TagWriteError(
@@ -359,7 +360,8 @@ public struct TagWriter: Sendable {
                 detail: "the file was replaced after its tags were being written in place, so"
                     + " that write isn't finished")
         }
-        if Data(try fileHashes(path, payload: []).full) == record.unconfirmedSHA256 {
+        if Data(try fileHashes(path, payload: [], faults: faults).full) == record.unconfirmedSHA256
+        {
             var landed = record
             landed.setEdited(current)
             try journal.confirm(landed, at: handle)
@@ -383,7 +385,9 @@ public struct TagWriter: Sendable {
     private func putBackOriginal(
         _ record: TagUndoJournal.FileRecord, at handle: TagUndoJournal.Handle, oldBytes: [UInt8]
     ) throws(TagWriteError) -> Bool {
-        if Data(try fileHashes(record.path, payload: []).full) == record.originalSHA256 {
+        if Data(try fileHashes(record.path, payload: [], faults: faults).full)
+            == record.originalSHA256
+        {
             try journal.remove(handle)
             logger.notice("\(record.path) still holds its original tags")
             return false
@@ -409,13 +413,13 @@ public struct TagWriter: Sendable {
         _ record: TagUndoJournal.FileRecord, oldBytes: [UInt8], requireEdited: Bool = true
     ) throws(TagWriteError) -> FileIdentity {
         let path = record.path
-        let before = try FileIdentity(path: path)
+        let before = try identity(path)
         guard !requireEdited || record.isEdited(before) else {
             throw TagWriteError(
                 path: path, kind: .changedSinceEdit,
                 detail: "the file changed after the tag edit, so the edit isn't undone")
         }
-        try requireWritable(path)
+        try requireWritable(path, faults)
         var cursor = 0
         let segments = record.restore.map { segment -> Segment in
             switch segment {
@@ -427,7 +431,7 @@ public struct TagWriter: Sendable {
         }
         let temp = try writeTemp(segments, from: path, identity: before, faults: faults)
         do throws(TagWriteError) {
-            let restored = try fileHashes(temp.path, payload: [])
+            let restored = try fileHashes(temp.path, payload: [], faults: faults)
             guard restored.full == Array(record.originalSHA256) else {
                 throw TagWriteError(
                     path: path, kind: .checkFailed,
@@ -439,7 +443,7 @@ public struct TagWriter: Sendable {
             throw error
         }
         logger.notice("undid the tag edit of \(path)")
-        return try FileIdentity(path: path)
+        return try identity(path)
     }
 
     /// The last steps: the injected faults, the checks that nothing else wrote the file or
@@ -454,14 +458,21 @@ public struct TagWriter: Sendable {
                 throw TagWriteError(path: path, kind: .writeFailed, detail: "\(error)")
             }
         }
-        guard try FileIdentity(path: path) == before else {
+        guard try identity(path) == before else {
             throw TagWriteError(path: path, kind: .changedDuringWrite, detail: changedDetail)
         }
+        faults.called(.metadata)
         try requireUnchanged(temp, path)
         if faults.crashBeforeRename {
             throw TagWriteError(path: path, kind: .writeFailed, detail: crashDetail)
         }
-        try replace(path, with: temp.path)
+        try replace(path, with: temp.path, faults)
+    }
+
+    /// The file's identity, by `lstat`.
+    private func identity(_ path: String) throws(TagWriteError) -> FileIdentity {
+        faults.called(.metadata)
+        return try FileIdentity(path: path)
     }
 
     /// What a new file must read back as.
@@ -473,7 +484,7 @@ public struct TagWriter: Sendable {
 
     /// The art the file must hold after `change`: the new image, none, or what it holds now.
     private func expectedArt(
-        _ change: ArtChange?, _ current: ParsedFile, _ source: FileSource, _ path: String
+        _ change: ArtChange?, _ current: ParsedFile, _ source: MeteredSource, _ path: String
     ) throws(TagWriteError) -> Data? {
         switch change {
         case .replace(let image, _): image
@@ -489,9 +500,9 @@ public struct TagWriter: Sendable {
         _ edited: String, original: TagFile, path: String, hashes: FileHashes,
         expected: Expected
     ) throws(TagWriteError) -> FileHashes {
-        let source: FileSource
+        let source: MeteredSource
         do throws(ParseFailure) {
-            source = try FileSource(path: edited)
+            source = try MeteredSource(path: edited, faults: faults)
         } catch {
             throw TagWriteError(
                 path: path, kind: .checkFailed,
@@ -500,7 +511,7 @@ public struct TagWriter: Sendable {
         var readBack: FileHashes?
         _ = try checkParsed(source, original: original, path: path, expected: expected) {
             file throws(TagWriteError) in
-            let read = try fileHashes(edited, payload: file.payload)
+            let read = try fileHashes(edited, payload: file.payload, faults: faults)
             guard read.payload == hashes.payload else {
                 throw TagWriteError(
                     path: path, kind: .checkFailed,
@@ -555,9 +566,11 @@ public struct TagWriter: Sendable {
 
     /// The file at `path` opened once, with its tags as the reader reads them and its layout as
     /// the writer parses it, each through a reader of its own.
-    private func opened(_ path: String) throws(MetadataError) -> (FileSource, ParsedFile, TagFile) {
+    private func opened(_ path: String) throws(MetadataError)
+        -> (MeteredSource, ParsedFile, TagFile)
+    {
         do throws(ParseFailure) {
-            let source = try FileSource(path: path)
+            let source = try MeteredSource(path: path, faults: faults)
             return (source, try parse(ByteReader(source)), try TagFile(ByteReader(source)))
         } catch {
             throw error.error(path: path)
@@ -579,7 +592,7 @@ public struct TagWriter: Sendable {
     /// The original's bytes that `segments` don't keep, and where the rest went, so the
     /// original can be put back together from the edited file.
     private func restoreSegments(
-        _ segments: [Segment], from source: FileSource, path: String, size: Int
+        _ segments: [Segment], from source: MeteredSource, path: String, size: Int
     ) throws(TagWriteError) -> ([TagUndoJournal.RestoreSegment], [[UInt8]]) {
         var kept: [(original: Range<Int>, edited: Int)] = []
         var offset = 0

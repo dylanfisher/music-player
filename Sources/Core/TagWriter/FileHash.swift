@@ -17,11 +17,16 @@ private let hashReadBytes = 4 * 1024 * 1024
 /// Hashes the file at `path` and, separately, the bytes in `payload`, which must be sorted;
 /// with `replacing`, also the file with those bytes at that offset instead of its own.
 func fileHashes(
-    _ path: String, payload: [Range<Int>], replacing: (offset: Int, bytes: [UInt8])? = nil
+    _ path: String, payload: [Range<Int>], faults: WriteFaults,
+    replacing: (offset: Int, bytes: [UInt8])? = nil
 ) throws(TagWriteError) -> FileHashes {
+    faults.called(.open)
     let descriptor = open(path, O_RDONLY | O_CLOEXEC)
     guard descriptor >= 0 else { throw systemError(path, .unreadable, FileFailure.open) }
-    defer { close(descriptor) }
+    defer {
+        faults.called(.close)
+        close(descriptor)
+    }
     var full = CC_SHA256_CTX()
     var audio = CC_SHA256_CTX()
     var edited = CC_SHA256_CTX()
@@ -35,6 +40,7 @@ func fileHashes(
         let count = buffer.withUnsafeMutableBytes {
             pread(descriptor, $0.baseAddress, hashReadBytes, off_t(offset))
         }
+        faults.called(.read(bytes: max(count, 0)))
         if count < 0 {
             if errno == EINTR { continue }
             throw systemError(path, .unreadable, FileFailure.read)

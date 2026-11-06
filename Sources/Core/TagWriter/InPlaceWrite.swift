@@ -15,7 +15,7 @@ struct InPlacePlan {
     /// original to the last; nil when the file would have another size or a kept range would
     /// move, or when no byte changes.
     init?(
-        _ segments: [Segment], size: Int, source: FileSource, payload: [Range<Int>], path: String
+        _ segments: [Segment], size: Int, source: MeteredSource, payload: [Range<Int>], path: String
     ) throws(TagWriteError) {
         var offset = 0
         var written: [(offset: Int, bytes: [UInt8])] = []
@@ -69,7 +69,7 @@ struct InPlacePlan {
     }
 }
 
-private func read(_ source: FileSource, _ range: Range<Int>, _ path: String)
+private func read(_ source: MeteredSource, _ range: Range<Int>, _ path: String)
     throws(TagWriteError) -> [UInt8]
 {
     do throws(ParseFailure) {
@@ -82,7 +82,7 @@ private func read(_ source: FileSource, _ range: Range<Int>, _ path: String)
 /// The original as the plan would leave it, so the reader can check the new tags before a
 /// byte of the original is written.
 struct PlannedSource: ByteSource {
-    let original: FileSource
+    let original: MeteredSource
     let plan: InPlacePlan
 
     var size: Int { original.size }
@@ -109,10 +109,12 @@ func overwrite(
     _ path: String, with plan: InPlacePlan, identity: FileIdentity, faults: WriteFaults,
     wrote: inout Bool
 ) throws(TagWriteError) {
+    faults.called(.open)
     let descriptor = open(path, O_RDWR | O_NOFOLLOW | O_CLOEXEC)
     guard descriptor >= 0 else { throw systemError(path, .unreadable, FileFailure.open) }
     var isOpen = true
     defer { if isOpen { close(descriptor) } }
+    faults.called(.metadata)
     var info = stat()
     guard fstat(descriptor, &info) == 0 else {
         throw systemError(path, .unreadable, FileFailure.stat)
@@ -121,6 +123,7 @@ func overwrite(
         Int(info.st_dev) == identity.device, info.st_ino == identity.inode
     else { throw TagWriteError(path: path, kind: .changedDuringWrite, detail: replacedDetail) }
     var current = [UInt8](repeating: 0, count: plan.oldBytes.count)
+    faults.called(.read(bytes: plan.oldBytes.count))
     let count = current.withUnsafeMutableBytes {
         pread(descriptor, $0.baseAddress, plan.oldBytes.count, off_t(plan.offset))
     }
@@ -129,6 +132,7 @@ func overwrite(
 
     let bytes = faults.tornWriteBytes.map { Array(plan.newBytes.prefix($0)) } ?? plan.newBytes
     wrote = true
+    faults.called(.write(bytes: bytes.count))
     var done = 0
     while done < bytes.count {
         let count = bytes.withUnsafeBytes {
@@ -144,8 +148,10 @@ func overwrite(
     if faults.tornWriteBytes != nil {
         throw TagWriteError(path: path, kind: .writeFailed, detail: crashDetail)
     }
+    faults.called(.flush)
     try flush(descriptor, path, .writeFailed)
     isOpen = false
+    faults.called(.close)
     // A network volume may report a failed write only when the file closes.
     guard close(descriptor) == 0 else {
         throw systemError(path, .writeFailed, "can't close it after writing the tags in place")

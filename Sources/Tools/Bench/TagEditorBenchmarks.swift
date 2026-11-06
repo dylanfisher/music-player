@@ -155,18 +155,11 @@ private func getInfoRuns(_ count: Int) throws -> [GetInfoRun] {
 /// and the rescan of each run, in milliseconds. The title fits the FLAC's padding; without
 /// `inPlace` it's written through the temp file anyway, as a tag past the padding is.
 private func writeAndRescanRuns(inPlace: Bool) throws -> (write: [Double], rescan: [Double]) {
-    let root = try defaultFixturesDirectory()
-    _ = try generateFixtures(count: fullLibraryFileCount, in: root)
-    let flac = try loadManifest(in: root).files.first {
-        $0.container == .flac && $0.malformation == nil
-    }
-    guard let flac else { throw BenchError.expected("a fixture FLAC") }
     let directory = try emptyCacheDirectory("bench-tag-write")
     let music = directory.appendingPathComponent("music", isDirectory: true)
     try FileManager.default.createDirectory(at: music, withIntermediateDirectories: true)
     let path = music.appendingPathComponent("track.flac", isDirectory: false).path
-    try FileManager.default.copyItem(
-        atPath: root.appendingPathComponent(flac.path).path, toPath: path)
+    try FileManager.default.copyItem(atPath: try fixtureFLAC().path, toPath: path)
     let scanner = LibraryScanner(
         databaseURL: libraryFileURL(in: directory))
     _ = try scanner.scan(WatchedFolder(path: music.path, kind: .local))
@@ -199,6 +192,139 @@ private func writeAndRescanRuns(inPlace: Bool) throws -> (write: [Double], resca
     }
     try FileManager.default.removeItem(at: directory)
     return (write, rescan)
+}
+
+/// The first readable FLAC of the full fixture library.
+private func fixtureFLAC() throws -> URL {
+    let root = try defaultFixturesDirectory()
+    _ = try generateFixtures(count: fullLibraryFileCount, in: root)
+    let flac = try loadManifest(in: root).files.first {
+        $0.container == .flac && $0.malformation == nil
+    }
+    guard let flac else { throw BenchError.expected("a fixture FLAC") }
+    return root.appendingPathComponent(flac.path)
+}
+
+/// Tracks in the album a batch edit saves, and how big each is: the owner's 24-bit hi-res FLACs.
+private let batchFileCount = 20
+private let batchFileBytes = 40 * 1024 * 1024
+/// The NAS's link, as the owner measured it: a 40 MB FLAC in about 0.7 s over gigabit.
+private let nasBytesPerSecond = 57.0 * 1024 * 1024
+
+/// A title saved to every track of an album of hi-res FLACs at once, as Save does on a
+/// selection: in place, as when the title fits the padding, and through the temp file, as when
+/// it doesn't; on this Mac's disk and on the slow simulated NAS.
+let tagBatchBenchmarks = [
+    Benchmark(
+        name: "tag write: \(batchFileCount) 40 MB FLACs' titles in one batch, in place",
+        budget: Budget(appleSilicon: 30, oldMac: 60, unit: .seconds)
+    ) {
+        try batchWrite(inPlace: true, nas: false)
+    },
+    Benchmark(
+        name:
+            "tag write: \(batchFileCount) 40 MB FLACs' titles in one batch, in place, slow simulated NAS",
+        budget: Budget(appleSilicon: 60, oldMac: 60, unit: .seconds)
+    ) {
+        try batchWrite(inPlace: true, nas: true)
+    },
+    Benchmark(
+        name:
+            "tag write: \(batchFileCount) 40 MB FLACs' titles in one batch, through the temp file",
+        budget: Budget(appleSilicon: 30, oldMac: 60, unit: .seconds)
+    ) {
+        try batchWrite(inPlace: false, nas: false)
+    },
+    Benchmark(
+        name:
+            "tag write: \(batchFileCount) 40 MB FLACs' titles in one batch, through the temp file, slow simulated NAS",
+        budget: Budget(appleSilicon: 120, oldMac: 120, unit: .seconds)
+    ) {
+        try batchWrite(inPlace: false, nas: true)
+    },
+]
+
+/// One batch write of a title to `batchFileCount` copies of a fixture FLAC grown to
+/// `batchFileBytes` with audio bytes, in seconds. On the NAS every file system call the writer
+/// makes on a music file is priced as `SimulatedLink` says; the journal stays on this Mac.
+private func batchWrite(inPlace: Bool, nas: Bool) throws -> Measured {
+    let directory = try emptyCacheDirectory("bench-tag-batch")
+    let album = directory.appendingPathComponent("batch", isDirectory: true)
+    try FileManager.default.createDirectory(at: album, withIntermediateDirectories: true)
+    var grown = try Data(contentsOf: try fixtureFLAC())
+    grown.append(Data(count: batchFileBytes - grown.count))
+    let paths = try (1...batchFileCount).map { track in
+        let path = album.appendingPathComponent(
+            String(format: "%02d.flac", track), isDirectory: false
+        ).path
+        try grown.write(to: URL(fileURLWithPath: path, isDirectory: false))
+        return path
+    }
+    var writer = TagWriter(
+        journal: TagUndoJournal(
+            dataDirectory: directory.appendingPathComponent("undo", isDirectory: true)))
+    writer.faults.writesInPlace = inPlace
+    let link = SimulatedLink(
+        roundTripSeconds: slowNAS.operationSeconds, bytesPerSecond: nasBytesPerSecond)
+    if nas { writer.faults.fileCall = { link.price($0) } }
+    var report: TagWriteReport?
+    let elapsed = seconds {
+        report = writer.write(TagEdit(values: [.title: "Batch"]), to: paths)
+    }
+    guard let report, report.changed == paths else {
+        throw BenchError.expected("every title written: \(report?.failures ?? [])")
+    }
+    try FileManager.default.removeItem(at: directory)
+    let perFile = String(format: "%.2f s a file", elapsed / Double(paths.count))
+    return Measured(
+        value: elapsed,
+        notes: [
+            nas
+                ? perFile
+                    + String(
+                        format: "; %d calls on the NAS, %.0f MB over its link", link.calls,
+                        Double(link.bytes) / 1024 / 1024)
+                : perFile
+        ])
+}
+
+/// A NAS for the writer's file system calls: each is a round trip, and the bytes reads and
+/// writes move share one link, so files written at once wait on each other's transfers but
+/// not on each other's round trips. A clone is a copy, which SMB can't do on the server.
+private final class SimulatedLink: @unchecked Sendable {
+    private let roundTripSeconds: Double
+    private let bytesPerSecond: Double
+    // Guarded by `lock`.
+    private let lock = NSLock()
+    private var linkFreeAt = 0.0
+    private var callCount = 0
+    private var byteCount = 0
+
+    init(roundTripSeconds: Double, bytesPerSecond: Double) {
+        self.roundTripSeconds = roundTripSeconds
+        self.bytesPerSecond = bytesPerSecond
+    }
+
+    var calls: Int { lock.withLock { callCount } }
+    var bytes: Int { lock.withLock { byteCount } }
+
+    func price(_ call: FileCall) {
+        let moved =
+            switch call {
+            case .read(let bytes), .write(let bytes): bytes
+            case .clone(let bytes): 2 * bytes
+            default: 0
+            }
+        let now = Double(DispatchTime.now().uptimeNanoseconds) / 1e9
+        let done = lock.withLock {
+            callCount += 1
+            byteCount += moved
+            guard moved > 0 else { return now + roundTripSeconds }
+            linkFreeAt = max(linkFreeAt, now) + Double(moved) / bytesPerSecond
+            return max(now + roundTripSeconds, linkFreeAt)
+        }
+        Thread.sleep(forTimeInterval: done - now)
+    }
 }
 
 private func median(_ values: [Double]) -> Double { values.sorted()[values.count / 2] }

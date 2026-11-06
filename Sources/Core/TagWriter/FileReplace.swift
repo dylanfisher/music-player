@@ -55,6 +55,9 @@ package struct WriteFaults: Sendable {
     /// Runs once a write in place is flushed and closed, before its read-back. A throw fails
     /// the write after the original was overwritten.
     var afterOverwriting: (@Sendable (_ original: String) throws -> Void)?
+    /// Told of each file system call on a music file, its temp file or its folder, and of each
+    /// read the parsers make there, from whichever thread makes it.
+    package var fileCall: (@Sendable (FileCall) -> Void)?
 
     init() {}
 }
@@ -92,7 +95,9 @@ struct TempFile {
 /// Fails unless the file and its folder can be written and the file isn't locked. A rename
 /// would replace a read-only file in a writable folder, so the file's own permission is checked
 /// too.
-func requireWritable(_ path: String) throws(TagWriteError) {
+func requireWritable(_ path: String, _ faults: WriteFaults) throws(TagWriteError) {
+    // The `lstat` and the two `access` calls.
+    for _ in 0..<3 { faults.called(.metadata) }
     var info = stat()
     guard lstat(path, &info) == 0 else { throw systemError(path, .unreadable, FileFailure.stat) }
     let locked = UInt32(UF_IMMUTABLE | SF_IMMUTABLE | UF_APPEND | SF_APPEND)
@@ -127,12 +132,17 @@ func writeTemp(
     _ segments: [Segment], from original: String, identity: FileIdentity,
     faults: WriteFaults = WriteFaults()
 ) throws(TagWriteError) -> TempFile {
-    try removeLeftoverTemps(for: original)
+    try removeLeftoverTemps(for: original, faults)
     // Not through a link, and the file that opened must be the one that was read: someone who
     // can write the folder could have swapped another in.
+    faults.called(.open)
     let source = open(original, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
     guard source >= 0 else { throw systemError(original, .unreadable, FileFailure.open) }
-    defer { close(source) }
+    defer {
+        faults.called(.close)
+        close(source)
+    }
+    faults.called(.metadata)
     var info = stat()
     guard fstat(source, &info) == 0 else {
         throw systemError(original, .unreadable, FileFailure.stat)
@@ -161,12 +171,14 @@ func writeTemp(
 
     var cloned = false
     if inPlace {
+        faults.called(.clone(bytes: identity.size))
         if fclonefileat(source, folder, name, 0) == 0 {
             cloned = true
         } else if errno != ENOTSUP && errno != EXDEV {
             throw systemError(original, .writeFailed, "can't clone it to \(temp)")
         }
     }
+    faults.called(.open)
     let destination = openTemp(name, in: folder, cloned: cloned)
     guard destination >= 0 else {
         let error = systemError(original, .writeFailed, "can't create the temp file \(temp)")
@@ -176,28 +188,35 @@ func writeTemp(
     do throws(TagWriteError) {
         var isOpen = true
         defer { if isOpen { close(destination) } }
+        faults.called(.metadata)
         try requireOwnTemp(destination, name, in: folder, device: info.st_dev, original)
         if cloned {
+            faults.called(.metadata)
             guard ftruncate(destination, off_t(total)) == 0 else {
                 throw systemError(original, .writeFailed, "can't size the temp file")
             }
             for (offset, segment) in placed {
                 if case .bytes(let bytes) = segment {
-                    try writeAll(bytes, to: destination, at: offset, original)
+                    try writeAll(bytes, to: destination, at: offset, original, faults)
                 }
             }
         } else {
             for (offset, segment) in placed {
                 switch segment {
-                case .bytes(let bytes): try writeAll(bytes, to: destination, at: offset, original)
+                case .bytes(let bytes):
+                    try writeAll(bytes, to: destination, at: offset, original, faults)
                 case .original(let range):
-                    try copy(range, from: source, to: destination, at: offset, original)
+                    try copy(range, from: source, to: destination, at: offset, original, faults)
                 }
             }
         }
         // The attributes go first, so the flush covers them too before the rename.
+        // The extended attributes and ACL, the mode, the creation date and the flags.
+        for _ in 0..<4 { faults.called(.metadata) }
         try copyAttributes(from: source, info, to: destination, original)
+        faults.called(.flush)
         try flush(destination, original, .writeFailed)
+        faults.called(.metadata)
         var written = stat()
         guard fstat(destination, &written) == 0 else {
             throw systemError(original, .writeFailed, "can't stat the temp file")
@@ -206,6 +225,7 @@ func writeTemp(
         // the identity the rename is checked against is taken after the close, by name, once
         // the name is known to still hold the file written here.
         isOpen = false
+        faults.called(.close)
         guard close(destination) == 0 else {
             throw systemError(original, .writeFailed, "can't close the temp file")
         }
@@ -216,6 +236,7 @@ func writeTemp(
                 throw TagWriteError(path: original, kind: .writeFailed, detail: "\(error)")
             }
         }
+        faults.called(.metadata)
         var closed = stat()
         guard fstatat(folder, name, &closed, AT_SYMLINK_NOFOLLOW) == 0 else {
             throw systemError(original, .writeFailed, "can't stat the temp file")
@@ -233,7 +254,8 @@ func writeTemp(
 }
 
 /// Removes the temp files an earlier write of `path` left, as a crash before its rename does.
-func removeLeftoverTemps(for path: String) throws(TagWriteError) {
+func removeLeftoverTemps(for path: String, _ faults: WriteFaults) throws(TagWriteError) {
+    faults.called(.list)
     let leftovers: [String]
     do {
         leftovers = try leftoverTemps(for: path)
@@ -241,8 +263,11 @@ func removeLeftoverTemps(for path: String) throws(TagWriteError) {
         throw TagWriteError(
             path: path, kind: .writeFailed, detail: "can't list its folder: \(error)")
     }
-    for leftover in leftovers where unlink(leftover) != 0 && errno != ENOENT {
-        throw systemError(path, .writeFailed, "can't remove the old temp file \(leftover)")
+    for leftover in leftovers {
+        faults.called(.remove)
+        guard unlink(leftover) == 0 || errno == ENOENT else {
+            throw systemError(path, .writeFailed, "can't remove the old temp file \(leftover)")
+        }
     }
 }
 
@@ -293,8 +318,10 @@ func requireUnchanged(_ temp: TempFile, _ original: String) throws(TagWriteError
 let tempChangedDetail = "something else changed the temp file before it replaced the original"
 
 private func writeAll(
-    _ bytes: [UInt8], to descriptor: Int32, at offset: Int, _ path: String
+    _ bytes: [UInt8], to descriptor: Int32, at offset: Int, _ path: String,
+    _ faults: WriteFaults
 ) throws(TagWriteError) {
+    faults.called(.write(bytes: bytes.count))
     var done = 0
     while done < bytes.count {
         let count = bytes.withUnsafeBytes {
@@ -310,12 +337,13 @@ private func writeAll(
 
 private func copy(
     _ range: Range<Int>, from source: Int32, to destination: Int32, at offset: Int,
-    _ path: String
+    _ path: String, _ faults: WriteFaults
 ) throws(TagWriteError) {
     var buffer = [UInt8](repeating: 0, count: min(copyBytes, range.count))
     var done = 0
     while done < range.count {
         let want = min(buffer.count, range.count - done)
+        faults.called(.read(bytes: want))
         let count = buffer.withUnsafeMutableBytes {
             pread(source, $0.baseAddress, want, off_t(range.lowerBound + done))
         }
@@ -327,7 +355,7 @@ private func copy(
             throw TagWriteError(
                 path: path, kind: .changedDuringWrite, detail: "the file got shorter while copying")
         }
-        try writeAll(Array(buffer[0..<count]), to: destination, at: offset + done, path)
+        try writeAll(Array(buffer[0..<count]), to: destination, at: offset + done, path, faults)
         done += count
     }
 }
@@ -354,12 +382,15 @@ private func copyAttributes(
 }
 
 /// Renames `temp` over `original`, then flushes the folder so the rename survives a crash.
-func replace(_ original: String, with temp: String) throws(TagWriteError) {
+func replace(_ original: String, with temp: String, _ faults: WriteFaults) throws(TagWriteError) {
+    faults.called(.rename)
     guard rename(temp, original) == 0 else {
         let error = systemError(original, .writeFailed, "can't replace it with the temp file")
         unlink(temp)
         throw error
     }
+    // The folder's open, flush and close.
+    for call in [FileCall.open, .flush, .close] { faults.called(call) }
     let folder = open((original as NSString).deletingLastPathComponent, O_RDONLY | O_CLOEXEC)
     // The rename is done either way; a folder that can't be flushed (some network volumes)
     // only loses the guarantee that it survives a power cut, so it's logged, not thrown.
