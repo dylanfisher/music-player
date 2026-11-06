@@ -177,16 +177,31 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// The interval generation current when the command now running was posted, or when the
     /// pass began; a cancel reaches no later interval than this.
     private var passGeneration: UInt64 = 0
+    /// Names the calls on this thread that haven't returned (ADR 0121).
+    private let watch: StepWatch
+    private let diagnostics: OutputDiagnostics
 
     /// `fileLatency` is for benchmarks: it makes PCM files read as from a NAS. `firstSound` is
     /// for tests.
-    public init(
+    public convenience init(
         _ choice: DeviceChoice, fileLatency: FileLatency? = nil,
         firstSound: PendingInterval = .firstSound
+    ) throws {
+        try self.init(
+            choice, fileLatency: fileLatency, firstSound: firstSound,
+            diagnostics: OutputDiagnostics())
+    }
+
+    /// `diagnostics` is for tests.
+    init(
+        _ choice: DeviceChoice, fileLatency: FileLatency? = nil,
+        firstSound: PendingInterval = .firstSound, diagnostics: OutputDiagnostics
     ) throws {
         self.choice = choice
         self.fileLatency = fileLatency
         self.firstSound = firstSound
+        self.diagnostics = diagnostics
+        watch = StepWatch(diagnostics)
         volumeOn = choice.digitalVolume
         gain = choice.gain
         knownFormats = choice.formats
@@ -387,7 +402,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         let started = uptime()
         let track: Track
         do {
-            track = try reused ?? Track(item, latency: fileLatency)
+            track = try reused ?? Track.open(item, latency: fileLatency, watch: watch)
             try refuseUntakeable(track)
         } catch {
             cannotPlay(item, error)
@@ -484,7 +499,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private func openDevice(for item: OutputItem, at seconds: Double) -> Bool {
         if device != nil { return true }
         do {
-            guard let opened = try provider.open() else {
+            guard let opened = try watch.run(.openingDevice(provider.deviceName), provider.open)
+            else {
                 deviceMissing = true
                 emit(.deviceLost(item.id, positionSeconds: seconds))
                 return false
@@ -501,9 +517,11 @@ public final class DeviceOutput: Output, @unchecked Sendable {
 
     private func configure(for track: Track) throws -> RenderStream {
         guard let device else { preconditionFailure("configure needs an open device") }
-        let format = try device.configure(
-            sampleRateHz: track.sampleRateHz, channels: track.channels,
-            forDoP: track.isDoP, file: track.file)
+        let format = try watch.run(.configuringDevice(provider.deviceName)) {
+            try device.configure(
+                sampleRateHz: track.sampleRateHz, channels: track.channels,
+                forDoP: track.isDoP, file: track.file)
+        }
         // DoP is never scaled, so its stream gets no gain at all.
         let withGain = choice.digitalVolume && !track.isDoP
         let stream = try RenderStream(format: format, for: track, withGain: withGain)
@@ -565,7 +583,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private func reusableTrack(for item: OutputItem) throws -> Track {
         let open = [feeding].compactMap { $0 } + segments.map(\.track)
         guard let track = open.first(where: { $0.item.id == item.id }) else {
-            return try Track(item, latency: fileLatency)
+            return try Track.open(item, latency: fileLatency, watch: watch)
         }
         try track.decoder.seek(toFrame: 0)
         return track
@@ -625,7 +643,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
         if let item {
             do {
-                let track = try Track(item, latency: fileLatency)
+                let track = try Track.open(item, latency: fileLatency, watch: watch)
                 try refuseUntakeable(track)
                 next = track
             } catch {
@@ -642,6 +660,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     /// to 7.5 s of audio, which on hi-res FLAC from a NAS takes hundreds of milliseconds, and a
     /// seek that waited for it made scrubbing lag (ADR 0083). The next pass carries on.
     private func fill(_ stream: RenderStream, upTo limit: Int = .max) {
+        let (queued, started) = (stream.queuedSeconds, uptime())
         var written = 0
         while written < limit {
             if stream.chunkIsEmpty {
@@ -675,6 +694,13 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             }
             let count = stream.writeChunk()
             written += count
+            // A share slower than the audio never lets the ring fill, so this refill only ends
+            // with the track: its underruns are reported as they come.
+            reportUnderrun(
+                stream,
+                during: Refill(
+                    queuedSeconds: queued, wroteSeconds: stream.seconds(ofBytes: UInt64(written)),
+                    tookSeconds: uptime() - started))
             if count == 0 { return }
             // The pass publishes the position only once the refill is done, which on a NAS is
             // hundreds of milliseconds after a seek's audio, fading in, has started to play. A
@@ -684,6 +710,16 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             publishPosition()
             if limit == .max, condition.withLock({ !pending.isEmpty }) { return }
         }
+    }
+
+    /// Reports the silence the IO proc played since the last check, if any, with the refill
+    /// under way: an event for the engine, and a line that says why (ADR 0121).
+    private func reportUnderrun(_ stream: RenderStream, during refill: Refill?) {
+        guard let frames = stream.newUnderrunFrames() else { return }
+        emit(.underrun(frames: frames))
+        diagnostics.report(
+            underrunLine(seconds: Double(frames) / stream.sampleRateHz, during: refill),
+            segments.first?.item.url)
     }
 
     /// The track being decoded has ended: queue the next one behind it if it has the same format.
@@ -778,7 +814,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             firstSoundTarget = nil
             firstSound.end(generation: target.generation)
         }
-        if let frames = stream.newUnderrunFrames() { emit(.underrun(frames: frames)) }
+        reportUnderrun(stream, during: nil)
         if running, feeding == nil, !stream.hasTailToWrite, stream.chunkIsEmpty,
             consumed >= stream.audioEndByte
         {
@@ -893,7 +929,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         // Audio that doesn't start at a track's first frame cuts in, so it fades in.
         HALRenderPrepareStart(stream.render, position() > 0)
         do {
-            try device.start(stream.render)
+            try watch.run(.startingDevice(provider.deviceName)) { try device.start(stream.render) }
             running = true
         } catch {
             if deviceIsGone(after: error, resuming: segments.first?.item.id, at: position()) {
@@ -936,7 +972,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         let resume = resume ?? (segments.first?.item.id, position())
         running = false
         do {
-            try device.stop()
+            try watch.run(.stoppingDevice(provider.deviceName), device.stop)
         } catch {
             retired.append(stream)
             if deviceIsGone(after: error, resuming: resume.item, at: resume.seconds) { return }
@@ -991,7 +1027,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         self.device = nil
         running = false
         do {
-            try device.close()
+            try watch.run(.closingDevice(provider.deviceName), device.close)
         } catch {
             if let stream { retired.append(stream) }
             emit(.failed(nil, error))
@@ -1149,7 +1185,29 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     }
 }
 
-private func uptime() -> Double { ProcessInfo.processInfo.systemUptime }
+func uptime() -> Double { ProcessInfo.processInfo.systemUptime }
+
+/// A refill of the ring buffer so far: what was queued when it began, what it has written and how
+/// long it has taken. An underrun's log line says which: a read that stalled takes long and
+/// writes little, a share that's slow throughout writes less audio than the time it takes
+/// (ADR 0121).
+struct Refill: Equatable {
+    var queuedSeconds: Double
+    var wroteSeconds: Double
+    var tookSeconds: Double
+}
+
+/// The log line for `seconds` of silence the IO proc played because the ring buffer ran dry,
+/// with the refill under way when it was found. With none, the control thread was doing
+/// something else while the ring drained.
+func underrunLine(seconds: Double, during refill: Refill?) -> String {
+    let silence = "underrun: " + String(format: "%.0f", seconds * 1000) + " ms of silence"
+    guard let refill else { return silence + " while no refill was running" }
+    return silence + " during a refill that has written "
+        + String(
+            format: "%.1f s of audio in %.1f s, from %.1f s queued", refill.wroteSeconds,
+            refill.tookSeconds, refill.queuedSeconds)
+}
 
 /// How often the control thread refills and looks for track boundaries, or nil to sleep until a
 /// command. The ring buffer holds seconds, so this only sets how late an event can be. Stopped,
@@ -1197,11 +1255,16 @@ private struct Track {
     /// header states, or nil when there's none and the length can't be checked.
     let checkedLengthFrames: Int64?
 
-    init(_ item: OutputItem, latency: FileLatency?) throws {
+    /// Opens `item`'s file, every call that reads it named to `watch`.
+    static func open(_ item: OutputItem, latency: FileLatency?, watch: StepWatch) throws -> Track {
+        try watch.run(.opening(item.url)) { try Track(item, latency: latency, watch: watch) }
+    }
+
+    private init(_ item: OutputItem, latency: FileLatency?, watch: StepWatch) throws {
         self.item = item
         if dsdFileExtensions.contains(item.url.pathExtension.lowercased()) {
             let reader = try DSDReader(url: item.url)
-            decoder = reader
+            decoder = WatchedDecoder(reader, url: item.url, watch: watch)
             sampleRateHz = reader.carrierRateHz
             channels = UInt32(reader.stream.channels)
             file = SignalFormat(
@@ -1216,7 +1279,7 @@ private struct Track {
             return
         }
         let decoder = try FileDecoder(url: item.url, latency: latency)
-        self.decoder = decoder
+        self.decoder = WatchedDecoder(decoder, url: item.url, watch: watch)
         sampleRateHz = decoder.fileFormat.mSampleRate
         channels = decoder.fileFormat.mChannelsPerFrame
         channelOrder = decoder.channelOrder
@@ -1400,6 +1463,12 @@ private final class RenderStream {
     }
 
     var sampleRateHz: Double { format.stream.mSampleRate }
+    /// The audio in the ring buffer the IO proc hasn't taken.
+    var queuedSeconds: Double { seconds(ofBytes: UInt64(RingBufferReadable(ring))) }
+
+    func seconds(ofBytes bytes: UInt64) -> Double {
+        Double(bytes) / Double(bytesPerFrame) / sampleRateHz
+    }
     var prefillBytes: Int { Int(sampleRateHz * Self.prefillSeconds) * bytesPerFrame }
 
     /// The format written to the ring buffer. Converters reject the non-mixable flag, which
