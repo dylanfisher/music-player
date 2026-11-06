@@ -49,7 +49,7 @@ extension TagWriter {
     /// `writesAtOnce` at a time; then one flush of the drive's cache per volume written; then
     /// each record confirmed. A file whose write or read-back fails is put back from the
     /// journal. Returns each file's result in order, and whether the batch stops after the
-    /// chunk: a journal that can't be written, or a crash `faults` injects.
+    /// chunk: a full disk or a journal that can't be written, or a crash `faults` injects.
     func writeInPlace(
         _ jobs: [InPlaceJob], entry: TagUndoJournal.Entry, progress: WriteProgressCounter
     ) -> (results: [JobResult], stop: Bool, crashed: Bool) {
@@ -122,7 +122,11 @@ extension TagWriter {
                 preconditionFailure("a crash returns before the confirmations")
             }
         }
-        return (results, false, false)
+        // A full disk stops the files after the chunk, as it stops those after a temp file.
+        let stop = results.contains {
+            if case .failure(let error) = $0 { error.stopsBatch } else { false }
+        }
+        return (results, stop, false)
     }
 
     /// What one file's write and read-back came to.
@@ -142,6 +146,9 @@ extension TagWriter {
             if let hook = faults.beforeReplacing {
                 do {
                     try hook(job.path, nil)
+                } catch let error as TagWriteError {
+                    // As a full disk, which the tests inject here.
+                    throw error
                 } catch {
                     throw TagWriteError(path: job.path, kind: .writeFailed, detail: "\(error)")
                 }

@@ -94,6 +94,23 @@ func aBatchCrashedAfterEachStepIsPutRight(_ step: BatchStep) throws {
     for url in urls { #expect(try tags(url).title == "Edited") }
 }
 
+/// A full disk during a chunk's writes stops the batch after the chunk, as after any file:
+/// the chunk's other files are written, the next chunk's aren't.
+@Test func aFullDiskInAChunkStopsTheBatchAfterIt() throws {
+    let urls = try (0...chunkFiles).map { _ in try Sample.flac.copy() }
+    var writer = scratchWriter()
+    let first = urls[0].path
+    writer.faults.beforeReplacing = { path, _ in
+        guard path == first else { return }
+        throw TagWriteError(path: path, kind: .diskFull, detail: "the disk is full")
+    }
+    let report = writer.write(titleEdit, to: urls.map(\.path))
+    #expect(report.failures.map(\.kind) == [.diskFull])
+    #expect(report.changed == urls[1..<chunkFiles].map(\.path))
+    #expect(report.notWritten == [urls[chunkFiles].path])
+    #expect(try tags(urls[0]).title != "Edited")
+}
+
 /// A batch lists each folder once for the temp files earlier writes left, and removes each
 /// file's (ADR 0108).
 @Test func aBatchListsEachFolderOnce() throws {
