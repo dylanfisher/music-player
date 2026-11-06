@@ -244,7 +244,7 @@ extension LibraryIndex {
     /// Logs a play of the path `id` in the history, and marks the path recorded for History.
     /// Call inside a transaction.
     func addHistory(_ id: Int64, at seconds: Double) throws {
-        try statement(insertHistorySQL).run(id, Int(seconds.rounded(.down)))
+        try statement(insertHistorySQL).run(id, wholeSeconds(seconds))
         try statement("INSERT OR IGNORE INTO \(recordedTable) (path_id) VALUES (?)").run(id)
     }
 

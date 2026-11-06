@@ -1,6 +1,6 @@
 import Settings
 
-/// What two scans of `history` read for a period, before `StatsReport` adds it up (ADR 0102).
+/// What two scans of `history` and the imports' last plays read for a period, before `StatsReport` adds it up (ADR 0102).
 struct PeriodScan: Equatable, Sendable {
     /// One path played in the period, with what the index knows of it.
     struct Path: Equatable, Sendable {
@@ -31,9 +31,11 @@ struct PeriodScan: Equatable, Sendable {
     var buckets: [Bucket]
     var bucketSeconds: Int64
     var libraryTracks: Int
-    /// Plays counted in `plays` with no history row, such as an import's (ADR 0033); only
+    /// Plays counted in `plays` with no date: an import's but its last (ADR 0033, 0105); only
     /// read for All Time, the one period they can be in.
     var undatedPlays: Int
+    /// Of the period's plays, the imports' last plays, which have the other player's date.
+    var importedPlays = 0
 }
 
 /// When each album and artist was first played, from every play with a date: what "first played

@@ -12,12 +12,18 @@ extension LibraryIndex {
     func periodScan(_ span: PlaySpan?, groupByAlbumArtist: Bool, bucketSeconds: Int64) throws
         -> PeriodScan
     {
-        // The whole table's plays per path read the covering `history_path` in order.
-        let plays =
+        let within = span == nil ? "" : " WHERE played_at >= ?1 AND played_at < ?2"
+        // The whole table's plays per path read the covering `history_path` in order. Each
+        // import's last play is a dated play too (ADR 0105), from a table of a row a track.
+        let history =
             span == nil
             ? "SELECT path_id, count(*) AS n FROM history GROUP BY path_id"
-            : "SELECT path_id, count(*) AS n FROM history NOT INDEXED"
-                + " WHERE played_at >= ?1 AND played_at < ?2 GROUP BY path_id"
+            : "SELECT path_id, count(*) AS n FROM history NOT INDEXED\(within) GROUP BY path_id"
+        let plays = """
+            SELECT path_id, sum(n) AS n FROM (\(history) UNION ALL
+                SELECT path_id, count(*) FROM (\(importedLastPlaysSQL))\(within) GROUP BY path_id)
+            GROUP BY path_id
+            """
         let artist = artistColumn(TrackFilter(groupByAlbumArtist: groupByAlbumArtist))
         let bounds: [(any SQLiteValue)?] = span.map { [$0.start, $0.end] } ?? []
         let paths = try statement(
@@ -41,14 +47,22 @@ extension LibraryIndex {
                 },
                 codec: row.optionalText(8), sampleRateHz: rate)
         }
-        let within = span == nil ? "" : " WHERE played_at >= ?1 AND played_at < ?2"
         let bucketValues: [(any SQLiteValue)?] = [span?.start, span?.end, bucketSeconds]
         let buckets = try statement(
-            "SELECT played_at / ?3 * ?3, count(*) FROM history NOT INDEXED\(within)"
-                + " GROUP BY 1 ORDER BY 1"
+            """
+            SELECT b, sum(n) FROM (
+                SELECT played_at / ?3 * ?3 AS b, count(*) AS n FROM history NOT INDEXED\(within)
+                GROUP BY 1
+                UNION ALL SELECT played_at / ?3 * ?3, count(*) FROM (\(importedLastPlaysSQL))\(within)
+                GROUP BY 1)
+            GROUP BY 1 ORDER BY 1
+            """
         ).map(binding: bucketValues) {
             PeriodScan.Bucket(start: try $0.int64(0), plays: try $0.int(1))
         }
+        let imported = try statement(
+            "SELECT count(*) FROM (\(importedLastPlaysSQL))\(within)"
+        ).map(binding: bounds) { try $0.int(0) }[0]
         let libraryTracks = try trackCount()
         var undated = 0
         if span == nil {
@@ -59,18 +73,21 @@ extension LibraryIndex {
         }
         return PeriodScan(
             span: span, paths: paths, buckets: buckets, bucketSeconds: bucketSeconds,
-            libraryTracks: libraryTracks, undatedPlays: undated)
+            libraryTracks: libraryTracks, undatedPlays: undated, importedPlays: imported)
     }
 
     /// When each album and artist still in the library was first played, and the first play of
-    /// all, from every history row: one scan of the whole table.
+    /// all, from every history row and import's last play: one scan of the whole history.
     func firstPlays(groupByAlbumArtist: Bool) throws -> FirstPlays {
         let artist = artistColumn(TrackFilter(groupByAlbumArtist: groupByAlbumArtist))
         var first = FirstPlays()
         try statement(
             """
             SELECT t.album_id, t.\(artist), f.played
-            FROM (SELECT path_id, min(played_at) AS played FROM history NOT INDEXED
+            FROM (SELECT path_id, min(played) AS played FROM (
+                    SELECT path_id, min(played_at) AS played FROM history NOT INDEXED
+                    GROUP BY path_id
+                    UNION ALL SELECT path_id, played_at FROM (\(importedLastPlaysSQL)))
                 GROUP BY path_id) f
             LEFT JOIN tracks t ON t.file_id = f.path_id
             """

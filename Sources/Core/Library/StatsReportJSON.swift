@@ -5,8 +5,9 @@ import Settings
 extension StatsReport: Encodable {
     private enum CodingKeys: String, CodingKey {
         case span, plays, seconds, tracks, artists, albums, libraryTracks, playedLibraryTracks
-        case missingPlays, undatedPlays, top, barUnit, bars, months, weekdayHours, busiestDay
-        case busiestMonth, firstAlbums, firstArtists, firstAlbumCount, firstArtistCount, codecs
+        case missingPlays, undatedPlays, importedPlays, top, barUnit, bars, months, weekdayHours
+        case busiestDay, busiestMonth, firstAlbums, firstArtists, firstAlbumCount, firstArtistCount,
+            codecs
         case rateGroups, earliestPlay
     }
 
@@ -22,6 +23,7 @@ extension StatsReport: Encodable {
         try container.encode(playedLibraryTracks, forKey: .playedLibraryTracks)
         try container.encode(missingPlays, forKey: .missingPlays)
         try container.encode(undatedPlays, forKey: .undatedPlays)
+        try container.encode(importedPlays, forKey: .importedPlays)
         // Keyed by the enums' names: a dictionary with enum keys would encode as an array.
         let lists = Dictionary(
             uniqueKeysWithValues: top.map { ranking, lists in

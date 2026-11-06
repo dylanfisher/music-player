@@ -6,6 +6,8 @@ import Settings
 /// How many plays the history benchmarks log over the fixture library: about 20 years of a few
 /// hours' listening a day.
 private let syntheticPlayCount = 1_000_000
+/// The plays an import counts for each track, all but its last without a date.
+private let importedPlaysPerTrack = 4
 
 let historyBenchmarks = [
     Benchmark(
@@ -124,6 +126,20 @@ let playedLibrary = Result { () throws -> PlayedLibrary in
             SELECT path_id, count(*), 0, max(played_at) FROM history GROUP BY path_id
             """)
         try database.execute(fillRecordedSQL)
+        // An import from Swinsian of every track, each with a last play over the same years:
+        // a dated play a track for Listening Stats (ADR 0105), more than the owner's 11,000.
+        let counts = try database.prepare(recordImportedCountsSQL)
+        let addPlays = try database.prepare(addPlaysSQL)
+        let lastPlay = try database.prepare(recordImportedLastPlaySQL)
+        let player = PlayerLibrary.Player.swinsian.rawValue
+        let span = syntheticPlayCount * 600
+        for row in rows {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            let played = start + Int(state >> 33) % span
+            try counts.run(player, row.id, importedPlaysPerTrack, 0)
+            try addPlays.run(row.id, importedPlaysPerTrack, 0, nil)
+            try lastPlay.run(row.id, player, played)
+        }
     }
     try index.checkpoint()
     return PlayedLibrary(

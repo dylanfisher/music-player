@@ -43,6 +43,10 @@ extension LibraryIndex {
             ).map(library.player.rawValue) {
                 (try $0.int64(0), ImportedCounts(plays: try $0.int(1), skips: try $0.int(2)))
             })
+        let recordedLastPlays = Dictionary(
+            uniqueKeysWithValues: try statement(
+                "SELECT path_id, played_at FROM \(importedLastPlaysTable) WHERE player = ?"
+            ).map(library.player.rawValue) { (try $0.int64(0), try $0.int64(1)) })
         for id in order {
             guard let theirs = merged[id], let our = ours[id] else { continue }
             let before = recorded[id] ?? ImportedCounts(plays: 0, skips: 0)
@@ -54,6 +58,14 @@ extension LibraryIndex {
             if let played = theirs.lastPlayedSeconds, played > our.lastPlayedSeconds ?? -.infinity {
                 update.lastPlayedSeconds = played
                 plan.lastPlayed += 1
+            }
+            // Their last play is one of the plays they counted, the one with a date (ADR 0105),
+            // kept apart from Last Played, which a play here moves on.
+            if let played = theirs.lastPlayedSeconds, theirs.plays > 0,
+                wholeSeconds(played) > recordedLastPlays[id] ?? .min
+            {
+                update.importedLastPlayed = played
+                plan.datedLastPlays += 1
             }
             if let added = theirs.addedSeconds, added < our.addedSeconds {
                 update.addedSeconds = added
@@ -116,24 +128,31 @@ extension LibraryIndex {
         try database.transaction {
             let plan = try importPlan(library, prefix: prefix)
             let plays = try statement(addPlaysSQL)
-            let recordCounts = try statement(
-                "INSERT OR REPLACE INTO \(importedPlaysTable) (player, path_id, play_count,"
-                    + " skip_count) VALUES (?, ?, ?, ?)")
+            let recordCounts = try statement(recordImportedCountsSQL)
             let added = try statement(earliestAddedSQL)
             let rate = try statement(
                 "INSERT OR IGNORE INTO ratings (path_id, rating) VALUES (?, ?)")
             let love = try statement(insertLovedSQL)
+            let lastPlay = try statement(recordImportedLastPlaySQL)
             let roots = try syncRoots()
             // What the import changed reaches the other machines as events (ADR 0038).
             for update in plan.updates {
                 let id = update.pathID
                 if update.plays > 0 || update.skips > 0 || update.lastPlayedSeconds != nil {
                     try plays.run(id, update.plays, update.skips, update.lastPlayedSeconds)
+                }
+                if let played = update.importedLastPlayed {
+                    try lastPlay.run(id, library.player.rawValue, wholeSeconds(played))
+                }
+                if update.plays > 0 || update.skips > 0 || update.lastPlayedSeconds != nil
+                    || update.importedLastPlayed != nil
+                {
+                    // Their last played, which the other machines keep as its dated play too.
                     try logSync(pathID: id, roots) {
                         .counts(
                             path: $0, player: library.player, plays: update.plays,
                             skips: update.skips,
-                            lastPlayed: update.lastPlayedSeconds)
+                            lastPlayed: update.importedLastPlayed ?? update.lastPlayedSeconds)
                     }
                 }
                 if let counts = update.imported {
@@ -168,7 +187,7 @@ extension LibraryIndex {
 }
 
 /// Adds plays and skips to a path's counts, keeping the latest Last Played.
-let addPlaysSQL = """
+package let addPlaysSQL = """
     INSERT INTO plays (path_id, play_count, skip_count, last_played_seconds)
     VALUES (?, ?, ?, ?)
     ON CONFLICT (path_id) DO UPDATE SET
@@ -178,6 +197,22 @@ let addPlaysSQL = """
             ifnull(last_played_seconds, excluded.last_played_seconds),
             ifnull(excluded.last_played_seconds, last_played_seconds))
     """
+
+/// Records a player's last play of a path, given its ID, the player and the time in seconds,
+/// keeping the later of it and the one recorded (ADR 0105).
+package let recordImportedLastPlaySQL = """
+    INSERT INTO \(importedLastPlaysTable) (path_id, player, played_at) VALUES (?, ?, ?)
+    ON CONFLICT (path_id, player) DO UPDATE SET played_at = max(played_at, excluded.played_at)
+    """
+
+/// `seconds` rounded down to a whole second, as history's times are.
+func wholeSeconds(_ seconds: Double) -> Int64 { Int64(seconds.rounded(.down)) }
+
+/// Records the play and skip counts a player's import brought for a path, given the player,
+/// the path's ID and the counts.
+package let recordImportedCountsSQL =
+    "INSERT OR REPLACE INTO \(importedPlaysTable) (player, path_id, play_count, skip_count)"
+    + " VALUES (?, ?, ?, ?)"
 
 /// Keeps the earlier of a path's Date Added and the one given.
 let earliestAddedSQL = "UPDATE paths SET added_seconds = min(added_seconds, ?) WHERE id = ?"

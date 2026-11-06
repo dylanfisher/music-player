@@ -46,15 +46,22 @@ extension LibraryIndex {
             guard let id = try mergedPathID(path, seenAt: seconds, &merge) else { return nil }
             try addCounts(id, plays: plays, skips: skips, lastPlayed: lastPlayed)
             // So an import of the same library here, or after a rebuild, adds only what grew.
-            try statement(
-                """
-                INSERT INTO \(importedPlaysTable) (player, path_id, play_count, skip_count)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT (player, path_id) DO UPDATE SET
-                    play_count = play_count + excluded.play_count,
-                    skip_count = skip_count + excluded.skip_count
-                """
-            ).run(player.rawValue, id, plays, skips)
+            if plays > 0 || skips > 0 {
+                try statement(
+                    """
+                    INSERT INTO \(importedPlaysTable) (player, path_id, play_count, skip_count)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT (player, path_id) DO UPDATE SET
+                        play_count = play_count + excluded.play_count,
+                        skip_count = skip_count + excluded.skip_count
+                    """
+                ).run(player.rawValue, id, plays, skips)
+            }
+            // The event's last played is the other player's, its dated play (ADR 0105).
+            if let lastPlayed {
+                try statement(recordImportedLastPlaySQL).run(
+                    id, player.rawValue, wholeSeconds(lastPlayed))
+            }
         case .rating(let path, let stars):
             guard let id = try mergedPathID(path, seenAt: seconds, &merge),
                 try wins(stamp, .rating, id)
@@ -289,6 +296,12 @@ extension LibraryIndex {
         ).run(gone, kept)
         try statement("UPDATE OR IGNORE \(importedPlaysTable) SET path_id = ? WHERE path_id = ?")
             .run(kept, gone)
+        try statement(
+            "UPDATE OR IGNORE \(importedLastPlaysTable) SET path_id = ? WHERE path_id = ?"
+        ).run(kept, gone)
+        // A last play `kept` has for the same player stays: two dated plays would stand for
+        // one player's single last play.
+        try statement("DELETE FROM \(importedLastPlaysTable) WHERE path_id = ?").run(gone)
     }
 
     /// Whether `kept` takes `gone`'s value of `field`: the later change, or with no clock on

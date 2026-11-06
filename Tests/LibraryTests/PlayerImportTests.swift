@@ -120,6 +120,74 @@ private func track(
     #expect(try index.rows(ids: [rows[0].id])[0].playCount == 8)
 }
 
+/// The last plays the imports recorded, by path ID, as `player` and seconds.
+private func lastPlays(_ index: LibraryIndex) throws -> [Int64: [String: Int64]] {
+    var plays: [Int64: [String: Int64]] = [:]
+    try index.database.prepare(
+        "SELECT path_id, player, played_at FROM \(importedLastPlaysTable)"
+    ).query { plays[try $0.int64(0), default: [:]][try $0.text(1)] = try $0.int64(2) }
+    return plays
+}
+
+@Test func anImportKeepsItsOwnLastPlayApartFromLastPlayed() throws {
+    let (_, index, rows) = try scanned()
+    // Played here after the other player last played it: Last Played is ours.
+    try index.recordPlay(rows[0].path, at: 3_000)
+    let library = player([
+        track(rows[0].path, plays: 5, played: 2_000.7),
+        track(rows[1].path, plays: 2, played: 9_000),
+        // A date with no play counted isn't one of its plays.
+        track(rows[2].path, played: 9_500),
+    ])
+    let plan = try index.applyImport(library, prefix: nil)
+    #expect(plan.datedLastPlays == 2)
+    #expect(
+        try lastPlays(index) == [
+            rows[0].id: ["swinsian": 2_000], rows[1].id: ["swinsian": 9_000],
+        ])
+    #expect(try index.rows(ids: [rows[0].id])[0].lastPlayedSeconds == 3_000)
+    // The same library again changes nothing; a newer copy moves the last play later.
+    #expect(!(try index.importPlan(library, prefix: nil).changesSomething))
+    let later = try index.applyImport(
+        player([track(rows[0].path, plays: 6, played: 4_000)]), prefix: nil)
+    #expect(later.datedLastPlays == 1)
+    #expect(try lastPlays(index)[rows[0].id] == ["swinsian": 4_000])
+}
+
+@Test func theLastPlaysTableFillsFromLastPlayedWhereNoRealPlayIsAtOrAfterIt() throws {
+    let (library, index, rows) = try scanned()
+    _ = try index.applyImport(
+        player([
+            track(rows[0].path, plays: 5, played: 2_000),
+            track(rows[1].path, plays: 2, played: 9_000),
+            track(rows[2].path, plays: 1, played: 7_000),
+        ]), prefix: nil)
+    var itunes = PlayerLibrary(player: .iTunes, source: "/music/Library.xml")
+    _ = itunes.add(track(rows[2].path, plays: 1, played: 6_000))
+    _ = try index.applyImport(itunes, prefix: nil)
+    // Played here after the import, so Last Played is that real play's.
+    try index.recordPlay(rows[1].path, at: 9_500)
+    // A database from before the table, which knew only the counts and Last Played.
+    try index.database.execute(
+        """
+        DROP TABLE \(importedLastPlaysTable);
+        DELETE FROM schema_identity WHERE part = '\(SchemaPart.importedLastPlays.rawValue)'
+        """)
+    let reopened = try library.index()
+    // rows[2]'s Last Played could be either player's, so it's left without a date.
+    #expect(try lastPlays(reopened) == [rows[0].id: ["swinsian": 2_000]])
+    #expect(try reopened.rows(ids: [rows[0].id])[0].playCount == 5)
+    #expect(try reopened.discards().isEmpty)
+    // The counts were kept, so an import of the same library adds no play, only the dates.
+    let again = try reopened.applyImport(
+        player([
+            track(rows[0].path, plays: 5, played: 2_000),
+            track(rows[1].path, plays: 2, played: 9_000),
+        ]), prefix: nil)
+    #expect(again.playsAdded == 0 && again.datedLastPlays == 1)
+    #expect(try lastPlays(reopened)[rows[1].id] == ["swinsian": 9_000])
+}
+
 @Test func aPrefixAndNFCMatchTracksFromAnotherMount() throws {
     let (library, index, rows) = try scanned()
     let moved = { (path: String) in

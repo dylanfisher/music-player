@@ -20,6 +20,7 @@ extension ImportPlan {
         }
         lines += [
             "Last played: later on \(tracks(lastPlayed))",
+            "Last plays dated in Listening Stats: \(tracks(datedLastPlays))",
             "Date added: earlier on \(tracks(dateAdded))",
             "Ratings: \(tracks(ratings)) rated"
                 + (roundedRatings > 0

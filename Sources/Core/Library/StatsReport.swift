@@ -2,8 +2,9 @@ import Foundation
 import Settings
 
 /// Listening Stats for one period (ADR 0102): totals, top lists, plays over time and by the
-/// hour of the week, what was first played and in which formats. Only plays with a date, rows
-/// of `history`, are counted; All Time also says how many plays have none. Built from a
+/// hour of the week, what was first played and in which formats. Only plays with a date are
+/// counted: rows of `history`, and each import's last play on the other player's date (ADR
+/// 0105); All Time also says how many plays have none. Built from a
 /// `PeriodScan` in local time: a play's day and hour are its bucket's at the time zone's offset
 /// then, and the bars are the calendar's days, weeks, months or years.
 public struct StatsReport: Equatable, Sendable {
@@ -135,6 +136,9 @@ public struct StatsReport: Equatable, Sendable {
     /// Plays without a date, such as imported ones; only counted for All Time, and in no
     /// other total.
     public var undatedPlays = 0
+    /// Of `plays`, the imports' last plays: one a track an import counted plays for, dated as
+    /// the other player last played it.
+    public var importedPlays = 0
     /// Each ranking's lists, `listLength` rows at most.
     public var top: [Ranking: [List: [Entry]]] = [:]
     public var barUnit = BarUnit.day
@@ -173,6 +177,7 @@ public struct StatsReport: Equatable, Sendable {
         paths = scan.paths
         libraryTracks = scan.libraryTracks
         undatedPlays = scan.undatedPlays
+        importedPlays = scan.importedPlays
         earliestPlay = firstPlays.earliest
         addTotals(scan.paths)
         for list in List.allCases {

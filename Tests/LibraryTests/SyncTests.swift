@@ -506,6 +506,31 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(try rebuilt.track(path: a.path("x.flac"))?.playCount == 7)
 }
 
+@Test func anImportsLastPlayReachesTheOtherMachinesThoughItsPlayedLaterHere() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    let id = try a.scanned("x.flac")
+    try b.scanned("x.flac")
+    try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_000)
+    var library = PlayerLibrary(player: .swinsian, source: "/tmp/swinsian.sqlite")
+    var track = PlayerTrack(path: a.path("x.flac"))
+    track.plays = 3
+    track.lastPlayedSeconds = 1_600_000_000
+    library.tracks = [track]
+    _ = try a.index.applyImport(library, prefix: nil)
+    try syncAll([a, b])
+    let lastPlays = { (machine: Machine) in
+        try machine.index.database.prepare(
+            "SELECT path_id, played_at FROM \(importedLastPlaysTable) WHERE player = 'swinsian'"
+        ).map { [try $0.int64(0): try $0.int64(1)] }
+    }
+    #expect(try lastPlays(a) == [[id: 1_600_000_000]])
+    let other = try #require(try b.track("x.flac")).id
+    #expect(try lastPlays(b) == [[other: 1_600_000_000]])
+    #expect(try b.track("x.flac")?.playCount == 4)
+    #expect(try b.track("x.flac")?.lastPlayedSeconds == 1_700_000_000)
+}
+
 @Test func dateAddedIsTheEarliestAnyMachineSaw() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair

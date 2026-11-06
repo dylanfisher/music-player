@@ -16,6 +16,14 @@ func approximateDuration(_ seconds: Double) -> String {
 /// "+12 imported plays without dates", which no period ranks.
 func undatedText(_ plays: Int) -> String { "+" + count(plays, "imported play") + " without dates" }
 
+/// "40 plays from an import", the imports' last plays among the period's (ADR 0105).
+func importedText(_ value: Int) -> String { plays(value) + " from an import" }
+
+/// What the imports' dated plays are, for the totals' Plays.
+let importedHelp =
+    "An import counts one play a track on the day the other player last played it;"
+    + " its other plays have no date."
+
 func albums(_ value: Int) -> String { count(value, "album") }
 
 func artists(_ value: Int) -> String { count(value, "artist") }
@@ -107,6 +115,9 @@ func statsSummary(_ report: StatsReport, period: StatsPeriod, ranking: StatsRepo
     ]
     if report.missingPlays > 0 {
         lines.append(plays(report.missingPlays) + " " + missingText.lowercased())
+    }
+    if report.importedPlays > 0 {
+        lines.append(importedText(report.importedPlays) + ", each a track's last play there")
     }
     if report.undatedPlays > 0 {
         lines.append(undatedText(report.undatedPlays))

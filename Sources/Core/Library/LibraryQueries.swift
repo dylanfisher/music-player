@@ -372,15 +372,21 @@ extension LibraryIndex {
                 [check.rawValue]
             )
         case .stats(let period):
-            // The tracks played in the period, whose stats the panel above them shows. A
-            // scan of the table, as Listening Stats' own reads are (ADR 0102).
+            // The tracks played in the period, whose stats the panel above them shows: by a
+            // history row, in a scan of the table as Listening Stats' own reads are, or by an
+            // import's last play (ADR 0102, 0105).
             guard let span = period.span() else {
-                return ("t.file_id IN (SELECT path_id FROM \(recordedTable))", [])
+                return (
+                    "t.file_id IN (SELECT path_id FROM \(recordedTable)"
+                        + " UNION ALL SELECT path_id FROM (\(importedLastPlaysSQL)))", []
+                )
             }
             return (
                 "t.file_id IN (SELECT path_id FROM history NOT INDEXED"
+                    + " WHERE played_at >= ? AND played_at < ?"
+                    + " UNION ALL SELECT path_id FROM (\(importedLastPlaysSQL))"
                     + " WHERE played_at >= ? AND played_at < ?)",
-                [span.start, span.end]
+                [span.start, span.end, span.start, span.end]
             )
         case .timeline, .plays:
             // The timeline pages through plays with `timeline(before:limit:)` instead.

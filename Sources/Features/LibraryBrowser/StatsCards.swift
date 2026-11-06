@@ -212,7 +212,10 @@ final class StatsCards {
     /// The totals: plays, approximate hours, tracks, artists, albums and the library's share.
     static func figures(_ report: StatsReport) -> [StatsFigures.Figure] {
         [
-            .init(value: number(report.plays), name: StatsReport.Ranking.plays.title),
+            .init(
+                value: number(report.plays), name: StatsReport.Ranking.plays.title,
+                help: report.importedPlays > 0
+                    ? importedText(report.importedPlays) + ". " + importedHelp : nil),
             .init(
                 value: "≈ " + number(Int((report.seconds / 3600).rounded())),
                 name: "Hours, approx.",
@@ -227,14 +230,15 @@ final class StatsCards {
         ]
     }
 
-    /// The line under the totals: the period's days, the plays no longer in the library and,
-    /// for All Time, the plays without dates.
+    /// The line under the totals: the period's days, the plays no longer in the library, the
+    /// imports' dated plays and, for All Time, the plays without dates.
     static func notes(_ report: StatsReport) -> String {
         var notes: [String] = []
         if let span = report.span { notes.append(span.title()) }
         if report.missingPlays > 0 {
             notes.append(plays(report.missingPlays) + " " + missingText.lowercased())
         }
+        if report.importedPlays > 0 { notes.append(importedText(report.importedPlays)) }
         if report.undatedPlays > 0 {
             notes.append(
                 undatedText(report.undatedPlays) + ", not ranked")

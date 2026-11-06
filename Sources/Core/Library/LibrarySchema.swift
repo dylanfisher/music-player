@@ -19,6 +19,9 @@ enum SchemaPart: String, CaseIterable {
     /// What each import from another player counted, so a second import adds only what grew
     /// (ADR 0033). A part of its own for the same reason as `loved`.
     case imports
+    /// Each import's last play of a path, the one dated play of its counted plays (ADR 0105).
+    /// A part of its own so adding it kept the import counts, which a second import needs.
+    case importedLastPlays
     /// This machine's log and what it read of the others' (ADR 0038). Rebuilding it from an
     /// earlier shape rebuilds the stats too: the new machine ID reads every log from the
     /// start, its own old one included, which the old stats already hold.
@@ -43,6 +46,7 @@ enum SchemaPart: String, CaseIterable {
         case .loved: lovedSchema
         case .disliked: dislikedSchema
         case .imports: importsSchema
+        case .importedLastPlays: importedLastPlaysSchema
         case .sync: syncSchema
         case .scans: scansSchema
         case .removed: removedSchema
@@ -59,6 +63,7 @@ enum SchemaPart: String, CaseIterable {
         case .loved: [lovedTable]
         case .disliked: [dislikedTable]
         case .imports: [importedPlaysTable]
+        case .importedLastPlays: [importedLastPlaysTable]
         case .sync: syncTables
         case .scans: [scannedFoldersTable]
         case .removed: [removedTable]
@@ -88,6 +93,7 @@ let recordedTable = "recorded_paths"
 let dismissedProblemsTable = "dismissed_problems"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
+let importedLastPlaysTable = "imported_last_plays"
 let syncStateTable = "sync_state"
 let syncOutboxTable = "sync_outbox"
 let syncLogsTable = "sync_logs"
@@ -332,6 +338,36 @@ private let importsSchema = """
         skip_count INTEGER NOT NULL,
         PRIMARY KEY (player, path_id)
     );
+    """
+
+private let importedLastPlaysSchema = """
+    -- Each player's last play of a path, as its imports gave it, in whole seconds since 1970.
+    CREATE TABLE \(importedLastPlaysTable) (
+        path_id INTEGER NOT NULL REFERENCES paths (id),
+        player TEXT NOT NULL,
+        played_at INTEGER NOT NULL,
+        PRIMARY KEY (path_id, player)
+    );
+    -- Filled, as the table is made, from the import counts and Last Played: a path's Last
+    -- Played where one player's import alone counted plays for it and no history row is at or
+    -- after it, so the time is that import's and not a real play's.
+    INSERT INTO \(importedLastPlaysTable) (path_id, player, played_at)
+    SELECT i.path_id, i.player, CAST(p.last_played_seconds AS INTEGER)
+    FROM \(importedPlaysTable) i JOIN plays p ON p.path_id = i.path_id
+    WHERE i.play_count > 0 AND p.last_played_seconds IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM \(importedPlaysTable) o
+            WHERE o.path_id = i.path_id AND o.player != i.player AND o.play_count > 0)
+        AND NOT EXISTS (SELECT 1 FROM history h
+            WHERE h.path_id = i.path_id AND h.played_at >= CAST(p.last_played_seconds AS INTEGER));
+    """
+
+/// Each import's last play of a path that the import counted plays for, as `path_id` and
+/// `played_at`: one dated play of the import's, which Listening Stats counts with the history
+/// (ADR 0105). The rest of its plays have no date.
+let importedLastPlaysSQL = """
+    SELECT d.path_id, d.played_at FROM \(importedLastPlaysTable) d
+    JOIN \(importedPlaysTable) i ON i.path_id = d.path_id AND i.player = d.player
+    WHERE i.play_count > 0
     """
 
 private let syncSchema = """

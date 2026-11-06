@@ -23,6 +23,9 @@ public struct ImportPlan: Equatable, Sendable {
     public var tracksGainingSkips = 0
     /// Tracks whose last played moves later.
     public var lastPlayed = 0
+    /// Tracks whose last play in the other player is recorded as a dated play, or moves
+    /// later: what Listening Stats counts in its periods (ADR 0105).
+    public var datedLastPlays = 0
     /// Tracks whose date added moves earlier.
     public var dateAdded = 0
     /// Tracks rated here for the first time.
@@ -85,13 +88,16 @@ struct TrackUpdate: Equatable, Sendable {
     /// equal what's recorded.
     var imported: ImportedCounts?
     var lastPlayedSeconds: Double?
+    /// The source's last play, to record as its dated play; nil when it isn't later than the
+    /// one recorded.
+    var importedLastPlayed: Double?
     var addedSeconds: Double?
     var rating: Int?
     var loves: Bool
 
     var writesNothing: Bool {
         plays == 0 && skips == 0 && imported == nil && lastPlayedSeconds == nil
-            && addedSeconds == nil && rating == nil && !loves
+            && importedLastPlayed == nil && addedSeconds == nil && rating == nil && !loves
     }
 }
 

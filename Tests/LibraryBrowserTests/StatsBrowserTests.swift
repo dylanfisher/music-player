@@ -191,3 +191,18 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     #expect(review.highlights.figures.count == 4)
     review.close()
 }
+
+@MainActor @Test func theTotalsSayHowManyPlaysCameFromAnImport() {
+    var report = StatsReport(
+        PeriodScan(
+            span: nil, paths: [], buckets: [], bucketSeconds: 3600, libraryTracks: 1,
+            undatedPlays: 30, importedPlays: 12), firstPlays: FirstPlays(), calendar: .current)
+    report.plays = 40
+    #expect(report.importedPlays == 12)
+    #expect(StatsCards.notes(report).contains("12 plays from an import"))
+    #expect(StatsCards.notes(report).contains("+30 imported plays without dates"))
+    #expect(StatsCards.figures(report).first?.help?.hasPrefix("12 plays from an import.") == true)
+    #expect(
+        statsSummary(report, period: .all, ranking: .plays).contains(
+            "12 plays from an import, each a track's last play there"))
+}

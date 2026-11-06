@@ -270,6 +270,55 @@ private func scan(
     #expect(again.plays == 5)
 }
 
+@Test func eachImportsLastPlayIsOneDatedPlayAndTheRestStayUndated() async throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    let calendar = calendar()
+    let now = Date(timeIntervalSince1970: TimeInterval(seconds(calendar, 2026, 11, 5, 12)))
+    let thisMonth = Double(seconds(calendar, 2026, 11, 2, 9))
+    let lastYear = Double(seconds(calendar, 2025, 6, 14, 21))
+    var swinsian = PlayerLibrary(player: .swinsian, source: "/swinsian/Library.sqlite")
+    for (row, plays, played) in [
+        (rows[0], 2, thisMonth - 50), (rows[1], 5, thisMonth + 100), (rows[2], 3, lastYear),
+        // Swinsian's date with no play counted is no play.
+        (rows[3], 0, thisMonth),
+    ] {
+        var track = PlayerTrack(path: row.path)
+        track.plays = plays
+        track.lastPlayedSeconds = played
+        _ = swinsian.add(track)
+    }
+    _ = try index.applyImport(swinsian, prefix: nil)
+    // Played here after Swinsian last played it: both plays have dates.
+    try index.recordPlay(rows[0].path, at: thisMonth)
+
+    let reader = try StatsReader(databaseURL: library.databaseURL)
+    let month = try await reader.report(
+        .month, groupByAlbumArtist: false, now: now, calendar: calendar)
+    #expect(month.plays == 3)
+    #expect(month.importedPlays == 2)
+    #expect(month.tracks == 2)
+    #expect(month.list(.tracks, by: .plays).map(\.id) == [rows[0].id, rows[1].id])
+    #expect(month.list(.tracks, by: .plays).first?.plays == 2)
+    #expect(month.bars.map(\.plays).reduce(0, +) == 3)
+    #expect(month.weekdayHours.joined().reduce(0, +) == 3)
+
+    let all = try await reader.report(.all, groupByAlbumArtist: false, now: now, calendar: calendar)
+    #expect(all.plays == 4)
+    #expect(all.importedPlays == 3)
+    // 1 + 2 + 5 + 3 counted, 4 with dates.
+    #expect(all.undatedPlays == 7)
+    #expect(all.earliestPlay == Int64(lastYear))
+    let lastYearsAlbum = try #require(rows[2].albumID)
+    #expect(all.firstAlbums.first { $0.id == lastYearsAlbum }?.firstPlayed == Int64(lastYear))
+    let year = try await reader.report(
+        .chosenYear(2025), groupByAlbumArtist: false, now: now, calendar: calendar)
+    #expect(year.plays == 1 && year.importedPlays == 1)
+    #expect(year.firstAlbums.contains { $0.id == lastYearsAlbum })
+}
+
 @Test func theStatsSourceListsThePeriodsTracksAndTheTimelineItsSpan() throws {
     let library = try TestLibrary()
     _ = try library.scan()
@@ -285,6 +334,23 @@ private func scan(
     let allTime = try index.trackIDs(
         TrackFilter(source: .stats(.all)), sortedBy: .path, ascending: true)
     #expect(Set(allTime) == [rows[0].id, rows[1].id, rows[2].id])
+    // An import's last play puts its track in the period, as a play would.
+    var swinsian = PlayerLibrary(player: .swinsian, source: "/swinsian/Library.sqlite")
+    for (row, played) in [(rows[5], now - 120), (rows[6], now - 86_400 * 800)] {
+        var track = PlayerTrack(path: row.path)
+        track.plays = 4
+        track.lastPlayedSeconds = played
+        _ = swinsian.add(track)
+    }
+    _ = try index.applyImport(swinsian, prefix: nil)
+    #expect(
+        Set(
+            try index.trackIDs(TrackFilter(source: .stats(.year)), sortedBy: .path, ascending: true)
+        )
+            == [rows[1].id, rows[2].id, rows[5].id])
+    #expect(
+        Set(try index.trackIDs(TrackFilter(source: .stats(.all)), sortedBy: .path, ascending: true))
+            == [rows[0].id, rows[1].id, rows[2].id, rows[5].id, rows[6].id])
     #expect(throws: LibraryError.self) {
         try index.trackIDs(
             TrackFilter(source: .plays(PlaySpan(start: 0, end: 1))), sortedBy: .path,
