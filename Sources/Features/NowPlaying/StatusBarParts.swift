@@ -4,8 +4,10 @@ import Settings
 /// The playing track's parts of the status bar: art, title and artist, the format line and a
 /// seek bar with its times, one view each, which the browser lays out in the user's order. The
 /// minimal style puts the track on one line; the tall one gives it two, under a larger title.
+/// A playback problem in the format line has a question mark after it, and a click on either
+/// opens its details.
 @MainActor
-public final class StatusBarParts {
+public final class StatusBarParts: NSObject {
     /// The text's size in the minimal style, the track table's.
     static let minimalFontPoints = 11.0
     static let seekMinimumPoints = 60.0
@@ -15,13 +17,19 @@ public final class StatusBarParts {
     private let titleLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let formatLabel = NSTextField(labelWithString: "")
+    let problemButton = NSButton()
+    /// The format line and the question mark, the format part's view.
+    private let format: NSStackView
     private let track: NSStackView
     private(set) var style = StatusBarStyle.minimal
     /// The title and subtitle the model gave, kept to lay out again when the style changes.
     private var title = ""
     private var subtitle = ""
+    /// Called when the problem in the format line is clicked.
+    var problemClicked: () -> Void = {}
 
-    init() {
+    override init() {
+        format = NSStackView(views: [formatLabel, problemButton])
         track = NSStackView(views: [titleLabel, subtitleLabel])
         track.orientation = .vertical
         track.alignment = .leading
@@ -43,6 +51,19 @@ public final class StatusBarParts {
         for label in [subtitleLabel, formatLabel] {
             label.textColor = .secondaryLabelColor
         }
+        format.spacing = 2
+        format.detachesHiddenViews = true
+        problemButton.isBordered = false
+        problemButton.image = NSImage(
+            systemSymbolName: "questionmark.circle", accessibilityDescription: "Problem details")
+        problemButton.toolTip = "Show the problem's details"
+        problemButton.setContentHuggingPriority(.required, for: .horizontal)
+        problemButton.isHidden = true
+        super.init()
+        problemButton.target = self
+        problemButton.action = #selector(clickedProblem)
+        formatLabel.addGestureRecognizer(
+            NSClickGestureRecognizer(target: self, action: #selector(clickedProblem)))
         apply(.minimal)
     }
 
@@ -51,7 +72,7 @@ public final class StatusBarParts {
         switch part {
         case .art: art
         case .track: track
-        case .format: formatLabel
+        case .format: format
         case .seek: seekBox
         case .totals: nil
         }
@@ -74,10 +95,17 @@ public final class StatusBarParts {
         showTrack()
     }
 
-    func show(format: String, color: NSColor) {
+    /// With `problem`, the line is a playback problem, which a click opens.
+    func show(format: String, color: NSColor, problem: Bool) {
         formatLabel.stringValue = format
         formatLabel.textColor = color
-        formatLabel.toolTip = format
+        formatLabel.toolTip = problem ? "\(format)\nClick for details." : format
+        problemButton.isHidden = !problem
+    }
+
+    @objc func clickedProblem() {
+        guard !problemButton.isHidden else { return }
+        problemClicked()
     }
 
     /// "Title — Artist — Album" on one line in the minimal style; the title over the rest in the

@@ -18,6 +18,8 @@ public final class NowPlayingModel {
     public private(set) var track: TrackRow?
     /// The last thing that went wrong, until playback carries on.
     public private(set) var message: String?
+    /// The playback problem `message` says, for its details; nil for any other message.
+    public private(set) var problem: ShownProblem?
     private let lookup: (String) throws -> TrackRow?
 
     /// `lookup` finds a file's row by path.
@@ -35,17 +37,45 @@ public final class NowPlayingModel {
         let before = currentURL
         state = update.state
         switch update.event {
-        case .trackStarted, .resumed: message = nil
-        case .trackFailed(let url, let problem):
-            message = "Couldn't play \(url.lastPathComponent): \(problem.message)"
+        case .trackStarted, .resumed: show(nil)
+        case .trackFailed(let url, let failure):
+            show(
+                ShownProblem(
+                    problem: failure, track: url, trackFormat: format(of: url),
+                    headline: "Couldn't play \(url.lastPathComponent): \(failure.message)"))
         case .deviceLost:
-            message = "The output device went away, so playback paused. Plug it back in to resume."
-        case .deviceReturned: message = "The output device is back. Press Play to resume."
-        case .failed(let problem): message = "Playback stopped: \(problem.message)"
+            show("The output device went away, so playback paused. Plug it back in to resume.")
+        case .deviceReturned: show("The output device is back. Press Play to resume.")
+        case .failed(let failure):
+            // The output stops on the track it was playing.
+            show(
+                ShownProblem(
+                    problem: failure, track: currentURL, trackFormat: currentURL.flatMap(format),
+                    headline: "Playback stopped: \(failure.message)"))
         default: break
         }
         guard currentURL != before else { return }
         lookUpTrack()
+    }
+
+    private func show(_ message: String?) {
+        self.message = message
+        problem = nil
+    }
+
+    private func show(_ problem: ShownProblem) {
+        message = problem.headline
+        self.problem = problem
+    }
+
+    /// The format of the file at `url`, from the library's row, for a problem's details.
+    private func format(of url: URL) -> String? {
+        do {
+            return try lookup(url.path).map(Self.format)
+        } catch {
+            logger.error("couldn't read the library's row for \(url.path): \(error)")
+            return nil
+        }
     }
 
     /// Reads the current file's row again, after a rescan may have changed its tags.
@@ -60,7 +90,7 @@ public final class NowPlayingModel {
             track = try lookup(url.path)
         } catch {
             logger.error("couldn't read the library's row for \(url.path): \(error)")
-            message = "Couldn't read \(url.lastPathComponent) from the library: \(error)"
+            show("Couldn't read \(url.lastPathComponent) from the library: \(error)")
         }
     }
 
@@ -80,15 +110,15 @@ public final class NowPlayingModel {
     }
 
     /// "96 kHz 24-bit FLAC": the file's format, from the library's row.
-    private var sourceFormat: String? {
-        track.map { track in
-            // A DSD rate's name says the format and the depth already.
-            guard track.codec != TrackAudio.Codec.dsd.rawValue else {
-                return sampleRateText(track.sampleRateHz)
-            }
-            let bits = track.bitsPerSample.map { " " + bitDepth($0) } ?? ""
-            return "\(sampleRateText(track.sampleRateHz))\(bits) \(track.codec.uppercased())"
+    private var sourceFormat: String? { track.map(Self.format) }
+
+    private static func format(of track: TrackRow) -> String {
+        // A DSD rate's name says the format and the depth already.
+        guard track.codec != TrackAudio.Codec.dsd.rawValue else {
+            return sampleRateText(track.sampleRateHz)
         }
+        let bits = track.bitsPerSample.map { " " + bitDepth($0) } ?? ""
+        return "\(sampleRateText(track.sampleRateHz))\(bits) \(track.codec.uppercased())"
     }
 
     /// The window's title, `template` filled from the current track: nil with nothing playing,

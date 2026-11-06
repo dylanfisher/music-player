@@ -22,6 +22,8 @@ public final class SignalPathPanel: NSViewController {
     private let receiverCell = TrackingSliderCell()
     /// Called with the level in decibels as the slider moves.
     public var setReceiverVolume: (Double) -> Void = { _ in }
+    /// The path shown last, for a playback problem's details.
+    public private(set) var path: SignalPath?
 
     /// The slider stops at 0 dB, reference level, so a slip can't take the receiver to its
     /// +18 dB top; a level above it, set on the receiver, shows at the end.
@@ -90,6 +92,7 @@ public final class SignalPathPanel: NSViewController {
 
     /// Shows `path`, or no output when it's nil.
     public func show(_ path: SignalPath?) {
+        self.path = path
         _ = view
         let lines = signalPathLines(path)
         badgeLabel.stringValue = lines.badge

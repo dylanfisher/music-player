@@ -71,6 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var nowPlaying: NowPlayingBar?
     private(set) var toolbar: MainToolbar?
     private(set) var signalPath: SignalPathPanel?
+    /// The details of a playback problem, opened from the status bar.
+    private(set) lazy var problemWindow = PlaybackProblemWindow()
     /// Media keys, headphone buttons, Now Playing in Control Center, and the Dock menu.
     private var mediaControls: MediaControls?
     private var dockMenu: DockMenu?
@@ -266,6 +268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.browser = browser
         self.nowPlaying = nowPlaying
         nowPlaying.follow(window.window)
+        nowPlaying.problemOpened = { [weak self] in self?.showProblem($0) }
         window.showTitles(of: nowPlaying, layout.windowTitle)
         self.toolbar = toolbar
         self.signalPath = signalPath

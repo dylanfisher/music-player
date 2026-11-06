@@ -34,6 +34,8 @@ public final class NowPlayingBar: NSObject {
     }
     /// The status bar's art, track, format and seek bar.
     public let statusBar = StatusBarParts()
+    /// Called when the playback problem in the status bar is clicked.
+    public var problemOpened: (ShownProblem) -> Void = { _ in }
     /// What the window's title says while a track plays.
     public var windowTitle = TitleTemplate.windowTitle {
         didSet { show() }
@@ -76,6 +78,10 @@ public final class NowPlayingBar: NSObject {
         Self.setUpTransport(previousButton, playButton, nextButton)
         for bar in seekBars {
             bar.seek = { [weak self] fraction, done in self?.seek(to: fraction, done: done) }
+        }
+        statusBar.problemClicked = { [weak self] in
+            guard let self, let problem = model.problem else { return }
+            problemOpened(problem)
         }
         setEnabled(false)
         show()
@@ -205,7 +211,9 @@ public final class NowPlayingBar: NSObject {
         }
         statusBar.show(title: model.title, subtitle: model.subtitle)
         windowTitleChanged(model.windowTitle(windowTitle))
-        statusBar.show(format: format, color: formatColor)
+        statusBar.show(
+            format: format, color: formatColor,
+            problem: unavailableReason == nil && model.problem != nil)
         let playing = model.isPlaying
         let title = AppCommands.title(of: playing ? .pause : .play)
         playButton.image = NSImage(

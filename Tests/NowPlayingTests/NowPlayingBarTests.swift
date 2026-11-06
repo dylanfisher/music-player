@@ -240,6 +240,28 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     }
 }
 
+/// A playback problem in the status bar has a question mark, and it and the line open the
+/// details; another message has neither.
+@MainActor @Test func aProblemInTheStatusBarOpensItsDetails() throws {
+    let bar = bar()
+    var opened: [ShownProblem] = []
+    bar.problemOpened = { opened.append($0) }
+    bar.apply(update(.trackFailed(urls[1], PlaybackProblem(DeviceStopped())), duration: nil))
+    #expect(!bar.statusBar.problemButton.isHidden)
+    bar.statusBar.problemButton.performClick(nil)
+    let format = try #require(bar.statusBar.view(for: .format) as? NSStackView)
+    let label = try #require(format.arrangedSubviews.first as? NSTextField)
+    let click = try #require(label.gestureRecognizers.first as? NSClickGestureRecognizer)
+    _ = click.target?.perform(click.action)
+    #expect(opened.count == 2)
+    #expect(opened.first?.track == urls[1] && opened.first?.trackFormat == "44.1 kHz 16-bit FLAC")
+    #expect(opened.first?.headline == "Couldn't play b.flac: the device stopped")
+    bar.apply(update(.deviceLost, duration: nil))
+    #expect(bar.statusBar.problemButton.isHidden)
+    _ = click.target?.perform(click.action)
+    #expect(opened.count == 2)
+}
+
 /// The title line follows its format, and leaves out the words before a field the track
 /// doesn't have.
 @MainActor @Test func theTitleLineFollowsItsFormat() {
