@@ -55,6 +55,12 @@ enum SchemaPart: String, CaseIterable {
         }
     }
 
+    /// What takes the part's data out of the stats before its earlier tables are dropped, in a
+    /// rebuild that keeps the stats; nil for a part whose rows the stats don't count.
+    var discardSQL: String? {
+        self == .imports ? importsDiscardSQL : nil
+    }
+
     /// The tables the part creates; nil for the index, which is every table no other part names.
     var tables: Set<String>? {
         switch self {
@@ -330,7 +336,9 @@ private let dislikedSchema = """
 
 private let importsSchema = """
     -- Each player's play and skip totals for a path, the highest any machine's import reported;
-    -- an import here or synced adds what passes them.
+    -- an import here or synced adds what passes them. Changing this SQL rebuilds the part, which
+    -- takes the imports' plays and skips out of the counts first (importsDiscardSQL), so the
+    -- owner imports again after it.
     CREATE TABLE \(importedPlaysTable) (
         player TEXT NOT NULL,
         path_id INTEGER NOT NULL REFERENCES paths (id),
@@ -338,10 +346,16 @@ private let importsSchema = """
         skip_count INTEGER NOT NULL,
         PRIMARY KEY (player, path_id)
     );
-    -- Made empty, so no import's plays may stay in the counts, or the next import would add them
-    -- again: each path's play count becomes its history, the plays recorded here and synced.
-    -- Skips have no history, so an import's skips stay and count again at its next import.
-    UPDATE plays SET play_count = (SELECT count(*) FROM history h WHERE h.path_id = plays.path_id);
+    """
+
+/// Takes the imports' plays and skips out of the counts before `imported_plays` is dropped, or
+/// the next import would add them again. Each play count becomes its history, the plays recorded
+/// here and synced; skips have no history, so each loses the skips the imports recorded.
+private let importsDiscardSQL = """
+    UPDATE plays SET
+        play_count = (SELECT count(*) FROM history h WHERE h.path_id = plays.path_id),
+        skip_count = max(0, skip_count - (SELECT ifnull(sum(i.skip_count), 0)
+            FROM \(importedPlaysTable) i WHERE i.path_id = plays.path_id));
     """
 
 private let importedLastPlaysSchema = """

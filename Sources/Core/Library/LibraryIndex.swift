@@ -168,6 +168,11 @@ public final class LibraryIndex {
             }
             .compactMap(\.tables).reduce(into: Set<String>()) { $0.formUnion($1) }
             if !discarded.isEmpty { try recordDiscardedStats(discarded) }
+            if !rebuilt.contains(.stats) {
+                for part in rebuilt where stored[part.rawValue] != nil {
+                    if let sql = part.discardSQL { try database.execute(sql) }
+                }
+            }
             let kept = SchemaPart.allCases.filter { !rebuilt.contains($0) }.compactMap(\.tables)
                 .reduce(into: Set<String>()) { $0.formUnion($1) }
             let rebuiltTables = rebuilt.compactMap(\.tables)

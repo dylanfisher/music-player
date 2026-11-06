@@ -93,6 +93,19 @@ private func track(
     #expect(try rebuilt.loggedPlayCount() == 1)
 }
 
+@Test func rebuildingTheImportCountsTakesTheirSkipsOutAndKeepsTheOnesRecordedHere() throws {
+    let (testLibrary, index, rows) = try scanned()
+    try index.recordSkip(rows[0].path)
+    let library = player([track(rows[0].path, plays: 1, skips: 5)])
+    _ = try index.applyImport(library, prefix: nil)
+    #expect(try index.rows(ids: [rows[0].id]).first?.skipCount == 6)
+    try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'imports'")
+    let rebuilt = try testLibrary.index()
+    #expect(try rebuilt.rows(ids: [rows[0].id]).first?.skipCount == 1)
+    _ = try rebuilt.applyImport(library, prefix: nil)
+    #expect(try rebuilt.rows(ids: [rows[0].id]).first?.skipCount == 6)
+}
+
 @Test func historyListsOnlyTracksWithARecordedPlay() throws {
     let (_, index, rows) = try scanned()
     _ = try index.applyImport(
