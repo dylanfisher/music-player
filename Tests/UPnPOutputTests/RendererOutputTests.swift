@@ -435,20 +435,19 @@ private func notGaplessReason(_ output: RendererOutput) async -> String? {
     fake.ignoresNext()
     let (output, log) = try await output(fake)
     defer { output.close() }
-    let started = ProcessInfo.processInfo.systemUptime
     output.load(item(1, "medium"), startSeconds: 0, playing: true)
     output.setNext(item(2))
     await log.wait(for: ["started 1"])
-    // Past a poll that saw the position move, so a stall can't be taken for a lag.
     await eventually("the position to move") { fake.playedSeconds > 1.6 }
     // Re-buffering for four seconds puts it past the clock's first idea of the end.
+    let realEnd = ProcessInfo.processInfo.systemUptime + 4 + (5 - fake.playedSeconds)
     fake.stall(forSeconds: 4)
     await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 20)
-    // The next track came only once the first had played out and stopped, and no later than
-    // the cap on how far stalls move the end allows.
+    // The next track came only once the first had played out and stopped, and within the
+    // margin and a poll of its real end.
     #expect(fake.setTransportURIs.map(\.stateBefore) == [.stopped, .stopped])
-    let took = ProcessInfo.processInfo.systemUptime - started
-    #expect(took < 5 + RendererClock.stallCapSeconds + RendererClock.leadMarginSeconds, "\(took) s")
+    let late = ProcessInfo.processInfo.systemUptime - realEnd
+    #expect(late < RendererClock.leadMarginSeconds + pollSeconds, "\(late) s late")
 }
 
 @Test func aRendererWhosePositionLagsStillEndsTheTrackWhenItStops() async throws {
