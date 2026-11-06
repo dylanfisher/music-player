@@ -105,6 +105,33 @@ private final class RecordingWindow: SilentEscapeWindow {
     #expect(window.unhandled == [#selector(NSResponder.keyDown(with:))])
 }
 
+/// Full screen gives the window the screen's frame, which isn't one to open it at: the frame it
+/// had before is kept, and the frames after it left are saved again.
+@MainActor @Test func aFrameInFullScreenIsntSaved() async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    let window = fixture.window.window
+    let screen = try #require(window.screen?.frame)
+    let windowed = NSRect(x: 40, y: 60, width: 1000, height: 700)
+    window.setFrame(windowed, display: false)
+    func saved() -> NSRect? {
+        fixture.saver.flush()
+        return fixture.state[\.windowFrame].map {
+            NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height)
+        }
+    }
+    #expect(saved() == windowed)
+    // The delegate calls AppKit makes around the change, without the animation.
+    let notification = Notification(name: NSWindow.willEnterFullScreenNotification, object: window)
+    fixture.window.windowWillEnterFullScreen(notification)
+    window.setFrame(screen, display: false)
+    #expect(saved() == windowed)
+    fixture.window.windowDidExitFullScreen(notification)
+    let moved = NSRect(x: 80, y: 60, width: 1000, height: 700)
+    window.setFrame(moved, display: false)
+    #expect(saved() == moved)
+}
+
 @Test func aVisibilityIsSavedOnlyWhenItChanged() {
     var saved = SavedVisibility(true)
     let changes = [true, false, false, true].map { saved.change(to: $0) }

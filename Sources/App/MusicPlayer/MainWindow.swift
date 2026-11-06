@@ -24,6 +24,9 @@ final class MainWindow: NSObject, NSWindowDelegate {
     let queue: QueuePanel
     private let saver: LayoutSaver
     private var restoring = true
+    /// From entering full screen until it's left, when the frame is the screen's, not one to
+    /// open the window at.
+    private var isFullScreen = false
     /// What Distraction-Free Mode hid, while it's on.
     private var hidden: ChromeVisibility?
     private var toolbarObservation: NSKeyValueObservation?
@@ -217,7 +220,12 @@ final class MainWindow: NSObject, NSWindowDelegate {
         browser.centerStatusBar(besideSidebar: window.styleMask.contains(.fullSizeContentView))
     }
 
+    func windowWillEnterFullScreen(_ notification: Notification) { isFullScreen = true }
+
+    func windowDidFailToEnterFullScreen(_ window: NSWindow) { isFullScreen = false }
+
     func windowDidExitFullScreen(_ notification: Notification) {
+        isFullScreen = false
         restoring = true
         split.keepingWidths { glass?.matchStyleMask() }
         restoring = false
@@ -238,7 +246,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
     func windowDidResize(_ notification: Notification) { saveFrame() }
 
     private func saveFrame() {
-        guard !restoring else { return }
+        guard !restoring, !isFullScreen else { return }
         let frame = window.frame
         saver.set(
             \.windowFrame,
