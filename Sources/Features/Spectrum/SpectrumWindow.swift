@@ -53,7 +53,7 @@ final class SpectrumWindow: NSWindowController, NSWindowDelegate {
     private func build(in window: NSWindow) {
         var rows: [NSView] = []
         for index in model.files.indices {
-            titles[index].stringValue = model.files[index].title
+            titles[index].stringValue = model.heading(index)
             titles[index].font = .boldSystemFont(ofSize: NSFont.systemFontSize)
             titles[index].lineBreakMode = .byTruncatingMiddle
             if model.files.count > 1 { titles[index].textColor = SpectrumColors.files[index] }

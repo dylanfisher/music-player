@@ -26,6 +26,15 @@ private func result(rateHz: Double, cutoffHz: Double? = nil, level: (Int) -> Dou
             durationSeconds: 100))
 }
 
+/// A file titled `title` at "/<title, lowercased>.<type, lowercased>".
+private func file(
+    _ title: String, album: String? = nil, sizeBytes: Int? = nil, type: String = "FLAC"
+) -> SpectrumModel.File {
+    SpectrumModel.File(
+        path: "/\(title.lowercased()).\(type.lowercased())", title: title, album: album,
+        sizeBytes: sizeBytes, fileType: type)
+}
+
 private final class Calls: @unchecked Sendable {
     private let lock = NSLock()
     private var running = 0
@@ -55,7 +64,7 @@ private struct Unreadable: Error, CustomStringConvertible {
 }
 
 @MainActor @Test func eachFileShowsItsProgressThenItsResult() async {
-    let model = SpectrumModel(files: [("/a.flac", "A"), ("/b.flac", "B"), ("/c.flac", "C")])
+    let model = SpectrumModel(files: [file("A"), file("B"), file("C")])
     var seen: [String] = []
     model.changed = { seen.append(model.status(0)) }
     model.start { path, progress in
@@ -80,7 +89,7 @@ private struct Unreadable: Error, CustomStringConvertible {
 }
 
 @MainActor @Test func atMostTwoFilesAreAnalyzedAtOnce() async {
-    let files = (0..<AnalysisRules.comparedFiles).map { ("/\($0).flac", "\($0)") }
+    let files = (0..<AnalysisRules.comparedFiles).map { file("\($0)") }
     let model = SpectrumModel(files: files)
     let calls = Calls()
     model.start { _, _ in
@@ -95,7 +104,7 @@ private struct Unreadable: Error, CustomStringConvertible {
 }
 
 @MainActor @Test func closingCancelsTheFilesStillAnalyzed() async {
-    let model = SpectrumModel(files: [("/a.flac", "A"), ("/b.flac", "B"), ("/c.flac", "C")])
+    let model = SpectrumModel(files: [file("A"), file("B"), file("C")])
     let calls = Calls()
     model.start { _, _ in
         calls.begin()
@@ -118,7 +127,7 @@ private struct Unreadable: Error, CustomStringConvertible {
 }
 
 @MainActor @Test func thePointerReadsTimeFrequencyAndLevel() async {
-    let model = SpectrumModel(files: [("/a.flac", "A"), ("/b.flac", "B")])
+    let model = SpectrumModel(files: [file("A"), file("B")])
     model.start { path, _ in
         path == "/a.flac"
             ? result(rateHz: 44_100, level: { $0 < 256 ? -40 : -120 })
@@ -138,4 +147,36 @@ private struct Unreadable: Error, CustomStringConvertible {
 @Test func theFloorOfTheScaleReadsAsUnderIt() {
     #expect(decibelsText(-150) == "under -150 dB")
     #expect(decibelsText(-63.4) == "-63 dB")
+}
+
+@MainActor @Test func theHeaderNamesTheAlbumAndEndsWithTheSize() async {
+    let model = SpectrumModel(files: [
+        file("So Many Questions", album: "Album", sizeBytes: 44_812_345), file("B"),
+    ])
+    model.start { _, _ in result(rateHz: 44_100) }
+    await model.finished()
+    #expect(model.heading(0) == "So Many Questions — Album")
+    #expect(model.heading(1) == "B")
+    #expect(
+        model.status(0)
+            == "FLAC · 44.1 kHz · 16-bit stored, 16 effective · stereo · 1:40 · 44.8 MB")
+    // A file the index doesn't have has no size to show.
+    #expect(model.status(1) == "FLAC · 44.1 kHz · 16-bit stored, 16 effective · stereo · 1:40")
+}
+
+@Test func aFileTheIndexDoesntHaveIsNamedByItsFile() {
+    let file = SpectrumModel.File(path: "/Music/01 Intro.flac", row: nil)
+    #expect(file.title == "01 Intro")
+    #expect(file.album == nil)
+    #expect(file.sizeBytes == nil)
+    #expect(file.fileType == "FLAC")
+}
+
+@MainActor @Test func filesOfOneTitleAreNamedByTheirTypeThenByTheirPlace() {
+    let model = SpectrumModel(files: [
+        file("Song", type: "WAV"), file("Song"), file("Other"), file("Song"),
+    ])
+    #expect(model.names == ["the WAV", "file 2", "Other", "file 4"])
+    #expect(model.heading(0) == "Song (WAV)")
+    #expect(model.heading(1) == "Song")
 }
