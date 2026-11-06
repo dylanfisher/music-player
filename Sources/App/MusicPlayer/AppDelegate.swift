@@ -298,6 +298,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             saver.set(\.browserColumns, state.columns)
             self?.resumeSaver?.changed()
         }
+        browser.groupingsChosen = { [weak self] groupings in
+            do {
+                try settings.set(\.browserGroupings, to: groupings)
+            } catch {
+                self?.fail("Couldn't change the browser's columns", error)
+                return
+            }
+            // Here too, not only on the config's change: a file that didn't name the key held
+            // the default, which may be what was chosen, so nothing changed there.
+            Task { await browser.setGroupings(groupings) }
+        }
         browser.selectionChanged = { [weak self] in self?.resumeSaver?.changed() }
         makeGoToListings(browser)
         browser.libraryRefreshed = { [weak self] in

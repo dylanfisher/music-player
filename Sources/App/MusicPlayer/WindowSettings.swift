@@ -44,7 +44,10 @@ struct WindowSettings {
         queueWidth = state[\.queueWidth]
         trackTable = state[\.trackTable]
         timelineTable = state[\.timelineTable]
-        browser = BrowserState(source: nil, columns: state[\.browserColumns])
+        browser = BrowserState(
+            source: nil,
+            columns: BrowserColumn.restored(
+                state[\.browserColumns], groupings: settings.fileValue(\.browserGroupings)))
         resume = settings[\.resume]
         groupByAlbumArtist = settings[\.groupByAlbumArtist]
         tableAppearance = TableAppearance(settings)

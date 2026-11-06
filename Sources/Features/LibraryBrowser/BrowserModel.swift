@@ -176,16 +176,28 @@ public final class BrowserModel {
     /// Has the column at `column` group by `grouping`, at All. A grouping another column shows
     /// trades places with the column's own, so no two columns show the same.
     func setGrouping(_ grouping: BrowserGrouping, ofColumn column: Int) async {
-        let current = pendingColumns[column]
-        guard grouping != current else { return }
-        var first = column
-        if let other = pendingColumns.firstIndex(of: grouping) {
-            pendingColumns[other] = current
-            first = min(first, other)
+        await setGroupings(groupings(choosing: grouping, ofColumn: column))
+    }
+
+    /// The columns' groupings once the column at `column` groups by `grouping`: one another
+    /// column shows trades places with the column's own.
+    func groupings(choosing grouping: BrowserGrouping, ofColumn column: Int) -> [BrowserGrouping] {
+        var next = pendingColumns
+        if let other = next.firstIndex(of: grouping) { next[other] = next[column] }
+        next[column] = grouping
+        return next
+    }
+
+    /// Has the columns group by `groupings`, as the config file says (ADR 0106). Each column
+    /// whose grouping changes goes to All, and the columns from the first of them reload.
+    func setGroupings(_ groupings: [BrowserGrouping]) async {
+        let changed = groupings.indices.filter { groupings[$0] != pendingColumns[$0] }
+        guard let first = changed.first else { return }
+        for column in changed {
+            pending.selections[pendingColumns[column]] = nil
+            pending.selections[groupings[column]] = nil
         }
-        pendingColumns[column] = grouping
-        pending.selections[current] = nil
-        pending.selections[grouping] = nil
+        pendingColumns = groupings
         await reload(panesFrom: first, reason: .user)
     }
 

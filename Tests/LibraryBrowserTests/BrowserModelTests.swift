@@ -629,3 +629,47 @@ private func loadedModel(
     await model.select(.albums, .id(album.id))
     #expect(model.filter.selections.isEmpty)
 }
+
+@MainActor @Test func columnsRegroupedAsTheConfigSaysGoToAllWhereTheirGroupingChanged()
+    async throws
+{
+    let (model, _) = try await loadedModel()
+    let genre = try #require(model.genres.first)
+    await model.select(.genre, id: genre.id)
+    let album = try #require(model.albums.first)
+    await model.select(.album, id: album.id)
+    // The Artists column becomes Years; the Genres column and its selection stay, and the
+    // Albums column keeps its album, which it still lists.
+    await model.setGroupings([.genres, .years, .albums])
+    #expect(model.columns == [.genres, .years, .albums])
+    #expect(model.filter.genre == genre.id)
+    #expect(model.filter.album == album.id)
+    #expect(model.filter.selections[.years] == nil)
+    // A grouping that moves to another column goes to All in both.
+    await model.setGroupings([.albums, .years, .genres])
+    #expect(model.columns == [.albums, .years, .genres])
+    #expect(model.filter.selections.isEmpty)
+    // The same groupings change nothing.
+    let applied = model.state
+    await model.setGroupings([.albums, .years, .genres])
+    #expect(model.state == applied)
+}
+
+@MainActor @Test func aHeaderMenuChoiceAsksForTheGroupingsAndChangesNothingItself() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, groupByAlbumArtist: false, thumbnails: nil)
+    await browser.load(BrowserState(source: nil))
+    var chosen: [[BrowserGrouping]] = []
+    browser.groupingsChosen = { chosen.append($0) }
+    let menu = NSMenu()
+    browser.panes.fill(menu, column: 2)
+    menu.performActionForItem(at: try #require(menu.items.firstIndex { $0.title == "Genres" }))
+    // Genres trades places with Albums, once the config file has it.
+    #expect(chosen == [[.albums, .artists, .genres]])
+    #expect(browser.model.columns == [.genres, .artists, .albums])
+    await browser.setGroupings(chosen[0])
+    #expect(browser.model.columns == [.albums, .artists, .genres])
+}

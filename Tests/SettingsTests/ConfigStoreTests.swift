@@ -280,6 +280,45 @@ private struct FolderSchema: SettingsSchema {
     let count = Setting("a.count", title: "Count", default: 5, range: 1...10, "An integer.")
 }
 
+@MainActor @Test func theColumnGroupingsAreAKeyOfTheirOwnThatABadValueBlocks() throws {
+    let schema = AppSettings()
+    // Written from the columns' header menu, so the settings window has no row for it.
+    #expect(schema.browserGroupings.kind == .windowState)
+    let url = configURL()
+    try write("{\n  \"appearance.glass\": true\n}\n", to: url)
+    let settings = ConfigStore(schema, fileURL: url, check: { _, _, _ in nil }, creating: true)
+    #expect(settings.fileValue(\.browserGroupings) == nil)
+    #expect(settings[\.browserGroupings] == [.genres, .artists, .albums])
+
+    // A file without the key gets it under its comment, and keeps the rest.
+    try settings.set(\.browserGroupings, to: [.years, .genres, .composers])
+    let text = try read(url)
+    #expect(text.hasPrefix("{\n  \"appearance.glass\": true,\n"))
+    #expect(
+        text.contains("  // Each browser column's grouping, left to right; right-click a header"))
+    #expect(settings.fileValue(\.browserGroupings) == [.years, .genres, .composers])
+    let reread = ConfigStore(schema, fileURL: url, check: { _, _, _ in nil }, creating: false)
+    #expect(reread.problems.isEmpty)
+    #expect(reread.fileValue(\.browserGroupings) == [.years, .genres, .composers])
+
+    for (value, problem) in [
+        (#"["genres", "genres", "albums"]"#, "column 1: genres is listed twice"),
+        (#"["genres", "albums"]"#, "2 columns; the browser has 3"),
+        (#"["moods", "genres", "albums"]"#, "moods"),
+        (#""genres""#, "expected a list of a browser grouping"),
+    ] {
+        try write(#"{"appearance.glass": true, "browser.columnGroupings": \#(value)}"#, to: url)
+        let bad = ConfigStore(schema, fileURL: url, check: { _, _, _ in nil }, creating: false)
+        #expect(bad.blocked, "\(value)")
+        #expect(bad.problems.map(\.description).joined().contains(problem), "\(value)")
+        #expect(bad.fileValue(\.browserGroupings) == nil)
+        #expect(bad.fileValue(\.glass) == nil)
+        #expect(throws: ConfigError.self) {
+            try bad.set(\.browserGroupings, to: [.years, .genres, .composers])
+        }
+    }
+}
+
 @MainActor @Test func aFileThatCantBeReadIsAProblem() throws {
     let url = configURL()
     try write(#"{"a.count": 3}"#, to: url)

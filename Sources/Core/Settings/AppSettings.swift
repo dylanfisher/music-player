@@ -49,6 +49,10 @@ public struct AppSettings: SettingsSchema {
     public let groupByAlbumArtist = Setting(
         "library.groupByAlbumArtist", title: "Group by Album Artist", default: true,
         "List album artists, not every track artist, in the Artist pane.")
+    public let browserGroupings = Setting(
+        "browser.columnGroupings", title: "Browser Column Groupings",
+        groupings: BrowserColumn.defaults.map(\.grouping),
+        "Each browser column's grouping, left to right; right-click a header to change.")
     public let fileViewer = Setting(
         "library.fileViewer", title: "File Viewer", default: FileViewer.searcher,
         "Where Reveal in Finder shows tracks; without Searcher, it uses Finder.")

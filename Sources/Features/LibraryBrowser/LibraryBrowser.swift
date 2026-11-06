@@ -74,6 +74,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// The Listening Stats panel's height, each time the user drags it (ADR 0102).
     public var statsHeightChanged: (Int) -> Void = { _ in }
     public var stateChanged: (BrowserState) -> Void = { _ in }
+    /// Called with the columns' groupings a choice in a column's header menu asks for. The
+    /// columns change only through `setGroupings`, once the config file has them (ADR 0106).
+    public var groupingsChosen: ([BrowserGrouping]) -> Void = { _ in }
     /// Called after the track table's selection changed, which the play state keeps.
     public var selectionChanged: () -> Void = {}
     /// Called after each refresh for a library change, so other views can read their rows again.
@@ -116,7 +119,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// What is changing the track table's selection now, for Undo Selection's steps; nil
     /// while a step is being shown, which records nothing.
     private var selectionCause: SelectionHistory.Cause? = .jump
-    private let panes: PanesController
+    let panes: PanesController
     let sidebarController: SidebarController
     private let split = NSSplitView()
     /// The split's first subview: the browser columns, or in their place the shown source's
@@ -254,7 +257,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             model: model,
             select: { grouping, value in Task { await model.select(grouping, value) } },
             setGrouping: { grouping, column in
-                Task { await model.setGrouping(grouping, ofColumn: column) }
+                owner?.groupingsChosen(model.groupings(choosing: grouping, ofColumn: column))
             },
             keyCommand: { chords in owner?.keyCommand(chords) ?? .unbound },
             focusPane: { forward in owner?.focusPane(forward: forward) })
@@ -1583,6 +1586,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Follows `library.groupByAlbumArtist`.
     public func setGroupByAlbumArtist(_ on: Bool) async { await model.setGroupByAlbumArtist(on) }
+
+    /// Follows `browser.columnGroupings`.
+    public func setGroupings(_ groupings: [BrowserGrouping]) async {
+        await model.setGroupings(groupings)
+    }
 
     /// Reports the track table's changed columns, which the timeline shows too until it has
     /// its own.

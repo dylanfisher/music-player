@@ -504,3 +504,19 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(read[\.infoPlace] == InfoWindowPlace(x: 120.5, y: 880))
     #expect(read[\.sidebarWidth] == 250)
 }
+
+@Test func savedColumnsTakeTheConfigsGroupingsAndKeepOnlySelectionsMadeInThem() {
+    let saved = [
+        BrowserColumn(grouping: .years, selection: "1999"),
+        BrowserColumn(grouping: .genres, selection: "Jazz"),
+        BrowserColumn(grouping: .albums, selection: "Kind of Blue"),
+    ]
+    // No groupings in the config: the state file's columns as they were.
+    #expect(BrowserColumn.restored(saved, groupings: nil) == saved)
+    #expect(
+        BrowserColumn.restored(saved, groupings: [.years, .artists, .genres]) == [
+            BrowserColumn(grouping: .years, selection: "1999"),
+            BrowserColumn(grouping: .artists, selection: nil),
+            BrowserColumn(grouping: .genres, selection: nil),
+        ])
+}

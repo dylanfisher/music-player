@@ -102,6 +102,13 @@ extension AppDelegate {
             let on = settings[\.groupByAlbumArtist]
             Task { await browser.setGroupByAlbumArtist(on) }
         }
+        // A file that stops naming the key leaves the columns as they are, as a launch without
+        // it keeps the state file's.
+        if keys.contains(schema.browserGroupings.key), let browser,
+            let groupings = settings.fileValue(\.browserGroupings)
+        {
+            Task { await browser.setGroupings(groupings) }
+        }
         if !keys.isDisjoint(with: TableAppearance.keys) {
             // The glass first: taking it off puts back the lists' rows, which the track table's
             // appearance then sets.

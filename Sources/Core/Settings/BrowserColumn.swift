@@ -36,4 +36,17 @@ public struct BrowserColumn: SettingValue {
 
     public static var typeName: String { "a browser column (grouping, selection)" }
     public static var kind: SettingKind { .windowState }
+
+    /// The columns to load: `saved`, the state file's, grouped as `groupings` says when the
+    /// config file names them. A saved selection stays only in a column that still groups by
+    /// what it was made in, since a name means nothing in another grouping (ADR 0106).
+    public static func restored(_ saved: [BrowserColumn], groupings: [BrowserGrouping]?)
+        -> [BrowserColumn]
+    {
+        guard let groupings else { return saved }
+        return zip(groupings, saved).map { grouping, column in
+            BrowserColumn(
+                grouping: grouping, selection: column.grouping == grouping ? column.selection : nil)
+        }
+    }
 }

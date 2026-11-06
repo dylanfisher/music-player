@@ -16,7 +16,8 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   for the settings in titled boxes, a Playback pane for the output and play counts, an
   Appearance pane for light or dark and the track table's lines, rows and album art, a Watched
   Folders pane with the network folders' settings, and a Shortcuts pane for every command's two chords. Network Scan Readers, and File Viewer without
-  Searcher, are set in the file only.
+  Searcher, are set in the file only. What each browser column groups by, picked by
+  right-clicking its header, is saved in the file too, as `browser.columnGroupings`.
 - **⌘K** opens the command palette: every command, setting, output, playlist and genre, ranked
   by how well they match and how often and recently you chose or played them.
 - **Controls ▸ Output** picks the output device or a UPnP renderer on the network, by name;

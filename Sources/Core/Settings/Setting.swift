@@ -105,17 +105,31 @@ extension Setting where Value == [BrowserColumn] {
     /// something the others don't.
     init(_ key: String, title: String, columns defaultValue: [BrowserColumn], _ summary: String) {
         self.init(key, title, defaultValue, summary, Value.kind) { columns in
-            guard columns.count == BrowserColumn.count else {
-                return .invalid("\(columns.count) columns; the browser has \(BrowserColumn.count)")
-            }
-            var seen: Set<BrowserGrouping> = []
-            for (index, column) in columns.enumerated()
-            where !seen.insert(column.grouping).inserted {
-                return .invalid("column \(index): \(column.grouping.rawValue) is listed twice")
-            }
-            return nil
+            columnsProblem(columns.map(\.grouping))
         }
     }
+}
+
+extension Setting where Value == [BrowserGrouping] {
+    /// What the browser's columns group by, left to right, checked as `columns:` checks them.
+    /// The app writes it from the columns' header menu, so the settings window shows no row.
+    init(_ key: String, title: String, groupings defaultValue: [BrowserGrouping], _ summary: String)
+    {
+        self.init(key, title, defaultValue, summary, .windowState, check: columnsProblem)
+    }
+}
+
+/// Why `groupings` can't be the browser's columns: not `BrowserColumn.count` of them, or one
+/// listed twice.
+private func columnsProblem(_ groupings: [BrowserGrouping]) -> SettingProblem.Reason? {
+    guard groupings.count == BrowserColumn.count else {
+        return .invalid("\(groupings.count) columns; the browser has \(BrowserColumn.count)")
+    }
+    var seen: Set<BrowserGrouping> = []
+    for (index, grouping) in groupings.enumerated() where !seen.insert(grouping).inserted {
+        return .invalid("column \(index): \(grouping.rawValue) is listed twice")
+    }
+    return nil
 }
 
 private func outside<Bound>(_ range: ClosedRange<Bound>, _ value: Bound) -> SettingProblem.Reason? {

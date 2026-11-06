@@ -75,8 +75,10 @@ public struct AppState: SettingsSchema {
             + " Null shows the track table's.")
     public let browserColumns = Setting(
         "browser.columns", title: "Browser Columns", columns: BrowserColumn.defaults,
-        "The browser's three columns, left to right: what each groups by, and the entry"
-            + " selected in it by name. A null selection is All.")
+        "The browser's three columns, left to right: what each grouped by, and the entry"
+            + " selected in it by name. A null selection is All. The config's"
+            + " browser.columnGroupings, when it names them, says what the columns group by,"
+            + " and a selection in a column it groups otherwise is dropped.")
     public let palettePlace = Setting<PalettePlace?>(
         "palette.place", title: "Palette Place", default: nil,
         "Where the palette was dragged. Null opens it centered near the top of the screen.")
