@@ -292,6 +292,29 @@ Plan, part 48a (ADR 0114):
   instead of writing the status bar.
 - Order: this plan, 48a.1, 48a.4, 48a.2, 48a.3, the ADR, the bench and the result.
 
+Result, part 48a (draft, before the gate): shipped 48a.1 to 48a.4 (ADR 0114). Get Info's
+window is made whole before it shows, the fields filled in when the read ends, so the window
+and its fields keep their frames. Back and Forward (⌘[ and ⌘]) step the key info window's
+tabs, wrapping, and act on the main window otherwise. Resolve Lost Stats is off once a health
+report finds no lost files, and when its sheet can't open an alert on the window says why. The
+formats the writer refuses are one fact in TagWriter, checked before the editor's read parses
+anything for writing, so DSF and DSDIFF files open with their tags read-only and the line
+"Tags in DSF files can't be written yet"; in a mix, Save checks, counts and writes only the
+others and the line says how many. Bench on Apple Silicon (fixture files, median of 5): Get
+Info on one track 15.9 ms to its window and 28.4 ms to its fields, on 100 tracks 45.9 ms to
+their fields (window 12.2 ms). The window row is up from 42e's 5.1 ms because the first tab's
+fields are now made before the window shows, which is 48a.1; the time to the fields is about
+the same (31 ms in 42e). Tests: the window's and fields' frames unchanged by the fill; tabs
+stepping both ways with wrap, only in the key info window; the Lost Stats flag following the
+report, and an empty run alerting on the window, not the status bar; a generated DSF and
+DSDIFF read with their tags, scheme and reason, untagged ones as "No tag"; the model over a
+mixed selection; a read-only window with Save off; Get Info on a DSF, a DSDIFF and a FLAC
+writing only the FLAC, the DSD files' bytes unchanged. For the owner: open Get Info on a track
+and watch nothing move as it fills; press ⌘] and ⌘[ in it and past the last and first tabs;
+with no lost stats, check Resolve Lost Stats is greyed out in the menu; Get Info on a DSF and
+a DSDIFF file (and on one with a FLAC), check the tags show, the line says why, and Save
+writes only the FLAC.
+
 #### 48b. Listening Stats
 
 - [ ] **48b.1 Rolling periods.** Past Week, Past Month, Past Year and All Time replace This
