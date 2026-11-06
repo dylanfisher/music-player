@@ -560,6 +560,32 @@ Plan, part 48d (ADR 0113):
 - Order: this plan, 48d.1, the window's saves moved, 48d.2, 48d.3, the ADR, the bench and the
   result.
 
+Result, part 48d (draft): shipped 48d.1 to 48d.3 (ADR 0113). The table now saves its layout
+when the table's sort changes, not only when a column does, and the layout keeps the sort of
+the sources without their own; a manual playlist, History and Stats open in their own sort at
+launch as on a click, and a sort chosen in one is `browser.sourceSort`, put back with that
+source. Every piece of window state and whether it survived a quit before this part: the
+source, yes (`playback.resume`); the sort, no, fixed; the columns and widths, yes; the panes'
+selections, yes; the search, no, fixed (`browser.search`, loaded only while the toolbar has the
+field); the selection, one track, the last selected, as ADR 0095 has it; the scroll, to the
+row, as ADR 0095 has it; the split sizes, the browser and Stats yes, the sidebar 8 points
+narrower at each launch on macOS 26 and the queue a point narrower, fixed by measuring from
+divider to edge; the queue panel, yes; the frame, yes except a quit in full screen, which saved
+the screen's frame, fixed by not saving it in full screen (full screen itself isn't put back).
+The browser's layout saves moved from the app delegate to the main window, so a test window
+saves what the app does. Bench: the launch row (launch to the first rows drawn, budget 1 s)
+didn't finish on the build Mac this run, on this branch or on main (66ee213): the measuring app
+drew its first rows, then sat idle over 15 minutes until stopped, so it waits on the owner's
+run. Tests: a header sort saved and loaded in a new table with the same first rows; a
+manual playlist loading in its own order, in the sort chosen in it, and leaving it as before;
+the search across a load, and none without the field; no frame saved in full screen; split
+widths saved as a restored split shows them; one round trip that changes every item above,
+saves, opens a second window on the same home and checks each came back. For the owner: sort
+by a column, open a manual playlist and sort it by another, type a search, select a row and
+scroll, drag the sidebar, queue and browser dividers, move and resize the window, quit,
+relaunch; everything is where it was. Quit once in full screen; the window opens windowed at
+its earlier frame.
+
 #### 48e. The receiver moves on to the next track
 
 Playing to the Denon, a track ends and the next never starts. The session waits for the
