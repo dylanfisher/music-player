@@ -21,6 +21,14 @@ public func kilohertzText(_ hertz: Double) -> String {
     String(format: "%.1f", hertz / 1000)
 }
 
+/// 0.43 -> "+0.4 dBTP": a true peak, signed, to a tenth of a decibel.
+public func truePeakText(_ decibels: Double) -> String {
+    String(format: "%+.1f dBTP", decibels)
+}
+
+/// 10 -> "DR10": a dynamic range score as the DR meters print it.
+public func dynamicRangeText(_ score: Int) -> String { "DR\(score)" }
+
 /// 44100...44100 -> "44.1", 44100...192000 -> "44.1–192".
 public func kilohertz(_ range: ClosedRange<Double>) -> String {
     range.lowerBound == range.upperBound

@@ -3,9 +3,10 @@ import Settings
 extension TrackColumn {
     /// What `LibraryIndex`'s track query orders by first. Its tables are `t` (tracks), `f`
     /// (files), `pa` (paths), `ar` (artist), `aa` (album artist), `ga` (the Artist pane's album
-    /// artist), `al` (album), `g` (genre), `p` (plays), `r` (ratings), `lv` (loved) and, for
-    /// playlist order, `pe` (the shown playlist's entries). Text the tags hold as written sorts
-    /// without regard to ASCII case.
+    /// artist), `al` (album), `g` (genre), `p` (plays), `r` (ratings), `lv` (loved), `m` (the
+    /// measures analysis stored for the file as it is now) and, for playlist order, `pe` (the
+    /// shown playlist's entries). Text the tags hold as written sorts without regard to ASCII
+    /// case.
     var expression: String {
         switch self {
         case .rowNumber: preconditionFailure("the row number can't be sorted by")
@@ -44,6 +45,10 @@ extension TrackColumn {
         case .sampleRate: "t.sample_rate_hz"
         case .bitDepth: "t.bits_per_sample"
         case .channels: "t.channels"
+        case .cutoff: "m.cutoff_hz"
+        case .effectiveBits: "m.effective_bits"
+        case .dynamicRange: "m.dynamic_range"
+        case .truePeak: "m.true_peak_dbtp"
         case .size: "f.size_bytes"
         case .fileName: fileNameSQL + nocase
         case .path: "f.path"

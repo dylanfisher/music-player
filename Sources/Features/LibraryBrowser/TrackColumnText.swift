@@ -10,7 +10,8 @@ extension TrackColumn {
         switch self {
         case .rowNumber, .trackNumber, .trackTotal, .trackOfTotal, .discNumber, .discTotal,
             .discOfTotal, .year, .duration, .sampleRate, .bitDepth, .bitRate, .channels, .size,
-            .bpm, .movementNumber, .playCount, .skipCount, .playlistOrder:
+            .bpm, .movementNumber, .playCount, .skipCount, .playlistOrder, .cutoff, .effectiveBits,
+            .dynamicRange, .truePeak:
             true
         default: false
         }
@@ -27,10 +28,13 @@ extension TrackColumn {
         case .trackNumber, .discNumber, .year, .channels, .bpm, .playCount, .skipCount, .loved,
             .compilation, .art:
             34
-        case .duration, .trackTotal, .discTotal, .movementNumber, .bitDepth, .playlistOrder: 40
+        case .duration, .trackTotal, .discTotal, .movementNumber, .bitDepth, .playlistOrder,
+            .dynamicRange:
+            40
         case .size, .codec, .fileType: 48
         case .rating: 50
-        case .bitRate: 55
+        case .bitRate, .effectiveBits: 55
+        case .cutoff, .truePeak: 70
         case .sampleRate: 76
         case .trackOfTotal, .discOfTotal: 84
         case .dateAdded, .dateCreated, .dateModified, .lastPlayed: 86
@@ -79,6 +83,10 @@ extension TrackColumn {
         case .sampleRate: sampleRateText(row.sampleRateHz)
         case .bitDepth: number(row.bitsPerSample)
         case .channels: String(row.channels)
+        case .cutoff: row.cutoffHz.map { "\(kilohertzText($0)) kHz" } ?? ""
+        case .effectiveBits: number(row.effectiveBits)
+        case .dynamicRange: row.dynamicRange.map(dynamicRangeText) ?? ""
+        case .truePeak: row.truePeakDBTP.map(truePeakText) ?? ""
         case .size:
             ByteCountFormatter.string(fromByteCount: Int64(row.sizeBytes), countStyle: .file)
         case .fileName: row.fileName

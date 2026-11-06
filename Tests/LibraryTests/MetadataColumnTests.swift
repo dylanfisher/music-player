@@ -1,4 +1,5 @@
 import Foundation
+import Metadata
 import Settings
 import Testing
 
@@ -316,4 +317,73 @@ private let grouped = TrackFilter(groupByAlbumArtist: true)
     #expect(
         try sortArtists(TrackFilter())
             == ["Band", "Singer and Guest", "Solo", "Xavier", "Yvonne"])
+}
+
+/// Measures as analysis stores them, with these four values.
+private func measured(
+    cutoffHz: Double?, effectiveBits: Int?, dynamicRange: Int?, truePeak: Double?
+) -> FileMeasures {
+    FileMeasures(
+        formatID: "flac", sampleRateHz: 44_100, storedBits: 16, channels: 2, isFloat: false,
+        durationSeconds: 0.1, cutoffHz: cutoffHz,
+        cutoffSteepnessDBPerKHz: cutoffHz.map { _ in 150 }, effectiveBits: effectiveBits,
+        identicalChannels: false, peakDBFS: -1, truePeakDBTP: truePeak, clippedRuns: 0,
+        dynamicRange: dynamicRange)
+}
+
+@Test func theMeasureColumnsAndFieldsReadWhatAnalysisStoredForTheFileAsItIs() throws {
+    let (index, rows, _) = try taggedLibrary(["a": [:], "b": [:], "c": [:], "d": [:]])
+    func row(_ name: String) throws -> TrackRow { try #require(rows["\(name).flac"]) }
+    func stamp(_ name: String) throws -> FileStamp {
+        let row = try row(name)
+        return FileStamp(sizeBytes: row.sizeBytes, modifiedSeconds: row.modifiedSeconds)
+    }
+    try index.storeMeasures(
+        measured(cutoffHz: 16_015.6, effectiveBits: 16, dynamicRange: 12, truePeak: -0.3),
+        path: try row("a").path, stamp: try stamp("a"))
+    try index.storeMeasures(
+        measured(cutoffHz: nil, effectiveBits: 14, dynamicRange: 5, truePeak: 0.4),
+        path: try row("b").path, stamp: try stamp("b"))
+    // Made from the file before it changed: the index's stamp no longer matches.
+    var older = try stamp("d")
+    older.modifiedSeconds -= 1
+    try index.storeMeasures(
+        measured(cutoffHz: 15_000, effectiveBits: 8, dynamicRange: 3, truePeak: 1),
+        path: try row("d").path, stamp: older)
+
+    let read = Dictionary(
+        uniqueKeysWithValues: try index.rows(ids: try index.trackIDs(sortedBy: .path)).map {
+            (($0.fileName as NSString).deletingPathExtension, $0)
+        })
+    let a = try #require(read["a"])
+    #expect(a.cutoffHz == 16_015.6 && a.effectiveBits == 16)
+    #expect(a.dynamicRange == 12 && a.truePeakDBTP == -0.3)
+    let b = try #require(read["b"])
+    #expect(b.cutoffHz == nil && b.effectiveBits == 14 && b.truePeakDBTP == 0.4)
+    for name in ["c", "d"] {
+        let unmeasured = try #require(read[name])
+        #expect(unmeasured.cutoffHz == nil && unmeasured.effectiveBits == nil, "\(name)")
+        #expect(unmeasured.dynamicRange == nil && unmeasured.truePeakDBTP == nil, "\(name)")
+    }
+
+    // Not analyzed sorts first, as a missing value does.
+    #expect(try names(index, .effectiveBits) == ["c", "d", "b", "a"])
+    #expect(try names(index, .dynamicRange, ascending: false) == ["a", "b", "c", "d"])
+    #expect(try names(index, .truePeak, ascending: false) == ["b", "a", "c", "d"])
+    #expect(try names(index, .cutoff).last == "a")
+
+    func smart(_ rule: SmartRule) throws -> [String] {
+        let id = try index.createPlaylist(
+            named: "\(rule.field)", rules: SmartRules(match: .all, rules: [rule]))
+        return try names(index, .path, TrackFilter(source: .playlist(id)))
+    }
+    #expect(try smart(SmartRule(.cutoff, .lessThan, .number(17_000))) == ["a"])
+    #expect(try smart(SmartRule(.cutoff, .is, .number(16_015))) == ["a"])
+    #expect(try smart(SmartRule(.effectiveBits, .lessThan, .number(16))) == ["b"])
+    #expect(try smart(SmartRule(.dynamicRange, .greaterThan, .number(6))) == ["a"])
+    // A true peak compares as measured, and may be negative.
+    #expect(try smart(SmartRule(.truePeak, .greaterThan, .number(0))) == ["b"])
+    #expect(try smart(SmartRule(.truePeak, .lessThan, .number(0))) == ["a"])
+    #expect(try smart(SmartRule(.truePeak, .greaterThan, .number(-1))) == ["a", "b"])
+    #expect(SmartRule(.dynamicRange, .greaterThan, .number(-1)).problem != nil)
 }

@@ -5,8 +5,10 @@ extension SmartField {
     var unit: String? {
         switch self {
         case .duration: "seconds"
-        case .sampleRate: "Hz"
-        case .bitDepth: "bits"
+        case .sampleRate, .cutoff: "Hz"
+        case .bitDepth, .effectiveBits: "bits"
+        case .dynamicRange: "dB"
+        case .truePeak: "dBTP"
         case .rating: "stars"
         case .dateAdded, .lastPlayed: "days"
         default: nil

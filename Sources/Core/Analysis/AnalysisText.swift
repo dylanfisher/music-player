@@ -2,6 +2,7 @@ import DisplayText
 import Foundation
 import Library
 import Playback
+import Settings
 
 /// "FLAC · 96 kHz · 24-bit stored, 16 effective · stereo · 5:00": the codec, the rate, the
 /// stored and effective bits where there are any, the channels and the length.
@@ -28,7 +29,7 @@ public func formatLine(_ measures: FileMeasures) -> String {
 public func measureItems(_ measures: FileMeasures) -> [(name: String, value: String)] {
     [
         (
-            "Cutoff",
+            TrackColumn.cutoff.title,
             measures.cutoffHz.map { cutoff in
                 "\(kilohertzText(cutoff)) kHz"
                     + (measures.cutoffSteepnessDBPerKHz.map {
@@ -47,12 +48,12 @@ public func measureItems(_ measures: FileMeasures) -> [(name: String, value: Str
                 ?? channelsText(measures.channels)
         ),
         ("Peak", measures.peakDBFS.map { String(format: "%.1f dBFS", $0) } ?? "silent"),
-        ("True peak", measures.truePeakDBTP.map { String(format: "%+.1f dBTP", $0) } ?? "silent"),
+        ("True peak", measures.truePeakDBTP.map(truePeakText) ?? "silent"),
         (
             "Clipped runs",
             number(measures.clippedRuns) + " of \(AnalysisRules.clippedRunSamples) or more samples"
         ),
-        ("Dynamic range", measures.dynamicRange.map { "DR\($0)" } ?? "silent"),
+        ("Dynamic range", measures.dynamicRange.map(dynamicRangeText) ?? "silent"),
     ]
 }
 

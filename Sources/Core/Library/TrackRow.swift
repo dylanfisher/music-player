@@ -65,6 +65,12 @@ public struct TrackRow: Equatable, Sendable {
     public var movementNumber: Int? = nil
     public var movementName: String? = nil
     public var originalDate: String? = nil
+    /// What analysis measured, as the index keeps it for the file as it is now (phase 45); nil
+    /// before an analysis, and where the measure doesn't apply.
+    public var cutoffHz: Double? = nil
+    public var effectiveBits: Int? = nil
+    public var dynamicRange: Int? = nil
+    public var truePeakDBTP: Double? = nil
 
     /// The year the date tag starts with, which is what the year column sorts by.
     public var year: Int? {

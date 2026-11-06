@@ -79,7 +79,9 @@ public struct SmartRule: Codable, Equatable, Sendable {
             if text.contains("\u{0}") { return "a rule's text can't hold a NUL" }
             return nil
         case (.number, .number(let number)), (.date, .number(let number)):
-            guard number >= 0 else { return "\(field.rawValue) can't be negative" }
+            guard number >= 0 || field.isSigned else {
+                return "\(field.rawValue) can't be negative"
+            }
             if field == .rating, number > SmartField.maxRating {
                 return "a rating is 0 to \(SmartField.maxRating) stars, not \(number)"
             }
@@ -140,6 +142,7 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
         rating
     case trackTotal, discTotal, movementNumber, bpm, bitRate, channels, size, loved, compilation
     case dateAdded, lastPlayed, dateCreated, dateModified
+    case cutoff, effectiveBits, dynamicRange, truePeak
 
     public enum Kind: Sendable {
         case text
@@ -161,7 +164,8 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
             .text
         case .year, .trackNumber, .discNumber, .duration, .sampleRate, .bitDepth, .playCount,
             .skipCount, .rating, .trackTotal, .discTotal, .movementNumber, .bpm, .bitRate,
-            .channels, .size, .loved, .compilation:
+            .channels, .size, .loved, .compilation, .cutoff, .effectiveBits, .dynamicRange,
+            .truePeak:
             .number
         case .dateAdded, .lastPlayed, .dateCreated, .dateModified: .date
         }
@@ -170,16 +174,22 @@ public enum SmartField: String, Codable, CaseIterable, Sendable {
     /// Yes or no, compared as 1 or 0.
     var isFlag: Bool { self == .loved || self == .compilation }
 
+    /// A true peak is in decibels of full scale, under 0 but for overs, and compares as
+    /// measured: rounded to a whole decibel, "is more than 0" would miss an over of 0.4 dB.
+    var isSigned: Bool { self == .truePeak }
+
     /// The track table column the field compares: the names match.
     public var column: TrackColumn { TrackColumn(rawValue: rawValue)! }
 
     /// The SQL the rule compares, over the tables `TrackColumn.expression` names. The names and
     /// titles are the folded sort columns, which a folded value matches whatever its case and
-    /// accents. Numbers compare as whole numbers, so a duration of 200.4 seconds "is 200", as
-    /// the table shows it; sizes compare in megabytes and bit rates in kilobits a second.
+    /// accents. Numbers but true peaks compare as whole numbers, so a duration of 200.4 seconds
+    /// "is 200", as the table shows it; sizes compare in megabytes, bit rates in kilobits a
+    /// second and cutoffs in hertz. A file not analyzed has no measures, so no rule on one
+    /// holds for it but "isn't".
     var expression: String {
         let expression = self == .size ? "f.size_bytes / 1000000.0" : column.expression
-        return kind == .number ? "CAST(\(expression) AS INTEGER)" : expression
+        return kind == .number && !isSigned ? "CAST(\(expression) AS INTEGER)" : expression
     }
 
     /// Whether `expression` is a folded sort key, so the typed value is folded the same way.
@@ -267,7 +277,8 @@ public enum SmartOrder: String, Codable, CaseIterable, Sendable {
 
 /// Every join a rule or a sort can need, from tracks `t`. Each joins on a unique key, so SQLite
 /// leaves out the ones a statement doesn't use. Every track has a file, so files is a left join
-/// only so that it can be left out too.
+/// only so that it can be left out too. Measures join only when made from the file as the index
+/// has it, so a file changed since reads as not analyzed.
 let trackJoins = """
     LEFT JOIN files f ON f.id = t.file_id
     LEFT JOIN artists ar ON ar.id = t.artist_id
@@ -279,6 +290,8 @@ let trackJoins = """
     LEFT JOIN plays p ON p.path_id = t.file_id
     LEFT JOIN ratings r ON r.path_id = t.file_id
     LEFT JOIN \(lovedTable) lv ON lv.path_id = t.file_id
+    LEFT JOIN \(measuresTable) m ON m.path = f.path AND m.size_bytes = f.size_bytes
+        AND m.modified_seconds = f.modified_seconds
     """
 
 private let secondsPerDay = 86_400.0

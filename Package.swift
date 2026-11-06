@@ -130,7 +130,9 @@ let package = Package(
         ),
         .target(
             name: "Analysis",
-            dependencies: ["DisplayText", "HALOutput", "Library", "Log", "Metadata", "Playback"],
+            dependencies: [
+                "DisplayText", "HALOutput", "Library", "Log", "Metadata", "Playback", "Settings",
+            ],
             path: "Sources/Core/Analysis",
             swiftSettings: strictSwift
         ),
