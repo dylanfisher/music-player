@@ -86,3 +86,11 @@ import Testing
     #expect(SmartField.trackNumber.title == "Track Number")
     #expect(Set(SmartField.allCases.map(\.title)).count == SmartField.allCases.count)
 }
+
+/// A measure's unit follows its value as the table shows it; a DR score has none.
+@Test func theMeasureFieldsNameTheirUnits() {
+    #expect(SmartField.cutoff.unit == "Hz")
+    #expect(SmartField.effectiveBits.unit == "bits")
+    #expect(SmartField.truePeak.unit == "dBTP")
+    #expect(SmartField.dynamicRange.unit == nil)
+}

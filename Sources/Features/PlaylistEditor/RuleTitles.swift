@@ -7,7 +7,6 @@ extension SmartField {
         case .duration: "seconds"
         case .sampleRate, .cutoff: "Hz"
         case .bitDepth, .effectiveBits: "bits"
-        case .dynamicRange: "dB"
         case .truePeak: "dBTP"
         case .rating: "stars"
         case .dateAdded, .lastPlayed: "days"
