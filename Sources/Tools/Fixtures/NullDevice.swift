@@ -37,6 +37,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     private var restoredDefaults = 0
     private var openSessions = 0
     private var sessionsEverOpened = 0
+    private var running = false
     /// `goneAfterSeconds` is nil for a call that fails while the device stays.
     private var failsDuring: (step: SessionStep, callsLeft: Int, goneAfterSeconds: Double?)?
     private let delays: HALDelays?
@@ -124,6 +125,8 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
     var openSessionCount: Int { lock.withLock { openSessions } }
     /// How many sessions have been opened, closed ones included.
     var openedSessionCount: Int { lock.withLock { sessionsEverOpened } }
+    /// Whether a session is calling the IO proc, which a pause stops once its fade has played.
+    var isRunning: Bool { lock.withLock { running } }
     var defaultsRestoredCount: Int { lock.withLock { restoredDefaults } }
 
     /// Whether a watcher is registered, which closing the output must undo.
@@ -436,6 +439,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
                 finished.signal()
             }
             thread.qualityOfService = .userInteractive
+            device.lock.withLock { device.running = true }
             thread.start()
         }
 
@@ -447,6 +451,7 @@ public final class NullDevice: PCMDeviceProvider, @unchecked Sendable {
                 finished.wait()
                 self.stopRequested = nil
                 self.finished = nil
+                device.lock.withLock { device.running = false }
             }
             try device.perform(.stop)
         }
