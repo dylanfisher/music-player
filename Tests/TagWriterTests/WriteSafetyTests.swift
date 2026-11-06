@@ -61,6 +61,7 @@ private let titleEdit = TagEdit(values: [.title: "Edited"])
     let url = try Sample.mp3v23.copy()
     let original = try Data(contentsOf: url)
     var writer = scratchWriter()
+    writer.faults.writesInPlace = false
     writer.faults.crashBeforeRename = true
     _ = writer.write(titleEdit, to: [url.path])
     #expect(try Data(contentsOf: url) == original)

@@ -5,7 +5,9 @@ import Foundation
 /// `tag-undo` under the app's data directory (or under `--home`'s folder and the tests' temp
 /// folders), and each file it changed adds two files there: a small JSON record and the raw
 /// bytes the edit replaced. A batch appends per file, so its cost grows with its size, not its
-/// square, and every record is on the disk before its music file is replaced.
+/// square, and every record is on the disk before its music file is replaced or overwritten.
+/// A file written in place also gets a marker in `tag-undo` itself until its write is
+/// confirmed, so the writer finds an interrupted one without reading every record (ADR 0107).
 public struct TagUndoJournal: Sendable {
     /// Edits kept; older ones are dropped once a new one is written.
     package static let capacity = 50
@@ -17,6 +19,7 @@ public struct TagUndoJournal: Sendable {
     fileprivate static let sequenceDigits = 8
     package static let recordSuffix = ".json"
     package static let bytesSuffix = ".bytes"
+    static let unconfirmedSuffix = ".unconfirmed"
 
     package let directory: URL
     let capacityBytes: Int
@@ -42,6 +45,12 @@ public struct TagUndoJournal: Sendable {
         let number: Int
         var record: URL { entry.folder.appendingPathComponent(name(number) + recordSuffix) }
         var bytes: URL { entry.folder.appendingPathComponent(name(number) + bytesSuffix) }
+        /// `<entry>.<number>.unconfirmed` beside the entry folders, which the listing of
+        /// entries skips.
+        var marker: URL {
+            entry.folder.deletingLastPathComponent().appendingPathComponent(
+                entry.folder.lastPathComponent + "." + name(number) + unconfirmedSuffix)
+        }
     }
 
     package struct FileRecord: Codable, Equatable, Sendable {
@@ -59,11 +68,15 @@ public struct TagUndoJournal: Sendable {
         /// The original's SHA-256, which the restored file must match.
         var originalSHA256: Data
         var restore: [RestoreSegment]
+        /// Set from before a write in place starts until its read-back passes: the SHA-256 the
+        /// whole file has once the write lands. Until then the edited identity is the
+        /// original's, and a file found with neither hash is one the write tore.
+        var unconfirmedSHA256: Data?
 
         package init(
             path: String, editedSize: Int, editedModifiedNanoseconds: Int, editedInode: UInt64,
             originalSize: Int, originalModifiedNanoseconds: Int, originalInode: UInt64,
-            originalSHA256: Data, restore: [RestoreSegment]
+            originalSHA256: Data, restore: [RestoreSegment], unconfirmedSHA256: Data? = nil
         ) {
             self.path = path
             self.editedSize = editedSize
@@ -74,6 +87,7 @@ public struct TagUndoJournal: Sendable {
             self.originalInode = originalInode
             self.originalSHA256 = originalSHA256
             self.restore = restore
+            self.unconfirmedSHA256 = unconfirmedSHA256
         }
     }
 
@@ -97,35 +111,110 @@ public struct TagUndoJournal: Sendable {
         return Entry(sequence: sequence, folder: folder)
     }
 
-    /// Adds one file to `entry`: its old bytes, then its record, each flushed to the disk, then
-    /// the folder, so the record is durable before the music file is replaced.
+    /// Adds one file to `entry`: its old bytes and its record, and for an unconfirmed record its
+    /// marker, each flushed with its folder, then the drive's cache, so all of it is durable
+    /// before the music file is replaced or overwritten.
     package func append(_ record: FileRecord, oldBytes: [[UInt8]], to entry: Entry)
         throws(TagWriteError) -> Handle
     {
         let handle = Handle(entry: entry, number: (try sequences(in: entry.folder).last ?? 0) + 1)
-        // F_FULLFSYNC empties the drive's whole cache, so one after both files covers both.
         try writeDurably(oldBytes, to: handle.bytes.path, drive: false)
-        try writeDurably([Array(try encode(record))], to: handle.record.path)
+        try writeDurably([Array(try encode(record))], to: handle.record.path, drive: false)
         try syncFolder(entry.folder.path)
+        if record.unconfirmedSHA256 != nil {
+            try writeDurably([], to: handle.marker.path, drive: false)
+            try syncFolder(directory.path)
+        }
+        // F_FULLFSYNC empties the drive's whole cache, which may reach the disk in any order,
+        // so one after the files and their folders covers them all.
+        try flushDrive(directory.path)
         return handle
+    }
+
+    /// Records that a write in place landed and read back: `record` is saved without its
+    /// unconfirmed hash, through the drive's cache, then the marker goes, so a power cut can't
+    /// keep the marker's removal and lose the record's. A marker left behind is harmless:
+    /// `unconfirmed` removes one whose record is confirmed.
+    func confirm(_ record: FileRecord, at handle: Handle) throws(TagWriteError) {
+        var confirmed = record
+        confirmed.unconfirmedSHA256 = nil
+        try update(confirmed, at: handle)
+        try removeMarker(handle)
+    }
+
+    /// The records whose write in place a crash or a failure left unconfirmed, found by their
+    /// markers. A marker whose record is gone or confirmed is removed; a record that doesn't
+    /// read is deleted and reported, as `latest` does.
+    func unconfirmed() throws(TagWriteError)
+        -> (files: [(Handle, FileRecord)], discarded: [TagWriteError])
+    {
+        let names: [String]
+        do {
+            names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        } catch CocoaError.fileReadNoSuchFile {
+            return ([], [])
+        } catch {
+            throw journalError("can't list \(directory.path): \(error)")
+        }
+        var files: [(Handle, FileRecord)] = []
+        var discarded: [TagWriteError] = []
+        for marker in names.sorted() where marker.hasSuffix(Self.unconfirmedSuffix) {
+            let parts = marker.dropLast(Self.unconfirmedSuffix.count).split(separator: ".")
+            guard parts.count == 2, parts.allSatisfy({ $0.count == Self.sequenceDigits }),
+                let sequence = Int(parts[0]), let number = Int(parts[1])
+            else { continue }
+            let entry = Entry(
+                sequence: sequence, folder: directory.appendingPathComponent(String(parts[0])))
+            let handle = Handle(entry: entry, number: number)
+            guard FileManager.default.fileExists(atPath: handle.record.path) else {
+                try removeMarker(handle)
+                continue
+            }
+            let record: FileRecord
+            do {
+                record = try decodeExactly(FileRecord.self, from: Data(contentsOf: handle.record))
+            } catch {
+                discarded.append(
+                    journalError("discarded \(handle.record.path), which doesn't read: \(error)"))
+                try remove(handle)
+                continue
+            }
+            if record.unconfirmedSHA256 == nil {
+                try removeMarker(handle)
+            } else {
+                files.append((handle, record))
+            }
+        }
+        return (files, discarded)
+    }
+
+    private func removeMarker(_ handle: Handle) throws(TagWriteError) {
+        guard unlink(handle.marker.path) == 0 || errno == ENOENT else {
+            throw systemError(handle.marker.path, .journal, "can't remove the marker")
+        }
+        try syncFolder(directory.path)
     }
 
     /// Replaces a file's record, as when the renamed file's mtime or inode differ from the temp
     /// file's.
     package func update(_ record: FileRecord, at handle: Handle) throws(TagWriteError) {
         let staging = handle.record.path + ".new"
-        try writeDurably([Array(try encode(record))], to: staging)
+        try writeDurably([Array(try encode(record))], to: staging, drive: false)
         guard rename(staging, handle.record.path) == 0 else {
             throw systemError(handle.record.path, .journal, "can't replace the undo record")
         }
         try syncFolder(handle.entry.folder.path)
+        // After the rename, so the drive can't keep a later change and lose this one.
+        try flushDrive(handle.entry.folder.path)
     }
 
-    /// Removes one file of an edit, and the edit's folder once it holds none.
+    /// Removes one file of an edit, its marker if it has one, and the edit's folder once it
+    /// holds none.
     package func remove(_ handle: Handle) throws(TagWriteError) {
         for url in [handle.record, handle.bytes] where unlink(url.path) != 0 && errno != ENOENT {
             throw systemError(url.path, .journal, "can't remove the undo record")
         }
+        if FileManager.default.fileExists(atPath: handle.marker.path) { try removeMarker(handle) }
         try removeIfEmpty(handle.entry)
     }
 
@@ -271,13 +360,14 @@ public struct TagUndoJournal: Sendable {
 extension TagUndoJournal.FileRecord {
     init(
         path: String, edited: FileIdentity, original: FileIdentity, originalSHA256: Data,
-        restore: [TagUndoJournal.RestoreSegment]
+        restore: [TagUndoJournal.RestoreSegment], unconfirmedSHA256: Data? = nil
     ) {
         self.init(
             path: path, editedSize: edited.size,
             editedModifiedNanoseconds: edited.modifiedNanoseconds, editedInode: edited.inode,
             originalSize: original.size, originalModifiedNanoseconds: original.modifiedNanoseconds,
-            originalInode: original.inode, originalSHA256: originalSHA256, restore: restore)
+            originalInode: original.inode, originalSHA256: originalSHA256, restore: restore,
+            unconfirmedSHA256: unconfirmedSHA256)
     }
 
     /// Records `identity` as the edited file's.
@@ -339,6 +429,15 @@ private func writeDurably(_ chunks: [[UInt8]], to path: String, drive: Bool = tr
     } else if fsync(descriptor) != 0 {
         throw systemError(path, .journal, "can't flush it")
     }
+}
+
+/// Empties the drive's cache through `path`'s volume, so what was flushed to the drive before
+/// survives a power cut.
+private func flushDrive(_ path: String) throws(TagWriteError) {
+    let descriptor = open(path, O_RDONLY | O_CLOEXEC)
+    guard descriptor >= 0 else { throw systemError(path, .journal, "can't open the folder") }
+    defer { close(descriptor) }
+    try flush(descriptor, path, .journal)
 }
 
 /// Flushes a folder's entries, so a file just made or renamed in it survives a power cut.

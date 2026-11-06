@@ -217,6 +217,7 @@ struct RoundTrip {
             chmod(clone.path, info.st_mode & 0o7777)
 
             var crashing = writer
+            crashing.faults.writesInPlace = false
             crashing.faults.crashBeforeRename = true
             _ = crashing.write(edit, to: [clone.path])
             edits += 1
@@ -237,6 +238,20 @@ struct RoundTrip {
             }
             if try !leftoverTemps(for: clone.path).isEmpty {
                 failures.append("\(container) after a crash: the temp file is still there")
+            }
+
+            // A crash one byte into a write in place; the next call puts the clone back. A
+            // file the edit doesn't fit in place goes through the temp file, and undo.
+            var tearing = writer
+            tearing.faults.tornWriteBytes = 1
+            let torn = tearing.write(edit, to: [clone.path])
+            edits += 1
+            let mended = torn.changed.isEmpty ? writer.recoverInterrupted() : writer.undoLast()
+            if mended.changed != [clone.path] || !mended.failures.isEmpty {
+                failures.append("\(container) after a torn write in place: \(mended)")
+            }
+            if try !sameBytes(original, clone) {
+                failures.append("\(container) after a torn write in place: the clone isn't back")
             }
 
             var changing = writer

@@ -73,21 +73,32 @@ let tagEditorBenchmarks = [
     },
     Benchmark(
         name:
-            "tag write: one fixture FLAC's title, written and read back into the index (median of \(editorRuns))",
+            "tag write: one fixture FLAC's title, written in place and read back into the index (median of \(editorRuns))",
         budget: Budget(appleSilicon: 100, oldMac: 400, unit: .milliseconds)
     ) {
-        let (write, rescan) = try writeAndRescanRuns()
-        let total = zip(write, rescan).map { $0 + $1 }
-        return Measured(
-            value: median(total),
-            notes: [
-                runsNote(total)
-                    + String(
-                        format: "; the write %.1f ms, the rescan %.1f ms", median(write),
-                        median(rescan))
-            ])
+        try writeAndRescan(inPlace: true)
+    },
+    Benchmark(
+        name:
+            "tag write: one fixture FLAC's title, written through a temp file and read back into the index (median of \(editorRuns))",
+        budget: Budget(appleSilicon: 100, oldMac: 400, unit: .milliseconds)
+    ) {
+        try writeAndRescan(inPlace: false)
     },
 ]
+
+private func writeAndRescan(inPlace: Bool) throws -> Measured {
+    let (write, rescan) = try writeAndRescanRuns(inPlace: inPlace)
+    let total = zip(write, rescan).map { $0 + $1 }
+    return Measured(
+        value: median(total),
+        notes: [
+            runsNote(total)
+                + String(
+                    format: "; the write %.1f ms, the rescan %.1f ms", median(write),
+                    median(rescan))
+        ])
+}
 
 /// The first `count` fixture files of the full library, by absolute path; with `readableOnly`,
 /// none made malformed.
@@ -141,8 +152,9 @@ private func getInfoRuns(_ count: Int) throws -> [GetInfoRun] {
 
 /// A fixture FLAC copied into a folder of its own and indexed, then its title written through
 /// `TagWriter` and read back through `LibraryScanner.rescan(files:)`, as Save does: the write
-/// and the rescan of each run, in milliseconds.
-private func writeAndRescanRuns() throws -> (write: [Double], rescan: [Double]) {
+/// and the rescan of each run, in milliseconds. The title fits the FLAC's padding; without
+/// `inPlace` it's written through the temp file anyway, as a tag past the padding is.
+private func writeAndRescanRuns(inPlace: Bool) throws -> (write: [Double], rescan: [Double]) {
     let root = try defaultFixturesDirectory()
     _ = try generateFixtures(count: fullLibraryFileCount, in: root)
     let flac = try loadManifest(in: root).files.first {
@@ -158,18 +170,24 @@ private func writeAndRescanRuns() throws -> (write: [Double], rescan: [Double]) 
     let scanner = LibraryScanner(
         databaseURL: libraryFileURL(in: directory))
     _ = try scanner.scan(WatchedFolder(path: music.path, kind: .local))
-    let writer = TagWriter(
+    var writer = TagWriter(
         journal: TagUndoJournal(
             dataDirectory: directory.appendingPathComponent("undo", isDirectory: true)))
+    writer.faults.writesInPlace = inPlace
     var write: [Double] = []
     var rescan: [Double] = []
+    let fileNumber = { try FileManager.default.attributesOfItem(atPath: path)[.systemFileNumber] }
     for run in 0...editorRuns {
+        let before = try fileNumber() as? Int
         let start = DispatchTime.now().uptimeNanoseconds
         let report = writer.write(TagEdit(values: [.title: "Bench \(run)"]), to: [path])
         guard report.changed == [path] else {
             throw BenchError.expected("the title written: \(report.failures)")
         }
         let written = DispatchTime.now().uptimeNanoseconds
+        guard (try fileNumber() as? Int == before) == inPlace else {
+            throw BenchError.expected(inPlace ? "the title written in place" : "a new file")
+        }
         guard try scanner.rescan(files: [path]).read == 1 else {
             throw BenchError.expected("the file read again")
         }

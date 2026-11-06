@@ -97,7 +97,9 @@ func aTempFileSwappedBeforeTheRenameIsRefused(_ swap: String) throws {
     try otherBytes.write(to: other)
     let link = scratchFolder().appendingPathComponent("link").path
     var writer = scratchWriter()
+    writer.faults.writesInPlace = false
     writer.faults.beforeReplacing = { _, temp in
+        guard let temp else { throw POSIXError(.EINVAL) }
         switch swap {
         case "a regular file":
             let copy = temp + ".copy"
@@ -125,6 +127,7 @@ func aTempFileWhoseMtimeMovesAtItsCloseIsWritten(_ sample: Sample) throws {
     let url = try sample.copy()
     let original = try Data(contentsOf: url)
     var writer = scratchWriter()
+    writer.faults.writesInPlace = false
     writer.faults.whenTempCloses = { temp in
         var info = stat()
         guard lstat(temp, &info) == 0 else { throw POSIXError(.EIO) }
@@ -152,6 +155,7 @@ func aTempFileReplacedAfterItClosesIsRefused(_ change: String) throws {
     let url = try Sample.flac.copy()
     let original = try Data(contentsOf: url)
     var writer = scratchWriter()
+    writer.faults.writesInPlace = false
     if change == "swapped at the close" {
         writer.faults.whenTempCloses = { temp in
             let copy = temp + ".copy"
@@ -160,6 +164,7 @@ func aTempFileReplacedAfterItClosesIsRefused(_ change: String) throws {
         }
     } else {
         writer.faults.beforeReplacing = { _, temp in
+            guard let temp else { throw POSIXError(.EINVAL) }
             let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: temp))
             try handle.seekToEnd()
             try handle.write(contentsOf: Data([0]))

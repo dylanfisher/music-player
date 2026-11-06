@@ -79,6 +79,15 @@ public final class TagEditing {
             write: { writer.write($0, to: $1) }, undo: { writer.undoLast() },
             present: { $0.show(beside: $1, at: $2, avoiding: $3) }, confirm: ask,
             alert: showProblems)
+        // A write in place a crash cut short is finished before anything reads the file
+        // again; the writer logs what it found (ADR 0107).
+        writes.async { [weak self] in
+            let report = writer.recoverInterrupted()
+            guard !report.changed.isEmpty else { return }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.written(report.changed) }
+            }
+        }
     }
 
     init(effects: Effects) {

@@ -67,6 +67,8 @@ private func newestEntry(_ journal: TagUndoJournal) throws -> URL {
 @Test func aJournalThatCantBeWrittenStopsTheBatchAfterThatFile() throws {
     let urls = try [Sample.mp4, .mp3v24, .flac].map { try $0.copy() }
     var writer = scratchWriter()
+    // A write in place also has to confirm its record afterwards, which this folder refuses.
+    writer.faults.writesInPlace = false
     let journal = writer.journal
     writer.faults.beforeReplacing = { _, _ in
         // Once the first file is journaled, its edit's folder becomes read-only.

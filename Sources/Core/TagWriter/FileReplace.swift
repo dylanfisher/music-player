@@ -32,19 +32,29 @@ struct FileIdentity: Equatable {
     }
 }
 
-/// Faults the corpus run and the tests inject between writing the temp file and renaming it.
+/// Faults the corpus run and the tests inject between planning a write and finishing it.
 package struct WriteFaults: Sendable {
-    /// Runs once the file is read and planned, before the temp file is made from it. A throw
-    /// stops the write the way a failure there would.
+    /// Off, a tag that fits the file's padding goes through the temp file too, so the temp
+    /// file's faults can be injected on any file.
+    package var writesInPlace = true
+    /// Runs once the file is read and planned, before the temp file is made from it or the
+    /// original is overwritten. A throw stops the write the way a failure there would.
     var beforeWritingTemp: (@Sendable (_ original: String) throws -> Void)?
-    /// Runs once the temp file is written and checked, before the original is checked for
-    /// changes and replaced. A throw stops the write the way a failure there would.
-    package var beforeReplacing: (@Sendable (_ original: String, _ temp: String) throws -> Void)?
+    /// Runs once the temp file is written and checked, or once a write in place is journaled,
+    /// before the original is checked for changes and replaced or overwritten. `temp` is nil
+    /// for a write in place. A throw stops the write the way a failure there would.
+    package var beforeReplacing: (@Sendable (_ original: String, _ temp: String?) throws -> Void)?
     /// Runs right after the temp file is closed, where an SMB server sets the mtime of a file
     /// written through the handle. A throw stops the write the way a failure there would.
     var whenTempCloses: (@Sendable (_ temp: String) throws -> Void)?
     /// Stops right before the rename and leaves the temp file, as a crash there would.
     package var crashBeforeRename = false
+    /// Writes only this many bytes of a write in place, then stops and leaves the file and the
+    /// journal as they are, as a crash mid-write would.
+    package var tornWriteBytes: Int?
+    /// Runs once a write in place is flushed and closed, before its read-back. A throw fails
+    /// the write after the original was overwritten.
+    var afterOverwriting: (@Sendable (_ original: String) throws -> Void)?
 
     init() {}
 }
@@ -117,16 +127,7 @@ func writeTemp(
     _ segments: [Segment], from original: String, identity: FileIdentity,
     faults: WriteFaults = WriteFaults()
 ) throws(TagWriteError) -> TempFile {
-    let leftovers: [String]
-    do {
-        leftovers = try leftoverTemps(for: original)
-    } catch {
-        throw TagWriteError(
-            path: original, kind: .writeFailed, detail: "can't list its folder: \(error)")
-    }
-    for leftover in leftovers where unlink(leftover) != 0 && errno != ENOENT {
-        throw systemError(original, .writeFailed, "can't remove the old temp file \(leftover)")
-    }
+    try removeLeftoverTemps(for: original)
     // Not through a link, and the file that opened must be the one that was read: someone who
     // can write the folder could have swapped another in.
     let source = open(original, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
@@ -231,7 +232,22 @@ func writeTemp(
     }
 }
 
+/// Removes the temp files an earlier write of `path` left, as a crash before its rename does.
+func removeLeftoverTemps(for path: String) throws(TagWriteError) {
+    let leftovers: [String]
+    do {
+        leftovers = try leftoverTemps(for: path)
+    } catch {
+        throw TagWriteError(
+            path: path, kind: .writeFailed, detail: "can't list its folder: \(error)")
+    }
+    for leftover in leftovers where unlink(leftover) != 0 && errno != ENOENT {
+        throw systemError(path, .writeFailed, "can't remove the old temp file \(leftover)")
+    }
+}
+
 let replacedDetail = "something else replaced the file while its tags were written"
+let changedDetail = "something else changed the file while its tags were written"
 
 /// Opens the temp file `name` in `folder` for writing, without following a link. A clone
 /// already exists; a whole write creates the file, which refuses any existing name.

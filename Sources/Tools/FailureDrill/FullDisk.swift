@@ -152,6 +152,8 @@ private func tagJournal(on mount: URL, music: MusicFolders) throws -> [String] {
     }
     var writer = TagWriter(journal: TagUndoJournal(dataDirectory: journalHome))
     let filler = mount.appendingPathComponent("filler")
+    // Through the temp file, so the first file's record needs no update once the disk is full.
+    writer.faults.writesInPlace = false
     writer.faults.beforeReplacing = { _, _ in try fillVolume(with: filler) }
     let report = writer.write(TagEdit(values: [.title: fullDiskTitle]), to: files)
     if report.failures.map(\.kind) == [.diskFull],

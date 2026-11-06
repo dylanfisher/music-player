@@ -35,8 +35,10 @@ public func readArt(_ art: EmbeddedArt, at url: URL) throws(MetadataError) -> Da
 }
 
 /// `readArt` from a file already open, as the one `readMetadata`'s parse read, so a caller that
-/// wants both opens the file once.
-package func readArt(_ art: EmbeddedArt, from source: FileSource) throws(ParseFailure) -> Data {
+/// wants both opens the file once, or from the file a tag write plans before it's written.
+package func readArt(_ art: EmbeddedArt, from source: some ByteSource) throws(ParseFailure)
+    -> Data
+{
     guard art.byteCount <= maximumArtBytes else {
         throw .unsupported(
             at: art.offset,
