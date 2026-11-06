@@ -455,6 +455,36 @@ Implementation plan (ADR 0112, amending 0041), all in `UPnPOutput` and its tests
    steady lag moves nothing, a stall moves the end by its length, a long one by the cap, a
    renderer stuck past the end moves nothing, pause and resume, seeks.
 
+Result (draft, before the gate): shipped 48e.1 to 48e.4 as planned, checked only against the
+fake renderer (ADR 0112). A track's end is the app's clock's: started by the first poll that
+finds the renderer playing, paused and resumed with it, set by a seek. A poll moves the end
+later only when the renderer falls further behind than its usual lag, measured once its
+position first moves, and by 10 s at most from a start or a seek. A stop counts as the end
+when the clock or the last position is within 3 s of it. A renderer that took a next URI and
+then stopped at the end, two polls running, or played on past the clock's end, is marked not
+gapless with the reason, and from then on the app gives it each track with
+`SetAVTransportURI` and Play. The two new network tests (a renderer lagging 5 s without a
+next URI, and one lagging 5 s that takes and ignores it, three tracks in a row) fail on main
+with the stop reported as one on the renderer; a stall now moves the end only after the
+position has moved, so a stall in a track's first second isn't waited for (ADR 0112). No test
+reads the log lines; they were read with `log show` after a fake-renderer run.
+
+Checkpoint steps, once the owner has pushed the branch: on the Mac that plays to the Denon,
+`./scripts/pull`, then `./scripts/dev`, and pick the Denon as the output. Queue three tracks,
+one of them under a minute, and seek the first to about 20 s before its end. Let all three
+ends pass, noting how long each next track takes to start. Then, within 15 minutes, run:
+
+```
+/usr/bin/log show --last 15m --style compact \
+  --predicate 'subsystem == "com.dylanfisher.MusicPlayer" AND category == "UPnPOutput"' \
+  > ~/Desktop/denon-track-changes.txt
+```
+
+and send back `~/Desktop/denon-track-changes.txt` with the timings. The lines that matter:
+"polled near a track change" (state, the Denon's position and URI, and the app's clock),
+"took SetNextAVTransportURI", "hadn't moved on by the track's end", "each track now starts
+after the last" with its reason, and "a gap of".
+
 ### 49. Click-free play, pause and seek
 
 The owner hears a pop when they play and pause quickly, and asks for the slight fade other

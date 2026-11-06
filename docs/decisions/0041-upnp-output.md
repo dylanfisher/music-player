@@ -5,6 +5,9 @@
 - **Amends:** [0025](0025-threat-model.md) (rows 28 and 29), [0039](0039-network-control.md)
 - **Amended by:** [0093](0093-signal-path-stages-sonos-groups-receiver-keys.md): Sonos players
   named by room and group, and `receiver.volumeKeys` folded into `receiver.enabled`.
+  [0112](0112-renderer-track-ends-by-the-apps-clock.md): a track's end by the app's clock, a
+  poll moving it only for a stall and by 10 s at most, and a renderer that ignores the next URI
+  given each track itself.
 
 ## Context
 
