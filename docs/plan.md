@@ -348,6 +348,52 @@ ADR numbers: 0117 to 50a if it needs one, 0118 to 50b, 0119 to 50c, 0120 to 50d.
       `WatchState` and the watcher.
 - [ ] Amend ADR 0116 with ADR 0119.
 
+Plan, part 50c (ADR 0119, amending 0116):
+
+1. **Files at once, utility priority (50c.1, 50c.2).** `LibraryAnalysis.filesAtOnce` is
+   `min(4, max(2, activeProcessorCount / 2))`. The pass starts files in path order into a task
+   group, at most that many under way, each child decoding at `.utility` and storing its own
+   measures (the three tries stay); only the actor counts and reports. Pause cancels the run,
+   so every child. Bench rows rename "at background priority" to "two to four files at once".
+   Tests: no more than `filesAtOnce` under way, every file started in path order, a pause
+   with several under way reads each again next run and none twice in a run.
+2. **The count over the whole pass, run again (50c.4, 50c.5).** A new schema part,
+   `analysisRun`, beside `measures`, so the measures table and the owner's rows stay as they
+   are: `analysis_run` (one row: when the run that's going or last went started, and whether
+   it finished), `measured_at` (the time each measures row was stored, by path), and
+   `analysis_failures` (the files the last run couldn't analyze, with their stamps). A file is
+   done for the pass when it has current measures stored at or after the run's start; rows
+   from before this part count as made at 0, so the owner's measures are done. `MeasuresCache`
+   gains `analysisFiles()` (pending files in path order, the done count, the last run's
+   failures still pending, and whether a run is unfinished), `beginRun(again:)` and
+   `finishRun()`. `Progress.analyzed` and `total` count the whole pass. `start(again:)`;
+   `standing()` says, while no run goes, whether a run is unfinished and whether every file
+   was tried. Tests: a relaunch counting from what's stored, a run again listing every file
+   and resuming after a relaunch, keeping the measures it replaces until each is stored, and
+   the owner's rows from before the part counting as done.
+3. **What the pass reports (50c.3).** `Progress.file`: the name of the newest file started.
+   Counts are reported at most every `reportIntervalSeconds` (0.25 s); a change of stage and
+   the end always. A run with nothing to do reports only its end, so no "0 of 0".
+4. **Pause Scan (50c.6).** `WatchState.pauseRunningScan()`/`resumeRunningScan()`; a user's
+   pause makes `holdsRunningScan` true until Resume or the scan's end. The watcher's
+   `pauseScan()`/`resumeScan()` send `.scanPaused(folder:, Bool)`. `LibraryStatus` keeps the
+   paused folder: "Scan paused: Music: 300 of 1,200 read", and `isScanning` leaves it out, so
+   Analyze Library goes on. Commands `library.pauseScan` "Pause Scan" and
+   `library.resumeScan` "Resume Scan" after Rescan All. Settings > Folders shows no scan
+   progress, so the status bar is the only place. Tests: `WatchState`, the watcher holding a
+   paused scan through a playback stop, `LibraryStatus`.
+5. **Status bar and Library Health (50c.3–50c.5).** The activity line splits: the scans and a
+   save, then a small borderless pause or play button for the scan, then Analyze Library's
+   text and its own button; each button runs a command through the browser's `runCommand`,
+   so the menu, palette and buttons agree. Library Health's header gains the analysis line:
+   a bar, "Analyzing library: 1,240 of 43,368 · name.flac" and Pause while it runs; paused,
+   "Library analysis paused: …" and Analyze Library; idle, the button alone, reading "Analyze
+   Library Again…" once every file was tried. The menu and palette title follow it through a
+   dispatcher `title` hook. Again asks first. At launch the app asks the pass's standing and
+   shows a paused run as paused.
+6. **Bench.** The 200-file row and the search during the pass, before and after, under the
+   load of the other parts' agents.
+
 #### 50d. Spectrum window
 
 - [ ] **50d.1 Album and file size.** Each file's header names its album beside the title and
