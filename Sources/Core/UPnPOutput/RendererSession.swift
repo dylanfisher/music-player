@@ -244,7 +244,7 @@ actor RendererSession {
                 }
                 gapless = .afterStop(Self.refusedNextURI)
                 logger.error(
-                    "\(self.renderer.name, privacy: .public): \(AVTransport.setNextURIAction, privacy: .public) was refused: \(error); each track now starts after the last"
+                    "\(self.renderer.name, privacy: .public): \(AVTransport.setNextURIAction, privacy: .public) was refused: \(error, privacy: .public); each track now starts after the last"
                 )
                 publish(signalPath())
             }
@@ -322,7 +322,7 @@ actor RendererSession {
         do throws(SOAPProblem) {
             try await control.send(AVTransport.stop)
         } catch {
-            logger.error("\(self.renderer.name): \(error)")
+            logger.error("\(self.renderer.name, privacy: .public): \(error, privacy: .public)")
         }
         release()
     }
@@ -338,7 +338,7 @@ actor RendererSession {
             if case .unreachable = error, let current {
                 lose(current, error)
             } else {
-                logger.error("\(self.renderer.name): \(error)")
+                logger.error("\(self.renderer.name, privacy: .public): \(error, privacy: .public)")
             }
             return false
         }
@@ -360,7 +360,9 @@ actor RendererSession {
             position = try await control.positionInfo()
         } catch {
             failedPolls += 1
-            logger.notice("\(self.renderer.name) didn't answer a poll: \(error)")
+            logger.notice(
+                "\(self.renderer.name, privacy: .public) didn't answer a poll: \(error, privacy: .public)"
+            )
             if failedPolls >= Self.lostAfterPolls, self.current === current {
                 lose(current, error)
             }
@@ -387,7 +389,8 @@ actor RendererSession {
         case .playing, .paused:
             await playingOrPaused(current, playing: transport.state == .playing, position)
             if !transport.isOK {
-                logger.notice("\(self.renderer.name) reports an error while playing")
+                logger.notice(
+                    "\(self.renderer.name, privacy: .public) reports an error while playing")
             }
         case .stopped, .noMedia:
             await stopped(current, transportOK: transport.isOK)
@@ -522,7 +525,9 @@ actor RendererSession {
                     await ignoresNextURI(Self.playedOnInsteadOfNext)
                 }
             } catch {
-                logger.notice("\(self.renderer.name) didn't answer at the track's end: \(error)")
+                logger.notice(
+                    "\(self.renderer.name, privacy: .public) didn't answer at the track's end: \(error, privacy: .public)"
+                )
             }
             guard self.current === current else { return }
         }
@@ -542,7 +547,8 @@ actor RendererSession {
     /// The renderer is on a next track it was told to drop: the change came too late. The
     /// current track counts as ended, and what the engine has next replaces it.
     private func resync(_ current: Loaded) async {
-        logger.notice("\(self.renderer.name) went on to a next track it was told to drop")
+        logger.notice(
+            "\(self.renderer.name, privacy: .public) went on to a next track it was told to drop")
         guard next != nil else {
             await send(AVTransport.stop)
             emit(.trackEnded(current.item.id))
@@ -611,7 +617,8 @@ actor RendererSession {
             try await control.send(AVTransport.setNextURI("", metadata: ""))
         } catch {
             logger.notice(
-                "\(self.renderer.name, privacy: .public) kept the next track it took: \(error)")
+                "\(self.renderer.name, privacy: .public) kept the next track it took: \(error, privacy: .public)"
+            )
         }
     }
 
@@ -677,7 +684,8 @@ actor RendererSession {
     }
 
     private func lose(_ current: Loaded, _ error: SOAPProblem) {
-        logger.error("\(self.renderer.name) is gone: \(error)")
+        logger.error(
+            "\(self.renderer.name, privacy: .public) is gone: \(error, privacy: .public)")
         emit(.deviceLost(current.item.id, positionSeconds: elapsed))
         release()
         lost = true
@@ -696,7 +704,7 @@ actor RendererSession {
         }
         guard lost, current == nil else { return }
         lost = false
-        logger.notice("\(self.renderer.name) answers again")
+        logger.notice("\(self.renderer.name, privacy: .public) answers again")
         emit(.deviceReturned)
     }
 
@@ -708,10 +716,13 @@ actor RendererSession {
         do {
             found = try RendererChoice.renderer(renderer.udn, in: try await rediscover())
         } catch {
-            return logger.notice("\(self.renderer.name) wasn't found again: \(error)")
+            return logger.notice(
+                "\(self.renderer.name, privacy: .public) wasn't found again: \(error, privacy: .public)"
+            )
         }
         guard found.location != renderer.location, let transport = found.transport else { return }
-        logger.notice("\(found.name) is at \(found.address) now")
+        logger.notice(
+            "\(found.name, privacy: .public) is at \(found.address, privacy: .public) now")
         renderer = found
         control = AVTransportControl(transport, timeoutSeconds: timeoutSeconds)
         gapless = .unknown
@@ -759,7 +770,8 @@ actor RendererSession {
             started = try await HTTPServer<OutputItem.ID>.start(
                 on: serverInterfaceOverride ?? renderer.location.interface,
                 acceptingOnly: renderer.address, resolve: { shared.file($0) },
-                problem: { logger.notice("serving \(name): \($0)") })
+                // A problem can name a served file's path, so it stays private.
+                problem: { logger.notice("serving \(name, privacy: .public): \($0)") })
         } catch {
             throw .server(error)
         }
@@ -783,7 +795,7 @@ actor RendererSession {
         } catch {
             gapless = .afterStop(Self.unreadableActions)
             logger.notice(
-                "\(self.renderer.name, privacy: .public): \(error); each track now starts after the last"
+                "\(self.renderer.name, privacy: .public): \(error, privacy: .public); each track now starts after the last"
             )
         }
     }

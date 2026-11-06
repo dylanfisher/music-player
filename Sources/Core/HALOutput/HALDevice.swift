@@ -250,7 +250,9 @@ final class HALDevice: PCMDevice {
             do {
                 try step()
             } catch {
-                logger.error("device \(self.id, privacy: .public): restoring failed: \(error)")
+                logger.error(
+                    "device \(self.id, privacy: .public): restoring failed: \(error, privacy: .public)"
+                )
                 errors.append(error)
             }
         }
@@ -278,7 +280,9 @@ final class HALDevice: PCMDevice {
             try stop()
             return true
         } catch {
-            logger.error("device \(self.id, privacy: .public) gone, stopping it failed: \(error)")
+            logger.error(
+                "device \(self.id, privacy: .public) gone, stopping it failed: \(error, privacy: .public)"
+            )
             return false
         }
     }
@@ -296,7 +300,8 @@ func restoreDefaultOutputs(_ snapshot: DeviceSnapshot) throws {
     ] {
         guard let uid else { continue }
         guard let original = try deviceID(uid: uid) else {
-            logger.error("can't restore default output \(uid): it isn't connected")
+            logger.error(
+                "can't restore default output \(uid, privacy: .public): it isn't connected")
             continue
         }
         let now: AudioObjectID = try readScalar(systemObject, address(selector))
@@ -328,7 +333,9 @@ private func waitUntil(
         AudioObjectAddPropertyListenerBlock(object, &address, queue, listener))
     defer {
         let status = AudioObjectRemovePropertyListenerBlock(object, &address, queue, listener)
-        if status != noErr { logger.error("removing the \(what) listener failed: \(status)") }
+        if status != noErr {
+            logger.error("removing the \(what, privacy: .public) listener failed: \(status)")
+        }
     }
     let deadline = Date().addingTimeInterval(3)
     while try !condition() {

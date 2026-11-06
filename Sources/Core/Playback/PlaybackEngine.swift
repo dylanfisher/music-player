@@ -598,7 +598,9 @@ public actor PlaybackEngine {
                 url: queue.url(at: failed), entry: queue.entry(at: failed),
                 problem: PlaybackProblem(error))
             failuresInARow.append(track)
-            logger.error("\(track.url.path): \(error)")
+            logger.error(
+                "\(track.url.path, privacy: .private(mask: .hash)): \(logText(error, without: track.url.path), privacy: .public)"
+            )
             if completing {
                 failedEarly.append(track)
             } else {
@@ -636,7 +638,10 @@ public actor PlaybackEngine {
             state.durationSeconds = nil
             if stoppedRun {
                 let error = PlaybackError.failedInARow(failuresInARow)
-                logger.error("\(error)")
+                // Each track's error is on its own line, without its path; a cause's message
+                // can be an error's whole text, so the run's line has only the count.
+                logger.error(
+                    "\(PlaybackProblem.failedInARow(self.failuresInARow.count), privacy: .public)")
                 publish(.failed(PlaybackProblem(error)))
             } else {
                 publish(.finished)
@@ -683,7 +688,7 @@ public actor PlaybackEngine {
             nextItem = nil
             resumeSeconds = nil
             state.status = .stopped
-            logger.error("output failed: \(error)")
+            logger.error("output failed: \(error, privacy: .public)")
             publish(.failed(PlaybackProblem(error)))
         }
     }

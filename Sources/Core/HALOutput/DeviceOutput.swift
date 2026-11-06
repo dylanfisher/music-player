@@ -581,7 +581,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         do {
             try track.decoder.seek(toFrame: 0)
         } catch {
-            logger.info("rewinding an open track failed, opening it again: \(error)")
+            logger.info(
+                "rewinding \(item.url.path, privacy: .private(mask: .hash)) failed, opening it again: \(logText(error, without: item.url.path), privacy: .public)"
+            )
             return nil
         }
         track.item = item
@@ -751,7 +753,9 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             }
             audio.count = decoded * Int(format.mBytesPerFrame)
         } catch {
-            logger.info("decoding ahead of a switch failed, retrying at the switch: \(error)")
+            logger.info(
+                "decoding \(track.item.url.path, privacy: .private(mask: .hash)) ahead of a switch failed, retrying at the switch: \(logText(error, without: track.item.url.path), privacy: .public)"
+            )
             return track
         }
         var ahead = track
@@ -954,7 +958,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             }
             usleep(10_000)
         }
-        logger.error("\(self.provider.deviceName) went away: \(error)")
+        logger.error(
+            "\(self.provider.deviceName, privacy: .public) went away: \(error, privacy: .public)")
         lose(item, at: seconds)
         return true
     }
@@ -997,13 +1002,14 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private func checkDevice() {
         if device != nil {
             guard !provider.isConnected() else { return }
-            logger.error("\(self.provider.deviceName) went away")
+            logger.error("\(self.provider.deviceName, privacy: .public) went away")
             lose(segments.first?.item.id, at: position())
         } else if let resume = failedResume, !provider.isConnected() {
             // A step failed while the device still read as connected, and now it's gone.
             failedResume = nil
             deviceMissing = true
-            logger.error("\(self.provider.deviceName) went away after a failed step")
+            logger.error(
+                "\(self.provider.deviceName, privacy: .public) went away after a failed step")
             emit(.deviceLost(resume.item, positionSeconds: resume.seconds))
         } else if deviceMissing, provider.isConnected() {
             deviceMissing = false
@@ -1018,7 +1024,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         guard let returnTo, returnTo.provider.isConnected(), !(playing && !segments.isEmpty)
         else { return }
         let uid = returnTo.provider.deviceUID
-        logger.notice("\(returnTo.provider.deviceName) is back, so output returns to it")
+        logger.notice(
+            "\(returnTo.provider.deviceName, privacy: .public) is back, so output returns to it")
         returnTo.provider.deviceReturned()
         use(returnTo, remembering: false)
         returnContinuation.yield(uid)
@@ -1220,7 +1227,9 @@ private struct Track {
                 checkedLengthFrames = try mp3StatedLengthFrames(at: item.url).map(Int64.init)
             } catch {
                 // AudioToolbox opened it, so this only means its length can't be checked.
-                logger.info("can't read the length \(item.url.path) states: \(error)")
+                logger.info(
+                    "can't read the length \(item.url.path, privacy: .private(mask: .hash)) states: \(logText(error, without: item.url.path), privacy: .public)"
+                )
                 checkedLengthFrames = nil
             }
         } else {

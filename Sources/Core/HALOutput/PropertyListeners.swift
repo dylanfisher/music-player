@@ -82,7 +82,7 @@ final class PropertyListeners {
             let status = listening.remove(key, queue, block)
             if status != noErr {
                 logger.info(
-                    "removing the '\(fourCharCode(key.selector))' listener from \(key.object) failed: \(status)"
+                    "removing the '\(fourCharCode(key.selector), privacy: .public)' listener from \(key.object) failed: \(status)"
                 )
             }
             active.remove(key)
@@ -93,7 +93,8 @@ final class PropertyListeners {
                 active.insert(key)
             } else {
                 logger.error(
-                    "can't listen to '\(fourCharCode(key.selector))' on \(key.object): \(status)")
+                    "can't listen to '\(fourCharCode(key.selector), privacy: .public)' on \(key.object): \(status)"
+                )
             }
         }
     }
