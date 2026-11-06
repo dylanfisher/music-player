@@ -60,10 +60,12 @@ public final class BrowserModel {
     /// Counts applied changes, so names read for one list aren't used for the next.
     private var applied = 0
     private var names: (applied: Int, list: [TrackName])?
-    /// The list the last play from the table queued, as its track IDs in play order, and its
-    /// queue, so a play from the same list can keep the queue the engine plays (ADR 0097).
-    private var lastQueued: (ids: [Int64], queue: ListQueue)?
-    /// Counts library changes, so a queue read before one isn't kept after it.
+    /// The list the last play from the table queued, as its track IDs in play order, its
+    /// queue, and the library change it was read after, so a play from the same list can keep
+    /// the queue the engine plays (ADR 0097, 0104).
+    private var lastQueued: (ids: [Int64], queue: ListQueue, readAt: Int)?
+    /// Counts library changes. A kept queue read before the latest one is read again, and
+    /// a play keeps it only once its files are found where they were.
     private var queuedGeneration = 0
     /// The sources the sidebar showed and the plays from the browser, for Back and Forward.
     private(set) var history = StepHistory(start: WindowPlace(filter: TrackFilter()))
@@ -377,22 +379,22 @@ public final class BrowserModel {
     /// Rates the tracks `trackIDs`; 0 stars clears their rating.
     public func rate(_ trackIDs: [Int64], stars: Int) async throws {
         try await reader.setRating(stars, trackIDs: trackIDs)
-        await refresh()
+        await refreshEdited()
     }
 
     func toggle(_ opinion: TrackOpinion, _ trackIDs: [Int64]) async throws {
         try await reader.toggle(opinion, trackIDs: trackIDs)
-        await refresh()
+        await refreshEdited()
     }
 
     public func recordPlay(_ path: String, at seconds: Double) async throws {
         try await reader.recordPlay(path, at: seconds)
-        await refresh()
+        await refreshEdited()
     }
 
     public func recordSkip(_ path: String) async throws {
         try await reader.recordSkip(path)
-        await refresh()
+        await refreshEdited()
     }
 
     /// The window as it is now, as a step keeps it.
@@ -606,10 +608,45 @@ public final class BrowserModel {
     /// Runs every query again after the library changed, keeping each selection that's still
     /// there.
     package func refresh() async {
-        // The tracks' files may have moved.
-        lastQueued = nil
+        // The tracks' files may have moved, so the kept queue waits for its check.
         queuedGeneration += 1
         await reload(panesFrom: 0, reason: .libraryChanged)
+        await checkKept()
+    }
+
+    /// Runs every query again after an edit that moves no file (a rating, an opinion, a
+    /// counted play or skip), so the kept queue stays usable: a skip is counted as Enter plays
+    /// the next track, and a play partway through each track.
+    private func refreshEdited() async {
+        await reload(panesFrom: 0, reason: .libraryChanged)
+    }
+
+    /// Keeps `queue` as the queue of the list `ids`, read after library change `readAt`, and
+    /// checks it when a library change came since.
+    private func keep(_ ids: [Int64], _ queue: ListQueue, readAt: Int) {
+        lastQueued = (ids, queue, readAt)
+        if readAt != queuedGeneration { Task { await checkKept() } }
+    }
+
+    /// Reads the kept list's files again after a library change. The list stays kept when
+    /// each track's file is where it was, and is forgotten otherwise.
+    private func checkKept() async {
+        guard let kept = lastQueued, kept.readAt != queuedGeneration else { return }
+        let generation = queuedGeneration
+        let fresh: ListQueue?
+        do {
+            fresh = try await Self.queue(ids: kept.ids, reader: reader.refreshes)
+        } catch {
+            logger.error("couldn't read the kept queue's files again: \(error)")
+            fresh = nil
+        }
+        // Another play may have kept another list meanwhile, or a later check this one.
+        guard let now = lastQueued, now.ids == kept.ids, now.readAt < generation else { return }
+        if let fresh, fresh.urls == now.queue.urls, fresh.entries == now.queue.entries {
+            lastQueued?.readAt = generation
+        } else {
+            lastQueued = nil
+        }
     }
 
     /// The queue a double-click plays, as file URLs, and where in it to start. Rows whose track
@@ -629,7 +666,7 @@ public final class BrowserModel {
         let ids = rows.map { trackIDs[$0] }
         // The same list in the same order as the last play: its queue is known, and the
         // engine may still be playing it.
-        if let queued = lastQueued, queued.ids == ids,
+        if let queued = lastQueued, queued.ids == ids, queued.readAt == queuedGeneration,
             let request = Self.request(queued.queue, first: first),
             request.urls.indices.contains(request.first)
         {
@@ -637,8 +674,7 @@ public final class BrowserModel {
         }
         let reader = reader
         let remember = { @MainActor [weak self, queuedGeneration] (queue: ListQueue) in
-            guard let self, queuedGeneration == self.queuedGeneration else { return }
-            lastQueued = (ids, queue)
+            self?.keep(ids, queue, readAt: queuedGeneration)
         }
         guard let path = try await reader.paths(ids: [ids[first]])[ids[first]] else {
             // The clicked track has gone from the index: the queue says where playback starts.
@@ -654,6 +690,16 @@ public final class BrowserModel {
             await remember(queue)
             return request
         }
+    }
+
+    /// The queue of `ids` from `first`, for the play state resumed at launch, kept as a
+    /// play's would be: a play from the same list, as the table lists it unfiltered, then
+    /// plays in the restored queue (ADR 0104).
+    func resumedQueue(ids: [Int64], first: Int) async throws -> PlayRequest? {
+        let generation = queuedGeneration
+        let queue = try await Self.queue(ids: ids, reader: reader)
+        keep(ids, queue, readAt: generation)
+        return Self.request(queue, first: first)
     }
 
     nonisolated static func request(ids: [Int64], first: Int, reader: LibraryReader)

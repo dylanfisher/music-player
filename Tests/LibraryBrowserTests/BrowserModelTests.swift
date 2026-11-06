@@ -402,7 +402,30 @@ private func loadedModel(
     await model.setSort(.artist, ascending: true)
     _ = try await model.playStart(selected: [], clicked: 4)?.request()
     #expect(try await model.playStart(selected: [], clicked: 5)?.queue != nil)
-    // A library change may have moved the files.
+}
+
+@MainActor @Test func aCountedPlayOrALibraryChangeThatMovesNoFileKeepsTheQueue() async throws {
+    let databaseURL = try writableBrowserDatabase()
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: .artist, ascending: true,
+        groupByAlbumArtist: false)
+    await model.load(BrowserState(source: nil))
+    let queued = try await #require(try await model.playStart(selected: [], clicked: 3)).request()
+
+    // Enter on the next track counts a skip of the playing one, and each track that ends
+    // counts a play: neither moves a file.
+    try await model.recordSkip(queued.urls[3].path)
+    try await model.recordPlay(queued.urls[4].path, at: 1_000)
+    try await model.rate([model.trackIDs[5]], stars: 4)
+    #expect(try await model.playStart(selected: [], clicked: 4)?.queue?.urls == queued.urls)
+    // A rescan that left the files where they were.
+    await model.refresh()
+    #expect(try await model.playStart(selected: [], clicked: 5)?.queue?.urls == queued.urls)
+
+    // One that moved them.
+    let root = try browserLibrary.get().root
+    let index = try LibraryIndex(at: databaseURL)
+    try index.database.transaction { try index.rewritePaths(under: root, to: root + "-moved") }
     await model.refresh()
     #expect(try await model.playStart(selected: [], clicked: 5)?.queue == nil)
 }

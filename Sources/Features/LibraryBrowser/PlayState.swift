@@ -98,8 +98,8 @@ extension LibraryBrowser {
                 }
             }
             guard
-                let request = try await BrowserModel.request(
-                    ids: ids, first: ids.firstIndex(of: id) ?? 0, reader: reader)
+                let request = try await model.resumedQueue(
+                    ids: ids, first: ids.firstIndex(of: id) ?? 0)
             else { return nil }
             return (
                 PlaybackSpot(

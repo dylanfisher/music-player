@@ -80,6 +80,11 @@ private func config(_ url: URL) throws -> ConfigStore<AppSettings> {
     #expect(resumed.spot.index.map { resumed.spot.queue[$0].path } == played)
     #expect(resumed.durationSeconds > 0)
 
+    // A play from the list the queue was restored from plays in that queue.
+    let next = try #require(resumed.spot.index) + 1
+    let start = try #require(try await second.model.playStart(selected: [], clicked: next))
+    #expect(start.queue == PlayRequest(urls: resumed.spot.queue, first: next))
+
     // Show Current Track goes to where the resumed track was played from.
     await second.model.setSource(nil)
     await second.showCurrentTrack(playingPath: played)
