@@ -52,9 +52,11 @@ final class SampleMeasures {
         }
     }
 
-    /// `frames` interleaved float samples, as decoded.
-    func addFloats(_ samples: UnsafePointer<Float>, frames: Int) {
+    /// `frames` interleaved float samples, as decoded. Throws for a sample that isn't a number
+    /// or is infinite, which no measure can take.
+    func addFloats(_ samples: UnsafePointer<Float>, frames: Int) throws {
         for index in 0..<frames * channels {
+            guard samples[index].isFinite else { throw AnalysisError.nonFiniteSample }
             countClipped(
                 abs(samples[index]) >= AnalysisRules.clippedFloatLevel, channel: index % channels)
         }

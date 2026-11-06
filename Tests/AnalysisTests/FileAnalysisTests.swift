@@ -71,6 +71,43 @@ private func wav(frames: Int, _ value: (Int, Int) -> Double) throws -> URL {
     #expect(verdicts(measures).isEmpty)
 }
 
+/// A 32-bit float stereo WAV at 44.1 kHz in a folder of its own.
+private func floatWAV(_ samples: [Float]) throws -> URL {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("analysis-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appendingPathComponent("float.wav")
+    var data = Data("RIFF".utf8)
+    func append<T: FixedWidthInteger>(_ value: T) {
+        withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) }
+    }
+    append(UInt32(36 + samples.count * 4))
+    data.append(contentsOf: Array("WAVEfmt ".utf8))
+    append(UInt32(16))
+    append(UInt16(3))  // IEEE float
+    append(UInt16(2))
+    append(UInt32(44_100))
+    append(UInt32(44_100 * 8))
+    append(UInt16(8))
+    append(UInt16(32))
+    data.append(contentsOf: Array("data".utf8))
+    append(UInt32(samples.count * 4))
+    for sample in samples { append(sample.bitPattern) }
+    try data.write(to: url)
+    return url
+}
+
+@Test func aFloatFileWithNaNOrInfinityFailsAndSaysWhy() throws {
+    var samples = (0..<40_000).map { Float(0.25 * sin(Double($0) / 7)) }
+    let clean = try floatWAV(samples)
+    #expect(try analyzeFile(at: clean).measures.peakDBFS != nil)
+    samples[1001] = .nan
+    samples[30_000] = .infinity
+    #expect(throws: AnalysisError.nonFiniteSample) { try analyzeFile(at: try floatWAV(samples)) }
+    samples[1001] = 0
+    #expect(throws: AnalysisError.nonFiniteSample) { try analyzeFile(at: try floatWAV(samples)) }
+}
+
 @Test func aDSDFileIsSkippedAndSaysSo() throws {
     #expect(throws: AnalysisError.dsd) {
         try analyzeFile(at: URL(fileURLWithPath: "/x.dsf", isDirectory: false))

@@ -15,10 +15,13 @@ public struct AnalysisResult: Equatable, Sendable {
 enum AnalysisError: Error, Equatable, CustomStringConvertible {
     /// DSD isn't analyzed in phase 45a.
     case dsd
+    /// A float sample is NaN or infinite: the file is damaged.
+    case nonFiniteSample
 
     var description: String {
         switch self {
         case .dsd: "DSD files aren't analyzed yet"
+        case .nonFiniteSample: "the file holds a sample that isn't a number or is infinite"
         }
     }
 }
@@ -32,7 +35,8 @@ let losslessFormatIDs = Set(
 /// own integer samples, so effective bits are exact, and anything else as float. Reads from
 /// the calling thread, so call it off the main one; `latency` makes every read wait as on a
 /// network volume. Throws `CancellationError` at the next FFT frame once the task is
-/// cancelled, and `AnalysisError.dsd` for a DSD file. `progress` hears the share read, from 0
+/// cancelled, `AnalysisError.dsd` for a DSD file, and `AnalysisError.nonFiniteSample` for a
+/// float sample that's NaN or infinite. `progress` hears the share read, from 0
 /// to 1, at most every hundredth.
 public func analyzeFile(
     at url: URL, latency: FileLatency? = nil, progress: (Double) -> Void = { _ in }
@@ -72,7 +76,7 @@ public func analyzeFile(
         if integer {
             samples.addIntegers(decoded.assumingMemoryBound(to: Int32.self), frames: frames)
         } else {
-            samples.addFloats(decoded.assumingMemoryBound(to: Float.self), frames: frames)
+            try samples.addFloats(decoded.assumingMemoryBound(to: Float.self), frames: frames)
         }
         if filled == points {
             for channel in 0..<channels {
