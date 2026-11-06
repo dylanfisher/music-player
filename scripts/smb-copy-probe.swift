@@ -1,6 +1,7 @@
 // Finds out whether this Mac copies a file on an SMB share without the bytes crossing the
 // network, as SMB's server-side copy (FSCTL_SRV_COPYCHUNK) would (ADR 0108, part 47.7). The
-// owner runs it on a scratch folder on the NAS; no agent or test does (AGENTS.md).
+// owner runs it on a scratch folder on the NAS, the one tool AGENTS.md lets touch it; no agent
+// or test runs it.
 //
 //   swift scripts/smb-copy-probe.swift <scratch folder on the share> [<megabytes>]
 //
