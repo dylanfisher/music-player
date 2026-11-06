@@ -189,9 +189,13 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     #expect(rig.device.captured.isEmpty)
 }
 
-/// With hog mode off, a DSD album stops on the one cause, which carries its fix.
+/// With hog mode off, a DSD album stops on the one cause, which carries its fix, even with
+/// DSD64 and DSD128 tracks mixed in it.
 @Test func aDSDAlbumWithHogModeOffStopsOnTheHogModeFix() async throws {
-    let album = try (0..<4).map { try dsdTrack("hogless-\($0)", bytes: 4096, seed: $0) }
+    let album = try (0..<4).map {
+        try dsdTrack(
+            "hogless-\($0)", rateHz: $0 % 2 == 0 ? 2_822_400 : 5_644_800, bytes: 4096, seed: $0)
+    }
     let rig = try await Rig()
     rig.device.setHogModeSetting(false)
     await rig.engine.setQueue(album.map(\.url))
@@ -217,8 +221,7 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
         noHog.events.contains { event in
             guard case .trackFailed(track.url, let problem) = event else { return false }
             return problem.message
-                == "null device can't play DSD64: DoP needs exclusive access, and hog mode is off"
-                + " for this device"
+                == "DoP needs exclusive access, and hog mode is off for this device"
         })
 
     let mixable = try await Rig()

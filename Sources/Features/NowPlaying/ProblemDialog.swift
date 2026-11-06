@@ -38,7 +38,7 @@ struct ProblemDialog: Equatable {
             title = failed
             text = problem.causes.map { "\(tracks($0.tracks.count)): " + sentence($0.message) }
                 .joined(separator: "\n")
-            buttons = [.details, .ok]
+            buttons = problem.fix.map { [.fix($0), .details, .cancel] } ?? [.details, .ok]
         }
     }
 }

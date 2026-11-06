@@ -30,8 +30,12 @@ enum PlaybackError: PlaybackFailure {
         }
     }
 
-    /// One cause's fix makes every track play.
-    var fix: PlaybackFix? { causes.count == 1 ? causes[0].fix : nil }
+    /// The fix every cause has, which makes every track play; nil when any differs or has none.
+    var fix: PlaybackFix? {
+        let fixes = causes.map(\.fix)
+        guard let first = fixes.first, fixes.allSatisfy({ $0 == first }) else { return nil }
+        return first
+    }
 
     /// The failures in a row grouped by their message and fix, in the order each first came.
     var causes: [PlaybackProblem.Cause] {

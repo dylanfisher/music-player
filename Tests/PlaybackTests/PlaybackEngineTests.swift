@@ -938,6 +938,15 @@ private struct Unplayable: PlaybackFailure {
             .init(message: "the file is damaged", fix: nil, tracks: [urls[1]]),
         ])
     #expect(two.detail.contains("1.dsf: Unplayable(the file is damaged)"))
+
+    // Causes that differ but share one fix still offer it.
+    let other = Unplayable(why: "hog mode is off here", fix: .turnOnHogMode(deviceUID: "ADI-2"))
+    let shared = PlaybackProblem(
+        PlaybackError.failedInARow([
+            FailedTrack(url: urls[0], problem: PlaybackProblem(hog)),
+            FailedTrack(url: urls[1], problem: PlaybackProblem(other)),
+        ]))
+    #expect(shared.causes.count == 2 && shared.fix == .turnOnHogMode(deviceUID: "ADI-2"))
 }
 
 @Test func whenEveryTrackHasFailedTheNextIsCleared() async {

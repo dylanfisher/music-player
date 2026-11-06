@@ -55,8 +55,7 @@ private let errors: [any PlaybackFailure] =
     }
     #expect(
         refusals[0].userMessage
-            == "ADI-2 DAC can't play DSD64: DoP needs exclusive access, and hog mode is off for"
-            + " this device")
+            == "DoP needs exclusive access, and hog mode is off for this device")
     #expect(refusals.map(\.fix) == [.turnOnHogMode(deviceUID: "ADI-2"), nil, nil])
     #expect(errors.filter { $0.fix != nil }.count == 1)
 }

@@ -60,6 +60,9 @@ enum DeviceOutputError: PlaybackFailure {
         case .cannotPlayDSD(let device, _, let dsd, let carrier, .noFormat):
             "\(device) can't play \(sampleRateText(dsd)): none of its formats at"
                 + " \(kilohertz(carrier)) kHz can carry DoP"
+        // Without the rate, so every DSD track refused for it has one cause and one fix.
+        case .cannotPlayDSD(_, _, _, _, .noHogMode):
+            "DoP needs exclusive access, and hog mode is off for this device"
         case .noDoPLayout: "the device's format can't carry DSD as DoP"
         case .endedEarly, .cannotPlayDSD, .noChannelMix: description
         }

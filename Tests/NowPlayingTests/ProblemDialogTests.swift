@@ -92,6 +92,12 @@ private func inARow(_ problems: [PlaybackProblem]) -> ShownProblem {
             "1 track: The file is damaged.",
         ])
     #expect(mixed.buttons.map(\.title) == ["Show Details", "OK"])
+
+    // Causes that differ but share one fix offer it beside the details.
+    var elsewhere = PlaybackProblem(NoHogMode())
+    elsewhere.message = "hog mode is off for the other device"
+    let shared = try #require(ProblemDialog(inARow([PlaybackProblem(NoHogMode()), elsewhere])))
+    #expect(shared.buttons == [.fix(.turnOnHogMode(deviceUID: "ADI-2")), .details, .cancel])
 }
 
 /// A problem with a fix, or tracks failing in a row, shows its dialog as it happens; another
