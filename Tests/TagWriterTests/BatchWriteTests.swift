@@ -94,6 +94,24 @@ func aBatchCrashedAfterEachStepIsPutRight(_ step: BatchStep) throws {
     for url in urls { #expect(try tags(url).title == "Edited") }
 }
 
+/// A batch lists each folder once for the temp files earlier writes left, and removes each
+/// file's (ADR 0108).
+@Test func aBatchListsEachFolderOnce() throws {
+    let folder = scratchFolder()
+    let urls = try (1...3).map { track in
+        let url = folder.appendingPathComponent("\(track).flac")
+        try FileManager.default.moveItem(at: try Sample.flac.copy(), to: url)
+        let leftover = folder.appendingPathComponent(".\(track).flac.0123456789abcdef.tagwrite")
+        try Data("left by a crash".utf8).write(to: leftover)
+        return url
+    }
+    var writer = scratchWriter()
+    let calls = FileCalls(&writer)
+    expectChanged(writer.write(titleEdit, to: urls.map(\.path)), urls)
+    #expect(calls.all.filter { $0 == .list }.count == 1)
+    for url in urls { #expect(try leftoverTemps(for: url.path).isEmpty) }
+}
+
 private final class FlushCount: @unchecked Sendable {
     // `value` is guarded by `lock`.
     private let lock = NSLock()

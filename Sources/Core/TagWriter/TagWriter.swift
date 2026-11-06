@@ -36,6 +36,7 @@ public struct TagWriter: Sendable {
             report.notWritten = paths
             return report
         }
+        let unclear = removeLeftoverTemps(for: paths, faults)
         var results = [JobResult?](repeating: nil, count: paths.count)
         var chunk: [(index: Int, job: InPlaceJob)] = []
         // Writes the planned chunk; returns whether the batch stops after it, and whether as a
@@ -54,6 +55,7 @@ public struct TagWriter: Sendable {
             // next, but for a chunk's plans.
             let prepared = autoreleasepool { () -> Result<Prepared, TagWriteError> in
                 do throws(TagWriteError) {
+                    if let error = unclear[path] { throw error }
                     return .success(try prepare(edit, path, entry: entry))
                 } catch {
                     logger.error("\(error.description)")
@@ -118,6 +120,7 @@ public struct TagWriter: Sendable {
                 return report
             }
             var older: [String: (TagUndoJournal.Handle, TagUndoJournal.FileRecord)]?
+            let unclear = removeLeftoverTemps(for: files.map(\.1.path), faults)
             for (handle, record) in files.reversed() {
                 // Its write in place couldn't be finished; the journal keeps it for the next try.
                 guard !journal.isUnconfirmed(handle) else {
@@ -130,6 +133,7 @@ public struct TagWriter: Sendable {
                 }
                 let restored: FileIdentity
                 do throws(TagWriteError) {
+                    if let error = unclear[record.path] { throw error }
                     restored = try restore(record, oldBytes: try journal.oldBytes(handle))
                 } catch {
                     logger.error("\(error.description)")
@@ -235,7 +239,6 @@ public struct TagWriter: Sendable {
                         detail: "the audio in the new file isn't where the original's is")
                 }
             }
-            try removeLeftoverTemps(for: path, faults)
             return .inPlace(
                 InPlaceJob(
                     path: path, plan: plan, before: before, original: file, expected: expected))
@@ -298,8 +301,10 @@ public struct TagWriter: Sendable {
             let (files, discarded) = try journal.unconfirmed()
             for error in discarded { logger.error("\(error.description)") }
             report.failures += discarded
+            let unclear = removeLeftoverTemps(for: files.map(\.1.path), faults)
             for (handle, record) in files {
                 do throws(TagWriteError) {
+                    if let error = unclear[record.path] { throw error }
                     if try recover(record, at: handle) { report.changed.append(record.path) }
                 } catch {
                     logger.error("\(error.description)")

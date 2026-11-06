@@ -69,11 +69,15 @@ package struct WriteFaults: Sendable {
 /// nobody else who can write the folder can create the name first.
 package func leftoverTemps(for path: String) throws -> [String] {
     let folder = (path as NSString).deletingLastPathComponent
-    let prefix = "." + (path as NSString).lastPathComponent + "."
     return try FileManager.default.contentsOfDirectory(atPath: folder).filter {
-        $0.hasPrefix(prefix) && $0.hasSuffix(tempSuffix)
+        isTemp($0, of: path)
     }
     .map { folder + "/" + $0 }
+}
+
+/// Whether the name `name` in `path`'s folder is one of `path`'s temp files.
+private func isTemp(_ name: String, of path: String) -> Bool {
+    name.hasPrefix("." + (path as NSString).lastPathComponent + ".") && name.hasSuffix(tempSuffix)
 }
 
 private let tempSuffix = ".tagwrite"
@@ -128,13 +132,12 @@ private let copyBytes = 4 * 1024 * 1024
 /// When every kept range stays where it was, the temp file starts as an APFS clone of the open
 /// original and only the new bytes are written; otherwise, or where the volume can't clone
 /// (SMB), it's written whole. Then it takes the original's mode, flags, ACL, extended
-/// attributes (Finder tags among them) and creation date; its mtime is new. Temp files an
-/// earlier write left are removed first.
+/// attributes (Finder tags among them) and creation date; its mtime is new. The caller removes
+/// the temp files an earlier write left, a batch at a time (`removeLeftoverTemps`).
 func writeTemp(
     _ segments: [Segment], from original: String, identity: FileIdentity,
     faults: WriteFaults = WriteFaults()
 ) throws(TagWriteError) -> TempFile {
-    try removeLeftoverTemps(for: original, faults)
     // Not through a link, and the file that opened must be the one that was read: someone who
     // can write the folder could have swapped another in.
     faults.called(.open)
@@ -255,22 +258,36 @@ func writeTemp(
     }
 }
 
-/// Removes the temp files an earlier write of `path` left, as a crash before its rename does.
-func removeLeftoverTemps(for path: String, _ faults: WriteFaults) throws(TagWriteError) {
-    faults.called(.list)
-    let leftovers: [String]
-    do {
-        leftovers = try leftoverTemps(for: path)
-    } catch {
-        throw TagWriteError(
-            path: path, kind: .writeFailed, detail: "can't list its folder: \(error)")
-    }
-    for leftover in leftovers {
-        faults.called(.remove)
-        guard unlink(leftover) == 0 || errno == ENOENT else {
-            throw systemError(path, .writeFailed, "can't remove the old temp file \(leftover)")
+/// Removes the temp files earlier writes of `paths` left, as a crash before a rename does,
+/// listing each folder once however many of its files a batch writes (ADR 0108). Returns why,
+/// for each path whose folder couldn't be listed or whose leftovers couldn't be removed.
+func removeLeftoverTemps(for paths: [String], _ faults: WriteFaults) -> [String: TagWriteError] {
+    var failures: [String: TagWriteError] = [:]
+    let byFolder = Dictionary(grouping: Set(paths)) { ($0 as NSString).deletingLastPathComponent }
+    for (folder, files) in byFolder {
+        faults.called(.list)
+        let names: [String]
+        do {
+            names = try FileManager.default.contentsOfDirectory(atPath: folder)
+        } catch {
+            for path in files {
+                failures[path] = TagWriteError(
+                    path: path, kind: .writeFailed, detail: "can't list its folder: \(error)")
+            }
+            continue
+        }
+        for path in files {
+            for name in names where isTemp(name, of: path) {
+                faults.called(.remove)
+                guard unlink(folder + "/" + name) == 0 || errno == ENOENT else {
+                    failures[path] = systemError(
+                        path, .writeFailed, "can't remove the old temp file \(folder)/\(name)")
+                    break
+                }
+            }
         }
     }
+    return failures
 }
 
 let replacedDetail = "something else replaced the file while its tags were written"
