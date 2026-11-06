@@ -3,6 +3,8 @@
 - **Date:** 2026-11-05
 - **Status:** accepted
 - **Amends:** [0020](0020-tag-writing.md), [0100](0100-get-info-windows-and-smb-temp-files.md)
+- **Amended by:** [0108](0108-faster-tag-writes.md): no whole-file hashes, the journal on the
+  region, two drive flushes a batch, four writes at once.
 
 ## Context
 

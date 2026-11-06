@@ -6,7 +6,8 @@
   files the user confirmed to the Trash. [0100](0100-get-info-windows-and-smb-temp-files.md): the temp file's identity is taken
   after it closes. [0107](0107-tags-written-in-place-within-the-padding.md): tags that fit the
   padding are written in place, journaled first, so a crash mid-write can tear the original
-  until the journal puts it back.
+  until the journal puts it back. [0108](0108-faster-tag-writes.md): a rewrite leaves 64 KiB
+  of padding or the tag's size, and an MP4 with `moov` last grows in place.
 - **See also:** [0025](0025-threat-model.md) records the writer's threats and how the temp file is made and checked.
 
 ## Context
