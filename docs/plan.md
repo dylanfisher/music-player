@@ -497,16 +497,16 @@ layout (`TrackTableController.swift:845`), so start by finding where it's lost. 
 track table and the state file, not the windows of 48a to 48c, so it can run in its own
 worktree and merge last. ADR 0113 records the list if it needs one.
 
-- [ ] **48d.1 Sort order.** The sort column and direction come back after a quit, per source as
+- [x] **48d.1 Sort order.** The sort column and direction come back after a quit, per source as
       they are kept now. A test sorts, saves, relaunches the model from the saved state and
       gets the same sort and the same first rows.
-- [ ] **48d.2 Everything else the window shows.** List every piece of window state and whether
+- [x] **48d.2 Everything else the window shows.** List every piece of window state and whether
       it survives a quit: the source, the sort, the columns and their widths, the browser
       panes' selections, the search, the selection, the scroll, the split sizes, the queue
       panel, the window's frame. Fix each that doesn't. Per-Mac state goes in the state file;
       `playback.resume` stays as ADR 0095 has it, so the synced key stays small. The list goes
       in the Result line.
-- [ ] **48d.3 Test.** One round trip that changes each item in 48d.2, saves, restores into a
+- [x] **48d.3 Test.** One round trip that changes each item in 48d.2, saves, restores into a
       fresh window and checks each came back. It fails without the fixes.
 - [ ] **Owner check in the running app:** sort by a column, change the window, quit, relaunch;
       everything is where it was.
@@ -560,7 +560,14 @@ Plan, part 48d (ADR 0113):
 - Order: this plan, 48d.1, the window's saves moved, 48d.2, 48d.3, the ADR, the bench and the
   result.
 
-Result, part 48d (draft): shipped 48d.1 to 48d.3 (ADR 0113). The table now saves its layout
+Gate, part 48d: the audit found one missing ADR line; the review one medium (a saved search
+loaded with the toolbar hidden) and two lows (a sort leaking between two sources with their own,
+the state file rewritten at each refresh), fixed in their own commits. `./scripts/check` passes
+but for `WindowGlassTests.theGlassHeadersAreFrosted`, which fails on main too with this Mac's
+display asleep. The launch row hung on main as well, for the same reason; Bench now times such a
+run out (60f0264), and the number waits on the owner's run.
+
+Result, part 48d: shipped 48d.1 to 48d.3 (ADR 0113). The table now saves its layout
 when the table's sort changes, not only when a column does, and the layout keeps the sort of
 the sources without their own; a manual playlist, History and Stats open in their own sort at
 launch as on a click, and a sort chosen in one is `browser.sourceSort`, put back with that
