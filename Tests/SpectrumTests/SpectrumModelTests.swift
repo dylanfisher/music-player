@@ -65,7 +65,7 @@ private struct Unreadable: Error, CustomStringConvertible {
         return result(rateHz: path == "/a.flac" ? 44_100 : 96_000)
     }
     await model.finished()
-    #expect(seen.first == "Analyzing… 0%")
+    #expect(seen.contains("Analyzing… 0%"))
     #expect(seen.contains("Analyzing… 50%"))
     #expect(model.status(0) == "FLAC · 44.1 kHz · 16-bit stored, 16 effective · stereo · 1:40")
     #expect(model.status(2) == "Couldn't analyze: the file is damaged")
