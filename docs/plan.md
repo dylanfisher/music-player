@@ -274,7 +274,8 @@ The parts, biggest gain first. ADR 0108 records them and amends ADR 0020 and 010
 
 ### 48. Owner feedback, 2026-11-05 (third round)
 
-Get Info, Listening Stats, playback errors and the state across a quit. Parts 48a and 48b touch different windows, so
+Get Info, Listening Stats, playback errors, the state across a quit and the receiver moving
+on. Parts 48a and 48b touch different windows, so
 they can run in parallel worktrees and merge in order a, b. ADR 0109 is given to 48b if it needs
 one.
 
@@ -365,6 +366,44 @@ worktree and merge last. ADR 0113 records the list if it needs one.
       fresh window and checks each came back. It fails without the fixes.
 - [ ] **Owner check in the running app:** sort by a column, change the window, quit, relaunch;
       everything is where it was.
+
+#### 48e. The receiver moves on to the next track
+
+Playing to the Denon, a track ends and the next never starts. The session waits for the
+receiver to report the end (`RendererSession.swift`, `poll` and `stopped`), but the receiver's
+reports lag: the last position it gave can be more than `endSlackSeconds` (3 s) short of the
+end when it stops, so the stop doesn't count as the end, and `holdBack` keeps moving the app's
+own deadline later while the receiver reports itself behind. The receiver also seems to ignore
+`SetNextAVTransportURI`, so it never moves on by itself. 48e touches only `UPnPOutput`, so it
+runs in its own worktree. ADR 0112 records the new timing and amends ADR 0041.
+
+- [ ] **48e.1 Find out first.** Log, at notice level, each poll's transport state, position,
+      duration and track URI in a track's last 15 s and the 15 s after, and whether a
+      `SetNextAVTransportURI` was accepted. The owner's run on the Denon (checkpoint below)
+      confirms the cause; the parts below don't wait for it.
+- [ ] **48e.2 The app's clock decides.** When the next track goes out is worked out from the
+      app's own clock: started when the receiver first reports playing, paused and resumed
+      with it, and set again by a seek. It no longer waits on a report of the end. A poll may
+      move the end later only for a stall the polls show (the position not moving while the
+      receiver says it's playing), and by at most a cap defined once, for example 10 s a
+      track, so a lagging receiver can't hold the next track back for good. A stop counts as
+      the end when the app's clock is within the slack of it, whatever position was last
+      polled.
+- [ ] **48e.3 A receiver that ignores the next URI.** After a track whose next URI was
+      accepted, if the receiver stops, or goes on playing the same URI past the end, instead
+      of moving to the next one, the session marks that renderer as not honoring it
+      (`RendererGapless.afterStop`, with the reason shown in the signal path) and from then
+      on starts each track itself with `SetAVTransportURI` and Play at the clock's end. The
+      choice is kept per renderer for the session, so the second track in a row doesn't stall
+      too.
+- [ ] **48e.4 Tests,** with the fake renderer the UPnP output tests already use: one whose
+      position lags 5 s and that never reports the end; one that accepts and ignores
+      `SetNextAVTransportURI`; one that stalls mid-track for 4 s and then catches up (the end
+      moves later, by no more than the cap); a renderer that honors the next URI still plays
+      gapless. Each of the first two fails without the change: the next track never starts.
+- [ ] **Hardware checkpoint (owner):** play the end of three tracks in a row to the Denon,
+      with a short track among them; each next one starts within about 2 s. Send back the log
+      lines from 48e.1.
 
 ### 49. Click-free play, pause and seek
 
