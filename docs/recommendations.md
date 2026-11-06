@@ -65,24 +65,45 @@ in the API.
 
 The core dump holds MusicBrainz's URL relationships, which link artists, release groups and
 releases to their Discogs pages. That is how ListenBrainz data, keyed by MusicBrainz ids
-(MBIDs), joins the Discogs data. The tables needed (`url`, `l_artist_url`, `l_release_url`,
-`l_release_group_url`, and the entity tables for their MBIDs) are to be confirmed when the
-dump is read.
+(MBIDs), joins the Discogs data. The join needs ten tables of the core dump, about 6 GB
+unpacked: `url` (the Discogs ones match `discogs.com/(artist|master|release)/<id>`),
+`l_artist_url`, `l_release_group_url` and `l_release_url` (entity, then url), `artist`,
+`release_group`, `release` and `artist_credit_name` for MBIDs and names, and `link` and
+`link_type`, which the URL match makes unnecessary. Counts:
+
+| Entity | In MusicBrainz | Linked to Discogs |
+|---|---|---|
+| Artists | 3,032,671 | 1,281,511 (to a Discogs artist) |
+| Release groups | 4,621,126 | 351,994 to a master; 1,501,479 counting a linked release |
+| Releases | | 1,898,079 (to a Discogs release) |
+
+3,556,411 URLs in MusicBrainz point at Discogs.
 
 The `mbdump-derived` dump (503 MB) has MusicBrainz user ratings and tags, but it is
 CC BY-NC-SA, not CC0, and its ratings are sparse. Not downloaded.
 
 ### ListenBrainz
 
-The statistics dump has each listener's all-time top artists with listen counts and MBIDs,
-one JSON line per user:
+The statistics dump has each listener's top artists, releases and recordings with listen
+counts and MBIDs, one JSON line per user, for nine periods: all time, year, half year,
+quarter, month, week, and this year, month and week. It also has daily and listening
+activity per user, which isn't useful here.
 
 ```json
 {"user_id":1,"data":[{"listen_count":4298,"artist_name":"Wax Tailor","artist_mbid":"c24b47a1-…"}, …]}
+{"user_id":1,"data":[{"listen_count":1699,"release_name":"Filling Up the City Skies","release_mbid":"dda07cd4-…","artist_mbids":["3a07764c-…"], …}, …]}
 ```
 
-`artists_all_time.jsonl` alone is 4.2 GB uncompressed. The dump probably also has releases and
-recordings, and periods shorter than all time; to be confirmed once it's unpacked.
+| Stat | All time, unpacked | All nine periods |
+|---|---|---|
+| Artists | 4.2 GB | 13.3 GB |
+| Releases | 17.2 GB | 56.4 GB |
+| Recordings | 25.3 GB | 93.9 GB |
+
+The all-time artists cover 101,313 users and 702,983 artist MBIDs. 284,852 artists have 5 or
+more listeners, the least that co-occurrence can say much about. 406,579 artists link to
+Discogs through MusicBrainz, 196,884 of them with 5 or more listeners. Release stats join to
+Discogs releases through `l_release_url`, so album-to-album similarity is possible too.
 
 The feedback dump (loved and hated tracks) is of little use: of 6,129,610 rows only 3,534 carry
 a recording MBID. The rest have a MessyBrainz id or `None`.
@@ -99,8 +120,8 @@ files). In order of confidence:
 
 1. **A Discogs release id in the tags.** No matching needed. The tag reader and the index gain
    the field.
-2. **Barcode** (7,788 tracks have one) or **catalog number with label** (1,811 albums). Usually
-   one release, or a few editions to choose between.
+2. **Barcode** (629 albums) or **catalog number with label** (1,811 albums). Usually one
+   release, or a few editions to choose between.
 3. **Artist, album title, track count and durations.** Search masters by folded artist and
    title, then rank the master's releases by track count, durations where Discogs has them,
    then format, country and year. Discogs positions, headings, sub-tracks and `Artist (2)`
@@ -108,6 +129,29 @@ files). In order of confidence:
 
 A match is a suggestion. The user confirms it in the tag editor, and only then does
 `TagWriter` write the release's fields, including its Discogs id, so the next lookup is case 1.
+
+### Coverage
+
+Measured on 2026-11-06 by exact match of folded names: lowercased, accents and a leading
+"The" dropped, `&` as "and", `Artist (2)` suffixes and edition words in brackets ("Remastered",
+"Deluxe Edition", "SACD") removed, punctuation and spaces removed. These are lower bounds;
+fuzzy matching and track counts will find more.
+
+| Library | Count | Found |
+|---|---|---|
+| Albums (127 by Various Artists or with no artist) | 6,541 | |
+| … as a Discogs master by artist and title | | 2,447 (37%) |
+| … as a MusicBrainz release group | | 2,668 (41%) |
+| … and that group linked to Discogs | | 2,244 (34%) |
+| … and its artist in ListenBrainz with 5+ listeners | | 2,119 (32%) |
+| Artists (album and track artists, including "A feat. B" credits) | 4,526 | |
+| … in MusicBrainz by name | | 3,421 (76%) |
+| … linked to Discogs | | 3,248 (72%) |
+| … linked to Discogs and in ListenBrainz with 5+ listeners | | 2,571 (57%) |
+| … among Discogs master artists by name | | 3,138 (69%) |
+
+Artist-level similarity reaches more of the library than album-level, so recommendations
+start from artists.
 
 ## Recommendations
 
