@@ -60,8 +60,3 @@ public func verdicts(_ measures: FileMeasures) -> [Verdict] {
     }
     return found
 }
-
-/// 16012.3 -> "16.0": a measured frequency to a tenth of a kilohertz.
-public func kilohertzText(_ hertz: Double) -> String {
-    String(format: "%.1f", hertz / 1000)
-}
