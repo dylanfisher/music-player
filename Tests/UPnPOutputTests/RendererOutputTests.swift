@@ -491,6 +491,43 @@ private func notGaplessReason(_ output: RendererOutput) async -> String? {
     #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 1)
 }
 
+/// The system clock moved on by however much a test says, for the output's `now`.
+private final class ShiftedClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var offset = 0.0
+
+    func advance(by seconds: Double) { lock.withLock { offset += seconds } }
+    var now: @Sendable () -> Double {
+        { [self] in ProcessInfo.processInfo.systemUptime + lock.withLock { offset } }
+    }
+}
+
+@Test func aRendererThatMovesOnAsTheClockRunsOutStaysGapless() async throws {
+    let fake = try await FakeRenderer.denon(trackSeconds: 60)
+    let clock = ShiftedClock()
+    let output = try RendererOutput(
+        renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: pollSeconds,
+        timeoutSeconds: 1, now: clock.now)
+    let log = EventLog(output)
+    defer { output.close() }
+    output.load(item(1, "short"), startSeconds: 0, playing: true)
+    output.setNext(item(2))
+    await eventually("the next track handed over") { fake.nextTrackURI != "" }
+    await eventually("the renderer seen playing") {
+        fake.actions.filter { $0 == "GetPositionInfo" }.count >= 2
+    }
+    // It moves on to the next track just as the app's clock passes the first one's end.
+    fake.moveToNext()
+    clock.advance(by: 10)
+    await log.wait(for: ["started 1", "ended 1", "started 2"])
+    #expect(fake.setTransportURIs.count == 1)
+    // Commands run in order, so once the Pause has gone, the next track has been handled.
+    output.setNext(item(3, "short"))
+    output.pause()
+    await eventually("the pause") { fake.commands.last == "Pause" }
+    #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 2)
+}
+
 @Test func aRendererBufferingAheadNeverFetchesADeadURL() async throws {
     let fake = try await FakeRenderer.denon(trackSeconds: 1)
     fake.buffersAhead()

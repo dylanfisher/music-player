@@ -471,12 +471,27 @@ actor RendererSession {
     /// The track should have ended and the renderer hasn't moved on: the app sends the next
     /// track itself, or stops it when nothing is next.
     private func lead(past current: Loaded) async {
+        if let next, next.sent {
+            // A renderer that took the next track may be on it just now; only one still on this
+            // track is ignoring it.
+            do throws(SOAPProblem) {
+                let position = try await control.positionInfo()
+                guard self.current === current else { return }
+                if sameURI(position.trackURI, next.uri) {
+                    return advance(from: current, to: next, gapless: true)
+                }
+                if position.trackURI.isEmpty || sameURI(position.trackURI, current.uri) {
+                    ignoresNextURI(
+                        "it played on past a track's end instead of the next track it took")
+                }
+            } catch {
+                logger.notice("\(self.renderer.name) didn't answer at the track's end: \(error)")
+            }
+            guard self.current === current else { return }
+        }
         logger.notice(
             "\(self.renderer.name, privacy: .public) hadn't moved on by the track's end; the app does"
         )
-        if next?.sent == true {
-            ignoresNextURI("it played on past a track's end instead of the next track it took")
-        }
         guard next != nil else {
             await send(AVTransport.stop)
             guard self.current === current else { return }

@@ -155,6 +155,16 @@ final class FakeRenderer: @unchecked Sendable {
             state = .paused
         }
     }
+    /// Goes on to the next track it was given now, as it would at its track's end.
+    func moveToNext() {
+        lock.withLock {
+            guard !nextURI.isEmpty else { return }
+            uri = nextURI
+            nextURI = ""
+            seconds = 0
+            since = now
+        }
+    }
     func neverStarts() { lock.withLock { startsPlaying = false } }
     func ignoresNext() { lock.withLock { advancesToNext = false } }
     func setTrackSeconds(_ value: Double) { lock.withLock { trackSecondsValue = value } }
