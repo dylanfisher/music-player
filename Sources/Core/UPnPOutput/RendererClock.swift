@@ -14,6 +14,9 @@ struct RendererClock: Equatable {
     /// The most that stalls move a track's end later, from a start or a seek, so a renderer that
     /// reports itself further and further behind can't hold the next track back for good.
     static let stallCapSeconds = 10.0
+    /// How far back a polled position may go from the last before the lag is measured again: a
+    /// renderer may report where it was before a seek back for a poll or two.
+    static let jumpBackSeconds = 2.0
 
     /// The track's length in the file.
     let durationSeconds: Double
@@ -27,6 +30,7 @@ struct RendererClock: Equatable {
     /// The least the renderer has been behind the clock since the lag was measured from
     /// scratch.
     private var lagSeconds: Double?
+    private var lastPolledSeconds: Double?
     private var behindPolls = 0
 
     init(durationSeconds: Double) { self.durationSeconds = durationSeconds }
@@ -65,8 +69,13 @@ struct RendererClock: Equatable {
         anchorTime = now
         isRunning = false
         // The renderer's lag may differ once it plays again, so it's measured again.
+        measureAgain()
+    }
+
+    private mutating func measureAgain() {
         stallBeforeSeconds = stallSeconds
         lagSeconds = nil
+        lastPolledSeconds = nil
         behindPolls = 0
     }
 
@@ -82,6 +91,12 @@ struct RendererClock: Equatable {
     /// earlier, and by at most `stallCapSeconds`.
     mutating func polled(_ polledSeconds: Double, at now: Double) {
         guard isRunning else { return }
+        // A position from before a seek back would have set a lag ahead of the clock, and every
+        // correct position after it would look like a stall.
+        if let last = lastPolledSeconds, polledSeconds < last - Self.jumpBackSeconds {
+            measureAgain()
+        }
+        lastPolledSeconds = polledSeconds
         let clockSeconds = seconds(at: now)
         // Behind the clock as stalls before a pause had already moved it.
         let behind = clockSeconds - stallBeforeSeconds - polledSeconds

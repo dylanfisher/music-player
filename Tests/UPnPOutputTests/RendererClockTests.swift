@@ -88,3 +88,11 @@ private let margin = RendererClock.leadMarginSeconds
     #expect(clock.stallSeconds == 0)
     #expect(clock.deadline == 21 + 30 + margin)
 }
+
+@Test func aPositionFromBeforeASeekBackMovesNothing() {
+    var clock = polled(to: 40) { $0 }
+    clock.set(10, at: 40, running: true)
+    // One poll still reports where it was before the seek, then it reports where it went.
+    clock = polled(from: 41, to: 59, clock) { $0 == 41 ? 41 : $0 - 30 }
+    #expect(clock.stallSeconds == 0)
+}
