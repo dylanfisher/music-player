@@ -105,7 +105,8 @@ extension CommandID {
     public static let previousTrack = CommandID("playback.previous")
     public static let seekForward = CommandID("playback.seekForward")
     public static let seekBack = CommandID("playback.seekBack")
-    /// Seek by `AppCommands.seekStepPercent` of the playing track's duration.
+    /// Seek by `AppCommands.seekStepPercent` of the playing track's duration, or
+    /// `AppCommands.seekStepMinimumSeconds`, whichever is longer.
     public static let seekForwardPercent = CommandID("playback.seekForwardPercent")
     public static let seekBackPercent = CommandID("playback.seekBackPercent")
     public static let volumeUp = CommandID("playback.volumeUp")
@@ -157,8 +158,10 @@ public enum AppCommands {
     private static let playArgument = "a search, or album:, artist: or genre: and a name"
     /// Set Receiver Volume's argument, as `ReceiverVolume(decibels:)` reads it.
     private static let receiverVolumeArgument = "a level in dB from -80 to +18, in half steps"
-    /// How far Seek Forward and Back 5% move, as a percentage of the track's duration.
+    /// How far Seek Forward and Back 5% or 30 s move: this percentage of the track's duration,
+    /// or `seekStepMinimumSeconds` when that's longer or the duration is unknown.
     public static let seekStepPercent = 5
+    public static let seekStepMinimumSeconds = 30
     /// Show Listening Stats' argument, as `StatsPeriod(text:)` reads it.
     private static let statsPeriodArgument = StatsPeriod.textHelp
 
@@ -266,18 +269,21 @@ public enum AppCommands {
             Command(.nextTrack, "Next Track", [.init(.right, cmd), .init(.right)], links: true),
             Command(
                 .previousTrack, "Previous Track", [.init(.left, cmd), .init(.left)], links: true),
+            // ⌥→ and ⌥← (with or without ⇧) move by word in a field being edited, which takes
+            // them first (`KeyChord.isTextEditing`).
             Command(
-                .seekForward, "Seek Forward", [.init(.right, [opt, cmd]), .init(.right, ctrl)],
+                .seekForward, "Seek Forward", [.init(.right, [opt, cmd]), .init(.right, opt)],
                 links: true),
             Command(
-                .seekBack, "Seek Back", [.init(.left, [opt, cmd]), .init(.left, ctrl)],
+                .seekBack, "Seek Back", [.init(.left, [opt, cmd]), .init(.left, opt)],
                 links: true),
             Command(
-                .seekForwardPercent, "Seek Forward \(seekStepPercent)%",
-                [.init(.right, [ctrl, shift])], links: true),
+                .seekForwardPercent,
+                "Seek Forward \(seekStepPercent)% or \(seekStepMinimumSeconds) s",
+                [.init(.right, [opt, shift])], links: true),
             Command(
-                .seekBackPercent, "Seek Back \(seekStepPercent)%", [.init(.left, [ctrl, shift])],
-                links: true),
+                .seekBackPercent, "Seek Back \(seekStepPercent)% or \(seekStepMinimumSeconds) s",
+                [.init(.left, [opt, shift])], links: true),
             // Not from links: a page could raise it to full in a loop (ADR 0036).
             Command(.volumeUp, "Volume Up", [.init(.up, [ctrl, cmd])]),
             Command(.volumeDown, "Volume Down", [.init(.down, [ctrl, cmd])], links: true),

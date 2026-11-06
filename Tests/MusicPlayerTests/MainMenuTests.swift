@@ -135,26 +135,47 @@ private func items(_ menu: NSMenu) -> [(NSMenuItem, String)] {
     #expect(registry.command(for: KeyChord(.tab, .shift)) == .focusPreviousArea)
 }
 
-/// ⌃→ and ⌃← seek 10 s as ⌥⌘→ and ⌥⌘← do; with ⇧, 5% of the track.
-@MainActor @Test func theControlArrowsSeekByTenSecondsOrFivePercent() throws {
+/// ⌥→ and ⌥← seek 10 s as ⌥⌘→ and ⌥⌘← do; with ⇧, 5% of the track or 30 s, whichever is
+/// longer. The Control-arrows seek no more.
+@MainActor @Test func theOptionArrowsSeekByTenSecondsOrFivePercentAndAtLeastThirty() throws {
     let (main, dispatcher) = try menu()
     let registry = dispatcher.bindings.registry
-    #expect(registry.command(for: KeyChord(.right, .control)) == .seekForward)
-    #expect(registry.command(for: KeyChord(.left, .control)) == .seekBack)
-    #expect(registry.command(for: KeyChord(.right, [.control, .shift])) == .seekForwardPercent)
-    #expect(registry.command(for: KeyChord(.left, [.control, .shift])) == .seekBackPercent)
+    #expect(registry.command(for: KeyChord(.right, .option)) == .seekForward)
+    #expect(registry.command(for: KeyChord(.left, .option)) == .seekBack)
+    #expect(registry.command(for: KeyChord(.right, [.option, .shift])) == .seekForwardPercent)
+    #expect(registry.command(for: KeyChord(.left, [.option, .shift])) == .seekBackPercent)
+    for chord in [
+        KeyChord(.right, .control), KeyChord(.left, .control),
+        KeyChord(.right, [.control, .shift]), KeyChord(.left, [.control, .shift]),
+    ] {
+        #expect(registry.command(for: chord) == nil, "\(chord)")
+    }
+    // A field being edited takes them first, to move by word.
+    for chord in [
+        KeyChord(.right, .option), KeyChord(.left, .option),
+        KeyChord(.right, [.option, .shift]), KeyChord(.left, [.option, .shift]),
+    ] {
+        #expect(chord.isTextEditing, "\(chord)")
+    }
     let controls = items(main.bar).filter { $0.1 == "Controls" }.map(\.0)
         .filter { !$0.isHidden }
     let back = try #require(
         controls.firstIndex { ($0.representedObject as? CommandID) == .seekBack })
-    #expect(controls[(back + 1)...].prefix(2).map(\.title) == ["Seek Forward 5%", "Seek Back 5%"])
+    #expect(
+        controls[(back + 1)...].prefix(2).map(\.title) == [
+            "Seek Forward 5% or 30 s", "Seek Back 5% or 30 s",
+        ])
     #expect(
         controls[(back + 1)...].prefix(2).map(\.keyEquivalentModifierMask) == [
-            [.control, .shift], [.control, .shift],
+            [.option, .shift], [.option, .shift],
         ])
-    #expect(seekSeconds(seekStepShare, ofDuration: 200) == 10)
-    #expect(seekSeconds(-seekStepShare, ofDuration: 300) == -15)
-    #expect(seekSeconds(seekStepShare, ofDuration: nil) == nil)
+    // 5% of 20 minutes is a minute; of 200 s, 10 s, so 30 s; of an unknown length, 30 s.
+    #expect(seekSeconds(seekStepShare, ofDuration: 1200) == 60)
+    #expect(seekSeconds(-seekStepShare, ofDuration: 1200) == -60)
+    #expect(seekSeconds(seekStepShare, ofDuration: 200) == 30)
+    #expect(seekSeconds(-seekStepShare, ofDuration: 300) == -30)
+    #expect(seekSeconds(seekStepShare, ofDuration: nil) == 30)
+    #expect(seekSeconds(-seekStepShare, ofDuration: nil) == -30)
 }
 
 @MainActor @Test func theTrackMenuRunsAndValidatesItsCommandsThroughTheDispatcher() throws {

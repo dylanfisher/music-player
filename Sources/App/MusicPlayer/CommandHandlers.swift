@@ -328,19 +328,21 @@ private func seek(_ engine: PlaybackEngine, by seconds: Double) async {
     await engine.seek(toSeconds: max(0, position + seconds))
 }
 
-/// The share of the track's duration Seek Forward and Back 5% move by.
+/// The share of the track's duration Seek Forward and Back 5% or 30 s move by.
 let seekStepShare = Double(AppCommands.seekStepPercent) / 100
 
-/// Seeks by `share` of the playing track's duration; nothing while the duration is unknown.
+/// Seeks by `share` of the playing track's duration, or at least the minimum step.
 private func seek(_ engine: PlaybackEngine, byShare share: Double) async {
-    guard let seconds = seekSeconds(share, ofDuration: await engine.state.durationSeconds)
-    else { return }
-    await seek(engine, by: seconds)
+    await seek(engine, by: seekSeconds(share, ofDuration: await engine.state.durationSeconds))
 }
 
-/// How far a seek by `share` of a track `durationSeconds` long moves.
-func seekSeconds(_ share: Double, ofDuration durationSeconds: Double?) -> Double? {
-    durationSeconds.map { share * $0 }
+/// How far a seek by `share` of a track `durationSeconds` long moves, in the share's
+/// direction: `AppCommands.seekStepMinimumSeconds` when that's longer, or when the duration is
+/// unknown.
+func seekSeconds(_ share: Double, ofDuration durationSeconds: Double?) -> Double {
+    let minimum = Double(AppCommands.seekStepMinimumSeconds)
+    let step = max(minimum, abs(share) * (durationSeconds ?? 0))
+    return share < 0 ? -step : step
 }
 
 /// What Remove from Queue or Playlist takes from.
