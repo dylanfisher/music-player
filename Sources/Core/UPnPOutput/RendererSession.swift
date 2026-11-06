@@ -37,6 +37,9 @@ actor RendererSession {
     static let seekEndMarginSeconds = 1.0
     /// Ticks between tries of a lost renderer, while waiting for it to answer again.
     static let probeEveryTicks = 5
+    /// How long before a track's end by the clock, and after a track change, every poll's reply
+    /// is logged: what a renderer reports there decides when the next track starts.
+    static let traceSeconds = 15.0
 
     private final class Loaded {
         let item: OutputItem
@@ -100,6 +103,8 @@ actor RendererSession {
     /// Set from a loss until the renderer answers again, or something else is loaded.
     private var lost = false
     private var ticksSinceProbe = 0
+    /// When the last track gave way to the next, for the log.
+    private var trackChangedAt: Double?
 
     init(
         renderer: Renderer, control: AVTransportControl, timeoutSeconds: Double,
@@ -215,6 +220,9 @@ actor RendererSession {
                 try await control.send(
                     AVTransport.setNextURI(uri, metadata: track.metadata.document(url: uri)))
                 pending.sent = true
+                logger.notice(
+                    "\(self.renderer.name, privacy: .public) took \(AVTransport.setNextURIAction, privacy: .public) \(uri, privacy: .public)"
+                )
             } catch {
                 if case .unreachable = error, let current {
                     return lose(current, error)
@@ -345,6 +353,7 @@ actor RendererSession {
         failedPolls = 0
         // Commands may have run while the poll waited; only a reply about the same track counts.
         guard self.current === current else { return }
+        trace(current, transport, position)
         if !position.trackURI.isEmpty, !sameURI(position.trackURI, current.uri) {
             if let next, next.sent, sameURI(position.trackURI, next.uri) {
                 return advance(from: current, to: next, gapless: true)
@@ -369,6 +378,32 @@ actor RendererSession {
         case .transitioning, .other:
             break
         }
+    }
+
+    /// Logs a poll's reply in a track's last seconds by the clock and just after a track change,
+    /// for the owner to read what the renderer reported there.
+    private func trace(_ current: Loaded, _ transport: TransportInfo, _ position: PositionInfo) {
+        let time = now()
+        let nearEnd =
+            current.clock.seconds(at: time) >= current.track.durationSeconds - Self.traceSeconds
+        let afterChange = trackChangedAt.map { time - $0 < Self.traceSeconds } ?? false
+        guard nearEnd || afterChange else { return }
+        let uri = position.trackURI
+        let which =
+            sameURI(uri, current.uri)
+            ? "the current track"
+            : next.map { sameURI(uri, $0.uri) } == true ? "the next track" : "another track"
+        func seconds(_ value: Double?) -> String {
+            value.map { String(format: "%.1f", $0) } ?? "no time"
+        }
+        let clock = current.clock
+        let line =
+            "polled near a track change: \(transport.state)" + (transport.isOK ? "" : " (error)")
+            + ", at \(seconds(position.seconds)) of \(seconds(position.durationSeconds)) s"
+            + " on \(which) \(uri); the app's clock at"
+            + " \(seconds(clock.seconds(at: time))) of \(seconds(clock.durationSeconds)) s,"
+            + " the end moved \(seconds(clock.stallSeconds)) s for stalls"
+        logger.notice("\(self.renderer.name, privacy: .public) \(line, privacy: .public)")
     }
 
     /// The renderer has the track: what waited for that goes out, and a renderer that plays
@@ -436,7 +471,9 @@ actor RendererSession {
     /// The track should have ended and the renderer hasn't moved on: the app sends the next
     /// track itself, or stops it when nothing is next.
     private func lead(past current: Loaded) async {
-        logger.notice("\(self.renderer.name) hadn't moved on by the track's end; the app does")
+        logger.notice(
+            "\(self.renderer.name, privacy: .public) hadn't moved on by the track's end; the app does"
+        )
         if next?.sent == true {
             ignoresNextURI("it played on past a track's end instead of the next track it took")
         }
@@ -510,7 +547,9 @@ actor RendererSession {
     /// last has ended, so the next one doesn't wait on the renderer either.
     private func ignoresNextURI(_ reason: String) {
         gapless = .afterStop(reason)
-        logger.notice("\(self.renderer.name): \(reason); each track now starts after the last")
+        logger.notice(
+            "\(self.renderer.name, privacy: .public): \(reason, privacy: .public); each track now starts after the last"
+        )
         publish(signalPath())
     }
 
@@ -533,12 +572,13 @@ actor RendererSession {
             return fail(next.item, error, at: 0, finishing: true)
         }
         logger.notice(
-            "\(self.renderer.name): a gap of \(self.now() - stoppedAt) s, plus up to a poll, between tracks"
+            "\(self.renderer.name, privacy: .public): a gap of \(self.now() - stoppedAt) s, plus up to a poll, between tracks"
         )
         advance(from: current, to: next, gapless: false)
     }
 
     private func advance(from current: Loaded, to next: Next, gapless: Bool) {
+        trackChangedAt = now()
         emit(.trackEnded(current.item.id))
         shared.retire(current.item.id)
         let loaded = Loaded(next.item, next.track, uri: next.uri, playing: true)
@@ -623,6 +663,7 @@ actor RendererSession {
         next = nil
         replacedNextURIs = []
         failedPolls = 0
+        trackChangedAt = nil
         shared.retireAll()
         shared.setPosition(nil)
     }
