@@ -5,7 +5,7 @@ Agents work through it phase by phase, mostly unattended, and stop only at **har
 checkpoints**, where the owner has to try something on the DAC Mac, the Denon, a phone, or the
 2015 MacBook Pro.
 
-Finished phases, 1 to 44 apart from 10 and 13, and 46 to 49, are in [plan-archive.md](plan-archive.md), with
+Finished phases, 1 to 44 apart from 10 and 13, and 45 to 49, are in [plan-archive.md](plan-archive.md), with
 their implementation plans, Result lines and the full text of each checkpoint.
 
 Each phase ends with the [phase gate](#phase-gate): review, performance audit, and architecture
@@ -95,6 +95,9 @@ that phase's Result line, and delete its line here.
 - **49 Click-free play, pause and seek** ([steps](plan-archive.md#49-click-free-play-pause-and-seek)):
   play, pause and seek quickly on the ADI-2 at 44.1 and 192 kHz and with DSD; pops gone, still
   immediate, bit-perfect in the signal path panel.
+- **45 Spectrum and file quality** ([steps](plan-archive.md#45-spectrum-and-file-quality)):
+  45a, Show Spectrum on the 2015 MacBook Pro while music plays and flagged files against Spek;
+  45b, Analyze Library on the real library from the DAC Mac, its time and tile counts.
 
 ### Owner checks in the running app
 
@@ -238,7 +241,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 ## Phases
 
-Phases 10 and 13 are from the original plan and haven't been built; 45 is new.
+Phases 10 and 13 are from the original plan and haven't been built.
 
 ### 10. Web remote
 
@@ -264,258 +267,6 @@ Phases 10 and 13 are from the original plan and haven't been built; 45 is new.
       decide how stored data will be migrated from then on.
 - [ ] **Hardware checkpoint (owner):** a clean install on the 2015 MacBook Pro and the DAC Mac
       from a notarized build.
-
-### 45. Spectrum and file quality
-
-The owner asked on 2026-11-05 for a way to check that a file is what it says it is (a FLAC that
-isn't a lossy file converted to FLAC, a 24/96 file that isn't 16/44.1 underneath) and to compare
-several files side by side. This replaces the Later item "Library quality audit".
-
-Read-only: analysis decodes files and writes nothing to them (AGENTS.md). Nothing in it runs on
-the real-time audio thread. Accelerate (vDSP) does the FFTs: a system framework, available on
-macOS 12, so not a new dependency; AGENTS.md's Stack line gains it when 45a lands.
-
-What a fake looks like, and so what the phase measures:
-
-| Problem | What it looks like | Measure |
-|---|---|---|
-| Lossy file converted to lossless | A sharp cutoff near 16 kHz (128k MP3), 19 kHz (192–256k) or 20 kHz (320k MP3, AAC), often with holes above 16 kHz | Cutoff frequency and how steep the drop is |
-| Upsampled | Nothing above 22.05 or 24 kHz in a 88.2 kHz or higher file | Cutoff against the file's Nyquist frequency |
-| Padded bit depth | A 24-bit file whose bottom 8 bits are always zero | Effective bits: trailing zero bits of every sample OR'd together |
-| Fake stereo | Left and right identical | Channels compared sample by sample |
-| Clipping, brickwall mastering | Runs of samples at full scale, little dynamic range | Peak, true peak, clipped runs, a dynamic range score |
-
-A cutoff is evidence, not proof: old analog masters, quiet music and some mastering roll off
-early, and a 320k MP3 can reach 20 kHz. So the cutoff verdicts say "suspect" and the
-spectrogram is there for the owner to decide. Effective bits and identical channels are exact.
-
-The owner's answers (2026-11-05): the whole-library pass is wanted, but runs only when the
-user starts it. A live visualizer isn't wanted yet; it's in Later. The owner has no
-known-good or known-bad files to tune the thresholds on, so they're set from the generated
-fixtures (45a.8) and the published cutoffs of common lossy encoders, and the owner's
-checkpoint compares flagged files with Spek.
-
-#### 45a. Analysis and the Spectrum window
-
-- [x] **45a.1 Analysis module.** A new Core module, `Analysis`. It decodes a file through
-      `FileDecoder` (marked `package` for it), off the main thread at utility priority, and
-      runs a short-time FFT with vDSP: 8192 points, Hann window, 50% overlap, per channel. A
-      lossless file is read in its own integer format, so effective bits are exact; a lossy one
-      as float. DSD files are skipped in this phase and say so. Analysis can be cancelled at
-      any FFT frame.
-- [x] **45a.2 Results.** One pass gives: a spectrogram reduced to at most 1,000 time columns ×
-      512 frequency rows in dB, keeping each cell's maximum so short events survive; the average
-      spectrum; and the measures in the table above: cutoff frequency and steepness, effective
-      bits, identical channels, peak, true peak (4× oversampled), clipped runs (3 or more
-      samples at full scale), and a dynamic range score (per 3-second block, the peak against
-      the loudest 20% RMS, as DR meters do).
-- [x] **45a.3 Verdicts.** Rules from the measures, with every threshold defined once:
-      suspect lossy origin (a lossless codec, a steep cutoff at or under 20.5 kHz, Nyquist at
-      22.05 kHz or more), suspect upsampled (a rate over 48 kHz and content stopping at or under
-      24 kHz), padded bits (effective bits under the stored bits), fake stereo, clipped. Lossy
-      files get measures, not a lossy-origin verdict. Each verdict has one line of text that
-      names its numbers: "Cutoff at 16.0 kHz: suspect conversion from a lossy file".
-- [x] **45a.4 Spectrum window.** A command, Show Spectrum, on the selected tracks, from the
-      track table's menu, the File menu and so the palette. For one track: the spectrogram
-      (time across, frequency up, linear to Nyquist, a dB color scale with its legend), dotted
-      reference lines at 16, 19, 20, 22.05 and 24 kHz, the average spectrum beside it, the
-      format line (codec, rate, stored and effective bits), the measures and the verdicts.
-      Hovering shows time, frequency and level. Drawn in AppKit, no Swift Charts, as 43.4.
-- [x] **45a.5 Comparing files.** With up to 8 tracks selected, the window stacks their
-      spectrograms on one frequency axis scaled to the highest Nyquist, and draws every
-      average spectrum on one chart, one color per file, with a legend of title and format. A
-      file that's still being analyzed shows its progress; closing the window cancels the work.
-- [x] **45a.6 Cache.** Measures go in the index, in a table of their own keyed by path, with the
-      file's size and modification time; a row whose file changed is ignored and the file
-      analyzed again. The table is a schema part of its own (`SchemaPart`), so changing it drops
-      nothing else. Spectrograms go in the Caches folder beside the thumbnails (ADR 0079), as
-      8-bit dB, about 0.5 MB each, and are evicted oldest first past a size cap.
-- [x] **45a.7 Command line.** `music-player analyze [<path>…] [--json]`, from the same command
-      registry entry: the selected tracks with no paths. It prints the format line, measures and
-      verdicts, or the results as JSON.
-- [x] **45a.8 Fixtures and tests.** The fixture generator adds broadband test audio with known
-      properties: full band at 16/44.1; the same through a steep low-pass at 16 and 19 kHz;
-      the same encoded to AAC with AudioToolbox and decoded back into a FLAC; 16/44.1 upsampled
-      to 24/96; 16-bit padded to 24; identical channels; clipped. Each verdict has a test that
-      fails without its rule, and each clean fixture a test that it gets no verdict.
-- [x] **45a.9 Speed.** Bench rows with budgets set from the first measurement, with room for
-      the old Mac: analyze a 5-minute 24/96 FLAC fixture locally, and the same on the slow
-      simulated NAS; the analysis's peak memory. A soak run with analysis going shows no
-      underruns.
-- [ ] **Hardware checkpoint (owner):** on the 2015 MacBook Pro, show the spectrum of a 24/192
-      track and of 8 tracks at once while music plays; report the times and any dropout. Open a
-      few flagged and unflagged files in Spek and say whether the verdicts agree.
-
-Implementation plan, part 45a (ADR 0115):
-
-1. **Promotion.** `SignalPathLines`' private codec name (`FLAC`, `PCM`, `DSD`) moves to
-   `Playback` as `SignalFormat.codecName`, so the Spectrum window's format line and the signal
-   path name a codec the same way. Its own commit.
-2. **Library (45a.6).** `FileMeasures`, the stored measures: the format as the decoder read it
-   (format ID, rate, stored bits, channels, float, length) and the measures, each nil where it
-   doesn't apply. A new `SchemaPart.measures` with its own `measures` table keyed by path,
-   with the file's size and modification time, as the walk reads them so 45b can compare them
-   with `files` without touching the NAS. Rebuilding it discards no stats. `MeasuresCache`, a
-   public actor on a connection of its own, as `StatsReader`: `measures(path:stamp:)` returns
-   a row only when the stamp matches, `store(_:path:stamp:)` replaces it. 45b reads the table.
-3. **Analysis module (45a.1–45a.3).** `Sources/Core/Analysis`, importing Accelerate, HALOutput
-   (`FileDecoder` and `fourCharCode` become `package`), Library, Playback,
-   Metadata. `analyzeFile(at:latency:progress:)` decodes in 4096-frame hops as Int32 for
-   FLAC, ALAC and integer PCM and as Float32 otherwise, keeps an 8192-frame window per
-   channel, and per hop: a Hann window and `vDSP_fft_zrip`, power averaged over channels, the
-   spectrogram cell maxima (at most 1,000 columns × 512 rows) and the average; the OR of every
-   integer sample (effective bits), left against right, clipped runs, the sample peak, the
-   true peak through a 4-phase, 48-tap interpolator with `vDSP_conv`, and 3-second blocks for
-   the DR score. `Task.isCancelled` is checked at every hop. DSD throws a skip that says so.
-   `Cutoff` finds the highest fall of `cutoffDropDB` across `cutoffSpanHz` in the average
-   spectrum, from 5 kHz up, and its steepness. `AnalysisRules` holds every threshold once;
-   `verdicts(_:)` turns measures into the five verdicts with their one line of text.
-4. **Spectrogram cache (45a.6).** `SpectrogramStore`, files in `Caches/MusicPlayer/Spectrograms`
-   (`AppPaths.spectrogramDirectory`): the 8-bit cells and the 512-row average, named by a hash
-   of the path, size and modification time, least recently used removed past 100 MB, as
-   `ThumbnailStore` does. `FileAnalyzer` puts the two caches in front of `analyzeFile`, at
-   utility priority, cancelled with the task that awaits it.
-5. **Command (45a.4, 45a.7).** `track.analyze`, "Show Spectrum", in the track menu and the
-   File menu after Get Info (and so the palette). `Command` gains `paths`: the command line
-   passes the words after its name as absolute paths, in a new `paths` key of a report
-   request, and waits `ScriptLimits.fileReplySeconds` for it, as files on the NAS take long.
-   `music-player analyze [<path>…] [--json]`: with no paths, the selection. It prints the
-   format line, measures and verdicts of each file, or JSON; it opens no window. Up to 8 files
-   in both, `AnalysisRules.comparedFiles`.
-6. **Spectrum feature (45a.4, 45a.5).** `Sources/Features/Spectrum`: `SpectrumModel` (no
-   AppKit) holds each file's progress, result or error, the frequency axis to the highest
-   Nyquist, the reference lines, the hover readout and the text lines; `SpectrogramView` and
-   `AverageSpectrumView` draw in AppKit as `StatsBarChart` does, with a dB color scale and
-   legend; `SpectrumWindow` stacks one row per file and cancels its tasks on close. The app
-   wires the command and the analyzer, at most two files at once.
-7. **Fixtures (45a.8).** `AnalysisFixtures` in `Fixtures`: broadband noise made by an inverse
-   FFT, so a low-pass is exact: full band 16/44.1, low-passed at 16 and 19 kHz, through AAC at
-   128 kbps with afconvert (AudioToolbox) and back into FLAC, 16/44.1 content in 24/96,
-   16 bits padded to 24, identical channels, clipped, and full band 24/96 (also 5 minutes
-   for the bench). Tests: each fixture's verdicts, each rule against measures just either side
-   of its threshold, the measures (effective bits, true peak, DR, clipped runs), cancellation,
-   DSD, both caches, the command line's parse and reply, the model's layout and text.
-8. **Bench (45a.9).** Analyze the 5-minute 24/96 fixture locally and on the slow simulated
-   NAS (`FileLatency` as the play latency rows use it), and the peak footprint it adds; the
-   soak gains a thread analyzing that fixture again and again. Budgets from the first run,
-   with room for the old Mac.
-
-Gate, part 45a: the review's two crashes (a NaN or infinite float sample, a lossless file of
-unknown depth), the cache failure that threw away a finished analysis, the time axis of a file
-longer than its stated length and a damaged cache header, and the audit's six points, fixed in
-their own commits. `./scripts/check` passes but for `WindowGlassTests.theGlassHeadersAreFrosted`
-(this Mac's display asleep) and a color test that passes alone.
-
-Result, part 45a: shipped as planned (ADR 0115). Every generated fixture gets
-the verdicts it was made for and the clean ones none: low-passed at 16 and 19 kHz, cutoffs at
-16.0 and 19.0 kHz (155 dB per kHz); AAC at 128 kbps decoded into a FLAC, cutoff 17.5 kHz, and
-the AAC file itself measured with no lossy verdict; 16/44.1 in 24/96, cutoff 22.1 kHz, suspect
-upsampled; 16 bits padded to 24, 16 effective; identical channels, fake stereo; clipped, 5,558
-runs; full band 16/44.1 and 24/96, none, DR 10. Bench on Apple Silicon: a 5-minute 24/96 FLAC
-(157 MB) analyzed in 1.02–1.06 s locally (about 290× real time), 3.91–3.98 s on the slow
-simulated NAS (the reads wait in turn), 2.8 MB added at the peak in a fresh process. Budgets:
-local < 2 s and < 12 s on the old Mac, about twice the 4–6× an i7 of 2015 is slower at this
-decoding and vDSP work; NAS < 6 s and < 20 s, the old Mac's compute plus the same 2.9 s of
-waits, with room; memory < 10 MB on both. Soak with analysis of that file one run after
-another at utility priority, beside the scan and a search a second: 20 s, 0 underruns over 19
-analyses; 180 s, 0 underruns over 161 analyses, memory −7.0 MB. `music-player analyze` opens
-no window (ADR 0115) and waits up to 600 s. Gate: the review's five fixed in their own commits
-(a NaN or infinite float sample is now the named error "the file holds a sample that isn't a
-number or is infinite" instead of a trap; a lossless file of unknown depth is read as float; a
-measures cache that fails is logged and the analysis returned; the spectrogram's columns each
-hold a whole number of windows and fold in pairs when a file runs past its stated length, so a
-5-minute 24/96 file has 879 columns rather than 1,000; a stored spectrogram with a damaged
-header is refused); the audit's five done (`trackMouseMoves()` is public in DisplayText,
-`kilohertzText` beside `kilohertz`, the CD Nyquist defined once, `clamped(to:)` and the
-Accelerate linker setting gone). After the gate: local 1.04 s, NAS 3.94 s, memory 0.13 MB;
-20 s soak 0 underruns over 19 analyses, −4.2 MB.
-The 20.5 kHz lossy threshold stays until the owner's Spek check: a genuine CD mastered
-through a 20–20.5 kHz low-pass will be flagged as suspect lossy. Deferred to 45b: the library pass, which reads
-`measures`. Owner checkpoint: on the 2015 MacBook Pro, with music playing, select a 24/192
-track and choose Show Spectrum (File menu or the track's menu), then 8 tracks at once; say how
-long each window took to fill and whether playback dropped out; run
-`./scripts/bench analysis:` there and paste the table. Then choose a few files Show Spectrum
-flags and a few it doesn't, open each in Spek, and say whether the cutoff, the spectrogram and
-the verdict agree with what Spek shows; `music-player analyze <path>…` prints the numbers to
-paste.
-
-#### 45b. The library pass
-
-- [ ] **45b.1 Analyze Library.** A command that analyzes every file not yet analyzed, or
-      changed, one at a time at background priority, pausing while a scan runs. It runs only
-      when the user starts it, from the menu, the palette or the command line: never at launch,
-      after a scan, or on a schedule, and files a scan adds aren't analyzed until the next run. It shows
-      progress in the status area, can be paused, and resumes after a relaunch from what the
-      index already holds. On the NAS the reading is the cost, so it reads each file once.
-- [ ] **45b.2 Library Health.** Tiles for suspect lossy origin, suspect upsampled, padded
-      bits, fake stereo and clipped, over the files analyzed so far; each tile says how many
-      that is.
-- [ ] **45b.3 Columns and smart playlists.** Cutoff, Effective Bits, Dynamic Range and True
-      Peak as track table columns and smart playlist fields, read from the index.
-- [ ] **45b.4 Speed.** A bench row for analyzing 200 fixture files on the slow simulated NAS,
-      and the soak run with Analyze Library going: 0 underruns, and search still within its
-      budget.
-- [ ] **Hardware checkpoint (owner):** run Analyze Library on the real library from the DAC
-      Mac; report the time, the counts per tile, and a handful of flagged files checked by eye.
-
-Implementation plan, part 45b (ADR 0116):
-
-1. **Columns and fields (45b.3).** `trackJoins` gains `measures m`, joined by path, size and
-   modification time, so a row whose file changed reads as not analyzed. `TrackColumn` and
-   `SmartField` gain `cutoff`, `effectiveBits`, `dynamicRange` and `truePeak`, each with its
-   expression, title and text once; `TrackRow` reads them in the same select. Cutoff compares
-   in hertz as the sample rate does; true peak may be negative and compares unrounded, so
-   "is more than 0" finds overs. Tests: each column's sort and text, each field's rule, a
-   changed file's row reading as none.
-2. **The pending list (45b.1).** `MeasuresCache.filesToAnalyze()`: each track's path and the
-   index's stamp for it, with no current measures row, in path order (a folder at a time on
-   the NAS), DSD left out. The stamp comes from the index, so the pass stats nothing on the
-   NAS, and its row joins the files row it was made for.
-3. **The pass (45b.1).** `LibraryAnalysis`, an actor in Analysis: one file at a time, decoded
-   at background priority, its measures stored and no spectrogram (100 MB of them would churn
-   through the cache). Before each file it asks whether a scan runs and waits a second at a
-   time while one does. `pause()` cancels the file under way, which the next run reads again.
-   Progress: analyzed, total, failed, waiting or paused, and the status line's text. A file
-   that fails is logged and counted, and tried again next run. Tests: pending list, pause and
-   resume, a run after a relaunch skipping what's stored, waiting for a scan, a failure.
-4. **Command and status (45b.1).** `library.analyzeLibrary` "Analyze Library" and
-   `library.pauseAnalysis` "Pause Library Analysis" in the File menu after Show Library
-   Health, so in the palette and on the command line; neither from links. The app wires the
-   pass to the browser's scan state and to a status part beside the scans and the tag save:
-   "Analyzing library: 40 of 1,200". The browser refreshes as during a scan, and refreshes and
-   reruns Library Health when the pass ends or pauses.
-5. **Library Health (45b.2).** `HealthCheck` gains `lossyOrigin`, `upsampled`, `paddedBits`,
-   `fakeStereo` and `clipped`; `healthReport(measuredChecks:)` reads every current measures
-   row and asks Analysis's verdicts which checks each earns, so the rules stay in
-   `AnalysisRules`. The report counts the files analyzed, and each of those tiles says it:
-   "of 1,204 files analyzed". Tests: each tile's tracks from crafted measures, a stale row
-   ignored, the count.
-6. **Bench and soak (45b.4).** A row analyzing 200 fixture files (no DSD, none malformed) on
-   the slow simulated NAS through the pass, budget from the first run with room for the old
-   Mac; a reader row for search keystrokes while the pass writes to the same library; the
-   soak runs the pass over a copy of the fixture library beside its other load.
-
-Result, part 45b (draft): shipped as planned (ADR 0116). Analyze Library and
-Pause Library Analysis in the File menu after Show Library Health, so the palette and
-`music-player analyzeLibrary` / `pauseAnalysis`; never at launch, after a scan or on a
-schedule. One file at a time at background priority, in path order, stored with the index's
-stamp and no spectrogram; waits a second at a time while the status bar shows a scan; Pause
-cancels the file under way. Library Health gains Lossy Origin, Upsampled, Padded Bits, Fake
-Stereo and Clipped, each "of N files analyzed"; Cutoff, Effective Bits, Dynamic Range and True
-Peak are columns and smart playlist fields. Bench on Apple Silicon: 200 fixture files on the
-slow simulated NAS in 9.53–9.65 s (9.60–9.63 s after the gate) (48 ms a file, 33 ms of it the NAS's waits); budget < 15 s,
-< 40 s on the old Mac (the same 6.6 s of waits and five times the compute). The second of two
-search keystrokes while the pass runs, 13.5 ms p95 (idle 7.3, during a scan 15.6), within the
-idle budget of 20 ms. Soak with the pass beside the scan, the search and the single-file
-analysis: 20 s, 0 underruns, 17,929 files analyzed, −2.7 MB; 180 s, 0 underruns, 146,979
-files, −9.2 MB. Health report 0.10 s, smart playlist 15.8 ms, re-sort 25.8 ms, as before.
-Not done: read-ahead within a file, which the fixtures can't show a gain for. Owner
-checkpoint: on the DAC Mac, choose File > Analyze Library with the real library; note the
-time from start to the end of the status line (pause and start it again once, and quit and
-relaunch once mid-way, to see it carry on); then open Library Health and send the counts of
-Lossy Origin, Upsampled, Padded Bits, Fake Stereo and Clipped and the "of N files analyzed"
-line; open a few flagged files of each in Show Spectrum (and Spek) and say whether they look
-right; and say whether playback or the window stuttered while it ran.
 
 ## Later
 
