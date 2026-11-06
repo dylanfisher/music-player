@@ -77,7 +77,8 @@ public final class TagEditing {
         effects = Effects(
             read: { readEditableTracks($0, isStopped: $1) },
             write: { writer.write($0, to: $1) }, undo: { writer.undoLast() },
-            present: { $0.show(beside: $1, at: $2, avoiding: $3) }, confirm: ask, alert: showProblems)
+            present: { $0.show(beside: $1, at: $2, avoiding: $3) }, confirm: ask,
+            alert: showProblems)
     }
 
     init(effects: Effects) {
