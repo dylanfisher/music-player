@@ -57,7 +57,7 @@ func exchange(timeoutSeconds: Double = ScriptLimits.replySeconds, starting: Bool
     }
 }
 
-/// The app this tool is inside: `MusicPlayer.app/Contents/MacOS/music-player`.
+/// The app this tool is inside: `Music Player.app/Contents/MacOS/music-player`.
 func enclosingApp() -> URL? {
     guard let executable = Bundle.main.executableURL?.resolvingSymlinksInPath() else { return nil }
     let app = executable.deletingLastPathComponent().deletingLastPathComponent()

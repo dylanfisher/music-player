@@ -28,7 +28,13 @@ swift build "${flags[@]}" --product MusicPlayer >&2
 swift build "${flags[@]}" --product ScriptTool >&2
 if [ "$config" = release ]; then swift build "${flags[@]}" --product Bench >&2; fi
 bin="$(swift build "${flags[@]}" --show-bin-path)"
-app="$bin/MusicPlayer.app"
+# The name people see is declared once, in Swift. The Dock and the app switcher show the
+# bundle's file name, so the .app carries it too.
+display_name=$(sed -n 's/^public let appDisplayName = "\(.*\)"$/\1/p' Sources/Core/Log/ModuleLogger.swift)
+if [ -z "$display_name" ]; then
+  echo "couldn't read appDisplayName from Sources/Core/Log/ModuleLogger.swift" >&2; exit 1
+fi
+app="$bin/$display_name.app"
 
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
@@ -79,6 +85,8 @@ if [ -z "$bundle_id" ]; then
   echo "couldn't read bundleIdentifier from Sources/Core/Log/ModuleLogger.swift" >&2; exit 1
 fi
 /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $bundle_id" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :CFBundleName string $display_name" \
+  -c "Add :CFBundleDisplayName string $display_name" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" \
   -c "Add :CFBundleURLTypes:0:CFBundleURLName string $bundle_id" \
   -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" \

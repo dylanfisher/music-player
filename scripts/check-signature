@@ -4,7 +4,7 @@
 # entitlement but those listed below, so never get-task-allow, which debug bundles carry so
 # lldb can attach. scripts/bundle runs it on every release bundle, and
 # scripts/check-signature-test checks that it fails when it should.
-#   scripts/check-signature <MusicPlayer.app> [--launch]
+#   scripts/check-signature "<Music Player.app>" [--launch]
 # --launch also runs the app with --home in a temp folder and --snapshot, and fails unless the
 # hardened app opens its window and draws it within a minute. Not part of ./scripts/check, which
 # stays hermetic: it opens a window.

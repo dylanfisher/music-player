@@ -54,7 +54,7 @@ Runs on macOS 12 and later, so a 2015 MacBook Pro is the oldest supported machin
   ratings, loved tracks, playlists and Date Added through a folder outside the music, where
   each writes only its own log. They sync at launch, after each rescan and on wake; a Mac
   away from the share keeps its changes and sends them when it's back.
-- **`music-player`**, in `MusicPlayer.app/Contents/MacOS`, runs any command in the app and
+- **`music-player`**, in `Music Player.app/Contents/MacOS`, runs any command in the app and
   starts it if it isn't running: `music-player next`, `music-player play "album:Kind of Blue"`,
   `music-player status --json`. `music-player help` lists the commands. Links run playback and
   moving around the window only: `music-player://next`, `music-player://play?q=miles`
@@ -71,7 +71,7 @@ Needs the Xcode version in `.xcode-version`, selected with `sudo xcode-select -s
 | Check a window's layout | `./scripts/dev --home <folder> --snapshot <file.png> [--snapshot-of main\|palette\|playlist\|tags\|settings\|playback\|appearance\|toolbar\|folders\|shortcuts\|statusBar\|headerStatus\|toolbarSheet]` |
 | Run tests | `./scripts/test` |
 | Build the `.app`, signed ad hoc with the hardened runtime (debug also lets lldb attach) | `./scripts/bundle [debug\|release]` |
-| Check a release bundle's signature and entitlements, and that it launches hardened (not in `check`) | `./scripts/check-signature <MusicPlayer.app> [--launch]` |
+| Check a release bundle's signature and entitlements, and that it launches hardened (not in `check`) | `./scripts/check-signature "<Music Player.app>" [--launch]` |
 | Update a second Mac's clone, then run the app | `./scripts/pull` |
 | Build the fixture library (43k tagged files) | `./scripts/fixtures [--count N]` |
 | Survey the tag corpus, or edit and undo every file on clones of it (not in `check`) | `./scripts/tag-corpus [<folder> \| --round-trip]` |

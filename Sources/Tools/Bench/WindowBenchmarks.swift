@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import Library
 import LibraryBrowser
+import Log
 import Settings
 
 let windowBenchmarks = [
@@ -312,7 +313,7 @@ func runMeasuring(_ app: URL, home: URL, _ arguments: [String]) throws -> Data {
 }
 
 /// The app beside this Bench: the executable `scripts/bench` builds next to it, else the one in
-/// `MusicPlayer.app`, for a copy of the release bundle. The bare one comes first, since a bundle
+/// `Music Player.app`, for a copy of the release bundle. The bare one comes first, since a bundle
 /// beside it can be left from an older build.
 func appExecutable() throws -> URL {
     let directory = URL(fileURLWithPath: CommandLine.arguments[0], isDirectory: false)
@@ -320,7 +321,7 @@ func appExecutable() throws -> URL {
         .deletingLastPathComponent()
     let candidates = [
         directory.appendingPathComponent("MusicPlayer"),
-        directory.appendingPathComponent("MusicPlayer.app/Contents/MacOS/MusicPlayer"),
+        directory.appendingPathComponent("\(appDisplayName).app/Contents/MacOS/MusicPlayer"),
     ]
     guard
         let found = candidates.first(where: {

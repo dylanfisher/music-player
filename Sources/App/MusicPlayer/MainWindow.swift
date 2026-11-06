@@ -1,12 +1,13 @@
 import AppKit
 import KeyChord
 import LibraryBrowser
+import Log
 import NowPlaying
 import QueueView
 import Settings
 
 /// The app's name, as the window title and the app menu show it.
-let appName = ProcessInfo.processInfo.processName
+let appName = appDisplayName
 
 /// The main window: the toolbar, the config file's banner when it has a problem, the signal
 /// path when shown, then the sidebar, the browser and the queue side by side. It places the
