@@ -189,14 +189,27 @@ extension AppDelegate {
         dispatcher.handle(.scrollDown, enabled: hasWindow) { [weak self] in
             self?.browser?.scrollTracks(byRows: 1)
         }
+        // In an info window, Back and Forward step through its tabs (ADR 0114).
         dispatcher.handle(
-            .back, enabled: { [weak self] in self?.browser?.canGoBack == true },
-            run: {
-                [weak self] in self?.browser?.back()
+            .back,
+            enabled: { [weak self] in
+                self?.tagEditing.hasTabs(NSApp.keyWindow) == true
+                    || self?.browser?.canGoBack == true
+            },
+            run: { [weak self] in
+                guard self?.tagEditing.stepTab(-1, in: NSApp.keyWindow) == false else { return }
+                self?.browser?.back()
             })
         dispatcher.handle(
-            .forward, enabled: { [weak self] in self?.browser?.canGoForward == true },
-            run: { [weak self] in self?.browser?.forward() })
+            .forward,
+            enabled: { [weak self] in
+                self?.tagEditing.hasTabs(NSApp.keyWindow) == true
+                    || self?.browser?.canGoForward == true
+            },
+            run: { [weak self] in
+                guard self?.tagEditing.stepTab(1, in: NSApp.keyWindow) == false else { return }
+                self?.browser?.forward()
+            })
         dispatcher.handle(
             .undoSelection, enabled: { [weak self] in self?.browser?.canUndoSelection == true },
             run: { [weak self] in self?.browser?.undoSelection() })

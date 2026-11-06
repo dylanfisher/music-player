@@ -339,6 +339,35 @@ private final class Titles: @unchecked Sendable {
     #expect(fractions == [0.25, 0.5, 0.75, 1])
 }
 
+/// Back and Forward step the key info window's tabs, wrapping at the ends, and leave anything
+/// else to the main window.
+@MainActor
+@Test func backAndForwardStepTheKeyInfoWindowsTabs() async throws {
+    let editing = makeEditing(Seen())
+    editing.open(["/a.flac"], over: window)
+    editing.open(["/b.flac"], over: window)
+    let first = try #require(editor(editing, ["/a.flac"]))
+    let second = try #require(editor(editing, ["/b.flac"]))
+    first.stepTab(-TagEditorTab.allCases.firstIndex(of: first.shownTab ?? .info)!)
+    #expect(first.shownTab == .info)
+    let secondTab = second.shownTab
+
+    #expect(editing.hasTabs(first.window))
+    #expect(editing.stepTab(-1, in: first.window))
+    #expect(first.shownTab == TagEditorTab.allCases.last, "Back from the first tab wraps")
+    #expect(editing.stepTab(1, in: first.window))
+    #expect(first.shownTab == .info, "Forward from the last tab wraps")
+    #expect(editing.stepTab(1, in: first.window))
+    #expect(first.shownTab == .sorting)
+    #expect(second.shownTab == secondTab, "only the key window's tabs move")
+
+    #expect(!editing.hasTabs(window))
+    #expect(!editing.stepTab(1, in: window), "the main window goes forward instead")
+    #expect(!editing.stepTab(1, in: nil))
+    // The next window opens on the tab last shown; the other tests expect the first.
+    first.stepTab(-1)
+}
+
 /// Get Info on a DSF, a DSDIFF and a FLAC shows all three; Save writes only the FLAC, at once
 /// as one file, and the DSD files are left as they were.
 @MainActor

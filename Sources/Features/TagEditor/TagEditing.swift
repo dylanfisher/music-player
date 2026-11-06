@@ -203,6 +203,19 @@ public final class TagEditing {
 
     public func removeArt() { active?.removeArt() }
 
+    /// Whether `keyWindow` is an info window, whose tabs Back and Forward step through.
+    public func hasTabs(_ keyWindow: NSWindow?) -> Bool {
+        editors.contains { $0.window === keyWindow }
+    }
+
+    /// Back and Forward in an info window: shows the tab `step` places on in `keyWindow`,
+    /// wrapping at the ends. False, doing nothing, when `keyWindow` isn't an info window.
+    public func stepTab(_ step: Int, in keyWindow: NSWindow?) -> Bool {
+        guard let editor = editors.first(where: { $0.window === keyWindow }) else { return false }
+        editor.stepTab(step)
+        return true
+    }
+
     /// Undo Tag Edit: puts back the files of the newest edit, after any write still queued.
     public func undo(over window: NSWindow) {
         let undo = effects.undo

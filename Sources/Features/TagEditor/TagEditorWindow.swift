@@ -162,6 +162,20 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         showValues()
     }
 
+    /// The tab shown.
+    var shownTab: TagEditorTab? {
+        (tabs.selectedTabViewItem?.identifier as? String).flatMap(TagEditorTab.init)
+    }
+
+    /// Shows the tab `step` places after the one shown, wrapping past either end, as Back and
+    /// Forward do in an info window.
+    func stepTab(_ step: Int) {
+        let all = TagEditorTab.allCases
+        let index = shownTab.flatMap { all.firstIndex(of: $0) } ?? 0
+        let next = all[((index + step) % all.count + all.count) % all.count]
+        tabs.selectTabViewItem(withIdentifier: next.rawValue)
+    }
+
     func replaceArt(_ image: Data, mimeType: String) {
         model?.replaceArt(image, mimeType: mimeType)
         showArt()
