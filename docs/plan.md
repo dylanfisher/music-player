@@ -393,27 +393,27 @@ a DSD file with hog mode off, where `DeviceOutput.swift:42` already has the clea
 touches playback and the status bar, not the windows of 48a and 48b, so it can run in a third
 worktree and merge after them. ADR 0111 records the error model if it needs one.
 
-- [ ] **48c.1 Messages people can read.** Every error that can stop playback gives a short
+- [x] **48c.1 Messages people can read.** Every error that can stop playback gives a short
       message for the user, defined once beside the error, such as "DoP needs exclusive access,
       and hog mode is off for this device". The status bar shows that message, not the error's
       `description`. A test walks every case of the playback, output and decoder errors and
       checks that each has a message and that none prints a type name.
-- [ ] **48c.2 Details on click.** The playback stopped message in the status bar has a small
+- [x] **48c.2 Details on click.** The playback stopped message in the status bar has a small
       question mark icon and is clickable. It opens a Playback Problem window with the message,
       the track and its format, the output device and its format, hog mode, the error's full
       text, and the app's recent log lines about playback. A Copy button copies all of it as
       text for a bug report.
-- [ ] **48c.3 Fixes offered.** An error the app knows how to fix carries its fix, and the
+- [x] **48c.3 Fixes offered.** An error the app knows how to fix carries its fix, and the
       details window shows it as a button. The first is hog mode: playing DSD over DoP with hog
       mode off shows a dialog at once, saying that DSD needs exclusive access to the device, with
       a button that turns hog mode on for that device (the per-device setting, phase 22) and
       plays the track again, and a Cancel button. Hog mode held by another app is a different
       message, naming the app, with no button.
-- [ ] **48c.4 Every track failing.** When tracks fail in a row until playback stops
+- [x] **48c.4 Every track failing.** When tracks fail in a row until playback stops
       (`PlaybackError.failedInARow`), a dialog says why instead of the count alone: if every
       failure has the same cause, that cause and its fix as in 48c.3; if not, the causes with
       the number of tracks each, and a button that opens the details window.
-- [ ] **48c.5 Tests.** DSD on a null device with hog mode off gives the hog mode message and
+- [x] **48c.5 Tests.** DSD on a null device with hog mode off gives the hog mode message and
       fix, and the fix turns hog mode on and plays; tracks failing in a row with one cause give
       that cause; the details window's text includes the device and the log lines.
 - [ ] **Owner check in the running app:** play a DSD file on the ADI-2 with hog mode off; turn
@@ -457,7 +457,13 @@ Plan, part 48c (ADR 0111):
   three tracks failing with one cause give that cause and fix; two causes give both counts.
 - Order: this plan, 48c.1, 48c.2, 48c.3, 48c.4, the ADR, the result.
 
-Result, part 48c (draft, before the gate): shipped 48c.1 to 48c.5 (ADR 0111). Every error
+Gate, part 48c: the review found nothing above low and the audit was clean; fixed in their
+own commits: a mixed-rate DSD album keeps its hog mode fix, the fix replays the failed track when
+it's current or nothing plays and says why when it doesn't, and hog mode taken by no one is worded
+apart. `./scripts/check` passes but for `WindowGlassTests.theGlassHeadersAreFrosted`, which fails
+on main too with this Mac's display asleep.
+
+Result, part 48c: shipped 48c.1 to 48c.5 (ADR 0111). Every error
 that can stop playback has a message for people beside its description, and the status bar
 shows it: "Couldn't play So What.dsf: DoP needs exclusive access, and hog mode is off for
 this device". A question mark follows a problem in the status bar,
