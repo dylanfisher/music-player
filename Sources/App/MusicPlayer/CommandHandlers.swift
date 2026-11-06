@@ -44,10 +44,15 @@ extension AppDelegate {
         dispatcher.handle(
             .rescanNow, enabled: { [weak self] in self?.watcher != nil },
             run: { [weak self] in self?.watcher?.rescanNow() })
-        dispatcher.handle(.resolveLostStats, enabled: hasWindow) { [weak self] in
-            guard let window = self?.window?.window else { return }
-            self?.browser?.resolveLostStats(over: window)
-        }
+        dispatcher.handle(
+            .resolveLostStats,
+            enabled: { [weak self] in
+                self?.window != nil && self?.browser?.canResolveLostStats == true
+            },
+            run: { [weak self] in
+                guard let window = self?.window?.window else { return }
+                self?.browser?.resolveLostStats(over: window)
+            })
         dispatcher.handle(.restoreRemoved, enabled: hasWindow) { [weak self] in
             guard let window = self?.window?.window else { return }
             self?.browser?.restoreRemoved(over: window)

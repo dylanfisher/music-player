@@ -577,8 +577,20 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         await reveal(trackID: id)
     }
 
+    /// Whether Resolve Lost Stats has anything to show: false once a health report found no
+    /// lost files, true before the first report.
+    public var canResolveLostStats: Bool {
+        health.report.map { $0[.lostStats].otherCount > 0 } ?? true
+    }
+
+    /// Says why a sheet the user asked for can't open, in a sheet on the window they asked
+    /// over; tests record it instead.
+    var tell: @MainActor (_ message: String, _ detail: String, _ window: NSWindow) -> Void =
+        tellInSheet
+
     /// Opens Lost Stats over `window`, one lost file at a time, to give each one's stats to a
-    /// track that matches it or dismiss it.
+    /// track that matches it or dismiss it. When there are none, or they can't be read, a sheet
+    /// on `window` says so.
     public func resolveLostStats(over window: NSWindow) {
         guard !isResolvingLostStats else {
             NSSound.beep()
@@ -591,7 +603,11 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 let lost = try await reader.lostFiles()
                 guard !lost.isEmpty else {
                     isResolvingLostStats = false
-                    return show(failure: "No lost stats to resolve")
+                    return tell(
+                        "No Lost Stats to Resolve",
+                        "Lost Stats lists files that left the library with plays, a rating or"
+                            + " playlist entries no track has taken. There are none now.",
+                        window)
                 }
                 let session = LostStatsSession(
                     lost: lost,
@@ -613,7 +629,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 sheet.begin(over: window)
             } catch {
                 isResolvingLostStats = false
-                report("couldn't read the lost stats: \(error)")
+                logger.error("couldn't read the lost stats: \(error)")
+                tell("The Lost Stats Couldn't Be Read", "\(error)", window)
             }
         }
     }
@@ -2156,4 +2173,13 @@ private func statusBackground(around content: NSView, border: NSBox) -> NSView {
         border.heightAnchor.constraint(equalToConstant: StatusBarLayout.borderPoints),
     ])
     return material
+}
+
+/// An alert sheet on `window` that says `message`, with `detail` below.
+@MainActor
+private func tellInSheet(_ message: String, _ detail: String, _ window: NSWindow) {
+    let alert = NSAlert()
+    alert.messageText = message
+    alert.informativeText = detail
+    alert.beginSheetModal(for: window, completionHandler: nil)
 }
