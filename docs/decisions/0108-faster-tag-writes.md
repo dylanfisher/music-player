@@ -34,9 +34,19 @@ original's hash, for a write through the temp file as before, or `inPlace`: the 
 offset, the SHA-256 of its old bytes (which the bytes file holds) and the length and SHA-256
 of its new bytes. The marker alone says a write in place is unconfirmed; the record no longer
 carries a hash for it. Recovery reads the region: the new bytes at the new size keep the edit,
-the old bytes at the original's size drop the record, anything else is torn and put back
-through the temp file. Undo and a put-back check the journaled bytes against their hash
-before writing, and the restored temp file's size and region after.
+the old bytes at the original's size drop the record, anything else is torn and put back.
+Undo checks the journaled bytes against their hash before writing, and the restored temp
+file's size and region after.
+
+**A failed write in place is put back over itself.** A torn write, or one whose read-back
+failed, gets its journaled old bytes back over the region with `pwrite`, a file that grew is
+cut back with `ftruncate`, then `F_FULLFSYNC`, all on one descriptor whose inode, link count
+and size (from the original's to what the write leaves) must still be the original's. A file
+something else put at the path is left alone. ADR 0107 rejected this for the temp file, since
+a crash during the repair would tear the file again; but the record and its marker stay until
+the region reads back as the old bytes, so such a crash is put back again by the next call,
+and the temp file needs as much free space as the file, which a growth that filled the disk
+doesn't leave.
 
 **Two flushes a batch.** A batch reads and plans its files first, a chunk of up to 32 files
 or 64 MB of tag bytes at a time, so a thousand-file art change doesn't hold every plan. For
@@ -72,8 +82,11 @@ own, since SMB is bound by round trips and the work blocks on the network. Each 
 its own file; the journal steps before and after stay one at a time.
 
 **Less bookkeeping.** A batch, an undo and recovery list each folder once for the temp files
-a crash left, not once per file. The report carries each written file's read-back parse, and
-`LibraryScanner.rescan(files:parsed:)` stores it instead of reading the file again.
+a crash left, not once per file. The report carries each written file's read-back parse,
+stamped with the file's size and mtime from right after its write, and
+`LibraryScanner.rescan(files:parsed:)` stores it instead of reading the file again while a
+fresh stat still matches the stamp; a file another app changed in between is read again. A
+path named twice in a batch is written once.
 
 **Progress.** The writer reports each file read and each written; Get Info's saves show
 "Saving tags: 3 of 20" on the status bar's scan line, the bar filling as files are read and

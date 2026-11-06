@@ -246,8 +246,8 @@ The parts, biggest gain first. ADR 0108 records them and amends ADR 0020 and 010
       (keep the edit), the old bytes (drop the record), or neither (torn, put back).
 - [ ] **47.3 Two flushes a batch.** Write the records, old bytes and markers for all the files,
       then one `F_FULLFSYNC`; then the writes; then one more flush to confirm them all. A
-      20-track album goes from about 40 full flushes to 2, and the per-file markers still cover
-      a crash partway through.
+      20-track album goes from about 60 full flushes (three a file) to 2, and the per-file
+      markers still cover a crash partway through.
 - [ ] **47.4 More room.** The padding is 2,048 bytes, defined three times (`FLACFile`,
       `ID3Tag`, `MP4File`); define it once. A save through the temp file leaves much more room,
       for example 16–64 KB, or the art's size plus a margin, so later edits fit. Adding art or
@@ -315,7 +315,7 @@ generated fixtures and hand-built files only.
   lists); `TagWriteReport.parsed` carries each written file's read-back parse, and
   `LibraryScanner.rescan(files:parsed:)` stores it instead of reading the file again, through
   `TagEditing.written` and `LibraryWatcher`.
-- 47.9: `write` reports `TagWriteProgress` (read, written, of total); `TagEditing.progress`
+- 47.9: `write` reports `TagWriteProgress` (read, written, of total); `TagEditing.saving`
   hands it to the main thread, and the app shows "Saving tags: 3 of 20" in the browser's
   status bar beside the scan's text, with its bar.
 - Order: plan, bench and hook, 47.4, 47.1+47.2, 47.5, 47.3, 47.6, 47.8, 47.9, probe, ADR,
@@ -345,9 +345,19 @@ read back into the index, median of 5: in place 15.0 ms before, 11.2 to 12.0 ms 
 the temp file 11.9 ms before, 12.8 to 13.3 ms over four runs after, within ADR 0107's 12.7 to
 13.1 ms, so the 11.9 was a low run. The rescan stays about 2.5 ms: its cost is the index
 store, not the parse, locally. The journal row, 1000 files with 1 MB art flushed per file:
-6.5 s. Not run here: `scripts/tag-corpus --round-trip` (the reference corpus isn't on this
-Mac), `scripts/full-disk` and `scripts/kill-test`. Deferred: the temp-file path still hashes,
-copies and reads back the whole file; on the NAS it is unchanged until 47.7 reports.
+6.5 s. The gate's bench run: tag journal 6.19 s; one FLAC title in place 11.9 ms, through the
+temp file 13.09 ms; the 20-file batch in place 0.04 s locally and 4.33 s on the slow NAS,
+through the temp file 1.26 s and 73.96 s; Get Info on 100 tracks 50.8 ms, up 18% under load
+from other worktrees, and equal to the base when run A/B against e01bd90. The gate's fixes: a
+batch whose first files fail before writing goes on writing the rest (the journal makes the
+edit's folder again); the rescan uses the writer's parse only while the file's size and mtime
+are still the ones stamped right after its write; a failed write in place is put back over
+itself with `pwrite` and `ftruncate`, needing no free space, and only while the file is still
+the original by inode and size; a path named twice in a batch is written once. Not run here:
+`scripts/tag-corpus --round-trip` (the reference corpus isn't on this Mac), `scripts/full-disk`
+and `scripts/kill-test`. Deferred: the temp-file path still hashes, copies and reads back the
+whole file, and on the NAS it is unchanged until 47.7 reports; the rewrite padding has no cap,
+so a file with a large cover grows by as much again once (ADR 0108's choice).
 For the owner:
 1. **47.7 probe**, on an empty scratch folder on the NAS, over Ethernet:
    `swift scripts/smb-copy-probe.swift /Volumes/<share>/<scratch folder>` (256 MB; add a size
