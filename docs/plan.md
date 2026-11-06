@@ -309,7 +309,7 @@ The parts, biggest gain first. ADR 0108 records them and amends ADR 0020 and 010
 
 ### 48. Owner feedback, 2026-11-05 (third round)
 
-Get Info, Listening Stats and playback errors. Parts 48a and 48b touch different windows, so
+Get Info, Listening Stats, playback errors and the state across a quit. Parts 48a and 48b touch different windows, so
 they can run in parallel worktrees and merge in order a, b. ADR 0109 is given to 48b if it needs
 one.
 
@@ -378,6 +378,28 @@ worktree and merge after them. ADR 0111 records the error model if it needs one.
       that cause; the details window's text includes the device and the log lines.
 - [ ] **Owner check in the running app:** play a DSD file on the ADI-2 with hog mode off; turn
       it on from the dialog and hear it play. Click the stopped message and copy its details.
+
+#### 48d. The window comes back as it was left
+
+The owner quit and relaunched, and the track list had lost the column it was sorted by. The
+goal: quitting and launching again shows the same state. The sort is saved with the column
+layout (`TrackTableController.swift:845`), so start by finding where it's lost. 48d touches the
+track table and the state file, not the windows of 48a to 48c, so it can run in its own
+worktree and merge last. ADR 0113 records the list if it needs one.
+
+- [ ] **48d.1 Sort order.** The sort column and direction come back after a quit, per source as
+      they are kept now. A test sorts, saves, relaunches the model from the saved state and
+      gets the same sort and the same first rows.
+- [ ] **48d.2 Everything else the window shows.** List every piece of window state and whether
+      it survives a quit: the source, the sort, the columns and their widths, the browser
+      panes' selections, the search, the selection, the scroll, the split sizes, the queue
+      panel, the window's frame. Fix each that doesn't. Per-Mac state goes in the state file;
+      `playback.resume` stays as ADR 0095 has it, so the synced key stays small. The list goes
+      in the Result line.
+- [ ] **48d.3 Test.** One round trip that changes each item in 48d.2, saves, restores into a
+      fresh window and checks each came back. It fails without the fixes.
+- [ ] **Owner check in the running app:** sort by a column, change the window, quit, relaunch;
+      everything is where it was.
 
 ### 49. Click-free play, pause and seek
 
