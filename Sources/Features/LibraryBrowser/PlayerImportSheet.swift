@@ -2,8 +2,8 @@ import AppKit
 import DisplayText
 import Library
 
-/// The import preview: an `NSAlert` sheet (ADR 0012) with the counts, a path prefix to replace,
-/// and the details, which fits a 1440x900 screen. Nothing is written until Import.
+/// The import preview: an `NSAlert` sheet (ADR 0012) with a table of what changes, a path prefix
+/// to replace, and the details, which fits a 1440x900 screen. Nothing is written until Import.
 @MainActor
 final class PlayerImportSheet: NSObject {
     /// Called with the plan shown when the user clicks Import, and with Swinsian's columns when
@@ -17,7 +17,11 @@ final class PlayerImportSheet: NSObject {
     /// Swinsian's track table, or why it couldn't be read; nil for a player without one.
     private let columns: Result<SwinsianColumns, any Error>?
     let columnsBox = NSButton(checkboxWithTitle: "Import column layout", target: nil, action: nil)
-    private let countsLabel = NSTextField(wrappingLabelWithString: "")
+    private let headingLabel = NSTextField(wrappingLabelWithString: "")
+    /// What changes on the left, how many on the right, a row for each field that changes.
+    let changes = NSGridView(numberOfColumns: 2, rows: 0)
+    let unchangedLabel = NSTextField(wrappingLabelWithString: "")
+    let notesLabel = NSTextField(wrappingLabelWithString: "")
     let fromField = NSTextField()
     let toField = NSTextField()
     private let updateButton = NSButton(title: "Update Preview", target: nil, action: nil)
@@ -59,7 +63,15 @@ final class PlayerImportSheet: NSObject {
     }
 
     private func makeAccessory() {
-        countsLabel.preferredMaxLayoutWidth = Self.width
+        for label in [headingLabel, unchangedLabel, notesLabel] {
+            label.preferredMaxLayoutWidth = Self.width
+        }
+        headingLabel.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        unchangedLabel.textColor = .secondaryLabelColor
+        changes.rowSpacing = 4
+        changes.columnSpacing = 16
+        // As wide as its rows, so each count stays near what it counts.
+        changes.setContentHuggingPriority(.required, for: .horizontal)
         fromField.placeholderString = "/Volumes/old"
         toField.placeholderString = "/Volumes/music"
         updateButton.target = self
@@ -77,12 +89,14 @@ final class PlayerImportSheet: NSObject {
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
         var views = [
-            countsLabel, NSTextField(labelWithString: "Replace the path prefix:"), fields, scroll,
+            headingLabel, changes, unchangedLabel, notesLabel,
+            NSTextField(labelWithString: "Replace the path prefix:"), fields, scroll,
         ]
         if let columns { views.append(columnsRow(columns)) }
         for view in views { stack.addArrangedSubview(view) }
         stack.orientation = .vertical
         stack.alignment = .leading
+        stack.detachesHiddenViews = true
         NSLayoutConstraint.activate([
             stack.widthAnchor.constraint(equalToConstant: Self.width),
             fields.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -122,19 +136,41 @@ final class PlayerImportSheet: NSObject {
 
     @objc private func columnsToggled() { show(session.shown) }
 
-    /// Shows `plan`'s counts and details, or none, and sizes the sheet to them, so the wrapped
-    /// counts can't be cut off.
+    /// Shows `plan`'s table and details, or none, and sizes the sheet to them, so the wrapped
+    /// lines can't be cut off.
     private func show(_ plan: ImportPlan?) {
-        if let plan {
-            countsLabel.stringValue = plan.previewLines.joined(separator: "\n")
+        let preview = plan?.preview
+        if let plan, let preview {
+            headingLabel.stringValue = preview.heading
             let lines = plan.detailLines + (columnsChosen?.detailLines ?? [])
             details.string = lines.isEmpty ? "Every track matched." : lines.joined(separator: "\n")
         }
+        showChanges(preview?.rows ?? [])
+        unchangedLabel.stringValue = preview?.unchanged ?? ""
+        unchangedLabel.isHidden = preview?.unchanged == nil
+        notesLabel.stringValue = preview?.notes.joined(separator: " · ") ?? ""
+        notesLabel.isHidden = preview?.notes.isEmpty ?? true
         alert.buttons.first?.isEnabled =
             plan.map { $0.changesSomething || columnsChosen != nil } ?? false
         stack.layoutSubtreeIfNeeded()
         stack.setFrameSize(stack.fittingSize)
         alert.layout()
+    }
+
+    /// Fills the table with `rows`, hidden when there are none.
+    private func showChanges(_ rows: [ImportPreview.Row]) {
+        while changes.numberOfRows > 0 {
+            let row = changes.row(at: 0)
+            let views = (0..<row.numberOfCells).compactMap { row.cell(at: $0).contentView }
+            changes.removeRow(at: 0)
+            for view in views { view.removeFromSuperview() }
+        }
+        for row in rows {
+            changes.addRow(with: [
+                NSTextField(labelWithString: row.change), NSTextField(labelWithString: row.count),
+            ])
+        }
+        changes.isHidden = rows.isEmpty
     }
 
     @objc private func updatePreview() {
@@ -145,7 +181,7 @@ final class PlayerImportSheet: NSObject {
                 guard let plan = try await session.preview(prefix) else { return }
                 show(plan)
             } catch {
-                countsLabel.stringValue = "Couldn't preview that prefix: \(error)"
+                headingLabel.stringValue = "Couldn't preview that prefix: \(error)"
                 details.string = ""
                 show(nil)
             }

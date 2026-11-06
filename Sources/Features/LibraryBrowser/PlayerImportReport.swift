@@ -5,61 +5,91 @@ import Library
 /// The words for an import's preview and its report (ADR 0033). Every name and path came from
 /// another program's file, so each is escaped as a playlist file's are (ADR 0032).
 extension ImportPlan {
-    /// One line per field, for the preview sheet.
-    var previewLines: [String] {
-        var lines = [
-            "\(tracks(library.tracks.count)) read: \(number(matched)) in this library,"
+    /// The preview sheet's table: a row for each field the import changes, the others named in
+    /// one line, and what it leaves out.
+    var preview: ImportPreview {
+        var rows: [ImportPreview.Row] = []
+        var unchanged: [String] = []
+        func field(_ name: String, _ change: String, on changed: Int, _ count: String) {
+            if changed > 0 {
+                rows.append(ImportPreview.Row(change: change, count: count))
+            } else {
+                unchanged.append(name)
+            }
+        }
+        field(
+            "play counts", "Play counts", on: tracksGainingPlays,
+            "+\(number(playsAdded)) on \(tracks(tracksGainingPlays))")
+        if library.player == .iTunes {
+            field(
+                "skip counts", "Skip counts", on: tracksGainingSkips,
+                "+\(number(skipsAdded)) on \(tracks(tracksGainingSkips))")
+        }
+        field("last played", "Last played, later", on: lastPlayed, tracks(lastPlayed))
+        field(
+            "last plays dated in Listening Stats", "Last plays dated in Listening Stats",
+            on: datedLastPlays, tracks(datedLastPlays))
+        field("date added", "Date added, earlier", on: dateAdded, tracks(dateAdded))
+        field(
+            "ratings", "Ratings", on: ratings,
+            tracks(ratings)
+                + (roundedRatings > 0
+                    ? ", \(number(roundedRatings)) from a half star rounded up" : ""))
+        field("loved", "Loved", on: loved, tracks(loved))
+        field(
+            "playlists", "New playlists", on: playlists.count,
+            number(playlists.count) + newPlaylistNotes)
+        return ImportPreview(
+            heading: "\(tracks(library.tracks.count)) read: \(number(matched)) in this library,"
                 + " \(number(missedCount)) not"
                 + (unreadFormat.isEmpty
                     ? "" : ", \(number(unreadFormat.count)) of them in a format not read yet"),
-            "Play counts: +\(number(playsAdded)) on \(tracks(tracksGainingPlays))",
-        ]
-        if library.player == .iTunes {
-            lines.append(
-                "Skip counts: +\(number(skipsAdded)) on \(tracks(tracksGainingSkips))")
-        }
-        lines += [
-            "Last played: later on \(tracks(lastPlayed))",
-            "Last plays dated in Listening Stats: \(tracks(datedLastPlays))",
-            "Date added: earlier on \(tracks(dateAdded))",
-            "Ratings: \(tracks(ratings)) rated"
-                + (roundedRatings > 0
-                    ? ", \(number(roundedRatings)) from a half star rounded up" : "")
-                + (ratingsKept > 0
-                    ? ", \(number(ratingsKept)) keep the rating they have here" : ""),
-            "Loved: \(tracks(loved))",
-            "Playlists: \(number(playlists.count)) new" + playlistNotes,
-        ]
-        if mergedRows > 0 {
-            lines.append("\(count(mergedRows, "row")) for a track already read, merged into it")
-        }
-        if library.tracksWithoutFiles > 0 {
-            lines.append("\(tracks(library.tracksWithoutFiles)) with no file, left out")
-        }
-        let problems = library.problems.count + library.unlistedProblemCount
-        if problems > 0 { lines.append("\(count(problems, "problem")) reading the library") }
-        return lines
+            rows: rows,
+            unchanged: unchanged.isEmpty ? nil : "No change: " + unchanged.joined(separator: ", "),
+            notes: previewNotes)
     }
 
     /// The tracks not matched to this library, whether or not their format is read.
     private var missedCount: Int { unmatched.count + unreadFormat.count }
 
-    private var playlistNotes: String {
+    /// What the new playlists were in the other player.
+    private var newPlaylistNotes: String {
         var notes: [String] = []
         let smart = playlists.filter { if case .smart = $0.kind { true } else { false } }.count
         if smart > 0 { notes.append("\(number(smart)) smart") }
         let wasSmart = playlists.filter(\.wasSmart).count
         if wasSmart > 0 { notes.append("\(number(wasSmart)) smart there, a list of tracks here") }
+        return notes.isEmpty ? "" : " (" + notes.joined(separator: "; ") + ")"
+    }
+
+    /// What the import leaves as it is or leaves out, for the line under the preview's table.
+    private var previewNotes: [String] {
+        var notes: [String] = []
+        if ratingsKept > 0 {
+            notes.append("Ratings kept on \(tracks(ratingsKept)), rated differently here")
+        }
+        var skipped: [String] = []
         if !existingPlaylists.isEmpty {
-            notes.append("\(number(existingPlaylists.count)) skipped, a playlist has the name")
+            skipped.append("\(number(existingPlaylists.count)) with a name already used here")
         }
         if !unmappedPlaylists.isEmpty {
-            notes.append("\(number(unmappedPlaylists.count)) skipped, rules that don't map")
+            skipped.append("\(number(unmappedPlaylists.count)) with rules that don't map")
         }
         if library.builtInPlaylists > 0 {
-            notes.append("\(number(library.builtInPlaylists)) built in or folders, skipped")
+            skipped.append("\(number(library.builtInPlaylists)) built in or folders")
         }
-        return notes.isEmpty ? "" : " (" + notes.joined(separator: "; ") + ")"
+        if !skipped.isEmpty {
+            notes.append("Playlists skipped: " + skipped.joined(separator: ", "))
+        }
+        if mergedRows > 0 {
+            notes.append("\(count(mergedRows, "row")) for a track already read, merged into it")
+        }
+        if library.tracksWithoutFiles > 0 {
+            notes.append("\(tracks(library.tracksWithoutFiles)) with no file, left out")
+        }
+        let problems = library.problems.count + library.unlistedProblemCount
+        if problems > 0 { notes.append("\(count(problems, "problem")) reading the library") }
+        return notes
     }
 
     /// The smart playlists whose rules don't map, with why.

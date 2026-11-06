@@ -49,7 +49,9 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     plan.library.unlistedProblemCount = 2
     plan.ratings = 3
     plan.roundedRatings = 2
-    #expect(plan.previewLines.contains("Ratings: 3 tracks rated, 2 from a half star rounded up"))
+    #expect(
+        plan.preview.rows.contains(
+            ImportPreview.Row(change: "Ratings", count: "3 tracks, 2 from a half star rounded up")))
     let lines = plan.detailLines
     let source = "/s/Library.sqlite"
     #expect(lines.filter { $0.hasPrefix("\(source): not in the library: ") }.count == 100)
@@ -58,7 +60,7 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
         lines.contains(
             "\(source): not in the library, a format this app doesn't read yet: /ogg/1.ogg"))
     #expect(
-        plan.previewLines[0]
+        plan.preview.heading
             == "0 tracks read: 0 in this library, 151 not, 1 of them in a format not read yet")
     #expect(lines.contains("\(source): not made, a playlist has the name: Mix\\u{A}fake row"))
     #expect(
@@ -68,9 +70,45 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     #expect(
         lines.suffix(2) == ["\(source): track 3: has no file path", "\(source): 2 more problems"])
     #expect(
-        plan.previewLines.contains(
-            "Playlists: 0 new (1 skipped, a playlist has the name; 1 skipped, rules that don't map)"
-        ))
+        plan.preview.notes.contains(
+            "Playlists skipped: 1 with a name already used here, 1 with rules that don't map"))
+}
+
+/// The preview's table has a row for each field that changes, Skip counts only from iTunes,
+/// which keeps them; the fields that change nothing share one line, and what's left out is a
+/// note under the table.
+@Test func thePreviewListsWhatChangesAndGroupsTheRest() {
+    var plan = emptyPlan()
+    plan.library.tracks = (1...3).map { PlayerTrack(path: "/m/\($0).flac") }
+    plan.matched = 2
+    plan.unmatched = ["/m/3.flac"]
+    plan.playsAdded = 1204
+    plan.tracksGainingPlays = 2
+    plan.datedLastPlays = 2
+    plan.ratingsKept = 1
+    plan.mergedRows = 32
+    plan.playlists = [PlannedPlaylist(name: "Mix", kind: .manual([]))]
+    let preview = plan.preview
+    #expect(preview.heading == "3 tracks read: 2 in this library, 1 not")
+    #expect(
+        preview.rows == [
+            ImportPreview.Row(change: "Play counts", count: "+1,204 on 2 tracks"),
+            ImportPreview.Row(change: "Last plays dated in Listening Stats", count: "2 tracks"),
+            ImportPreview.Row(change: "New playlists", count: "1"),
+        ])
+    #expect(preview.unchanged == "No change: last played, date added, ratings, loved")
+    #expect(
+        preview.notes == [
+            "Ratings kept on 1 track, rated differently here",
+            "32 rows for a track already read, merged into it",
+        ])
+    plan.library.player = .iTunes
+    #expect(
+        plan.preview.unchanged == "No change: skip counts, last played, date added, ratings, loved")
+    plan.skipsAdded = 5
+    plan.tracksGainingSkips = 1
+    #expect(
+        plan.preview.rows[1] == ImportPreview.Row(change: "Skip counts", count: "+5 on 1 track"))
 }
 
 @MainActor @Test func anAppliedImportShowsItsPlaysAndPlaylists() async throws {
@@ -207,12 +245,25 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
 
 @MainActor @Test func theSheetFitsA1440x900ScreenWithEverythingFilled() throws {
     var plan = emptyPlan()
+    // Every field changing but Loved, so the table and the line for what doesn't change both
+    // show.
+    plan.library.tracks = (1...12_000).map { PlayerTrack(path: "/m/\($0).flac") }
+    plan.matched = 11_700
     plan.unmatched = (1...300).map {
         "/Volumes/music/library/Some Very Long Artist Name/An Album Title (Deluxe Edition)/\($0) A Track.flac"
     }
+    (plan.playsAdded, plan.tracksGainingPlays) = (48_210, 9_310)
+    (plan.lastPlayed, plan.datedLastPlays, plan.dateAdded) = (9_002, 8_950, 11_204)
+    (plan.ratings, plan.roundedRatings, plan.ratingsKept) = (2_400, 120, 18)
+    plan.playlists = [
+        PlannedPlaylist(name: "Mix", kind: .manual([])),
+        PlannedPlaylist(name: "Recent", kind: .manual([]), wasSmart: true),
+    ]
     plan.existingPlaylists = ["Mix"]
+    plan.library.builtInPlaylists = 4
     plan.library.tracksWithoutFiles = 3
     plan.mergedRows = 32
+    plan.library.unlistedProblemCount = 2
     let columns = try SwinsianColumns(
         preferences: try swinsianPreferences(
             columns: [("artwork", 160), ("currentlyPlaying", 64), ("title", 390)],
@@ -224,8 +275,18 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     sheet.fromField.stringValue = "/Volumes/Old Music Drive/iTunes/iTunes Media/Music"
     sheet.toField.stringValue = "/Volumes/music/library"
     sheet.alert.layout()
+    #expect(sheet.changes.numberOfRows == 6)
+    let firstRow = (0..<2).map {
+        (sheet.changes.cell(atColumnIndex: $0, rowIndex: 0).contentView as? NSTextField)?
+            .stringValue
+    }
+    #expect(firstRow == ["Play counts", "+48,210 on 9,310 tracks"])
+    #expect(
+        !sheet.unchangedLabel.isHidden && sheet.unchangedLabel.stringValue == "No change: loved")
+    #expect(!sheet.notesLabel.isHidden)
     let frame = sheet.alert.window.frame
-    #expect(frame.width <= 1440 && frame.height <= 900 - 25, "\(frame)")
+    // Room to spare for iTunes' row of skip counts, in place of the column layout's row.
+    #expect(frame.width <= 1440 && frame.height <= 900 - 25 - 30, "\(frame)")
     let accessory = try #require(sheet.alert.accessoryView)
     #expect(accessory.fittingSize.width <= PlayerImportSheet.width + 1, "\(accessory.fittingSize)")
     #expect(sheet.toField.frame.width > 100, "\(sheet.toField.frame)")
