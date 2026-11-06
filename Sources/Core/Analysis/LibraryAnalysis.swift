@@ -203,7 +203,9 @@ public actor LibraryAnalysis {
     }
 
     /// Analyzes `files`, `atOnce` at a time, started in path order so a share is still read
-    /// about a folder at a time. Returns where the run got to, and whether it was paused.
+    /// about a folder at a time. Returns where the run got to, and whether it was paused
+    /// before every file was done: a pause after the last file started and before it ended,
+    /// with that file done, leaves nothing to do.
     private func analyze(_ files: [(path: String, stamp: FileStamp)], from start: Progress) async
         -> (Progress, stopped: Bool)
     {
@@ -216,8 +218,11 @@ public actor LibraryAnalysis {
         return await withTaskGroup(of: FileOutcome.self) { group in
             var progress = start
             var underWay = 0
+            var started = 0
+            var unfinished = false
             var reported = Date.distantPast
             func count(_ outcome: FileOutcome) {
+                if outcome == .cancelled { unfinished = true }
                 guard progress.count(outcome),
                     Date().timeIntervalSince(reported) >= Self.reportIntervalSeconds
                 else { return }
@@ -250,9 +255,10 @@ public actor LibraryAnalysis {
                     await Self.analyzed(file, analyze: analyze, store: store, cache: cache)
                 }
                 underWay += 1
+                started += 1
             }
             for await outcome in group { count(outcome) }
-            return (progress, Task.isCancelled)
+            return (progress, unfinished || started < files.count)
         }
     }
 

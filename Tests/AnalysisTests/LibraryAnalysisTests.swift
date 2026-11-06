@@ -312,3 +312,27 @@ private struct SQLiteBusy: Error {}
     #expect(heard.progress.dropFirst(reportsBefore).first?.analyzed == 1)
     #expect(heard.paths.filter { $0 == library.paths[0] }.count == 1)
 }
+
+/// A pause that comes after the last file started, and that the file finishes through, leaves
+/// nothing to do: the run ends as finished, not paused.
+@Test func aPauseAfterTheLastFileStartedThatItFinishesThroughEndsTheRun() async throws {
+    let library = try ScannedFixtures()
+    let heard = Heard()
+    let pass = LibraryAnalysis(
+        cache: library.cache(),
+        analyze: { path in
+            heard.ask(path)
+            // The last file goes on through the pause, as a read under way can.
+            while path == library.paths[2], !heard.paths.contains("paused") {
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
+            return clean
+        }, filesAtOnce: 1, scanRunning: { false }, report: heard.report)
+    let run = await pass.start()
+    try await eventually { heard.paths.contains(library.paths[2]) }
+    await pass.pause()
+    heard.ask("paused")
+    let ended = await run.value
+    #expect(ended.stage == .finished && ended.analyzed == 3 && ended.total == 3)
+    #expect(try await pass.standing() == .init(paused: nil, everyFileTried: true))
+}
