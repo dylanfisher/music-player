@@ -6897,3 +6897,424 @@ relaunch once mid-way, to see it carry on); then open Library Health and send th
 Lossy Origin, Upsampled, Padded Bits, Fake Stereo and Clipped and the "of N files analyzed"
 line; open a few flagged files of each in Show Spectrum (and Spek) and say whether they look
 right; and say whether playback or the window stuttered while it ran.
+
+### 50. Owner feedback, 2026-11-06
+
+Listening Stats, the import sheet, the hog mode fix, Analyze Library and Scan Library, the
+spectrum window and the log. The four parts touch mostly different modules, so they run in
+parallel worktrees and merge in order a, b, c, d; a later part rebases on the earlier ones.
+ADR numbers: 0117 to 50a if it needs one, 0118 to 50b, 0119 to 50c, 0120 to 50d.
+
+#### 50a. Library window
+
+- [x] **50a.1 Stats never opens hidden.** Clicking Stats with Show Browser off showed the
+      panel at zero height; the owner had to drag it open. Probe: the panel slot is hidden
+      for sources without a panel, so the split collapses it, and `fillPanelSlot`
+      (`LibraryBrowser.swift`) calls `setPosition` straight after unhiding, with no layout
+      between, then records `placedHeight` whether or not it took. `statsHeight`'s range is
+      `0...2000`, so a 0 can be saved, and the split has no minimum. Give the stats height a
+      range with a real minimum (the header and one row of cards), place the divider after a
+      layout pass as `MainSplit.restore` does, set a minimum coordinate while a panel shows,
+      and record a height only from the user's drag, not from layout passes.
+- [x] **50a.2 Stats keeps its height.** Moving to another source and back, or relaunching,
+      opens Stats at the height the user last dragged it to. Test: Show Browser off, Stats
+      shown at its saved height, a playlist, Stats again at the same height; and the same
+      with Show Browser on.
+- [x] **50a.3 A lighter selected row in the Stats lists.** The marked row in Top Genres and the
+      other list cards is the selection color at 0.4 alpha (`StatsListView.swift`), too
+      dark. Lighter, still clearly above hover's 0.18.
+- [x] **50a.4 No "discarded" text in the status bar.** "earlier play counts and playlists
+      discarded" leaves the status bar's totals (`LibraryStatus.summary`). The notices stay in
+      the Problems list and the problems button, where they already show.
+- [x] **50a.5 The import sheet says what will change.** The top of the Import from Swinsian
+      sheet becomes a two-column table (`NSGridView`, as in Get Info's File tab): what
+      changes on the left, the count on the right, a heading line for how many tracks matched,
+      rows with nothing to change grouped in one dimmed line ("No change: last played, date
+      added, ratings, loved") instead of "later on 0 tracks", and the notes (playlists
+      skipped, rows merged) as a short line under the table. Same width, so it still fits
+      1440×900. Tests: the rows for a plan, and the sheet's fit test and its snapshot.
+- [x] **50a.6 The stuck row line.** After hours of use a 1-point horizontal line stays at a fixed
+      height on screen, across the art column and the rows, while the rows scroll under it.
+      Not reproduced yet. Candidates, from reading the code: the split's divider over a panel
+      slot shown at 0 height (fixed by 50a.1); an album line set on an art cell drawn into its
+      row's layer (`canDrawSubviewsIntoLayer`) without redrawing the row, so a recycled row
+      keeps it; the status bar's border. Fix the first two, and try to reproduce with long
+      scrolls, source changes and Stats shown and hidden. Owner check: when it shows again,
+      whether View > Hide Status Bar or resizing the window clears it.
+
+Plan, part 50a (ADR 0117):
+- Probe: reproduced 50a.1 in a test. From the timeline, which hides the whole split, to Stats,
+  the split is unhidden and the divider placed in the same pass, in the split's hidden bounds,
+  so it ends at 0, and the next layout pass saves that 0 as Stats' height. A plain playlist
+  before Stats, with Show Browser on or off, keeps the height.
+- 50a.1, 50a.2 (`Core/Settings`, `Features/LibraryBrowser`, `App`): `AppState.statsHeightRange`
+  with a least height that holds the header and the Totals card; `fillPanelSlot` and
+  `restoreSplit` place the divider after a layout pass and record the height the slot got; the
+  split's delegate keeps Stats at least that tall; the split is a `DividerDragSplitView` that
+  says while `mouseDown` tracks a drag, and only then is a height saved, the columns' too.
+  Tests: Show Browser on and off, Stats after a playlist, the timeline and a playlist again at
+  its height; a drag saved and stopped at the least height, layout passes and a window resize
+  saving nothing; the panel's header and Totals card inside the least height.
+- 50a.3 (`Features/LibraryBrowser`): the marked row at 0.28 alpha, hover's 0.18 kept, both
+  named on `StatsListView`. Test: the marked row drawn into a bitmap, its alpha between.
+- 50a.4 (`Features/LibraryBrowser`): `LibraryStatus.summary` drops the discard notice; the
+  problems list keeps it. Test: the summary without it, the problem still listed.
+- 50a.5 (`Features/LibraryBrowser`): `ImportPlan.preview`, an `ImportPreview` of a heading,
+  rows of what changes and how many (Skip counts only from iTunes), the fields with nothing
+  to change in one "No change:" line, and notes (ratings kept, playlists skipped, rows merged,
+  tracks with no file, problems). The sheet shows the heading, an `NSGridView` of the rows,
+  the dimmed line and the notes in one wrapping line, at the same width. Tests: the rows for
+  a plan from each player; the fit test with the table and the dimmed line, and the snapshot
+  it writes.
+- 50a.6 (`Features/LibraryBrowser`): the first candidate is 50a.1's fix. For the second, a
+  probe drew an art cell in a row view that draws its subviews into its layer: setting the
+  album line redraws the row's layer, and clearing it clears the line, so there is nothing to
+  fix there. Test: after long scrolls both ways and a change of order, every row view on
+  screen has its own row's line and its art cell its own album line.
+- Order: this plan, 50a.4, 50a.3, 50a.1 and 50a.2 with the ADR, 50a.6's test, 50a.5, the
+  result.
+
+Gate, part 50a: the review found nothing above low. Fixed: Stats' least height gives way
+when the window leaves the table less room, so the split's minimum never passes its maximum;
+the "No change" names come from the rows' own words, which also cleared the single-source
+check's three new repeated literals ("ratings", "loved", "playlists"), with Loved taking the
+track column's title; a comment rewrapped. Left: tests of the columns' height saved only from
+a drag (the same code path as Stats', covered by the window state test's drag) and of a
+Ratings row of one. One full run failed on two tests outside this part, a window centered
+on another screen and a Settings wait timing out under load; both pass alone, and the next
+run passed. `./scripts/check` passes.
+
+Result, part 50a: shipped 50a.1 to 50a.6 (ADR 0117). Stats opened at 0 after the timeline,
+which hides the whole split: the divider was placed in the split's hidden bounds, and the
+next layout pass saved the 0. The divider is now placed after a layout pass, a height is
+saved only while the user drags the divider (`DividerDragSplitView`), the columns' too, and
+`window.statsHeight` takes `130...2000`, the panel's header and Totals card, which the divider
+keeps while Stats shows; a saved 0 is discarded and Stats opens at 380 once. The Stats lists'
+marked row is at 0.28 alpha, hover's 0.18 kept. The status bar no longer says "earlier play
+counts and playlists discarded"; the Problems list does. The import sheet shows a heading of
+how many tracks matched, a two-column table of what changes and how many, "No change: …" in
+one dimmed line, and what's left out in a line under it, at the same 640 points; Skip counts
+show for iTunes only. The stuck line wasn't reproduced: a probe shows an art cell's album
+line redraws its row's layer, and a test of long scrolls both ways and a change of order finds
+every row view with its own lines; the 0-height panel's divider, the first candidate, is gone
+with 50a.1. Tests: Stats at its height after a playlist, the timeline and a playlist again
+with Show Browser on and off; a drag saved and stopped at the least height, layout passes
+and a window resize saving nothing; the header and Totals card inside the least height; the
+marked row's alpha drawn; the status summary without the notice; the preview's rows for
+Swinsian and iTunes; the sheet's fit test with the table, and its snapshot. Owner check: (1)
+with Show Browser off, open History's timeline, then Stats: it opens at the height last
+dragged; drag it, go to a playlist and back, and relaunch: the same height; (2) Import from
+Swinsian: the table at the top, nothing listed as "on 0 tracks"; (3) the marked row in Top
+Genres reads lighter; (4) when the stuck line shows again, whether View > Hide Status Bar or
+resizing the window clears it, and whether the timeline or Stats was shown before.
+
+#### 50b. Playback: the hog mode fix plays the track you chose; the log
+
+- [x] **50b.1 Turn On plays the chosen track.** With hog mode off, double-clicking a DSD
+      track and choosing Turn On in the dialog started the first row instead. Probe:
+      `play(starting:)` plays a one-track queue until the full list arrives (ADR 0078), and
+      DoP's refusal comes before the full queue does, so `FailedTrack.entry` is 0, not the
+      clicked row's index. `complete()` moves the cursor to the row but never corrects
+      the failure's entry, the DSD album fails three times and stops at entry 0, the dialog's
+      replay finds a different track at 0 and only logs `.gone`, and the next Play starts row
+      0. Fix: failures recorded against the one-track queue move with it to the row in
+      `complete()`, so the event and the dialog carry the right entry; `replayPosition` still
+      never plays a different track; and a fix that can't replay says why where the user is
+      looking, not only in the log. Test: `play(starting: urls[2])` with a gated fill and a
+      refusal before the gate opens, then the fix replaying entry 2.
+- [x] **50b.2 Log values in Copy Details.** The owner asked whether playback log lines should be
+      public so Copy Details shows their values instead of `<private>`. Decision (the owner can
+      overrule it): the log's values that are the app's own or the device's are public: errors,
+      OSStatus codes, formats, device and renderer names. Track paths stay private, logged
+      with `privacy: .private(mask: .hash)` so the lines about one file can be matched; Copy
+      Details already prints the failed track's path and error in plain text. Make
+      `renderer.name`'s privacy consistent in `RendererSession`. Update ADR 0025's row 35 and
+      its `rg` check.
+
+Plan, part 50b (ADR 0118, amending 0025 and 0111):
+- Probe: confirmed by a test before any fix. `play(starting:)` loads the one-track queue, and
+  `DeviceOutput.loadTrack` refuses DoP without hog mode synchronously, so `.trackFailed` goes
+  out with entry 0 and `.finished` is held for the queue. `complete()` moves the cursor to the
+  row, the held end skips on, the album's next two tracks fail too and the engine stops with
+  causes `[0, 3, 4]` and the cursor on entry 0. The dialog, shown for the first failure, keeps
+  entry 0, and `replayPosition` finds row 0's track there and refuses with `.gone`, which only
+  the log says.
+- 50b.1 (`Core/Playback`): while `completing`, a failure is recorded but its event is held,
+  as the end already is; `complete()` moves every failure recorded so far to the started
+  track's entry in the whole queue, and the held events go out first when the hold is
+  released, so the event, the dialog and the run's causes carry the row. Abandoned, they go out
+  with entry 0, right for the queue that stays. A run of failures that stops playback leaves
+  the cursor on its first track, not entry 0, so Play tries the chosen track again.
+  `replayPosition` is unchanged and still never plays a different track.
+- 50b.1 (`Features/NowPlaying`, `App`): `ReplayRefusal.notice(after:)` says, for a fix made
+  whose track isn't played again, why and what to do; the app shows it as an alert sheet on
+  the window the fix was asked from (the main window under the dialog, or the details window).
+- 50b.2 (`Core/Log`, `Core/Playback`, `Core/HALOutput`, `Core/UPnPOutput`): the decoder's and
+  DSD reader's errors (`MetadataError`) name the file's path in their description, so
+  `logText(_:without:)` in Log gives an error's text with the track's path replaced by "the
+  track's file", logged public beside the path logged with `.private(mask: .hash)`. Errors about no
+  track (HAL, OSStatus, SOAP, device description, DeviceOutput's and the renderer's) name no
+  path and are logged public, as are device names, UIDs, renderer names and addresses and
+  four-character codes. A run's line logs only its count, as a cause's message can be an
+  error's whole text; each track's own line has its error. `serving <renderer>: …` stays private: the HTTP server's problems can
+  name a served file's path. Every `renderer.name` in `RendererSession` and `RendererOutput`
+  is public.
+- Tests: `play(starting: urls[2])` with a gated fill and a refusal before the gate opens, then
+  two more refusals: the events and causes say entries 2, 3 and 4, the engine stops on entry
+  2, and playing it loads the chosen track; a failure before a queue that couldn't be read
+  still goes out, with entry 0; the refusal's notice; `logText` removes a `MetadataError`'s
+  path; and a line logged as the engine logs a failure reads back in `recentLogLines` with
+  the error and a hash, not the path or `<private>`.
+- Order: this plan, 50b.1's engine fix, its notice, 50b.2, the ADR and the result.
+
+Gate, part 50b: one review, which found nothing above low. Fixed: the run's log line now logs
+only its count, as a cause's message can be a non-`PlaybackFailure` error's whole text; the
+log rule also catches camelCase names (`fileURL`, `filePath`); the ADR names `logText`'s
+exact-path limit and the short queue that ends rather than stops. Left as accepted: a failure
+held while the queue is read waits as long as the read does; a failure of a track removed
+during the read still goes out and its fix refuses with `.gone`. `./scripts/check` passes; the
+two color-well tests in SettingsWindowTests failed in two of four runs on this loaded machine,
+and on the base commit too.
+
+Result, part 50b: shipped 50b.1 and 50b.2 (ADR 0118, amending 0025 and 0111). The cause was
+as probed and a test confirmed it before the fix: a play from a list fails its first track
+against the one-track queue, so the failure named entry 0, the run's causes read `[0, 3, 4]`
+and the engine stopped on entry 0. While the queue is read a failure's event is now held, as
+the track's end is, and goes out with the track's entry in the whole queue; a run of failures
+that stops playback leaves the cursor on its first track, so Play and the fix play the chosen
+track. A fix whose track can't be played again says why in an alert on the window it was
+asked from. The playback modules log errors, device and renderer names, UIDs, addresses and
+codes public, a track's path as a hash and its error with the path replaced by "the track's
+file"; `scripts/arch.swift` fails a path or URL logged public. Tests: the DSD album played
+from its third row with the refusal before the queue, events and causes on entries 2 to 4,
+stopped on entry 2 and playing it loads that track; a held failure goes out with entry 0 when
+the queue can't be read; the refusal's alert text; a failure logged as the engine logs one
+reads back from the log store with its error and a hash, no path and no `<private>`; the
+arch rule's planted cases. For the owner: with hog mode off, double-click the third track of
+a DSD album, choose Turn On Hog Mode, and check that track plays; turn hog mode off again,
+play a DSD track, Cancel the dialog, click the status bar's problem to open its details, play
+a FLAC track, click Turn On Hog Mode in the details and check an alert says why the DSD track
+isn't played; open a problem's details, Copy Details, and check the log lines show
+errors and device names, and paths only as `<mask.hash: …>`.
+
+#### 50c. Analyze Library and Scan Library
+
+- [x] **50c.1 Two to four files at once.** The pass analyzes `min(4, max(2,
+      activeProcessorCount / 2))` files at once, 2 on the 2015 MacBook Pro, as a sliding task
+      group (Spectrum's `filesAtOnce` loop is the pattern); only the pass's actor counts and
+      reports. Pause cancels every file under way, and each is read again next run; each file
+      is still read once per run. Files are still started in path order.
+- [x] **50c.2 Utility priority.** Each file is decoded at `.utility`, not `.background`. Bench
+      rows rename "at background priority"; the 200-file row is measured again (the owner's
+      guess: 2 to 3 times faster on the NAS).
+- [x] **50c.3 Progress in Library Health.** While the pass runs, Library Health shows a
+      progress bar with "Analyzing library: 1,240 of 43,368" and the file under way (the
+      newest started, its name only), and a Pause button beside it; paused, it shows Analyze
+      Library to carry on. The status bar shows the same Pause button beside its bar. Detail
+      comes from what the pass already knows, reported at most a few times a second; no new
+      reads.
+- [x] **50c.4 Carry on after a quit.** A run already skips measured files; what's missing is
+      the count. The count is over the whole pass, not what's left: "1,240 of 43,368" after a
+      relaunch, the measured files counted as done. After a relaunch with a pass unfinished,
+      Library Health says "Library analysis paused: 1,240 of 43,368" and its Analyze Library
+      button carries on.
+- [x] **50c.5 Start over once done.** Once every file is measured, Analyze Library reads
+      "Analyze Library Again" in the menu and Library Health, and asks first, since it reads
+      every file again. A run again keeps the measures it replaces until each file's new ones
+      are stored, and resumes after a quit the same way: the index records the time the run
+      started and each measure the time it was made, and a run lists files measured before
+      its start. Stored data has one shape: if the measures table changes, how the owner's
+      existing measures are kept, or why they can't be, goes in the ADR; prefer a side table
+      over a change that discards them.
+- [x] **50c.6 Pause Scan Library.** A Pause button beside the scan's bar in the status bar,
+      and wherever scan progress shows (Settings > Folders), pauses the running scan with
+      `ScanControl.pause()`, which already exists; Resume carries on where it was. A
+      user's pause is held in `WatchState` so the watcher's own `resume()` calls don't undo
+      it, and the status bar says "Scan paused: …". While a scan is paused by the user, other
+      scans wait behind it as now, and Analyze Library doesn't wait for it (a paused scan
+      reads nothing). A pause doesn't outlast a quit; the next launch scans as usual. Tests in
+      `WatchState` and the watcher.
+- [x] Amend ADR 0116 with ADR 0119.
+
+Plan, part 50c (ADR 0119, amending 0116):
+
+1. **Files at once, utility priority (50c.1, 50c.2).** `LibraryAnalysis.filesAtOnce` is
+   `min(4, max(2, activeProcessorCount / 2))`. The pass starts files in path order into a task
+   group, at most that many under way, each child decoding at `.utility` and storing its own
+   measures (the three tries stay); only the actor counts and reports. Pause cancels the run,
+   so every child. Bench rows rename "at background priority" to "two to four files at once".
+   Tests: no more than `filesAtOnce` under way, every file started in path order, a pause
+   with several under way reads each again next run and none twice in a run.
+2. **The count over the whole pass, run again (50c.4, 50c.5).** A new schema part,
+   `analysisRun`, beside `measures`, so the measures table and the owner's rows stay as they
+   are: `analysis_run` (one row: when the run that's going or last went started, and whether
+   it finished), `measured_at` (the time each measures row was stored, by path), and
+   `analysis_failures` (the files the last run couldn't analyze, with their stamps). A file is
+   done for the pass when it has current measures stored at or after the run's start; rows
+   from before this part count as made at 0, so the owner's measures are done. `MeasuresCache`
+   gains `analysisFiles()` (pending files in path order, the done count, the last run's
+   failures still pending, and whether a run is unfinished), `beginRun(again:)` and
+   `finishRun()`. `Progress.analyzed` and `total` count the whole pass. `start(again:)`;
+   `standing()` says, while no run goes, whether a run is unfinished and whether every file
+   was tried. Tests: a relaunch counting from what's stored, a run again listing every file
+   and resuming after a relaunch, keeping the measures it replaces until each is stored, and
+   the owner's rows from before the part counting as done.
+3. **What the pass reports (50c.3).** `Progress.file`: the name of the newest file started.
+   Counts are reported at most every `reportIntervalSeconds` (0.25 s); a change of stage and
+   the end always. A run with nothing to do reports only its end, so no "0 of 0".
+4. **Pause Scan (50c.6).** `WatchState.pauseRunningScan()`/`resumeRunningScan()`; a user's
+   pause makes `holdsRunningScan` true until Resume or the scan's end. The watcher's
+   `pauseScan()`/`resumeScan()` send `.scanPaused(folder:, Bool)`. `LibraryStatus` keeps the
+   paused folder: "Scan paused: Music: 300 of 1,200 read", and `isScanning` leaves it out, so
+   Analyze Library goes on. Commands `library.pauseScan` "Pause Scan" and
+   `library.resumeScan` "Resume Scan" after Rescan All. Settings > Folders shows no scan
+   progress, so the status bar is the only place. Tests: `WatchState`, the watcher holding a
+   paused scan through a playback stop, `LibraryStatus`.
+5. **Status bar and Library Health (50c.3–50c.5).** The activity line splits: the scans and a
+   save, then a small borderless pause or play button for the scan, then Analyze Library's
+   text and its own button; each button runs a command through the browser's `runCommand`,
+   so the menu, palette and buttons agree. Library Health's header gains the analysis line:
+   a bar, "Analyzing library: 1,240 of 43,368 · name.flac" and Pause while it runs; paused,
+   "Library analysis paused: …" and Analyze Library; idle, the button alone, reading "Analyze
+   Library Again…" once every file was tried. The menu and palette title follow it through a
+   dispatcher `title` hook. Again asks first. At launch the app asks the pass's standing and
+   shows a paused run as paused.
+6. **Bench.** The 200-file row and the search during the pass, before and after, under the
+   load of the other parts' agents.
+
+Gate, part 50c: no separate reviewer pass was run for this part; the implementer reviewed its
+own diff. `./scripts/check` passes clean on the last commit; earlier runs under the other
+parts' load failed renderer tests that lost their port to another run ("Address already in
+use") and a Settings color test, each passing alone and on the rerun. Two dupes findings fixed in the commits that caused them: the failures table's `DELETE FROM`
+and the confirmation's "Cancel", both allowlisted as different facts.
+
+Result, part 50c: shipped as planned (ADR 0119, amending 0116). Analyze Library runs
+`min(4, max(2, cores / 2))` files at once at utility priority, 4 here and 2 on the 2015
+MacBook Pro, started in path order; Pause cancels every file under way. A new schema part,
+`analysisRun` (the run's start and whether it finished, when each measures row was stored, the
+run's failures), leaves `measures` as it was, so the owner's measures count as done. The count
+is over the whole pass and survives a relaunch, which shows the run as "Library analysis
+paused: N of M"; a run with nothing to do shows no "0 of 0". Once every file was tried, the
+menu, the palette and Library Health read "Analyze Library Again…", which asks first and keeps
+each file's measures until its new ones are stored. Library Health shows the bar, the count,
+the file under way and Pause or Analyze Library; the status bar has a small pause/play button
+after the scans' text and after Analyze Library's. Pause Scan and Resume Scan (File menu after
+the analysis commands, the palette, `music-player pauseScan` / `resumeScan`) hold the running
+scan in `WatchState` through playback changes; "Scan paused: …", and Analyze Library doesn't
+wait for it. Settings > Watched Folders shows no scan progress, so the status bar is the only
+place for the button. Bench, Apple Silicon, with three other agents building and testing:
+200 fixture files on the slow simulated NAS, 9.38 s before (load 10–12) and 2.11 s and 2.09 s
+after (load 4–5), 10 ms a file against 47; budget < 15 s, < 40 s on the old Mac, kept until its
+checkpoint. The second search keystroke during the pass, 15.46 ms p95 before, 15.51 and
+16.77 ms after (slowest 34 ms in the second run), within the 20 ms budget. Tests: files at once
+and in path order, a pause with several under way, the whole count and a run again across a
+relaunch, the owner's rows counting as done, throttled reports, `WatchState` and the watcher
+holding a user's pause through playback stopping, the status text, the buttons and Library
+Health's line, the dispatcher's title hook. Owner checkpoint: on the DAC Mac, with the real
+library, choose File > Analyze Library and check that the files already measured count as
+done ("N of 43,368" starts near where it stopped), the time to the end, and whether playback
+or the window stutter with four files at once; open Library Health during the run (bar, file
+name, Pause), pause and quit, relaunch and see "Library analysis paused" there and in the
+status bar, and carry on; once done, check the menu reads "Analyze Library Again…" and asks;
+during a scan of the NAS, click the status bar's pause button, start and stop a track, and
+check the scan stays paused until Resume. Then the 2015 MacBook Pro: the same run, two files at
+once, while playing.
+
+#### 50d. Spectrum window
+
+- [x] **50d.1 Album and file size.** Each file's header names its album beside the title and
+      ends with the file's size ("So Many Questions — Album · PCM · 44.1 kHz · … · 4:16 ·
+      44.8 MB"); the window opens with the `TrackRow`s it already looks titles up in, the size
+      from the index, formatted as the track table's Size column formats it.
+- [x] **50d.2 What differs, in words.** With two or more files, a "Differences" box under the
+      average spectrum explains how each file differs from the first, in plain sentences
+      for someone who doesn't read spectra, from the measures and the average spectra the
+      window already has, no new reads: a lower cutoff ("B stops at 16 kHz and A goes on to
+      22 kHz: B was probably made from an MP3 or AAC"), stored and effective bits ("B is
+      24-bit but holds 16 bits of detail: no more detail than A"), a level difference ("B is
+      about 3 dB louder overall"), a dynamic range difference ("B's DR is 6 against A's 11: B
+      is more compressed, typical of a loud remaster"), true peaks over 0 and clipping, more
+      bass or treble (band levels from the average spectrum, matched by frequency, not row),
+      length, and format and size. When nothing differs past the thresholds it says "These
+      files sound the same as far as these measures can tell" and that identical audio can't
+      be proved without comparing samples. Every threshold is one constant in
+      `AnalysisRules`; the sentences are built in Analysis's text, testable without a window.
+      Tests: the owner's case (a 16-bit WAV and a 24-bit FLAC of one master: format, bits
+      and size differ, a little more above 16 kHz in the WAV), a lossy-origin copy, a louder remaster.
+- [x] Record ADR 0120, amending 0115.
+
+Implementation plan, part 50d (ADR 0120):
+
+1. **Promotion.** The file size text, `ByteCountFormatter` in `.file` style, written twice now
+   (the track table's Size column, the tag editor's `FileRow.sizeText`), moves to
+   `DisplayText` as `fileSizeText`, for its third caller. Its own commit.
+2. **Header (50d.1).** `SpectrumModel.File` gains the album and the size, made from the
+   `TrackRow` the app already looks the title up in (`File(path:row:)`, the file's name when
+   the index has no row), so `SpectrumWindows.show` takes paths and rows. The title reads
+   "Title — Album", the analyzed status line ends with the size. Each file gets a short name
+   for the legend and the sentences: its title, or where titles repeat, its file type ("the
+   FLAC"), or else its place ("file 2"). The legend shows the names, not the format lines the
+   headers already show.
+3. **Differences (50d.2).** `Differences.swift` in Analysis: `ComparedFile` (a name, the
+   result, the size) and `differences(_:from:)`, one sentence per difference of a later file
+   from the first, in order: cutoff, level, DR, true peak over 0, clipping, bass, treble and
+   above 16 kHz (band power from the average spectra, matched by frequency, against the
+   overall level), length, rate, bits, format, size; then, when none of the sound measures
+   differ, that they sound the same as far as the measures tell and that only the samples
+   could prove it. Level is the power summed over the average spectrum from 20 Hz to the lower
+   Nyquist, so "about". Thresholds in `AnalysisRules`. Tests: the owner's WAV and FLAC, a
+   lossy-origin copy, a louder remaster, and each sentence either side of its threshold.
+4. **Window (50d.2).** A "Differences" title and a scrolling text view under the legend and
+   the dB scale, sharing the right column's height with the chart, only with two or more
+   files; it fills once every file has finished, each later file's sentences in a paragraph.
+   Test: the window with 8 analyzed files lays out with the chart and the differences both
+   tall enough to read, and writes a picture to `.build/snapshots`.
+5. **ADR 0120**, amending 0115: the header, the names, the sentences and their thresholds,
+   and why the level is an estimate.
+
+Gate, part 50d: the review's five points, fixed in their own commit: the cutoff and rate
+sentences both describing one upsampled file, a lossy file at a higher rate called upsampled,
+a 32 kHz file's lost highs called beyond hearing, and the closing line saying a silent file, a
+mono one, or a pair whose spectra couldn't be compared sounded the same (now a silence and a
+channels sentence, and no closing line without the spectra). Row 0's DC weighting across rates
+and the missing bit rate of lossy files are recorded in ADR 0120, not fixed. `./scripts/check`
+passes; under the other parts' load, the Settings window's color tests failed twice and pass
+alone.
+
+Result, part 50d: shipped as planned (ADR 0120). The header reads "So Many Questions —
+Album" and its format line ends with the index's size ("· 44.8 MB"); `fileSizeText` is the
+one size text in `DisplayText`. Files of one title are named by type ("the WAV", "(WAV)" in
+the header), then by place. With two files or more, a Differences box under the legend
+says how each later file differs from the first, in sentences, once all have finished. Tests:
+the owner's WAV and FLAC (dither above 16 kHz, 24 against 16 bits, compressed against
+uncompressed, size, then "sound the same as far as these measures can tell"), a lossy-origin
+copy, a loud remaster (5 dB louder, DR 6 against 12, true peak, clipping, 3 dB more bass),
+each threshold either side, padded bits, rates, a lossy file, mono and silence, the fixtures'
+16/44.1 noise against its 96 kHz upsampling (the same level once matched by frequency), the
+model's names and comparison, and the window with 8 files (picture in
+`.build/snapshots/spectrum-window.png`). Owner steps: select the WAV and the FLAC of "So Many
+Questions", Show Spectrum, and read the
+Differences box (each file against the top one); say whether each sentence matches what you hear, and whether the thresholds
+(1 dB level and bands, DR 2, 1 kHz cutoff) say too much or too little. Then try a remaster
+against its original.
+
+Gate, phase 50: two Sonnet reviews of the merged branch; nine findings, each fixed in its own
+commit. The measures cache opens its connection on first use, on its actor, so the launch's
+read of where Analyze Library stands doesn't wait on SQLite on the main thread while the scan
+holds the index. A scan the watcher's stop cancels, as a folder removed or a Settings change
+does, ends with `scanStopped`, so the status bar drops it and its pause instead of showing
+"Scan paused" with a Resume that does nothing. A run carried on keeps its failures, so it
+doesn't read those files again and its count doesn't step back; only Again forgets them. A
+pause after the last file started, which the file finishes through, ends the run as finished.
+Analyze Library counts as running once the user starts it, so a scan's end before the first
+report doesn't show it paused (no test: the app delegate holds it). `Stage.isRunning` and
+`HealthPanel.analysisCommand(for:)` say once which stages run and which command the buttons
+run. A paused scan's bar stands still, empty while it still lists folders. Library Health
+opens at 110 points at least, its header, the analysis line and a row of tiles, over columns
+dragged shut, and its divider stops there (ADR 0117). A window resize that moves the divider
+clears the height last placed, so the next panel is placed again. Accepted, in ADR 0119: a
+forgotten Pause Scan holds other scans and sync pushes until resumed, as a playback hold does,
+and Resume Scan while playback holds a network scan leaves it held until playback stops.
+The Settings window's two color tests failed the first full runs, as on 50c's branch before
+its fix; that fix, a 30 s wait for the color saves, is taken onto this branch, and
+`./scripts/check` passes.
