@@ -21,6 +21,9 @@ public func kilohertzText(_ hertz: Double) -> String {
     String(format: "%.1f", hertz / 1000)
 }
 
+/// 16012.3 -> "16.0 kHz": `kilohertzText` with its unit.
+public func kilohertzLabel(_ hertz: Double) -> String { "\(kilohertzText(hertz)) kHz" }
+
 /// 0.43 -> "+0.4 dBTP": a true peak, signed, to a tenth of a decibel.
 public func truePeakText(_ decibels: Double) -> String {
     String(format: "%+.1f dBTP", decibels)

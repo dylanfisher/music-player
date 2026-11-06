@@ -78,7 +78,7 @@ class FrequencyAxisView: NSView {
         }
         let labels =
             [(0.0, "0")] + referenceHz.map { ($0, "\(kilohertzText($0))") } + [
-                (topHz, "\(kilohertzText(topHz)) kHz")
+                (topHz, kilohertzLabel(topHz))
             ]
         var lastTop = -CGFloat.infinity
         for (hertz, text) in labels {

@@ -125,7 +125,7 @@ public final class SpectrumModel {
             (0...1).contains(y)
         else { return nil }
         let hertz = y * topHz
-        let place = "\(clock(x * spectrogram.durationSeconds)) · \(kilohertzText(hertz)) kHz"
+        let place = "\(clock(x * spectrogram.durationSeconds)) · \(kilohertzLabel(hertz))"
         guard hertz < spectrogram.nyquistHz else { return place + " · over this file's Nyquist" }
         let column = min(spectrogram.columns - 1, Int(x * Double(spectrogram.columns)))
         let row = min(
@@ -148,7 +148,7 @@ public final class SpectrumModel {
             return files.count == 1 ? level : "\(file.title) \(level)"
         }
         guard !levels.isEmpty else { return nil }
-        return "\(kilohertzText(hertz)) kHz · " + levels.joined(separator: " · ")
+        return "\(kilohertzLabel(hertz)) · " + levels.joined(separator: " · ")
     }
 
     /// The legend's line for file `index`: its title and format.

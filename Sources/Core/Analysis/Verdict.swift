@@ -44,7 +44,7 @@ public func verdicts(_ measures: FileMeasures) -> [Verdict] {
             found.append(
                 Verdict(
                     kind: .lossyOrigin,
-                    text: "Cutoff at \(kilohertzText(cutoff)) kHz: suspect conversion from a"
+                    text: "Cutoff at \(kilohertzLabel(cutoff)): suspect conversion from a"
                         + " lossy file"))
         }
         if measures.sampleRateHz > AnalysisRules.upsampledMinimumRateHz,
@@ -53,7 +53,7 @@ public func verdicts(_ measures: FileMeasures) -> [Verdict] {
             found.append(
                 Verdict(
                     kind: .upsampled,
-                    text: "Content stops at \(kilohertzText(cutoff)) kHz in a"
+                    text: "Content stops at \(kilohertzLabel(cutoff)) in a"
                         + " \(kilohertz(measures.sampleRateHz)) kHz file: suspect upsampled"))
         }
     }

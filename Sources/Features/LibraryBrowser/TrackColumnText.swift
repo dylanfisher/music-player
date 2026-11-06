@@ -83,7 +83,7 @@ extension TrackColumn {
         case .sampleRate: sampleRateText(row.sampleRateHz)
         case .bitDepth: number(row.bitsPerSample)
         case .channels: String(row.channels)
-        case .cutoff: row.cutoffHz.map { "\(kilohertzText($0)) kHz" } ?? ""
+        case .cutoff: row.cutoffHz.map(kilohertzLabel) ?? ""
         case .effectiveBits: number(row.effectiveBits)
         case .dynamicRange: row.dynamicRange.map(dynamicRangeText) ?? ""
         case .truePeak: row.truePeakDBTP.map(truePeakText) ?? ""

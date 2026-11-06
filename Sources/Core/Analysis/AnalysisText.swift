@@ -31,7 +31,7 @@ public func measureItems(_ measures: FileMeasures) -> [(name: String, value: Str
         (
             TrackColumn.cutoff.title,
             measures.cutoffHz.map { cutoff in
-                "\(kilohertzText(cutoff)) kHz"
+                kilohertzLabel(cutoff)
                     + (measures.cutoffSteepnessDBPerKHz.map {
                         String(format: ", falling %.0f dB per kHz", $0)
                     } ?? "")
