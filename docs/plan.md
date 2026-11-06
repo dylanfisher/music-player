@@ -283,9 +283,15 @@ Implementation plan:
 Result (draft until the gate passes): shipped 46.1 to 46.3 as planned, amending ADR 0033 and
 0038. An import logs `totals`, the player's totals for each path, and `imported_plays` keeps the
 highest any machine's import reported; an import or a merge adds only what passes it. A `counts`
-line is skipped without a problem. Building the rebuilt `imports` part sets each play count to
-its history rows, so each Mac opens with its own and synced plays only, and the window shows
-once that 11,282 import counts were discarded.
+line is skipped without a problem. Rebuilding the `imports` part first sets each play count to
+its history rows and takes the recorded import skips off each skip count, so each Mac opens with
+its own and synced plays only, and the window shows once that 11,282 import counts were
+discarded. From the review: a synced move that merges two paths counts each player's import
+once, the higher.
+
+Bench: merging 1M events 6.39 s, history 12.11 ms, the database 47.14 MB with the history table
+28.61 MB, a stats period change 227 ms. Record a play measured 0.17 ms (p95) against 0.08 ms in
+an older record; the phase doesn't touch that path, and it is within its 1 ms budget.
 
 46.4, on copies taken at 20:48 of both indexes, both logs and both Swinsian libraries: opened
 with this build, this Mac had 137 plays and mbp2015 135, and 137 each after a sync. Importing
