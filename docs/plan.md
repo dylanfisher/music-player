@@ -697,8 +697,9 @@ Not phases yet. Each becomes one when the owner asks.
   album artist when tags change, with Move and Consolidate Library. It moves and renames music
   files, which AGENTS.md allows only `TagWriter` and Move to Trash to touch, so it needs an ADR
   and the owner's go-ahead first. Watched folders cover adding music meanwhile.
-- **Discogs lookup:** fetch release data from the Discogs API and offer it as a tag edit the user
-  confirms in the tag editor, written through `TagWriter` (ADR 0020). Start with files that
+- **Discogs lookup:** superseded by [recommendations.md](recommendations.md), which uses local
+  data dumps and needs no token. The API version: fetch release data from the Discogs API and
+  offer it as a tag edit the user confirms in the tag editor, written through `TagWriter` (ADR 0020). Start with files that
   already carry `DISCOGS_RELEASE_ID` (39 of the 159 reference files), which need one
   `GET /releases/{id}` and no matching. Searching for other files needs a Discogs token, which
   breaks the no-secrets rule, so the owner decides how a user-supplied token is stored first.
