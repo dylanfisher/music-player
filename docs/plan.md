@@ -255,6 +255,43 @@ one.
       Only a file that can't be read at all is left out with the alert. Tests: Get Info on a
       generated DSF and DSDIFF fixture shows their tags, and Save never writes them.
 
+Plan, part 48a (ADR 0114):
+- Probe: `TagEditorWindow` opens on a small "Reading tags…" view and swaps in the tabs and
+  buttons in `load`, resizing to fit, so the window grows and everything moves once the files
+  are read. ⌘[ and ⌘] are Back and Forward in the menu, which act on the main window's history
+  even while an info window is key. Resolve Lost Stats is always on, and with none to resolve
+  writes to the status bar. Get Info reads each file with Metadata's `parse`, which reads DSF
+  and DSDIFF, then `editorTagFacts`, which parses a `TagFile` for the tag scheme and the fields
+  holding several values, and `TagFile` throws for DSF and DSDIFF: that throw is the whole
+  failure.
+- 48a.1 (`Features/TagEditor`): the window builds its heading, tabs, the last tab's fields and
+  the buttons row in `init`, at the size it keeps; until `load` the fields can't be typed in and
+  a spinner and "Reading tags…" sit in the buttons row, where a line of one height says what
+  applies once read. Test: the window's frame and the first tab's field frames are equal before
+  and after `load`, the window drawn in between.
+- 48a.4 (`Core/TagWriter`, `Features/TagEditor`): the formats the writer refuses, and why
+  ("Tags in DSF files can't be written yet"), are one fact on `FileFormat` in TagWriter, which
+  `TagFile` throws with. `editorTagFacts` checks the format first and, for those files, returns
+  that reason without parsing a `TagFile`, so the read uses only Metadata's reader. The
+  `EditableTrack` carries the reason; the model shows every track's values, but edits, checks
+  and collapse notes cover only the writable ones, and `TagEditing.save` writes and counts only
+  their paths. With every file read-only the fields, art buttons and Save are off; in a mix the
+  line says which can't be saved and how many Save writes. Tests: a generated DSF and DSDIFF
+  read through `readEditableTrack` with their tags and reason; the model's edit over a mix; Get
+  Info on a DSF, a DSDIFF and a FLAC fixture writing only the FLAC through a real `TagWriter`,
+  the DSD files' bytes unchanged; a window on only DSD files with Save off.
+- 48a.2 (`Features/TagEditor`, `App`): `TagEditorWindow.stepTab` moves one tab and wraps;
+  `TagEditing.stepTab(_:in:)` acts on the info window that is key. The Back and Forward
+  handlers step the key info window's tabs and fall through to the browser otherwise, so the
+  keys stay the ones bound to Back and Forward. Tests: stepping wraps both ways, and only a key
+  info window steps.
+- 48a.3 (`Features/LibraryBrowser`, `App`): `LibraryBrowser.canResolveLostStats` is false once
+  a health report has found no lost files (true before the first report), and the command is
+  enabled by it. When the sheet can't open (none found after all, or the read fails) an alert
+  sheet on the window says why. Tests: the flag follows the report, and an empty run alerts
+  instead of writing the status bar.
+- Order: this plan, 48a.1, 48a.4, 48a.2, 48a.3, the ADR, the bench and the result.
+
 #### 48b. Listening Stats
 
 - [ ] **48b.1 Rolling periods.** Past Week, Past Month, Past Year and All Time replace This
