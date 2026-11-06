@@ -5734,9 +5734,49 @@ changes nothing it draws.
 
 #### 44b. Enter on the next track keeps the queue panel
 
-- [ ] **44b.1** With the queue panel open, Enter or a double-click on the track after the
+- [x] **44b.1** With the queue panel open, Enter or a double-click on the track after the
       playing one in the track table moves the queue as Next does, without the panel reloading
       every row. A rebuild when the queue does change is fine.
+
+Plan, part 44b (ADR 0104, amending 0097):
+- Probe (done before this plan): with the kept queue handed over, the engine's
+  `play(entry:ifQueueIs:)` makes Next's calls (`move(to:)` and `load`), so its state is Next's,
+  and `QueuePanel.show` drops the played rows as on Next. The model rarely hands it over:
+  `BrowserModel.refresh` forgets the kept list, and a counted play, a counted skip, a rating
+  and an opinion all refresh, as does every scan's progress, a network folder's empty poll
+  included. A track counts a play partway through, and Enter on the next track counts a skip,
+  so the list was gone before most Enters. A refresh during the queue read dropped the queue
+  read for the play too.
+- Edits that move no file (rating, opinion, counted play and skip) run the queries again
+  without touching the kept list. A library change checks the kept list instead of forgetting
+  it: its files are read again on the refresh connection, and it stays kept while every file is
+  where it was. A play keeps it only once checked. A queue read across a change is kept and
+  checked the same way.
+- Launch: the restored queue (ADR 0095) is kept as a play's, so the first play from the same
+  list, the source unfiltered in its sort, plays in it; the engine's check still refuses a
+  restored queue that was replaced or edited.
+- Tests: a counted skip, play and rating keep the queue, a rescan that moved nothing keeps it,
+  and one that moved the files forgets it; a play from the list the play state was restored
+  from carries the restored queue.
+- Order: this plan, then the change through the tests, `./scripts/check`, then the result.
+
+Result, part 44b: shipped 44b.1 (ADR 0104, amending 0097). The panel already moved as on Next
+whenever the play went in place; the play went in place only until the next refresh of the
+track list, and a refresh came with each counted play or skip, each rating, and each scan's
+progress, so after the first track, or the first Enter, every play rebuilt the queue. Counts,
+ratings and opinions keep the kept list now, and a library change reads the list's files again
+and keeps it when none moved, which for the whole library (43k tracks on the build Mac) is a
+read of under 60 ms off the main thread, once per refresh while a list is kept. The play state
+restored at launch counts as the last play, so the first Enter after launch on the next track
+plays in place when the table shows the source it was played from, unfiltered. No state or
+config key changed, and nothing on the real-time thread. Checked by tests only, nothing on
+screen. For the owner: with the queue panel open, Enter on the next track after the playing one
+has counted a play, after a rating, during a network folder's poll, and as the first play after
+a launch; the panel should move up as on Next. A list narrowed by the columns or a search at
+quit is restored as its whole source, so the first play from the narrowed list still builds the
+queue.
+`./scripts/check` passes but for its test step, where `theGlassHeadersAreFrosted` (which
+reads the screen) fails in the full run and alone, the same with this part's change undone.
 
 #### 44c. Listening Stats stays put, and counts Swinsian's plays
 
