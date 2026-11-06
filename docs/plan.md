@@ -295,48 +295,48 @@ checkpoint compares flagged files with Spek.
 
 #### 45a. Analysis and the Spectrum window
 
-- [ ] **45a.1 Analysis module.** A new Core module, `Analysis`. It decodes a file through
+- [x] **45a.1 Analysis module.** A new Core module, `Analysis`. It decodes a file through
       `FileDecoder` (marked `package` for it), off the main thread at utility priority, and
       runs a short-time FFT with vDSP: 8192 points, Hann window, 50% overlap, per channel. A
       lossless file is read in its own integer format, so effective bits are exact; a lossy one
       as float. DSD files are skipped in this phase and say so. Analysis can be cancelled at
       any FFT frame.
-- [ ] **45a.2 Results.** One pass gives: a spectrogram reduced to at most 1,000 time columns ×
+- [x] **45a.2 Results.** One pass gives: a spectrogram reduced to at most 1,000 time columns ×
       512 frequency rows in dB, keeping each cell's maximum so short events survive; the average
       spectrum; and the measures in the table above: cutoff frequency and steepness, effective
       bits, identical channels, peak, true peak (4× oversampled), clipped runs (3 or more
       samples at full scale), and a dynamic range score (per 3-second block, the peak against
       the loudest 20% RMS, as DR meters do).
-- [ ] **45a.3 Verdicts.** Rules from the measures, with every threshold defined once:
+- [x] **45a.3 Verdicts.** Rules from the measures, with every threshold defined once:
       suspect lossy origin (a lossless codec, a steep cutoff at or under 20.5 kHz, Nyquist at
       22.05 kHz or more), suspect upsampled (a rate over 48 kHz and content stopping at or under
       24 kHz), padded bits (effective bits under the stored bits), fake stereo, clipped. Lossy
       files get measures, not a lossy-origin verdict. Each verdict has one line of text that
       names its numbers: "Cutoff at 16.0 kHz: suspect conversion from a lossy file".
-- [ ] **45a.4 Spectrum window.** A command, Show Spectrum, on the selected tracks, from the
+- [x] **45a.4 Spectrum window.** A command, Show Spectrum, on the selected tracks, from the
       track table's menu, the File menu and so the palette. For one track: the spectrogram
       (time across, frequency up, linear to Nyquist, a dB color scale with its legend), dotted
       reference lines at 16, 19, 20, 22.05 and 24 kHz, the average spectrum beside it, the
       format line (codec, rate, stored and effective bits), the measures and the verdicts.
       Hovering shows time, frequency and level. Drawn in AppKit, no Swift Charts, as 43.4.
-- [ ] **45a.5 Comparing files.** With up to 8 tracks selected, the window stacks their
+- [x] **45a.5 Comparing files.** With up to 8 tracks selected, the window stacks their
       spectrograms on one frequency axis scaled to the highest Nyquist, and draws every
       average spectrum on one chart, one color per file, with a legend of title and format. A
       file that's still being analyzed shows its progress; closing the window cancels the work.
-- [ ] **45a.6 Cache.** Measures go in the index, in a table of their own keyed by path, with the
+- [x] **45a.6 Cache.** Measures go in the index, in a table of their own keyed by path, with the
       file's size and modification time; a row whose file changed is ignored and the file
       analyzed again. The table is a schema part of its own (`SchemaPart`), so changing it drops
       nothing else. Spectrograms go in the Caches folder beside the thumbnails (ADR 0079), as
       8-bit dB, about 0.5 MB each, and are evicted oldest first past a size cap.
-- [ ] **45a.7 Command line.** `music-player analyze [<path>…] [--json]`, from the same command
+- [x] **45a.7 Command line.** `music-player analyze [<path>…] [--json]`, from the same command
       registry entry: the selected tracks with no paths. It prints the format line, measures and
       verdicts, or the results as JSON.
-- [ ] **45a.8 Fixtures and tests.** The fixture generator adds broadband test audio with known
+- [x] **45a.8 Fixtures and tests.** The fixture generator adds broadband test audio with known
       properties: full band at 16/44.1; the same through a steep low-pass at 16 and 19 kHz;
       the same encoded to AAC with AudioToolbox and decoded back into a FLAC; 16/44.1 upsampled
       to 24/96; 16-bit padded to 24; identical channels; clipped. Each verdict has a test that
       fails without its rule, and each clean fixture a test that it gets no verdict.
-- [ ] **45a.9 Speed.** Bench rows with budgets set from the first measurement, with room for
+- [x] **45a.9 Speed.** Bench rows with budgets set from the first measurement, with room for
       the old Mac: analyze a 5-minute 24/96 FLAC fixture locally, and the same on the slow
       simulated NAS; the analysis's peak memory. A soak run with analysis going shows no
       underruns.
@@ -398,7 +398,13 @@ Implementation plan, part 45a (ADR 0115):
    soak gains a thread analyzing that fixture again and again. Budgets from the first run,
    with room for the old Mac.
 
-Result (draft, before the gate): shipped as planned (ADR 0115). Every generated fixture gets
+Gate, part 45a: the review's two crashes (a NaN or infinite float sample, a lossless file of
+unknown depth), the cache failure that threw away a finished analysis, the time axis of a file
+longer than its stated length and a damaged cache header, and the audit's six points, fixed in
+their own commits. `./scripts/check` passes but for `WindowGlassTests.theGlassHeadersAreFrosted`
+(this Mac's display asleep) and a color test that passes alone.
+
+Result, part 45a: shipped as planned (ADR 0115). Every generated fixture gets
 the verdicts it was made for and the clean ones none: low-passed at 16 and 19 kHz, cutoffs at
 16.0 and 19.0 kHz (155 dB per kHz); AAC at 128 kbps decoded into a FLAC, cutoff 17.5 kHz, and
 the AAC file itself measured with no lossy verdict; 16/44.1 in 24/96, cutoff 22.1 kHz, suspect
