@@ -183,7 +183,7 @@ final class RepeatedAnalysis: Sendable {
 
     init(_ databaseURL: URL) throws {
         let pass = LibraryAnalysis(
-            cache: try MeasuresCache(databaseURL: databaseURL), scanRunning: { false },
+            cache: MeasuresCache(databaseURL: databaseURL), scanRunning: { false },
             report: { _ in })
         self.pass = pass
         let stopping = stopping

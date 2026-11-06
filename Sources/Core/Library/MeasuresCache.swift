@@ -2,12 +2,24 @@ import Foundation
 import Metadata
 
 /// The analysis's stored measures (phase 45), on a connection of its own, so an analysis
-/// never waits for the window's queries or holds them up.
+/// never waits for the window's queries or holds them up. The connection opens on first use,
+/// on the actor: opening prepares the schema, which waits while a scan holds the index, and
+/// the app makes the cache on the main thread at launch.
 public actor MeasuresCache {
-    private let index: LibraryIndex
+    private let databaseURL: URL
+    private var opened: LibraryIndex?
 
-    public init(databaseURL: URL) throws {
-        index = try LibraryIndex(at: databaseURL)
+    public init(databaseURL: URL) {
+        self.databaseURL = databaseURL
+    }
+
+    private var index: LibraryIndex {
+        get throws {
+            if let opened { return opened }
+            let made = try LibraryIndex(at: databaseURL)
+            opened = made
+            return made
+        }
     }
 
     /// The measures of `path`, when they were made from the file as `stamp` describes it.

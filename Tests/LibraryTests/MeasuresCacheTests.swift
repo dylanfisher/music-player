@@ -18,9 +18,23 @@ private let silent = FileMeasures(
     durationSeconds: 1, cutoffHz: nil, cutoffSteepnessDBPerKHz: nil, effectiveBits: nil,
     identicalChannels: nil, peakDBFS: nil, truePeakDBTP: nil, clippedRuns: 0, dynamicRange: nil)
 
+/// Making the cache opens nothing: the app makes it on the main thread at launch, while a scan
+/// may hold the index, so the connection opens on the cache's first use, off that thread.
+@Test func theCacheOpensItsConnectionOnFirstUse() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("measures-cache-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let databaseURL = libraryFileURL(in: directory)
+    let cache = MeasuresCache(databaseURL: databaseURL)
+    #expect(!FileManager.default.fileExists(atPath: databaseURL.path))
+    #expect(try await cache.analysisFiles().total == 0)
+    #expect(FileManager.default.fileExists(atPath: databaseURL.path))
+}
+
 @Test func measuresComeBackForTheSameFile() async throws {
     let library = try TestLibrary()
-    let cache = try MeasuresCache(databaseURL: library.databaseURL)
+    let cache = MeasuresCache(databaseURL: library.databaseURL)
     try await cache.store(measured, path: "/a.flac", stamp: stamp)
     try await cache.store(silent, path: "/b.m4a", stamp: stamp)
     #expect(try await cache.measures(path: "/a.flac", stamp: stamp) == measured)
@@ -30,7 +44,7 @@ private let silent = FileMeasures(
 
 @Test func measuresOfAChangedFileAreIgnoredAndReplaced() async throws {
     let library = try TestLibrary()
-    let cache = try MeasuresCache(databaseURL: library.databaseURL)
+    let cache = MeasuresCache(databaseURL: library.databaseURL)
     try await cache.store(measured, path: "/a.flac", stamp: stamp)
     let grown = FileStamp(sizeBytes: stamp.sizeBytes + 1, modifiedSeconds: stamp.modifiedSeconds)
     let touched = FileStamp(sizeBytes: stamp.sizeBytes, modifiedSeconds: stamp.modifiedSeconds + 1)
@@ -48,7 +62,7 @@ private let silent = FileMeasures(
     let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
     let analyzable = rows.filter { !["dsf", "dff"].contains($0.fileType.lowercased()) }
     #expect(analyzable.count < rows.count)
-    let cache = try MeasuresCache(databaseURL: library.databaseURL)
+    let cache = MeasuresCache(databaseURL: library.databaseURL)
     let before = try await cache.analysisFiles().pending
     #expect(before.map(\.path) == analyzable.map(\.path).sorted())
     #expect(

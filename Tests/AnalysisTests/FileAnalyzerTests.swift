@@ -22,7 +22,7 @@ private struct Scratch {
             at: try analysisFixture(fixture, in: try defaultPlaybackFixturesDirectory()), to: file)
         store = SpectrogramStore(directory: directory.appendingPathComponent("Spectrograms"))
         analyzer = FileAnalyzer(
-            measures: try MeasuresCache(
+            measures: MeasuresCache(
                 databaseURL: libraryFileURL(in: directory.appendingPathComponent("data"))),
             spectrograms: store)
     }

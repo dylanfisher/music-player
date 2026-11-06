@@ -111,7 +111,7 @@ let analysisBenchmarks = [
         budget: Budget(appleSilicon: 15, oldMac: 40, unit: .seconds)
     ) {
         try withScratchDirectory("library-pass") { directory in
-            let cache = try MeasuresCache(databaseURL: try passLibrary(in: directory))
+            let cache = MeasuresCache(databaseURL: try passLibrary(in: directory))
             let pass = LibraryAnalysis(
                 cache: cache, latency: nasFileLatency, scanRunning: { false }, report: { _ in })
             var ended: LibraryAnalysis.Progress?

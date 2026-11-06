@@ -47,7 +47,7 @@ extension AppDelegate {
 
     func makeSpectrumWindows() -> SpectrumWindows {
         SpectrumWindows { [weak self] path, progress in
-            guard let analyzer = try await self?.fileAnalyzer() else { throw CancellationError() }
+            guard let analyzer = await self?.fileAnalyzer() else { throw CancellationError() }
             return try await analyzer.result(of: path, progress: progress)
         }
     }
@@ -63,28 +63,29 @@ extension AppDelegate {
         }
     }
 
-    /// The measures in the index, on a connection of their own, opened on first use.
-    private func measuresCache() throws -> MeasuresCache {
+    /// The measures in the index, on a connection of their own, which the cache opens off the
+    /// main thread on first use.
+    private func measuresCache() -> MeasuresCache {
         if let measures { return measures }
-        let made = try MeasuresCache(databaseURL: libraryFileURL(in: paths.dataDirectory))
+        let made = MeasuresCache(databaseURL: libraryFileURL(in: paths.dataDirectory))
         measures = made
         return made
     }
 
     /// The analyzer, made on first use.
-    func fileAnalyzer() throws -> FileAnalyzer {
+    func fileAnalyzer() -> FileAnalyzer {
         if let analyzer { return analyzer }
-        let made = FileAnalyzer(measures: try measuresCache(), spectrograms: spectrograms)
+        let made = FileAnalyzer(measures: measuresCache(), spectrograms: spectrograms)
         analyzer = made
         return made
     }
 
     /// Analyze Library, made on first use. It waits while the status bar shows a scan, and
     /// reports to it in the order it went.
-    private func libraryPass() throws -> LibraryAnalysis {
+    private func libraryPass() -> LibraryAnalysis {
         if let libraryAnalysis { return libraryAnalysis }
         let made = LibraryAnalysis(
-            cache: try measuresCache(),
+            cache: measuresCache(),
             scanRunning: { [weak self] in await self?.browser?.isScanning ?? false },
             report: { [weak self] progress in
                 DispatchQueue.main.async {
@@ -118,13 +119,7 @@ extension AppDelegate {
     /// Analyze Library: carries on with what's left, or, once every file was tried, asks
     /// before reading the whole library again.
     private func analyzeLibrary() {
-        let pass: LibraryAnalysis
-        do {
-            pass = try libraryPass()
-        } catch {
-            browser?.report("Analyze Library: \(error)")
-            return
-        }
+        let pass = libraryPass()
         Task { [weak self] in
             let standing: LibraryAnalysis.Standing
             do {
@@ -161,13 +156,7 @@ extension AppDelegate {
     /// Library has, and a run left unfinished at the last quit, as paused.
     func showLibraryAnalysisStanding() {
         guard libraryAnalysisStage == nil || libraryAnalysisStage == .paused else { return }
-        let pass: LibraryAnalysis
-        do {
-            pass = try libraryPass()
-        } catch {
-            logger.error("couldn't open the measures to see where Analyze Library stands: \(error)")
-            return
-        }
+        let pass = libraryPass()
         Task { [weak self] in
             let standing: LibraryAnalysis.Standing
             do {
@@ -219,7 +208,7 @@ extension AppDelegate {
             files = paths
         }
         if let problem = AnalysisRequestError(fileCount: files.count) { throw problem }
-        let analyzer = try fileAnalyzer()
+        let analyzer = fileAnalyzer()
         var measured: [(path: String, measures: FileMeasures)] = []
         for path in files {
             do {

@@ -35,7 +35,7 @@ private struct ScannedFixtures {
         self.paths = paths
     }
 
-    func cache() throws -> MeasuresCache { try MeasuresCache(databaseURL: databaseURL) }
+    func cache() -> MeasuresCache { MeasuresCache(databaseURL: databaseURL) }
 }
 
 /// What a run reported and which files it was asked to analyze, as they come.
@@ -74,7 +74,7 @@ private func eventually(_ condition: () -> Bool) async throws {
     let library = try ScannedFixtures()
     let heard = Heard()
     let pass = LibraryAnalysis(
-        cache: try library.cache(), scanRunning: { false }, report: heard.report)
+        cache: library.cache(), scanRunning: { false }, report: heard.report)
     let ended = await pass.start().value
     #expect(ended.stage == .finished)
     #expect(ended.analyzed == 3 && ended.total == 3 && ended.failed == 0)
@@ -95,7 +95,7 @@ private func eventually(_ condition: () -> Bool) async throws {
     // says only that it's done: no "0 of 0".
     let relaunchedHeard = Heard()
     let relaunched = LibraryAnalysis(
-        cache: try library.cache(),
+        cache: library.cache(),
         analyze: { path in
             heard.ask(path)
             return clean
@@ -112,11 +112,11 @@ private func eventually(_ condition: () -> Bool) async throws {
 @Test func aRunAgainReadsEveryFileAndCarriesOnAfterARelaunch() async throws {
     let library = try ScannedFixtures()
     _ = await LibraryAnalysis(
-        cache: try library.cache(), scanRunning: { false }, report: { _ in }
+        cache: library.cache(), scanRunning: { false }, report: { _ in }
     ).start().value
     let heard = Heard()
     let pass = LibraryAnalysis(
-        cache: try library.cache(),
+        cache: library.cache(),
         analyze: { path in
             heard.ask(path)
             if path == library.paths[1] { try await Task.sleep(nanoseconds: 60_000_000_000) }
@@ -133,7 +133,7 @@ private func eventually(_ condition: () -> Bool) async throws {
     #expect(rows[0].cutoffHz == nil && rows.allSatisfy { $0.effectiveBits != nil })
 
     let relaunched = LibraryAnalysis(
-        cache: try library.cache(),
+        cache: library.cache(),
         analyze: { path in
             heard.ask(path)
             return clean
@@ -153,7 +153,7 @@ private func eventually(_ condition: () -> Bool) async throws {
     let library = try ScannedFixtures()
     let heard = Heard()
     let pass = LibraryAnalysis(
-        cache: try library.cache(),
+        cache: library.cache(),
         analyze: { path in
             heard.ask(path)
             if path != library.paths[0], heard.paths.filter({ $0 == path }).count == 1 {
@@ -196,7 +196,7 @@ private final class UnderWay: @unchecked Sendable {
     let heard = Heard()
     let underWay = UnderWay()
     let pass = LibraryAnalysis(
-        cache: try library.cache(),
+        cache: library.cache(),
         analyze: { path in
             underWay.started()
             defer { underWay.ended() }
@@ -218,7 +218,7 @@ private final class UnderWay: @unchecked Sendable {
     let heard = Heard()
     heard.scanRuns = true
     let pass = LibraryAnalysis(
-        cache: try library.cache(),
+        cache: library.cache(),
         analyze: { path in
             heard.ask(path)
             return clean
@@ -239,7 +239,7 @@ private final class UnderWay: @unchecked Sendable {
 @Test func aStoreThatFailsIsTriedAgainWithoutAnotherRead() async throws {
     let library = try ScannedFixtures()
     let heard = Heard()
-    let cache = try library.cache()
+    let cache = library.cache()
     let pass = LibraryAnalysis(
         cache: cache,
         analyze: { path in
@@ -268,7 +268,7 @@ private struct SQLiteBusy: Error {}
 @Test func aFileThatFailsIsCountedAndTriedAgainNextRun() async throws {
     let library = try ScannedFixtures()
     let pass = LibraryAnalysis(
-        cache: try library.cache(),
+        cache: library.cache(),
         analyze: { path in
             guard path != library.paths[1] else { throw AnalysisError.nonFiniteSample }
             return clean
