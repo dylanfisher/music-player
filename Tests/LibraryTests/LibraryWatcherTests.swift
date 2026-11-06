@@ -123,6 +123,16 @@ private final class LockedEvents: @unchecked Sendable {
         }
     }
 
+    /// The folder of each scan that failed, in order.
+    var failedScans: [String] {
+        lock.withLock {
+            events.compactMap { event in
+                guard case .scanFailed(let folder, _) = event else { return nil }
+                return folder
+            }
+        }
+    }
+
     var launchesEnded: Int {
         lock.withLock {
             events.filter { event in
@@ -384,6 +394,33 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     #expect(try index.trackCount() == library.readableCount)
     // One pass read each file once: it went on from where it paused.
     #expect(received.scanned.first?.1.read == library.manifest.files.count)
+}
+
+/// Every scan that fails says so, not only the first of a run of them, so the window stops
+/// showing it as running.
+@Test func eachScanThatFailsInARowReportsItsEnd() async throws {
+    let library = try TestLibrary()
+    // A database in a folder that can't be written fails every scan as it opens.
+    let locked = library.databaseURL.deletingLastPathComponent().appendingPathComponent("locked")
+    try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+    try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: locked.path)
+    defer {
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: locked.path)
+    }
+    let received = LockedEvents()
+    let watcher = LibraryWatcher(
+        databaseURL: locked.appendingPathComponent("library.sqlite"), networkReaders: nil,
+        events: received.append)
+    watcher.start(
+        folders: [library.folder], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: true)
+    defer { watcher.stop() }
+    // The first failure finding the shares names no folder.
+    func failures() -> Int { received.failedScans.filter { $0 == library.root }.count }
+    #expect(try await eventually(within: 20) { failures() == 1 })
+    watcher.rescanNow()
+    #expect(try await eventually(within: 20) { failures() == 2 })
 }
 
 @Test func rescanNowWalksANetworkFolderWhilePollsArePausedForPlayback() async throws {

@@ -45,6 +45,10 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
     #expect(status.isScanning)
     status.apply(.scanFailed(folder: "/Volumes/music/library", reason: "gone"))
     #expect(!status.isScanning)
+    // A retry that fails the same way ends the same way, as the watcher reports each one.
+    status.apply(.scanning(folder: "/Volumes/music/library", ScanProgress()))
+    status.apply(.scanFailed(folder: "/Volumes/music/library", reason: "gone"))
+    #expect(!status.isScanning && status.scanText == nil)
 }
 
 @Test func statusShowsTracksScansAndProblemsApart() {

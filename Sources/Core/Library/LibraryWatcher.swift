@@ -369,11 +369,15 @@ public final class LibraryWatcher: @unchecked Sendable {
             for issue in summary.issues { logger.error("\(issue.description)") }
             events(.scanned(folder: job.folder.path, summary))
         case .failure(let error):
-            logger.error("scanning \(job.folder.path) failed: \(error)")
-            // Its retries fail the same way until something changes, so only the first shows.
+            // Its retries fail the same way until something changes, so only the first is
+            // logged as an error. Each still ends with its event, which clears the scan the
+            // window shows and Analyze Library waits for.
             if state?.failed(now: Date()) == true {
-                events(.scanFailed(folder: job.folder.path, reason: "\(error)"))
+                logger.error("scanning \(job.folder.path) failed: \(error)")
+            } else {
+                logger.notice("scanning \(job.folder.path) failed again: \(error)")
             }
+            events(.scanFailed(folder: job.folder.path, reason: "\(error)"))
         }
         reportLaunchIfEnded()
         advance()

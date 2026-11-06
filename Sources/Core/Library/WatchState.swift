@@ -248,7 +248,7 @@ struct WatchState {
 
     /// The running scan failed at `now`, as on a full disk. A polled folder waits for its next
     /// poll; a local folder is scanned whole `failedScanRetrySeconds` later, doubling with each
-    /// failure in a row. True for the first failure of a run of them, the one worth reporting.
+    /// failure in a row. True for the first failure of a run of them, the one worth logging.
     mutating func failed(now: Date) -> Bool {
         guard let job = running else { preconditionFailure("no scan is running") }
         let path = job.folder.path
