@@ -9,7 +9,8 @@ import Settings
 @MainActor
 final class HealthPanel: NSViewController, SourcePanel {
     /// The narrowest a tile gets before a column is dropped, and the tiles' height and spacing.
-    static let tileMinWidthPoints: CGFloat = 180
+    /// Wide enough for all but the three longest descriptions, which the tooltip shows whole.
+    static let tileMinWidthPoints: CGFloat = 330
     static let tileHeightPoints: CGFloat = 46
     static let spacingPoints: CGFloat = 8
     static let insetPoints: CGFloat = 12

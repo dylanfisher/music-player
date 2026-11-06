@@ -238,3 +238,18 @@ private func browserInWindow(browserHeight: Int = 150) async throws -> (
         browser.health.report?[.missingEntries].count == 0
     }
 }
+
+/// At its narrowest, a tile shows most checks' descriptions whole.
+@MainActor @Test func mostDescriptionsShowWholeInTheNarrowestTile() {
+    var whole: [HealthCheck] = []
+    for check in HealthCheck.allCases {
+        let tile = HealthTile(check: check)
+        tile.frame = NSRect(
+            x: 0, y: 0, width: HealthPanel.tileMinWidthPoints,
+            height: HealthPanel.tileHeightPoints)
+        tile.layoutSubtreeIfNeeded()
+        let label = tile.summaryLabel
+        if label.intrinsicContentSize.width <= label.frame.width { whole.append(check) }
+    }
+    #expect(whole.count * 4 >= HealthCheck.allCases.count * 3, "\(whole)")
+}
