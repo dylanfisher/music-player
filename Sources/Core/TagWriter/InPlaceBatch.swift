@@ -50,9 +50,9 @@ extension TagWriter {
     /// each record confirmed. A file whose write or read-back fails is put back from the
     /// journal. Returns each file's result in order, and whether the batch stops after the
     /// chunk: a journal that can't be written, or a crash `faults` injects.
-    func writeInPlace(_ jobs: [InPlaceJob], entry: TagUndoJournal.Entry)
-        -> (results: [JobResult], stop: Bool, crashed: Bool)
-    {
+    func writeInPlace(
+        _ jobs: [InPlaceJob], entry: TagUndoJournal.Entry, progress: WriteProgressCounter
+    ) -> (results: [JobResult], stop: Bool, crashed: Bool) {
         var records = jobs.map { job in
             TagUndoJournal.FileRecord(
                 path: job.path, edited: job.before, original: job.before, originalSHA256: nil,
@@ -64,12 +64,14 @@ extension TagWriter {
                 Array(zip(records, jobs.map(\.plan.oldBytes))), to: entry)
         } catch {
             logger.error("\(error.description)")
+            for _ in jobs { progress.written() }
             return (jobs.map { _ in .failure(error) }, error.stopsBatch, false)
         }
         if faults.crashAfter == .journaled { return ([], true, true) }
 
         let writes = concurrently(jobs.count, atOnce: writesAtOnce) { index in
             if faults.crashAfter == .firstWritten, index > 0 { return Written.skipped }
+            defer { progress.written() }
             return autoreleasepool { write(jobs[index]) }
         }
         if faults.crashAfter == .firstWritten || faults.crashAfter == .written

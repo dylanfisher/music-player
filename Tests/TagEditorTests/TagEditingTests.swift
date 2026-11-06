@@ -69,7 +69,8 @@ private func makeEditing(
         return report
     },
     undo: @escaping @Sendable () -> TagWriteReport = { TagWriteReport() },
-    confirm: Bool = true
+    confirm: Bool = true,
+    progress: [TagWriteProgress] = []
 ) -> TagEditing {
     let editing = TagEditing(
         effects: .init(
@@ -78,8 +79,9 @@ private func makeEditing(
                 let (tracks, problems) = read(paths, isStopped)
                 return (tracks, problems)
             },
-            write: { edit, paths in
+            write: { edit, paths, report in
                 seen.ran("write \(paths.joined(separator: " "))")
+                for step in progress { report(step) }
                 return write(edit, paths)
             },
             undo: {
@@ -307,4 +309,32 @@ private final class Titles: @unchecked Sendable {
     #expect(saved == [moved])
     editing.open(["/b.flac"], over: window)
     #expect(seen.places == [nil, moved])
+}
+
+/// A save tells the status bar how far it's got, file by file, and that it's done (ADR 0108).
+@MainActor
+@Test func aSaveShowsItsProgressThenClears() async throws {
+    var step = TagWriteProgress(total: 2)
+    var progress: [TagWriteProgress] = []
+    for stage in [\TagWriteProgress.read, \.read, \.written, \.written] {
+        step[keyPath: stage] += 1
+        progress.append(step)
+    }
+    let editing = makeEditing(Seen(), progress: progress)
+    var shown: [String?] = []
+    var fractions: [Double] = []
+    editing.saving = { status in
+        shown.append(status?.text)
+        if let status { fractions.append(status.fraction) }
+    }
+    editing.open(["/a.flac", "/b.flac"], over: window)
+    try await eventually { editor(editing, ["/a.flac", "/b.flac"])?.isLoaded == true }
+    editor(editing, ["/a.flac", "/b.flac"])?.saved(TagEdit(values: [.title: "New"]))
+    try await eventually { !editing.isWriting }
+    #expect(
+        shown == [
+            "Saving tags: 0 of 2", "Saving tags: 0 of 2", "Saving tags: 1 of 2",
+            "Saving tags: 2 of 2", nil,
+        ])
+    #expect(fractions == [0.25, 0.5, 0.75, 1])
 }

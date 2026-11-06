@@ -603,6 +603,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         editing.replaceArtwork = { [weak self] in self?.dispatcher?.run(.replaceArtwork) }
         editing.removeArtwork = { [weak self] in self?.dispatcher?.run(.removeArtwork) }
+        editing.saving = { [weak self] progress in self?.browser?.showSaving(progress) }
         editing.place = state?[\.infoPlace].map { NSPoint(x: $0.x, y: $0.y) }
         editing.placeChanged = { [weak self] corner in
             self?.saver?.set(\.infoPlace, InfoWindowPlace(x: corner.x, y: corner.y))

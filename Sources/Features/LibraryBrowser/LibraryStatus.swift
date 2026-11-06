@@ -24,6 +24,10 @@ struct LibraryStatus: Equatable, Sendable {
     var healthOtherCount = 0
     /// The lines the user dismissed, which the problems list leaves out.
     var dismissed: Set<String> = []
+    /// What the tag editor says of a save under way, such as "Saving tags: 3 of 20", and how
+    /// far along it is, from 0 to 1.
+    var savingText: String?
+    var savingFraction = 0.0
 
     init() {}
 
@@ -104,6 +108,19 @@ struct LibraryStatus: Equatable, Sendable {
         else { return nil }
         let values = scanning.values
         return Double(values.map(\.read).reduce(0, +)) / Double(values.map(\.toRead).reduce(0, +))
+    }
+
+    /// The line beside the bar that fills: the scans and a tag save, either or both; nil while
+    /// neither runs.
+    var activityText: String? {
+        let parts = [scanText, savingText].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// How far that bar is filled: the scans' fraction while any scans, else the save's. Nil
+    /// for a bar that moves on its own, or none.
+    var activityFraction: Double? {
+        scanText != nil ? scanFraction : savingText.map { _ in savingFraction }
     }
 
     /// "3 files and 1 folder with problems", the title of the button that lists them. Notices

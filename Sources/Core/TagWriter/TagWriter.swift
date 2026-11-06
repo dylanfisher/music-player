@@ -26,7 +26,12 @@ public struct TagWriter: Sendable {
     ///
     /// Files whose new tags fit are read and planned first, a chunk at a time, then written in
     /// place together (ADR 0108); any other file goes through its temp file when it's reached.
-    public func write(_ edit: TagEdit, to paths: [String]) -> TagWriteReport {
+    /// `progress` is told of each file read and each written, from the threads writing them.
+    public func write(
+        _ edit: TagEdit, to paths: [String],
+        progress: @escaping @Sendable (TagWriteProgress) -> Void = { _ in }
+    ) -> TagWriteReport {
+        let counter = WriteProgressCounter(total: paths.count, report: progress)
         var report = recoverInterrupted()
         let entry: TagUndoJournal.Entry
         do {
@@ -43,7 +48,8 @@ public struct TagWriter: Sendable {
         // crash would, which leaves the journal as it is.
         func writeChunk() -> (stop: Bool, crashed: Bool) {
             guard !chunk.isEmpty else { return (false, false) }
-            let (written, stop, crashed) = writeInPlace(chunk.map(\.job), entry: entry)
+            let (written, stop, crashed) = writeInPlace(
+                chunk.map(\.job), entry: entry, progress: counter)
             for (item, result) in zip(chunk, written) { results[item.index] = result }
             chunk = []
             return (stop, crashed)
@@ -62,8 +68,11 @@ public struct TagWriter: Sendable {
                     return .failure(error)
                 }
             }
+            counter.read()
             switch prepared {
-            case .success(.done(let outcome)): results[index] = .success(outcome)
+            case .success(.done(let outcome)):
+                results[index] = .success(outcome)
+                counter.written()
             case .success(.inPlace(let job)):
                 chunk.append((index, job))
                 guard chunk.count >= chunkFiles || chunk.map(\.job.bytes).reduce(0, +) >= chunkBytes
@@ -76,6 +85,7 @@ public struct TagWriter: Sendable {
                 }
             case .failure(let error):
                 results[index] = .failure(error)
+                counter.written()
                 if error.stopsBatch {
                     reached = index + 1
                     break files

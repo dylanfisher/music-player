@@ -127,6 +127,31 @@ func aWriteReportsWhatItReadBack(_ fits: Bool) throws {
     #expect(report.parsed[url.path]?.warnings == read.warnings)
 }
 
+/// A batch counts each file read and each written, in order, the files written in place
+/// once their chunk is read, so a save shows how far it's got (ADR 0108).
+@Test func aBatchReportsItsProgressFileByFile() throws {
+    let urls = try batch()
+    let steps = Steps()
+    let report = scratchWriter().write(titleEdit, to: urls.map(\.path)) { steps.append($0) }
+    expectChanged(report, urls)
+    let seen = steps.all
+    #expect(seen.count == 2 * urls.count)
+    #expect(seen.allSatisfy { $0.total == urls.count })
+    #expect(zip(seen, seen.dropFirst()).allSatisfy { $0.fraction < $1.fraction })
+    #expect(seen.last?.fraction == 1)
+    // Every file of the chunk is read before the first is written.
+    #expect(seen.first { $0.written > 0 }?.read == urls.count)
+}
+
+private final class Steps: @unchecked Sendable {
+    // `values` is guarded by `lock`.
+    private let lock = NSLock()
+    private var values: [TagWriteProgress] = []
+
+    func append(_ step: TagWriteProgress) { lock.withLock { values.append(step) } }
+    var all: [TagWriteProgress] { lock.withLock { values } }
+}
+
 private final class FlushCount: @unchecked Sendable {
     // `value` is guarded by `lock`.
     private let lock = NSLock()

@@ -17,6 +17,9 @@ public final class TagEditing {
     public private(set) var editors: [TagEditorWindow] = []
     /// Called on the main thread with what a write or undo changed, for the rescan.
     public var written: (TagWriteReport) -> Void = { _ in }
+    /// Called on the main thread as a save goes, for the status bar: "Saving tags: 3 of 20" and
+    /// how far along, from 0 to 1; nil once no write is left (ADR 0108).
+    public var saving: (_ progress: (text: String, fraction: Double)?) -> Void = { _ in }
     /// What an info window's art buttons run: the registry's Replace Artwork… and Remove
     /// Artwork.
     public var replaceArtwork: () -> Void = {}
@@ -35,7 +38,10 @@ public final class TagEditing {
             @Sendable ([String], @escaping @Sendable () -> Bool) -> (
                 tracks: [EditableTrack], problems: [String]
             )
-        var write: @Sendable (TagEdit, [String]) -> TagWriteReport
+        /// Writes an edit, telling its last argument how far it's got, from any thread.
+        var write:
+            @Sendable (TagEdit, [String], @escaping @Sendable (TagWriteProgress) -> Void) ->
+                TagWriteReport
         var undo: @Sendable () -> TagWriteReport
         /// Shows an info window in front, beside the main window: at the place given, past the
         /// other info windows' top left corners.
@@ -76,7 +82,7 @@ public final class TagEditing {
     public init(writer: TagWriter) {
         effects = Effects(
             read: { readEditableTracks($0, isStopped: $1) },
-            write: { writer.write($0, to: $1) }, undo: { writer.undoLast() },
+            write: { writer.write($0, to: $1, progress: $2) }, undo: { writer.undoLast() },
             present: { $0.show(beside: $1, at: $2, avoiding: $3) }, confirm: ask,
             alert: showProblems)
         // A write in place a crash cut short is finished before anything reads the file
@@ -200,7 +206,7 @@ public final class TagEditing {
     /// Undo Tag Edit: puts back the files of the newest edit, after any write still queued.
     public func undo(over window: NSWindow) {
         let undo = effects.undo
-        enqueue("undo the tag edit", over: window) { undo() }
+        enqueue("undo the tag edit", over: window) { _ in undo() }
     }
 
     /// Writes one file at once; a batch asks first, in a sheet on the info window, which stays
@@ -217,34 +223,53 @@ public final class TagEditing {
         let write = effects.write
         guard paths.count > 1 else {
             editor.close()
-            enqueue("write the tags", over: window) { write(edit, paths) }
+            enqueue("write the tags", over: window) { write(edit, paths, $0) }
             return
         }
         effects.confirm(.writing(paths.count), editor.window) { [weak self, weak editor] yes in
             guard yes, let self else { return }
             editor?.close()
-            self.enqueue("write the tags", over: window) { write(edit, paths) }
+            self.enqueue("write the tags", over: window) { write(edit, paths, $0) }
         }
     }
 
+    /// Queues `work`, which is handed what to tell of its progress.
     private func enqueue(
         _ action: String, over window: NSWindow,
-        _ work: @escaping @Sendable () -> TagWriteReport
+        _ work:
+            @escaping @Sendable (@escaping @Sendable (TagWriteProgress) -> Void) ->
+            TagWriteReport
     ) {
         lastWrite += 1
         let number = lastWrite
         alertWindows[number] = (action, window)
         pendingWrites += 1
         writes.async {
-            let report = work()
+            let report = work { progress in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self.saving(Self.savingStatus(progress)) }
+                }
+            }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { self.finished(number, report) }
             }
         }
     }
 
+    /// "Saving tags: 3 of 20", by the files written, and how far along.
+    static func savingStatus(_ progress: TagWriteProgress) -> (text: String, fraction: Double) {
+        let count = { (value: Int) in
+            NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
+        }
+        return (
+            "Saving tags: \(count(progress.written)) of \(count(progress.total))",
+            progress.fraction
+        )
+    }
+
     private func finished(_ number: Int, _ report: TagWriteReport) {
         pendingWrites -= 1
+        if pendingWrites == 0 { saving(nil) }
         guard let (action, window) = alertWindows.removeValue(forKey: number) else { return }
         if !report.changed.isEmpty {
             written(report)

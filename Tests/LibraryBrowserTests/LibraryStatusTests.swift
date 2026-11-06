@@ -11,6 +11,24 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
         count: count, sizeBytes: count * sizeBytes, durationSeconds: Double(count) * seconds)
 }
 
+/// A tag save shows beside the scans, its bar filling while nothing scans (ADR 0108).
+@Test func aTagSaveShowsBesideTheScans() {
+    var status = LibraryStatus()
+    #expect(status.activityText == nil && status.activityFraction == nil)
+    status.savingText = "Saving tags: 3 of 20"
+    status.savingFraction = 0.4
+    #expect(status.activityText == "Saving tags: 3 of 20")
+    #expect(status.activityFraction == 0.4)
+    var progress = ScanProgress()
+    progress.found = 40
+    status.apply(.scanning(folder: "/Volumes/music/library", progress))
+    #expect(status.activityText == "Scanning library: 40 files checked · Saving tags: 3 of 20")
+    #expect(status.activityFraction == nil, "the scan is still listing folders")
+    status.apply(.scanned(folder: "/Volumes/music/library", ScanSummary()))
+    status.savingText = nil
+    #expect(status.activityText == nil && status.activityFraction == nil)
+}
+
 @Test func statusShowsTracksScansAndProblemsApart() {
     var status = LibraryStatus()
     #expect(

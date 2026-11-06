@@ -820,9 +820,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusLabel.toolTip = nil
         statusLabel.isHidden = !statusLayout.showsTotals
         fitStatusBarHeight()
-        scanLabel.stringValue = status.scanText ?? ""
-        scanLabel.isHidden = status.scanText == nil
-        showScanProgress()
+        showActivity()
         problemsButton.title = status.problemsTitle ?? ""
         problemsButton.toolTip = status.problemLines.joined(separator: "\n")
         problemsButton.isHidden = status.problemsTitle == nil
@@ -862,12 +860,28 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
-    /// A bar that fills as the scans read, or moves on its own while one still lists folders.
+    /// Shows what the tag editor says of a save under way, such as "Saving tags: 3 of 20", and
+    /// how far along it is, from 0 to 1, beside the scans' line; nil once it's done.
+    public func showSaving(_ progress: (text: String, fraction: Double)?) {
+        status.savingText = progress?.text
+        status.savingFraction = progress?.fraction ?? 0
+        showActivity()
+    }
+
+    /// The scans' and a save's line, and their bar.
+    private func showActivity() {
+        scanLabel.stringValue = status.activityText ?? ""
+        scanLabel.isHidden = status.activityText == nil
+        showScanProgress()
+    }
+
+    /// A bar that fills as the scans read or a save writes, or moves on its own while a scan
+    /// still lists folders.
     private func showScanProgress() {
-        let scans = status.scanText != nil
+        let scans = status.activityText != nil
         scanIndicator.isHidden = !scans
         insetStatusBar()
-        let fraction = status.scanFraction
+        let fraction = status.activityFraction
         scanIndicator.isIndeterminate = fraction == nil
         if let fraction { scanIndicator.doubleValue = fraction }
         // A hidden bar would keep animating and drawing.
@@ -885,7 +899,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// it has as much space on its left, and the spacing otherwise.
     private func insetStatusBar() {
         statusBar.leadingInset =
-            statusLayout.startsWithArt(scanning: status.scanText != nil)
+            statusLayout.startsWithArt(scanning: status.activityText != nil)
             ? StatusBarLayout.artInsetPoints : Self.statusSpacingPoints
     }
 
