@@ -1,5 +1,6 @@
 import Analysis
 import AppKit
+import DisplayText
 
 /// A chart with frequency up, linear from 0 to `topHz`, and dotted lines at `referenceHz`
 /// labeled at the left. Reports the pointer as shares of the plot across and up, from 0 to 1.
@@ -44,12 +45,7 @@ class FrequencyAxisView: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        for area in trackingAreas { removeTrackingArea(area) }
-        addTrackingArea(
-            NSTrackingArea(
-                rect: .zero,
-                options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-                owner: self))
+        trackMouseMoves()
     }
 
     override func mouseMoved(with event: NSEvent) {

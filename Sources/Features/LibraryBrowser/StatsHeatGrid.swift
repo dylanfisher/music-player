@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 import Library
 
 /// Plays by weekday and hour as a grid: a row per weekday from the calendar's first, a column

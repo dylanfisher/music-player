@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 
 /// A ranked list of Listening Stats, drawn rather than built from views: each row its rank,
 /// name, detail and value over a bar as long as its share of the first row's. A row that can be
