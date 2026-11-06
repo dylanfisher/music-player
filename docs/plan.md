@@ -236,17 +236,17 @@ one.
 
 #### 48a. Get Info and Lost Stats
 
-- [ ] **48a.1 No layout shift.** The Get Info window opens with its final layout: no flash of
+- [x] **48a.1 No layout shift.** The Get Info window opens with its final layout: no flash of
       unstyled content and nothing that moves after it shows. A test checks that the window's
       frame and its fields' frames don't change between the first draw and the fields filled.
-- [ ] **48a.2 Tab keys.** ⌘[ and ⌘] switch to the previous and next tab (Info, Sorting and the
+- [x] **48a.2 Tab keys.** ⌘[ and ⌘] switch to the previous and next tab (Info, Sorting and the
       rest), wrapping at the ends.
-- [ ] **48a.3 Resolve Lost Stats says what happened.** The command opens a sheet to move the play
+- [x] **48a.3 Resolve Lost Stats says what happened.** The command opens a sheet to move the play
       counts and ratings of files that vanished onto the tracks they probably moved to
       (ADR 0026). With none to resolve it writes "No lost stats to resolve" in the status bar,
       which the owner didn't notice. Disable the command when there are none, and when it can't
       open the sheet, say why where the user is looking.
-- [ ] **48a.4 Get Info reads every file it can.** Get Info on a DSF file now fails with "files
+- [x] **48a.4 Get Info reads every file it can.** Get Info on a DSF file now fails with "files
       can't be edited", because `TagFile` refuses to write DSF and DSDIFF tags and the read goes
       through it (`TagFile.swift:17`). Get Info is for reading tags too: a file the app can read
       but not write opens with its fields shown and read-only, and a line in the window says why
@@ -292,7 +292,11 @@ Plan, part 48a (ADR 0114):
   instead of writing the status bar.
 - Order: this plan, 48a.1, 48a.4, 48a.2, 48a.3, the ADR, the bench and the result.
 
-Result, part 48a (draft, before the gate): shipped 48a.1 to 48a.4 (ADR 0114). Get Info's
+Gate, part 48a: the review found nothing above low and no way to write a DSF or DSDIFF file;
+two lows fixed (the read-only note after a save error, the tab keys under a sheet); the audit's
+rewrap fixed. `./scripts/check` passes.
+
+Result, part 48a: shipped 48a.1 to 48a.4 (ADR 0114). Get Info's
 window is made whole before it shows, the fields filled in when the read ends, so the window
 and its fields keep their frames. Back and Forward (⌘[ and ⌘]) step the key info window's
 tabs, wrapping, and act on the main window otherwise. Resolve Lost Stats is off once a health
