@@ -17,8 +17,11 @@ Instructions for AI coding agents working in this repo. Humans: see [README.md](
 |---|---|
 | Install / bootstrap | `./scripts/setup` |
 | Run locally | `./scripts/dev` |
-| Run tests | `./scripts/test` |
+| Run tests | `./scripts/test` (only what changed since its last pass) |
+| Run the tests for what you changed | `./scripts/test --changed [ref]` |
 | **Full gate** (see Definition of done) | `./scripts/check` |
+
+Iterate with `./scripts/test --changed`; run `check` once, at the end. **Run a check only when it can fail on your diff:** name the step that reads what you changed (the list heads `scripts/check`), and if none does, skip it and say so.
 
 ## Principles
 
@@ -43,7 +46,7 @@ Non-negotiable, regardless of stack. Rationale: [docs/principles.md](docs/princi
 
 ## Definition of done
 
-- `./scripts/check` passes clean.
+- `./scripts/check` passes clean, when the change touches anything it reads.
 - New behavior has a test that fails without the change.
 - No new dependencies, no new files outside the agreed layout, no TODOs left behind.
 - If a decision was non-obvious, record it in `docs/decisions/`.

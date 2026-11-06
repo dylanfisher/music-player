@@ -4,6 +4,19 @@
 #
 # Every step runs even if an earlier one fails, so one invocation reports every
 # problem. Fixing four failures should cost one run, not four.
+#
+# Run a step only when it can fail on your diff (AGENTS.md). What each one reads:
+#   agents.md                     AGENTS.md
+#   map                           docs/map.md and the paths it names
+#   links                         every .md file
+#   residue                       nothing, while docs/scaffold.md is gone
+#   format                        Package.swift, Sources, Tests, the scripts/*.swift it lists
+#   typecheck, arch               Package.swift, Sources (typecheck also Tests)
+#   dupes, surface                Sources and their scripts/*-allow.txt
+#   <name>-test                   scripts/<name>* (signature-test: scripts/check-signature*)
+#   test                          what `swift scripts/affected.swift --inputs` lists; it reruns
+#                                 only the test targets an edit since its last pass can affect
+# Nothing reads .claude/ or docs/ apart from the .md checks and the test step's docs/plan.md.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -98,7 +111,7 @@ run residue bash -c '
 '
 
 # swift-format checks layout and its lint rules (.swift-format) in one pass.
-run format    swift format lint --strict --recursive --parallel Package.swift Sources Tests scripts/arch.swift scripts/dupes.swift scripts/surface.swift scripts/icon-mask.swift scripts/smb-copy-probe.swift
+run format    swift format lint --strict --recursive --parallel Package.swift Sources Tests scripts/affected.swift scripts/arch.swift scripts/dupes.swift scripts/surface.swift scripts/icon-mask.swift scripts/smb-copy-probe.swift
 # Strict concurrency and warnings-as-errors are set in Package.swift, so a clean build is the typecheck.
 run typecheck swift build --build-tests
 run arch      swift scripts/arch.swift
@@ -112,6 +125,8 @@ run surface   swift scripts/surface.swift
 run surface-test ./scripts/surface-test
 # The release signature check refuses what it should (ADR 0025), on stand-in bundles.
 run signature-test ./scripts/check-signature-test
+# The test step's own picker, on paths whose test targets are known.
+run affected-test ./scripts/affected-test
 run test      ./scripts/test
 
 if [ ${#failures[@]} -gt 0 ]; then

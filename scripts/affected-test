@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Runs scripts/affected.swift on changed-path lists against the real Package.swift and checks
+# which test targets it picks: the direct and transitive dependents of a changed target, only
+# the target of a changed test file, the reader of a file outside the targets, nothing for a
+# path no test reads, `all` for a shared input, and a failure for a path in no target's folder.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+problems=0
+
+# expect <paths, one per line> <exit status> <expected output, or a +name/-name list> — +name
+# must be a line of the output and -name must not; anything else must be the whole output.
+expect() {
+  local out status
+  out=$(printf '%s\n' "$1" | swift scripts/affected.swift 2>&1)
+  status=$?
+  if [ "$status" != "$2" ]; then
+    printf 'affected-test: %s exited %s, expected %s:\n%s\n' "$1" "$status" "$2" "$out" >&2
+    problems=$((problems + 1))
+    return
+  fi
+  case "$3" in
+    [+-]*)
+      for want in $3; do
+        local found=-
+        if grep -qx "${want:1}" <<<"$out"; then found=+; fi
+        if [ "${want:0:1}" != "$found" ]; then
+          printf 'affected-test: %s wanted %s in:\n%s\n' "$1" "$want" "$out" >&2
+          problems=$((problems + 1))
+        fi
+      done
+      ;;
+    *)
+      if [ "$out" != "$3" ]; then
+        printf 'affected-test: %s printed:\n%s\nexpected:\n%s\n' "$1" "$out" "$3" >&2
+        problems=$((problems + 1))
+      fi
+      ;;
+  esac
+}
+
+# RingBuffer reaches MusicPlayerTests only through the app's targets.
+expect 'Sources/Primitives/RingBuffer/RingBuffer.c' 0 '+RingBufferTests +HALRenderTests +MusicPlayerTests -DisplayTextTests'
+expect 'Tests/LogTests/ModuleLoggerTests.swift' 0 'LogTests'
+expect $'docs/plan.md\nREADME.md' 0 'BenchTests'
+expect $'README.md\ndocs/map.md\nscripts/check' 0 ''
+expect $'Tests/LogTests/ModuleLoggerTests.swift\nPackage.swift' 0 'all'
+expect 'Sources/Core/NoSuchModule/A.swift' 1 'affected: Sources/Core/NoSuchModule/A.swift is in no target'"'"'s folder in Package.swift'
+
+out=$(swift scripts/affected.swift --inputs)
+for want in Sources Tests Package.swift scripts/test docs/plan.md; do
+  grep -qx "$want" <<<"$out" ||
+    { printf 'affected-test: --inputs is missing %s in:\n%s\n' "$want" "$out" >&2; problems=$((problems + 1)); }
+done
+
+[ "$problems" = 0 ] && echo "affected picks each planted case's test targets"
+exit "$problems"

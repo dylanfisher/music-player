@@ -21,9 +21,12 @@ a workflow to run phases N–M of docs/plan.md". For each phase, the orchestrati
    search first (map.md recipes), so it extends existing code instead of writing a second copy.
    Earlier phases' plans in the archive are the pattern to follow.
 2. **Implements** on a branch `phase/<n>-<slug>` with an Opus subagent (per the owner's
-   CLAUDE.md), in small commits that each pass `./scripts/check`.
+   CLAUDE.md), in small commits. Each commit passes the `./scripts/check` steps that read
+   what it changed (AGENTS.md); the implementer iterates with `./scripts/test --changed`.
 3. **Runs the phase gate.** The reviewers and auditors are Sonnet subagents running in parallel.
-   It fixes every confirmed finding, then reruns the gate.
+   It fixes every confirmed finding, then reruns only the checks those fixes can fail. A full
+   `./scripts/check` runs once, before step 4, and its test step reruns only the test targets
+   edited since its last pass.
 4. **Records.** It ticks the phase's boxes, adds a "Result" line with measured numbers, commits,
    and fast-forwards `main` to the branch. It never pushes.
 5. **Archives.** It moves the finished phase, unchanged, to the end of the archive's phases. A

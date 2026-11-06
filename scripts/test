@@ -1,7 +1,74 @@
 #!/usr/bin/env bash
-# Run the test suite. Passes through any extra args to the test runner,
-# so `./scripts/test --filter RingBufferTests` works for a focused run.
+# Run the tests.
+#   ./scripts/test                  the suite, minus the test targets whose inputs match the last
+#                                   passing run: only what the edits since then can affect, and
+#                                   nothing when there are none (ADR 0122). --fresh runs it all.
+#   ./scripts/test --changed [ref]  only the test targets the files changed since ref (default
+#                                   HEAD) can affect, uncommitted and untracked files included
+#   ./scripts/test <args>           passes args to `swift test`, e.g. --filter RingBufferTests
+#
+# scripts/affected.swift says which paths a test reads and which test targets a changed path
+# affects. `--changed` is the inner loop; ./scripts/check runs the plain form.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-exec swift test "$@"
+stamp=.build/test-pass
+
+fresh=0 changed=0 ref=HEAD args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --fresh) fresh=1 ;;
+    --changed)
+      changed=1
+      if [ $# -gt 1 ] && [ "${2#-}" = "$2" ]; then ref="$2"; shift; fi
+      ;;
+    *) args+=("$1") ;;
+  esac
+  shift
+done
+
+if [ "${#args[@]}" -gt 0 ]; then exec swift test "${args[@]}"; fi
+
+# run <test targets, one per line, or `all`> — swift test over just those targets.
+run() {
+  case "$1" in
+    "") echo "no test reads what changed — skipped" ;;
+    all) swift test ;;
+    *)
+      echo "running $(tr '\n' ' ' <<<"$1")"
+      swift test --filter "^($(paste -sd '|' - <<<"$1"))\."
+      ;;
+  esac
+}
+
+if [ "$changed" = 1 ]; then
+  files=$( { git diff --name-only "$ref"; git ls-files --others --exclude-standard; } | sort -u)
+  run "$(swift scripts/affected.swift <<<"$files")"
+  exit 0
+fi
+
+# The toolchain on the first line, then one `<sha>  <path>` line per input that exists, sorted
+# for comm.
+inputs() {
+  printf 'toolchain %s\n' "$(swift --version 2>&1 | shasum | cut -c1-40)"
+  swift scripts/affected.swift --inputs | tr '\n' '\0' |
+    xargs -0 git ls-files --cached --others --exclude-standard -z -- |
+    while IFS= read -r -d '' f; do if [ -e "$f" ]; then printf '%s\0' "$f"; fi; done |
+    xargs -0 shasum | LC_ALL=C sort
+}
+
+current=$(inputs)
+if [ "$fresh" = 1 ] || [ ! -e "$stamp" ] || [ "$(head -1 "$stamp")" != "$(head -1 <<<"$current")" ]; then
+  targets=all
+else
+  # Paths added, removed or edited since the last pass. shasum puts two spaces after the hash.
+  files=$(LC_ALL=C comm -3 <(tail -n +2 "$stamp") <(tail -n +2 <<<"$current") |
+    sed -E 's/^[[:space:]]*[0-9a-f]{40}  //' | sort -u)
+  if [ -z "$files" ]; then
+    echo "inputs match the last passing run — skipped (--fresh runs it anyway)"
+    exit 0
+  fi
+  targets=$(swift scripts/affected.swift <<<"$files")
+fi
+run "$targets"
+printf '%s\n' "$current" > "$stamp"
