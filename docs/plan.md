@@ -398,6 +398,28 @@ Implementation plan, part 45a (ADR 0115):
    soak gains a thread analyzing that fixture again and again. Budgets from the first run,
    with room for the old Mac.
 
+Result (draft, before the gate): shipped as planned (ADR 0115). Every generated fixture gets
+the verdicts it was made for and the clean ones none: low-passed at 16 and 19 kHz, cutoffs at
+16.0 and 19.0 kHz (155 dB per kHz); AAC at 128 kbps decoded into a FLAC, cutoff 17.5 kHz, and
+the AAC file itself measured with no lossy verdict; 16/44.1 in 24/96, cutoff 22.1 kHz, suspect
+upsampled; 16 bits padded to 24, 16 effective; identical channels, fake stereo; clipped, 5,558
+runs; full band 16/44.1 and 24/96, none, DR 10. Bench on Apple Silicon: a 5-minute 24/96 FLAC
+(157 MB) analyzed in 1.02–1.06 s locally (about 290× real time), 3.91–3.98 s on the slow
+simulated NAS (the reads wait in turn), 2.8 MB added at the peak in a fresh process. Budgets:
+local < 2 s and < 12 s on the old Mac, about twice the 4–6× an i7 of 2015 is slower at this
+decoding and vDSP work; NAS < 6 s and < 20 s, the old Mac's compute plus the same 2.9 s of
+waits, with room; memory < 10 MB on both. Soak with analysis of that file one run after
+another at utility priority, beside the scan and a search a second: 20 s, 0 underruns over 19
+analyses; 180 s, 0 underruns over 161 analyses, memory −7.0 MB. `music-player analyze` opens
+no window (ADR 0115) and waits up to 600 s. Deferred to 45b: the library pass, which reads
+`measures`. Owner checkpoint: on the 2015 MacBook Pro, with music playing, select a 24/192
+track and choose Show Spectrum (File menu or the track's menu), then 8 tracks at once; say how
+long each window took to fill and whether playback dropped out; run
+`./scripts/bench analysis:` there and paste the table. Then choose a few files Show Spectrum
+flags and a few it doesn't, open each in Spek, and say whether the cutoff, the spectrogram and
+the verdict agree with what Spek shows; `music-player analyze <path>…` prints the numbers to
+paste.
+
 #### 45b. The library pass
 
 - [ ] **45b.1 Analyze Library.** A command that analyzes every file not yet analyzed, or
