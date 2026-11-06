@@ -129,11 +129,18 @@ extension AppDelegate {
                 return
             }
             guard standing.everyFileTried else {
-                await pass.start()
+                self?.startLibraryAnalysis(pass)
                 return
             }
             self?.confirmAnalyzingAgain(pass)
         }
+    }
+
+    /// Starts a run and counts it as running at once, so a read of where the pass stands that
+    /// ends before the run's first report, as after a scan, doesn't show it paused.
+    private func startLibraryAnalysis(_ pass: LibraryAnalysis, again: Bool = false) {
+        libraryAnalysisStage = .analyzing
+        Task { await pass.start(again: again) }
     }
 
     private func confirmAnalyzingAgain(_ pass: LibraryAnalysis) {
@@ -146,9 +153,9 @@ extension AppDelegate {
             + " are stored."
         alert.addButton(withTitle: "Analyze Again")
         alert.addButton(withTitle: "Cancel")
-        alert.beginSheetModal(for: window) { response in
+        alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
-            Task { await pass.start(again: true) }
+            self?.startLibraryAnalysis(pass, again: true)
         }
     }
 
