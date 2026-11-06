@@ -5672,16 +5672,65 @@ sync logs compressed (see the end of this phase).
 
 #### 44a. Keys, Get Info's place and Library Health
 
-- [ ] **44a.1 Option-arrow seeks.** ⌥→ and ⌥← seek forward and back 10 s, replacing ⌃→ and
+- [x] **44a.1 Option-arrow seeks.** ⌥→ and ⌥← seek forward and back 10 s, replacing ⌃→ and
       ⌃←; ⌥⇧→ and ⌥⇧← replace ⌃⇧→ and ⌃⇧←. A text field being edited still takes them to
       move by word (`KeyChord.isTextEditing`).
-- [ ] **44a.2 Longer step.** ⌥⇧→ and ⌥⇧← seek by 5% of the track or 30 s, whichever is longer.
-- [ ] **44a.3 Get Info's place.** A Get Info window opens where the last one was moved to,
+- [x] **44a.2 Longer step.** ⌥⇧→ and ⌥⇧← seek by 5% of the track or 30 s, whichever is longer.
+- [x] **44a.3 Get Info's place.** A Get Info window opens where the last one was moved to,
       across launches.
-- [ ] **44a.4 Wider health cards.** Library Health's cards are wide enough that a card's
+- [x] **44a.4 Wider health cards.** Library Health's cards are wide enough that a card's
       description usually shows whole.
-- [ ] **44a.5 Show Library Health toggles.** With Library Health showing, Show Library Health
+- [x] **44a.5 Show Library Health toggles.** With Library Health showing, Show Library Health
       hides it and shows the track table, at the playing track when there is one.
+
+Plan, part 44a (ADR 0103, amending 0096, 0099 and 0100):
+- Probe: Seek Forward and Seek Back have ⌃→ and ⌃← as second chords, Seek Forward 5% and Seek
+  Back 5% ⌃⇧→ and ⌃⇧←, in `AppCommands`; nothing else is bound to ⌥→, ⌥←, ⌥⇧→ or ⌥⇧← (→ and ←
+  alone are Next and Previous Track), and `KeyChord.isTextEditing` already gives all four to a
+  field being edited, through the app's key monitor, in every window. The 5% step is
+  `seekSeconds`, nothing with no duration. An info window opens a cascade step from the last
+  one opened, a static point that starts near the main window's top left each launch.
+  Health tiles are 180 points or more; at that width four of the thirteen descriptions fit.
+  Show Library Health (`library.checkHealth`) only shows the panel.
+- 44a.1 and 44a.2: ⌥→ and ⌥← replace ⌃→ and ⌃←, ⌥⇧→ and ⌥⇧← replace ⌃⇧→ and ⌃⇧←, same IDs. The
+  step is `max(5% of the duration, 30 s)`, 30 s with no duration; the commands say "5% or
+  30 s". ADR 0012's table follows.
+- 44a.3: an added optional state key, `tagEditor.place`, the top left corner of the info
+  window the user last moved; a new window opens there, a step past any open info window at
+  that corner, and near the main window when the key is null or on no screen. Only moves after
+  the window shows are saved, through the layout saver.
+- 44a.4: tiles of 330 points or more, so ten descriptions show whole.
+- 44a.5: the command, with the panel showing, shows the playing track as Show Current Track
+  finds it, else the whole library; a play started from a check goes to the library. The menu
+  item is checked while the panel shows; Settings' button doesn't hide it.
+- Tests: the chords, titles and menu places, the old chords unbound, the four chords
+  text-editing, the step for long, short and unknown durations; an info window's start place,
+  a move reported and the app's placing and the growth on load not, a second window stepped
+  past the first, the place given to the next window and passed on to save, the key saved
+  and read back with an older file reading null; most descriptions whole at the narrowest
+  tile, failing at 180; the toggle there and back, with and without a playing track.
+- Order: the seeks, Get Info's place, the tiles, the toggle, then the ADR and the result.
+
+Result, part 44a: shipped 44a.1 to 44a.5 (ADR 0103, amending 0096, 0099 and 0100). Seek
+Forward and Back take ⌥→ and ⌥← as their second chords, and Seek Forward and Back 5% or 30 s
+(the same IDs) ⌥⇧→ and ⌥⇧←, which move 5% of the track or 30 s, whichever is longer, and 30 s
+when the duration is unknown. The Control-arrows are unbound. An info window opens with its
+top left corner where the user last moved one, saved as the optional state key
+`tagEditor.place`, a step down and to the right of an info window already there; with none
+saved, or on no screen, near the main window as before. Health tiles are 330 points or more:
+ten descriptions show whole, the three longest are cut and whole in the tooltip. Show Library
+Health, with the panel showing, shows the playing track in what the window showed when the
+play started, else the library, or the whole library with nothing playing or a play from a
+check; its menu item is checked while the panel shows, and Settings' button only brings the
+window forward then. One state key added, no config key changed; the owner's `state.json` and
+`config.json`, copied to a temporary folder, decode with the new schema. Checked by tests
+only. For the owner: ⌥→ and ⌥⇧→ while playing a long and a short track, and ⌥→ in the search
+field moving by word; Get Info moved somewhere, closed, opened again, and opened again after
+a relaunch; two Get Info windows at once; Library Health's tiles at the usual window size;
+Show Library Health twice while a track plays. `./scripts/check` passes but
+for one test, `theGlassHeadersAreFrosted`, whose screen capture came back blank (every pixel
+0, the red under the glass too) with the machine idle, in the full run and alone; this part
+changes nothing it draws.
 
 #### 44b. Enter on the next track keeps the queue panel
 

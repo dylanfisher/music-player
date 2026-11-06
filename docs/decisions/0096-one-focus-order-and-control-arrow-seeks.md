@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-05
 - **Status:** accepted
+- **Amended by:** [0103](0103-option-arrow-seeks-get-info-place-health-toggle.md): the seeks
+  take ⌥→, ⌥←, ⌥⇧→ and ⌥⇧←, and the longer one moves at least 30 s
 
 ## Context
 

@@ -120,8 +120,8 @@ The player's own:
 | Play the selection | Return, alternate ⌘↓ | ⌘↓ is Searcher's Open |
 | Play Next | ⌥Return | |
 | Next / Previous Track | ⌘→ / ⌘← | A field being edited takes ⌘ or ⌥ with ←, → or ⌫ (± ⇧) before the menu, in every window, as Searcher's filter field takes its own keys (0037). A test checks it |
-| Seek Forward / Back | ⌥⌘→ / ⌥⌘←, alternate ⌃→ / ⌃← | 10 s. ⌃→ and ⌃← are macOS's Spaces keys by default; the owner turns those off (0096) |
-| Seek Forward / Back 5% | ⌃⇧→ / ⌃⇧← | A twentieth of the track (0096) |
+| Seek Forward / Back | ⌥⌘→ / ⌥⌘←, alternate ⌥→ / ⌥← | 10 s. A field being edited takes ⌥→ and ⌥← to move by word (0096, 0103) |
+| Seek Forward / Back 5% or 30 s | ⌥⇧→ / ⌥⇧← | A twentieth of the track or 30 s, whichever is longer (0096, 0103) |
 | Volume Up / Down | ⌃⌘↑ / ⌃⌘↓ | Enabled only while digital volume is on |
 | Show Current Track | ⌘L | |
 | Show Selected Track | ⇧⌘L | Centers the selection whatever plays (0088) |

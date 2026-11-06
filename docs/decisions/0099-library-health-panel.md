@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0034](0034-folders-and-library-health.md) (where the checks are listed),
   [0042](0042-window-layout-and-settings-sections.md) (what Show Browser hides)
+- **Amended by:** [0103](0103-option-arrow-seeks-get-info-place-health-toggle.md): tiles of
+  330 points or more, and Show Library Health hides the panel while it shows
 
 ## Context
 
