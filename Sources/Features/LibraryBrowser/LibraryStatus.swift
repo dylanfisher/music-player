@@ -1,3 +1,4 @@
+import DisplayText
 import Foundation
 import Library
 import Settings
@@ -160,16 +161,5 @@ struct LibraryStatus: Equatable, Sendable {
     }
 }
 
-func number(_ value: Int) -> String {
-    NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
-}
-
-/// "1 track", "1,204 tracks": the one spelling of the noun every count of tracks uses.
-func tracks(_ value: Int) -> String { count(value, "track") }
-
 /// "1 play", "1,204 plays", as the timeline and Listening Stats count them.
 func plays(_ value: Int) -> String { count(value, "play") }
-
-func count(_ value: Int, _ noun: String) -> String {
-    "\(number(value)) \(noun)\(value == 1 ? "" : "s")"
-}

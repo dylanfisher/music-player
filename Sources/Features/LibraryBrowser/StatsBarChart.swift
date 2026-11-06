@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 import Library
 
 /// Plays over time as bars, one per day, week, month or year, the tallest the chart's height,

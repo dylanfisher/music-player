@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 import Settings
 import Testing
 

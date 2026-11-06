@@ -47,6 +47,19 @@ public func depthText(bits: UInt32, isFloat: Bool) -> String {
     bitDepth(bits) + (isFloat ? " float" : "")
 }
 
+/// 1204 -> "1,204", in the user's locale.
+public func number(_ value: Int) -> String {
+    NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
+}
+
+/// "1 track", "1,204 tracks": the one spelling of the noun every count of tracks uses.
+public func tracks(_ value: Int) -> String { count(value, "track") }
+
+/// "1 album", "1,204 albums": `noun` after the count, plural but for one.
+public func count(_ value: Int, _ noun: String) -> String {
+    "\(number(value)) \(noun)\(value == 1 ? "" : "s")"
+}
+
 /// 3 -> "★★★"; 0, unrated, -> "".
 public func stars(_ count: Int) -> String {
     String(repeating: "★", count: max(0, count))
