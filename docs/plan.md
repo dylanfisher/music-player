@@ -41,8 +41,9 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 Set by the owner on 2026-11-05. Earlier run orders are in the archive.
 
-1. Phase 45 next: 45a, then 45b.
-2. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+1. Phase 46 next, then 47, 48 and 49, in that order.
+2. Then phase 45: 45a, then 45b.
+3. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -214,7 +215,144 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 ## Phases
 
-Phases 10 and 13 are from the original plan and haven't been built; 45 is new.
+Phases 10 and 13 are from the original plan and haven't been built; 45 to 49 are new.
+
+### 46. Doubled Swinsian play counts
+
+Found on 2026-11-05 and checked on copies of both Macs' indexes and sync logs. This Mac imported
+Swinsian on 2 Nov. mbp2015 imported the same library on 4 Nov, before it had read this Mac's
+log. Each Mac then merged the other's `counts` events on top of its own
+(`LibrarySyncMerge.swift:45`). That doubled 11,049 tracks on both Macs: 86,792 plays against
+Swinsian's 43,293. A `counts` event carries a delta, so a merge can't tell two imports of the
+same plays from two real sets of plays. mbp2015's `imported_plays` baseline is now 86,646, so
+its later imports undercount.
+
+The rule: a path's imported plays for one player are the highest total that any machine's
+import of that player reported, never a sum across machines. `play_count` is the plays recorded
+here, plus the synced plays, plus each player's total. Neither the order of the imports nor the
+order of the syncs changes the result, and a later import still adds only real growth.
+
+- [ ] **46.1 Totals, not deltas.** The `counts` event and the import carry the source's totals
+      per path and player. The merge takes the maximum per player and path, so applying an
+      event twice changes nothing. Amends ADR 0033 and ADR 0038.
+- [ ] **46.2 Existing data.** Pre-release, so there is no migration. The deltas already in the
+      logs and in `imported_plays` may be discarded and rebuilt, as long as the owner's stats
+      come out right without importing again on both Macs. The Result line says exactly what
+      the owner has to do on each Mac.
+- [ ] **46.3 Tests** that fail without the fix: two machines import the same library in either
+      order, before and after syncing, and end with the same count; an import after the source
+      gained plays adds only the gain; a play recorded here is never lost.
+- [ ] **46.4 Check on the owner's data.** Against copies of both Macs' indexes and logs, never
+      the live files: the imported plays total 43,293 (plus whatever Swinsian has gained since),
+      and the plays recorded in this app are added on top.
+- [ ] **Hardware checkpoint (owner):** after the steps in the Result line, both Macs show the
+      same play count for a few tracks, matching Swinsian plus the plays made in this app.
+
+Answered without a change: Swinsian's database keeps no play history, only a count, a last
+played and a date added per track. Its Library Statistics window is worked out from those, so
+individual plays can't be recovered from it. The last played already counts as one dated play
+(44c); the rest of an import stays undated.
+
+### 47. Faster tag writes
+
+The owner reports that saving tags is very slow, worst with several tracks selected, and asks
+for edits in place as Swinsian makes them, without risking the files. 44e already writes in
+place when the new tag fits the padding, but each in-place save still reads the whole file
+twice to hash it. Swinsian (TagLib) reads the header and writes a few KB. A 40 MB FLAC takes
+about 0.7 s over gigabit and 2–3 s over Wi-Fi, so a hi-res album over Wi-Fi takes minutes. A
+save that doesn't fit the padding goes through the temp file: about four passes over the file.
+
+The parts, biggest gain first. ADR 0108 records them and amends ADR 0020 and 0107.
+
+- [ ] **47.1 No whole-file hashes in place.** A write in place touches only `plan.region`, and the
+      code already checks that the region doesn't overlap the audio, so hashing bytes the write
+      never touches proves nothing about it. Before the write, keep the checks that exist:
+      `fstat` identity, a `pread` of the region matching the journaled old bytes, and the
+      planned file read back through `PlannedSource`. After it: reopen with `F_NOCACHE`, so SMB
+      can't answer from the client's cache, `pread` the region and compare it to the new bytes,
+      then parse the header and check the tags. All of that reads about as much as the tag.
+- [ ] **47.2 Journal on the region.** The journal and recovery key on a hash of the region, not
+      of the whole file. Recovery sorts a file into three cases: the region holds the new bytes
+      (keep the edit), the old bytes (drop the record), or neither (torn, put back).
+- [ ] **47.3 Two flushes a batch.** Write the records, old bytes and markers for all the files,
+      then one `F_FULLFSYNC`; then the writes; then one more flush to confirm them all. A
+      20-track album goes from about 40 full flushes to 2, and the per-file markers still cover
+      a crash partway through.
+- [ ] **47.4 More room.** The padding is 2,048 bytes, defined three times (`FLACFile`,
+      `ID3Tag`, `MP4File`); define it once. A save through the temp file leaves much more room,
+      for example 16–64 KB, or the art's size plus a margin, so later edits fit. Adding art or
+      lyrics then fits, and an MP3 with no padding takes the slow path once instead of every
+      time.
+- [ ] **47.5 MP4 growing at the end.** An MP4 whose `moov` is the last atom grows in place by
+      writing past the end of the file: no `mdat` moves and no chunk offsets change. Count how
+      many of the 61 "moov after mdat" corpus files this covers.
+- [ ] **47.6 Several files at once on the NAS.** Write 3–4 files at a time, since SMB is bound by
+      round trips. The journal steps of 47.3 stay serial; only the writes and read-backs run in
+      parallel.
+- [ ] **47.7 Probe: server-side copy.** Find out whether macOS's SMB server-side copy (copy-chunk
+      through `copyfile`) works against the owner's NAS. If it does, the temp file can be the new
+      header plus a server-side copy of the audio, which never crosses the network. If it
+      doesn't, record that and drop the part.
+- [ ] **47.8 Less bookkeeping.** `removeLeftoverTemps` lists the folder once per folder per
+      batch, not once per file. `rescan(files:)` takes the tags the writer just parsed instead of
+      parsing each file again.
+- [ ] **47.9 Progress.** A batch save shows progress per file, so a slow save doesn't look stuck.
+- [ ] **47.10 Speed.** Bench rows: a 20-file FLAC batch in place, locally and on the slow
+      simulated NAS, and the same through the temp file; the existing FLAC title rows rerun.
+      Tests on generated fixtures and corpus clones for each part, including a crash at each
+      step of a batch.
+- [ ] **Hardware checkpoint (owner):** save a tag edit on a 20-track hi-res album on the NAS over
+      Wi-Fi and over Ethernet; report the times. Then add art to a few tracks and edit them again.
+
+### 48. Owner feedback, 2026-11-05 (third round)
+
+Get Info and Listening Stats. Parts 48a and 48b touch different windows, so they can run in
+parallel worktrees and merge in order a, b. ADR 0109 is given to 48b if it needs one.
+
+#### 48a. Get Info and Lost Stats
+
+- [ ] **48a.1 No layout shift.** The Get Info window opens with its final layout: no flash of
+      unstyled content and nothing that moves after it shows. A test checks that the window's
+      frame and its fields' frames don't change between the first draw and the fields filled.
+- [ ] **48a.2 Tab keys.** ⌘[ and ⌘] switch to the previous and next tab (Info, Sorting and the
+      rest), wrapping at the ends.
+- [ ] **48a.3 Resolve Lost Stats says what happened.** The command opens a sheet to move the play
+      counts and ratings of files that vanished onto the tracks they probably moved to
+      (ADR 0026). With none to resolve it writes "No lost stats to resolve" in the status bar,
+      which the owner didn't notice. Disable the command when there are none, and when it can't
+      open the sheet, say why where the user is looking.
+
+#### 48b. Listening Stats
+
+- [ ] **48b.1 Rolling periods.** Past Week, Past Month, Past Year and All Time replace This
+      Week, This Month and This Year: the last 7, 30 and 365 days up to today. The year menu
+      stays as it is. The bench rows rename their periods.
+- [ ] **48b.2 Totals box height.** When the totals box shares a row with Plays per Day, it fits
+      the height of the Plays per Day cards, laid out in columns rather than one tall list.
+- [ ] **48b.3 Smaller cards wider.** The smaller cards' maximum width goes up slightly.
+- [ ] **48b.4 Save as Playlist asks first.** A sheet asks for the playlist's name, filled in with
+      the name the current logic makes, and creates the playlist only on confirm.
+
+### 49. Click-free play, pause and seek
+
+The owner hears a pop when they play and pause quickly, and asks for the slight fade other
+players use, keeping the response immediate and bit-perfect playback unchanged. The same goes
+for seeking and for clicking in the progress bar.
+
+- [ ] **49.1 Short fades.** Pause fades out and play fades in over a few milliseconds (one
+      length, defined once, about 5 ms), as do both sides of a seek and a click in the progress
+      bar. The fade runs in the C render path (`HALRender`), with no allocation, locks or
+      logging. Every sample outside a fade is passed through unchanged, so playback between
+      fades stays bit-perfect; gapless track changes don't fade.
+- [ ] **49.2 DoP.** A fade would corrupt the DoP markers, so DSD over DoP doesn't fade. Say in
+      ADR 0110 how it goes quiet instead (for example DoP silence), or that it doesn't.
+- [ ] **49.3 Tests.** A sine paused and played has no step larger than the fade allows; the
+      samples outside the fades match the file bit for bit; a seek during a fade goes on from
+      where the gain is. The seek rows in the budgets still pass, and the soak shows no
+      underruns.
+- [ ] **Hardware checkpoint (owner):** play, pause and seek quickly on the ADI-2 and say whether
+      the pops are gone and it still feels immediate, and that the signal path panel still shows
+      bit-perfect while playing.
 
 ### 10. Web remote
 
