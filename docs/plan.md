@@ -254,6 +254,32 @@ played and a date added per track. Its Library Statistics window is worked out f
 individual plays can't be recovered from it. The last played already counts as one dated play
 (44c); the rest of an import stays undated.
 
+Implementation plan:
+- Event (Library, `SyncEvent`): a `totals` event, `path`, `player`, `plays`, `skips`,
+  `lastPlayed`, carries the player's totals for the path as this machine holds them, in place
+  of `counts`. A `counts` line, which earlier builds wrote with an import's deltas, is read and
+  skipped without a problem (`SyncLineProblem.retiredCounts`, skipped by the sync cursor), since
+  the app never rewrites a log. The fuzz target's seed line becomes a `totals` one.
+- Import (Library, `LibraryPlayerImport`, `ImportPlan`): `imported_plays` holds the highest
+  totals any machine's import of a player reported. The plan's gain is the source's total past
+  that, never less than 0; `TrackUpdate.totals` replaces `imported` and is recorded when a gain
+  is. The import logs `totals` with the recorded totals.
+- Merge (Library, `LibrarySyncMerge`): `totals` raises the recorded totals to the event's and
+  adds the gain to the path's counts, so applying it twice, or after an import of the same
+  library here, adds nothing.
+- Existing data (Library, `LibrarySchema`): the `imports` part's SQL changes, so it's rebuilt
+  empty, and building it sets each path's play count to its history rows, this machine's and
+  the synced plays, discarding what earlier imports added. Skips have no history and stay. The
+  owner then imports Swinsian once, on either Mac, and the other reads its `totals`.
+- Tests, in `SyncTests`, `PlayerImportTests`, `SyncLogTests` and `LibraryIndexTests`: two
+  machines import the same library in either order, before and after syncing, and agree; an
+  import after the source gained plays adds only the gain, here and on the other machine; a
+  play recorded here survives both; a `counts` line is skipped without a problem; the rebuilt
+  part leaves each play count at its history.
+- 46.4 on copies in the scratchpad: both Macs' indexes and the sync folder's logs, opened by a
+  test-only run of the new build, then an import of this Mac's Swinsian copy.
+- ADR 0033 and 0038 amended in place, with their "Amended" lines.
+
 ### 47. Faster tag writes
 
 The owner reports that saving tags is very slow, worst with several tracks selected, and asks
