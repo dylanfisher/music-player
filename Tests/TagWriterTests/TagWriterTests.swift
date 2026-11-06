@@ -4,7 +4,7 @@ import Testing
 @testable import Metadata
 @testable import TagWriter
 
-/// The edits the round trip makes, as on the corpus (docs/plan.md, phase 11).
+/// The edits the round trip makes, as on the corpus (docs/plan-archive.md, phase 11).
 private func edits(for url: URL) throws -> [(String, TagEdit)] {
     let layout = try readTagLayout(at: url)
     let current = try tags(url)

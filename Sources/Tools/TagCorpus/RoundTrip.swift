@@ -3,7 +3,7 @@ import Foundation
 import Metadata
 import TagWriter
 
-/// Every edit of docs/plan.md's phase 11 on every clone, each checked and undone, then the
+/// Every edit of docs/plan-archive.md's phase 11 on every clone, each checked and undone, then the
 /// failure injections. The clones must have just been made from `reference`.
 struct RoundTrip {
     let reference: URL
@@ -145,7 +145,7 @@ struct RoundTrip {
         }
     }
 
-    /// The checks of docs/plan.md's phase 11, step 4, on one edited clone.
+    /// The checks of docs/plan-archive.md's phase 11, step 4, on one edited clone.
     private mutating func check(_ clone: URL, after edit: TagEdit, attributes: [String]) throws {
         let original = original(of: clone)
         let originalParsed = try readMetadata(at: original)
