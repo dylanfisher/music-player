@@ -37,7 +37,7 @@ milliseconds after the pause; what's heard starts fading as soon as the next buf
 
 **Play.** A start whose audio doesn't begin at a track's first frame fades in from silence: a
 resume, a play after a seek while paused, a load mid-track such as the resume after a quit or
-a return of a lost device. A track from its first frame starts at full gain, from silence.
+a return of a lost device. A track from its first frame starts at full gain, as before.
 
 **Seek.** A discard that drops what's playing (a seek, a click in the bar, a track loaded over
 the one playing on the same device) moves as many frames of the old audio as the counter
