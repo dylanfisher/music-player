@@ -288,7 +288,7 @@ ADR numbers: 0117 to 50a if it needs one, 0118 to 50b, 0119 to 50c, 0120 to 50d.
 
 #### 50b. Playback: the hog mode fix plays the track you chose; the log
 
-- [ ] **50b.1 Turn On plays the chosen track.** With hog mode off, double-clicking a DSD
+- [x] **50b.1 Turn On plays the chosen track.** With hog mode off, double-clicking a DSD
       track and choosing Turn On in the dialog started the first row instead. Probe:
       `play(starting:)` plays a one-track queue until the full list arrives (ADR 0078), and
       DoP's refusal comes before the full queue does, so `FailedTrack.entry` is 0, not the
@@ -300,7 +300,7 @@ ADR numbers: 0117 to 50a if it needs one, 0118 to 50b, 0119 to 50c, 0120 to 50d.
       never plays a different track; and a fix that can't replay says why where the user is
       looking, not only in the log. Test: `play(starting: urls[2])` with a gated fill and a
       refusal before the gate opens, then the fix replaying entry 2.
-- [ ] **50b.2 Log values in Copy Details.** The owner asked whether playback log lines should be
+- [x] **50b.2 Log values in Copy Details.** The owner asked whether playback log lines should be
       public so Copy Details shows their values instead of `<private>`. Decision (the owner can
       overrule it): the log's values that are the app's own or the device's are public: errors,
       OSStatus codes, formats, device and renderer names. Track paths stay private, logged
@@ -344,6 +344,36 @@ Plan, part 50b (ADR 0118, amending 0025 and 0111):
   path; and a line logged as the engine logs a failure reads back in `recentLogLines` with
   the error and a hash, not the path or `<private>`.
 - Order: this plan, 50b.1's engine fix, its notice, 50b.2, the ADR and the result.
+
+Gate, part 50b: one review, which found nothing above low. Fixed: the run's log line now logs
+only its count, as a cause's message can be a non-`PlaybackFailure` error's whole text; the
+log rule also catches camelCase names (`fileURL`, `filePath`); the ADR names `logText`'s
+exact-path limit and the short queue that ends rather than stops. Left as accepted: a failure
+held while the queue is read waits as long as the read does; a failure of a track removed
+during the read still goes out and its fix refuses with `.gone`. `./scripts/check` passes; the
+two color-well tests in SettingsWindowTests failed in two of four runs on this loaded machine,
+and on the base commit too.
+
+Result, part 50b: shipped 50b.1 and 50b.2 (ADR 0118, amending 0025 and 0111). The cause was
+as probed and a test confirmed it before the fix: a play from a list fails its first track
+against the one-track queue, so the failure named entry 0, the run's causes read `[0, 3, 4]`
+and the engine stopped on entry 0. While the queue is read a failure's event is now held, as
+the track's end is, and goes out with the track's entry in the whole queue; a run of failures
+that stops playback leaves the cursor on its first track, so Play and the fix play the chosen
+track. A fix whose track can't be played again says why in an alert on the window it was
+asked from. The playback modules log errors, device and renderer names, UIDs, addresses and
+codes public, a track's path as a hash and its error with the path replaced by "the track's
+file"; `scripts/arch.swift` fails a path or URL logged public. Tests: the DSD album played
+from its third row with the refusal before the queue, events and causes on entries 2 to 4,
+stopped on entry 2 and playing it loads that track; a held failure goes out with entry 0 when
+the queue can't be read; the refusal's alert text; a failure logged as the engine logs one
+reads back from the log store with its error and a hash, no path and no `<private>`; the
+arch rule's planted cases. For the owner: with hog mode off, double-click the third track of
+a DSD album, choose Turn On Hog Mode, and check that track plays; turn hog mode off again,
+play a DSD track, Cancel the dialog, click the status bar's problem to open its details, play
+a FLAC track, click Turn On Hog Mode in the details and check an alert says why the DSD track
+isn't played; open a problem's details, Copy Details, and check the log lines show
+errors and device names, and paths only as `<mask.hash: …>`.
 
 #### 50c. Analyze Library and Scan Library
 
