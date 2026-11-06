@@ -108,7 +108,7 @@ public final class TagEditing {
         editors.last { $0.window.isKeyWindow } ?? editors.last
     }
 
-    public var canReplaceArt: Bool { active?.isLoaded == true }
+    public var canReplaceArt: Bool { active?.model?.canSave == true }
     public var canRemoveArt: Bool { active?.model?.canRemoveArt == true }
 
     /// Get Info: opens an info window on `paths` at once and reads them into it. A window
@@ -171,13 +171,13 @@ public final class TagEditing {
             guard !tracks.isEmpty else {
                 editor.close()
                 self.effects.alert(
-                    "\(problems.count) of \(paths.count) files can't be edited", problems, window)
+                    "\(problems.count) of \(paths.count) files can't be read", problems, window)
                 return
             }
             editor.load(TagEditorModel(tracks: tracks))
             if !problems.isEmpty {
                 self.effects.alert(
-                    "\(problems.count) of \(paths.count) files can't be edited", problems,
+                    "\(problems.count) of \(paths.count) files can't be read", problems,
                     editor.window)
             }
         }
@@ -185,7 +185,7 @@ public final class TagEditing {
 
     /// Replace Artwork…: an image chosen in an open panel over the info window.
     public func chooseArt() {
-        guard let editor = active, editor.isLoaded else { return }
+        guard let editor = active, editor.model?.canSave == true else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.jpeg, .png]
         panel.message = "Choose a JPEG or PNG image for the artwork."
@@ -211,11 +211,13 @@ public final class TagEditing {
 
     /// Writes one file at once; a batch asks first, in a sheet on the info window, which stays
     /// open with what was typed if the answer is no. The window closes once the write is
-    /// queued.
+    /// queued. Only the files whose tags can be written are written or counted; the window
+    /// said which can't.
     private func save(_ edit: TagEdit, from editor: TagEditorWindow, over window: NSWindow) {
         guard let model = editor.model else { return }
+        guard model.canSave else { return NSSound.beep() }
         if let note = model.collapseNote { logger.notice("\(note)") }
-        let paths = model.tracks.map(\.path)
+        let paths = model.writable.map(\.path)
         guard !edit.isEmpty else {
             editor.close()
             return

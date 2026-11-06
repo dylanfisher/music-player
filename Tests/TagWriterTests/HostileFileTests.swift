@@ -260,6 +260,6 @@ func dsdFilesAreRefusedByTheWriterAndLeftUnchanged(fileExtension: String) throws
     try bytes.write(to: url)
     let report = scratchWriter().write(titleEdit, to: [url.path])
     #expect(report.failures.map(\.kind) == [.unsupported])
-    #expect(report.failures.first?.detail.contains("DSF and DSDIFF") == true)
+    #expect(report.failures.first?.detail.contains("can't be written yet") == true)
     #expect(try Data(contentsOf: url) == bytes)
 }

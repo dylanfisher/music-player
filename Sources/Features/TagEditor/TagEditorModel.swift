@@ -12,16 +12,20 @@ package struct EditableTrack: Equatable, Sendable {
     var multiValued: Set<TagEditField>
     /// What the File tab shows; nil when not read, as in tests.
     var file: FileFacts?
+    /// Why its tags can't be written, as for a DSF file, which the window shows read-only; nil
+    /// when they can.
+    var readOnly: String?
 
     init(
         path: String, tags: TrackTags, art: Data?, multiValued: Set<TagEditField> = [],
-        file: FileFacts? = nil
+        file: FileFacts? = nil, readOnly: String? = nil
     ) {
         self.path = path
         self.tags = tags
         self.art = art
         self.multiValued = multiValued
         self.file = file
+        self.readOnly = readOnly
     }
 }
 
@@ -63,6 +67,27 @@ public struct TagEditorModel: Equatable, Sendable {
         self.tracks = tracks
     }
 
+    /// The tracks Save writes: those whose tags can be written. The fields show every track's
+    /// values, but an edit is checked against and written to only these.
+    var writable: [EditableTrack] { tracks.filter { $0.readOnly == nil } }
+
+    /// Whether any track can be saved, which turns the fields, the art buttons and Save on.
+    var canSave: Bool { !writable.isEmpty }
+
+    /// Why some tracks can't be saved, and, when others can, how many Save writes; nil when
+    /// every track can.
+    var readOnlyNote: String? {
+        var reasons: [String] = []
+        for track in tracks {
+            if let reason = track.readOnly, !reasons.contains(reason) { reasons.append(reason) }
+        }
+        guard !reasons.isEmpty else { return nil }
+        let why = reasons.joined(separator: ". ") + "."
+        let count = writable.count
+        guard count > 0 else { return why }
+        return why + " Save writes only the other \(count) file\(count == 1 ? "" : "s")."
+    }
+
     func isTyped(_ field: TagEditField) -> Bool { typed[field] != nil }
 
     /// Whether saving would change the field: it was typed differently from what it showed.
@@ -90,7 +115,7 @@ public struct TagEditorModel: Equatable, Sendable {
     var collapsedFields: [TagEditField] {
         let typedChanges = Set(typed.filter { shared($0.key) != $0.value }.keys)
         return TagEditField.allCases.filter { field in
-            typedChanges.contains(field) && tracks.contains { $0.multiValued.contains(field) }
+            typedChanges.contains(field) && writable.contains { $0.multiValued.contains(field) }
         }
     }
 
@@ -98,7 +123,7 @@ public struct TagEditorModel: Equatable, Sendable {
     var collapseNote: String? {
         let fields = collapsedFields
         guard !fields.isEmpty else { return nil }
-        let files = tracks.filter { !$0.multiValued.isDisjoint(with: fields) }.count
+        let files = writable.filter { !$0.multiValued.isDisjoint(with: fields) }.count
         let names = fields.map(\.title).joined(separator: ", ")
         return "\(names) \(fields.count == 1 ? "holds" : "hold") several values in \(files)"
             + " file\(files == 1 ? "" : "s"). Saving keeps only the value shown."
@@ -122,7 +147,7 @@ public struct TagEditorModel: Equatable, Sendable {
         switch art {
         case .replaced: true
         case .removed: false
-        case .unchanged: tracks.contains { $0.art != nil }
+        case .unchanged: writable.contains { $0.art != nil }
         }
     }
 
@@ -133,7 +158,7 @@ public struct TagEditorModel: Equatable, Sendable {
     public mutating func removeArt() { art = .removed }
 
     /// The edit to write: every field typed differently from what it showed, and the art. Throws
-    /// for a value some track can't take, before anything is written.
+    /// for a value some writable track can't take, before anything is written.
     func edit() throws(TagValueError) -> TagEdit {
         var values: [TagEditField: String] = [:]
         for (field, text) in typed where shared(field) != text { values[field] = text }
@@ -144,7 +169,7 @@ public struct TagEditorModel: Equatable, Sendable {
             case .removed: .remove
             }
         let edit = TagEdit(values: values, art: artChange)
-        for track in tracks { _ = try edit.applied(to: track.tags) }
+        for track in writable { _ = try edit.applied(to: track.tags) }
         return edit
     }
 
@@ -221,14 +246,15 @@ package func readEditableTrack(_ path: String) throws -> EditableTrack {
         let art = try parsed.metadata.art.map { art throws(ParseFailure) in
             try readArt(art, from: source)
         }
-        let facts = try editorTagFacts(in: reader)
+        let facts = try editorTagFacts(
+            in: reader, hasTags: !parsed.metadata.tags.isEmpty || parsed.metadata.art != nil)
         // The dates come from the open descriptor's stat, so they cost no extra round trip.
         let file = FileFacts(
             audio: parsed.metadata.audio, sizeBytes: reader.size, tagScheme: facts.tagScheme,
             modified: source.modified, created: source.created)
         return EditableTrack(
             path: path, tags: parsed.metadata.tags, art: art, multiValued: facts.multiValued,
-            file: file)
+            file: file, readOnly: facts.readOnly)
     } catch {
         throw error.error(path: path)
     }

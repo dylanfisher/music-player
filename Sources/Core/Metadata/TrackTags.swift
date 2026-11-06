@@ -61,4 +61,7 @@ public struct TrackTags: Equatable, Sendable {
     public var paymentURL: String?
     public var publisherURL: String?
     public var radioStationURL: String?
+
+    /// Whether no field is set, as for a file with no tag.
+    package var isEmpty: Bool { self == TrackTags() }
 }

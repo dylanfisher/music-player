@@ -284,13 +284,13 @@ private final class Titles: @unchecked Sendable {
     let editing = makeEditing(seen) { _, _ in ([editable("/a.flac")], ["/b.flac: unreadable"]) }
     editing.open(["/a.flac", "/b.flac"], over: window)
     try await eventually { editing.editors.first?.isLoaded == true }
-    #expect(seen.alerts == ["1 of 2 files can't be edited"])
+    #expect(seen.alerts == ["1 of 2 files can't be read"])
     #expect(editing.editors.first?.model?.tracks.map(\.path) == ["/a.flac"])
 
     let none = makeEditing(seen) { _, _ in ([], ["/c.flac: unreadable"]) }
     none.open(["/c.flac"], over: window)
     try await eventually { seen.alerts.count == 2 }
-    #expect(seen.alerts.last == "1 of 1 files can't be edited")
+    #expect(seen.alerts.last == "1 of 1 files can't be read")
     #expect(!none.isOpen, "nothing to edit, so the window closes")
 }
 
@@ -337,4 +337,30 @@ private final class Titles: @unchecked Sendable {
             "Saving tags: 2 of 2", nil,
         ])
     #expect(fractions == [0.25, 0.5, 0.75, 1])
+}
+
+/// Get Info on a DSF, a DSDIFF and a FLAC shows all three; Save writes only the FLAC, at once
+/// as one file, and the DSD files are left as they were.
+@MainActor
+@Test func saveWritesOnlyTheFilesWhoseTagsCanBeWritten() async throws {
+    let seen = Seen()
+    let dsd = try ["dsf", "dff"].map { try dsdFixture($0) }
+    let before = try dsd.map { try Data(contentsOf: $0) }
+    let paths = dsd.map(\.path) + ["/a.flac"]
+    let editing = makeEditing(
+        seen,
+        read: { paths, isStopped in
+            readEditableTracks(paths, isStopped: isStopped) { path in
+                path.hasSuffix(".flac") ? editable(path) : try readEditableTrack(path)
+            }
+        })
+    editing.open(paths, over: window)
+    try await eventually { editor(editing, paths)?.isLoaded == true }
+    #expect(seen.alerts.isEmpty, "every file was read")
+    #expect(editor(editing, paths)?.model?.tracks.count == 3)
+    editor(editing, paths)?.saved(TagEdit(values: [.title: "New"]))
+    try await eventually { seen.written == [["/a.flac"]] }
+    #expect(seen.work == ["write /a.flac"])
+    #expect(seen.confirmations.isEmpty, "one file is written, so nothing asks")
+    #expect(try dsd.map { try Data(contentsOf: $0) } == before)
 }

@@ -8,13 +8,15 @@ enum TagFile {
     case flac(FLACFile)
 
     init(_ reader: ByteReader) throws(ParseFailure) {
-        switch try FileFormat(reader) {
+        let format = try FileFormat(reader)
+        if let refusal = format.tagWriteRefusal { throw .unsupported(at: nil, refusal) }
+        switch format {
         case .mp4: self = .mp4(try MP4File(reader))
         case .flac: self = .flac(try FLACFile(reader))
         case .mp3: self = .id3(try ID3File(reader, container: .mp3))
         case .aiff: self = .id3(try ID3File(reader, container: .aiff))
         case .wav: self = .id3(try ID3File(reader, container: .wav))
-        case .dsf, .dff: throw .unsupported(at: nil, "writing tags in DSF and DSDIFF files")
+        case .dsf, .dff: preconditionFailure("refused above")
         }
     }
 
@@ -48,6 +50,17 @@ enum TagFile {
             try file.rewrite(groups, from: tags, art: art, artOffset: artOffset)
         case .flac(let file):
             try file.rewrite(groups, from: tags, art: art, artOffset: artOffset)
+        }
+    }
+}
+
+extension FileFormat {
+    /// Why the writer can't write this format's tags, as Get Info says it; nil when it can.
+    var tagWriteRefusal: String? {
+        switch self {
+        case .dsf: "Tags in DSF files can't be written yet"
+        case .dff: "Tags in DSDIFF files can't be written yet"
+        case .flac, .mp4, .mp3, .wav, .aiff: nil
         }
     }
 }

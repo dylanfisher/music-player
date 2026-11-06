@@ -418,7 +418,7 @@ let package = Package(
         ),
         .testTarget(
             name: "TagEditorTests",
-            dependencies: ["Metadata", "TagEditor", "TagWriter"],
+            dependencies: ["Fixtures", "Metadata", "TagEditor", "TagWriter"],
             swiftSettings: strictSwift
         ),
         .testTarget(

@@ -19,20 +19,29 @@ func multiValuedFields(in reader: ByteReader) throws(ParseFailure) -> Set<TagEdi
     try multiValuedFields(in: TagFile(reader))
 }
 
-/// The fields holding several values, as `multiValuedFields`, and the kind of tag the file
-/// holds, such as "ID3v2.4", from one parse of its layout.
-package func editorTagFacts(in reader: ByteReader) throws(ParseFailure)
-    -> (multiValued: Set<TagEditField>, tagScheme: String)
+/// The fields holding several values, as `multiValuedFields`, the kind of tag the file holds,
+/// such as "ID3v2.4", from one parse of its layout, and why its tags can't be written, when they
+/// can't. A file of a format the writer refuses, as DSF and DSDIFF, isn't parsed for writing:
+/// its tag is ID3v2, or none when `hasTags` says the reader found nothing, and no field counts
+/// as holding several values, since nothing is saved to it.
+package func editorTagFacts(in reader: ByteReader, hasTags: Bool) throws(ParseFailure)
+    -> (multiValued: Set<TagEditField>, tagScheme: String, readOnly: String?)
 {
+    if let refusal = try FileFormat(reader).tagWriteRefusal {
+        return ([], hasTags ? "ID3v2" : noTagScheme, refusal)
+    }
     let file = try TagFile(reader)
     let scheme: String =
         switch file {
-        case .id3(let id3): id3.tag.byteCount == 0 ? "No tag" : id3VersionName(id3.tag.version)
+        case .id3(let id3):
+            id3.tag.byteCount == 0 ? noTagScheme : id3VersionName(id3.tag.version)
         case .mp4: "iTunes MP4"
         case .flac: "Vorbis comment"
         }
-    return (try multiValuedFields(in: file), scheme)
+    return (try multiValuedFields(in: file), scheme, nil)
 }
+
+private let noTagScheme = "No tag"
 
 private func multiValuedFields(in file: TagFile) throws(ParseFailure) -> Set<TagEditField> {
     var groups = Set<TagGroup>()

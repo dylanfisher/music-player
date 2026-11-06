@@ -48,9 +48,10 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     private var fileValues: [FileRow: NSTextField] = [:]
     /// Spins in the buttons row while the files are read; it keeps its space once stopped.
     private let spinner = NSProgressIndicator()
-    /// One line beside the buttons: "Reading tags…", then why Save failed.
-    private let problemLabel = NSTextField(labelWithString: "Reading tags…")
-    private let saveButton = NSButton(title: "Save", target: nil, action: nil)
+    /// One line beside the buttons: "Reading tags…", then why some files can't be saved, or why
+    /// Save failed.
+    let problemLabel = NSTextField(labelWithString: "Reading tags…")
+    let saveButton = NSButton(title: "Save", target: nil, action: nil)
     /// Says, as soon as such a field is edited, that saving keeps one of its several values.
     private let collapseLabel = NSTextField(wrappingLabelWithString: "")
     private var isClosed = false
@@ -142,8 +143,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         }
         self.model = model
         spinner.stopAnimation(nil)
-        problemLabel.stringValue = ""
-        problemLabel.textColor = .systemRed
+        showNote(model.readOnlyNote ?? "", color: .secondaryLabelColor)
         showEditable()
         showValues()
         focusFirstField()
@@ -487,9 +487,10 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     // MARK: Values
 
-    /// Lets the fields, the art buttons and Save be used once the files are read.
+    /// Lets the fields, the art buttons and Save be used once the files are read, if any of
+    /// them can be written.
     private func showEditable() {
-        let editable = model != nil
+        let editable = model?.canSave == true
         for view in fields.values.joined() { view.isEditable = editable }
         for view in areas.values { view.isEditable = editable }
         compilationBox.isEnabled = editable
@@ -605,6 +606,12 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         showEdited()
     }
 
+    private func showNote(_ text: String, color: NSColor) {
+        problemLabel.stringValue = text
+        problemLabel.toolTip = text.isEmpty ? nil : text
+        problemLabel.textColor = color
+    }
+
     @objc private func replaceClicked() { replaceArtwork() }
     @objc private func removeClicked() { removeArtwork() }
     @objc private func cancelClicked() { close() }
@@ -614,8 +621,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         do {
             saved(try model.edit())
         } catch {
-            problemLabel.stringValue = error.description
-            problemLabel.toolTip = error.description
+            showNote(error.description, color: .systemRed)
             NSSound.beep()
         }
     }
