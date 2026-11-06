@@ -62,6 +62,9 @@ drawing sits in: `scripts/icon-mask.swift` reads that clip path as a rect in the
 canvas. The mask also cuts away the tile's drop shadow, since Quick Look draws it on an opaque
 white square, where it can't stay see-through.
 
+On 2026-11-05 the owner replaced the drawing with a pure red version of Ember. Its clip path was
+renamed to `tile` so the mask finds it; nothing else in it changed.
+
 ## Alternatives considered
 
 - **No `added` from a scan at all** — rejected: a Mac that scans a new album days after another
