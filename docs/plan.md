@@ -459,15 +459,16 @@ Plan, part 48c (ADR 0111):
 
 Result, part 48c (draft, before the gate): shipped 48c.1 to 48c.5 (ADR 0111). Every error
 that can stop playback has a message for people beside its description, and the status bar
-shows it: "Couldn't play So What.dsf: ADI-2 DAC can't play DSD64: DoP needs exclusive access,
-and hog mode is off for this device". A question mark follows a problem in the status bar,
+shows it: "Couldn't play So What.dsf: DoP needs exclusive access, and hog mode is off for
+this device". A question mark follows a problem in the status bar,
 and it or the line opens the Playback Problem window with the track and its format, the
 device and its format, hog mode, the error's full text and the playback modules' log lines
 of the last 10 minutes, which Copy Details copies; log values not marked public read as
 `<private>`. DoP refused for hog mode shows a dialog at once whose Turn On Hog Mode button,
 and the details window's, set `output.hogMode` for the device in use and play the track
-again; hog mode held by another app names it, with no button. Tracks failing in a row stop
-on their one cause and its fix, or list each cause with its count and a Show Details button.
+again while it is still the queue's current one (otherwise the log says why); hog mode held
+by another app names it, with no button, and held by no one says so. Tracks failing in a row stop
+on their one cause and its fix (a DSD64 and DSD128 album too), a fix every cause shares, or list each cause with its count and a Show Details button.
 `tracks(_:)` moved from LibraryBrowser to DisplayText for the dialog. Tests: every case of
 the playback, output, renderer and metadata errors has a plain message; a problem keeps the
 message and the full text; the recent log lines come back with their category; the status

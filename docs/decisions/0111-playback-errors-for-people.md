@@ -35,15 +35,18 @@ nothing offered to turn hog mode on, and tracks failing in a row ended on a coun
   opening the store takes seconds. A value logged without `privacy: .public` reads as
   `<private>` there.
 - **A fix is a `PlaybackFix`**, with one case: turn on hog mode for a device, by UID. DoP
-  refused because hog mode is off carries it. A problem with a fix shows a dialog at once,
+  refused because hog mode is off carries it, with a message that names neither the DSD rate
+  nor the device, so every DSD track refused for it has one cause. A problem with a fix shows a dialog at once,
   and the details window shows the fix as a button. Either sets `output.hogMode`, which the
   config mirrors from the device in use, so the existing settings path saves the device's
-  profile and moves the output to it, then plays the track again. A fix for a device that is
-  no longer the output beeps. Hog mode held by another app names that app, from its pid's
-  process name, with no fix.
+  profile and moves the output to it. It plays the track again only while the engine's
+  current queue entry is still the one that failed, which the event carries; otherwise it
+  logs why. A fix for a device that is no longer the output beeps. Hog mode held by another
+  app names that app, from its pid's process name, with no fix; a device that reads as held
+  by no one after the app asked for it says so, naming no app.
 - **Tracks failing in a row say why.** `PlaybackError.failedInARow` carries each track and
-  its problem, grouped into causes by message and fix. One cause: the message says it, and
-  its fix is the run's. Several: the message counts them, and the dialog lists each with its
+  its problem, grouped into causes by message and fix. One cause: the message says it. A
+  fix every cause shares is the run's. Several: the message counts them, and the dialog lists each with its
   number of tracks and a Show Details button.
 - **One dialog at a time.** A dialog is a sheet over the main window, and none shows while a
   sheet is up there, so a DSD album with hog mode off asks once.
