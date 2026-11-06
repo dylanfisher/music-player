@@ -29,6 +29,10 @@ month the calendar periods held a day or two of plays.
   more), the flow makes them as tall as the row's tallest card, and the figures go into two rows
   of three, each row in the middle of its half; on a row of their own they keep 92 points and
   one row. A card says whether it fills its row, so the rule isn't tied to the two cards' places.
+- **Columns of 300 points or more**, not 270, for the panel and Year in Review alike. Once two
+  columns fit, a one-column card is 300 to 455 points wide instead of 270 to 410; the owner asked
+  for the smaller cards' widest to go up slightly. A 1440-point screen's panel, about 1,200
+  points, shows three columns instead of four.
 
 ## Alternatives considered
 

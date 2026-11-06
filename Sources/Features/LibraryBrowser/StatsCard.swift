@@ -83,7 +83,7 @@ final class StatsCard: NSView {
 /// its rows, so a scroll view scrolls them.
 final class StatsFlowView: NSView {
     static let spacingPoints: CGFloat = 10
-    var minimumColumnPoints: CGFloat = 270
+    var minimumColumnPoints: CGFloat = 300
     /// At most this many columns, however wide; nil for as many as fit.
     var maximumColumns: Int?
     var insetPoints: CGFloat = 12

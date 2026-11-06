@@ -336,3 +336,21 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     #expect(narrow.chartCard.frame.minY > narrow.totalsCard.frame.maxY)
     #expect(figureRows(narrow.figures) == (1, 6))
 }
+
+@MainActor @Test func aOneColumnCardIs300To455PointsWideOnceTwoColumnsFit() {
+    let cards = StatsCards()
+    let flow = StatsFlowView()
+    flow.cards = cards.all
+    let clock = cards.clockCard
+    var narrowest = CGFloat.infinity
+    var widest: CGFloat = 0
+    for width in stride(from: 2 * flow.insetPoints + 610, through: 2400, by: 7) {
+        flow.frame = NSRect(x: 0, y: 0, width: width, height: 900)
+        flow.layout()
+        narrowest = min(narrowest, clock.frame.width)
+        widest = max(widest, clock.frame.width)
+    }
+    #expect(narrowest >= 300, "\(narrowest)")
+    // Just short of three columns, two share 3 × 300 + 2 × 10 points less a spacing.
+    #expect(widest > 450 && widest < 455, "\(widest)")
+}

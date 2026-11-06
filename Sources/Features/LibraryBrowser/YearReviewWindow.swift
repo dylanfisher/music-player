@@ -66,7 +66,6 @@ final class YearReviewWindow: NSWindowController {
             cards.actions.showPlays(bar.span)
         }
         flow.maximumColumns = 2
-        flow.minimumColumnPoints = 300
         flow.cards =
             [cards.totalsCard, highlightsCard, monthsCard]
             + StatsReport.List.allCases.compactMap { cards.listCards[$0] }
