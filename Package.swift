@@ -132,9 +132,7 @@ let package = Package(
             name: "Analysis",
             dependencies: ["DisplayText", "HALOutput", "Library", "Log", "Metadata", "Playback"],
             path: "Sources/Core/Analysis",
-            swiftSettings: strictSwift,
-            // Accelerate, for the FFTs, is a system framework on macOS 12.
-            linkerSettings: [.linkedFramework("Accelerate")]
+            swiftSettings: strictSwift
         ),
         .target(
             name: "Commands",
