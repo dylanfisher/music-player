@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0099](0099-library-health-panel.md) (a panel may have a height of its own),
   [0036](0036-scripting.md) (a command that replies)
+- **Amended by:** [0105](0105-stats-clicks-filter-and-imported-last-plays.md): a click narrows
+  the table under the panel, and each import's last play counts as a dated play.
 
 ## Context
 

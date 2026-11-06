@@ -5780,12 +5780,81 @@ reads the screen) fails in the full run and alone, the same with this part's cha
 
 #### 44c. Listening Stats stays put, and counts Swinsian's plays
 
-- [ ] **44c.1 Clicks filter.** A click on an artist, album, genre or track in Stats stays in
+- [x] **44c.1 Clicks filter.** A click on an artist, album, genre or track in Stats stays in
       Stats; the track table under the panel shows that item's tracks played in the period,
       with a way to clear the filter.
-- [ ] **44c.2 Swinsian's last plays.** Each imported track's last-played date counts as one
+- [x] **44c.2 Swinsian's last plays.** Each imported track's last-played date counts as one
       dated play in every period, its totals, top lists and charts; the rest of its imported
       count stays undated. The totals say how many plays came from an import.
+
+Plan, part 44c (ADR 0105, amending 0102 and 0033):
+- Probe (done before this plan): the index keeps no copy of an import's last played. An import
+  sets `plays.last_played_seconds` to the later of ours and theirs, and a play here sets it
+  again. Read from a copy of the owner's library: 11,282 `imported_plays` rows for Swinsian,
+  11,172 with plays (43,293 in all), 122 history rows, and 70 imported tracks with a history row
+  at or after their Last Played. A copy of the owner's Swinsian database has 11,202 tracks with
+  plays, each with a last played, the earliest in February 2022. Changing `importsSchema` would
+  rebuild the imports part and drop the baseline, and the next import would add every play
+  again, which the owner can't undo; the stats part's SQL can't change either (phase 43). A new
+  part rebuilds nothing else (`rebuildStaleParts` builds a part with no stored SQL alone).
+- Library: a part `importedLastPlays`, `imported_last_plays (path_id, player, played_at)`, its
+  SQL filling it from Last Played where one player alone counted plays for the path and no
+  history row is at or after it. An import records the source's last played for each track it
+  counted plays for (the later of two), the preview counts them, and the counts event carries
+  it to the other Macs, which record it; a merge of two paths and a deleted path take theirs.
+  `importedLastPlaysSQL`, the recorded last plays whose player still counts a play, is unioned
+  with the history in the period scans, the first plays, and the `.stats` source; the report
+  gains `importedPlays`. `TrackFilter.stats`, a `StatsFilter` of a list's row or a bar's span,
+  narrows the `.stats` source.
+- LibraryBrowser: a row's click narrows Stats' table to it, a second click on it clears it; a
+  bar's click narrows it to its span, its double-click shows the timeline as the click did. The
+  row or bar is marked, and a button in the header names it and clears it. Another period keeps
+  a row's filter and drops a bar's; another source drops both. Year in Review's clicks act on
+  the main window's Stats for its year. Showing Stats selects All in the hidden columns.
+- Bench: the played library imports a last play for each of its 43k tracks; the stats rows
+  keep their budgets.
+- Tests that fail without each part: an import keeps its own last play apart from Last Played
+  and a second import changes nothing; the part fills from Last Played by the rule above and
+  keeps the counts; a report counts last plays in periods, lists, bars, the clock, first
+  played and the undated count; the `.stats` source lists their tracks; a counts event carries
+  one to another Mac; the totals' texts; a filter narrows the source by row and by span; a row,
+  a bar, the header's button, a second click, another period and Year in Review act as above.
+- Order: this plan; the part, the reads and the import with their tests; Bench; the filter and
+  the panel with their tests; the ADR; `./scripts/check`; the result.
+
+Result, part 44c: shipped 44c.1 and 44c.2 (ADR 0105, amending 0102 and 0033). A click on a
+top list's or First Played's row keeps Stats on screen and lists that row's tracks played in
+the period below it; the row is marked in its card, and a button in the panel's header with its
+name and a clear mark lists every track again, as a second click on the row does. A bar does
+the same for its span, since going to the timeline left Stats; a double-click on a bar still
+shows its plays there. A row's filter stays across periods, a bar's doesn't, and neither is
+saved; no key in `state.json` or `config.json` changed, and copies of the owner's two files
+decode with no problem and no discard. Each import's last played is kept in a new schema part,
+`imported_last_plays`, and counted as one dated play while that player's import counts a play
+for the track; the rest stay undated. Built on a copy of the owner's library it filled 11,102
+of the 11,172 Swinsian tracks in under 2 s and changed no other part (no discard notice);
+importing a copy of the owner's Swinsian database into it again added no plays and dated the
+other 69. Against that copy (with the re-import): All Time 11,293 plays (11,171 from the
+import), this year 5,075, 2025 3,326, this month 153 (31 imported), the year menu from 2022;
+undated plays 75,494, since the owner's `play_count` adds up to 86,787, about twice the
+Swinsian counts plus the 122 played here: a doubling from before this part, which it doesn't
+touch. The totals' line and the Plays tooltip say "N plays from an import", and the command
+line's text and JSON say it too. Bench, Apple Silicon, with a last play for each of the 43k
+fixture tracks: opening Stats 384 ms (budget 400), changing the period 223 ms p95 with All
+Time the slowest (budget 250), This Week 31, This Month 30, a year 69 to 75; the union adds
+about 40 ms to All Time's scans, measured with `sqlite3` on the bench library, and other
+agents' runs shared the machine. Checked on screen with `--snapshot-of stats` from a home
+folder holding a copy of the owner's library and no config: the month's totals with "31 plays
+from an import", the bars and the clock. Not checked on screen: the clicks, the marked rows,
+the header's button, double-clicks, dark mode, glass and macOS 12 (the browser tests drive the
+clicks). `./scripts/check` passes but for
+`theGlassHeadersAreFrosted`, which reads the screen and fails the same here by name (as in
+earlier parts), and one run each of `aRendererThatStallsMidTrackIsWaitedForNotCutShort` and
+`aColorPickedInThePanelIsSavedAndDefaultClearsIt`, timing flakes with other agents' runs on the
+machine, which pass by name. For the owner: run Import from Swinsian once more (it adds no plays, and dates the 70
+tracks played here since the first import), open Stats on All Time and a year, click an
+artist, an album, a genre, a track and a bar, use the header's button, double-click a bar,
+click a row in Year in Review, and time Stats on the 2015 MacBook Pro.
 
 #### 44d. Column groupings in the config file
 

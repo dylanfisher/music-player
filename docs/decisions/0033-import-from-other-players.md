@@ -10,6 +10,8 @@
   skips is listed apart, and Locate… matches the misses again under another folder.
   [0061](0061-swinsian-column-layout.md): the Swinsian import can bring across its column
   layout, from its preferences file.
+  [0105](0105-stats-clicks-filter-and-imported-last-plays.md): each import's last played is kept
+  apart, as one dated play for Listening Stats.
 
 ## Context
 
