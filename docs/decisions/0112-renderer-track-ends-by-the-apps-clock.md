@@ -25,14 +25,14 @@ past the start, plus `RendererClock.leadMarginSeconds` (2 s). The session no lon
 a report of the end.
 
 **A poll moves the end later only for a stall.** The clock keeps the least the renderer has
-been behind it, its usual lag, measured from the first poll the clock runs through and again
-after each pause. Two polls running that find it more than `behindToleranceSeconds` (1.5 s)
+been behind it, its usual lag, measured from the first poll the clock runs through after a
+start or a seek and kept across a pause, so a renderer that holds a moment after each resume
+adds the holds up behind it. Two polls running that find it more than `behindToleranceSeconds` (1.5 s)
 further behind than that, while the clock less the stalls so far is short of the track's
 length, move the end later to the stall so far plus that excess: never earlier, and by at most
 `RendererClock.stallCapSeconds` (10 s) from a start or a seek. A lag measured at the first poll
 counts for 1.5 s at most, a poll's noise, so a renderer that reports playing while it holds at
-the place it started, buffering after a start, a seek or a resume, has the hold taken as a
-stall rather than as its lag: otherwise the clock would run that far ahead all track and the
+the place it started, buffering after a start or a seek, has the hold taken as a stall rather than as its lag: otherwise the clock would run that far ahead all track and the
 end would come early. A renderer stuck at its end, behind the clock once the clock is past the
 length, moves nothing.
 
@@ -48,14 +48,17 @@ the renderer, as before.
 **A renderer that ignores the next URI.** After it took a next track with
 `SetNextAVTransportURI`, a renderer that stops at the end on two polls running
 (`stoppedAtEndPolls`; one may come between tracks, and a TRANSITIONING poll starts the count
-again), or that the clock's deadline finds still on the track when it's asked for its
-position, is marked `RendererGapless.afterStop`. One that the deadline finds on the next track
-has just moved on, and the change counts as gapless. The mark carries a short reason defined
+again), or that the clock's deadline finds still on the track within
+`leadShortSeconds` (1 s) of its end or past it when it's asked for its position, is marked
+`RendererGapless.afterStop`. One that the deadline finds on the next track has just moved on,
+and the change counts as gapless. One still further short of the end is behind the clock: the
+end moves to when it will get there, within the stall cap, and only once the cap leaves no
+room is it marked and led. One that doesn't answer is led without being marked. The mark carries a short reason defined
 once in `RendererSession`, which the signal path panel shows after "not gapless", as it does
 the reasons for a renderer without the action or one that refused it; the errors behind those
 go to the log. The next track the renderer holds is taken back with an empty
-`SetNextAVTransportURI`, so it can't go on to it after the app has sent it, and the next track
-goes with `SetAVTransportURI` and Play at once. From then on, while
+`SetNextAVTransportURI`, so it can't go on to it after the app has sent it; a renderer that
+doesn't answer that is logged, not lost, since it's still playing. The next track goes with `SetAVTransportURI` and Play at once. From then on, while
 the session lasts, `setNext` sends no next URI, so every later track goes the same way when
 the last stops, or at the clock's deadline. A renderer found again at a new address reads its
 description again, as before.

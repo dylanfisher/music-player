@@ -464,7 +464,7 @@ moves the end later only when the renderer falls further behind than its usual l
 renderer holding where it started while it buffers has the hold waited for. A stop counts as
 the end when the clock or the last position is within 3 s of it. A renderer that took a next
 URI and then stopped at the end, two polls running with no change of tracks between, or is
-still on the track when asked at the clock's end, is marked not gapless, the next URI it
+at its end when asked at the clock's end, is marked not gapless, the next URI it
 holds is taken back, and from then on the app gives it each track with `SetAVTransportURI`
 and Play. The signal path panel says why: "Not gapless: it stopped instead of playing the
 next track". The two new network tests (a renderer lagging 5 s without a next URI, and one
@@ -474,7 +474,10 @@ reported as one on the renderer.
 From the gate: a renderer on the next track when the clock runs out keeps gapless; stopped,
 transitioning, stopped between tracks isn't taken for ignoring the next URI; a position from
 before a seek back starts the lag's measurement again; another app's stream is logged as
-another track, without its URL.
+another track, without its URL. From the second review: the lag is kept across a pause, so
+holds after each resume add up as a stall; at the clock's deadline a renderer still more than
+1 s short of the end is waited for, within the cap, rather than marked and cut; a renderer that
+doesn't answer the take-back of the next URI isn't reported lost.
 
 Checkpoint steps, once the owner has pushed the branch: on the Mac that plays to the Denon,
 `./scripts/pull`, then `./scripts/dev`, and pick the Denon as the output. Queue three tracks,
