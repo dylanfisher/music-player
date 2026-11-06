@@ -228,3 +228,49 @@ func writableModel(
     try await model.duplicatePlaylist(original)
     #expect(model.shownPlaylist?.name == "Mix copy 2")
 }
+
+@MainActor @Test func aManualPlaylistOpensAfterAQuitInItsOrderOrTheSortChosenInIt() async throws {
+    let databaseURL = try writableBrowserDatabase()
+    let reader = try LibraryReader(databaseURL: databaseURL)
+    /// A model loading `state` as a launch does, after a quit with the table sorted as
+    /// `table`.
+    func launched(_ state: BrowserState, table: (column: TrackColumn, ascending: Bool)) async
+        -> BrowserModel
+    {
+        let model = BrowserModel(
+            reader: reader, sortColumn: table.column, ascending: table.ascending,
+            groupByAlbumArtist: false)
+        await model.load(state)
+        return model
+    }
+    let model = await launched(BrowserState(source: nil), table: (.artist, true))
+    let ids = Array(model.trackIDs.prefix(6).reversed())
+    try await model.createPlaylist(named: "Mix", rules: nil, trackIDs: ids)
+    let playlist = try #require(model.shownPlaylist)
+    // In its own order the table's sort is still the library's, and nothing else is saved.
+    #expect(model.state.sourceSort == nil)
+    #expect(model.tableSort == (.artist, true))
+    let ownOrder = await launched(model.state, table: model.tableSort)
+    #expect(ownOrder.sortColumn == .playlistOrder && ownOrder.ascending)
+    #expect(ownOrder.trackIDs == ids)
+
+    await model.setSort(.title, ascending: false)
+    let state = model.state
+    #expect(
+        state.sourceSort
+            == SourceSort(source: .playlist(playlist.id), column: .title, ascending: false))
+    #expect(model.tableSort == (.artist, true))
+    let chosen = await launched(state, table: model.tableSort)
+    #expect(chosen.sortColumn == .title && !chosen.ascending)
+    #expect(chosen.trackIDs == model.trackIDs)
+    // Leaving it does what it did before the quit.
+    await chosen.setSource(nil)
+    await model.setSource(nil)
+    #expect(chosen.sortColumn == model.sortColumn && chosen.ascending == model.ascending)
+    #expect(chosen.trackIDs == model.trackIDs)
+    // A sort chosen in another source than the one loaded is left alone.
+    var library = state
+    library.source = nil
+    let other = await launched(library, table: (.artist, true))
+    #expect(other.sortColumn == .artist && other.ascending)
+}

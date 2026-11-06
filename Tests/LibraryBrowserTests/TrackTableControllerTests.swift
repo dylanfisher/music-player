@@ -1315,3 +1315,51 @@ private func hoveredRescanTable() async throws -> (
     controller.apply(appearance(alternating: true, glass: false))
     #expect(try colors() == plain)
 }
+
+/// A model and its table over the library at `databaseURL`, loaded from `layout` and `saved` as
+/// a launch does, reporting each layout to `layoutChanged`.
+@MainActor
+private func launchedTable(
+    _ databaseURL: URL, _ layout: TrackTableLayout, _ saved: BrowserState,
+    layoutChanged: @escaping (TrackTableLayout) -> Void = { _ in }
+) async throws -> (BrowserModel, TrackTableController) {
+    let model = BrowserModel(
+        reader: try LibraryReader(databaseURL: databaseURL), sortColumn: layout.sortColumn,
+        ascending: layout.sortAscending, groupByAlbumArtist: false)
+    let index = try LibraryIndex(at: databaseURL)
+    let actions = BrowserActions(
+        play: { _, _ in }, playNext: { _ in }, move: { _, _ in },
+        sort: { column, ascending in Task { await model.setSort(column, ascending: ascending) } },
+        layoutChanged: layoutChanged,
+        failed: { Issue.record("\($0)") }, keyCommand: { _ in .unbound })
+    let controller = TrackTableController(
+        model: model, cache: RowCache { try index.rows(ids: $0) }, layout: layout,
+        actions: actions, thumbnails: nil)
+    _ = controller.view
+    model.changed = { controller.reload($0) }
+    await model.load(saved)
+    return (model, controller)
+}
+
+@MainActor @Test func aSortFromTheHeaderIsSavedAndComesBackAfterAQuit() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    var saved = AppState().trackTable.defaultValue
+    let (model, controller) = try await launchedTable(
+        databaseURL, saved, BrowserState(source: nil)
+    ) { saved = $0 }
+    // A click on the Year header, then a second to reverse it, as the user sorts.
+    let year = TrackColumn.year.rawValue
+    controller.table.sortDescriptors = [NSSortDescriptor(key: year, ascending: true)]
+    try await waitFor("the sort by year") { model.sortColumn == .year }
+    controller.table.sortDescriptors = [NSSortDescriptor(key: year, ascending: false)]
+    try await waitFor("the sort reversed") { !model.ascending }
+    #expect(saved.sortColumn == .year && !saved.sortAscending)
+    #expect(saved.columns == AppState().trackTable.defaultValue.columns)
+
+    let (relaunched, table) = try await launchedTable(
+        databaseURL, saved, BrowserState(source: nil))
+    #expect(relaunched.sortColumn == .year && !relaunched.ascending)
+    #expect(Array(relaunched.trackIDs.prefix(20)) == Array(model.trackIDs.prefix(20)))
+    #expect(table.table.sortDescriptors.first?.key == year)
+    #expect(table.table.sortDescriptors.first?.ascending == false)
+}

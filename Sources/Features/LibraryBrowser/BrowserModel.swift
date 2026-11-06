@@ -119,16 +119,29 @@ public final class BrowserModel {
         await reload(panesFrom: 0, reason: .user)
     }
 
-    /// The source and columns the window saves, each selection by name.
+    /// The source and columns the window saves, each selection by name, and the sort chosen
+    /// in a source with its own.
     public var state: BrowserState {
-        BrowserState(
-            source: filter.source,
+        let source = filter.source
+        let ownSort = defaultSort(source)
+        return BrowserState(
+            source: source,
             columns: zip(columns, entries).map { grouping, entries in
                 let value = filter.selections[grouping]
                 return BrowserColumn(
                     grouping: grouping,
                     selection: entries.first { $0.value == value }?.savedName)
+            },
+            sourceSort: source.flatMap { source in
+                guard let ownSort, ownSort != (sortColumn, ascending) else { return nil }
+                return SourceSort(source: source, column: sortColumn, ascending: ascending)
             })
+    }
+
+    /// The sort of the sources without one of their own: the table's, which a source with its
+    /// own replaced while it shows. The window saves this one with the columns.
+    var tableSort: (column: TrackColumn, ascending: Bool) {
+        sortBeforeDefault ?? (sortColumn, ascending)
     }
 
     /// Loads the playlists, panes and tracks, selecting what `saved` names where it still
@@ -155,6 +168,12 @@ public final class BrowserModel {
             start: WindowPlace(
                 filter: TrackFilter(
                     source: saved.source, groupByAlbumArtist: pending.groupByAlbumArtist)))
+        // The source opens in its own sort, as a click on it does, or in the one chosen in it.
+        changeSort(from: pending.source, to: saved.source)
+        if let sort = saved.sourceSort, sort.source == saved.source, defaultSort(sort.source) != nil
+        {
+            pendingSort = (sort.column, sort.ascending)
+        }
         pending = TrackFilter(
             source: saved.source, search: pending.search,
             groupByAlbumArtist: pending.groupByAlbumArtist)
@@ -253,7 +272,7 @@ public final class BrowserModel {
     /// never the playlist order a playlist shown now has.
     func queueSort(for source: BrowserSource?) -> (column: TrackColumn, ascending: Bool) {
         if let sort = defaultSort(source) { return sort }
-        let sort = sortBeforeDefault ?? (sortColumn, ascending)
+        let sort = tableSort
         guard sort.column == .playlistOrder else { return sort }
         let table = AppState().trackTable.defaultValue
         return (table.sortColumn, table.sortAscending)
@@ -938,10 +957,16 @@ public struct BrowserChange: Equatable, Sendable {
 public struct BrowserState: Equatable, Sendable {
     public var source: BrowserSource?
     public var columns: [BrowserColumn]
+    /// The sort chosen in `source`, when it has its own and another was chosen.
+    public var sourceSort: SourceSort?
 
-    public init(source: BrowserSource?, columns: [BrowserColumn] = BrowserColumn.defaults) {
+    public init(
+        source: BrowserSource?, columns: [BrowserColumn] = BrowserColumn.defaults,
+        sourceSort: SourceSort? = nil
+    ) {
         self.source = source
         self.columns = columns
+        self.sourceSort = sourceSort
     }
 }
 

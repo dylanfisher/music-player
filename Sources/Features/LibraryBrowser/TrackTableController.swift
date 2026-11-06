@@ -23,6 +23,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     private var applyingSort = false
     /// Set while `showColumns` moves and resizes columns.
     private var applyingColumns = false
+    /// The table sort last reported with the layout, so a change of it alone is saved too.
+    private var reportedSort: (column: TrackColumn, ascending: Bool)
     /// A row fetch failed; reported once until the next reload.
     private var reportedFetchFailure = false
     private var typeSelect: TypeSelect? = TypeSelect()
@@ -87,6 +89,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         self.cache = cache
         self.actions = actions
         self.thumbnails = thumbnails
+        reportedSort = (layout.sortColumn, layout.sortAscending)
         art = RowArt(
             pixels: RowArt.pixels(
                 columnWidth: layout.columns.first { $0.column == .art }?.width
@@ -208,6 +211,10 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     /// `change.previousIDs`, so the selection and position are read through those.
     func reload(_ change: BrowserChange) {
         reportedFetchFailure = false
+        if model.tableSort != reportedSort {
+            reportedSort = model.tableSort
+            actions.layoutChanged(layout)
+        }
         ratingsSet = [:]
         if change.reason == .libraryChanged, change.previousIDs == model.trackIDs {
             redrawChangedRows()
@@ -829,7 +836,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         centerSelection()
     }
 
-    /// The visible columns as they stand, and the model's sort.
+    /// The visible columns as they stand, and the model's table sort.
     var layout: TrackTableLayout {
         let widths = TrackTableLayout.widthRange
         return TrackTableLayout(
@@ -842,7 +849,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
                             max(Double(tableColumn.width.rounded()), widths.lowerBound),
                             widths.upperBound))
                 }
-            }, sortColumn: model.sortColumn, sortAscending: model.ascending)
+            }, sortColumn: model.tableSort.column, sortAscending: model.tableSort.ascending)
     }
 
     // MARK: Header menu: one item per column, checked when shown

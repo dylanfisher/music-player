@@ -300,6 +300,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         browser.stateChanged = { [weak self] state in
             saver.set(\.browserColumns, state.columns)
+            saver.set(\.sourceSort, state.sourceSort)
             self?.resumeSaver?.changed()
         }
         browser.groupingsChosen = { [weak self] groupings in

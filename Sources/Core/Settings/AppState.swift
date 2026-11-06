@@ -73,6 +73,10 @@ public struct AppState: SettingsSchema {
         "browser.timelineTable", title: "Timeline Columns", default: nil,
         "The timeline's columns after Played, with their widths, once changed in the timeline."
             + " Null shows the track table's.")
+    public let sourceSort = Setting<SourceSort?>(
+        "browser.sourceSort", title: "Source Sort", default: nil,
+        "The sort chosen in the source shown, when it's one that opens in a sort of its own: a"
+            + " manual playlist, History or Listening Stats. Null for its own.")
     public let browserColumns = Setting(
         "browser.columns", title: "Browser Columns", columns: BrowserColumn.defaults,
         "The browser's three columns, left to right: what each grouped by, and the entry"

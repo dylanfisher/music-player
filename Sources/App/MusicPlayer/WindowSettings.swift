@@ -47,7 +47,8 @@ struct WindowSettings {
         browser = BrowserState(
             source: nil,
             columns: BrowserColumn.restored(
-                state[\.browserColumns], groupings: settings.fileValue(\.browserGroupings)))
+                state[\.browserColumns], groupings: settings.fileValue(\.browserGroupings)),
+            sourceSort: state[\.sourceSort])
         resume = settings[\.resume]
         groupByAlbumArtist = settings[\.groupByAlbumArtist]
         tableAppearance = TableAppearance(settings)
