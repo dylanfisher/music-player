@@ -431,14 +431,14 @@ Implementation plan (ADR 0112, amending 0041), all in `UPnPOutput` and its tests
    duration and `TrackURI`, and the app's clock, while the clock is within 15 s of the track's
    end or less than 15 s has passed since the last track change. `setNext` logs an accepted
    `SetNextAVTransportURI`; the lead, a stop at the end and a renderer marked as ignoring the
-   next URI are logged too. Every line starts "track change:", so one predicate finds them.
+   next URI are logged too.
 2. **48e.2 clock.** A new value type, `RendererClock` (its own file), holds the app's clock for
    the loaded track: where it was, when, whether it runs, and how far stalls moved the end. It
    starts at the first poll that finds the renderer playing, pauses and resumes with the
    transport (not from the polled position), and a seek or start sets it. A poll moves the end
-   later only by how much more the renderer is behind the clock than its least lag since its
-   position first moved, two polls running, while the clock is short of the end, and by at
-   most `RendererClock.stallCapSeconds` (10 s) a run of the clock. `leadMarginSeconds` and
+   later only by how much more the renderer is behind the clock than its least lag, two polls
+   running, while the clock is short of the end, and by at most
+   `RendererClock.stallCapSeconds` (10 s) a run of the clock. `leadMarginSeconds` and
    `behindToleranceSeconds` move to it. `holdBack` and `Loaded.deadline` go. `stopped` counts
    a stop as the end when the clock or the last polled position is within `endSlackSeconds`
    of the end.
@@ -449,25 +449,32 @@ Implementation plan (ADR 0112, amending 0041), all in `UPnPOutput` and its tests
    `gapless` is `.nextURI`. `findAgain` resets it, as now, for a renderer at a new address.
 4. **48e.4 tests.** `FakeRenderer.lagsBy(_:)` reports positions that many seconds behind.
    `RendererOutputTests`: a lagging renderer without the next URI that stops at its end; a
-   lagging renderer that accepts and ignores the next URI, three tracks in a row with one
-   `SetNextAVTransportURI` sent; the mid-track stall test stalls 4 s once the position moved;
-   the gapless test plays three tracks with one `SetAVTransportURI`. `RendererClockTests`: a
-   steady lag moves nothing, a stall moves the end by its length, a long one by the cap, a
-   renderer stuck past the end moves nothing, pause and resume, seeks.
+   lagging renderer that accepts and ignores the next URI, three tracks in a row with no
+   next URI sent after the first; the mid-track stall test stalls 4 s once the position
+   moved; the gapless test plays three tracks with one `SetAVTransportURI`.
+   `RendererClockTests`: a poll's noise moves nothing, a hold at the start is waited for, a
+   stall moves the end by its length, a long one by the cap, a renderer stuck past the end
+   moves nothing, pause and resume, seeks.
 
-Result (draft, before the gate): shipped 48e.1 to 48e.4 as planned, checked only against the
-fake renderer (ADR 0112). A track's end is the app's clock's: started by the first poll that
-finds the renderer playing, paused and resumed with it, set by a seek. A poll moves the end
-later only when the renderer falls further behind than its usual lag, measured once its
-position first moves, and by 10 s at most from a start or a seek. A stop counts as the end
-when the clock or the last position is within 3 s of it. A renderer that took a next URI and
-then stopped at the end, two polls running, or played on past the clock's end, is marked not
-gapless with the reason, and from then on the app gives it each track with
-`SetAVTransportURI` and Play. The two new network tests (a renderer lagging 5 s without a
-next URI, and one lagging 5 s that takes and ignores it, three tracks in a row) fail on main
-with the stop reported as one on the renderer; a stall now moves the end only after the
-position has moved, so a stall in a track's first second isn't waited for (ADR 0112). No test
-reads the log lines; they were read with `log show` after a fake-renderer run.
+Result (draft, gate fixes in, before the rerun): shipped 48e.1 to 48e.4 as planned, checked
+only against the fake renderer (ADR 0112). A track's end is the app's clock's: started by the
+first poll that finds the renderer playing, paused and resumed with it, set by a seek. A poll
+moves the end later only when the renderer falls further behind than its usual lag, and by
+10 s at most from a start or a seek; a lag at the first poll counts for 1.5 s at most, so a
+renderer holding where it started while it buffers has the hold waited for. A stop counts as
+the end when the clock or the last position is within 3 s of it. A renderer that took a next
+URI and then stopped at the end, two polls running with no change of tracks between, or is
+still on the track when asked at the clock's end, is marked not gapless, the next URI it
+holds is taken back, and from then on the app gives it each track with `SetAVTransportURI`
+and Play. The signal path panel says why: "Not gapless: it stopped instead of playing the
+next track". The two new network tests (a renderer lagging 5 s without a next URI, and one
+lagging 5 s that takes and ignores it, three tracks in a row) fail on main with the stop
+reported as one on the renderer.
+
+From the gate: a renderer on the next track when the clock runs out keeps gapless; stopped,
+transitioning, stopped between tracks isn't taken for ignoring the next URI; a position from
+before a seek back starts the lag's measurement again; another app's stream is logged as
+another track, without its URL.
 
 Checkpoint steps, once the owner has pushed the branch: on the Mac that plays to the Denon,
 `./scripts/pull`, then `./scripts/dev`, and pick the Denon as the output. Queue three tracks,

@@ -47,9 +47,15 @@ the renderer, as before.
 
 **A renderer that ignores the next URI.** After it took a next track with
 `SetNextAVTransportURI`, a renderer that stops at the end on two polls running
-(`stoppedAtEndPolls`; one may come between tracks), or is still on the track at the clock's
-deadline, is marked `RendererGapless.afterStop` with the reason, which the signal path
-carries. The next track goes with `SetAVTransportURI` and Play at once. From then on, while
+(`stoppedAtEndPolls`; one may come between tracks, and a TRANSITIONING poll starts the count
+again), or that the clock's deadline finds still on the track when it's asked for its
+position, is marked `RendererGapless.afterStop`. One that the deadline finds on the next track
+has just moved on, and the change counts as gapless. The mark carries a short reason defined
+once in `RendererSession`, which the signal path panel shows after "not gapless", as it does
+the reasons for a renderer without the action or one that refused it; the errors behind those
+go to the log. The next track the renderer holds is taken back with an empty
+`SetNextAVTransportURI`, so it can't go on to it after the app has sent it, and the next track
+goes with `SetAVTransportURI` and Play at once. From then on, while
 the session lasts, `setNext` sends no next URI, so every later track goes the same way when
 the last stops, or at the clock's deadline. A renderer found again at a new address reads its
 description again, as before.
@@ -59,7 +65,12 @@ logs, at notice level, the transport state, the renderer's position, duration an
 and the clock, with how far stalls moved the end; an accepted next URI, the lead, the gap and
 the mark are logged too. These are public in the unified log, since the owner reads them with
 `log show`. The URLs carry the tokens, which serve only to the renderer's address and end
-with the server (0041).
+with the server (0041). A `TrackURI` that's neither the current nor the next track's is
+another app's, and is logged only as "another track".
+
+A position more than `jumpBackSeconds` (2 s) behind the last one polled starts the lag's
+measurement again, keeping the stalls so far: a renderer may report where it was before a
+seek back for a poll or two, which would otherwise set a lag far ahead of the clock.
 
 ## Alternatives considered
 
