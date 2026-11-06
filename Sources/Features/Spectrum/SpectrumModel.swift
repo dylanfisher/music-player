@@ -157,36 +157,72 @@ public final class SpectrumModel {
         return "\(kilohertzLabel(hertz)) · " + levels.joined(separator: " · ")
     }
 
-    /// The legend's line for file `index`: its title and format.
-    func legend(_ index: Int) -> String {
-        guard let measures = results[index]?.measures else { return files[index].title }
-        return "\(files[index].title) — \(formatLine(measures))"
-    }
+    /// The legend's line for file `index`: its name, in its color, as the differences call it;
+    /// the header above its spectrogram has its format.
+    func legend(_ index: Int) -> String { naming[index].opening }
 
     /// File `index`'s header: its title and album, and its file type where that's what its
     /// name tells it apart by.
     func heading(_ index: Int) -> String {
         let file = files[index]
         let album = file.album.map { " — \($0)" } ?? ""
-        let type = names[index] == Self.byType(file) ? " (\(file.fileType))" : ""
+        let type = naming[index].byType ? " (\(file.fileType))" : ""
         return file.title + album + type
     }
 
     /// What the legend and the differences call each file: its title, or where titles repeat,
     /// its file type ("the FLAC"), or where that repeats too, its place ("file 2").
-    var names: [String] {
+    var names: [String] { naming.map(\.name) }
+
+    /// Each file's name inside a sentence and at its start, and whether it's its file type.
+    private var naming: [(name: String, opening: String, byType: Bool)] {
         files.indices.map { index in
             let file = files[index]
             let sameTitle = files.filter { $0.title == file.title }
-            if sameTitle.count == 1 { return file.title }
+            if sameTitle.count == 1 { return (file.title, file.title, false) }
             if sameTitle.filter({ $0.fileType == file.fileType }).count == 1 {
-                return Self.byType(file)
+                return ("the \(file.fileType)", "The \(file.fileType)", true)
             }
-            return "file \(index + 1)"
+            return ("file \(index + 1)", "File \(index + 1)", false)
         }
     }
 
-    private static func byType(_ file: File) -> String { "the \(file.fileType)" }
+    /// How each later analyzed file differs from the first, a paragraph each, once every file
+    /// has finished; empty until then, and with fewer than two analyzed.
+    var comparison: [[String]] {
+        guard allFinished else { return [] }
+        let named = naming
+        let compared = files.indices.compactMap { index in
+            results[index].map {
+                ComparedFile(
+                    name: named[index].name, openingName: named[index].opening, result: $0,
+                    sizeBytes: files[index].sizeBytes)
+            }
+        }
+        guard let first = compared.first, compared.count > 1 else { return [] }
+        return compared.dropFirst().map { differences($0, from: first) }
+    }
+
+    /// The Differences box's text: a paragraph of `comparison` each, a sentence a line, or why
+    /// there's none.
+    var comparisonText: String {
+        let paragraphs = comparison
+        if !paragraphs.isEmpty {
+            return paragraphs.map { $0.joined(separator: "\n") }.joined(separator: "\n\n")
+        }
+        return allFinished
+            ? "Fewer than two files were analyzed, so there's nothing to compare"
+            : "Shown once every file is analyzed"
+    }
+
+    private var allFinished: Bool {
+        files.allSatisfy {
+            switch $0.state {
+            case .analyzed, .failed: true
+            case .waiting, .analyzing: false
+            }
+        }
+    }
 
     /// The line under file `index`'s title: its progress, its format and size, or why it
     /// failed.

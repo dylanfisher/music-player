@@ -7,7 +7,7 @@ import Testing
 
 /// A result whose spectrogram has 10 columns, each row's cells at `level(row)` dB, and whose
 /// measures are a clean 16-bit FLAC's at `rateHz`.
-private func result(rateHz: Double, cutoffHz: Double? = nil, level: (Int) -> Double = { _ in -60 })
+func result(rateHz: Double, cutoffHz: Double? = nil, level: (Int) -> Double = { _ in -60 })
     -> AnalysisResult
 {
     let cells = (0..<10).flatMap { _ in
@@ -27,7 +27,7 @@ private func result(rateHz: Double, cutoffHz: Double? = nil, level: (Int) -> Dou
 }
 
 /// A file titled `title` at "/<title, lowercased>.<type, lowercased>".
-private func file(
+func file(
     _ title: String, album: String? = nil, sizeBytes: Int? = nil, type: String = "FLAC"
 ) -> SpectrumModel.File {
     SpectrumModel.File(
@@ -82,7 +82,7 @@ private struct Unreadable: Error, CustomStringConvertible {
     // The axis reaches the highest Nyquist, and its lines stop under it.
     #expect(model.topHz == 48_000)
     #expect(model.referenceLines == [16_000, 19_000, 20_000, 22_050, 24_000])
-    #expect(model.legend(1) == "B — FLAC · 96 kHz · 16-bit stored, 16 effective · stereo · 1:40")
+    #expect(model.legend(1) == "B")
     #expect(model.legend(2) == "C")
     #expect(model.verdictLines(0) == [noVerdictText])
     #expect(model.verdictLines(2).isEmpty)
@@ -179,4 +179,36 @@ private struct Unreadable: Error, CustomStringConvertible {
     #expect(model.names == ["the WAV", "file 2", "Other", "file 4"])
     #expect(model.heading(0) == "Song (WAV)")
     #expect(model.heading(1) == "Song")
+    #expect((0..<4).map(model.legend) == ["The WAV", "File 2", "Other", "File 4"])
+}
+
+@MainActor @Test func eachLaterFileIsComparedWithTheFirstOnceAllHaveFinished() async {
+    let model = SpectrumModel(files: [
+        file("Song", type: "WAV"), file("Song"), file("Broken"), file("Copy"),
+    ])
+    #expect(model.comparisonText == "Shown once every file is analyzed")
+    model.start { path, _ in
+        if path == "/broken.flac" { throw Unreadable() }
+        return result(rateHz: 44_100, cutoffHz: path == "/copy.flac" ? 16_000 : nil)
+    }
+    await model.finished()
+    // The file that failed is left out; the others are each compared with the WAV.
+    #expect(model.comparison.count == 2)
+    #expect(model.comparison[0].last?.hasPrefix("The FLAC and the WAV sound the same") == true)
+    #expect(model.comparison[1].first?.hasPrefix("Copy stops at 16.0 kHz") == true)
+    #expect(
+        model.comparisonText
+            == model.comparison.map { $0.joined(separator: "\n") }.joined(separator: "\n\n"))
+}
+
+@MainActor @Test func oneFileAnalyzedHasNothingToCompare() async {
+    let model = SpectrumModel(files: [file("A"), file("B")])
+    model.start { path, _ in
+        if path == "/b.flac" { throw Unreadable() }
+        return result(rateHz: 44_100)
+    }
+    await model.finished()
+    #expect(model.comparison.isEmpty)
+    #expect(
+        model.comparisonText == "Fewer than two files were analyzed, so there's nothing to compare")
 }
