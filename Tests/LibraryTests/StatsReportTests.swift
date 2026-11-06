@@ -407,3 +407,23 @@ private func scan(
         try index.timeline(after: try #require(page.first?.id), limit: 200, in: span).map(\.trackID)
             == [rows[4].id])
 }
+
+@Test func theStatsSourceKeepsToTheShownReportsDaysAfterMidnight() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    let calendar = Calendar.current
+    // The report was read yesterday; a play on the first of its seven days has left the past
+    // week since midnight.
+    let yesterday = try #require(calendar.date(byAdding: .day, value: -1, to: Date()))
+    let read = try #require(StatsPeriod.week.span(now: yesterday, calendar: calendar))
+    try index.recordPlay(rows[0].path, at: Double(read.start + 3600))
+    try index.recordPlay(rows[1].path, at: Double(read.end - 3600))
+    var filter = TrackFilter(source: .stats(.week))
+    #expect(Set(try index.trackIDs(filter, sortedBy: .path, ascending: true)) == [rows[1].id])
+    filter.statsSpan = read
+    #expect(
+        Set(try index.trackIDs(filter, sortedBy: .path, ascending: true))
+            == [rows[0].id, rows[1].id])
+}

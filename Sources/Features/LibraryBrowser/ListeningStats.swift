@@ -9,6 +9,9 @@ extension LibraryBrowser {
         statsModel.changed = { [weak self] in
             guard let self else { return }
             statsPanel.show(statsModel)
+            guard !statsModel.isLoading, let report = statsModel.report else { return }
+            let period = statsModel.period
+            Task { await self.model.showStatsSpan(report.span, of: period) }
         }
         statsModel.failed = { [weak self] message in self?.report(message) }
         statsPanel.choosePeriod = { [weak self] period in self?.show(.stats(period)) }

@@ -375,7 +375,7 @@ extension LibraryIndex {
             // The tracks played in the period, or the span of the bar clicked, whose stats the
             // panel above them shows: by a history row, in a scan of the table as Listening
             // Stats' own reads are, or by an import's last play (ADR 0102, 0105).
-            var span = period.span()
+            var span = filter.statsSpan ?? period.span()
             var narrowed = ""
             var values: [(any SQLiteValue)?] = []
             switch filter.stats?.item {

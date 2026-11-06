@@ -451,6 +451,7 @@ public final class BrowserModel {
         pending.source = window.filter.source
         pending.search = window.filter.search
         pending.stats = window.filter.stats
+        pending.statsSpan = window.filter.statsSpan
         pending.selections = window.filter.selections.filter { pendingColumns.contains($0.key) }
         await reload(panesFrom: 0, reason: .user)
     }
@@ -473,7 +474,17 @@ public final class BrowserModel {
         case (.stats, .stats, .entry): break
         default: pending.stats = nil
         }
+        if pending.source != source { pending.statsSpan = nil }
         pending.source = source
+    }
+
+    /// Keeps Stats' table for `period` to `span`, the days of the report its panel shows, and
+    /// lists it again (ADR 0109). A reload under way is dropped for this one, since it would
+    /// write over the span with the filter it started from.
+    func showStatsSpan(_ span: PlaySpan?, of period: StatsPeriod) async {
+        guard pending.source == .stats(period), pending.statsSpan != span else { return }
+        pending.statsSpan = span
+        await reload(panesFrom: 0, reason: .libraryChanged)
     }
 
     /// Shows Stats for `period`, its table narrowed to `filter`, or listing every track

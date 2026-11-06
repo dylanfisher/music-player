@@ -18,6 +18,10 @@ public struct TrackFilter: Equatable, Sendable {
     /// What a click in Listening Stats narrowed its tracks to; only read with a `.stats`
     /// source.
     public var stats: StatsFilter?
+    /// The days of the Listening Stats report shown, so the table keeps to them after midnight
+    /// moves a rolling period on (ADR 0109); nil reads the period's days at query time. Only
+    /// read with a `.stats` source.
+    public var statsSpan: PlaySpan?
 
     public init(
         source: BrowserSource? = nil, genre: Int64? = nil, artist: Int64? = nil,

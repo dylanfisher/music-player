@@ -106,6 +106,11 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     #expect(browser.statsModel.report?.plays == album.count * 3 + 1)
     #expect(sidebar.selectedSource == .stats(.week))
     try await waitFor("the week's tracks") { Set(browser.model.trackIDs) == Set(album.map(\.id)) }
+    // The table keeps to the days the report counted, once it has arrived.
+    try await waitFor("the report's days") {
+        browser.model.filter.statsSpan != nil
+            && browser.model.filter.statsSpan == browser.statsModel.report?.span
+    }
 
     // The library puts the columns back at their own height.
     browser.show(nil)
