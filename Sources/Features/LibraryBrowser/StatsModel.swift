@@ -18,6 +18,8 @@ final class StatsModel {
     }
     /// The report of `period`, or of the period before it while that one loads.
     private(set) var report: StatsReport?
+    /// The period `report` was read for.
+    private(set) var reportPeriod: StatsPeriod?
     private(set) var isLoading = false
     /// Called after the period, the report, the ranking or the loading change.
     var changed: () -> Void = {}
@@ -43,6 +45,7 @@ final class StatsModel {
             let report = try await read(period)
             guard mine == session else { return }
             self.report = report
+            reportPeriod = period
             isLoading = false
             changed()
         } catch {
@@ -52,6 +55,12 @@ final class StatsModel {
             failed("couldn't read the listening stats: \(error)")
             changed()
         }
+    }
+
+    /// The report of `period` once it has arrived; nil while it loads, or when its read failed
+    /// and the last period's report still shows.
+    var periodReport: StatsReport? {
+        isLoading || reportPeriod != period ? nil : report
     }
 
     /// The years the year menu offers: from the first play with a date to `now`'s, latest

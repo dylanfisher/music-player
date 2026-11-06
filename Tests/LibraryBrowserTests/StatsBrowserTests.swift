@@ -36,6 +36,24 @@ import Testing
     #expect(changes == 1)
 }
 
+@MainActor @Test func aFailedReadLeavesNoReportForTheNewPeriod() async {
+    let model = StatsModel { period in
+        guard period == .year else { throw CancellationError() }
+        return StatsReport(
+            PeriodScan(
+                span: PlaySpan(start: 0, end: 86_400), paths: [], buckets: [],
+                bucketSeconds: 3600, libraryTracks: 1, undatedPlays: 0),
+            firstPlays: FirstPlays(), calendar: .current)
+    }
+    await model.show(.year)
+    #expect(model.periodReport?.span == PlaySpan(start: 0, end: 86_400))
+    // All Time's read fails: Past Year's report still shows, but isn't All Time's, so its
+    // days don't narrow All Time's table.
+    await model.show(.all)
+    #expect(model.report != nil)
+    #expect(model.periodReport == nil)
+}
+
 /// A browser over a copy of the shared library with plays today, 400 days ago and of a file
 /// no longer in the library, in a window, its split laid out, the library loaded.
 @MainActor
