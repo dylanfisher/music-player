@@ -67,6 +67,13 @@ extension PlaybackFix {
         }
     }
 
+    /// The title of what's said once the fix is made.
+    var madeTitle: String {
+        switch self {
+        case .turnOnHogMode: "Hog mode is on for this device"
+        }
+    }
+
     /// What the button does, after the problem's message.
     var explanation: String {
         switch self {

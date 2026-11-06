@@ -25,7 +25,8 @@ extension AppDelegate {
     }
 
     /// Makes `fix` through the settings the user would change, then plays the problem's track
-    /// again if it's still the queue's current one.
+    /// again if it's still the queue's current one, or says why not over the window it was
+    /// asked from.
     func apply(_ fix: PlaybackFix, for shown: ShownProblem) {
         switch fix {
         case .turnOnHogMode(let uid):
@@ -44,13 +45,23 @@ extension AppDelegate {
             return logger.error(
                 "\(String(describing: fix)) is made, but there's no engine to play the track again")
         }
+        // The window the fix was asked from: the main window under the dialog, or the details.
+        let over = NSApp.keyWindow ?? window?.window
         Task {
-            do {
-                await engine.play(at: try shown.replayPosition(in: await engine.state))
+            let state = await engine.state
+            do throws(ReplayRefusal) {
+                let position = try shown.replayPosition(in: state)
+                await engine.play(at: position)
             } catch {
                 logger.error(
                     "\(String(describing: fix)) is made, but the track isn't played again: \(error)"
                 )
+                guard let over else { return }
+                let notice = error.notice(after: fix)
+                let alert = NSAlert()
+                alert.messageText = notice.title
+                alert.informativeText = notice.text
+                alert.beginSheetModal(for: over, completionHandler: nil)
             }
         }
     }
