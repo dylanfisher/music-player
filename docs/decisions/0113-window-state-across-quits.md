@@ -28,11 +28,17 @@ points short of the divider and the sidebar narrowed at every launch.
   their own show. A manual playlist, History and Stats open in their own sort, at launch as on a
   click. A sort the user chose inside one of those is `browser.sourceSort`, with the source it
   was chosen in, and is put back only when the loaded source is that one, since the source comes
-  from the synced key and may be another Mac's.
+  from the synced key and may be another Mac's: a source loaded from another Mac's play state
+  drops this Mac's source sort, by design. Moving from one source with its own sort to another
+  keeps the table's sort as it was before the first.
 - **When it's saved.** The table reports its layout after any reload that changed the table's
   sort, as well as after a column change.
-- **The search** loads only while the toolbar has the search field: without it nothing on screen
-  says why the table is narrowed.
+- **Who saves.** `MainWindow` saves the browser's layout, columns, source sort and search,
+  beside the split widths and the frame. `AppDelegate` only hears that the browser's state
+  changed, for the play state. The state store skips a value equal to the one in effect, since
+  the browser reports its state at every change, each refresh during a scan included.
+- **The search** loads only while the toolbar shows and has the search field: without it
+  nothing on screen says why the table is narrowed.
 - **Full screen** isn't saved: the frame isn't saved from entering full screen until it's left,
   so the window opens at its windowed frame. Full screen itself isn't put back.
 - **Split widths** are measured from divider to edge, the way they're put back.

@@ -566,8 +566,8 @@ the sources without their own; a manual playlist, History and Stats open in thei
 launch as on a click, and a sort chosen in one is `browser.sourceSort`, put back with that
 source. Every piece of window state and whether it survived a quit before this part: the
 source, yes (`playback.resume`); the sort, no, fixed; the columns and widths, yes; the panes'
-selections, yes; the search, no, fixed (`browser.search`, loaded only while the toolbar has the
-field); the selection, one track, the last selected, as ADR 0095 has it; the scroll, to the
+selections, yes; the search, no, fixed (`browser.search`, loaded only while the toolbar shows
+with the field); the selection, one track, the last selected, as ADR 0095 has it; the scroll, to the
 row, as ADR 0095 has it; the split sizes, the browser and Stats yes, the sidebar 8 points
 narrower at each launch on macOS 26 and the queue a point narrower, fixed by measuring from
 divider to edge; the queue panel, yes; the frame, yes except a quit in full screen, which saved
