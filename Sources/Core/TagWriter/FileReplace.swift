@@ -49,9 +49,11 @@ package struct WriteFaults: Sendable {
     var whenTempCloses: (@Sendable (_ temp: String) throws -> Void)?
     /// Stops right before the rename and leaves the temp file, as a crash there would.
     package var crashBeforeRename = false
-    /// Writes only this many bytes of a write in place, then stops and leaves the file and the
-    /// journal as they are, as a crash mid-write would.
+    /// Writes only this many bytes of each write in place, then stops the batch and leaves the
+    /// files and the journal as they are, as a crash mid-write would.
     package var tornWriteBytes: Int?
+    /// Stops the batch after this step of its writes in place, as a crash there would.
+    var crashAfter: BatchStep?
     /// Runs once a write in place is flushed and closed, before its read-back. A throw fails
     /// the write after the original was overwritten.
     var afterOverwriting: (@Sendable (_ original: String) throws -> Void)?
@@ -214,7 +216,7 @@ func writeTemp(
         // The extended attributes and ACL, the mode, the creation date and the flags.
         for _ in 0..<4 { faults.called(.metadata) }
         try copyAttributes(from: source, info, to: destination, original)
-        faults.called(.flush)
+        faults.called(.flushDrive)
         try flush(destination, original, .writeFailed)
         faults.called(.metadata)
         var written = stat()

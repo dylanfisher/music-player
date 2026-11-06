@@ -10,8 +10,10 @@ package enum FileCall: Equatable, Sendable {
     case close
     case read(bytes: Int)
     case write(bytes: Int)
-    /// `fsync` or `F_FULLFSYNC`.
+    /// `fsync`, to the drive's cache.
     case flush
+    /// `F_FULLFSYNC`, through the drive's cache, or `fsync` where the volume can't.
+    case flushDrive
     /// A listing of a music file's folder.
     case list
     /// A clone of the whole file, which a volume that can't clone (SMB) has to copy instead.

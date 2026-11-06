@@ -9,7 +9,7 @@ private let titleEdit = TagEdit(values: [.title: "Edited"])
 
 /// A copy of `sample` whose tags have padding a short title fits in. The generated MP4s have no
 /// `free` atom, so one gets a longer title first, which the writer rewrites with padding.
-private func paddedCopy(_ sample: Sample) throws -> URL {
+func paddedCopy(_ sample: Sample) throws -> URL {
     let url = try sample.copy()
     guard sample == .mp4 || sample == .mp4WithArt else { return url }
     let longer = TagEdit(values: [.title: String(repeating: "Longer title ", count: 4)])
@@ -343,10 +343,10 @@ private func scribble(on text: String, in path: String) throws {
     try handle.close()
 }
 
-private func identity(_ url: URL) throws -> FileIdentity { try FileIdentity(path: url.path) }
+func identity(_ url: URL) throws -> FileIdentity { try FileIdentity(path: url.path) }
 
 /// The journal's markers of unconfirmed writes in place.
-private func markers(_ writer: TagWriter) throws -> [String] {
+func markers(_ writer: TagWriter) throws -> [String] {
     try FileManager.default.contentsOfDirectory(atPath: writer.journal.directory.path).filter {
         $0.hasSuffix(TagUndoJournal.unconfirmedSuffix)
     }

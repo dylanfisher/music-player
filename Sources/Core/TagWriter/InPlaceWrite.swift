@@ -163,10 +163,12 @@ struct PlannedSource: ByteSource {
 }
 
 /// Writes the plan's new bytes over the original at `path` with one `pwrite`, flushes them to
-/// the disk and closes the file. Before writing, the open file must still be `identity` with
-/// one link and hold the plan's old bytes, or another process wrote it since it was read.
-/// `wrote` is set once a byte may have reached the file, so a failure after it knows the
-/// original has to be put back.
+/// the drive with `fsync` and closes the file; `flushDrive` then takes a batch's writes on one
+/// volume through the drive's cache at once (ADR 0108). On SMB the `fsync` is what sends the
+/// flush to the server. Before writing, the open file must still be `identity` with one link
+/// and hold the plan's old bytes, or another process wrote it since it was read. `wrote` is
+/// set once a byte may have reached the file, so a failure after it knows the original has to
+/// be put back.
 func overwrite(
     _ path: String, with plan: InPlacePlan, identity: FileIdentity, faults: WriteFaults,
     wrote: inout Bool
@@ -211,11 +213,28 @@ func overwrite(
         throw TagWriteError(path: path, kind: .writeFailed, detail: crashDetail)
     }
     faults.called(.flush)
-    try flush(descriptor, path, .writeFailed)
+    guard fsync(descriptor) == 0 else {
+        throw systemError(path, .writeFailed, "can't flush the tags written in place")
+    }
     isOpen = false
     faults.called(.close)
     // A network volume may report a failed write only when the file closes.
     guard close(descriptor) == 0 else {
         throw systemError(path, .writeFailed, "can't close it after writing the tags in place")
     }
+}
+
+/// Empties the drive's cache through the volume of `path`, a file just written in place, so
+/// every write on that volume flushed with `fsync` before survives a power cut. Volumes without
+/// `F_FULLFSYNC` (SMB) take `fsync`, which each file's write already sent.
+func flushDrive(of path: String, faults: WriteFaults) throws(TagWriteError) {
+    faults.called(.open)
+    let descriptor = open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+    guard descriptor >= 0 else { throw systemError(path, .writeFailed, FileFailure.open) }
+    defer {
+        faults.called(.close)
+        close(descriptor)
+    }
+    faults.called(.flushDrive)
+    try flush(descriptor, path, .writeFailed)
 }

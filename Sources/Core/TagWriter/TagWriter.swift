@@ -23,6 +23,9 @@ public struct TagWriter: Sendable {
     /// in isn't written. Each file's failure is reported and the rest carry on, except a full
     /// disk or a journal that can't be written, which stop the batch after that file. A write
     /// in place an earlier call left unfinished is finished first.
+    ///
+    /// Files whose new tags fit are read and planned first, a chunk at a time, then written in
+    /// place together (ADR 0108); any other file goes through its temp file when it's reached.
     public func write(_ edit: TagEdit, to paths: [String]) -> TagWriteReport {
         var report = recoverInterrupted()
         let entry: TagUndoJournal.Entry
@@ -33,31 +36,65 @@ public struct TagWriter: Sendable {
             report.notWritten = paths
             return report
         }
-        for (index, path) in paths.enumerated() {
-            // A batch can run over an album of large files; each file's buffers go before the next.
-            let stop = autoreleasepool { () -> Bool in
+        var results = [JobResult?](repeating: nil, count: paths.count)
+        var chunk: [(index: Int, job: InPlaceJob)] = []
+        // Writes the planned chunk; returns whether the batch stops after it, and whether as a
+        // crash would, which leaves the journal as it is.
+        func writeChunk() -> (stop: Bool, crashed: Bool) {
+            guard !chunk.isEmpty else { return (false, false) }
+            let (written, stop, crashed) = writeInPlace(chunk.map(\.job), entry: entry)
+            for (item, result) in zip(chunk, written) { results[item.index] = result }
+            chunk = []
+            return (stop, crashed)
+        }
+        // The files up to where the batch stopped.
+        var reached = paths.count
+        files: for (index, path) in paths.enumerated() {
+            // A batch can run over an album of large files; each file's buffers go before the
+            // next, but for a chunk's plans.
+            let prepared = autoreleasepool { () -> Result<Prepared, TagWriteError> in
                 do throws(TagWriteError) {
-                    switch try write(edit, to: path, entry: entry) {
-                    case .unchanged: report.unchanged.append(path)
-                    case .changed(let problem):
-                        report.changed.append(path)
-                        if let problem { report.failures.append(problem) }
-                    }
-                    return false
+                    return .success(try prepare(edit, path, entry: entry))
                 } catch {
                     logger.error("\(error.description)")
-                    report.failures.append(error)
-                    return error.stopsBatch
+                    return .failure(error)
                 }
             }
-            if stop {
-                report.notWritten = Array(paths[(index + 1)...])
-                if !report.notWritten.isEmpty {
-                    logger.error(
-                        "stopped the batch; \(report.notWritten.count) files weren't written")
+            switch prepared {
+            case .success(.done(let outcome)): results[index] = .success(outcome)
+            case .success(.inPlace(let job)):
+                chunk.append((index, job))
+                guard chunk.count >= chunkFiles || chunk.map(\.job.bytes).reduce(0, +) >= chunkBytes
+                else { continue }
+                let (stop, crashed) = writeChunk()
+                if crashed { return report }
+                if stop {
+                    reached = index + 1
+                    break files
                 }
-                break
+            case .failure(let error):
+                results[index] = .failure(error)
+                if error.stopsBatch {
+                    reached = index + 1
+                    break files
+                }
             }
+        }
+        // The chunk's files come before any file that stopped the batch.
+        if writeChunk().crashed { return report }
+        for (index, result) in results.prefix(reached).enumerated() {
+            switch result {
+            case .success(.unchanged): report.unchanged.append(paths[index])
+            case .success(.changed(let problem)):
+                report.changed.append(paths[index])
+                if let problem { report.failures.append(problem) }
+            case .failure(let error): report.failures.append(error)
+            case nil: preconditionFailure("every file up to the stop has a result")
+            }
+        }
+        report.notWritten = Array(paths[reached...])
+        if !report.notWritten.isEmpty {
+            logger.error("stopped the batch; \(report.notWritten.count) files weren't written")
         }
         do throws(TagWriteError) {
             try journal.removeIfEmpty(entry)
@@ -123,15 +160,24 @@ public struct TagWriter: Sendable {
         return report
     }
 
-    private enum Outcome {
+    enum Outcome {
         case unchanged
         /// Written; `problem` is set when its undo record couldn't be brought up to date.
         case changed(problem: TagWriteError?)
     }
 
-    /// Writes one file.
-    private func write(_ edit: TagEdit, to path: String, entry: TagUndoJournal.Entry)
-        throws(TagWriteError) -> Outcome
+    /// What one file of a batch needs once it's read.
+    private enum Prepared {
+        /// Left alone, or written through the temp file.
+        case done(Outcome)
+        /// To be written in place with the rest of its chunk.
+        case inPlace(InPlaceJob)
+    }
+
+    /// Reads one file and plans its edit. One that fits is checked on its planned file and
+    /// handed back to be written in place; any other is written through the temp file now.
+    private func prepare(_ edit: TagEdit, _ path: String, entry: TagUndoJournal.Entry)
+        throws(TagWriteError) -> Prepared
     {
         let before = try identity(path)
         try requireWritable(path, faults)
@@ -153,7 +199,7 @@ public struct TagWriter: Sendable {
         }
         let groups = TagGroup.changed(by: edit, from: current.metadata.tags, to: target)
         let art = edit.art == .remove && current.metadata.art == nil ? nil : edit.art
-        guard !groups.isEmpty || art != nil else { return .unchanged }
+        guard !groups.isEmpty || art != nil else { return .done(.unchanged) }
 
         let segments: [Segment]
         do throws(ParseFailure) {
@@ -179,9 +225,20 @@ public struct TagWriter: Sendable {
             }
         }
         if let plan {
-            return try writeInPlace(
-                plan, path: path, before: before, source: source, original: file,
-                expected: expected, entry: entry)
+            _ = try checkParsed(
+                PlannedSource(original: source, plan: plan), original: file, path: path,
+                expected: expected
+            ) { edited throws(TagWriteError) in
+                guard edited.payload == file.payload else {
+                    throw TagWriteError(
+                        path: path, kind: .checkFailed,
+                        detail: "the audio in the new file isn't where the original's is")
+                }
+            }
+            try removeLeftoverTemps(for: path, faults)
+            return .inPlace(
+                InPlaceJob(
+                    path: path, plan: plan, before: before, original: file, expected: expected))
         }
         let hashes = try fileHashes(path, payload: file.payload, faults: faults)
         let (restore, oldBytes) = try restoreSegments(
@@ -219,91 +276,15 @@ public struct TagWriter: Sendable {
                 record.setEdited(final)
                 try journal.update(record, at: handle!)
             }
-            return .changed(problem: nil)
+            return .done(.changed(problem: nil))
         } catch {
             logger.error("\(error.description)")
-            return .changed(
-                problem: TagWriteError(
-                    path: path, kind: .journal,
-                    detail: "written, but its undo record couldn't be updated: \(error.detail)"))
-        }
-    }
-
-    /// Writes one file's new tags over its old ones in place (ADR 0107, 0108). The plan is read
-    /// back from the file as it would be before a byte is written; the old bytes are journaled
-    /// and flushed before the original is touched; the region and the tags are read back after.
-    /// A failure once the write has started puts the original back from the journal.
-    private func writeInPlace(
-        _ plan: InPlacePlan, path: String, before: FileIdentity, source: MeteredSource,
-        original: TagFile, expected: Expected, entry: TagUndoJournal.Entry
-    ) throws(TagWriteError) -> Outcome {
-        _ = try checkParsed(
-            PlannedSource(original: source, plan: plan), original: original, path: path,
-            expected: expected
-        ) { edited throws(TagWriteError) in
-            guard edited.payload == original.payload else {
-                throw TagWriteError(
-                    path: path, kind: .checkFailed,
-                    detail: "the audio in the new file isn't where the original's is")
-            }
-        }
-        try removeLeftoverTemps(for: path, faults)
-        var record = TagUndoJournal.FileRecord(
-            path: path, edited: before, original: before, originalSHA256: nil,
-            restore: plan.restore(size: before.size), inPlace: plan.journaled)
-        let handle = try journal.append(record, oldBytes: [plan.oldBytes], to: entry)
-        var wrote = false
-        do throws(TagWriteError) {
-            if let hook = faults.beforeReplacing {
-                do {
-                    try hook(path, nil)
-                } catch {
-                    throw TagWriteError(path: path, kind: .writeFailed, detail: "\(error)")
-                }
-            }
-            try overwrite(path, with: plan, identity: before, faults: faults, wrote: &wrote)
-            if let hook = faults.afterOverwriting {
-                do {
-                    try hook(path)
-                } catch {
-                    throw TagWriteError(path: path, kind: .writeFailed, detail: "\(error)")
-                }
-            }
-            _ = try readBack(plan, path: path, original: original, expected: expected)
-        } catch {
-            // A crash leaves the file and the journal as they are, for recovery to finish.
-            if error.detail == crashDetail { throw error }
-            guard wrote else {
-                do throws(TagWriteError) {
-                    try journal.remove(handle)
-                } catch let journalError {
-                    logger.error("\(journalError.description)")
-                }
-                throw error
-            }
-            logger.error("\(error.description)")
-            do throws(TagWriteError) {
-                _ = try putBackOriginal(record, at: handle, oldBytes: plan.oldBytes)
-            } catch let putBack {
-                logger.error("\(putBack.description)")
-                throw TagWriteError(
-                    path: path, kind: error.kind,
-                    detail: "\(error.detail); the original isn't put back yet, and the next"
-                        + " write or undo tries again: \(putBack.detail)")
-            }
-            throw error
-        }
-        logger.notice("wrote tags in place to \(path)")
-        do throws(TagWriteError) {
-            record.setEdited(try identity(path))
-            try journal.confirm(record, at: handle)
-            return .changed(problem: nil)
-        } catch {
-            logger.error("\(error.description)")
-            return .changed(
-                problem: TagWriteError(
-                    path: path, kind: .journal,
-                    detail: "written, but its undo record couldn't be confirmed: \(error.detail)"))
+            return .done(
+                .changed(
+                    problem: TagWriteError(
+                        path: path, kind: .journal,
+                        detail: "written, but its undo record couldn't be updated: \(error.detail)")
+                ))
         }
     }
 
@@ -375,7 +356,7 @@ public struct TagWriter: Sendable {
     /// Puts the original back after a write in place that didn't finish, and drops its
     /// record; returns whether the file had to be rewritten, which it doesn't when its region
     /// still holds the old bytes.
-    private func putBackOriginal(
+    func putBackOriginal(
         _ record: TagUndoJournal.FileRecord, at handle: TagUndoJournal.Handle, oldBytes: [UInt8]
     ) throws(TagWriteError) -> Bool {
         if let region = record.inPlace, try regionState(record, region, faults: faults) == .old {
@@ -477,13 +458,13 @@ public struct TagWriter: Sendable {
     }
 
     /// The file's identity, by `lstat`.
-    private func identity(_ path: String) throws(TagWriteError) -> FileIdentity {
+    func identity(_ path: String) throws(TagWriteError) -> FileIdentity {
         faults.called(.metadata)
         return try FileIdentity(path: path)
     }
 
     /// What a new file must read back as.
-    private struct Expected {
+    struct Expected {
         var tags: TrackTags
         var audio: TrackAudio
         var art: Data?
@@ -530,7 +511,7 @@ public struct TagWriter: Sendable {
     /// the bytes written; then the tags, audio format, art and chunk offsets, with the audio
     /// where the original's is. Only the region changed, so nothing else is read whole.
     /// Returns what the reader read.
-    private func readBack(
+    func readBack(
         _ plan: InPlacePlan, path: String, original: TagFile, expected: Expected
     ) throws(TagWriteError) -> ParsedFile {
         func failed(_ detail: String) -> TagWriteError {

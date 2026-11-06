@@ -24,6 +24,8 @@ public struct TagUndoJournal: Sendable {
 
     package let directory: URL
     let capacityBytes: Int
+    /// Told of each flush through the drive's cache, for the tests to count.
+    var driveFlushed: (@Sendable () -> Void)?
 
     public init(dataDirectory: URL) {
         self.init(dataDirectory: dataDirectory, capacityBytes: Self.defaultCapacityBytes)
@@ -124,9 +126,8 @@ public struct TagUndoJournal: Sendable {
         return Entry(sequence: sequence, folder: folder)
     }
 
-    /// Adds one file to `entry`: its old bytes and its record, and for a write in place its
-    /// marker, each flushed with its folder, then the drive's cache, so all of it is durable
-    /// before the music file is replaced or overwritten.
+    /// Adds one file to `entry`: its old bytes and its record, each flushed with its folder, then
+    /// the drive's cache, so all of it is durable before the music file is replaced.
     package func append(_ record: FileRecord, oldBytes: [[UInt8]], to entry: Entry)
         throws(TagWriteError) -> Handle
     {
@@ -134,21 +135,54 @@ public struct TagUndoJournal: Sendable {
         try writeDurably(oldBytes, to: handle.bytes.path, drive: false)
         try writeDurably([Array(try encode(record))], to: handle.record.path, drive: false)
         try syncFolder(entry.folder.path)
-        if record.inPlace != nil {
-            try writeDurably([], to: handle.marker.path, drive: false)
-            try syncFolder(directory.path)
-        }
         // F_FULLFSYNC empties the drive's whole cache, which may reach the disk in any order,
         // so one after the files and their folders covers them all.
         try flushDrive(directory.path)
         return handle
     }
 
+    /// Adds the files of a batch written in place to `entry` (ADR 0108): each one's old bytes,
+    /// record and marker flushed with `fsync`, then their folders, then the drive's cache once,
+    /// so all of it is durable before any of the music files is written. A failure part way
+    /// takes out what was added.
+    func appendInPlace(_ files: [(record: FileRecord, oldBytes: [UInt8])], to entry: Entry)
+        throws(TagWriteError) -> [Handle]
+    {
+        let first = (try sequences(in: entry.folder).last ?? 0) + 1
+        var handles: [Handle] = []
+        do throws(TagWriteError) {
+            for (offset, file) in files.enumerated() {
+                let handle = Handle(entry: entry, number: first + offset)
+                handles.append(handle)
+                try writeDurably([file.oldBytes], to: handle.bytes.path, drive: false)
+                try writeDurably(
+                    [Array(try encode(file.record))], to: handle.record.path, drive: false)
+                try writeDurably([], to: handle.marker.path, drive: false)
+            }
+            try syncFolder(entry.folder.path)
+            try syncFolder(directory.path)
+            try flushDrive(directory.path)
+        } catch {
+            var detail = error.detail
+            for handle in handles {
+                do throws(TagWriteError) {
+                    try remove(handle)
+                } catch let removing {
+                    detail += "; and \(removing.detail)"
+                }
+            }
+            throw TagWriteError(path: error.path, kind: error.kind, detail: detail)
+        }
+        return handles
+    }
+
     /// Records that a write in place landed and read back: `record` is saved with the file's
-    /// identity, through the drive's cache, then the marker goes. A marker left behind is
-    /// harmless: recovery finds the new bytes and confirms the record again.
+    /// identity, then the marker goes, neither through the drive's cache (ADR 0108). If a power
+    /// cut keeps the marker, recovery finds the new bytes and confirms the record again; if it
+    /// keeps the marker's removal and loses the record, undo finds the file changed since and
+    /// leaves it as it is.
     func confirm(_ record: FileRecord, at handle: Handle) throws(TagWriteError) {
-        try update(record, at: handle)
+        try update(record, at: handle, drive: false)
         try removeMarker(handle)
     }
 
@@ -212,7 +246,9 @@ public struct TagUndoJournal: Sendable {
 
     /// Replaces a file's record, as when the renamed file's mtime or inode differ from the temp
     /// file's.
-    package func update(_ record: FileRecord, at handle: Handle) throws(TagWriteError) {
+    package func update(_ record: FileRecord, at handle: Handle, drive: Bool = true)
+        throws(TagWriteError)
+    {
         let staging = handle.record.path + ".new"
         try writeDurably([Array(try encode(record))], to: staging, drive: false)
         guard rename(staging, handle.record.path) == 0 else {
@@ -220,7 +256,17 @@ public struct TagUndoJournal: Sendable {
         }
         try syncFolder(handle.entry.folder.path)
         // After the rename, so the drive can't keep a later change and lose this one.
-        try flushDrive(handle.entry.folder.path)
+        if drive { try flushDrive(handle.entry.folder.path) }
+    }
+
+    /// Empties the drive's cache through `path`'s volume, so what was flushed to the drive
+    /// before survives a power cut.
+    private func flushDrive(_ path: String) throws(TagWriteError) {
+        driveFlushed?()
+        let descriptor = open(path, O_RDONLY | O_CLOEXEC)
+        guard descriptor >= 0 else { throw systemError(path, .journal, "can't open the folder") }
+        defer { close(descriptor) }
+        try flush(descriptor, path, .journal)
     }
 
     /// Removes one file of an edit, its marker if it has one, and the edit's folder once it
@@ -444,15 +490,6 @@ private func writeDurably(_ chunks: [[UInt8]], to path: String, drive: Bool = tr
     } else if fsync(descriptor) != 0 {
         throw systemError(path, .journal, "can't flush it")
     }
-}
-
-/// Empties the drive's cache through `path`'s volume, so what was flushed to the drive before
-/// survives a power cut.
-private func flushDrive(_ path: String) throws(TagWriteError) {
-    let descriptor = open(path, O_RDONLY | O_CLOEXEC)
-    guard descriptor >= 0 else { throw systemError(path, .journal, "can't open the folder") }
-    defer { close(descriptor) }
-    try flush(descriptor, path, .journal)
 }
 
 /// Flushes a folder's entries, so a file just made or renamed in it survives a power cut.
