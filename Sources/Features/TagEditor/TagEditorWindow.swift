@@ -589,7 +589,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             let values = Set(model.tracks.map { row.text($0) })
             fileValues[row]?.stringValue =
                 row == .size
-                ? FileRow.sizeText(model.tracks.compactMap(\.file?.sizeBytes).reduce(0, +))
+                ? fileSizeText(model.tracks.compactMap(\.file?.sizeBytes).reduce(0, +))
                 : values.count == 1 ? values.first! : mixedPlaceholder
         }
     }
@@ -676,7 +676,7 @@ extension TagEditorWindow: NSTabViewDelegate {
 /// "JPEG, 700 × 700, 126 KB": the image's type, pixels and size.
 private func imageDescription(_ data: Data) -> String {
     guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
-        return FileRow.sizeText(data.count)
+        return fileSizeText(data.count)
     }
     var parts: [String] = []
     if let type = CGImageSourceGetType(source).flatMap({ UTType($0 as String) }) {
@@ -688,6 +688,6 @@ private func imageDescription(_ data: Data) -> String {
     {
         parts.append("\(width) × \(height)")
     }
-    parts.append(FileRow.sizeText(data.count))
+    parts.append(fileSizeText(data.count))
     return parts.joined(separator: ", ")
 }

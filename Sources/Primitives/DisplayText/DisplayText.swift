@@ -44,6 +44,11 @@ public func kbpsText(_ kilobitsPerSecond: Double) -> String {
     "\(Int(kilobitsPerSecond.rounded())) kbps"
 }
 
+/// 44_812_345 -> "44.8 MB": a file's size, as the Finder shows it.
+public func fileSizeText(_ bytes: Int) -> String {
+    ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+}
+
 /// 24 -> "24-bit".
 public func bitDepth(_ bits: some BinaryInteger) -> String { "\(bits)-bit" }
 

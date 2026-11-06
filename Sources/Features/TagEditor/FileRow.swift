@@ -41,16 +41,12 @@ enum FileRow: CaseIterable {
             // The whole file's average, tags and art included.
             guard seconds > 0 else { return "—" }
             return kbpsText(Double(file.sizeBytes) * 8 / seconds / 1000)
-        case .size: return Self.sizeText(file.sizeBytes)
+        case .size: return fileSizeText(file.sizeBytes)
         case .tag: return file.tagScheme
         case .modified: return Self.dateText(file.modified)
         case .created: return Self.dateText(file.created)
         case .folder: preconditionFailure("handled above")
         }
-    }
-
-    static func sizeText(_ bytes: Int) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
     private static func dateText(_ date: Date) -> String {

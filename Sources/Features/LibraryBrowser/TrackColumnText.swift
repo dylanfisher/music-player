@@ -87,8 +87,7 @@ extension TrackColumn {
         case .effectiveBits: number(row.effectiveBits)
         case .dynamicRange: row.dynamicRange.map(dynamicRangeText) ?? ""
         case .truePeak: row.truePeakDBTP.map(truePeakText) ?? ""
-        case .size:
-            ByteCountFormatter.string(fromByteCount: Int64(row.sizeBytes), countStyle: .file)
+        case .size: fileSizeText(row.sizeBytes)
         case .fileName: row.fileName
         case .path: row.path
         case .dateAdded: date(row.addedSeconds)
