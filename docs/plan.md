@@ -495,6 +495,28 @@ Implementation plan, part 45b (ADR 0116):
    Mac; a reader row for search keystrokes while the pass writes to the same library; the
    soak runs the pass over a copy of the fixture library beside its other load.
 
+Result, part 45b (draft, before the gate): shipped as planned (ADR 0116). Analyze Library and
+Pause Library Analysis in the File menu after Show Library Health, so the palette and
+`music-player analyzeLibrary` / `pauseAnalysis`; never at launch, after a scan or on a
+schedule. One file at a time at background priority, in path order, stored with the index's
+stamp and no spectrogram; waits a second at a time while the status bar shows a scan; Pause
+cancels the file under way. Library Health gains Lossy Origin, Upsampled, Padded Bits, Fake
+Stereo and Clipped, each "of N files analyzed"; Cutoff, Effective Bits, Dynamic Range and True
+Peak are columns and smart playlist fields. Bench on Apple Silicon: 200 fixture files on the
+slow simulated NAS in 9.53–9.65 s (48 ms a file, 33 ms of it the NAS's waits); budget < 15 s,
+< 40 s on the old Mac (the same 6.6 s of waits and five times the compute). The second of two
+search keystrokes while the pass runs, 13.5 ms p95 (idle 7.3, during a scan 15.6), within the
+idle budget of 20 ms. Soak with the pass beside the scan, the search and the single-file
+analysis: 20 s, 0 underruns, 17,929 files analyzed, −2.7 MB; 180 s, 0 underruns, 146,979
+files, −9.2 MB. Health report 0.10 s, smart playlist 15.8 ms, re-sort 25.8 ms, as before.
+Not done: read-ahead within a file, which the fixtures can't show a gain for. Owner
+checkpoint: on the DAC Mac, choose File > Analyze Library with the real library; note the
+time from start to the end of the status line (pause and start it again once, and quit and
+relaunch once mid-way, to see it carry on); then open Library Health and send the counts of
+Lossy Origin, Upsampled, Padded Bits, Fake Stereo and Clipped and the "of N files analyzed"
+line; open a few flagged files of each in Show Spectrum (and Spek) and say whether they look
+right; and say whether playback or the window stuttered while it ran.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
