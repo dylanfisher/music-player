@@ -520,8 +520,9 @@ private final class ShiftedClock: @unchecked Sendable {
     await eventually("the renderer seen playing") {
         fake.actions.filter { $0 == "GetPositionInfo" }.count >= 2
     }
-    // It moves on to the next track just as the app's clock passes the first one's end.
-    fake.moveToNext()
+    // It moves on to the next track just as the app's clock passes the first one's end; only
+    // the app's question at the deadline hears of it.
+    fake.moveToNextUnseenByPolls()
     clock.advance(by: 10)
     await log.wait(for: ["started 1", "ended 1", "started 2"])
     #expect(fake.setTransportURIs.count == 1)

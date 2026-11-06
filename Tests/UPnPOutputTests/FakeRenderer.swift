@@ -50,6 +50,8 @@ final class FakeRenderer: @unchecked Sendable {
     private var stalePausedPosition = false
     private var lagSeconds = 0.0
     private var resumeHoldSeconds = 0.0
+    /// The track a poll is still told of after `moveToNextUnseenByPolls`.
+    private var hiddenURI: String?
     private var changesTracksSlowly = false
     /// The states it reports, one a GetTransportInfo, at a track's end before it plays the next.
     private var betweenTracks: [State]?
@@ -165,10 +167,13 @@ final class FakeRenderer: @unchecked Sendable {
             state = .paused
         }
     }
-    /// Goes on to the next track it was given now, as it would at its track's end.
-    func moveToNext() {
+    /// Goes on to the next track it was given now, as it would at its track's end. Polls, a
+    /// GetPositionInfo right after a GetTransportInfo, go on hearing of the old track until a
+    /// GetPositionInfo comes alone, as the app's question at the clock's deadline does.
+    func moveToNextUnseenByPolls() {
         lock.withLock {
             guard !nextURI.isEmpty else { return }
+            hiddenURI = uri
             uri = nextURI
             nextURI = ""
             seconds = 0
@@ -374,7 +379,7 @@ final class FakeRenderer: @unchecked Sendable {
                         action,
                         "<Track>1</Track><TrackDuration>\(upnpTime(trackSecondsValue)).\(Int(trackSecondsValue * 1000) % 1000)"
                             + "</TrackDuration><TrackMetaData></TrackMetaData>"
-                            + "<TrackURI>\(xmlEscaped(reported(reportedURI)))</TrackURI>"
+                            + "<TrackURI>\(xmlEscaped(reported(polledURI)))</TrackURI>"
                             + "<RelTime>\(upnpTime(reportedSeconds))</RelTime>"
                             + "<AbsTime>NOT_IMPLEMENTED</AbsTime>"))
             default:
@@ -385,6 +390,14 @@ final class FakeRenderer: @unchecked Sendable {
 
     /// The track it says is current: the next one, half a second early, when it buffers ahead.
     /// Call under the lock.
+    /// The URI GetPositionInfo reports. Call under the lock, from its reply.
+    private var polledURI: String {
+        guard let hidden = hiddenURI else { return reportedURI }
+        if log.dropLast().last == "GetTransportInfo" { return hidden }
+        hiddenURI = nil
+        return reportedURI
+    }
+
     private var reportedURI: String {
         guard buffersLikeHEOS, state == .playing, !nextURI.isEmpty,
             position >= trackSecondsValue - 0.5
