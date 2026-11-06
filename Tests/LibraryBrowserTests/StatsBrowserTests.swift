@@ -197,7 +197,9 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     #expect(browser.model.filter.stats == nil)
 
     browser.show(.stats(.month))
-    try await waitFor("the month") { browser.statsModel.period == .month }
+    try await waitFor("the month's report") {
+        browser.statsModel.period == .month && !browser.statsModel.isLoading
+    }
     cards.chart.doubleClicked(today)
     try await waitFor("the day's plays") {
         browser.model.filter.source == .plays(span) && browser.timelineModel.isLoaded
