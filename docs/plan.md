@@ -325,6 +325,41 @@ generated fixtures and hand-built files only.
   torn growth (47.5), writes overlapping (47.6), one listing per folder and the parse handed on
   (47.8), progress counts and the status text (47.9).
 
+Result (draft, before the gate): shipped 47.1 to 47.6 and 47.8 to 47.10 (ADR 0108, amends 0020
+and 0107); 47.7's probe is written and waits on the owner. A save in place no longer hashes the
+file: the region is checked before the write and read back uncached after it, with the tags
+parsed from it, and the journal and recovery key on the region's old and new hashes. A batch
+plans its files a chunk at a time, journals the chunk with one drive flush, writes and reads
+back four files at once with an `fsync` each, flushes each volume once and confirms without a
+flush: two drive flushes for an album instead of about 60. A rewrite leaves 64 KiB of padding,
+or as much again as the tag; an MP4 with `moov` last grows in place past its end, which by ADR
+0020's survey covers all 61 corpus files with `moov` after `mdat` (the layout notes "moov last"
+for the corpus run to confirm). A batch lists each folder once for leftover temp files, the
+rescan stores the writer's read-back parse instead of reading the file again, and a save shows
+"Saving tags: 3 of 20" on the status bar's scan line. Bench on Apple Silicon, 20 fixture FLACs
+grown to 40 MB in one batch: in place 1.56 s before, 0.04 s after on this Mac's disk; 42.8 s
+before (1,602 MB over the link), 4.3 s after (2 MB) on the slow simulated NAS (10 ms a file
+system call, 57 MB/s on one link, the journal on the local disk); through the temp file 1.25 s
+and 74.5 s before, 1.25 s and 74.2 s after, unchanged as planned. One FLAC's title written and
+read back into the index, median of 5: in place 15.0 ms before, 11.2 to 12.0 ms after; through
+the temp file 11.9 ms before, 12.8 to 13.3 ms over four runs after, within ADR 0107's 12.7 to
+13.1 ms, so the 11.9 was a low run. The rescan stays about 2.5 ms: its cost is the index
+store, not the parse, locally. The journal row, 1000 files with 1 MB art flushed per file:
+6.5 s. Not run here: `scripts/tag-corpus --round-trip` (the reference corpus isn't on this
+Mac), `scripts/full-disk` and `scripts/kill-test`. Deferred: the temp-file path still hashes,
+copies and reads back the whole file; on the NAS it is unchanged until 47.7 reports.
+For the owner:
+1. **47.7 probe**, on an empty scratch folder on the NAS, over Ethernet:
+   `swift scripts/smb-copy-probe.swift /Volumes/<share>/<scratch folder>` (256 MB; add a size
+   in MB after the folder for another). Paste back what it prints. It writes only in a new
+   folder it makes there and removes it at the end.
+2. **Hardware checkpoint**, on copies of a 20-track hi-res album on the NAS: select all, Get
+   Info, change the album title, Save; time it over Wi-Fi and over Ethernet, and watch the
+   status bar count the files. Check with `ls -li` that each file keeps its inode and that no
+   `.tagwrite` file is left. Then add art to a few tracks (the first save goes through the temp
+   file and leaves room), edit their titles again and check those keep their inode. Edit the
+   title of an M4A with `moov` after its audio and check its inode stays. Report the times.
+
 ### 48. Owner feedback, 2026-11-05 (third round)
 
 Get Info, Listening Stats, playback errors, the state across a quit and the receiver moving
