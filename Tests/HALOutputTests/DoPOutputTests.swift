@@ -176,10 +176,34 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
         refused.allSatisfy {
             $0.1.contains("null device can't play DSD128: it has no 352.8 kHz rate for DoP")
         })
+    // The stop says the one cause, not only the count.
+    guard case .failed(let stopped) = rig.events.last else {
+        Issue.record("didn't stop: \(rig.events)")
+        return
+    }
     #expect(
-        rig.events.last
-            == .failed(PlaybackProblem(PlaybackError.failedInARow(PlaybackEngine.failureLimit))))
+        stopped.message
+            == "\(PlaybackEngine.failureLimit) tracks in a row couldn't play: null device can't"
+            + " play DSD128: it has no 352.8 kHz rate for DoP")
+    #expect(stopped.causes.map(\.tracks) == [refused.map(\.0)] && stopped.fix == nil)
     #expect(rig.device.captured.isEmpty)
+}
+
+/// With hog mode off, a DSD album stops on the one cause, which carries its fix.
+@Test func aDSDAlbumWithHogModeOffStopsOnTheHogModeFix() async throws {
+    let album = try (0..<4).map { try dsdTrack("hogless-\($0)", bytes: 4096, seed: $0) }
+    let rig = try await Rig()
+    rig.device.setHogModeSetting(false)
+    await rig.engine.setQueue(album.map(\.url))
+    await rig.engine.play()
+    let update = try await rig.wait { if case .failed = $0.event { true } else { false } }
+    guard case .failed(let stopped) = update.event else { return }
+    #expect(stopped.fix == .turnOnHogMode(deviceUID: rig.device.deviceUID))
+    #expect(
+        stopped.causes.count == 1 && stopped.causes[0].tracks.count == PlaybackEngine.failureLimit)
+    #expect(
+        stopped.message.hasSuffix("DoP needs exclusive access, and hog mode is off for this device")
+    )
 }
 
 @Test func dsdNeedsHogModeAndANonMixableFormatOrIsRefused() async throws {

@@ -26,7 +26,7 @@ public actor PlaybackEngine {
     private var resumeSeconds: Double?
     /// Tracks that failed since one last started. Once it reaches `failureLimit`, or the queue's
     /// length, the engine stops instead of trying more.
-    private var failuresInARow = 0
+    private var failuresInARow: [FailedTrack] = []
     /// Failed tracks in a row that stop playback. A run of failures usually has one cause, such
     /// as a share that went offline, which every track after them would hit too.
     static let failureLimit = 3
@@ -126,7 +126,7 @@ public actor PlaybackEngine {
         finishedEarly = nil
         heldSkip = nil
         heldEdits = []
-        failuresInARow = 0
+        failuresInARow = []
         cursor = queue.replace(with: urls, first: first, shuffled: shuffled) ?? 0
         state.queue = urls
         state.order = queue.order
@@ -227,7 +227,7 @@ public actor PlaybackEngine {
             output.play()
         case .paused, .stopped:
             guard !queue.order.isEmpty else { return }
-            failuresInARow = 0
+            failuresInARow = []
             load(currentItem?.position ?? cursor, startSeconds: resumeSeconds ?? 0, playing: true)
         }
         state.status = .playing
@@ -288,7 +288,7 @@ public actor PlaybackEngine {
     /// Loads the track at `position`, playing if playback was, or just points the queue at it when
     /// stopped.
     private func move(to position: Int) {
-        failuresInARow = 0
+        failuresInARow = []
         switch state.status {
         case .stopped:
             cursor = position
@@ -555,7 +555,7 @@ public actor PlaybackEngine {
             } else if id != currentItem?.id {
                 return
             }
-            failuresInARow = 0
+            failuresInARow = []
             let index = queue.entry(at: currentItem!.position)
             state.currentIndex = index
             state.durationSeconds = info.durationSeconds
@@ -579,9 +579,10 @@ public actor PlaybackEngine {
             } else {
                 return
             }
-            failuresInARow += 1
-            logger.error("\(self.queue.url(at: failed).path): \(error)")
-            publish(.trackFailed(queue.url(at: failed), PlaybackProblem(error)))
+            let track = FailedTrack(url: queue.url(at: failed), problem: PlaybackProblem(error))
+            failuresInARow.append(track)
+            logger.error("\(track.url.path): \(error)")
+            publish(.trackFailed(track.url, track.problem))
             if id == nextItem?.id { skip(after: failed) }
         case .finished(let id):
             guard let currentItem, id == currentItem.id else { return }
@@ -607,7 +608,7 @@ public actor PlaybackEngine {
             state.currentIndex = queue.order.isEmpty ? nil : queue.entry(at: 0)
             state.status = .stopped
             state.durationSeconds = nil
-            if failuresInARow >= Self.failureLimit {
+            if failuresInARow.count >= Self.failureLimit {
                 let error = PlaybackError.failedInARow(failuresInARow)
                 logger.error("\(error)")
                 publish(.failed(PlaybackProblem(error)))
@@ -665,7 +666,7 @@ public actor PlaybackEngine {
     /// or once every track in the queue has failed, so a queue of unplayable files ends instead
     /// of looping.
     private func skip(after position: Int) {
-        guard failuresInARow < min(Self.failureLimit, queue.order.count),
+        guard failuresInARow.count < min(Self.failureLimit, queue.order.count),
             let following = queue.position(after: position, natural: false)
         else {
             nextItem = nil

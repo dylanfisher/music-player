@@ -11,7 +11,13 @@ private struct StandIn: Error, CustomStringConvertible {
 
 @Test func everyPlaybackErrorHasAPlainMessage() {
     let errors: [PlaybackError] = [
-        .noVolume, .failedInARow(3),
+        .noVolume,
+        .failedInARow(
+            [URL(fileURLWithPath: "/m/a.dsf", isDirectory: false)].map {
+                FailedTrack(
+                    url: $0,
+                    problem: PlaybackProblem(MetadataError(unreadable: $0.path, detail: "gone")))
+            }),
         .startedTrackMissing(URL(fileURLWithPath: "/m/a.flac", isDirectory: false)),
     ]
     for error in errors {

@@ -53,9 +53,50 @@ private func update(_ event: PlaybackEvent) -> PlaybackUpdate {
     #expect(ProblemDialog(damaged) == nil)
 }
 
-/// A problem with a fix shows its dialog as it happens; one without shows only in the status
-/// bar.
-@MainActor @Test func theBarShowsTheDialogOnlyForAFixableProblem() {
+private func inARow(_ problems: [PlaybackProblem]) -> ShownProblem {
+    let tracks = zip(urls + urls, problems).map { FailedTrack(url: $0, problem: $1) }
+    let problem = PlaybackProblem(PlaybackError.failedInARow(tracks))
+    return ShownProblem(
+        problem: problem, track: urls[0], trackFormat: nil,
+        headline: "Playback stopped: \(problem.message)")
+}
+
+/// Tracks failing in a row for one reason say it, with its fix when there is one; for
+/// several, each with its count, and a button for the details.
+@Test func tracksFailingInARowSayWhyInTheirDialog() throws {
+    let hog = try #require(
+        ProblemDialog(inARow(Array(repeating: PlaybackProblem(NoHogMode()), count: 3))))
+    #expect(hog.title == "3 tracks in a row couldn't play")
+    #expect(hog.text.hasPrefix("ADI-2 DAC can't play DSD64: DoP needs exclusive access"))
+    #expect(
+        hog.text.hasSuffix(
+            "Turn on hog mode for this device to play it. While the app plays, other apps can't play through the device."
+        ))
+    #expect(hog.buttons == [.fix(.turnOnHogMode(deviceUID: "ADI-2")), .cancel])
+
+    let damaged = try #require(
+        ProblemDialog(inARow(Array(repeating: PlaybackProblem(Damaged()), count: 3))))
+    #expect(damaged.text == "The file is damaged." && damaged.buttons == [.ok])
+
+    let mixed = try #require(
+        ProblemDialog(
+            inARow([
+                PlaybackProblem(NoHogMode()), PlaybackProblem(Damaged()),
+                PlaybackProblem(NoHogMode()),
+            ])))
+    #expect(mixed.title == "3 tracks in a row couldn't play")
+    #expect(
+        mixed.text.components(separatedBy: "\n") == [
+            "2 tracks: ADI-2 DAC can't play DSD64: DoP needs exclusive access, and hog mode is off"
+                + " for this device.",
+            "1 track: The file is damaged.",
+        ])
+    #expect(mixed.buttons.map(\.title) == ["Show Details", "OK"])
+}
+
+/// A problem with a fix, or tracks failing in a row, shows its dialog as it happens; another
+/// problem shows only in the status bar.
+@MainActor @Test func theBarShowsADialogForAFixOrTracksFailingInARow() {
     let bar = bar()
     var shown: [ProblemDialog] = []
     bar.showDialog = { shown.append($0) }
@@ -63,6 +104,10 @@ private func update(_ event: PlaybackEvent) -> PlaybackUpdate {
     #expect(shown.isEmpty)
     bar.apply(update(.trackFailed(urls[0], PlaybackProblem(NoHogMode()))))
     #expect(shown.map(\.shown.track) == [urls[0]])
+    let stopped = inARow(Array(repeating: PlaybackProblem(Damaged()), count: 3))
+    bar.apply(update(.failed(stopped.problem)))
+    #expect(shown.count == 2 && shown.last?.buttons == [.ok])
+    #expect(shown.last?.shown.headline == stopped.headline)
 }
 
 @MainActor @Test func theDetailsWindowOffersTheFixAsAButton() {

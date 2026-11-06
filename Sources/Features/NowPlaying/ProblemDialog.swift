@@ -1,11 +1,16 @@
+import DisplayText
 import Foundation
 import Playback
 
-/// The dialog a playback problem shows at once, for one the app can fix (ADR 0111).
+/// The dialog a playback problem shows at once, for one the app can fix or tracks failing in a
+/// row until playback stopped (ADR 0111).
 struct ProblemDialog: Equatable {
     enum Button: Equatable {
         case fix(PlaybackFix)
+        /// Opens the Playback Problem window.
+        case details
         case cancel
+        case ok
     }
 
     var shown: ShownProblem
@@ -16,11 +21,25 @@ struct ProblemDialog: Equatable {
 
     /// Nil for a problem with nothing to offer, which only the status bar shows.
     init?(_ shown: ShownProblem) {
-        guard let fix = shown.problem.fix else { return nil }
+        let problem = shown.problem
         self.shown = shown
-        title = fix.dialogTitle
-        text = sentence(shown.problem.message) + " " + fix.explanation
-        buttons = [.fix(fix), .cancel]
+        let failed = PlaybackProblem.failedInARow(problem.causes.map(\.tracks.count).reduce(0, +))
+        switch (problem.causes.count, problem.fix) {
+        case (0, nil): return nil
+        case (0, let fix?):
+            title = fix.dialogTitle
+            text = sentence(problem.message) + " " + fix.explanation
+            buttons = [.fix(fix), .cancel]
+        case (1, let fix):
+            title = failed
+            text = sentence(problem.causes[0].message) + (fix.map { " " + $0.explanation } ?? "")
+            buttons = fix.map { [.fix($0), .cancel] } ?? [.ok]
+        default:
+            title = failed
+            text = problem.causes.map { "\(tracks($0.tracks.count)): " + sentence($0.message) }
+                .joined(separator: "\n")
+            buttons = [.details, .ok]
+        }
     }
 }
 
@@ -28,7 +47,9 @@ extension ProblemDialog.Button {
     var title: String {
         switch self {
         case .fix(let fix): fix.buttonTitle
+        case .details: "Show Details"
         case .cancel: "Cancel"
+        case .ok: "OK"
         }
     }
 }

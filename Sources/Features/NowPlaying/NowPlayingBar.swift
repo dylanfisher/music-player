@@ -202,7 +202,8 @@ public final class NowPlayingBar: NSObject {
             guard let self, dialog.buttons.indices.contains(index) else { return }
             switch dialog.buttons[index] {
             case .fix(let fix): fixRequested(fix, dialog.shown.track)
-            case .cancel: break
+            case .details: problemOpened(dialog.shown)
+            case .cancel, .ok: break
             }
         }
     }

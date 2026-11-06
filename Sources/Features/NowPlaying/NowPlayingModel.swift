@@ -47,10 +47,12 @@ public final class NowPlayingModel {
             show("The output device went away, so playback paused. Plug it back in to resume.")
         case .deviceReturned: show("The output device is back. Press Play to resume.")
         case .failed(let failure):
-            // The output stops on the track it was playing.
+            // The output stops on the track it was playing; tracks failing in a row are
+            // about the first of them.
+            let track = failure.causes.first?.tracks.first ?? currentURL
             show(
                 ShownProblem(
-                    problem: failure, track: currentURL, trackFormat: currentURL.flatMap(format),
+                    problem: failure, track: track, trackFormat: track.flatMap(format),
                     headline: "Playback stopped: \(failure.message)"))
         default: break
         }

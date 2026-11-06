@@ -890,8 +890,54 @@ private func published(
         if event == .stopped { break }
     }
     #expect(events.filter { if case .trackFailed = $0 { true } else { false } }.count == 3)
-    #expect(events.last == .failed(PlaybackProblem(PlaybackError.failedInARow(3))))
+    guard case .failed(let problem) = events.last else {
+        Issue.record("no failure: \(events)")
+        return
+    }
+    // One cause, and the tracks it stopped, so the dialog says why rather than how many.
+    #expect(problem.message == "3 tracks in a row couldn't play: broken file")
+    #expect(
+        problem.causes
+            == [PlaybackProblem.Cause(message: "broken file", fix: nil, tracks: Array(five[..<3]))])
     #expect(!events.contains(.finished))
+}
+
+private struct Unplayable: PlaybackFailure {
+    var why: String
+    var fix: PlaybackFix?
+    var description: String { "Unplayable(\(why))" }
+    var userMessage: String { why }
+}
+
+/// Tracks failing in a row for one reason carry it and its fix; for several, each with the
+/// tracks it stopped, and no fix.
+@Test func tracksFailingInARowGroupTheirCauses() {
+    let urls = (0..<3).map { URL(fileURLWithPath: "/music/\($0).dsf", isDirectory: false) }
+    let hog = Unplayable(why: "hog mode is off", fix: .turnOnHogMode(deviceUID: "ADI-2"))
+    let one = PlaybackProblem(
+        PlaybackError.failedInARow(urls.map { FailedTrack(url: $0, problem: PlaybackProblem(hog)) })
+    )
+    #expect(one.message == "3 tracks in a row couldn't play: hog mode is off")
+    #expect(one.fix == .turnOnHogMode(deviceUID: "ADI-2"))
+    #expect(one.causes.map(\.tracks) == [urls])
+
+    let damaged = PlaybackProblem(Unplayable(why: "the file is damaged"))
+    let two = PlaybackProblem(
+        PlaybackError.failedInARow([
+            FailedTrack(url: urls[0], problem: PlaybackProblem(hog)),
+            FailedTrack(url: urls[1], problem: damaged),
+            FailedTrack(url: urls[2], problem: PlaybackProblem(hog)),
+        ]))
+    #expect(two.message == "3 tracks in a row couldn't play, for 2 different reasons")
+    #expect(two.fix == nil)
+    #expect(
+        two.causes == [
+            .init(
+                message: "hog mode is off", fix: .turnOnHogMode(deviceUID: "ADI-2"),
+                tracks: [urls[0], urls[2]]),
+            .init(message: "the file is damaged", fix: nil, tracks: [urls[1]]),
+        ])
+    #expect(two.detail.contains("1.dsf: Unplayable(the file is damaged)"))
 }
 
 @Test func whenEveryTrackHasFailedTheNextIsCleared() async {
