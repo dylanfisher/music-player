@@ -330,6 +330,31 @@ writes only the FLAC.
 - [ ] **48b.4 Save as Playlist asks first.** A sheet asks for the playlist's name, filled in with
       the name the current logic makes, and creates the playlist only on confirm.
 
+Plan, part 48b (ADR 0109, amending 0102):
+- Probe: the periods are `StatsPeriod.week`, `.month` and `.year` in Settings, whose `span`
+  is the calendar's week, month or year holding now; the reader, the `.stats` source and the
+  command line all take it from there, and their saved text (`stats:week`) stays. A saved list's
+  name takes `.year`'s from its span's first day, which a rolling year would get wrong. The
+  cards flow in `StatsFlowView` (columns of 270 points or more, so a one-column card is 270 to
+  550 wide); the totals card is 92 high, its figures one `NSStackView` row; it shares a row with
+  Plays per Day only at six columns. Save as Playlist names the list and creates it at once; the
+  name sheet for New and Rename Playlist is `askForName` in the app's `PlaylistCommands`, which
+  a feature can't reach.
+- Settings: `.week`, `.month` and `.year` span the last 7, 30 and 365 local days, today
+  included (midnight of the first to tomorrow's), titled Past Week, Past Month and Past Year.
+  Past Year's Year in Review is the year today is in, as This Year's was. The bench rows and
+  their names in the budget table say Past Week, Past Month and Past Year.
+- LibraryBrowser: a saved list's name takes a rolling period's span ("Nov 7, 2025 – Nov 6,
+  2026"). The flow gives a card marked to fill its row (the totals) the height of the row's
+  tallest card, and `StatsFigures` lays its figures out by frame: one row, or two rows of
+  columns when two fit its height. The columns' minimum goes to 300 points (300 to 610 wide).
+  `askForName` moves to LibraryBrowser, its own commit; Save as Playlist opens it over the main
+  window with the made name, and creates the playlist on its button only.
+- Tests: the spans at a date and across a daylight saving change and the year's end; a list's
+  name; the flow's frames with totals beside Plays per Day and alone; the figures' frames in one
+  row and two; the column widths over a range of widths; the sheet, its name, a changed name
+  saved, and Cancel saving nothing.
+
 #### 48c. Playback errors that explain themselves
 
 When a track can't play, the status bar shows "Playback stopped: " and the error's
