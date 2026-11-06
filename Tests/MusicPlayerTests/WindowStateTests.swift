@@ -107,3 +107,26 @@ private func horizontalSplit(_ view: NSView) -> NSSplitView? {
     #expect(widths[0] == quitWidths[0] && widths[2] == quitWidths[2])
     #expect(second.window.window.frame == frame)
 }
+
+/// A library refresh that changes nothing, as during a scan, reports the browser's state again
+/// and leaves the state file as it was.
+@MainActor @Test func aRefreshThatChangesNothingWritesNoState() async throws {
+    let fixture = try await MainWindowFixture()
+    defer { fixture.close() }
+    await fixture.browser.model.setSearch("a")
+    fixture.saver.flush()
+    let path = fixture.state.fileURL.path
+    let written = try FileManager.default.attributesOfItem(atPath: path)[.systemFileNumber]
+    var reported = 0
+    let stateChanged = fixture.browser.stateChanged
+    fixture.browser.stateChanged = {
+        reported += 1
+        stateChanged($0)
+    }
+    await fixture.browser.model.refresh()
+    fixture.saver.flush()
+    #expect(reported > 0)
+    let after = try FileManager.default.attributesOfItem(atPath: path)[.systemFileNumber]
+    // An atomic write replaces the file, so a write gives it a new file number.
+    #expect(after as? Int == written as? Int)
+}

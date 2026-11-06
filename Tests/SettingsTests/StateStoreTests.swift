@@ -83,6 +83,19 @@ private func problems(_ json: String) -> [SettingProblem] {
     #expect(try fileContents(settings).isEmpty)
 }
 
+@Test func aValueEqualToTheOneInEffectWritesNothing() throws {
+    let settings = try store()
+    try settings.set(\.flag, to: false)
+    #expect(!FileManager.default.fileExists(atPath: settings.fileURL.path))
+    try settings.set(\.count, to: 7)
+    let written = try FileManager.default.attributesOfItem(atPath: settings.fileURL.path)
+    try settings.set(\.count, to: 7)
+    try settings.set(\.flag, to: false)
+    let after = try FileManager.default.attributesOfItem(atPath: settings.fileURL.path)
+    // An atomic write replaces the file, so a write gives it a new file number.
+    #expect(after[.systemFileNumber] as? Int == written[.systemFileNumber] as? Int)
+}
+
 @Test func valuesSurviveAReload() throws {
     let settings = try store()
     let folder = WatchedFolder(

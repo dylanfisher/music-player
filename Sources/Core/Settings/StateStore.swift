@@ -57,8 +57,11 @@ public final class StateStore<Schema: SettingsSchema>: @unchecked Sendable {
     }
 
     /// Validates `value` and saves it. Setting a value back to its default removes it from the file.
-    public func set<Value>(_ setting: KeyPath<Schema, Setting<Value>>, to value: Value) throws {
-        let setting = schema[keyPath: setting]
+    /// A value equal to the one in effect writes nothing: the window reports its state at every
+    /// change, a library refresh during a scan included.
+    public func set<Value>(_ keyPath: KeyPath<Schema, Setting<Value>>, to value: Value) throws {
+        guard self[keyPath] != value else { return }
+        let setting = schema[keyPath: keyPath]
         if let reason = setting.validate(value) {
             throw SettingsError.invalid(
                 path: nil, problems: [SettingProblem(key: setting.key, reason: reason)])
