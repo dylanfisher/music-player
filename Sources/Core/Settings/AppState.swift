@@ -10,6 +10,9 @@ public struct AppState: SettingsSchema {
     /// What the window's sizes accept, in points, so the window never saves one that won't load.
     public static let sidebarWidthRange = 100...600
     public static let browserHeightRange = 0...2000
+    /// The Listening Stats panel's header and its first row of cards, the Totals, fit in the
+    /// least height.
+    public static let statsHeightRange = 130...2000
     public static let queueWidthRange = 150...1000
     public let sidebarWidth = Setting(
         "window.sidebarWidth", title: "Sidebar Width", default: 180, range: sidebarWidthRange,
@@ -21,7 +24,7 @@ public struct AppState: SettingsSchema {
             + " them.")
     public let statsHeight = Setting(
         "window.statsHeight", title: "Listening Stats Height", default: 380,
-        range: browserHeightRange,
+        range: statsHeightRange,
         "Height of the Listening Stats panel above the track table, in points.")
     public let browserVisible = Setting(
         "window.browserVisible", title: "Show Browser", default: true,

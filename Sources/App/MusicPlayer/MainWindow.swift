@@ -79,7 +79,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
             }
         }
         browser.statsHeightChanged = { height in
-            if AppState.browserHeightRange.contains(height) { saver.set(\.statsHeight, height) }
+            if AppState.statsHeightRange.contains(height) { saver.set(\.statsHeight, height) }
         }
         browser.stateChanged = { [weak self] state in
             saver.set(\.browserColumns, state.columns)

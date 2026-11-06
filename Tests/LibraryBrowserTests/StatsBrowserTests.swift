@@ -89,6 +89,90 @@ private func playedBrowser(_ saved: BrowserState = BrowserState(source: nil)) as
     return (browser, window, split, album)
 }
 
+/// Moves `split`'s first divider to `position`, measured from the top, as the user's drag
+/// does. A drag through the split's own mouse tracking works in a test, but the run ends
+/// at the next suspension, so this sets what the tracking sets around it.
+@MainActor
+func dragDivider(of split: NSSplitView, to position: CGFloat) throws {
+    let split = try #require(split as? DividerDragSplitView)
+    split.isDragging = true
+    defer { split.isDragging = false }
+    split.setPosition(position, ofDividerAt: 0)
+}
+
+/// A drag of Stats' divider is saved and stops at the panel's least height; the browser's own
+/// placing and layout passes save nothing.
+@MainActor @Test func onlyADragSavesStatsHeight() async throws {
+    let (browser, window, split, _) = try await playedBrowser()
+    window.orderFront(nil)
+    defer { window.orderOut(nil) }
+    var saved: [Int] = []
+    browser.statsHeightChanged = { saved.append($0) }
+    browser.showStats(.all)
+    try await waitFor("Stats") { browser.shownPanel === browser.statsPanel }
+    window.layoutIfNeeded()
+    let slot = split.arrangedSubviews[0]
+    try dragDivider(of: split, to: 260)
+    #expect(abs(slot.frame.height - 260) <= 1)
+    #expect(saved.last.map { abs($0 - 260) <= 1 } == true)
+    try dragDivider(of: split, to: 10)
+    let least = AppState.statsHeightRange.lowerBound
+    #expect(abs(slot.frame.height - CGFloat(least)) <= 1)
+    #expect(saved.last == least)
+    let drags = saved.count
+    browser.show(.timeline)
+    try await waitFor("the timeline") { browser.model.filter.source == .timeline }
+    window.setContentSize(NSSize(width: 900, height: 500))
+    browser.showStats(.all)
+    try await waitFor("Stats again") { browser.shownPanel === browser.statsPanel }
+    window.layoutIfNeeded()
+    #expect(saved.count == drags)
+    #expect(abs(slot.frame.height - CGFloat(least)) <= 1)
+}
+
+/// The least height holds Stats' header and the Totals card, the first row of cards.
+@MainActor @Test func statsLeastHeightHoldsTheHeaderAndTheFirstCards() async throws {
+    let (browser, window, _, _) = try await playedBrowser()
+    browser.statsHeight = AppState.statsHeightRange.lowerBound
+    browser.showStats(.all)
+    try await waitFor("Stats") { browser.shownPanel === browser.statsPanel }
+    window.layoutIfNeeded()
+    let panel = browser.statsPanel.view
+    let totals = browser.statsPanel.cards.totalsCard
+    let card = panel.convert(totals.bounds, from: totals)
+    #expect(card.minY >= 0 && card.maxY <= panel.bounds.maxY, "\(card) in \(panel.bounds)")
+}
+
+/// Stats opens at its saved height with Show Browser on or off, after a playlist, where the
+/// slot holds the columns or is hidden, and after the timeline, which hides the whole split.
+@MainActor @Test(arguments: [true, false])
+func statsKeepsItsHeightAcrossSources(browserVisible: Bool) async throws {
+    let (browser, window, split, _) = try await playedBrowser()
+    // As at launch: Show Browser is set before the window shows.
+    if browser.isBrowserVisible != browserVisible { browser.toggleBrowser() }
+    window.orderFront(nil)
+    defer { window.orderOut(nil) }
+    let playlist = try browser.index.createPlaylist(named: "Evening")
+    try await browser.model.reloadPlaylists()
+    let slot = split.arrangedSubviews[0]
+    browser.statsHeight = 320
+    for before in [BrowserSource.playlist(playlist), .timeline, .playlist(playlist)] {
+        browser.show(before)
+        try await waitFor("\(before)") { browser.model.filter.source == before }
+        window.layoutIfNeeded()
+        if before == .playlist(playlist) {
+            #expect(slot.isHidden == !browserVisible)
+            if browserVisible { #expect(abs(slot.frame.height - 150) <= 1, "\(before)") }
+        }
+        browser.showStats(.all)
+        try await waitFor("Stats after \(before)") { browser.shownPanel === browser.statsPanel }
+        window.layoutIfNeeded()
+        #expect(!slot.isHidden)
+        #expect(abs(slot.frame.height - 320) <= 1, "Stats after \(before)")
+    }
+    #expect(browser.statsHeight == 320)
+}
+
 @MainActor @Test func statsShowsItsPanelAtItsOwnHeightOverThePeriodsTracks() async throws {
     let (browser, window, split, album) = try await playedBrowser()
     let sidebar = try #require(browser.sidebar as? SidebarController)

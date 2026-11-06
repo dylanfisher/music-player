@@ -122,7 +122,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var selectionCause: SelectionHistory.Cause? = .jump
     let panes: PanesController
     let sidebarController: SidebarController
-    private let split = NSSplitView()
+    private let split = DividerDragSplitView()
     /// The split's first subview: the browser columns, or in their place the shown source's
     /// panel (ADR 0099). Hidden, with its divider, while neither shows.
     private let panelSlot = NSView()
@@ -141,10 +141,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// The panel slot's height while Stats shows, apart from the columns' (ADR 0102).
     public var statsHeight = AppState().statsHeight.defaultValue
     /// The slot's height as last placed or dragged, so a change of panel moves the divider
-    /// only when the heights differ, and set while the divider is placed, whose resizes are
-    /// the browser's, not the user's.
+    /// only when the heights differ.
     private var placedHeight: Int?
-    private var placingDivider = false
     /// The scan progress and the leading columns, the center column centered on the window,
     /// and the trailing columns and the problems button, each edge in a stack so what's hidden
     /// takes no width.
@@ -404,11 +402,18 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Lays out the panes at their saved height. Call once the window has its size.
     public func restoreSplit() {
-        placingDivider = true
-        defer { placingDivider = false }
         split.adjustSubviews()
-        split.setPosition(CGFloat(slotHeight), ofDividerAt: 0)
-        placedHeight = slotHeight
+        placeDivider(at: slotHeight)
+    }
+
+    /// Moves the divider to `height` once the split has its size: just unhidden, as after the
+    /// timeline, its bounds are still the hidden ones, and the divider placed in them ends at
+    /// 0. Records the height the slot got, which a short window can make less than asked.
+    private func placeDivider(at height: Int) {
+        split.superview?.layoutSubtreeIfNeeded()
+        split.setPosition(CGFloat(height), ofDividerAt: 0)
+        split.layoutSubtreeIfNeeded()
+        placedHeight = Int(panelSlot.frame.height.rounded())
     }
 
     /// The slot's height for what it holds: the Stats panel's own, or the columns' (which the
@@ -1774,13 +1779,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         let shows = shownPanel != nil || isBrowserVisible
         let height = slotHeight
         guard shows == panelSlot.isHidden || (shows && placedHeight != height) else { return }
-        placingDivider = true
-        defer { placingDivider = false }
         panelSlot.isHidden = !shows
         split.adjustSubviews()
         guard shows else { return }
-        split.setPosition(CGFloat(height), ofDividerAt: 0)
-        placedHeight = height
+        placeDivider(at: height)
     }
 
     /// Adds `view` to `slot`, filling it.
@@ -2113,9 +2115,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     // MARK: Split view
 
+    /// Saves the slot's height from the user's drag only.
     public func splitViewDidResizeSubviews(_ notification: Notification) {
-        guard let window = split.window, window.isVisible, !panelSlot.isHidden, !placingDivider
-        else { return }
+        guard split.isDragging, !panelSlot.isHidden else { return }
         let height = Int(split.subviews[0].frame.height.rounded())
         placedHeight = height
         if shownPanel === statsPanel {
@@ -2135,6 +2137,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     ) -> CGFloat {
         // The table keeps room for a few rows.
         min(proposedMaximumPosition, splitView.bounds.height - 120)
+    }
+
+    public func splitView(
+        _ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat,
+        ofSubviewAt dividerIndex: Int
+    ) -> CGFloat {
+        // Stats keeps its header and a row of cards; the columns can be dragged shut.
+        guard shownPanel === statsPanel else { return proposedMinimumPosition }
+        return max(proposedMinimumPosition, CGFloat(AppState.statsHeightRange.lowerBound))
     }
 
     /// A hidden pane's divider would still draw as a line over the table.

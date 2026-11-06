@@ -34,10 +34,15 @@ private func horizontalSplit(_ view: NSView) -> NSSplitView? {
     let split = try #require(first.window.window.contentView.flatMap(firstVerticalSplit))
     split.setPosition(240, ofDividerAt: 0)
     split.setPosition(split.bounds.width - 300, ofDividerAt: 1)
-    // The browser's columns taller. Stats has a height of its own, whose divider shows only
-    // with Stats, so it's reported as a drag of that divider reports it.
-    let panes = try #require(browser.content.view.subviews.lazy.compactMap(horizontalSplit).first)
+    // The browser's columns taller, by a drag: a divider placed in code saves nothing. Stats has
+    // a height of its own, whose divider shows only with Stats, so it's reported as a drag of
+    // that divider reports it.
+    let panes = try #require(
+        browser.content.view.subviews.lazy.compactMap(horizontalSplit).first
+            as? DividerDragSplitView)
+    panes.isDragging = true
     panes.setPosition(200, ofDividerAt: 0)
+    panes.isDragging = false
     browser.statsHeightChanged(300)
 
     // The table sorted by Year, newest first, and the Artist column wider.
