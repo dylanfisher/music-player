@@ -86,3 +86,18 @@ private func cells(_ row: Substring) -> [String] {
             "no row in the plan's budget table for \"\(benchmark.name)\": \(limits.map(\.text))")
     }
 }
+
+@Test func anAppThatNeverExitsIsTimedOut() throws {
+    let folder = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let app = folder.appendingPathComponent("hangs")
+    try "#!/bin/sh\nexec sleep 60\n".write(to: app, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: app.path)
+    let start = Date()
+    #expect(throws: BenchError.self) {
+        try runMeasuring(app, home: folder, [], timeoutSeconds: 1)
+    }
+    #expect(Date().timeIntervalSince(start) < 10)
+}

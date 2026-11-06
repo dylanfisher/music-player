@@ -56,7 +56,7 @@ let statsBenchmarks = [
 
 /// Waits for `body` on this thread, for a benchmark of an actor's work.
 private func blocking<T: Sendable>(_ body: @escaping @Sendable () async throws -> T) throws -> T {
-    let result = ResultBox<T>()
+    let result = LockedResult<T>()
     let done = DispatchSemaphore(value: 0)
     Task.detached {
         do {
@@ -71,7 +71,7 @@ private func blocking<T: Sendable>(_ body: @escaping @Sendable () async throws -
 }
 
 /// Hands a result from a task to the thread waiting for it.
-private final class ResultBox<T: Sendable>: @unchecked Sendable {
+final class LockedResult<T: Sendable>: @unchecked Sendable {
     // `result` is guarded by `lock`.
     private let lock = NSLock()
     private var result: Result<T, any Error>?

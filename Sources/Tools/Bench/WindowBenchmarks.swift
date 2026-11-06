@@ -123,7 +123,7 @@ func loadedModel(_ databaseURL: URL) async throws -> BrowserModel {
 /// How many times the app is launched; the launch benchmark takes the median.
 private let windowRunCount = 3
 /// The longest one run may take, scrolling included, before it counts as hung.
-private let windowRunTimeoutSeconds = 300.0
+let windowRunTimeoutSeconds = 300.0
 
 /// The app launched `windowRunCount` times against the fixture library, already indexed, each
 /// run in a fresh home folder holding a copy of the index. The copy is an APFS clone, which
@@ -289,7 +289,10 @@ private func usage(of pid: pid_t) throws -> (
 }
 
 /// Runs the app with `arguments`, one of its measurements, and returns the JSON line it prints.
-func runMeasuring(_ app: URL, home: URL, _ arguments: [String]) throws -> Data {
+func runMeasuring(
+    _ app: URL, home: URL, _ arguments: [String],
+    timeoutSeconds: Double = windowRunTimeoutSeconds
+) throws -> Data {
     let process = Process()
     process.executableURL = app
     process.arguments = ["--home", home.path] + arguments
@@ -298,11 +301,21 @@ func runMeasuring(_ app: URL, home: URL, _ arguments: [String]) throws -> Data {
     let finished = DispatchSemaphore(value: 0)
     process.terminationHandler = { _ in finished.signal() }
     try process.run()
-    let data = output.fileHandleForReading.readDataToEndOfFile()
-    if finished.wait(timeout: .now() + windowRunTimeoutSeconds) == .timedOut {
-        process.terminate()
-        throw BenchError.expected("the app to finish measuring within \(windowRunTimeoutSeconds) s")
+    // Read on another thread, so the wait below times a hung app out: reading here would block
+    // until the app closes its output, and an app that never exits never does.
+    let read = LockedResult<Data>()
+    let reader = output.fileHandleForReading
+    let readDone = DispatchSemaphore(value: 0)
+    DispatchQueue.global().async {
+        read.set(.success(reader.readDataToEndOfFile()))
+        readDone.signal()
     }
+    if finished.wait(timeout: .now() + timeoutSeconds) == .timedOut {
+        process.terminate()
+        throw BenchError.expected("the app to finish measuring within \(timeoutSeconds) s")
+    }
+    readDone.wait()
+    let data = try read.get()
     guard process.terminationStatus == 0,
         let line = String(decoding: data, as: UTF8.self).split(separator: "\n").last
     else {
