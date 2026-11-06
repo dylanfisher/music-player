@@ -27,24 +27,56 @@ private let windowLibrary = Result { () throws -> URL in
     return databaseURL
 }
 
+/// The split of the sidebar, the browser and the queue under `view`.
+func firstVerticalSplit(_ view: NSView) -> NSSplitView? {
+    if let split = view as? NSSplitView, split.isVertical { return split }
+    return view.subviews.lazy.compactMap(firstVerticalSplit).first
+}
+
+/// A copy of the fixture library in a fresh temporary folder, for a test that writes to it.
+func writableWindowLibrary() throws -> URL {
+    let source = try windowLibrary.get()
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("main-window-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let databaseURL = directory.appendingPathComponent("library.sqlite")
+    for suffix in ["", "-wal"] where FileManager.default.fileExists(atPath: source.path + suffix) {
+        try FileManager.default.copyItem(
+            atPath: source.path + suffix, toPath: databaseURL.path + suffix)
+    }
+    return databaseURL
+}
+
 /// The main window as the app builds it, with the browser, toolbar, queue and the status bar's
-/// parts, over the fixture library, its config and state in a temporary home.
+/// parts, over the fixture library or the one at `databaseURL`. Its config and state are in
+/// `home`, a temporary one of its own unless given, and it opens as they say, as a launch does.
+/// `fillsWindow` lays the sidebar, browser and queue out over the whole window, as the app does.
 @MainActor
 struct MainWindowFixture {
     let window: MainWindow
     let browser: LibraryBrowser
     let nowPlaying: NowPlayingBar
     let home: URL
+    /// Whether `home` is the fixture's own, which `close` deletes.
+    private let ownsHome: Bool
+    let settings: ConfigStore<AppSettings>
     let state: StateStore<AppState>
     let saver: LayoutSaver
 
-    init(glass: Bool = false, statusBar: BarLayout<StatusPart> = .defaultStatusBar) async throws {
-        home = FileManager.default.temporaryDirectory
+    init(
+        home: URL? = nil, databaseURL: URL? = nil, fillsWindow: Bool = false, glass: Bool = false,
+        statusBar: BarLayout<StatusPart> = .defaultStatusBar
+    ) async throws {
+        ownsHome = home == nil
+        let home =
+            home
+            ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("main-window-\(UUID().uuidString)", isDirectory: true)
+        self.home = home
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         let paths = AppPaths(home: home)
-        let databaseURL = try windowLibrary.get()
-        let settings = ConfigStore(
+        let databaseURL = try databaseURL ?? windowLibrary.get()
+        settings = ConfigStore(
             AppSettings(), fileURL: paths.configFile, check: try shortcutCheck(), creating: true)
         state = try StateStore(AppState(), fileURL: paths.stateFile)
         saver = LayoutSaver(state)
@@ -56,6 +88,7 @@ struct MainWindowFixture {
             layout: layout.trackTable, browserHeight: layout.browserHeight,
             groupByAlbumArtist: false, thumbnails: nil)
         browser.setTableAppearance(layout.tableAppearance)
+        browser.statsHeight = layout.statsHeight
         let lookup = { (path: String) in try index.track(path: path) }
         nowPlaying = NowPlayingBar(
             model: NowPlayingModel(lookup: lookup),
@@ -71,10 +104,22 @@ struct MainWindowFixture {
             settings: layout, banner: ConfigBanner().view, browser: browser, toolbar: toolbar,
             signalPath: SignalPathPanel(), queue: QueuePanel(model: QueueModel(lookup: lookup)),
             saver: saver)
+        if fillsWindow {
+            // In a test run the window's stack leaves the split at its fitting height, about
+            // one row, where the app's fills the window (`--snapshot` shows it), so the
+            // browser's panes and rows have no room. Pinned to the bottom, it lays out as the
+            // app's does.
+            guard let split = window.window.contentView.flatMap(firstVerticalSplit),
+                let item = split.superview, let stack = item.superview
+            else { preconditionFailure("the main window has no split in a stack") }
+            item.bottomAnchor.constraint(equalTo: stack.bottomAnchor).isActive = true
+            window.window.layoutIfNeeded()
+            browser.restoreSplit()
+        }
         window.showTitles(of: nowPlaying, layout.windowTitle)
         setLayout(statusBar)
         window.window.orderFront(nil)
-        await browser.load(BrowserState(source: nil))
+        await browser.load(layout.browser, resume: layout.resume)
         window.window.layoutIfNeeded()
     }
 
@@ -150,7 +195,7 @@ struct MainWindowFixture {
 
     func close() {
         window.window.close()
-        try? FileManager.default.removeItem(at: home)
+        if ownsHome { try? FileManager.default.removeItem(at: home) }
     }
 }
 
