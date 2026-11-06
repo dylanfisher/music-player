@@ -62,9 +62,13 @@ extension CommandID {
     public static let showStats = CommandID("library.stats")
     public static let showYearInReview = CommandID("library.yearInReview")
     public static let rescanNow = CommandID("library.rescanNow")
-    /// Analyzes every file not analyzed yet, or changed since, until paused (ADR 0116).
+    /// Analyzes every file not analyzed yet, or changed since, until paused (ADR 0116); once
+    /// every file was tried, the whole library again (ADR 0119).
     public static let analyzeLibrary = CommandID("library.analyzeLibrary")
     public static let pauseLibraryAnalysis = CommandID("library.pauseAnalysis")
+    /// Holds the running scan until Resume Scan, whatever playback does (ADR 0119).
+    public static let pauseScan = CommandID("library.pauseScan")
+    public static let resumeScan = CommandID("library.resumeScan")
     public static let resolveLostStats = CommandID("library.resolveLostStats")
     public static let restoreRemoved = CommandID("library.restoreRemoved")
     public static let revealInFinder = CommandID("track.revealInFinder")
@@ -169,6 +173,8 @@ public enum AppCommands {
     public static let seekStepMinimumSeconds = 30
     /// Show Listening Stats' argument, as `StatsPeriod(text:)` reads it.
     private static let statsPeriodArgument = StatsPeriod.textHelp
+    /// Analyze Library's title once every file was tried, when it reads them all again.
+    public static let analyzeLibraryAgainTitle = "Analyze Library Again…"
 
     /// The commands written here, without the ones generated from settings.
     static let fixedSet: [Command] =
@@ -233,6 +239,8 @@ public enum AppCommands {
             // Not from links either: it reads every file on the NAS.
             Command(.analyzeLibrary, "Analyze Library"),
             Command(.pauseLibraryAnalysis, "Pause Library Analysis"),
+            Command(.pauseScan, "Pause Scan"),
+            Command(.resumeScan, "Resume Scan"),
             Command(.resolveLostStats, "Resolve Lost Stats…"),
             Command(.restoreRemoved, "Restore Removed Tracks…"),
             Command(

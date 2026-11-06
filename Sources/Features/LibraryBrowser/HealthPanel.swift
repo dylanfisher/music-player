@@ -1,4 +1,6 @@
+import Analysis
 import AppKit
+import Commands
 import DisplayText
 import Library
 import Settings
@@ -19,8 +21,17 @@ final class HealthPanel: NSViewController, SourcePanel {
     /// A tile clicked, and Check Again.
     var select: (HealthCheck) -> Void = { _ in }
     var checkAgain: () -> Void = {}
+    /// The analysis line's button: Pause Library Analysis, or Analyze Library.
+    var runCommand: (CommandID) -> Void = { _ in }
     private(set) var tiles: [HealthCheck: HealthTile] = [:]
     let statusLabel = NSTextField(labelWithString: "")
+    /// Analyze Library's line (ADR 0119): its bar, what it says with the file under way, and a
+    /// button that pauses it or starts it.
+    let analysisBar = NSProgressIndicator()
+    let analysisLabel = NSTextField(labelWithString: "")
+    let analysisButton = NSButton()
+    /// The command the analysis button runs now.
+    private(set) var analysisCommand = CommandID.analyzeLibrary
     private let flow = TileFlowView()
     /// The check listed below, which its tile shows highlighted.
     private(set) var shownCheck: HealthCheck?
@@ -42,6 +53,7 @@ final class HealthPanel: NSViewController, SourcePanel {
         let header = NSStackView(views: [title, statusLabel, spacer, again])
         header.alignment = .firstBaseline
         header.spacing = Self.spacingPoints
+        let analysis = analysisLine()
 
         for check in HealthCheck.allCases {
             let tile = HealthTile(check: check)
@@ -54,7 +66,7 @@ final class HealthPanel: NSViewController, SourcePanel {
         // No background of its own: the window's, or its glass, shows around the tiles, so the
         // panel reads apart from the table's rows.
         let panel = NSView()
-        for view in [header, scroll] {
+        for view in [header, analysis, scroll] {
             view.translatesAutoresizingMaskIntoConstraints = false
             panel.addSubview(view)
         }
@@ -63,14 +75,61 @@ final class HealthPanel: NSViewController, SourcePanel {
             header.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: inset),
             header.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -inset),
             header.topAnchor.constraint(equalTo: panel.topAnchor, constant: inset - 4),
+            analysis.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            analysis.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            analysis.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 4),
             scroll.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: panel.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 4),
+            scroll.topAnchor.constraint(equalTo: analysis.bottomAnchor, constant: 4),
             scroll.bottomAnchor.constraint(equalTo: panel.bottomAnchor),
         ])
         view = panel
         show(report: nil, checkedAt: nil, running: false)
+        showAnalysis(nil, analyzeTitle: AppCommands.title(of: .analyzeLibrary))
     }
+
+    /// The bar, the text and the button of Analyze Library's line.
+    private func analysisLine() -> NSStackView {
+        analysisBar.style = .bar
+        analysisBar.controlSize = .small
+        analysisBar.isIndeterminate = false
+        analysisBar.minValue = 0
+        analysisBar.maxValue = 1
+        analysisBar.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        analysisLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        analysisLabel.textColor = .secondaryLabelColor
+        analysisLabel.lineBreakMode = .byTruncatingMiddle
+        analysisLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        analysisButton.bezelStyle = .rounded
+        analysisButton.controlSize = .small
+        analysisButton.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        analysisButton.target = self
+        analysisButton.action = #selector(analysisClicked)
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let line = NSStackView(views: [analysisBar, analysisLabel, analysisButton, spacer])
+        line.alignment = .centerY
+        line.spacing = Self.spacingPoints
+        line.detachesHiddenViews = true
+        return line
+    }
+
+    /// Shows where Analyze Library is: running, with Pause; paused, with `analyzeTitle` to carry
+    /// on; or, nil, the button alone.
+    func showAnalysis(_ progress: LibraryAnalysis.Progress?, analyzeTitle: String) {
+        _ = view
+        let running = [.analyzing, .waitingForScan].contains(progress?.stage)
+        analysisBar.isHidden = progress == nil
+        analysisBar.doubleValue = progress?.fraction ?? 0
+        analysisLabel.isHidden = progress == nil
+        analysisLabel.stringValue =
+            ([progress?.text] + [running ? progress?.file : nil]).compactMap { $0 }
+            .joined(separator: " · ")
+        analysisCommand = running ? .pauseLibraryAnalysis : .analyzeLibrary
+        analysisButton.title = running ? AppCommands.title(of: analysisCommand) : analyzeTitle
+    }
+
+    @objc private func analysisClicked() { runCommand(analysisCommand) }
 
     /// Shows the report's counts, or a dash for each before there is one, and when it ran.
     func show(report: HealthReport?, checkedAt: Date?, running: Bool) {

@@ -46,6 +46,15 @@ extension AppDelegate {
             .rescanNow, enabled: { [weak self] in self?.watcher != nil },
             run: { [weak self] in self?.watcher?.rescanNow() })
         dispatcher.handle(
+            .pauseScan,
+            enabled: { [weak self] in
+                self?.browser?.showsScan == true && self?.browser?.scanIsPaused == false
+            },
+            run: { [weak self] in self?.watcher?.pauseScan() })
+        dispatcher.handle(
+            .resumeScan, enabled: { [weak self] in self?.browser?.scanIsPaused == true },
+            run: { [weak self] in self?.watcher?.resumeScan() })
+        dispatcher.handle(
             .resolveLostStats,
             enabled: { [weak self] in
                 self?.window != nil && self?.browser?.canResolveLostStats == true

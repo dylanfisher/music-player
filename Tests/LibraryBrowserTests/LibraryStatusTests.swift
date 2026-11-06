@@ -51,6 +51,32 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
     #expect(!status.isScanning && status.scanText == nil)
 }
 
+/// A scan Pause Scan holds says so, and Analyze Library doesn't wait for it, since it reads
+/// nothing; Resume Scan or its end clears the pause (ADR 0119).
+@Test func aPausedScanSaysSoAndAnalysisDoesntWaitForIt() {
+    var status = LibraryStatus()
+    var progress = ScanProgress()
+    progress.stage = .reading
+    progress.read = 300
+    progress.toRead = 1200
+    status.apply(.scanning(folder: "/Volumes/music/library", progress))
+    status.savingText = "Saving tags: 3 of 20"
+    status.apply(.scanPaused(folder: "/Volumes/music/library", true))
+    #expect(status.scanText == "Scan paused: library: 300 of 1,200 read")
+    #expect(
+        status.scanAndSaveText == "Scan paused: library: 300 of 1,200 read · Saving tags: 3 of 20")
+    #expect(status.scanIsPaused && !status.isScanning)
+    status.apply(.scanPaused(folder: "/Volumes/music/library", false))
+    #expect(status.scanText == "Scanning library: 300 of 1,200 read" && status.isScanning)
+
+    // Paused before its first progress, it shows; its end clears the pause.
+    status.apply(.scanned(folder: "/Volumes/music/library", ScanSummary()))
+    status.apply(.scanPaused(folder: "/Volumes/music/other", true))
+    #expect(status.scanText == "Scan paused: other: 0 files checked")
+    status.apply(.scanFailed(folder: "/Volumes/music/other", reason: "gone"))
+    #expect(!status.scanIsPaused && status.scanText == nil)
+}
+
 @Test func statusShowsTracksScansAndProblemsApart() {
     var status = LibraryStatus()
     #expect(

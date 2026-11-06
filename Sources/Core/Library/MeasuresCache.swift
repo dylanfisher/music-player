@@ -15,10 +15,23 @@ public actor MeasuresCache {
         try index.measures(path: path, stamp: stamp)
     }
 
-    /// The tracks' files Analyze Library has still to analyze, with the index's stamp for each:
-    /// those with no measures, or whose file changed since.
-    public func filesToAnalyze() throws -> [(path: String, stamp: FileStamp)] {
-        try index.filesToAnalyze()
+    /// What Analyze Library has done and has left: the files with no measures, or whose file
+    /// changed since, or measured before a run again started (ADR 0119).
+    public func analysisFiles() throws -> AnalysisFiles {
+        try index.analysisFiles()
+    }
+
+    /// Starts a run, `again` over every file, or else over what's left.
+    public func beginRun(again: Bool) throws {
+        try index.beginAnalysisRun(again: again)
+    }
+
+    public func finishRun() throws {
+        try index.finishAnalysisRun()
+    }
+
+    public func recordFailure(path: String, stamp: FileStamp) throws {
+        try index.recordAnalysisFailure(path: path, stamp: stamp)
     }
 
     public func store(_ measures: FileMeasures, path: String, stamp: FileStamp) throws {

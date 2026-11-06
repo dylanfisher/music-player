@@ -193,6 +193,26 @@ public final class LibraryWatcher: @unchecked Sendable {
         }
     }
 
+    /// Pause Scan: the running scan stops before its next directory or file until `resumeScan`,
+    /// whatever playback does, and other scans wait behind it. Nothing happens while none runs.
+    public func pauseScan() {
+        queue.async { [self] in
+            guard let path = state?.pauseRunningScan() else { return }
+            events(.scanPaused(folder: path, true))
+            advance()
+        }
+    }
+
+    /// Resume Scan: the scan paused by `pauseScan` goes on from where it was, unless playback
+    /// holds it.
+    public func resumeScan() {
+        queue.async { [self] in
+            guard let path = state?.resumeRunningScan() else { return }
+            events(.scanPaused(folder: path, false))
+            advance()
+        }
+    }
+
     /// The playback engine's hook. While playback is starting no network scan starts, and a
     /// running one pauses; while playing, the same holds if `library.pausePollingDuringPlayback`
     /// is on.

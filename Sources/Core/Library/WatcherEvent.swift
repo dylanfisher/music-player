@@ -6,6 +6,9 @@ public enum WatcherEvent: Sendable {
     /// A scan of the watched folder at this path is under way and may have stored rows. Sent at
     /// most once per `LibraryWatcher.progressIntervalSeconds`.
     case scanning(folder: String, ScanProgress)
+    /// Pause Scan held the running scan of the watched folder at this path, or, false, Resume
+    /// Scan let it go on. Its `scanned` or `scanFailed` ends the pause too.
+    case scanPaused(folder: String, Bool)
     case scanned(folder: String, ScanSummary)
     /// Files the tag editor wrote were read again and stored (`LibraryWatcher.rescan(files:)`).
     case edited(ScanSummary)

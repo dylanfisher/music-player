@@ -56,6 +56,9 @@ struct WatchState {
     private(set) var leftToTheIndex: [String] = []
     /// The folders, by path, whose scan at start hasn't ended yet.
     private var launchPending: Set<String> = []
+    /// Set by Pause Scan until Resume Scan or the running scan's end (ADR 0119): the scan waits
+    /// whatever playback does.
+    private(set) var pausedByUser = false
 
     /// `indexed` is the network folders, by path, whose last whole scan finished. Unless
     /// `rescanNetworkFoldersAtLaunch`, those show what the index holds until their first poll,
@@ -178,9 +181,26 @@ struct WatchState {
         }
     }
 
-    /// Whether the running scan has to wait for playback.
+    /// Pause Scan: holds the running scan until `resumeRunningScan` or its end, and returns its
+    /// folder's path; nil when no scan runs.
+    mutating func pauseRunningScan() -> String? {
+        guard let running else { return nil }
+        pausedByUser = true
+        return running.folder.path
+    }
+
+    /// Resume Scan: lets the running scan go on, unless playback holds it, and returns its
+    /// folder's path; nil when no scan runs or it wasn't paused.
+    mutating func resumeRunningScan() -> String? {
+        guard let running, pausedByUser else { return nil }
+        pausedByUser = false
+        return running.folder.path
+    }
+
+    /// Whether the running scan has to wait, for the user's pause or for playback.
     var holdsRunningScan: Bool {
         guard let running else { return false }
+        if pausedByUser { return true }
         guard running.folder.kind == .network else { return false }
         return activity == .starting || (!running.ignoresPlaybackPause && !pollsAllowed)
     }
@@ -234,6 +254,7 @@ struct WatchState {
     mutating func finished(now: Date) {
         guard let job = running else { preconditionFailure("no scan is running") }
         running = nil
+        pausedByUser = false
         if job.subtrees.isEmpty { launchPending.remove(job.folder.path) }
         failuresInARow[job.folder.path] = nil
         if job.folder.kind == .network {
@@ -255,6 +276,7 @@ struct WatchState {
         let failures = (failuresInARow[path] ?? 0) + 1
         if job.folder.kind == .local {
             running = nil
+            pausedByUser = false
             if job.subtrees.isEmpty { launchPending.remove(path) }
             let wait = min(
                 Self.failedScanRetrySeconds * pow(2, Double(failures - 1)), Self.longestRetrySeconds

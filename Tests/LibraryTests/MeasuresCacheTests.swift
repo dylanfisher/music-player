@@ -49,7 +49,7 @@ private let silent = FileMeasures(
     let analyzable = rows.filter { !["dsf", "dff"].contains($0.fileType.lowercased()) }
     #expect(analyzable.count < rows.count)
     let cache = try MeasuresCache(databaseURL: library.databaseURL)
-    let before = try await cache.filesToAnalyze()
+    let before = try await cache.analysisFiles().pending
     #expect(before.map(\.path) == analyzable.map(\.path).sorted())
     #expect(
         before.map(\.stamp)
@@ -62,7 +62,7 @@ private let silent = FileMeasures(
     var older = before[1].stamp
     older.sizeBytes += 1
     try await cache.store(measured, path: before[1].path, stamp: older)
-    #expect(try await cache.filesToAnalyze().map(\.path) == before.dropFirst().map(\.path))
+    #expect(try await cache.analysisFiles().pending.map(\.path) == before.dropFirst().map(\.path))
 }
 
 @Test func measuresRebuiltOnTheirOwnKeepTheStatsAndReportNothing() throws {
@@ -85,4 +85,69 @@ private let silent = FileMeasures(
     try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'index'")
 
     #expect(try library.index().measures(path: "/x.flac", stamp: stamp) == measured)
+}
+
+/// A run again counts the files measured before it as not done, keeps their measures until
+/// new ones are stored, and carries on from where it got to on a new connection, as after a
+/// relaunch.
+@Test func aRunAgainListsTheFilesMeasuredBeforeItAndCarriesOnAfterARelaunch() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let files = try index.analysisFiles().pending
+    let earlier = Date(timeIntervalSince1970: 1_000)
+    for file in files {
+        try index.storeMeasures(measured, path: file.path, stamp: file.stamp, now: earlier)
+    }
+    try index.beginAnalysisRun(again: false)
+    try index.finishAnalysisRun()
+    var done = try index.analysisFiles()
+    #expect(done.pending.isEmpty && done.done == files.count && !done.unfinished)
+
+    try index.beginAnalysisRun(again: true, now: Date(timeIntervalSince1970: 2_000))
+    var again = try index.analysisFiles()
+    #expect(again.pending.map(\.path) == files.map(\.path))
+    #expect(again.done == 0 && again.unfinished)
+    #expect(try index.measures(path: files[0].path, stamp: files[0].stamp) == measured)
+    try index.storeMeasures(
+        silent, path: files[0].path, stamp: files[0].stamp,
+        now: Date(timeIntervalSince1970: 3_000))
+
+    let relaunched = try library.index()
+    again = try relaunched.analysisFiles()
+    #expect(again.pending.map(\.path) == files.dropFirst().map(\.path))
+    #expect(again.done == 1 && again.total == files.count && again.unfinished)
+    // Carrying on keeps the run's start.
+    try relaunched.beginAnalysisRun(again: false)
+    #expect(try relaunched.analysisFiles().pending.count == files.count - 1)
+    for file in files.dropFirst() {
+        try relaunched.recordAnalysisFailure(path: file.path, stamp: file.stamp)
+    }
+    try relaunched.finishAnalysisRun()
+    done = try relaunched.analysisFiles()
+    #expect(done.failed == files.count - 1 && !done.unfinished)
+    // The next run tries the failures again.
+    try relaunched.beginAnalysisRun(again: false)
+    #expect(try relaunched.analysisFiles().failed == 0)
+}
+
+/// Measures stored before the run's tables were added count as done, so the owner's library
+/// isn't read again.
+@Test func measuresFromBeforeTheRunsTablesCountAsDone() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let files = try index.analysisFiles().pending
+    for file in files { try index.storeMeasures(measured, path: file.path, stamp: file.stamp) }
+    try index.database.execute(
+        """
+        DROP TABLE \(analysisRunTable); DROP TABLE \(measuredAtTable);
+        DROP TABLE \(analysisFailuresTable);
+        DELETE FROM schema_identity WHERE part = '\(SchemaPart.analysisRun.rawValue)'
+        """)
+
+    let added = try library.index()
+    let after = try added.analysisFiles()
+    #expect(after.pending.isEmpty && after.done == files.count && !after.unfinished)
+    #expect(try added.discards().isEmpty)
 }

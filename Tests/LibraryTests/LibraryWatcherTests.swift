@@ -142,6 +142,16 @@ private final class LockedEvents: @unchecked Sendable {
         }
     }
 
+    /// Each Pause Scan, true, and Resume Scan, false, in order.
+    var paused: [Bool] {
+        lock.withLock {
+            events.compactMap { event in
+                guard case .scanPaused(_, let paused) = event else { return nil }
+                return paused
+            }
+        }
+    }
+
     var kept: [String] {
         lock.withLock {
             events.compactMap { event in
@@ -518,4 +528,41 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     #expect(received.kept.isEmpty)
     #expect(try library.index().trackCount() == library.readableCount)
     #expect(received.launchesEnded == 1)
+}
+
+/// Pause Scan holds a running scan through playback stopping, which resumes a scan paused for
+/// playback; Resume Scan lets it finish from where it was.
+@Test func aScanPausedByTheUserStaysPausedUntilResumed() async throws {
+    let library = try TestLibrary()
+    let access = GatedAccess(readsBeforeGate: 20)
+    let received = LockedEvents()
+    let watcher = LibraryWatcher(
+        scanner: LibraryScanner(
+            databaseURL: library.databaseURL, networkReaders: 4, access: access, batchSize: 1),
+        mounts: FakeMounts(), events: received.append)
+    watcher.start(
+        folders: [WatchedFolder(path: library.root, kind: .network)],
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
+    defer { watcher.stop() }
+    #expect(try await eventually(within: 20) { access.isHeld })
+
+    watcher.pauseScan()
+    #expect(try await eventually(within: 20) { received.paused == [true] })
+    watcher.playbackChanged(.playing, pausePollingDuringPlayback: true)
+    watcher.playbackChanged(.stopped, pausePollingDuringPlayback: true)
+    access.open()
+    // The files being read when it paused are stored; then nothing more.
+    try await Task.sleep(nanoseconds: 500_000_000)
+    let index = try library.index()
+    let paused = try index.trackCount()
+    try await Task.sleep(nanoseconds: 1_500_000_000)
+    #expect(try index.trackCount() == paused)
+    #expect(paused < library.readableCount)
+    #expect(received.scanned.isEmpty)
+
+    watcher.resumeScan()
+    #expect(try await eventually(within: 30) { received.scanned.count == 1 })
+    #expect(received.paused == [true, false])
+    #expect(try index.trackCount() == library.readableCount)
+    #expect(received.scanned.first?.1.read == library.manifest.files.count)
 }

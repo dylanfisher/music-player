@@ -236,7 +236,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | The same on the slow simulated NAS: 23 ms to open, 10 ms a 1 MB block (phase 45a); the old Mac figure is an estimate until its checkpoint | < 6 s | < 20 s |
 | Memory that analysis adds at its peak (phase 45a) | < 10 MB | < 10 MB |
 | The second of two search keystrokes 50 ms apart, as above, while Analyze Library runs over every fixture file and the browser refreshes every 2 s (p95; phase 45b); the old Mac figure is an estimate until its checkpoint | < 20 ms | < 80 ms |
-| Analyze Library over 200 fixture files on the slow simulated NAS, at background priority (phase 45b); the old Mac figure is an estimate until its checkpoint | < 15 s | < 40 s |
+| Analyze Library over 200 fixture files on the slow simulated NAS, two to four files at once at utility priority (phase 45b, 50c); the old Mac figure is an estimate until its checkpoint | < 15 s | < 40 s |
 
 ## Phases
 
@@ -443,26 +443,26 @@ errors and device names, and paths only as `<mask.hash: …>`.
 
 #### 50c. Analyze Library and Scan Library
 
-- [ ] **50c.1 Two to four files at once.** The pass analyzes `min(4, max(2,
+- [x] **50c.1 Two to four files at once.** The pass analyzes `min(4, max(2,
       activeProcessorCount / 2))` files at once, 2 on the 2015 MacBook Pro, as a sliding task
       group (Spectrum's `filesAtOnce` loop is the pattern); only the pass's actor counts and
       reports. Pause cancels every file under way, and each is read again next run; each file
       is still read once per run. Files are still started in path order.
-- [ ] **50c.2 Utility priority.** Each file is decoded at `.utility`, not `.background`. Bench
+- [x] **50c.2 Utility priority.** Each file is decoded at `.utility`, not `.background`. Bench
       rows rename "at background priority"; the 200-file row is measured again (the owner's
       guess: 2 to 3 times faster on the NAS).
-- [ ] **50c.3 Progress in Library Health.** While the pass runs, Library Health shows a
+- [x] **50c.3 Progress in Library Health.** While the pass runs, Library Health shows a
       progress bar with "Analyzing library: 1,240 of 43,368" and the file under way (the
       newest started, its name only), and a Pause button beside it; paused, it shows Analyze
       Library to carry on. The status bar shows the same Pause button beside its bar. Detail
       comes from what the pass already knows, reported at most a few times a second; no new
       reads.
-- [ ] **50c.4 Carry on after a quit.** A run already skips measured files; what's missing is
+- [x] **50c.4 Carry on after a quit.** A run already skips measured files; what's missing is
       the count. The count is over the whole pass, not what's left: "1,240 of 43,368" after a
       relaunch, the measured files counted as done. After a relaunch with a pass unfinished,
       Library Health says "Library analysis paused: 1,240 of 43,368" and its Analyze Library
       button carries on.
-- [ ] **50c.5 Start over once done.** Once every file is measured, Analyze Library reads
+- [x] **50c.5 Start over once done.** Once every file is measured, Analyze Library reads
       "Analyze Library Again" in the menu and Library Health, and asks first, since it reads
       every file again. A run again keeps the measures it replaces until each file's new ones
       are stored, and resumes after a quit the same way: the index records the time the run
@@ -470,7 +470,7 @@ errors and device names, and paths only as `<mask.hash: …>`.
       its start. Stored data has one shape: if the measures table changes, how the owner's
       existing measures are kept, or why they can't be, goes in the ADR; prefer a side table
       over a change that discards them.
-- [ ] **50c.6 Pause Scan Library.** A Pause button beside the scan's bar in the status bar,
+- [x] **50c.6 Pause Scan Library.** A Pause button beside the scan's bar in the status bar,
       and wherever scan progress shows (Settings > Folders), pauses the running scan with
       `ScanControl.pause()`, which already exists; Resume carries on where it was. A
       user's pause is held in `WatchState` so the watcher's own `resume()` calls don't undo
@@ -478,7 +478,91 @@ errors and device names, and paths only as `<mask.hash: …>`.
       scans wait behind it as now, and Analyze Library doesn't wait for it (a paused scan
       reads nothing). A pause doesn't outlast a quit; the next launch scans as usual. Tests in
       `WatchState` and the watcher.
-- [ ] Amend ADR 0116 with ADR 0119.
+- [x] Amend ADR 0116 with ADR 0119.
+
+Plan, part 50c (ADR 0119, amending 0116):
+
+1. **Files at once, utility priority (50c.1, 50c.2).** `LibraryAnalysis.filesAtOnce` is
+   `min(4, max(2, activeProcessorCount / 2))`. The pass starts files in path order into a task
+   group, at most that many under way, each child decoding at `.utility` and storing its own
+   measures (the three tries stay); only the actor counts and reports. Pause cancels the run,
+   so every child. Bench rows rename "at background priority" to "two to four files at once".
+   Tests: no more than `filesAtOnce` under way, every file started in path order, a pause
+   with several under way reads each again next run and none twice in a run.
+2. **The count over the whole pass, run again (50c.4, 50c.5).** A new schema part,
+   `analysisRun`, beside `measures`, so the measures table and the owner's rows stay as they
+   are: `analysis_run` (one row: when the run that's going or last went started, and whether
+   it finished), `measured_at` (the time each measures row was stored, by path), and
+   `analysis_failures` (the files the last run couldn't analyze, with their stamps). A file is
+   done for the pass when it has current measures stored at or after the run's start; rows
+   from before this part count as made at 0, so the owner's measures are done. `MeasuresCache`
+   gains `analysisFiles()` (pending files in path order, the done count, the last run's
+   failures still pending, and whether a run is unfinished), `beginRun(again:)` and
+   `finishRun()`. `Progress.analyzed` and `total` count the whole pass. `start(again:)`;
+   `standing()` says, while no run goes, whether a run is unfinished and whether every file
+   was tried. Tests: a relaunch counting from what's stored, a run again listing every file
+   and resuming after a relaunch, keeping the measures it replaces until each is stored, and
+   the owner's rows from before the part counting as done.
+3. **What the pass reports (50c.3).** `Progress.file`: the name of the newest file started.
+   Counts are reported at most every `reportIntervalSeconds` (0.25 s); a change of stage and
+   the end always. A run with nothing to do reports only its end, so no "0 of 0".
+4. **Pause Scan (50c.6).** `WatchState.pauseRunningScan()`/`resumeRunningScan()`; a user's
+   pause makes `holdsRunningScan` true until Resume or the scan's end. The watcher's
+   `pauseScan()`/`resumeScan()` send `.scanPaused(folder:, Bool)`. `LibraryStatus` keeps the
+   paused folder: "Scan paused: Music: 300 of 1,200 read", and `isScanning` leaves it out, so
+   Analyze Library goes on. Commands `library.pauseScan` "Pause Scan" and
+   `library.resumeScan` "Resume Scan" after Rescan All. Settings > Folders shows no scan
+   progress, so the status bar is the only place. Tests: `WatchState`, the watcher holding a
+   paused scan through a playback stop, `LibraryStatus`.
+5. **Status bar and Library Health (50c.3–50c.5).** The activity line splits: the scans and a
+   save, then a small borderless pause or play button for the scan, then Analyze Library's
+   text and its own button; each button runs a command through the browser's `runCommand`,
+   so the menu, palette and buttons agree. Library Health's header gains the analysis line:
+   a bar, "Analyzing library: 1,240 of 43,368 · name.flac" and Pause while it runs; paused,
+   "Library analysis paused: …" and Analyze Library; idle, the button alone, reading "Analyze
+   Library Again…" once every file was tried. The menu and palette title follow it through a
+   dispatcher `title` hook. Again asks first. At launch the app asks the pass's standing and
+   shows a paused run as paused.
+6. **Bench.** The 200-file row and the search during the pass, before and after, under the
+   load of the other parts' agents.
+
+Gate, part 50c: no separate reviewer pass was run for this part; the implementer reviewed its
+own diff. `./scripts/check` passes clean on the last commit; earlier runs under the other
+parts' load failed renderer tests that lost their port to another run ("Address already in
+use") and a Settings color test, each passing alone and on the rerun. Two dupes findings fixed in the commits that caused them: the failures table's `DELETE FROM`
+and the confirmation's "Cancel", both allowlisted as different facts.
+
+Result, part 50c: shipped as planned (ADR 0119, amending 0116). Analyze Library runs
+`min(4, max(2, cores / 2))` files at once at utility priority, 4 here and 2 on the 2015
+MacBook Pro, started in path order; Pause cancels every file under way. A new schema part,
+`analysisRun` (the run's start and whether it finished, when each measures row was stored, the
+run's failures), leaves `measures` as it was, so the owner's measures count as done. The count
+is over the whole pass and survives a relaunch, which shows the run as "Library analysis
+paused: N of M"; a run with nothing to do shows no "0 of 0". Once every file was tried, the
+menu, the palette and Library Health read "Analyze Library Again…", which asks first and keeps
+each file's measures until its new ones are stored. Library Health shows the bar, the count,
+the file under way and Pause or Analyze Library; the status bar has a small pause/play button
+after the scans' text and after Analyze Library's. Pause Scan and Resume Scan (File menu after
+the analysis commands, the palette, `music-player pauseScan` / `resumeScan`) hold the running
+scan in `WatchState` through playback changes; "Scan paused: …", and Analyze Library doesn't
+wait for it. Settings > Watched Folders shows no scan progress, so the status bar is the only
+place for the button. Bench, Apple Silicon, with three other agents building and testing:
+200 fixture files on the slow simulated NAS, 9.38 s before (load 10–12) and 2.11 s and 2.09 s
+after (load 4–5), 10 ms a file against 47; budget < 15 s, < 40 s on the old Mac, kept until its
+checkpoint. The second search keystroke during the pass, 15.46 ms p95 before, 15.51 and
+16.77 ms after (slowest 34 ms in the second run), within the 20 ms budget. Tests: files at once
+and in path order, a pause with several under way, the whole count and a run again across a
+relaunch, the owner's rows counting as done, throttled reports, `WatchState` and the watcher
+holding a user's pause through playback stopping, the status text, the buttons and Library
+Health's line, the dispatcher's title hook. Owner checkpoint: on the DAC Mac, with the real
+library, choose File > Analyze Library and check that the files already measured count as
+done ("N of 43,368" starts near where it stopped), the time to the end, and whether playback
+or the window stutter with four files at once; open Library Health during the run (bar, file
+name, Pause), pause and quit, relaunch and see "Library analysis paused" there and in the
+status bar, and carry on; once done, check the menu reads "Analyze Library Again…" and asks;
+during a scan of the NAS, click the status bar's pause button, start and stop a track, and
+check the scan stays paused until Resume. Then the 2015 MacBook Pro: the same run, two files at
+once, while playing.
 
 #### 50d. Spectrum window
 

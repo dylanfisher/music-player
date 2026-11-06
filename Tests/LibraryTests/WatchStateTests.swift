@@ -404,3 +404,30 @@ private struct FakeEngine {
     state.finished(now: minutes(100_000))
     #expect(state.nextPoll(after: minutes(100_000)) == nil)
 }
+
+/// Pause Scan holds the running scan whatever playback does, until Resume Scan or the scan's
+/// end; other scans wait behind it, and the next scan starts unpaused.
+@Test func aScanPausedByTheUserWaitsUntilResumedWhateverPlaybackDoes() {
+    var state = WatchState(
+        folders: [local, nas], indexed: [], rescanNetworkFoldersAtLaunch: false,
+        pausePollingDuringPlayback: true, now: start)
+    #expect(state.pauseRunningScan() == nil, "no scan runs")
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: []))
+    #expect(state.pauseRunningScan() == local.path)
+    #expect(state.holdsRunningScan, "a local scan too")
+    let engine = FakeEngine(pausePollingDuringPlayback: true)
+    engine.report(.playing, to: &state)
+    engine.report(.stopped, to: &state)
+    #expect(state.holdsRunningScan, "playback stopping doesn't resume it")
+    state.directoriesChanged([local.path + "/Album"])
+    #expect(state.start(now: start) == nil, "other scans wait behind it")
+    #expect(state.resumeRunningScan() == local.path)
+    #expect(!state.holdsRunningScan)
+    #expect(state.resumeRunningScan() == nil, "it isn't paused")
+
+    #expect(state.pauseRunningScan() == local.path)
+    state.finished(now: start)
+    #expect(!state.pausedByUser)
+    #expect(state.start(now: start) == WatchJob(folder: local, subtrees: [local.path + "/Album"]))
+    #expect(!state.holdsRunningScan, "the pause ended with its scan")
+}

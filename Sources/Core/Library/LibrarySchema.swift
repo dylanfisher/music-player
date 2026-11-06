@@ -42,6 +42,10 @@ enum SchemaPart: String, CaseIterable {
     /// modification time. A cache: rebuilding it discards nothing a new analysis can't measure
     /// again.
     case measures
+    /// Analyze Library's run and when each measures row was made, which tell a run what it has
+    /// done (ADR 0119). A part of its own beside `measures`, so adding it kept the measures
+    /// already made, and a cache as they are.
+    case analysisRun
 
     var sql: String {
         switch self {
@@ -57,6 +61,7 @@ enum SchemaPart: String, CaseIterable {
         case .recorded: recordedSchema
         case .dismissed: dismissedSchema
         case .measures: measuresSchema
+        case .analysisRun: analysisRunSchema
         }
     }
 
@@ -81,6 +86,7 @@ enum SchemaPart: String, CaseIterable {
         case .recorded: [recordedTable]
         case .dismissed: [dismissedProblemsTable]
         case .measures: [measuresTable]
+        case .analysisRun: [analysisRunTable, measuredAtTable, analysisFailuresTable]
         }
     }
 }
@@ -104,6 +110,9 @@ let removedTable = "removed"
 let recordedTable = "recorded_paths"
 let dismissedProblemsTable = "dismissed_problems"
 let measuresTable = "measures"
+let analysisRunTable = "analysis_run"
+let measuredAtTable = "measured_at"
+let analysisFailuresTable = "analysis_failures"
 let shareRootsTable = "share_roots"
 let importedPlaysTable = "imported_plays"
 let importedLastPlaysTable = "imported_last_plays"
@@ -348,6 +357,29 @@ private let measuresSchema = """
         true_peak_dbtp REAL,
         clipped_runs INTEGER NOT NULL,
         dynamic_range INTEGER
+    ) WITHOUT ROWID;
+    """
+
+private let analysisRunSchema = """
+    -- Analyze Library's run going, or the last one: when it started, in seconds since 1970,
+    -- and 1 once it went through every file it listed. No row before the first run.
+    CREATE TABLE \(analysisRunTable) (
+        one INTEGER PRIMARY KEY CHECK (one = 1),
+        started_seconds REAL NOT NULL,
+        finished INTEGER NOT NULL
+    );
+    -- When each measures row was stored, in seconds since 1970. A row with none was stored
+    -- before this table was, and counts as made at 0.
+    CREATE TABLE \(measuredAtTable) (
+        path TEXT PRIMARY KEY,
+        measured_seconds REAL NOT NULL
+    ) WITHOUT ROWID;
+    -- The files the run couldn't analyze or store, by path with their size and modification
+    -- time as the index had them. Emptied as each run starts.
+    CREATE TABLE \(analysisFailuresTable) (
+        path TEXT PRIMARY KEY,
+        size_bytes INTEGER NOT NULL,
+        modified_seconds REAL NOT NULL
     ) WITHOUT ROWID;
     """
 
