@@ -3,7 +3,7 @@ import Library
 import Settings
 
 /// Listening Stats' panel over the track table (ADR 0102): a header with the period picker
-/// (This Week, This Month, This Year, a year from the menu, All Time), Plays or Hours for the
+/// (Past Week, Past Month, Past Year, a year from the menu, All Time), Plays or Hours for the
 /// top lists, and Year in Review, over cards that flow into as many columns as the width holds
 /// and scroll when the panel is short. The table below lists the period's tracks, or those a
 /// click in the cards narrowed it to, which a button in the header names and clears.

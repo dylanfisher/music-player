@@ -1,11 +1,14 @@
 import Foundation
 
-/// The time Listening Stats counts plays in (ADR 0102). The calendar periods are the ones that
-/// hold the moment the stats are read, in the local calendar, its time zone and its first
-/// weekday.
+/// The time Listening Stats counts plays in (ADR 0102, 0109). The rolling periods are the last
+/// 7, 30 or 365 days up to the moment the stats are read, today included, in the local calendar
+/// and its time zone.
 public enum StatsPeriod: Hashable, Sendable {
+    /// The last 7 days.
     case week
+    /// The last 30 days.
     case month
+    /// The last 365 days.
     case year
     /// One whole year, such as 2024.
     case chosenYear(Int)
@@ -47,9 +50,9 @@ public enum StatsPeriod: Hashable, Sendable {
     /// The period's name in the picker and the panel.
     public var title: String {
         switch self {
-        case .week: "This Week"
-        case .month: "This Month"
-        case .year: "This Year"
+        case .week: "Past Week"
+        case .month: "Past Month"
+        case .year: "Past Year"
         case .chosenYear(let year): String(year)
         case .all: "All Time"
         }
@@ -59,9 +62,9 @@ public enum StatsPeriod: Hashable, Sendable {
     public func span(now: Date = Date(), calendar: Calendar = .current) -> PlaySpan? {
         let interval: DateInterval?
         switch self {
-        case .week: interval = calendar.dateInterval(of: .weekOfYear, for: now)
-        case .month: interval = calendar.dateInterval(of: .month, for: now)
-        case .year: interval = calendar.dateInterval(of: .year, for: now)
+        case .week: interval = Self.days(7, upTo: now, calendar: calendar)
+        case .month: interval = Self.days(30, upTo: now, calendar: calendar)
+        case .year: interval = Self.days(365, upTo: now, calendar: calendar)
         case .chosenYear(let year):
             let midYear = calendar.date(from: DateComponents(year: year, month: 7, day: 1))
             interval = midYear.flatMap { calendar.dateInterval(of: .year, for: $0) }
@@ -73,7 +76,17 @@ public enum StatsPeriod: Hashable, Sendable {
         return PlaySpan(interval)
     }
 
-    /// The year the period is, for Year in Review: This Year's at `now`, or the chosen one.
+    /// The local days `count` long that end with the one holding `now`: from the first's
+    /// midnight to the next day's, so a bar of a day is a whole day.
+    private static func days(_ count: Int, upTo now: Date, calendar: Calendar) -> DateInterval? {
+        guard let today = calendar.dateInterval(of: .day, for: now),
+            let first = calendar.date(byAdding: .day, value: 1 - count, to: today.start)
+        else { return nil }
+        return DateInterval(start: first, end: today.end)
+    }
+
+    /// The year the period is, for Year in Review: the one `now` is in for Past Year, or the
+    /// chosen one.
     public func reviewYear(now: Date = Date(), calendar: Calendar = .current) -> Int? {
         switch self {
         case .year: calendar.component(.year, from: now)

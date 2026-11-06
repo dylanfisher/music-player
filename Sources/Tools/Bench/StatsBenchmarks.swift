@@ -4,7 +4,7 @@ import Settings
 
 let statsBenchmarks = [
     Benchmark(
-        name: "stats: open Stats on This Month, 1M synthetic plays (p95)",
+        name: "stats: open Stats on Past Month, 1M synthetic plays (p95)",
         budget: Budget(appleSilicon: 400, oldMac: 1500, unit: .milliseconds)
     ) {
         let url = try playedLibrary.get().databaseURL
@@ -21,7 +21,7 @@ let statsBenchmarks = [
                 }
             })
         return Measured(
-            value: p95(samples), notes: [slowestNote(samples), "\(plays) plays this month"])
+            value: p95(samples), notes: [slowestNote(samples), "\(plays) plays in the past month"])
     },
     Benchmark(
         name: "stats: change the period, each in turn, 1M synthetic plays (p95)",

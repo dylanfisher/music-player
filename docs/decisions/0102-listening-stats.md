@@ -6,6 +6,8 @@
   [0036](0036-scripting.md) (a command that replies)
 - **Amended by:** [0105](0105-stats-clicks-filter-and-imported-last-plays.md): a click narrows
   the table under the panel, and each import's last play counts as a dated play.
+  [0109](0109-listening-stats-rolling-periods.md): the last 7, 30 and 365 days replace the
+  calendar's week, month and year.
 
 ## Context
 

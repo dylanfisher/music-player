@@ -150,16 +150,12 @@ extension LibraryBrowser {
 }
 
 /// The period as a saved list's name says it, so the name stays right after the period moves
-/// on: "Nov 1 – 30, 2026", "2025", "All Time".
-func statsPlaylistPeriod(_ period: StatsPeriod, _ span: PlaySpan?) -> String {
+/// on: "Oct 8 – Nov 6, 2026", "2025", "All Time".
+func statsPlaylistPeriod(
+    _ period: StatsPeriod, _ span: PlaySpan?, calendar: Calendar = .current
+) -> String {
     switch period {
-    case .week, .month: span?.title() ?? period.title
-    case .year, .chosenYear:
-        span.map {
-            String(
-                Calendar.current.component(
-                    .year, from: Date(timeIntervalSince1970: TimeInterval($0.start))))
-        } ?? period.title
-    case .all: period.title
+    case .week, .month, .year: span?.title(calendar: calendar) ?? period.title
+    case .chosenYear, .all: period.title
     }
 }

@@ -36,7 +36,7 @@ import Testing
     #expect(changes == 1)
 }
 
-/// A browser over a copy of the shared library with plays this week, a year ago and of a file
+/// A browser over a copy of the shared library with plays today, 400 days ago and of a file
 /// no longer in the library, in a window, its split laid out, the library loaded.
 @MainActor
 private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitView, [TrackRow]) {
@@ -98,7 +98,7 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     #expect(played.count == album.count + 1)
     try await waitFor("the period's tracks") { Set(browser.model.trackIDs) == played }
 
-    // This Week leaves out last year's play; the sidebar's row keeps the period.
+    // Past Week leaves out the play 400 days ago; the sidebar's row keeps the period.
     browser.statsPanel.choosePeriod(.week)
     try await waitFor("the week") {
         browser.statsModel.report?.span != nil && !browser.statsModel.isLoading
@@ -281,4 +281,18 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     #expect(
         statsSummary(report, period: .all, ranking: .plays).contains(
             "12 plays from an import, each a track's last play there"))
+}
+
+@Test func aSavedListIsNamedForItsDaysOrItsYear() {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+    // 5 November 2026, 10:00 there.
+    let now = Date(timeIntervalSince1970: 1_793_901_600)
+    let pastYear = StatsPeriod.year.span(now: now, calendar: calendar)
+    let name = statsPlaylistPeriod(.year, pastYear, calendar: calendar)
+    // The days it covers, not the year it started in.
+    #expect(name == pastYear?.title(calendar: calendar))
+    #expect(name.contains("2025") && name.contains("2026"))
+    #expect(statsPlaylistPeriod(.chosenYear(2024), nil) == "2024")
+    #expect(statsPlaylistPeriod(.all, nil) == "All Time")
 }

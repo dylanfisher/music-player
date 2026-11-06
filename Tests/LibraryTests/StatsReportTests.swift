@@ -224,8 +224,8 @@ private func scan(
     let calendar = calendar()
     let now = Date(timeIntervalSince1970: TimeInterval(seconds(calendar, 2026, 11, 5, 12)))
     let thisMonth = Double(seconds(calendar, 2026, 11, 2, 9))
-    let lastMonth = Double(seconds(calendar, 2026, 10, 20, 9))
-    try index.recordPlay(rows[0].path, at: lastMonth)
+    let earlier = Double(seconds(calendar, 2026, 9, 20, 9))
+    try index.recordPlay(rows[0].path, at: earlier)
     try index.recordPlay(rows[0].path, at: thisMonth)
     try index.recordPlay(rows[0].path, at: thisMonth + 300)
     try index.recordPlay(rows[1].path, at: thisMonth + 600)
@@ -254,14 +254,14 @@ private func scan(
     let seconds1 = rows[1].durationSeconds
     #expect(abs(month.seconds - (2 * seconds0 + seconds1)) < 0.01)
     #expect(month.bars.map(\.plays).reduce(0, +) == 4)
-    // rows[0]'s album was first played last month, so it isn't new this month.
+    // rows[0]'s album was first played before the past month, so it isn't new in it.
     let firstAlbum = try #require(rows[0].albumID)
     #expect(!month.firstAlbums.contains { $0.id == firstAlbum })
 
     let all = try await reader.report(.all, groupByAlbumArtist: false, now: now, calendar: calendar)
     #expect(all.plays == 5)
     #expect(all.undatedPlays == 4)
-    #expect(all.firstAlbums.first?.firstPlayed == Int64(lastMonth))
+    #expect(all.firstAlbums.first?.firstPlayed == Int64(earlier))
 
     // A new play, through another connection, is in the next report.
     try index.recordPlay(rows[3].path, at: thisMonth + 1200)

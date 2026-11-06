@@ -3,11 +3,10 @@ import Testing
 
 @testable import Settings
 
-/// A Gregorian calendar in Los Angeles whose weeks start on `firstWeekday`.
-private func losAngeles(firstWeekday: Int = 1) -> Calendar {
+/// A Gregorian calendar in Los Angeles.
+private func losAngeles() -> Calendar {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
-    calendar.firstWeekday = firstWeekday
     return calendar
 }
 
@@ -22,48 +21,53 @@ private func seconds(
 
 private func date(_ seconds: Int64) -> Date { Date(timeIntervalSince1970: TimeInterval(seconds)) }
 
-@Test func thePeriodsAreTheCalendarsAroundNow() {
+@Test func thePeriodsAreTheLastDaysUpToToday() {
     let calendar = losAngeles()
     // Thursday 5 November 2026, 10:00.
     let now = date(seconds(calendar, 2026, 11, 5, 10))
+    let tomorrow = seconds(calendar, 2026, 11, 6)
     #expect(
         StatsPeriod.week.span(now: now, calendar: calendar)
-            == PlaySpan(start: seconds(calendar, 2026, 11, 1), end: seconds(calendar, 2026, 11, 8)))
+            == PlaySpan(start: seconds(calendar, 2026, 10, 30), end: tomorrow))
     #expect(
         StatsPeriod.month.span(now: now, calendar: calendar)
-            == PlaySpan(start: seconds(calendar, 2026, 11, 1), end: seconds(calendar, 2026, 12, 1)))
+            == PlaySpan(start: seconds(calendar, 2026, 10, 7), end: tomorrow))
     #expect(
         StatsPeriod.year.span(now: now, calendar: calendar)
-            == PlaySpan(start: seconds(calendar, 2026, 1, 1), end: seconds(calendar, 2027, 1, 1)))
+            == PlaySpan(start: seconds(calendar, 2025, 11, 6), end: tomorrow))
     #expect(
         StatsPeriod.chosenYear(2024).span(now: now, calendar: calendar)
             == PlaySpan(start: seconds(calendar, 2024, 1, 1), end: seconds(calendar, 2025, 1, 1)))
     #expect(StatsPeriod.all.span(now: now, calendar: calendar) == nil)
+    #expect(StatsPeriod.week.title == "Past Week")
     #expect(StatsPeriod.year.reviewYear(now: now, calendar: calendar) == 2026)
     #expect(StatsPeriod.chosenYear(2024).reviewYear(now: now, calendar: calendar) == 2024)
     #expect(StatsPeriod.month.reviewYear(now: now, calendar: calendar) == nil)
 }
 
-@Test func aWeekStartsOnTheSystemsFirstWeekday() {
-    let monday = losAngeles(firstWeekday: 2)
-    // Sunday 1 November is the last day of the week that started on Monday 26 October.
-    let now = date(seconds(monday, 2026, 11, 1, 10))
+@Test func aRollingPeriodCountsLocalDaysAcrossADaylightSavingChange() {
+    let calendar = losAngeles()
+    // Clocks went back at 2:00 on Sunday 1 November 2026, so that day had 25 hours.
+    let now = date(seconds(calendar, 2026, 11, 3, 23, 59))
+    let span = StatsPeriod.week.span(now: now, calendar: calendar)
     #expect(
-        StatsPeriod.week.span(now: now, calendar: monday)
-            == PlaySpan(start: seconds(monday, 2026, 10, 26), end: seconds(monday, 2026, 11, 2)))
+        span
+            == PlaySpan(start: seconds(calendar, 2026, 10, 28), end: seconds(calendar, 2026, 11, 4))
+    )
+    #expect(span.map { $0.end - $0.start } == Int64(7 * 86_400 + 3600))
 }
 
-@Test func aWeekCanCrossTheYearsEnd() {
+@Test func aRollingPeriodCanCrossTheYearsEnd() {
     let calendar = losAngeles()
     let now = date(seconds(calendar, 2026, 1, 1, 0, 1))
     let span = StatsPeriod.week.span(now: now, calendar: calendar)
     #expect(
-        span == PlaySpan(start: seconds(calendar, 2025, 12, 28), end: seconds(calendar, 2026, 1, 4))
+        span == PlaySpan(start: seconds(calendar, 2025, 12, 26), end: seconds(calendar, 2026, 1, 2))
     )
-    // A minute before midnight on New Year's Eve is in last year, not this one.
+    // A minute before midnight on New Year's Eve is in the past week and in 2025, not 2026.
     let eve = seconds(calendar, 2025, 12, 31, 23, 59)
     #expect(span?.contains(eve) == true)
-    #expect(StatsPeriod.year.span(now: now, calendar: calendar)?.contains(eve) == false)
+    #expect(StatsPeriod.chosenYear(2026).span(calendar: calendar)?.contains(eve) == false)
     #expect(StatsPeriod.chosenYear(2025).span(calendar: calendar)?.contains(eve) == true)
 }
 
