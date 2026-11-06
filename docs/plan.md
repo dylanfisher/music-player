@@ -356,6 +356,23 @@ Plan, part 48b (ADR 0109, amending 0102):
   row and two; the column widths over a range of widths; the sheet, its name, a changed name
   saved, and Cancel saving nothing.
 
+Result (draft): shipped 48b.1 to 48b.4 (ADR 0109, amends 0102). Past Week, Past Month and Past
+Year are the last 7, 30 and 365 local days, today included; a saved list's name for them is its
+days. The totals fill their row beside Plays per Day, their figures in two rows of three; the
+columns are 300 points or more (a one-column card 300 to 455 wide once two fit, from 270 to
+410). Save as Playlist opens the New Playlist name sheet, moved to LibraryBrowser, filled with
+the made name. Bench on Apple Silicon, with two other agents building on the machine (load about
+4): changing the period 226 to 235 ms p95 (budget 250), Past Week 32, Past Month 36 to 37, Past
+Year 75 to 81, 2025 76 to 83, All Time 227 to 236; opening Stats on Past Month 332 to 609 ms over
+six runs, three over its 400 budget. Phase 44c measured 384 on a quiet machine, and the period
+doesn't change the open's cost (every first play, then two scans not indexed), so the budget
+stays until a quiet rerun. Owner's check: open Listening Stats and click Past Week, Past Month
+and Past Year, the totals under each giving the dates from 6, 29 and 364 days ago to today;
+widen the window until the totals sit beside Plays per Day and see them as tall as it in two
+rows; see the cards a little wider at the usual window size; click a list's Save as Playlist
+button, change the name, Save, and see the playlist under that name; click it again and Cancel,
+and see no playlist added.
+
 #### 48c. Playback errors that explain themselves
 
 When a track can't play, the status bar shows "Playback stopped: " and the error's
