@@ -5655,6 +5655,74 @@ For the owner: open Stats, change periods and rankings, hover the bars and grid,
 an album and a track, save a list, open Year in Review, drag the panel's divider and then show
 Music to see the columns keep their height, and time it on the 2015 MacBook Pro.
 
+### 44. Owner feedback, 2026-11-05 (second round)
+
+The owner's feedback from trying phases 42 and 43. Parts 44a to 44e run in parallel worktrees
+and merge onto main in order a, b, c, d, e. ADR numbers are given out ahead so they don't
+collide: 44a 0103, 44b 0104, 44c 0105, 44d 0106, 44e 0107. Each part keeps the owner's window
+layout, column widths, toolbar and settings, as phase 42's did: a state or config key changes
+only by adding an optional key, and the owner's current `state.json` and `config.json` still
+decode after the part (checked against a copy, not the files themselves).
+
+The owner's answers: tag saves write in place when the new tag fits the file's padding and
+keep the temp file otherwise; a click in Stats filters the track table under the panel instead
+of leaving Stats; each Swinsian track's last-played date counts as one dated play in Stats;
+each browser column's grouping lives in `config.json`. Answered without a change: storing the
+sync logs compressed (see the end of this phase).
+
+#### 44a. Keys, Get Info's place and Library Health
+
+- [ ] **44a.1 Option-arrow seeks.** ⌥→ and ⌥← seek forward and back 10 s, replacing ⌃→ and
+      ⌃←; ⌥⇧→ and ⌥⇧← replace ⌃⇧→ and ⌃⇧←. A text field being edited still takes them to
+      move by word (`KeyChord.isTextEditing`).
+- [ ] **44a.2 Longer step.** ⌥⇧→ and ⌥⇧← seek by 5% of the track or 30 s, whichever is longer.
+- [ ] **44a.3 Get Info's place.** A Get Info window opens where the last one was moved to,
+      across launches.
+- [ ] **44a.4 Wider health cards.** Library Health's cards are wide enough that a card's
+      description usually shows whole.
+- [ ] **44a.5 Show Library Health toggles.** With Library Health showing, Show Library Health
+      hides it and shows the track table, at the playing track when there is one.
+
+#### 44b. Enter on the next track keeps the queue panel
+
+- [ ] **44b.1** With the queue panel open, Enter or a double-click on the track after the
+      playing one in the track table moves the queue as Next does, without the panel reloading
+      every row. A rebuild when the queue does change is fine.
+
+#### 44c. Listening Stats stays put, and counts Swinsian's plays
+
+- [ ] **44c.1 Clicks filter.** A click on an artist, album, genre or track in Stats stays in
+      Stats; the track table under the panel shows that item's tracks played in the period,
+      with a way to clear the filter.
+- [ ] **44c.2 Swinsian's last plays.** Each imported track's last-played date counts as one
+      dated play in every period, its totals, top lists and charts; the rest of its imported
+      count stays undated. The totals say how many plays came from an import.
+
+#### 44d. Column groupings in the config file
+
+- [ ] **44d.1** Each browser column's grouping is saved in `config.json` and restored at launch;
+      the selection in each column stays in the state file. Find out first why the owner's
+      `state.json` holds no `browser.columns`.
+
+#### 44e. Tags written in place
+
+- [ ] **44e.1** A tag save whose new tag fits the file's existing padding overwrites only the
+      tag's bytes in the original, with the same checks before and the read-back after; one
+      that doesn't fit uses the temp file as now. Amends ADR 0020 and 0100.
+
+#### Sync logs, compressed: answered, not done
+
+The owner asked how much work it would be. The sync design (ADR 0038) depends on each log
+being plain appended lines: a push appends the outbox's tail and checks that the file is a
+byte prefix of the outbox, a push that died mid-line continues from the file's size, and a
+reader resumes at a byte offset after the last whole line. Compressed, each push would append
+a gzip member (concatenated members are a valid gzip file); the writer would keep the member
+boundaries to check its prefix, readers would keep compressed offsets at member boundaries
+and drop a torn last member, and both would need a decompressor with caps against a
+compression bomb. About the size of phase 23's log code again, in the code that decides what
+counts twice. JSON lines compress about 8 to 10 times; a million plays are about 110 MB
+plain, so about 12 MB. Worth it when a log passes a few hundred MB; not before.
+
 ## Later
 
 Not phases yet. Each becomes one when the owner asks.
