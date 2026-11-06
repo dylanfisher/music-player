@@ -18,6 +18,10 @@ final class StatsListView: NSView {
     }
 
     static let rowHeightPoints: CGFloat = 20
+    /// The selection color's alpha under the marked row and the hovered one: the marked row
+    /// clearly stronger, yet light enough that its text reads as on the other rows.
+    static let markedAlpha: CGFloat = 0.28
+    static let hoveredAlpha: CGFloat = 0.18
 
     var rows: [Row] = [] {
         didSet {
@@ -106,7 +110,8 @@ final class StatsListView: NSView {
             guard frame.intersects(dirtyRect) else { continue }
             if place == hovered || place == marked {
                 NSColor.selectedContentBackgroundColor
-                    .withAlphaComponent(place == marked ? 0.4 : 0.18).setFill()
+                    .withAlphaComponent(place == marked ? Self.markedAlpha : Self.hoveredAlpha)
+                    .setFill()
                 NSBezierPath(roundedRect: frame, xRadius: 4, yRadius: 4).fill()
             }
             let barStart = rankWidth
