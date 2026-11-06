@@ -8,6 +8,8 @@ import Settings
 struct LibraryStatus: Equatable, Sendable {
     /// Scans running now, by folder path.
     private(set) var scanning: [String: ScanProgress] = [:]
+    /// The folder whose scan Pause Scan holds, until Resume Scan or the scan's end.
+    private(set) var pausedScan: String?
     /// Problems the last scan of each folder had with the folder itself, by folder path.
     private(set) var folderIssues: [String: [ScanIssue]] = [:]
     /// Scans that failed outright, by folder path.
@@ -40,12 +42,22 @@ struct LibraryStatus: Equatable, Sendable {
         switch event {
         case .scanning(let folder, let progress):
             scanning[folder] = progress
+        case .scanPaused(let folder, let paused):
+            if paused {
+                pausedScan = folder
+                // Paused before its first progress, it still shows.
+                if scanning[folder] == nil { scanning[folder] = ScanProgress() }
+            } else if pausedScan == folder {
+                pausedScan = nil
+            }
         case .scanned(let folder, let summary):
             scanning[folder] = nil
+            if pausedScan == folder { pausedScan = nil }
             failures[folder] = nil
             folderIssues[folder] = summary.issues.isEmpty ? nil : summary.issues
         case .scanFailed(let folder, let reason):
             scanning[folder] = nil
+            if pausedScan == folder { pausedScan = nil }
             failures[folder] = reason
         case .synced(let report):
             syncProblems = report.problems
@@ -93,17 +105,34 @@ struct LibraryStatus: Equatable, Sendable {
         }
     }
 
-    /// "Scanning Music: 300 of 1,200 read", a part per folder; nil while nothing scans.
+    /// "Scanning Music: 300 of 1,200 read", a part per folder, and "Scan paused: Music: 300 of
+    /// 1,200 read" for the one Pause Scan holds; nil while nothing scans.
     var scanText: String? {
         guard !scanning.isEmpty else { return nil }
         let parts = scanning.sorted(by: { $0.key < $1.key }).map { folder, progress in
             let name = (folder as NSString).lastPathComponent
-            return progress.toRead == 0
-                ? "\(name): \(number(progress.found)) files checked"
-                : "\(name): \(number(progress.read)) of \(number(progress.toRead)) read"
+            return (
+                folder,
+                progress.toRead == 0
+                    ? "\(name): \(number(progress.found)) files checked"
+                    : "\(name): \(number(progress.read)) of \(number(progress.toRead)) read"
+            )
         }
-        return "Scanning " + parts.joined(separator: " · ")
+        let running = parts.filter { $0.0 != pausedScan }.map(\.1)
+        let paused = parts.filter { $0.0 == pausedScan }.map(\.1)
+        return
+            ((running.isEmpty ? [] : ["Scanning " + running.joined(separator: " · ")])
+            + paused.map { "Scan paused: " + $0 }).joined(separator: " · ")
     }
+
+    /// The scans' text and a tag save's, the first part of the activity line.
+    var scanAndSaveText: String? {
+        let parts = [scanText, savingText].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// Whether Pause Scan holds the scan the status bar shows, so its button resumes it.
+    var scanIsPaused: Bool { pausedScan != nil }
 
     /// How much of what the scans have to read they've read, from 0 to 1. Nil while nothing
     /// scans, or while a scan is still listing folders, since what it has to read still grows.
@@ -118,7 +147,7 @@ struct LibraryStatus: Equatable, Sendable {
     /// The line beside the bar that fills: the scans, a tag save and Analyze Library, any of
     /// them; nil while none runs.
     var activityText: String? {
-        let parts = [scanText, savingText, analysisText].compactMap { $0 }
+        let parts = [scanAndSaveText, analysisText].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -130,8 +159,9 @@ struct LibraryStatus: Equatable, Sendable {
         return analysisText.map { _ in analysisFraction }
     }
 
-    /// Whether a scan is under way, which Analyze Library waits for.
-    var isScanning: Bool { !scanning.isEmpty }
+    /// Whether a scan is under way, which Analyze Library waits for; a paused scan reads
+    /// nothing, so it doesn't count.
+    var isScanning: Bool { scanning.keys.contains { $0 != pausedScan } }
 
     /// "3 files and 1 folder with problems", the title of the button that lists them. Notices
     /// that count nothing still have a list to show. Nil when there's nothing to list.

@@ -529,7 +529,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                 refreshNow()
                 runHealth()
             }
-        case .syncFailed, .launchScansEnded:
+        case .syncFailed, .launchScansEnded, .scanPaused:
             break
         }
         guard let pending = pendingLocate else { return }
