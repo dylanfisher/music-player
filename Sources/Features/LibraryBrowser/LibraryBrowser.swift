@@ -144,7 +144,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// The panel slot's height while Stats shows, apart from the columns' (ADR 0102).
     public var statsHeight = AppState().statsHeight.defaultValue
     /// The slot's height as last placed or dragged, so a change of panel moves the divider
-    /// only when the heights differ.
+    /// only when the heights differ; nil once a window resize moved it.
     private var placedHeight: Int?
     /// The scan progress and the leading columns, the center column centered on the window,
     /// and the trailing columns and the problems button, each edge in a stack so what's hidden
@@ -2206,8 +2206,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     /// Saves the slot's height from the user's drag only.
     public func splitViewDidResizeSubviews(_ notification: Notification) {
-        guard split.isDragging, !panelSlot.isHidden else { return }
+        guard !panelSlot.isHidden else { return }
         let height = Int(split.subviews[0].frame.height.rounded())
+        guard split.isDragging else {
+            // A window resize moves the divider, so the next change of panel places it again.
+            if height != placedHeight { placedHeight = nil }
+            return
+        }
         placedHeight = height
         if shownPanel === statsPanel {
             guard height != statsHeight else { return }

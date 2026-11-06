@@ -130,6 +130,27 @@ func dragDivider(of split: NSSplitView, to position: CGFloat) throws {
     #expect(abs(slot.frame.height - CGFloat(least)) <= 1)
 }
 
+/// A window resize moves the divider; the columns, saved at the height Stats was placed at,
+/// still open at their own height after it.
+@MainActor @Test func aWindowResizeDoesntLeaveTheNextPanelAtTheResizedHeight() async throws {
+    let (browser, window, split, _) = try await playedBrowser()
+    window.orderFront(nil)
+    defer { window.orderOut(nil) }
+    let slot = split.arrangedSubviews[0]
+    browser.statsHeight = 150
+    browser.showStats(.all)
+    try await waitFor("Stats") { browser.shownPanel === browser.statsPanel }
+    window.layoutIfNeeded()
+    #expect(abs(slot.frame.height - 150) <= 1)
+    window.setContentSize(NSSize(width: 1000, height: 400))
+    window.layoutIfNeeded()
+    try #require(abs(slot.frame.height - 150) > 1, "the resize moved the divider")
+    browser.show(nil)
+    try await waitFor("the library") { browser.shownPanel == nil }
+    window.layoutIfNeeded()
+    #expect(abs(slot.frame.height - 150) <= 1)
+}
+
 /// The least height holds Stats' header and the Totals card, the first row of cards.
 @MainActor @Test func statsLeastHeightHoldsTheHeaderAndTheFirstCards() async throws {
     let (browser, window, _, _) = try await playedBrowser()
