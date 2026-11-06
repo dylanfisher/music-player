@@ -302,24 +302,65 @@ func aWriteInPlaceThatDoesntReadBackPutsTheOriginalBack(_ sample: Sample) throws
     #expect(writer.undoLast().nothingToUndo)
 }
 
-/// The read-back fails and the folder refuses the temp file that would put the original back:
-/// the journal keeps the write, and a later call puts the original back once it can.
+/// The read-back fails and the file can't be opened for writing to put the original back: the
+/// journal keeps the write, and a later call puts the original back once it can.
 @Test func aWriteInPlaceThatCantBePutBackAtOnceIsPutBackLater() throws {
     let url = try Sample.mp3v24.copy()
     let original = try Data(contentsOf: url)
-    let folder = url.deletingLastPathComponent().path
     var writer = scratchWriter()
     writer.faults.afterOverwriting = { path in
         try scribble(on: "Edited", in: path)
-        guard chmod(folder, 0o500) == 0 else { throw POSIXError(.EIO) }
+        guard chmod(path, 0o400) == 0 else { throw POSIXError(.EIO) }
     }
     let report = writer.write(titleEdit, to: [url.path])
-    chmod(folder, 0o700)
+    chmod(url.path, 0o600)
     #expect(report.failures.map(\.kind) == [.checkFailed])
     #expect(try Data(contentsOf: url) != original)
     #expect(try markers(writer).count == 1)
     expectChanged(TagWriter(journal: writer.journal).recoverInterrupted(), [url])
     #expect(try Data(contentsOf: url) == original)
+    #expect(try markers(writer).isEmpty)
+}
+
+/// A write in place that grew the file and failed is put back over itself and cut back to its
+/// size, with no temp copy (ADR 0108): a folder that takes no new file stands in for a disk
+/// with no room for one.
+@Test func aGrowthThatFailsIsPutBackWithoutATempFile() throws {
+    let url = try mp4WithMoovLast()
+    let original = try Data(contentsOf: url)
+    let folder = url.deletingLastPathComponent().path
+    var writer = scratchWriter()
+    writer.faults.afterOverwriting = { path in
+        try scribble(on: "Grown", in: path)
+        guard chmod(folder, 0o500) == 0 else { throw POSIXError(.EIO) }
+    }
+    let long = TagEdit(values: [.title: String(repeating: "Grown ", count: 200)])
+    let report = writer.write(long, to: [url.path])
+    chmod(folder, 0o700)
+    #expect(report.failures.map(\.kind) == [.checkFailed])
+    #expect(try Data(contentsOf: url) == original)
+    #expect(try markers(writer).isEmpty)
+    #expect(writer.undoLast().nothingToUndo)
+}
+
+/// A file something else put at the path after a write in place failed isn't the original, so
+/// it isn't written over; the record goes, and the other file stays as it is.
+@Test func aFileReplacedAfterAFailedWriteIsntPutBack() throws {
+    let url = try Sample.flac.copy()
+    let other = Data("another app's file".utf8)
+    var writer = scratchWriter()
+    writer.faults.afterOverwriting = { path in
+        let replacement = path + ".other"
+        try other.write(to: URL(fileURLWithPath: replacement))
+        guard rename(replacement, path) == 0 else { throw POSIXError(.EIO) }
+    }
+    let report = writer.write(titleEdit, to: [url.path])
+    #expect(report.failures.map(\.kind) == [.checkFailed])
+    #expect(try Data(contentsOf: url) == other)
+    #expect(try markers(writer).count == 1, "kept for recovery to report")
+    let recovered = TagWriter(journal: writer.journal).recoverInterrupted()
+    #expect(recovered.failures.map(\.kind) == [.changedSinceEdit])
+    #expect(try Data(contentsOf: url) == other)
     #expect(try markers(writer).isEmpty)
 }
 

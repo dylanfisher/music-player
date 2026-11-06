@@ -224,6 +224,66 @@ func overwrite(
     }
 }
 
+/// Writes a write in place's journaled old bytes back over its region and cuts a file that
+/// grew back to the original's size, on one descriptor, then flushes the file through the
+/// drive's cache and closes it (ADR 0108). Unlike a temp copy it needs no free space, so a
+/// growth that filled the disk is put back. The open file must still be the original, by its
+/// inode and one link, with a size from the original's to what the write leaves; anything else
+/// is a file something else replaced, and is left alone.
+func overwriteBack(
+    _ record: TagUndoJournal.FileRecord, _ region: TagUndoJournal.InPlaceRegion,
+    oldBytes: [UInt8], faults: WriteFaults
+) throws(TagWriteError) {
+    let path = record.path
+    faults.called(.open)
+    let descriptor = open(path, O_RDWR | O_NOFOLLOW | O_CLOEXEC)
+    guard descriptor >= 0 else { throw systemError(path, .writeFailed, FileFailure.open) }
+    var isOpen = true
+    defer { if isOpen { close(descriptor) } }
+    faults.called(.metadata)
+    var info = stat()
+    guard fstat(descriptor, &info) == 0 else {
+        throw systemError(path, .unreadable, FileFailure.stat)
+    }
+    let newSize = max(record.originalSize, region.offset + region.newLength)
+    guard info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1,
+        info.st_ino == record.originalInode,
+        (record.originalSize...newSize).contains(Int(info.st_size))
+    else {
+        throw TagWriteError(
+            path: path, kind: .changedSinceEdit,
+            detail: "the file was replaced after its tags were written in place, so it isn't"
+                + " put back")
+    }
+    faults.called(.write(bytes: oldBytes.count))
+    var done = 0
+    while done < oldBytes.count {
+        let count = oldBytes.withUnsafeBytes {
+            pwrite(
+                descriptor, $0.baseAddress! + done, oldBytes.count - done,
+                off_t(region.offset + done))
+        }
+        if count < 0 {
+            if errno == EINTR { continue }
+            throw systemError(path, .writeFailed, "can't put the original tags back")
+        }
+        done += count
+    }
+    if Int(info.st_size) != record.originalSize {
+        faults.called(.metadata)
+        guard ftruncate(descriptor, off_t(record.originalSize)) == 0 else {
+            throw systemError(path, .writeFailed, "can't cut the file back to its size")
+        }
+    }
+    faults.called(.flushDrive)
+    try flush(descriptor, path, .writeFailed)
+    isOpen = false
+    faults.called(.close)
+    guard close(descriptor) == 0 else {
+        throw systemError(path, .writeFailed, "can't close it after putting the tags back")
+    }
+}
+
 /// Empties the drive's cache through the volume of `path`, a file just written in place, so
 /// every write on that volume flushed with `fsync` before survives a power cut. Volumes without
 /// `F_FULLFSYNC` (SMB) take `fsync`, which each file's write already sent.

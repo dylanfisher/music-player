@@ -374,16 +374,32 @@ public struct TagWriter: Sendable {
 
     /// Puts the original back after a write in place that didn't finish, and drops its
     /// record; returns whether the file had to be rewritten, which it doesn't when its region
-    /// still holds the old bytes.
+    /// still holds the old bytes. The old bytes go back over the region in place, which needs
+    /// no free space (ADR 0108); the record and its marker stay until the region reads back as
+    /// the old bytes, so a crash part way through is put back again.
     func putBackOriginal(
         _ record: TagUndoJournal.FileRecord, at handle: TagUndoJournal.Handle, oldBytes: [UInt8]
     ) throws(TagWriteError) -> Bool {
-        if let region = record.inPlace, try regionState(record, region, faults: faults) == .old {
+        guard let region = record.inPlace else {
+            preconditionFailure("only a write in place is put back")
+        }
+        if try regionState(record, region, faults: faults) == .old {
             try journal.remove(handle)
             logger.notice("\(record.path) still holds its original tags")
             return false
         }
-        let restored = try restore(record, oldBytes: oldBytes, requireEdited: false)
+        guard sha256(oldBytes) == region.oldSHA256 else {
+            throw TagWriteError(
+                path: record.path, kind: .checkFailed,
+                detail: "the journaled bytes don't match the hash they were journaled with")
+        }
+        try overwriteBack(record, region, oldBytes: oldBytes, faults: faults)
+        guard try regionState(record, region, faults: faults) == .old else {
+            throw TagWriteError(
+                path: record.path, kind: .checkFailed,
+                detail: "the file doesn't read back as the original's tag bytes")
+        }
+        let restored = try identity(record.path)
         try journal.remove(handle)
         // As undo does: an older edit of the file now names the restored file.
         if let (olderHandle, found) = try journal.olderRecords(before: handle.entry)[record.path],
@@ -397,16 +413,16 @@ public struct TagWriter: Sendable {
         return true
     }
 
-    /// Puts back the original of one journaled file, and returns the restored file's identity.
-    /// The file must be as the edit left it unless `requireEdited` is false, as for a write in
-    /// place that didn't finish. The restored file must hash as the original, or for a write in
-    /// place have its size and hold the journaled old bytes, which must match their hash.
-    private func restore(
-        _ record: TagUndoJournal.FileRecord, oldBytes: [UInt8], requireEdited: Bool = true
-    ) throws(TagWriteError) -> FileIdentity {
+    /// Undoes one journaled file through a temp file, and returns the restored file's identity.
+    /// The file must be as the edit left it. The restored file must hash as the original, or for
+    /// a write in place have its size and hold the journaled old bytes, which must match their
+    /// hash.
+    private func restore(_ record: TagUndoJournal.FileRecord, oldBytes: [UInt8])
+        throws(TagWriteError) -> FileIdentity
+    {
         let path = record.path
         let before = try identity(path)
-        guard !requireEdited || record.isEdited(before) else {
+        guard record.isEdited(before) else {
             throw TagWriteError(
                 path: path, kind: .changedSinceEdit,
                 detail: "the file changed after the tag edit, so the edit isn't undone")
