@@ -100,7 +100,7 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
     #expect(status.problemLines == ["/Music: the scan failed: disk I/O error"])
 }
 
-@Test func theTimelineCountsPlaysAndADiscardShowsAsAProblem() {
+@Test func theTimelineCountsPlaysAndADiscardShowsAsAProblemNotInTheTotals() {
     var status = LibraryStatus()
     #expect(
         status.summary(list: totals(0), selection: totals(0), shown: .list, playCount: 1_000_000)
@@ -109,7 +109,7 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
     #expect(status.hasProblems)
     #expect(
         status.summary(list: totals(2), selection: totals(0), shown: .list)
-            == "2 tracks, 0 bytes, 0 seconds · earlier play counts and playlists discarded")
+            == "2 tracks, 0 bytes, 0 seconds")
     // It counts no file or folder, but has a list to open.
     #expect(status.problemsTitle == "Show Problems")
     #expect(status.problemLines == ["the earlier stats were discarded"])

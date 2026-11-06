@@ -72,7 +72,6 @@ struct LibraryStatus: Equatable, Sendable {
             playCount.map { plays($0) + (playSpan.map { ", " + $0.title() } ?? "") }
                 ?? totals(list, selection, shown)
         ]
-        if !notices.isEmpty { parts.append("earlier play counts and playlists discarded") }
         if missingCount > 0 { parts.append(tracks(missingCount) + " not in the library") }
         if healthOtherCount > 0 {
             parts.append(count(healthOtherCount, "more item") + " with no track to list")
