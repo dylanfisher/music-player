@@ -9,7 +9,9 @@ struct StatsActions {
     var showEntry: (StatsReport.List, StatsReport.Entry) -> Void = { _, _ in }
     var showSpan: (PlaySpan, String) -> Void = { _, _ in }
     var showPlays: (PlaySpan) -> Void = { _ in }
-    var savePlaylist: (StatsReport.List) -> Void = { _ in }
+    /// A list's rows as a playlist: the name made for it, its tracks in order, and the window
+    /// whose button asked.
+    var savePlaylist: (String, [Int64], NSWindow?) -> Void = { _, _, _ in }
 }
 
 /// The cards of Listening Stats, made once and filled from each report, so a hover or a
@@ -142,10 +144,19 @@ final class StatsCards {
         firstKind.target = target
         firstKind.action = #selector(ControlTarget.act(_:))
         for (list, button) in saveButtons {
-            target.handlers[ObjectIdentifier(button)] = { [weak self] in
-                self?.actions.savePlaylist(list)
+            target.handlers[ObjectIdentifier(button)] = { [weak self, weak button] in
+                self?.save(list, from: button?.window)
             }
         }
+    }
+
+    /// Asks for `list`'s rows shown as a playlist, named for the list and the report's days, so
+    /// a report still showing while the next loads saves what it shows.
+    private func save(_ list: StatsReport.List, from window: NSWindow?) {
+        guard let report else { return }
+        let ids = report.trackIDs(of: entries[list] ?? [], in: list)
+        let name = list.title + ", " + statsPlaylistPeriod(report.span, calendar: calendar)
+        actions.savePlaylist(name, ids, window)
     }
 
     /// Fills every card from `report`, the top lists ranked by `ranking`.

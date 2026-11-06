@@ -245,30 +245,66 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
         browser.statsModel.report != nil && !browser.statsModel.isLoading
     }
     let report = try #require(browser.statsModel.report)
-    let made = "Top Artists, " + statsPlaylistPeriod(.week, report.span)
+    let made = "Top Artists, " + statsPlaylistPeriod(report.span)
     let before = browser.playlists.count
+    // A click by its action: `performClick` runs the main run loop, which ends the test
+    // process once the loop has nothing left to wait for.
+    let save = try #require(browser.statsPanel.cards.saveButtons[.artists])
 
     // Cancel saves nothing.
-    browser.statsPanel.cards.actions.savePlaylist(.artists)
+    _ = save.sendAction(save.action, to: save.target)
     #expect(try sheetField(over: window).stringValue == made)
     window.endSheet(try #require(window.attachedSheet), returnCode: .alertSecondButtonReturn)
     try await Task.sleep(nanoseconds: 200_000_000)
     #expect(browser.playlists.count == before)
 
     // The sheet asks first; its button saves the name in its field.
-    browser.statsPanel.cards.actions.savePlaylist(.artists)
+    _ = save.sendAction(save.action, to: save.target)
     let field = try sheetField(over: window)
     #expect(field.stringValue == made)
     #expect(browser.playlists.count == before)
-    field.stringValue = "  This Week's Artists "
+    field.stringValue = "  Past Week's Artists "
     window.endSheet(try #require(window.attachedSheet), returnCode: .alertFirstButtonReturn)
     try await waitFor("the playlist") {
-        browser.playlists.contains { $0.name == "This Week's Artists" }
+        browser.playlists.contains { $0.name == "Past Week's Artists" }
     }
-    let playlist = try #require(browser.playlists.first { $0.name == "This Week's Artists" })
+    let playlist = try #require(browser.playlists.first { $0.name == "Past Week's Artists" })
     #expect(browser.playlists.count == before + 1)
     try await waitFor("its tracks") { browser.model.filter.source == .playlist(playlist.id) }
     try await waitFor("its rows") { Set(browser.model.trackIDs) == Set(album.map(\.id)) }
+}
+
+@MainActor @Test func yearInReviewSavesItsOwnYearsListOverItsWindow() async throws {
+    let (browser, window, _, _) = try await playedBrowser()
+    browser.showStats(.week)
+    try await waitFor("the week") {
+        browser.statsModel.report != nil && !browser.statsModel.isLoading
+    }
+    // The year of the track played 400 days ago, whose list differs from the week's.
+    let year = Calendar.current.component(
+        .year, from: Date(timeIntervalSinceNow: -86_400 * 400))
+    browser.showYearInReview(year)
+    try await waitFor("the review") { browser.yearReview?.year == year }
+    let review = try #require(browser.yearReview)
+    let reviewWindow = try #require(review.window)
+    let tracks = try #require(review.cards.lists[.tracks]?.rows)
+    #expect(tracks.count == 1)
+    let before = browser.playlists.count
+    let save = try #require(review.cards.saveButtons[.tracks])
+    _ = save.sendAction(save.action, to: save.target)
+    #expect(window.attachedSheet == nil)
+    let field = try sheetField(over: reviewWindow)
+    #expect(field.stringValue == "Top Tracks, \(year)")
+    reviewWindow.endSheet(
+        try #require(reviewWindow.attachedSheet), returnCode: .alertFirstButtonReturn)
+    try await waitFor("the playlist") { browser.playlists.count == before + 1 }
+    let playlist = try #require(browser.playlists.first { $0.name == "Top Tracks, \(year)" })
+    let yearsTracks = try #require(review.cards.report).paths.filter(\.inLibrary).map(\.id)
+    try await waitFor("its rows") {
+        browser.model.filter.source == .playlist(playlist.id)
+            && browser.model.trackIDs == yearsTracks
+    }
+    review.close()
 }
 
 @MainActor @Test func theCommandLineGetsTheReportAsTextOrJSON() async throws {
@@ -322,12 +358,13 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     // 5 November 2026, 10:00 there.
     let now = Date(timeIntervalSince1970: 1_793_901_600)
     let pastYear = StatsPeriod.year.span(now: now, calendar: calendar)
-    let name = statsPlaylistPeriod(.year, pastYear, calendar: calendar)
+    let name = statsPlaylistPeriod(pastYear, calendar: calendar)
     // The days it covers, not the year it started in.
     #expect(name == pastYear?.title(calendar: calendar))
     #expect(name.contains("2025") && name.contains("2026"))
-    #expect(statsPlaylistPeriod(.chosenYear(2024), nil) == "2024")
-    #expect(statsPlaylistPeriod(.all, nil) == "All Time")
+    let year = StatsPeriod.chosenYear(2024).span(calendar: calendar)
+    #expect(statsPlaylistPeriod(year, calendar: calendar) == "2024")
+    #expect(statsPlaylistPeriod(nil) == "All Time")
 }
 
 /// The panel's cards, their totals filled, in a flow `width` points wide, laid out.

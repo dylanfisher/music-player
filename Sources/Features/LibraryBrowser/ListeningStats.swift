@@ -39,7 +39,9 @@ extension LibraryBrowser {
                 self?.bringWindowForward()
                 self?.show(.plays(span))
             },
-            savePlaylist: { [weak self] list in self?.saveStatsList(list) })
+            savePlaylist: { [weak self] name, ids, window in
+                self?.saveStatsList(named: name, ids, over: window)
+            })
     }
 
     /// Narrows Stats' table to `filter`, or lists every track again when it's the one shown.
@@ -128,24 +130,20 @@ extension LibraryBrowser {
         }
     }
 
-    /// Asks for a name, filled in with the list's and the period's, then makes a manual playlist
-    /// of the tracks the list's rows were played through, in its order, and shows it.
-    private func saveStatsList(_ list: StatsReport.List) {
-        guard let report = statsModel.report else { return }
-        let entries = Array(
-            report.list(list, by: statsModel.ranking).prefix(StatsReport.listLength))
-        let ids = report.trackIDs(of: entries, in: list)
+    /// Asks over the window whose list it is for a name, filled in with `name`, then makes a
+    /// manual playlist of `ids` and shows it in the main window.
+    private func saveStatsList(named name: String, _ ids: [Int64], over window: NSWindow?) {
         guard !ids.isEmpty else {
             NSSound.beep()
             return
         }
-        guard let window = content.view.window else {
-            return self.report("couldn't save the list: the library window isn't open")
+        guard let window else {
+            return report("couldn't save the list: its window isn't open")
         }
-        let name = list.title + ", " + statsPlaylistPeriod(statsModel.period, report.span)
         askForName(StatsCards.saveTitle, button: "Save", initial: name, over: window) {
             [weak self] name in
             guard let self else { return }
+            bringWindowForward()
             edit(playlistFailure(name), entriesChange: true) {
                 try await self.model.createPlaylist(named: name, rules: nil, trackIDs: ids)
             }
@@ -156,13 +154,13 @@ extension LibraryBrowser {
     private func bringWindowForward() { content.view.window?.makeKeyAndOrderFront(nil) }
 }
 
-/// The period as a saved list's name says it, so the name stays right after the period moves
-/// on: "Oct 8 – Nov 6, 2026", "2025", "All Time".
-func statsPlaylistPeriod(
-    _ period: StatsPeriod, _ span: PlaySpan?, calendar: Calendar = .current
-) -> String {
-    switch period {
-    case .week, .month, .year: span?.title(calendar: calendar) ?? period.title
-    case .chosenYear, .all: period.title
+/// A report's days as a saved list's name says them, so the name stays right after the period
+/// moves on: "Oct 8 – Nov 6, 2026", "2025" for a whole year, "All Time" for no bounds.
+func statsPlaylistPeriod(_ span: PlaySpan?, calendar: Calendar = .current) -> String {
+    guard let span else { return StatsPeriod.all.title }
+    let start = Date(timeIntervalSince1970: TimeInterval(span.start))
+    if let year = calendar.dateInterval(of: .year, for: start), PlaySpan(year) == span {
+        return String(calendar.component(.year, from: start))
     }
+    return span.title(calendar: calendar)
 }
