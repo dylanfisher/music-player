@@ -75,6 +75,46 @@ private func split(queueVisible: Bool) -> (MainSplit, NSWindow, content: NSView)
     #expect(abs(queue.frame.width - 220) <= 1)
 }
 
+/// The widths saved are the ones a launch puts back: a drag of the sidebar's and the queue's
+/// dividers saves widths that a split restored with them shows again, to the point.
+@MainActor @Test func theSidebarAndQueueWidthsSavedComeBackTheSame() {
+    let (split, window, _) = split(queueVisible: true)
+    window.orderFront(nil)
+    var saved = (sidebar: 0, queue: 0)
+    split.sidebarWidthChanged = { saved.sidebar = $0 }
+    split.queueWidthChanged = { saved.queue = $0 }
+    let view = split.controller.splitView
+    view.setPosition(240, ofDividerAt: 0)
+    view.setPosition(view.bounds.width - 300, ofDividerAt: 1)
+    let dragged = view.arrangedSubviews.map { Int($0.frame.width.rounded()) }
+    #expect(saved == (dragged[0], dragged[2]))
+
+    let restored = MainSplit(
+        sidebar: NSViewController(nibName: nil, bundle: nil).withView(),
+        content: NSViewController(nibName: nil, bundle: nil).withView(),
+        queue: NSViewController(nibName: nil, bundle: nil).withView(),
+        sidebarWidth: saved.sidebar, queueWidth: saved.queue)
+    let again = NSWindow(
+        contentRect: NSRect(origin: .zero, size: MainWindow.defaultSize),
+        styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    again.isReleasedWhenClosed = false
+    again.contentView = restored.view
+    again.layoutIfNeeded()
+    restored.restore(sidebarVisible: true, queueVisible: true)
+    let widths = restored.controller.splitView.arrangedSubviews.map {
+        Int($0.frame.width.rounded())
+    }
+    #expect((widths[0], widths[2]) == (dragged[0], dragged[2]))
+}
+
+extension NSViewController {
+    /// The controller with an empty view of its own.
+    fileprivate func withView() -> NSViewController {
+        view = NSView()
+        return self
+    }
+}
+
 /// Records the key presses no responder took, which AppKit beeps for.
 private final class RecordingWindow: SilentEscapeWindow {
     var unhandled: [Selector] = []

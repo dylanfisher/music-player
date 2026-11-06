@@ -54,7 +54,8 @@ final class MainSplit {
         let split = controller.splitView
         split.layoutSubtreeIfNeeded()
         split.setPosition(CGFloat(sidebarWidth), ofDividerAt: 0)
-        split.setPosition(split.bounds.width - CGFloat(queueWidth), ofDividerAt: 1)
+        split.setPosition(
+            split.bounds.width - CGFloat(queueWidth) - split.dividerThickness, ofDividerAt: 1)
         sidebar.isCollapsed = !sidebarVisible
         queue.isCollapsed = !queueVisible
         split.layoutSubtreeIfNeeded()
@@ -89,10 +90,14 @@ final class MainSplit {
         }
     }
 
-    /// The item's width when it shows and the setting accepts it.
+    /// The item's width when it shows and the setting accepts it: from divider to edge, as
+    /// `restore` places it. A sidebar's own view can be inset in that, by 8 points on macOS 26,
+    /// and saving that width would narrow the sidebar at every launch.
     private func width(of item: NSSplitViewItem, in range: ClosedRange<Int>) -> Int? {
-        guard !item.isCollapsed else { return nil }
-        let width = Int(item.viewController.view.frame.width.rounded())
+        guard !item.isCollapsed,
+            let index = controller.splitViewItems.firstIndex(where: { $0 === item })
+        else { return nil }
+        let width = Int(controller.splitView.arrangedSubviews[index].frame.width.rounded())
         return range.contains(width) ? width : nil
     }
 }
