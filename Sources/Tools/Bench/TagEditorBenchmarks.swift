@@ -217,28 +217,28 @@ private let nasBytesPerSecond = 57.0 * 1024 * 1024
 let tagBatchBenchmarks = [
     Benchmark(
         name: "tag write: \(batchFileCount) 40 MB FLACs' titles in one batch, in place",
-        budget: Budget(appleSilicon: 30, oldMac: 60, unit: .seconds)
+        budget: Budget(appleSilicon: 1, oldMac: 3, unit: .seconds)
     ) {
         try batchWrite(inPlace: true, nas: false)
     },
     Benchmark(
         name:
             "tag write: \(batchFileCount) 40 MB FLACs' titles in one batch, in place, slow simulated NAS",
-        budget: Budget(appleSilicon: 60, oldMac: 60, unit: .seconds)
+        budget: Budget(appleSilicon: 10, oldMac: 10, unit: .seconds)
     ) {
         try batchWrite(inPlace: true, nas: true)
     },
     Benchmark(
         name:
             "tag write: \(batchFileCount) 40 MB FLACs' titles in one batch, through the temp file",
-        budget: Budget(appleSilicon: 30, oldMac: 60, unit: .seconds)
+        budget: Budget(appleSilicon: 5, oldMac: 30, unit: .seconds)
     ) {
         try batchWrite(inPlace: false, nas: false)
     },
     Benchmark(
         name:
             "tag write: \(batchFileCount) 40 MB FLACs' titles in one batch, through the temp file, slow simulated NAS",
-        budget: Budget(appleSilicon: 120, oldMac: 120, unit: .seconds)
+        budget: Budget(appleSilicon: 100, oldMac: 120, unit: .seconds)
     ) {
         try batchWrite(inPlace: false, nas: true)
     },

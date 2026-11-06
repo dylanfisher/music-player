@@ -213,10 +213,10 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Get Info on one fixture track, to its fields (median of 5; phase 42e); the old Mac figure is an estimate until its checkpoint | < 100 ms | < 300 ms |
 | Get Info on 100 fixture tracks, to their fields (median of 5; phase 42e); the old Mac figure is an estimate until its checkpoint | < 500 ms | < 2000 ms |
 | One fixture FLAC's title written and read back into the index (median of 5; phase 42e); the old Mac figure is an estimate until its checkpoint | < 100 ms | < 400 ms |
-| A title saved to 20 fixture FLACs grown to 40 MB, in one batch, in place (phase 47); the old Mac figure is an estimate until its checkpoint | < 30 s | < 60 s |
-| The same on the slow simulated NAS: 10 ms a file system call, 57 MB/s over one link (phase 47) | < 60 s | < 60 s |
-| The same batch through the temp file (phase 47); the old Mac figure is an estimate until its checkpoint | < 30 s | < 60 s |
-| The same through the temp file on the slow simulated NAS (phase 47) | < 120 s | < 120 s |
+| A title saved to 20 fixture FLACs grown to 40 MB, in one batch, in place (phase 47); the old Mac figure is an estimate until its checkpoint | < 1 s | < 3 s |
+| The same on the slow simulated NAS: 10 ms a file system call, 57 MB/s over one link (phase 47) | < 10 s | < 10 s |
+| The same batch through the temp file (phase 47); the old Mac figure is an estimate until its checkpoint | < 5 s | < 30 s |
+| The same through the temp file on the slow simulated NAS (phase 47) | < 100 s | < 120 s |
 | Launch to the first scan's start with a 1M-event sync merge pending (phase 32d); the old Mac figure is an estimate until its checkpoint | < 1 s | < 3 s |
 
 ## Phases
