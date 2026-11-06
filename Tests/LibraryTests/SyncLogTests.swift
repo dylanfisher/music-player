@@ -392,6 +392,31 @@ private func record(_ seq: Int64, _ event: SyncEvent) -> String {
     #expect(recorded == [root + "b.flac"])
 }
 
+@Test func aMoveOntoAnImportedPathCountsEachPlayersImportOnce() throws {
+    let totals = { (name: String, plays: Int, skips: Int) in
+        SyncEvent.totals(
+            path: "music/library/" + name, player: .swinsian, plays: plays, skips: skips,
+            lastPlayed: nil)
+    }
+    let (sync, index) = try folder(with: [
+        record(1, totals("a.flac", 5, 1)),
+        record(2, totals("b.flac", 3, 2)),
+        record(3, .move(from: "music/library/a.flac", to: "music/library/b.flac")),
+    ])
+    let root = sync.deletingLastPathComponent().path + "/music/library/"
+    try index.recordPlay(root + "b.flac", at: 1_700_000_000)
+    let report = try index.sync(folder: "sync", at: sync.path)
+    #expect(report.problems.isEmpty, "\(report.problems)")
+    let counts = try index.database.prepare(
+        "SELECT p.path, s.play_count, s.skip_count FROM paths p JOIN plays s ON s.path_id = p.id"
+    ).map { [try $0.text(0), String(try $0.int(1)), String(try $0.int(2))] }
+    #expect(counts == [[root + "b.flac", "6", "2"]])
+    let imported = try index.database.prepare(
+        "SELECT player, play_count, skip_count FROM \(importedPlaysTable)"
+    ).map { [try $0.text(0), String(try $0.int(1)), String(try $0.int(2))] }
+    #expect(imported == [["swinsian", "5", "2"]])
+}
+
 @Test func aMoveCantTakeTheRowOfAFileThisMacStillHas() throws {
     let (sync, index) = try folder(with: [
         record(1, .move(from: "music/library/a.flac", to: "music/library/b.flac"))

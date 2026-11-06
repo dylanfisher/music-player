@@ -261,10 +261,23 @@ extension LibraryIndex {
     /// history moved, the later rating and opinion, the earliest Date Added. Leaves `gone` with no
     /// stats. Call inside a transaction.
     private func absorb(_ gone: Int64, into kept: Int64) throws {
+        // A player's import totals on both paths count once, the higher (ADR 0033), so the
+        // lower of each pair stays out of the counts added.
+        let overlap = try statement(
+            """
+            SELECT ifnull(sum(min(g.play_count, k.play_count)), 0),
+                ifnull(sum(min(g.skip_count, k.skip_count)), 0)
+            FROM \(importedPlaysTable) g
+            JOIN \(importedPlaysTable) k ON k.player = g.player AND k.path_id = ?2
+            WHERE g.path_id = ?1
+            """
+        ).map(gone, kept) { (try $0.int(0), try $0.int(1)) }[0]
         if let counts = try statement(
             "SELECT play_count, skip_count, last_played_seconds FROM plays WHERE path_id = ?"
         ).map(gone, row: { (try $0.int(0), try $0.int(1), $0.optionalDouble(2)) }).first {
-            try addCounts(kept, plays: counts.0, skips: counts.1, lastPlayed: counts.2)
+            try addCounts(
+                kept, plays: max(0, counts.0 - overlap.0), skips: max(0, counts.1 - overlap.1),
+                lastPlayed: counts.2)
             try statement("DELETE FROM plays WHERE path_id = ?").run(gone)
         }
         try statement("UPDATE history SET path_id = ? WHERE path_id = ?").run(kept, gone)
@@ -298,8 +311,20 @@ extension LibraryIndex {
             WHERE id = ?
             """
         ).run(gone, kept)
+        try statement(
+            """
+            UPDATE \(importedPlaysTable) SET
+                play_count = max(play_count, (SELECT g.play_count FROM \(importedPlaysTable) g
+                    WHERE g.path_id = ?1 AND g.player = \(importedPlaysTable).player)),
+                skip_count = max(skip_count, (SELECT g.skip_count FROM \(importedPlaysTable) g
+                    WHERE g.path_id = ?1 AND g.player = \(importedPlaysTable).player))
+            WHERE path_id = ?2
+                AND player IN (SELECT player FROM \(importedPlaysTable) WHERE path_id = ?1)
+            """
+        ).run(gone, kept)
         try statement("UPDATE OR IGNORE \(importedPlaysTable) SET path_id = ? WHERE path_id = ?")
             .run(kept, gone)
+        try statement("DELETE FROM \(importedPlaysTable) WHERE path_id = ?").run(gone)
         try statement(
             "UPDATE OR IGNORE \(importedLastPlaysTable) SET path_id = ? WHERE path_id = ?"
         ).run(kept, gone)

@@ -8,7 +8,7 @@
 - **Amended by:** [0098](0098-scan-adds-by-folder-hog-mode-off-ember-icon.md): a scan's new
   files go in the log as one `addedFiles` event a folder.
 - **Amended:** phase 46 (an import's `totals` in place of `counts`, merged by the higher; a
-  `counts` line is skipped).
+  `counts` line is skipped; a merged move counts each player's import once).
 
 ## Context
 
@@ -151,7 +151,8 @@ the config file but music files, through the tag writer.
   own scan will find the move, and a log can't take the row of a file that's there. Otherwise
   a row for the old path takes the new one, and when the new path has a row too, its stats
   merge into the old row first by the rules above, plays and skips added and history moved: a
-  move arriving after the new path was played.
+  move arriving after the new path was played. A player's import totals on both paths count
+  once, the higher (0033).
 - **Moves are noted** (`sync_moves`, by sync path, 100,000 at most), both this machine's and
   those read. An event for a moved path read later, such as a late play of the old one, goes
   to where the moves lead, and so does a move onto a path that moved on before it was read;
