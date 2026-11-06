@@ -5909,9 +5909,60 @@ part, alone and in the suite, while other agents use this Mac's screen.
 
 #### 44e. Tags written in place
 
-- [ ] **44e.1** A tag save whose new tag fits the file's existing padding overwrites only the
+- [x] **44e.1** A tag save whose new tag fits the file's existing padding overwrites only the
       tag's bytes in the original, with the same checks before and the read-back after; one
       that doesn't fit uses the temp file as now. Amends ADR 0020 and 0100.
+
+Plan, part 44e (ADR 0107):
+- Probe: every format's rewrite already returns segments, new bytes and ranges of the old file,
+  and `writeTemp` already tells when every kept range stays at its offset (it clones then). A
+  plan of the original's size with every kept range in place is a write in place; the region is
+  the first to the last byte that differs. FLAC rebuilds all its metadata blocks (art included)
+  as one segment, so the region is trimmed to the bytes that differ, not the segments. The
+  generated MP4 fixtures have no `free`; a first edit past the padding gives them 2 KB.
+- Before the write: the checks the temp path makes (writable, unlocked, one link, the identity
+  read at the start), one pass hashing the file, its payload and the file as planned, and the
+  planned file read back through a source that substitutes the region, so a plan that wouldn't
+  read back never opens the original for writing.
+- Journal: the record and the old bytes as for any edit, plus the planned file's hash and a
+  marker beside the entries, all flushed and then one `F_FULLFSYNC`, before the original is
+  opened. The write: `fstat` and a `pread` of the region must match what was read, then one
+  `pwrite`, `F_FULLFSYNC` (or `fsync`), `close`. After: the read-back as for a temp file plus
+  the whole file's hash; then the record is confirmed and the marker removed.
+- A failure after the write started puts the original back through the temp-file path, checked
+  by hash. Recovery (each write, each undo, and the app at launch) finishes what a marker names:
+  a file hashing as planned keeps the edit, one hashing as the original drops the record, one
+  torn is put back. Undo is unchanged.
+- Tests (generated fixtures only): in place when it fits for FLAC, MP4, MP3 2.3 and 2.4, AIFF
+  and WAV, with and without art (same inode and size, only bytes outside the audio differ,
+  undo restores); the temp file past the padding; a crash one byte into the write put back; a
+  crash after the whole write kept; a crash before it dropped; a file changed underneath (a tag
+  byte with the mtime set back, and the mtime) refused; a read-back failure put back; a put-back
+  that fails at once finished by the next call; a plan that wouldn't read back refused before
+  the original is touched; a stale marker removed. The temp-path fault tests pin the temp path.
+- Bench: the FLAC title row split into in place and through the temp file.
+
+Result, part 44e: shipped 44e.1 (ADR 0107). A tag edit whose new tag fits the padding is
+written over the old one in the original with one `pwrite` of the bytes that differ, journaled
+and flushed first, checked before on the planned file and read back after; anything else goes
+through the temp file as before. ADR 0020's guarantee changes, as the ADR says plainly: for the
+moment of that `pwrite` (about 1 ms locally) a crash or a dropped share leaves the original's
+tag torn on the disk, the audio untouched, until the next launch, write or undo puts it back
+from the journal; if the journal is lost too, the damage stays. Journal records and record
+updates now flush their folder before the drive's cache, for every write. Bench on Apple
+Silicon (fixture FLAC on APFS, median of 5): written in place and read back into the index 14.8
+to 15.8 ms (the write 12.3 to 13.2), through the temp file 12.7 to 13.1 ms (the write 9.9 to
+10.5): locally the clone makes the temp file cheap and the write in place pays for its extra
+flushes and hash; the saving is on the NAS, two passes over the file instead of four, which
+the build Mac can't measure. The corpus run gains a crash one byte into a write in place per
+container, not run here (the reference folder isn't on this Mac). `./scripts/check` passes but
+for `theGlassHeadersAreFrosted`, a screen test outside this part. For the owner, on copies of
+NAS files only: edit a title on a FLAC, an MP3 and an M4A with `moov` first, and check with
+`ls -li` that the inode stays and no `.tagwrite` file is left, that Swinsian and Finder read
+the new tag, Finder tags and permissions survive, and Undo Tag Edit puts the bytes back
+(`cmp` against a second copy); edit one while Swinsian plays it; then pull the network cable
+during a batch of small edits, reconnect, relaunch, and check each file reads as before or as
+edited, never torn, and that the log shows what recovery found.
 
 #### Sync logs, compressed: answered, not done
 

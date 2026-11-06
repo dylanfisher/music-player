@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Amends:** [0020](0020-tag-writing.md), [0021](0021-tag-editor.md),
   [0077](0077-tag-editor-reads-at-once.md), [0081](0081-hung-share-off-the-main-thread.md)
+- **Amended by:** [0107](0107-tags-written-in-place-within-the-padding.md): writing in place
+  within the padding, left to the owner below, is done.
 
 ## Context
 
