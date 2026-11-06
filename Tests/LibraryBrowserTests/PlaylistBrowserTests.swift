@@ -274,3 +274,15 @@ func writableModel(
     let other = await launched(library, table: (.artist, true))
     #expect(other.sortColumn == .artist && other.ascending)
 }
+
+@MainActor @Test func aSortChosenInAPlaylistStaysThereWhenHistoryOpensNext() async throws {
+    let (model, _) = try await writableModel()
+    try await model.createPlaylist(
+        named: "Mix", rules: nil, trackIDs: Array(model.trackIDs.prefix(6)))
+    await model.setSort(.title, ascending: false)
+    await model.setSource(.history)
+    #expect(model.sortColumn == .lastPlayed && !model.ascending)
+    #expect(model.tableSort == (.artist, true))
+    await model.setSource(nil)
+    #expect(model.sortColumn == .artist && model.ascending)
+}

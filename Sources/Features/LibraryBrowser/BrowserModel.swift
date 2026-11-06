@@ -524,6 +524,12 @@ public final class BrowserModel {
 
     private func changeSort(from old: BrowserSource?, to new: BrowserSource?) {
         let leaving = defaultSort(old)
+        // From one source with its own sort to another, the table's sort stays the one from
+        // before the first, not one chosen inside it.
+        if leaving != nil, let entering = defaultSort(new) {
+            pendingSort = entering
+            return
+        }
         if let leaving {
             if pendingSort == leaving, let sortBeforeDefault { pendingSort = sortBeforeDefault }
             sortBeforeDefault = nil
