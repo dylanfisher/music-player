@@ -25,17 +25,21 @@ past the start, plus `RendererClock.leadMarginSeconds` (2 s). The session no lon
 a report of the end.
 
 **A poll moves the end later only for a stall.** The clock keeps the least the renderer has
-been behind it since its position first moved, its usual lag. Two polls running that find it
-more than `behindToleranceSeconds` (1.5 s) further behind than that, while the clock is short
-of the track's length, move the end later by that much, never earlier, and by at most
-`RendererClock.stallCapSeconds` (10 s) from a start or a seek. After a pause the lag is
-measured again and new stalls add to earlier ones. A renderer that lags by the same amount
-throughout moves nothing, and one stuck at its end, behind the clock once the clock is past
-the length, moves nothing.
+been behind it, its usual lag, measured from the first poll the clock runs through and again
+after each pause. Two polls running that find it more than `behindToleranceSeconds` (1.5 s)
+further behind than that, while the clock less the stalls so far is short of the track's
+length, move the end later to the stall so far plus that excess: never earlier, and by at most
+`RendererClock.stallCapSeconds` (10 s) from a start or a seek. A lag measured at the first poll
+counts for 1.5 s at most, a poll's noise, so a renderer that reports playing while it holds at
+the place it started, buffering after a start, a seek or a resume, has the hold taken as a
+stall rather than as its lag: otherwise the clock would run that far ahead all track and the
+end would come early. A renderer stuck at its end, behind the clock once the clock is past the
+length, moves nothing.
 
-A stall before the position first moves can't be told from a lag, as both report the start
-for a while, so it moves nothing; the track's last seconds may then be cut by up to the stall
-less the margin. The polls can't separate them, and a lag is what the Denon shows.
+A renderer whose positions only lag, as the Denon's are thought to, looks the same as one that
+held at the start, so its end moves later by the lag. That costs nothing when it stops at its
+end, since a stop counts by the clock unmoved by stalls (below); one that plays on past its end
+gets the next track that much later.
 
 **A stop counts as the end** when the clock, unmoved by stalls, or the last position polled
 is within `endSlackSeconds` (3 s) of the track's length. Any earlier stop is reported as one on

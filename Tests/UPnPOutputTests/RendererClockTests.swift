@@ -21,11 +21,20 @@ private func started() -> RendererClock {
 
 private let margin = RendererClock.leadMarginSeconds
 
-@Test func aRendererThatLagsByTheSameAmountMovesNothing() {
-    // It says 0 for its first five seconds, then five seconds behind to the end.
-    let clock = polled(to: 59) { max(0, $0 - 5) }
+@Test func aRendererWithinAPollsNoiseOfTheClockMovesNothing() {
+    let clock = polled(to: 59) { max(0, $0 - 1) }
     #expect(clock.stallSeconds == 0)
     #expect(clock.deadline == 60 + margin)
+}
+
+@Test func aFreezeAtTheStartEndsNoEarlierThanTheTracksRealEnd() {
+    // It says it plays but holds at 0 for five seconds while it buffers, then plays to the end,
+    // which comes at 65.
+    let clock = polled(to: 59) { max(0, $0 - 5) }
+    #expect(clock.stallSeconds == 5)
+    #expect(clock.deadline.map { $0 >= 65 } == true)
+    // A stop at its real end still counts as the end.
+    #expect(clock.isAtEnd(at: 65, slackSeconds: 0))
 }
 
 @Test func aStallMovesTheEndByItsLength() {
@@ -42,19 +51,14 @@ private let margin = RendererClock.leadMarginSeconds
 }
 
 @Test func aRendererStuckPastTheEndMovesNothing() {
-    // Five seconds behind throughout, and stuck where it was at the end.
-    let clock = polled(to: 75) { max(0, min($0, 60) - 5) }
+    // A second behind throughout, and stuck where it was at the end.
+    let clock = polled(to: 75) { max(0, min($0, 60) - 1) }
     #expect(clock.stallSeconds == 0)
     #expect(clock.isAtEnd(at: 60, slackSeconds: 0))
 }
 
-@Test func aStallBeforeThePositionFirstMovesCantBeToldFromALag() {
-    let clock = polled(to: 59) { max(0, $0 - 4) }
-    #expect(clock.stallSeconds == 0)
-}
-
 @Test func theClockPausesAndResumesWithoutThePolledPosition() {
-    var clock = polled(to: 20) { max(0, $0 - 5) }
+    var clock = polled(to: 20) { $0 }
     clock.pause(at: 20.5)
     #expect(clock.deadline == nil)
     #expect(clock.seconds(at: 30) == 20.5)

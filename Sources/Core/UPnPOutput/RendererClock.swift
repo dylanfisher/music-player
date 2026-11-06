@@ -24,9 +24,8 @@ struct RendererClock: Equatable {
     private(set) var stallSeconds = 0.0
     /// `stallSeconds` when the lag was last measured from scratch, after a pause.
     private var stallBeforeSeconds = 0.0
-    /// The position of the first poll the clock ran through, until one shows it moved.
-    private var firstPolledSeconds: Double?
-    /// The least the renderer has been behind the clock since its position first moved.
+    /// The least the renderer has been behind the clock since the lag was measured from
+    /// scratch.
     private var lagSeconds: Double?
     private var behindPolls = 0
 
@@ -67,7 +66,6 @@ struct RendererClock: Equatable {
         isRunning = false
         // The renderer's lag may differ once it plays again, so it's measured again.
         stallBeforeSeconds = stallSeconds
-        firstPolledSeconds = nil
         lagSeconds = nil
         behindPolls = 0
     }
@@ -81,20 +79,16 @@ struct RendererClock: Equatable {
     /// A poll found the renderer playing at `polledSeconds`. When it's further behind the clock
     /// than its least lag by more than `behindToleranceSeconds`, `stalledPolls` running, while
     /// the clock is short of the end, it stalled, and the end moves later to match: never
-    /// earlier, and by at most `stallCapSeconds`. A renderer whose reports lag by the same
-    /// amount throughout moves nothing.
+    /// earlier, and by at most `stallCapSeconds`.
     mutating func polled(_ polledSeconds: Double, at now: Double) {
         guard isRunning else { return }
-        guard let first = firstPolledSeconds else {
-            firstPolledSeconds = polledSeconds
-            return
-        }
-        // Until its position first moves, a renderer still starting and one whose reports lag
-        // look the same, so its lag is measured from the first poll that moved.
-        guard lagSeconds != nil || polledSeconds != first else { return }
         let clockSeconds = seconds(at: now)
-        let behind = clockSeconds - polledSeconds
-        let lag = min(lagSeconds ?? behind, behind)
+        // Behind the clock as stalls before a pause had already moved it.
+        let behind = clockSeconds - stallBeforeSeconds - polledSeconds
+        // The first poll measured may already be behind, as after a resume, by no more than a
+        // poll's noise: a renderer held at where it started for longer is buffering, and the
+        // track's end would come early if that were taken as its lag.
+        let lag = min(lagSeconds ?? min(behind, Self.behindToleranceSeconds), behind)
         lagSeconds = lag
         // Past the end by the clock, a renderer that's behind is stuck at the end, and waiting
         // on it would never end the track.
