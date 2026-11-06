@@ -399,14 +399,35 @@ private func output(
     fake.ignoresNext()
     let (output, log) = try await output(fake)
     defer { output.close() }
+    let started = ProcessInfo.processInfo.systemUptime
     output.load(item(1, "medium"), startSeconds: 0, playing: true)
     output.setNext(item(2))
     await log.wait(for: ["started 1"])
-    await eventually("the renderer to be seen playing") { fake.playedSeconds > 0.2 }
-    // Re-buffering for three seconds puts it past the clock's first idea of the end.
-    fake.stall(forSeconds: 3)
-    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 15)
-    // The next track came only once the first had played out and stopped.
+    // Past a poll that saw the position move, so a stall can't be taken for a lag.
+    await eventually("the position to move") { fake.playedSeconds > 1.6 }
+    // Re-buffering for four seconds puts it past the clock's first idea of the end.
+    fake.stall(forSeconds: 4)
+    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 20)
+    // The next track came only once the first had played out and stopped, and no later than
+    // the cap on how far stalls move the end allows.
+    #expect(fake.setTransportURIs.map(\.stateBefore) == [.stopped, .stopped])
+    let took = ProcessInfo.processInfo.systemUptime - started
+    #expect(took < 5 + RendererClock.stallCapSeconds + RendererClock.leadMarginSeconds, "\(took) s")
+}
+
+@Test func aRendererWhosePositionLagsStillEndsTheTrackWhenItStops() async throws {
+    let scpd = try captured("denon-avtransport-scpd.xml").replacingOccurrences(
+        of: "<name>SetNextAVTransportURI</name>", with: "<name>Unlisted</name>")
+    let fake = try await FakeRenderer.denon(trackSeconds: 10, scpd: scpd)
+    // Its last report before it stops is five seconds short of the end, past the slack.
+    fake.lagsBy(5)
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    output.load(item(1), startSeconds: 0, playing: true)
+    output.setNext(item(2, "short"))
+    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 20)
+    #expect(!log.all.contains("failed 1"), "\(log.all)")
+    // The stop was the end: the second track went once the first had played out.
     #expect(fake.setTransportURIs.map(\.stateBefore) == [.stopped, .stopped])
 }
 
