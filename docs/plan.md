@@ -5,7 +5,7 @@ Agents work through it phase by phase, mostly unattended, and stop only at **har
 checkpoints**, where the owner has to try something on the DAC Mac, the Denon, a phone, or the
 2015 MacBook Pro.
 
-Finished phases, 1 to 44 apart from 10 and 13, are in [plan-archive.md](plan-archive.md), with
+Finished phases, 1 to 44 apart from 10 and 13, and 46, are in [plan-archive.md](plan-archive.md), with
 their implementation plans, Result lines and the full text of each checkpoint.
 
 Each phase ends with the [phase gate](#phase-gate): review, performance audit, and architecture
@@ -84,6 +84,8 @@ that phase's Result line, and delete its line here.
   periods on the 2015 MacBook Pro with the real library.
 - **44e Tags written in place** ([steps](plan-archive.md#44e-tags-written-in-place)): in-place
   tag edits on copies of NAS files, then a pulled network cable during a batch.
+- **46 Doubled Swinsian play counts** ([steps](plan-archive.md#46-doubled-swinsian-play-counts)):
+  the steps in its Result line on both Macs, then a few tracks' counts compared.
 
 ### Owner checks in the running app
 
@@ -215,108 +217,7 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 ## Phases
 
-Phases 10 and 13 are from the original plan and haven't been built; 45 to 49 are new.
-
-### 46. Doubled Swinsian play counts
-
-Found on 2026-11-05 and checked on copies of both Macs' indexes and sync logs. This Mac imported
-Swinsian on 2 Nov. mbp2015 imported the same library on 4 Nov, before it had read this Mac's
-log. Each Mac then merged the other's `counts` events on top of its own
-(`LibrarySyncMerge.swift:45`). That doubled 11,049 tracks on both Macs: 86,792 plays against
-Swinsian's 43,293. A `counts` event carries a delta, so a merge can't tell two imports of the
-same plays from two real sets of plays. mbp2015's `imported_plays` baseline is now 86,646, so
-its later imports undercount.
-
-The rule: a path's imported plays for one player are the highest total that any machine's
-import of that player reported, never a sum across machines. `play_count` is the plays recorded
-here, plus the synced plays, plus each player's total. Neither the order of the imports nor the
-order of the syncs changes the result, and a later import still adds only real growth.
-
-- [ ] **46.1 Totals, not deltas.** The `counts` event and the import carry the source's totals
-      per path and player. The merge takes the maximum per player and path, so applying an
-      event twice changes nothing. Amends ADR 0033 and ADR 0038.
-- [ ] **46.2 Existing data.** Pre-release, so there is no migration. The deltas already in the
-      logs and in `imported_plays` may be discarded and rebuilt (old events ignored when read:
-      the app only appends its own log and never rewrites one, ADR 0038), as long as the owner's stats
-      come out right without importing again on both Macs. The Result line says exactly what
-      the owner has to do on each Mac.
-- [ ] **46.3 Tests** that fail without the fix: two machines import the same library in either
-      order, before and after syncing, and end with the same count; an import after the source
-      gained plays adds only the gain; a play recorded here is never lost.
-- [ ] **46.4 Check on the owner's data.** Against copies of both Macs' indexes and logs, never
-      the live files: the imported plays total 43,293 (plus whatever Swinsian has gained since),
-      and the plays recorded in this app are added on top.
-- [ ] **Hardware checkpoint (owner):** after the steps in the Result line, both Macs show the
-      same play count for a few tracks, matching Swinsian plus the plays made in this app.
-
-Answered without a change: Swinsian's database keeps no play history, only a count, a last
-played and a date added per track. Its Library Statistics window is worked out from those, so
-individual plays can't be recovered from it. The last played already counts as one dated play
-(44c); the rest of an import stays undated.
-
-Implementation plan:
-- Event (Library, `SyncEvent`): a `totals` event, `path`, `player`, `plays`, `skips`,
-  `lastPlayed`, carries the player's totals for the path as this machine holds them, in place
-  of `counts`. A `counts` line, which earlier builds wrote with an import's deltas, is read and
-  skipped without a problem (`SyncLineProblem.retiredCounts`, skipped by the sync cursor), since
-  the app never rewrites a log. The fuzz target's seed line becomes a `totals` one.
-- Import (Library, `LibraryPlayerImport`, `ImportPlan`): `imported_plays` holds the highest
-  totals any machine's import of a player reported. The plan's gain is the source's total past
-  that, never less than 0; `TrackUpdate.totals` replaces `imported` and is recorded when a gain
-  is. The import logs `totals` with the recorded totals.
-- Merge (Library, `LibrarySyncMerge`): `totals` raises the recorded totals to the event's and
-  adds the gain to the path's counts, so applying it twice, or after an import of the same
-  library here, adds nothing.
-- Existing data (Library, `LibrarySchema`): the `imports` part's SQL changes, so it's rebuilt
-  empty, and building it sets each path's play count to its history rows, this machine's and
-  the synced plays, discarding what earlier imports added. Skips have no history and stay. The
-  owner then imports Swinsian once, on either Mac, and the other reads its `totals`.
-- Tests, in `SyncTests`, `PlayerImportTests`, `SyncLogTests` and `LibraryIndexTests`: two
-  machines import the same library in either order, before and after syncing, and agree; an
-  import after the source gained plays adds only the gain, here and on the other machine; a
-  play recorded here survives both; a `counts` line is skipped without a problem; the rebuilt
-  part leaves each play count at its history.
-- 46.4 on copies in the scratchpad: both Macs' indexes and the sync folder's logs, opened by a
-  test-only run of the new build, then an import of this Mac's Swinsian copy.
-- ADR 0033 and 0038 amended in place, with their "Amended" lines.
-
-Result (draft until the gate passes): shipped 46.1 to 46.3 as planned, amending ADR 0033 and
-0038. An import logs `totals`, the player's totals for each path, and `imported_plays` keeps the
-highest any machine's import reported; an import or a merge adds only what passes it. A `counts`
-line is skipped without a problem. Rebuilding the `imports` part first sets each play count to
-its history rows and takes the recorded import skips off each skip count, so each Mac opens with
-its own and synced plays only, and the window shows once that 11,282 import counts were
-discarded. From the review: a synced move that merges two paths counts each player's import
-once, the higher.
-
-Bench: merging 1M events 6.39 s, history 12.11 ms, the database 47.14 MB with the history table
-28.61 MB, a stats period change 227 ms. Record a play measured 0.17 ms (p95) against 0.08 ms in
-an older record; the phase doesn't touch that path, and it is within its 1 ms budget.
-
-46.4, on copies taken at 20:48 of both indexes, both logs and both Swinsian libraries: opened
-with this build, this Mac had 137 plays and mbp2015 135, and 137 each after a sync. Importing
-this Mac's Swinsian (43,293 plays, no growth since the copy given at 19:30) with the prefix
-`/Volumes/music-1` to `/Volumes/music` matched all 43,368 of its paths and added 43,293 plays to
-11,172 tracks: 43,430 here. After the sync mbp2015 had 43,411: the same, less 19 plays on 14
-tracks under `music/dsd`, a folder mbp2015 doesn't watch (ADR 0038 skips them). Importing
-mbp2015's own Swinsian there as well, which counts 179 plays more on some tracks (43,400 in
-all), raised both by those 179: 43,609 here and 43,590 there, the higher of the two Swinsians for
-each track. Without the prefix only 12,479 paths match; the owner's first import must have used
-it.
-
-What the owner does:
-1. **Both Macs, before any import:** install this build and open it once with the share mounted.
-   Update mbp2015 first, or keep its app quit until it's updated: a build before this one reads
-   the `totals` lines as unknown events and passes them for good. Each Mac shows a notice that
-   the import counts were discarded, and its play counts drop to the plays made in this app.
-2. **This Mac only:** quit Swinsian, then Import from Swinsian…, with "Replace the path prefix"
-   set to `/Volumes/music-1` → `/Volumes/music`, as the first import had. The preview should add 43,293
-   plays, or more if Swinsian has gained since.
-3. **mbp2015:** nothing to import. Its next sync, on launch or after a scan, brings this Mac's
-   totals. Importing mbp2015's own Swinsian there too, with the same prefix, is optional and
-   safe: it adds only the plays that library has past this Mac's (179 on 5 November).
-4. **Check:** a few tracks show the same play count on both Macs: Swinsian's count plus the
-   plays made in this app.
+Phases 10 and 13 are from the original plan and haven't been built; 45 and 47 to 49 are new.
 
 ### 47. Faster tag writes
 
