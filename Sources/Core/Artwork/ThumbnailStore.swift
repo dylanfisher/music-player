@@ -2,21 +2,10 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import Log
+import Metadata
 import UniformTypeIdentifiers
 
 private let logger = moduleLogger()
-
-/// The file a thumbnail was made from, as the index last saw it. A tag edit changes the file's
-/// size or modification time, so its new art isn't served from the store.
-public struct FileStamp: Hashable, Sendable {
-    public var sizeBytes: Int
-    public var modifiedSeconds: Double
-
-    public init(sizeBytes: Int, modifiedSeconds: Double) {
-        self.sizeBytes = sizeBytes
-        self.modifiedSeconds = modifiedSeconds
-    }
-}
 
 /// Thumbnails kept on disk between launches, so a cover shown before comes back without reading
 /// its file over the NAS and decoding it again (ADR 0079). A cache, not app state: a file that
