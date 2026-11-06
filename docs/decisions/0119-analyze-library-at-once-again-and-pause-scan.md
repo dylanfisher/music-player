@@ -31,8 +31,10 @@ it stopped at. A run with nothing to do reports only its end.
 **A run again, in a schema part of its own.** A new part, `analysisRun`, holds three tables:
 `analysis_run` (one row: when the run going, or the last one, started, and whether it finished),
 `measured_at` (when each measures row was stored, by path) and `analysis_failures` (the files the
-run couldn't analyze or store, with their stamps, emptied as each run starts). A file is done
-for the pass when it has current measures stored at or after the run's start. Analyze Library
+run couldn't analyze or store, with their stamps, emptied as a run again starts). A file is done
+for the pass when it has current measures stored at or after the run's start. A file that
+failed as the index has it now counts as tried: a run carried on doesn't read it again, and
+its count goes on from where it stopped; a run again reads it. Analyze Library
 carries on from the last run's start; Analyze Library Again starts a run now, so every file
 measured before it counts as not done. The measures it replaces stay until each file's new ones
 are stored, so the columns and Library Health keep their values while it runs, and a quit
@@ -62,7 +64,8 @@ what the menu and the palette do.
 **Pause Scan.** `library.pauseScan` and `library.resumeScan` pause and resume the running scan
 through its `ScanControl`. The user's pause is held in `WatchState`, which holds the running
 scan while it's set, so the watcher's own `resume()` after playback stops doesn't undo it; it
-ends with the scan, and doesn't outlast a quit. While it holds, other scans wait behind it as
+ends with the scan, or with the watcher's stop, whose cancelled scan ends with `scanStopped`,
+and doesn't outlast a quit. While it holds, other scans wait behind it as
 for a scan paused by playback. The status bar says "Scan paused: …", and Analyze Library doesn't
 wait for a paused scan, which reads nothing. Settings > Watched Folders shows no scan progress,
 so the status bar is the only place with the button.
@@ -85,3 +88,7 @@ so the status bar is the only place with the button.
   whether playback or the window stutter.
 - A store that keeps failing records a failure that may fail to store too; the file is then
   listed again, and only the Again title waits for it.
+- A file that failed is read again only by Analyze Library Again, or once its file changes.
+- A user's Pause Scan that's forgotten holds back other scans and sync pushes until Resume
+  Scan, as a scan held for playback does.
+- Resume Scan while playback holds a network scan leaves it held until playback stops.
