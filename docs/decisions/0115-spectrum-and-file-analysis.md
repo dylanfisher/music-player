@@ -23,13 +23,18 @@ every sample OR'd together. Lossy and float files are read as Float32 and have n
 bits. Each 4096-frame hop feeds an 8192-point FFT per channel (Hann, 50% overlap, vDSP from
 Accelerate, a system framework on macOS 12), its power averaged over the channels and scaled so
 a full-scale sine is 0 dB. The spectrogram keeps each cell's maximum over the frames and bins
-it covers, at most 1,000 columns × 512 rows, stored as 8 bits from -150 dB to 0 dB; the
+it covers, 512 rows and at most 1,000 columns, each column a whole number of windows: as
+many as the file's stated length needs to fit, doubled by merging pairs of columns whenever
+more come, as from a VBR MP3 whose length is an estimate. Cells are stored as 8 bits from
+-150 dB to 0 dB; the
 average spectrum is the mean power per row. The same hops give identical channels (the first
 two, sample by sample), clipped runs (3 or more samples at the largest code of the stored
 depth, or at 32767/32768 for float), the sample peak, the true peak (a 4-phase, 48-tap
 Hann-windowed sinc interpolator, as BS.1770 oversamples), and the DR meters' score (3-second
 blocks, the second-highest block peak over the RMS of the loudest 20%, a sine's RMS taken as
-its peak). The task is checked for cancellation at every hop, so at every FFT frame. DSD files
+its peak). A float sample that's NaN or infinite fails the analysis with that reason: the
+file is damaged, and no measure can take it. A lossless file whose format names no depth is
+read as float. The task is checked for cancellation at every hop, so at every FFT frame. DSD files
 are refused with "DSD files aren't analyzed yet".
 
 **A cutoff is a fall of at least 20 dB across 1 kHz** of the average spectrum: the mean level
@@ -61,7 +66,8 @@ each (columns, Nyquist, length, the 8-bit cells and the 512 average levels; abou
 1,000 columns) named by a hash of the path and stamp, and the least recently used are removed
 past 100 MB, after launch and every 10 MB written, as the thumbnails are (ADR 0079).
 `FileAnalyzer` puts both in front of the analysis, which runs at utility priority on a task
-cancelled with the one awaiting it.
+cancelled with the one awaiting it. Either cache failing, as the index held past SQLite's
+timeout by a scan, is logged and the result returned without it.
 
 **Show Spectrum** (`track.analyze`) is in the track menu and the File menu after Get Info, and
 so in the palette. It opens a window on 1 to 8 selected tracks; more is refused in the status

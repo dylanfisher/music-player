@@ -357,7 +357,7 @@ Implementation plan, part 45a (ADR 0115):
    public actor on a connection of its own, as `StatsReader`: `measures(path:stamp:)` returns
    a row only when the stamp matches, `store(_:path:stamp:)` replaces it. 45b reads the table.
 3. **Analysis module (45a.1–45a.3).** `Sources/Core/Analysis`, importing Accelerate, HALOutput
-   (`FileDecoder`, `FileLatency` and `SignalFormat(_:)` become `package`), Library, Playback,
+   (`FileDecoder` and `fourCharCode` become `package`), Library, Playback,
    Metadata. `analyzeFile(at:latency:progress:)` decodes in 4096-frame hops as Int32 for
    FLAC, ALAC and integer PCM and as Float32 otherwise, keeps an 8192-frame window per
    channel, and per hop: a Hann window and `vDSP_fft_zrip`, power averaged over channels, the
@@ -411,7 +411,18 @@ decoding and vDSP work; NAS < 6 s and < 20 s, the old Mac's compute plus the sam
 waits, with room; memory < 10 MB on both. Soak with analysis of that file one run after
 another at utility priority, beside the scan and a search a second: 20 s, 0 underruns over 19
 analyses; 180 s, 0 underruns over 161 analyses, memory −7.0 MB. `music-player analyze` opens
-no window (ADR 0115) and waits up to 600 s. Deferred to 45b: the library pass, which reads
+no window (ADR 0115) and waits up to 600 s. Gate: the review's five fixed in their own commits
+(a NaN or infinite float sample is now the named error "the file holds a sample that isn't a
+number or is infinite" instead of a trap; a lossless file of unknown depth is read as float; a
+measures cache that fails is logged and the analysis returned; the spectrogram's columns each
+hold a whole number of windows and fold in pairs when a file runs past its stated length, so a
+5-minute 24/96 file has 879 columns rather than 1,000; a stored spectrogram with a damaged
+header is refused); the audit's five done (`trackMouseMoves()` is public in DisplayText,
+`kilohertzText` beside `kilohertz`, the CD Nyquist defined once, `clamped(to:)` and the
+Accelerate linker setting gone). After the gate: local 1.04 s, NAS 3.94 s, memory 0.13 MB;
+20 s soak 0 underruns over 19 analyses, −4.2 MB.
+The 20.5 kHz lossy threshold stays until the owner's Spek check: a genuine CD mastered
+through a 20–20.5 kHz low-pass will be flagged as suspect lossy. Deferred to 45b: the library pass, which reads
 `measures`. Owner checkpoint: on the 2015 MacBook Pro, with music playing, select a 24/192
 track and choose Show Spectrum (File menu or the track's menu), then 8 tracks at once; say how
 long each window took to fill and whether playback dropped out; run
