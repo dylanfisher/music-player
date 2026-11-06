@@ -346,3 +346,30 @@ import Testing
     await browser.model.select(.genre, id: genre.id)
     #expect(!browser.showsAllMusic)
 }
+
+@MainActor @Test func theSearchIsSavedAndComesBackInTheFieldAndTheTable() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    func launched() throws -> LibraryBrowser {
+        LibraryBrowser(
+            reader: try LibraryReader(databaseURL: databaseURL),
+            index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+            browserHeight: 100, groupByAlbumArtist: false, thumbnails: nil)
+    }
+    let first = try launched()
+    var saved = BrowserState(source: nil)
+    first.stateChanged = { saved = $0 }
+    await first.load(saved)
+    let everything = first.model.trackIDs
+    let title = try #require(try await first.model.trackNames().first?.title)
+    first.searchField.stringValue = title
+    _ = first.searchField.target?.perform(first.searchField.action)
+    try await waitFor("the search") { first.model.filter.search == title }
+    #expect(saved.search == title)
+    #expect(first.model.trackIDs.count < everything.count)
+
+    let second = try launched()
+    await second.load(saved)
+    #expect(second.searchField.stringValue == title)
+    #expect(second.model.filter.search == title)
+    #expect(second.model.trackIDs == first.model.trackIDs)
+}

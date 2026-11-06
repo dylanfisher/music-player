@@ -77,6 +77,9 @@ public struct AppState: SettingsSchema {
         "browser.sourceSort", title: "Source Sort", default: nil,
         "The sort chosen in the source shown, when it's one that opens in a sort of its own: a"
             + " manual playlist, History or Listening Stats. Null for its own.")
+    public let search = Setting(
+        "browser.search", title: "Search Text", default: "",
+        "The text in the search field, which narrows the track table. Empty for none.")
     public let browserColumns = Setting(
         "browser.columns", title: "Browser Columns", columns: BrowserColumn.defaults,
         "The browser's three columns, left to right: what each grouped by, and the entry"

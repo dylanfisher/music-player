@@ -41,3 +41,18 @@ private func launchColumns(config: String?, saved: [BrowserColumn]) throws -> [B
         try launchColumns(
             config: #"{"browser.columnGroupings": ["genres", "artists"]}"#, saved: saved) == saved)
 }
+
+@MainActor @Test func theSavedSearchLoadsOnlyWhileTheToolbarHasTheSearchField() throws {
+    let home = FileManager.default.temporaryDirectory
+        .appendingPathComponent("window-settings-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+    let paths = AppPaths(home: home)
+    let settings = ConfigStore(
+        AppSettings(), fileURL: paths.configFile, check: try shortcutCheck(), creating: true)
+    let state = try StateStore(AppState(), fileURL: paths.stateFile)
+    try state.set(\.search, to: "Coltrane")
+    #expect(WindowSettings(settings, state: state).browser.search == "Coltrane")
+    try state.set(\.toolbarItems, to: ToolbarItem.defaultItems.filter { $0 != .search })
+    #expect(WindowSettings(settings, state: state).browser.search == "")
+}

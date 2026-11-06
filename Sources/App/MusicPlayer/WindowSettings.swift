@@ -48,7 +48,9 @@ struct WindowSettings {
             source: nil,
             columns: BrowserColumn.restored(
                 state[\.browserColumns], groupings: settings.fileValue(\.browserGroupings)),
-            sourceSort: state[\.sourceSort])
+            sourceSort: state[\.sourceSort],
+            // A search with no field to show it would narrow the table unseen.
+            search: state[\.toolbarItems].contains(.search) ? state[\.search] : "")
         resume = settings[\.resume]
         groupByAlbumArtist = settings[\.groupByAlbumArtist]
         tableAppearance = TableAppearance(settings)

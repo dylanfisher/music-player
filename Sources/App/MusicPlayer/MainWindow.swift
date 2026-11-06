@@ -29,7 +29,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
     private var toolbarObservation: NSKeyValueObservation?
     private var savedToolbar: SavedVisibility
     private var glass: WindowGlass?
-    /// Called after the browser's source, columns or sort changed, once they're saved.
+    /// Called after the browser's source, columns, sort or search changed, once they're saved.
     var browserStateChanged: () -> Void = {}
 
     init(
@@ -81,6 +81,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
         browser.stateChanged = { [weak self] state in
             saver.set(\.browserColumns, state.columns)
             saver.set(\.sourceSort, state.sourceSort)
+            saver.set(\.search, state.search)
             self?.browserStateChanged()
         }
 

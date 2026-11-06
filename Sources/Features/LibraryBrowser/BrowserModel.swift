@@ -119,8 +119,8 @@ public final class BrowserModel {
         await reload(panesFrom: 0, reason: .user)
     }
 
-    /// The source and columns the window saves, each selection by name, and the sort chosen
-    /// in a source with its own.
+    /// The source, columns and search the window saves, each selection by name, and the sort
+    /// chosen in a source with its own.
     public var state: BrowserState {
         let source = filter.source
         let ownSort = defaultSort(source)
@@ -135,7 +135,7 @@ public final class BrowserModel {
             sourceSort: source.flatMap { source in
                 guard let ownSort, ownSort != (sortColumn, ascending) else { return nil }
                 return SourceSort(source: source, column: sortColumn, ascending: ascending)
-            })
+            }, search: filter.search)
     }
 
     /// The sort of the sources without one of their own: the table's, which a source with its
@@ -175,7 +175,7 @@ public final class BrowserModel {
             pendingSort = (sort.column, sort.ascending)
         }
         pending = TrackFilter(
-            source: saved.source, search: pending.search,
+            source: saved.source, search: saved.search,
             groupByAlbumArtist: pending.groupByAlbumArtist)
         pendingColumns = saved.columns.map(\.grouping)
         await reload(panesFrom: 0, saved: saved, reason: .loaded)
@@ -959,14 +959,16 @@ public struct BrowserState: Equatable, Sendable {
     public var columns: [BrowserColumn]
     /// The sort chosen in `source`, when it has its own and another was chosen.
     public var sourceSort: SourceSort?
+    public var search: String
 
     public init(
         source: BrowserSource?, columns: [BrowserColumn] = BrowserColumn.defaults,
-        sourceSort: SourceSort? = nil
+        sourceSort: SourceSort? = nil, search: String = ""
     ) {
         self.source = source
         self.columns = columns
         self.sourceSort = sourceSort
+        self.search = search
     }
 }
 

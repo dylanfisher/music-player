@@ -424,6 +424,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             model.resumedFrom = resumed.from
         }
         await model.load(saved)
+        searchField.stringValue = model.filter.search
         // Handed over before anything else waits, so no row can draw first.
         if let firstRowsDrawn {
             if showsTimeline {
