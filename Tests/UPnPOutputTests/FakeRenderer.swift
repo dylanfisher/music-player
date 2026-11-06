@@ -21,6 +21,7 @@ final class FakeRenderer: @unchecked Sendable {
         case stopped = "STOPPED"
         case playing = "PLAYING"
         case paused = "PAUSED_PLAYBACK"
+        case transitioning = "TRANSITIONING"
     }
 
     struct Fetch: Equatable {
@@ -48,6 +49,9 @@ final class FakeRenderer: @unchecked Sendable {
     private var hangs = false
     private var stalePausedPosition = false
     private var lagSeconds = 0.0
+    private var changesTracksSlowly = false
+    /// The states it reports, one a GetTransportInfo, at a track's end before it plays the next.
+    private var betweenTracks: [State]?
     /// Fetches it owes, made as soon as the action that queued them has its answer ready.
     private var owedFetches: [(uri: String, range: String)] = []
     /// What it last reported while paused, for one that keeps reporting it.
@@ -137,6 +141,9 @@ final class FakeRenderer: @unchecked Sendable {
     /// Playing, it reports a position `seconds` behind what it plays, as the Denon is thought
     /// to, so its last report before it stops at the end is that far short.
     func lagsBy(_ seconds: Double) { lock.withLock { lagSeconds = seconds } }
+    /// At a track's end with a next one, it reports stopped, transitioning, stopped again and
+    /// playing the old track, one poll each, before it plays the next.
+    func changesTracksThroughStops() { lock.withLock { changesTracksSlowly = true } }
 
     /// Holds its position for `stallSeconds` while still saying it plays, as a renderer
     /// re-buffering mid-track does.
@@ -230,6 +237,13 @@ final class FakeRenderer: @unchecked Sendable {
     private func tick() {
         guard state == .playing, position >= trackSecondsValue else { return }
         if advancesToNext, !nextURI.isEmpty {
+            if changesTracksSlowly {
+                if betweenTracks == nil {
+                    betweenTracks = [.stopped, .transitioning, .stopped, .playing]
+                }
+                guard betweenTracks?.isEmpty == true else { return }
+                betweenTracks = nil
+            }
             if buffersLikeHEOS {
                 owedFetches.append((uri, "bytes=-100"))
                 owedFetches.append((nextURI, "bytes=100-199"))
@@ -348,7 +362,7 @@ final class FakeRenderer: @unchecked Sendable {
                 ok(
                     response(
                         action,
-                        "<CurrentTransportState>\(state.rawValue)</CurrentTransportState>"
+                        "<CurrentTransportState>\(reportedState.rawValue)</CurrentTransportState>"
                             + "<CurrentTransportStatus>OK</CurrentTransportStatus>"
                             + "<CurrentSpeed>1</CurrentSpeed>"))
             case "GetPositionInfo":
@@ -373,6 +387,15 @@ final class FakeRenderer: @unchecked Sendable {
             position >= trackSecondsValue - 0.5
         else { return uri }
         return nextURI
+    }
+
+    /// The state GetTransportInfo reports, which between tracks comes from the script. Call
+    /// under the lock.
+    private var reportedState: State {
+        guard var script = betweenTracks, !script.isEmpty else { return state }
+        let shown = script.removeFirst()
+        betweenTracks = script
+        return shown
     }
 
     /// Call under the lock.

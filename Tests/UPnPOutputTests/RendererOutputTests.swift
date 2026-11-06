@@ -528,6 +528,21 @@ private final class ShiftedClock: @unchecked Sendable {
     #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 2)
 }
 
+@Test func aRendererStoppedOnlyAroundATrackChangeStaysGapless() async throws {
+    let fake = try await FakeRenderer.denon(trackSeconds: 1)
+    fake.changesTracksThroughStops()
+    let (output, log) = try await output(fake)
+    defer { output.close() }
+    output.load(item(1, "short"), startSeconds: 0, playing: true)
+    output.setNext(item(2))
+    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 8)
+    #expect(fake.setTransportURIs.count == 1)
+    output.setNext(item(3, "short"))
+    output.pause()
+    await eventually("the pause") { fake.commands.last == "Pause" }
+    #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 2)
+}
+
 @Test func aRendererBufferingAheadNeverFetchesADeadURL() async throws {
     let fake = try await FakeRenderer.denon(trackSeconds: 1)
     fake.buffersAhead()

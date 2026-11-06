@@ -54,6 +54,9 @@ actor RendererSession {
         /// A Play or Pause given while `awaitingPlay`, sent once the renderer has started.
         var queuedTransport = false
         var stoppedPolls = 0
+        /// Polls in a row that found it stopped at the end holding a next track it took; one
+        /// that finds it changing tracks starts the count again.
+        var stoppedAtEndPolls = 0
         var disagreeingPolls = 0
         /// Where to seek once the renderer has the track playing or paused.
         var pendingSeek: Double?
@@ -375,7 +378,9 @@ actor RendererSession {
             }
         case .stopped, .noMedia:
             await stopped(current, transportOK: transport.isOK)
-        case .transitioning, .other:
+        case .transitioning:
+            current.stoppedAtEndPolls = 0
+        case .other:
             break
         }
     }
@@ -416,6 +421,7 @@ actor RendererSession {
         current.started = true
         current.awaitingPlay = false
         current.stoppedPolls = 0
+        current.stoppedAtEndPolls = 0
         if let duration = position.durationSeconds, duration > 0 {
             current.durationSeconds = duration
         }
@@ -550,8 +556,8 @@ actor RendererSession {
             return release()
         }
         if next?.sent == true {
-            current.stoppedPolls += 1
-            guard current.stoppedPolls >= Self.stoppedAtEndPolls else { return }
+            current.stoppedAtEndPolls += 1
+            guard current.stoppedAtEndPolls >= Self.stoppedAtEndPolls else { return }
             ignoresNextURI("it stopped at a track's end instead of playing the next track it took")
         }
         await ended(current)
