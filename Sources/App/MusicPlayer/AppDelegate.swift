@@ -288,21 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let engine = self?.engine else { return }
             Task { await engine.addToQueue(urls) }
         }
-        browser.tableLayoutChanged = { saver.set(\.trackTable, $0) }
-        browser.timelineLayoutChanged = { saver.set(\.timelineTable, $0) }
-        browser.browserHeightChanged = { height in
-            if AppState.browserHeightRange.contains(height) {
-                saver.set(\.browserHeight, height)
-            }
-        }
-        browser.statsHeightChanged = { height in
-            if AppState.browserHeightRange.contains(height) { saver.set(\.statsHeight, height) }
-        }
-        browser.stateChanged = { [weak self] state in
-            saver.set(\.browserColumns, state.columns)
-            saver.set(\.sourceSort, state.sourceSort)
-            self?.resumeSaver?.changed()
-        }
+        window.browserStateChanged = { [weak self] in self?.resumeSaver?.changed() }
         browser.groupingsChosen = { [weak self] groupings in
             do {
                 try settings.set(\.browserGroupings, to: groupings)

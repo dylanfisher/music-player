@@ -29,6 +29,8 @@ final class MainWindow: NSObject, NSWindowDelegate {
     private var toolbarObservation: NSKeyValueObservation?
     private var savedToolbar: SavedVisibility
     private var glass: WindowGlass?
+    /// Called after the browser's source, columns or sort changed, once they're saved.
+    var browserStateChanged: () -> Void = {}
 
     init(
         settings: WindowSettings, banner: NSView, browser: LibraryBrowser, toolbar: MainToolbar,
@@ -66,6 +68,21 @@ final class MainWindow: NSObject, NSWindowDelegate {
 
         split.sidebarWidthChanged = { saver.set(\.sidebarWidth, $0) }
         split.queueWidthChanged = { saver.set(\.queueWidth, $0) }
+        browser.tableLayoutChanged = { saver.set(\.trackTable, $0) }
+        browser.timelineLayoutChanged = { saver.set(\.timelineTable, $0) }
+        browser.browserHeightChanged = { height in
+            if AppState.browserHeightRange.contains(height) {
+                saver.set(\.browserHeight, height)
+            }
+        }
+        browser.statsHeightChanged = { height in
+            if AppState.browserHeightRange.contains(height) { saver.set(\.statsHeight, height) }
+        }
+        browser.stateChanged = { [weak self] state in
+            saver.set(\.browserColumns, state.columns)
+            saver.set(\.sourceSort, state.sourceSort)
+            self?.browserStateChanged()
+        }
 
         let line = NSBox()
         line.boxType = .separator

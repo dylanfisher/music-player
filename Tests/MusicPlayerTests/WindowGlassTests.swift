@@ -152,6 +152,10 @@ func glassOnThenOffLeavesTheWindowAsAFreshOne(
         return "\(String(describing: state[\.windowFrame])) \(state[\.sidebarWidth]) "
             + "\(state[\.queueWidth]) \(state[\.browserHeight])"
     }
+    // The panes report the height they have in this window first, as a drag would, so only
+    // the glass can change what's saved after.
+    fixture.browser.splitViewDidResizeSubviews(
+        Notification(name: NSSplitView.didResizeSubviewsNotification))
     let before = saved()
     for on in [true, false, true, false] {
         fixture.window.setGlass(on)
