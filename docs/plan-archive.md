@@ -5919,3 +5919,156 @@ What the owner does:
    safe: it adds only the plays that library has past this Mac's (179 on 5 November).
 4. **Check:** a few tracks show the same play count on both Macs: Swinsian's count plus the
    plays made in this app.
+
+### 47. Faster tag writes
+
+The owner reports that saving tags is very slow, worst with several tracks selected, and asks
+for edits in place as Swinsian makes them, without risking the files. 44e already writes in
+place when the new tag fits the padding, but each in-place save still reads the whole file
+twice to hash it. Swinsian (TagLib) reads the header and writes a few KB. A 40 MB FLAC takes
+about 0.7 s over gigabit and 2–3 s over Wi-Fi, so a hi-res album over Wi-Fi takes minutes. A
+save that doesn't fit the padding goes through the temp file: about four passes over the file.
+
+The parts, biggest gain first. ADR 0108 records them and amends ADR 0020 and 0107.
+
+- [x] **47.1 No whole-file hashes in place.** A write in place touches only `plan.region`, and the
+      code already checks that the region doesn't overlap the audio, so hashing bytes the write
+      never touches proves nothing about it. Before the write, keep the checks that exist:
+      `fstat` identity, a `pread` of the region matching the journaled old bytes, and the
+      planned file read back through `PlannedSource`. After it: reopen with `F_NOCACHE`, so SMB
+      can't answer from the client's cache, `pread` the region and compare it to the new bytes,
+      then parse the header and check the tags. All of that reads about as much as the tag.
+- [x] **47.2 Journal on the region.** The journal and recovery key on a hash of the region, not
+      of the whole file. Recovery sorts a file into three cases: the region holds the new bytes
+      (keep the edit), the old bytes (drop the record), or neither (torn, put back).
+- [x] **47.3 Two flushes a batch.** Write the records, old bytes and markers for all the files,
+      then one `F_FULLFSYNC`; then the writes; then one more flush to confirm them all. A
+      20-track album goes from about 60 full flushes (three a file) to 2, and the per-file
+      markers still cover a crash partway through.
+- [x] **47.4 More room.** The padding is 2,048 bytes, defined three times (`FLACFile`,
+      `ID3Tag`, `MP4File`); define it once. A save through the temp file leaves much more room,
+      for example 16–64 KB, or the art's size plus a margin, so later edits fit. Adding art or
+      lyrics then fits, and an MP3 with no padding takes the slow path once instead of every
+      time.
+- [x] **47.5 MP4 growing at the end.** An MP4 whose `moov` is the last atom grows in place by
+      writing past the end of the file: no `mdat` moves and no chunk offsets change. Count how
+      many of the 61 "moov after mdat" corpus files this covers.
+- [x] **47.6 Several files at once on the NAS.** Write 3–4 files at a time, since SMB is bound by
+      round trips. The journal steps of 47.3 stay serial; only the writes and read-backs run in
+      parallel.
+- [ ] **47.7 Probe: server-side copy.** Find out whether macOS's SMB server-side copy (copy-chunk
+      through `copyfile`) works against the owner's NAS. No agent or test touches the NAS
+      (AGENTS.md), so the agent writes the probe and the owner runs it on a scratch folder there,
+      as a pending checkpoint; the run goes on without it. If it works, the temp file can be the
+      new header plus a server-side copy of the audio, which never crosses the network. If it
+      doesn't, record that and drop the part.
+- [x] **47.8 Less bookkeeping.** `removeLeftoverTemps` lists the folder once per folder per
+      batch, not once per file. `rescan(files:)` takes the tags the writer just parsed instead of
+      parsing each file again.
+- [x] **47.9 Progress.** A batch save shows progress per file, so a slow save doesn't look stuck.
+- [x] **47.10 Speed.** Bench rows: a 20-file FLAC batch in place, locally and on the slow
+      simulated NAS, and the same through the temp file; the existing FLAC title rows rerun.
+      Tests on generated fixtures and corpus clones for each part, including a crash at each
+      step of a batch.
+- [ ] **Hardware checkpoint (owner):** save a tag edit on a 20-track hi-res album on the NAS over
+      Wi-Fi and over Ethernet; report the times. Then add art to a few tracks and edit them again.
+
+Plan (ADR 0108, amends 0020 and 0107). All in `Core/TagWriter` unless named; tests on
+generated fixtures and hand-built files only.
+- Bench first, so the rows have a before: `WriteFaults` gains a `package` hook told of each
+  file system call the writer makes on a music file, its temp file or its folder (metadata,
+  open, read and write with their bytes, flush, close, listing, clone), and of each read the
+  parsers make through a counting `ByteSource` around `FileSource`. The bench prices each call
+  at the slow simulated NAS's 10 ms and its bytes on one shared link at 57 MB/s (the owner's
+  40 MB in 0.7 s), and makes 20 copies of a fixture FLAC grown to 40 MB with audio bytes. Rows:
+  the batch in place and through the temp file, locally and on that NAS.
+- 47.1: the in-place path drops `fileHashes`. Before: the identity, the planned file read back
+  through `PlannedSource`, then `fstat` and the region's `pread` at the write, as now. After:
+  `FileSource` (which already sets `F_NOCACHE`) reads the region back against the new bytes,
+  then `checkParsed` reads the tags, format, art, chunk offsets and payload ranges.
+- 47.2: `FileRecord` holds either `originalSHA256` (temp-file writes, unchanged) or `inPlace`:
+  the region's offset, and the SHA-256 and length of its old and new bytes. The marker alone
+  says a write is unconfirmed. Recovery reads the region: new bytes keep the edit, old bytes
+  drop the record, neither puts the original back. Undo and put-back check the temp file's
+  region and size, and the journaled old bytes against their hash.
+- 47.3: `write(_:to:)` reads and plans every file first (in chunks bounded by files and
+  bytes, so a 1000-file art change doesn't hold all its plans), then for the chunk's in-place
+  files appends every record, old bytes and marker with `fsync`s and one `F_FULLFSYNC`; then
+  the writes with an `fsync` each; then one `F_FULLFSYNC` per volume written; then confirms
+  each record (no drive flush) and removes its marker. A lost confirmation leaves a marker
+  that recovery confirms. Temp-file files keep their own path. A fault stops the batch after
+  each step, for the crash tests.
+- 47.4: one `rewritePaddingBytes(tagBytes:)` replaces the three 2,048s: 64 KiB, or as much
+  again as the new tag when that's more, so a cover up to twice the old one's size fits.
+- 47.5: `InPlacePlan` takes a plan whose kept ranges stay put and which only grows past the old
+  end (MP4 `moov` last); `PlannedSource` serves the bytes past the end; recovery and undo take
+  the size between the old and the new. The corpus survey notes "moov last" for the count.
+- 47.6: the chunk's writes and read-backs run 4 at a time; journal steps stay serial.
+- 47.7: `scripts/smb-copy-probe.swift <scratch folder>` makes its own random files in a new
+  subfolder, times `clonefile`, `copyfile` with `COPYFILE_CLONE_FORCE` and `COPYFILE_DATA`, and
+  a read-write copy, compares them, counts the bytes the network interfaces moved, and removes
+  what it made. The owner runs it on the NAS; the temp-file path is unchanged until then.
+- 47.8: the batch lists each folder once for leftover temp files (`writeTemp` no longer
+  lists); `TagWriteReport.parsed` carries each written file's read-back parse, and
+  `LibraryScanner.rescan(files:parsed:)` stores it instead of reading the file again, through
+  `TagEditing.written` and `LibraryWatcher`.
+- 47.9: `write` reports `TagWriteProgress` (read, written, of total); `TagEditing.saving`
+  hands it to the main thread, and the app shows "Saving tags: 3 of 20" in the browser's
+  status bar beside the scan's text, with its bar.
+- Order: plan, bench and hook, 47.4, 47.1+47.2, 47.5, 47.3, 47.6, 47.8, 47.9, probe, ADR,
+  bench after, Result. Tests: reads bounded by the tag (47.1), the three recovery cases on the
+  region (47.2), a crash after each batch step leaving every file whole or edited (47.3), the
+  padding after a slow save and a second edit in place (47.4), moov-last growth with undo and a
+  torn growth (47.5), writes overlapping (47.6), one listing per folder and the parse handed on
+  (47.8), progress counts and the status text (47.9).
+
+Gate: two review rounds, every finding above low fixed in its own commit, and two lows
+(a flush before a put-back's record goes, the renamed file's stamp); simplify and architecture
+clean but for doc fixes; no budget missed, Get Info on 100 tracks at 50.8 ms against 43 ms in
+42e is the machine's load (52 ms here against 54–56 ms on the build before, back to back).
+`./scripts/check` passes.
+
+Result: shipped 47.1 to 47.6 and 47.8 to 47.10 (ADR 0108, amends 0020
+and 0107); 47.7's probe is written and waits on the owner. A save in place no longer hashes the
+file: the region is checked before the write and read back uncached after it, with the tags
+parsed from it, and the journal and recovery key on the region's old and new hashes. A batch
+plans its files a chunk at a time, journals the chunk with one drive flush, writes and reads
+back four files at once with an `fsync` each, flushes each volume once and confirms without a
+flush: two drive flushes for an album instead of about 60. A rewrite leaves 64 KiB of padding,
+or as much again as the tag; an MP4 with `moov` last grows in place past its end, which by ADR
+0020's survey covers all 61 corpus files with `moov` after `mdat` (the layout notes "moov last"
+for the corpus run to confirm). A batch lists each folder once for leftover temp files, the
+rescan stores the writer's read-back parse instead of reading the file again, and a save shows
+"Saving tags: 3 of 20" on the status bar's scan line. Bench on Apple Silicon, 20 fixture FLACs
+grown to 40 MB in one batch: in place 1.56 s before, 0.04 s after on this Mac's disk; 42.8 s
+before (1,602 MB over the link), 4.3 s after (2 MB) on the slow simulated NAS (10 ms a file
+system call, 57 MB/s on one link, the journal on the local disk); through the temp file 1.25 s
+and 74.5 s before, 1.25 s and 74.2 s after, unchanged as planned. One FLAC's title written and
+read back into the index, median of 5: in place 15.0 ms before, 11.2 to 12.0 ms after; through
+the temp file 11.9 ms before, 12.8 to 13.3 ms over four runs after, within ADR 0107's 12.7 to
+13.1 ms, so the 11.9 was a low run. The rescan stays about 2.5 ms: its cost is the index
+store, not the parse, locally. The journal row, 1000 files with 1 MB art flushed per file:
+6.5 s. The gate's bench run: tag journal 6.19 s; one FLAC title in place 11.9 ms, through the
+temp file 13.09 ms; the 20-file batch in place 0.04 s locally and 4.33 s on the slow NAS,
+through the temp file 1.26 s and 73.96 s; Get Info on 100 tracks 50.8 ms, up 18% under load
+from other worktrees, and equal to the base when run A/B against e01bd90. The gate's fixes: a
+batch whose first files fail before writing goes on writing the rest (the journal makes the
+edit's folder again); the rescan uses the writer's parse only while the file's size and mtime
+are still the ones stamped right after its write; a failed write in place is put back over
+itself with `pwrite` and `ftruncate`, needing no free space, and only while the file is still
+the original by inode and size; a path named twice in a batch is written once. Not run here:
+`scripts/tag-corpus --round-trip` (the reference corpus isn't on this Mac), `scripts/full-disk`
+and `scripts/kill-test`. Deferred: the temp-file path still hashes, copies and reads back the
+whole file, and on the NAS it is unchanged until 47.7 reports; the rewrite padding has no cap,
+so a file with a large cover grows by as much again once (ADR 0108's choice).
+For the owner:
+1. **47.7 probe**, on an empty scratch folder on the NAS, over Ethernet:
+   `swift scripts/smb-copy-probe.swift /Volumes/<share>/<scratch folder>` (256 MB; add a size
+   in MB after the folder for another). Paste back what it prints. It writes only in a new
+   folder it makes there and removes it at the end.
+2. **Hardware checkpoint**, on copies of a 20-track hi-res album on the NAS: select all, Get
+   Info, change the album title, Save; time it over Wi-Fi and over Ethernet, and watch the
+   status bar count the files. Check with `ls -li` that each file keeps its inode and that no
+   `.tagwrite` file is left. Then add art to a few tracks (the first save goes through the temp
+   file and leaves room), edit their titles again and check those keep their inode. Edit the
+   title of an M4A with `moov` after its audio and check its inode stays. Report the times.
