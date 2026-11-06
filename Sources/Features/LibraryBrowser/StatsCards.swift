@@ -2,11 +2,13 @@ import AppKit
 import Library
 import Settings
 
-/// What a click in Listening Stats asks for: a list's row shown, a bar's span of plays, a list
-/// saved as a playlist. The browser decides what each does.
+/// What a click in Listening Stats asks for: a list's row shown, a bar's span shown with what it
+/// covers, a bar's plays on the timeline, a list saved as a playlist. The browser decides what
+/// each does.
 struct StatsActions {
     var showEntry: (StatsReport.List, StatsReport.Entry) -> Void = { _, _ in }
-    var showSpan: (PlaySpan) -> Void = { _ in }
+    var showSpan: (PlaySpan, String) -> Void = { _, _ in }
+    var showPlays: (PlaySpan) -> Void = { _ in }
     var savePlaylist: (StatsReport.List) -> Void = { _ in }
 }
 
@@ -46,6 +48,8 @@ final class StatsCards {
     /// What the list rows stand for, by list, for their clicks.
     private var entries: [StatsReport.List: [StatsReport.Entry]] = [:]
     private var firstEntries: [StatsReport.Entry] = []
+    /// What the table under the panel is narrowed to, whose row or bar is marked.
+    private(set) var filter: StatsFilter?
     private let target = ControlTarget()
 
     /// How many rows a top list shows; Year in Review shows fewer.
@@ -106,8 +110,13 @@ final class StatsCards {
 
     private func wire() {
         chart.clicked = { [weak self] place in
+            guard let self, let report, report.bars.indices.contains(place) else { return }
+            let bar = report.bars[place]
+            actions.showSpan(bar.span, barTitle(bar, unit: report.barUnit, calendar: calendar))
+        }
+        chart.doubleClicked = { [weak self] place in
             guard let self, let bar = report?.bars[place] else { return }
-            actions.showSpan(bar.span)
+            actions.showPlays(bar.span)
         }
         chart.hoverChanged = { [weak self] place in self?.showChartDetail(place) }
         grid.hoverChanged = { [weak self] cell in self?.showClockDetail(cell) }
@@ -122,7 +131,10 @@ final class StatsCards {
             actions.showEntry(
                 firstKind.selectedSegment == 0 ? .albums : .artists, firstEntries[row])
         }
-        target.handlers[ObjectIdentifier(firstKind)] = { [weak self] in self?.showFirstPlayed() }
+        target.handlers[ObjectIdentifier(firstKind)] = { [weak self] in
+            self?.showFirstPlayed()
+            self?.markFilter()
+        }
         firstKind.target = target
         firstKind.action = #selector(ControlTarget.act(_:))
         for (list, button) in saveButtons {
@@ -161,6 +173,33 @@ final class StatsCards {
                 fraction: Double($0.plays) / mostCodec)
         }
         codecList.clicked = { _ in }
+        markFilter()
+    }
+
+    /// Marks the row or bar the table is narrowed to, in every list it's in.
+    func mark(_ filter: StatsFilter?) {
+        self.filter = filter
+        markFilter()
+    }
+
+    private func markFilter() {
+        for (list, view) in lists {
+            view.marked = entries[list].flatMap { place(of: filter, in: $0, list) }
+        }
+        firstList.marked = place(
+            of: filter, in: firstEntries, firstKind.selectedSegment == 0 ? .albums : .artists)
+        if case .span(let span) = filter?.item {
+            chart.marked = report?.bars.firstIndex { $0.span == span }
+        } else {
+            chart.marked = nil
+        }
+    }
+
+    private func place(
+        of filter: StatsFilter?, in entries: [StatsReport.Entry], _ list: StatsReport.List
+    ) -> Int? {
+        guard case .entry(list, let id) = filter?.item else { return nil }
+        return entries.firstIndex { $0.id == id && $0.inLibrary }
     }
 
     private func showFirstPlayed() {

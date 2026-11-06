@@ -438,16 +438,41 @@ public final class BrowserModel {
         changeSort(from: pending.source, to: window.filter.source)
         pending.source = window.filter.source
         pending.search = window.filter.search
+        pending.stats = window.filter.stats
         pending.selections = window.filter.selections.filter { pendingColumns.contains($0.key) }
         await reload(panesFrom: 0, reason: .user)
     }
 
     private func showSource(_ source: BrowserSource?) async {
+        enter(source)
+        await reload(panesFrom: 0, reason: .user)
+    }
+
+    /// Makes `source` the pending one. A panel takes the columns' place, and hidden columns
+    /// would narrow its table with nothing on screen saying why. A Stats row's filter stays
+    /// from one period to another; a bar's, which is in one period, doesn't.
+    private func enter(_ source: BrowserSource?) {
         changeSort(from: pending.source, to: source)
-        // A health check's panel takes the columns' place, and hidden columns would narrow it
-        // with nothing on screen saying why.
-        if case .health = source { pending.selections = [:] }
+        switch source {
+        case .health, .stats: pending.selections = [:]
+        case .playlist, .history, .timeline, .plays, nil: break
+        }
+        switch (pending.source, source, pending.stats?.item) {
+        case (.stats, .stats, .entry): break
+        default: pending.stats = nil
+        }
         pending.source = source
+    }
+
+    /// Shows Stats for `period`, its table narrowed to `filter`, or listing every track
+    /// played in the period for nil (ADR 0105). Showing Stats from another source is a step
+    /// Back can undo; narrowing it isn't.
+    func filterStats(_ filter: StatsFilter?, in period: StatsPeriod) async {
+        if pending.source != .stats(period) {
+            pendingVisit = .some(.stats(period))
+            enter(.stats(period))
+        }
+        pending.stats = filter
         await reload(panesFrom: 0, reason: .user)
     }
 

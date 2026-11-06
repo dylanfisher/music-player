@@ -3,7 +3,8 @@ import AppKit
 /// A ranked list of Listening Stats, drawn rather than built from views: each row its rank,
 /// name, detail and value over a bar as long as its share of the first row's. A row that can be
 /// shown is highlighted under the pointer and reports a click; a dimmed one (plays no longer in
-/// the library) can't. Flipped and as tall as its rows, for a scroll view.
+/// the library) can't. `marked`, the row the table is narrowed to, is highlighted more strongly.
+/// Flipped and as tall as its rows, for a scroll view.
 final class StatsListView: NSView {
     struct Row: Equatable {
         var rank: Int?
@@ -33,6 +34,9 @@ final class StatsListView: NSView {
     var emptyText = noPlaysText
     private(set) var hovered: Int? {
         didSet { if hovered != oldValue { needsDisplay = true } }
+    }
+    var marked: Int? {
+        didSet { if marked != oldValue { needsDisplay = true } }
     }
 
     override var isFlipped: Bool { true }
@@ -99,8 +103,9 @@ final class StatsListView: NSView {
             let frame = NSRect(
                 x: 0, y: CGFloat(place) * height, width: bounds.width, height: height)
             guard frame.intersects(dirtyRect) else { continue }
-            if place == hovered {
-                NSColor.selectedContentBackgroundColor.withAlphaComponent(0.18).setFill()
+            if place == hovered || place == marked {
+                NSColor.selectedContentBackgroundColor
+                    .withAlphaComponent(place == marked ? 0.4 : 0.18).setFill()
                 NSBezierPath(roundedRect: frame, xRadius: 4, yRadius: 4).fill()
             }
             let barStart = rankWidth

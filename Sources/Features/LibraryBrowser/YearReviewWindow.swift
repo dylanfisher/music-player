@@ -59,7 +59,11 @@ final class YearReviewWindow: NSWindowController {
         months.unit = .month
         months.clicked = { [weak self] place in
             guard let self, let bar = cards.report?.months[place] else { return }
-            cards.actions.showSpan(bar.span)
+            cards.actions.showSpan(bar.span, barTitle(bar, unit: .month, calendar: cards.calendar))
+        }
+        months.doubleClicked = { [weak self] place in
+            guard let self, let bar = cards.report?.months[place] else { return }
+            cards.actions.showPlays(bar.span)
         }
         flow.maximumColumns = 2
         flow.minimumColumnPoints = 300

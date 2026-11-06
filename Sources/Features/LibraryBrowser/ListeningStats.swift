@@ -14,19 +14,53 @@ extension LibraryBrowser {
         statsPanel.choosePeriod = { [weak self] period in self?.show(.stats(period)) }
         statsPanel.chooseRanking = { [weak self] ranking in self?.statsModel.ranking = ranking }
         statsPanel.showReview = { [weak self] year in self?.showYearInReview(year) }
-        statsPanel.cards.actions = statsActions()
+        statsPanel.clearFilter = { [weak self] in
+            guard let self, case .stats(let period) = model.filter.source else { return }
+            filterStats(nil, in: period)
+        }
+        statsPanel.cards.actions = statsActions { [weak self] in
+            self?.shownStatsPeriod ?? .month
+        }
     }
 
-    /// What a click in the cards does: a top artist or album shows it as Go to Item does, a
-    /// genre filters to it, a track is selected in the table below, a bar shows its plays.
-    private func statsActions() -> StatsActions {
+    /// What a click in the cards of `period` does (ADR 0105): a row or bar narrows Stats'
+    /// table to its tracks played in the period, or the marked one lists them all again; a
+    /// bar's double-click shows its plays on the timeline.
+    private func statsActions(period: @escaping @MainActor () -> StatsPeriod) -> StatsActions {
         StatsActions(
-            showEntry: { [weak self] list, entry in self?.showStatsEntry(list, entry) },
-            showSpan: { [weak self] span in
+            showEntry: { [weak self] list, entry in
+                guard let id = entry.id, entry.inLibrary else { return }
+                self?.toggleStats(StatsFilter(.entry(list, id), title: entry.name), in: period())
+            },
+            showSpan: { [weak self] span, title in
+                self?.toggleStats(StatsFilter(.span(span), title: title), in: period())
+            },
+            showPlays: { [weak self] span in
                 self?.bringWindowForward()
                 self?.show(.plays(span))
             },
             savePlaylist: { [weak self] list in self?.saveStatsList(list) })
+    }
+
+    /// Narrows Stats' table to `filter`, or lists every track again when it's the one shown.
+    private func toggleStats(_ filter: StatsFilter, in period: StatsPeriod) {
+        let shown = model.filter.source == .stats(period) && model.filter.stats == filter
+        filterStats(shown ? nil : filter, in: period)
+    }
+
+    /// Shows Stats for `period` in the main window with its table narrowed to `filter`, or to
+    /// nothing for nil, and selects a track narrowed to.
+    private func filterStats(_ filter: StatsFilter?, in period: StatsPeriod) {
+        bringWindowForward()
+        Task {
+            await model.filterStats(filter, in: period)
+            showSource()
+            if case .entry(.tracks, _) = filter?.item, !model.trackIDs.isEmpty {
+                showRow(0)
+            } else {
+                focusTracks()
+            }
+        }
     }
 
     /// The report of `period`, read on Listening Stats' own connection.
@@ -81,32 +115,15 @@ extension LibraryBrowser {
                 let report = try await readStats(.chosenYear(year))
                 let window = yearReview ?? YearReviewWindow()
                 if yearReview == nil {
-                    window.cards.actions = statsActions()
+                    window.cards.actions = statsActions { [weak window] in
+                        window?.year.map(StatsPeriod.chosenYear) ?? .year
+                    }
                     yearReview = window
                 }
                 window.show(report, year: year, ranking: statsModel.ranking)
                 window.showWindow(nil)
             } catch {
                 self.report("couldn't read the year in review: \(error)")
-            }
-        }
-    }
-
-    private func showStatsEntry(_ list: StatsReport.List, _ entry: StatsReport.Entry) {
-        guard let id = entry.id, entry.inLibrary else { return }
-        bringWindowForward()
-        Task {
-            switch list {
-            case .artists: await showFirstTrack(of: .artist, id: id)
-            case .albums: await showFirstTrack(of: .album, id: id)
-            case .genres: await showOnly(.genre, id: id)
-            case .tracks:
-                if case .stats = model.filter.source, let row = model.rows(holding: [id]).first {
-                    showRow(row)
-                    focusTracks()
-                } else {
-                    await reveal(trackID: id)
-                }
             }
         }
     }

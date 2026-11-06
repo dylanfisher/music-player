@@ -319,6 +319,42 @@ private func scan(
     #expect(year.firstAlbums.contains { $0.id == lastYearsAlbum })
 }
 
+@Test func aStatsFilterNarrowsThePeriodsTracksToARowOrABar() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    let now = Date().timeIntervalSince1970
+    for (row, ago) in [(rows[0], 60.0), (rows[1], 30), (rows[2], 86_400 * 800)] {
+        try index.recordPlay(row.path, at: now - ago)
+    }
+    let ids = { (column: String, row: TrackRow) in
+        try index.database.prepare("SELECT \(column) FROM tracks WHERE file_id = ?").map(row.id) {
+            try $0.int64(0)
+        }[0]
+    }
+    func listed(_ item: StatsFilter.Item, _ period: StatsPeriod = .year) throws -> Set<Int64> {
+        var filter = TrackFilter(source: .stats(period))
+        filter.stats = StatsFilter(item, title: "")
+        return Set(try index.trackIDs(filter, sortedBy: .path, ascending: true))
+    }
+    #expect(try listed(.entry(.tracks, rows[1].id)) == [rows[1].id])
+    // Played two years ago, so not this year, but in All Time.
+    #expect(try listed(.entry(.tracks, rows[2].id)).isEmpty)
+    #expect(try listed(.entry(.tracks, rows[2].id), .all) == [rows[2].id])
+    let album = try #require(rows[0].albumID)
+    #expect(
+        try listed(.entry(.albums, album))
+            == Set(rows[0...1].filter { $0.albumID == album }.map(\.id)))
+    let artist = try ids("artist_id", rows[0])
+    let byArtist = try listed(.entry(.artists, artist))
+    #expect(byArtist.contains(rows[0].id) && !byArtist.contains(rows[2].id))
+    let genre = try ids("genre_id", rows[0])
+    #expect(try listed(.entry(.genres, genre)).contains(rows[0].id))
+    let span = PlaySpan(start: Int64(now) - 45, end: Int64(now))
+    #expect(try listed(.span(span)) == [rows[1].id])
+}
+
 @Test func theStatsSourceListsThePeriodsTracksAndTheTimelineItsSpan() throws {
     let library = try TestLibrary()
     _ = try library.scan()

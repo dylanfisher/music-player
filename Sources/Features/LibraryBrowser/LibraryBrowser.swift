@@ -1373,7 +1373,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     }
 
     /// Selects the model's source in the sidebar, listing the playlists as they are now.
-    private func showSource() {
+    func showSource() {
         sidebarController.show(playlists: model.playlists, source: model.filter.source)
     }
 
@@ -1701,6 +1701,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             if panelHadKeys { focusTracks() }
         }
         if let panel, let source { panel.sourceShown(source) }
+        if panel === statsPanel { statsPanel.show(model.filter.stats) }
     }
 
     /// Shows the panel or else the columns, as Show Browser says, in the slot, at the saved

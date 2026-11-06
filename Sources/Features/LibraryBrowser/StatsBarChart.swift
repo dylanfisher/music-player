@@ -3,7 +3,8 @@ import Library
 
 /// Plays over time as bars, one per day, week, month or year, the tallest the chart's height,
 /// with the first and last bar's names under them. The bar under the pointer is drawn solid and
-/// reported; a click on a bar reports it. `marked` is drawn solid too, for the busiest month.
+/// reported; a click on a bar reports it, and a double-click too. `marked` is drawn solid,
+/// for the busiest month or the bar the table is narrowed to.
 final class StatsBarChart: NSView {
     var bars: [StatsReport.Bar] = [] {
         didSet {
@@ -19,6 +20,8 @@ final class StatsBarChart: NSView {
     }
     var calendar = Calendar.current
     var clicked: (Int) -> Void = { _ in }
+    /// Called on a double-click's second click, after the first's `clicked`.
+    var doubleClicked: (Int) -> Void = { _ in }
     /// The bar under the pointer, or nil once it leaves.
     var hoverChanged: (Int?) -> Void = { _ in }
     private(set) var hovered: Int? {
@@ -68,7 +71,7 @@ final class StatsBarChart: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard let place = bar(at: convert(event.locationInWindow, from: nil)) else { return }
-        clicked(place)
+        if event.clickCount == 2 { doubleClicked(place) } else { clicked(place) }
     }
 
     override func draw(_ dirtyRect: NSRect) {

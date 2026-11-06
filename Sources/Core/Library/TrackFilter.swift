@@ -15,6 +15,9 @@ public struct TrackFilter: Equatable, Sendable {
     /// `library.groupByAlbumArtist`: the Artists column and `artist` name the album artist, and
     /// sorts by Artist or Album keep each album's tracks together.
     public var groupByAlbumArtist: Bool
+    /// What a click in Listening Stats narrowed its tracks to; only read with a `.stats`
+    /// source.
+    public var stats: StatsFilter?
 
     public init(
         source: BrowserSource? = nil, genre: Int64? = nil, artist: Int64? = nil,

@@ -324,7 +324,7 @@ extension LibraryIndex {
             case .source:
                 guard let source = filter.source else { continue }
                 let (condition, sourceValues) = try sourceCondition(
-                    source, playsJoined: playsJoined)
+                    source, filter, playsJoined: playsJoined)
                 conditions.append(condition)
                 values += sourceValues
             case .selection(let grouping):
@@ -341,9 +341,9 @@ extension LibraryIndex {
         return (conditions, values)
     }
 
-    private func sourceCondition(_ source: BrowserSource, playsJoined: Bool) throws -> (
-        String, [(any SQLiteValue)?]
-    ) {
+    private func sourceCondition(
+        _ source: BrowserSource, _ filter: TrackFilter, playsJoined: Bool
+    ) throws -> (String, [(any SQLiteValue)?]) {
         switch source {
         case .history:
             // A play this app or a synced Mac recorded has a history row. An import sets only
@@ -372,21 +372,40 @@ extension LibraryIndex {
                 [check.rawValue]
             )
         case .stats(let period):
-            // The tracks played in the period, whose stats the panel above them shows: by a
-            // history row, in a scan of the table as Listening Stats' own reads are, or by an
-            // import's last play (ADR 0102, 0105).
-            guard let span = period.span() else {
+            // The tracks played in the period, or the span of the bar clicked, whose stats the
+            // panel above them shows: by a history row, in a scan of the table as Listening
+            // Stats' own reads are, or by an import's last play (ADR 0102, 0105).
+            var span = period.span()
+            var narrowed = ""
+            var values: [(any SQLiteValue)?] = []
+            switch filter.stats?.item {
+            case .span(let bar): span = bar
+            case .entry(let list, let id):
+                // The columns the lists group by, as the browser columns of those kinds do.
+                let condition =
+                    switch list {
+                    case .artists: BrowserGrouping.artists.condition(filter)
+                    case .albums: BrowserGrouping.albums.condition(filter)
+                    case .genres: BrowserGrouping.genres.condition(filter)
+                    case .tracks: "t.file_id = ?"
+                    }
+                narrowed = " AND " + condition
+                values = [id]
+            case nil: break
+            }
+            guard let span else {
                 return (
                     "t.file_id IN (SELECT path_id FROM \(recordedTable)"
-                        + " UNION ALL SELECT path_id FROM (\(importedLastPlaysSQL)))", []
+                        + " UNION ALL SELECT path_id FROM (\(importedLastPlaysSQL)))"
+                        + narrowed, values
                 )
             }
             return (
                 "t.file_id IN (SELECT path_id FROM history NOT INDEXED"
                     + " WHERE played_at >= ? AND played_at < ?"
                     + " UNION ALL SELECT path_id FROM (\(importedLastPlaysSQL))"
-                    + " WHERE played_at >= ? AND played_at < ?)",
-                [span.start, span.end, span.start, span.end]
+                    + " WHERE played_at >= ? AND played_at < ?)" + narrowed,
+                [span.start, span.end, span.start, span.end] + values
             )
         case .timeline, .plays:
             // The timeline pages through plays with `timeline(before:limit:)` instead.

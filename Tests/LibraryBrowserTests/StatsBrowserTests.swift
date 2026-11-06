@@ -118,33 +118,109 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     try await waitFor("Stats again") { browser.model.filter.source == .stats(.week) }
 }
 
-@MainActor @Test func aBarShowsItsSpansPlaysAndARowGoesToItsAlbum() async throws {
+@MainActor @Test func aRowNarrowsStatsTableToItsTracksAndClickedAgainListsThemAll() async throws {
+    let (browser, _, _, album) = try await playedBrowser()
+    // A selection in a column, hidden while Stats shows, would narrow its table unseen.
+    await browser.model.select(.albums, .id(try #require(album[0].albumID)))
+    browser.showStats(.month)
+    try await waitFor("the report") {
+        browser.statsModel.report != nil && !browser.statsModel.isLoading
+    }
+    #expect(browser.model.filter.selections.isEmpty)
+    let panel = browser.statsPanel
+    let cards = panel.cards
+    #expect(panel.filterButton.isHidden)
+    let played = Set(try #require(browser.statsModel.report).paths.filter(\.inLibrary).map(\.id))
+    try await waitFor("the period's tracks") { Set(browser.model.trackIDs) == played }
+
+    // An album's row stays in Stats and lists the album's tracks played in the period.
+    let albums = try #require(cards.lists[.albums])
+    let albumRow = try #require(albums.rows.firstIndex { $0.name == album[0].album })
+    albums.clicked(albumRow)
+    try await waitFor("the album's tracks") {
+        browser.model.filter.stats != nil && Set(browser.model.trackIDs) == Set(album.map(\.id))
+    }
+    #expect(browser.model.filter.source == .stats(.month))
+    #expect(browser.shownPanel === panel)
+    #expect(albums.marked == albumRow)
+    #expect(!panel.filterButton.isHidden)
+    #expect(panel.filterButton.title == album[0].album)
+
+    // Another period keeps it; the button lists every track played again.
+    panel.choosePeriod(.year)
+    try await waitFor("the year") { browser.model.filter.source == .stats(.year) }
+    #expect(browser.model.filter.stats?.title == album[0].album)
+    try await waitFor("the year's report") {
+        browser.statsModel.report?.span != nil && !browser.statsModel.isLoading
+            && browser.statsModel.period == .year
+    }
+    #expect(albums.marked != nil)
+    panel.filterButton.performClick(nil)
+    try await waitFor("every track") { browser.model.filter.stats == nil }
+    #expect(panel.filterButton.isHidden)
+    #expect(albums.marked == nil)
+
+    // A track's row lists it alone, selected; its row clicked again lists them all.
+    let tracks = try #require(cards.lists[.tracks])
+    let trackRow = try #require(tracks.rows.firstIndex { !$0.dimmed })
+    tracks.clicked(trackRow)
+    try await waitFor("the track") { browser.model.trackIDs.count == 1 }
+    try await waitFor("its selection") { browser.table.table.selectedRowIndexes == [0] }
+    #expect(tracks.marked == trackRow)
+    tracks.clicked(trackRow)
+    try await waitFor("every track again") { browser.model.filter.stats == nil }
+    #expect(browser.model.filter.source == .stats(.year))
+}
+
+@MainActor @Test func aBarNarrowsStatsToItsSpanAndADoubleClickShowsItsPlays() async throws {
     let (browser, _, _, album) = try await playedBrowser()
     browser.showStats(.month)
     try await waitFor("the report") {
         browser.statsModel.report != nil && !browser.statsModel.isLoading
     }
     let cards = browser.statsPanel.cards
-    let bars = try #require(browser.statsModel.report?.bars)
-    let today = try #require(bars.lastIndex { $0.plays > 0 })
+    let report = try #require(browser.statsModel.report)
+    let today = try #require(report.bars.lastIndex { $0.plays > 0 })
+    let span = report.bars[today].span
     cards.chart.clicked(today)
+    try await waitFor("the day's tracks") { browser.model.filter.stats?.item == .span(span) }
+    #expect(browser.model.filter.source == .stats(.month))
+    #expect(cards.chart.marked == today)
+    #expect(
+        browser.statsPanel.filterButton.title
+            == barTitle(report.bars[today], unit: report.barUnit))
+    try await waitFor("the day's rows") { !browser.model.trackIDs.isEmpty }
+    #expect(Set(browser.model.trackIDs).isSubset(of: Set(album.map(\.id))))
+    // A bar's span is the period's, so another period lists every track again.
+    browser.statsPanel.choosePeriod(.year)
+    try await waitFor("the year") { browser.model.filter.source == .stats(.year) }
+    #expect(browser.model.filter.stats == nil)
+
+    browser.show(.stats(.month))
+    try await waitFor("the month") { browser.statsModel.period == .month }
+    cards.chart.doubleClicked(today)
     try await waitFor("the day's plays") {
-        browser.model.filter.source == .plays(bars[today].span) && browser.timelineModel.isLoaded
+        browser.model.filter.source == .plays(span) && browser.timelineModel.isLoaded
     }
     #expect(browser.showsTimeline)
-    #expect(browser.timelineModel.entries.count == bars[today].plays)
-    #expect(browser.timelineModel.span == bars[today].span)
+    #expect(browser.timelineModel.entries.count == report.bars[today].plays)
+}
 
-    // Back to Stats, then an album row shows the whole library at the album's first track.
-    browser.show(.stats(.month))
-    try await waitFor("Stats") { browser.shownPanel === browser.statsPanel }
-    let albumRow = try #require(cards.lists[.albums]?.rows.firstIndex { $0.name == album[0].album })
-    try #require(cards.lists[.albums]).clicked(albumRow)
-    try await waitFor("the album in the library") {
-        browser.model.filter.source == nil && !browser.table.table.selectedRowIndexes.isEmpty
+@MainActor @Test func aClickInYearInReviewNarrowsStatsForThatYear() async throws {
+    let (browser, _, _, album) = try await playedBrowser()
+    let year = Calendar.current.component(.year, from: Date())
+    browser.showYearInReview(year)
+    try await waitFor("the window") { browser.yearReview?.year == year }
+    let review = try #require(browser.yearReview)
+    let albums = try #require(review.cards.lists[.albums])
+    let row = try #require(albums.rows.firstIndex { $0.name == album[0].album })
+    albums.clicked(row)
+    try await waitFor("Stats for the year") {
+        browser.model.filter.source == .stats(.chosenYear(year))
+            && Set(browser.model.trackIDs) == Set(album.map(\.id))
     }
-    let selected = browser.model.ids(ofRows: browser.table.table.selectedRowIndexes)
-    #expect(Set(selected).isSubset(of: Set(album.map(\.id))))
+    #expect(browser.statsPanel.filterButton.title == album[0].album)
+    review.close()
 }
 
 @MainActor @Test func aTopListIsSavedAsAPlaylistOfItsPlayedTracks() async throws {

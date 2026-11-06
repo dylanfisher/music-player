@@ -5,7 +5,8 @@ import Settings
 /// Listening Stats' panel over the track table (ADR 0102): a header with the period picker
 /// (This Week, This Month, This Year, a year from the menu, All Time), Plays or Hours for the
 /// top lists, and Year in Review, over cards that flow into as many columns as the width holds
-/// and scroll when the panel is short. The table below lists the period's tracks.
+/// and scroll when the panel is short. The table below lists the period's tracks, or those a
+/// click in the cards narrowed it to, which a button in the header names and clears.
 @MainActor
 final class StatsPanel: NSViewController, SourcePanel {
     /// The calendar periods the segments stand for, in order; a chosen year is in the menu.
@@ -15,6 +16,8 @@ final class StatsPanel: NSViewController, SourcePanel {
     var choosePeriod: (StatsPeriod) -> Void = { _ in }
     var chooseRanking: (StatsReport.Ranking) -> Void = { _ in }
     var showReview: (Int) -> Void = { _ in }
+    /// The filter's button clicked: list every track of the period again.
+    var clearFilter: () -> Void = {}
 
     let cards = StatsCards()
     let periods = NSSegmentedControl(
@@ -25,6 +28,8 @@ final class StatsPanel: NSViewController, SourcePanel {
         labels: StatsReport.Ranking.allCases.map(\.title), trackingMode: .selectOne, target: nil,
         action: nil)
     let reviewButton = NSButton(title: YearReviewWindow.title, target: nil, action: nil)
+    /// What the table is narrowed to, shown while it is; a click clears it.
+    let filterButton = NSButton(title: "", target: nil, action: nil)
     let statusLabel = NSTextField(labelWithString: "")
     private let flow = StatsFlowView()
     private(set) var period = StatsPeriod.month
@@ -51,6 +56,15 @@ final class StatsPanel: NSViewController, SourcePanel {
         reviewButton.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
         reviewButton.imagePosition = .imageLeading
         reviewButton.toolTip = "The year's listening on a page of its own"
+        filterButton.bezelStyle = .recessed
+        filterButton.controlSize = .small
+        filterButton.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        filterButton.image = NSImage(
+            systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil)
+        filterButton.imagePosition = .imageTrailing
+        filterButton.lineBreakMode = .byTruncatingTail
+        filterButton.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        filterButton.isHidden = true
         statusLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.lineBreakMode = .byTruncatingTail
@@ -60,6 +74,7 @@ final class StatsPanel: NSViewController, SourcePanel {
             (years, { [weak self] in self?.yearChosen() }),
             (rankings, { [weak self] in self?.rankingClicked() }),
             (reviewButton, { [weak self] in self?.reviewClicked() }),
+            (filterButton, { [weak self] in self?.clearFilter() }),
         ] as [(NSControl, () -> Void)] {
             control.target = target
             control.action = #selector(ControlTarget.act(_:))
@@ -68,7 +83,7 @@ final class StatsPanel: NSViewController, SourcePanel {
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         let header = NSStackView(views: [
-            title, periods, years, statusLabel, spacer, rankings, reviewButton,
+            title, periods, years, filterButton, statusLabel, spacer, rankings, reviewButton,
         ])
         header.alignment = .centerY
         header.spacing = 8
@@ -110,6 +125,20 @@ final class StatsPanel: NSViewController, SourcePanel {
         rankings.selectedSegment = model.ranking == .plays ? 0 : 1
         if let report = model.report { cards.show(report, ranking: model.ranking) }
         statusLabel.stringValue = model.isLoading ? "Reading…" : ""
+    }
+
+    /// Names what the table is narrowed to in the header, and marks its row or bar; hides the
+    /// button for nil.
+    func show(_ filter: StatsFilter?) {
+        _ = view
+        cards.mark(filter)
+        filterButton.isHidden = filter == nil
+        filterButton.title = filter?.title ?? ""
+        filterButton.toolTip = filter.map {
+            "The table lists only the tracks of \($0.title) played in the period. Click to"
+                + " list every track played in it."
+        }
+        filterButton.setAccessibilityLabel(filter.map { "Show every track, not only \($0.title)" })
     }
 
     /// Selects `period`'s segment, or its year in the menu, which lists `years`.
