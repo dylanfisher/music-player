@@ -1,6 +1,7 @@
 import AppKit
 import Commands
 import Library
+import LibraryBrowser
 import Playback
 import PlaylistEditor
 import UniformTypeIdentifiers
@@ -97,16 +98,18 @@ extension AppDelegate {
     }
 
     private func newPlaylist(withSelection: Bool) {
+        guard let window = window?.window else { return }
         askForName(
-            AppCommands.title(of: .newPlaylist), button: "Create", initial: untitledPlaylist
+            AppCommands.title(of: .newPlaylist), button: "Create", initial: untitledPlaylist,
+            over: window
         ) { [weak self] name in
             self?.browser?.createPlaylist(named: name, rules: nil, withSelection: withSelection)
         }
     }
 
     private func renameShownPlaylist() {
-        guard let playlist = browser?.shownPlaylist else { return }
-        askForName("Rename Playlist", button: "Rename", initial: playlist.name) {
+        guard let window = window?.window, let playlist = browser?.shownPlaylist else { return }
+        askForName("Rename Playlist", button: "Rename", initial: playlist.name, over: window) {
             [weak self] name in self?.browser?.renamePlaylist(playlist.id, to: name)
         }
     }
@@ -247,31 +250,6 @@ extension AppDelegate {
         }
         ruleEditor = sheet
         sheet.begin(over: window)
-    }
-
-    /// A sheet asking for a playlist's name. An empty name beeps and changes nothing.
-    private func askForName(
-        _ title: String, button: String, initial: String,
-        _ done: @escaping (String) -> Void
-    ) {
-        guard let window = window?.window else { return }
-        let alert = NSAlert()
-        alert.messageText = title
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-        field.stringValue = initial
-        alert.accessoryView = field
-        alert.addButton(withTitle: button)
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = field
-        alert.beginSheetModal(for: window) { response in
-            guard response == .alertFirstButtonReturn else { return }
-            let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else {
-                NSSound.beep()
-                return
-            }
-            done(name)
-        }
     }
 
     // MARK: Counting plays
