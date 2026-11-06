@@ -49,8 +49,10 @@ struct WindowSettings {
             columns: BrowserColumn.restored(
                 state[\.browserColumns], groupings: settings.fileValue(\.browserGroupings)),
             sourceSort: state[\.sourceSort],
-            // A search with no field to show it would narrow the table unseen.
-            search: state[\.toolbarItems].contains(.search) ? state[\.search] : "")
+            // A search with no field to show it, its item taken out or the toolbar hidden (as
+            // Distraction-Free Mode hides it), would narrow the table unseen.
+            search: state[\.toolbarVisible] && state[\.toolbarItems].contains(.search)
+                ? state[\.search] : "")
         resume = settings[\.resume]
         groupByAlbumArtist = settings[\.groupByAlbumArtist]
         tableAppearance = TableAppearance(settings)

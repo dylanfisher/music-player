@@ -53,6 +53,10 @@ private func launchColumns(config: String?, saved: [BrowserColumn]) throws -> [B
     let state = try StateStore(AppState(), fileURL: paths.stateFile)
     try state.set(\.search, to: "Coltrane")
     #expect(WindowSettings(settings, state: state).browser.search == "Coltrane")
+    // Hidden, by Hide Toolbar or Distraction-Free Mode, which saves the same setting.
+    try state.set(\.toolbarVisible, to: false)
+    #expect(WindowSettings(settings, state: state).browser.search == "")
+    try state.set(\.toolbarVisible, to: true)
     try state.set(\.toolbarItems, to: ToolbarItem.defaultItems.filter { $0 != .search })
     #expect(WindowSettings(settings, state: state).browser.search == "")
 }
