@@ -79,6 +79,21 @@ func aBatchCrashedAfterEachStepIsPutRight(_ step: BatchStep) throws {
     #expect(calls.all.filter { $0 == .flush }.count == urls.count, "each write's fsync")
 }
 
+/// The writes of a batch run four at a time; the journal steps around them don't (ADR 0108).
+@Test func aBatchWritesFourFilesAtOnce() throws {
+    let urls = try (0..<8).map { _ in try Sample.flac.copy() }
+    var writer = scratchWriter()
+    let inFlight = InFlight()
+    writer.faults.beforeReplacing = { _, _ in
+        inFlight.enter()
+        Thread.sleep(forTimeInterval: 0.05)
+        inFlight.leave()
+    }
+    expectChanged(writer.write(titleEdit, to: urls.map(\.path)), urls)
+    #expect(inFlight.most == 4)
+    for url in urls { #expect(try tags(url).title == "Edited") }
+}
+
 private final class FlushCount: @unchecked Sendable {
     // `value` is guarded by `lock`.
     private let lock = NSLock()
@@ -86,4 +101,22 @@ private final class FlushCount: @unchecked Sendable {
 
     func add() { lock.withLock { value += 1 } }
     var count: Int { lock.withLock { value } }
+}
+
+/// How many writes were under way at once, at most.
+private final class InFlight: @unchecked Sendable {
+    // `now` and `peak` are guarded by `lock`.
+    private let lock = NSLock()
+    private var now = 0
+    private var peak = 0
+
+    func enter() {
+        lock.withLock {
+            now += 1
+            peak = max(peak, now)
+        }
+    }
+
+    func leave() { lock.withLock { now -= 1 } }
+    var most: Int { lock.withLock { peak } }
 }

@@ -32,8 +32,9 @@ enum BatchStep: CaseIterable, Sendable {
     case firstConfirmed
 }
 
-/// Files a batch writes at once.
-private let writesAtOnce = 1
+/// Files a batch writes and reads back at once: SMB is bound by round trips, so a few in
+/// flight hide each other's (ADR 0108). Its journal steps stay one at a time.
+private let writesAtOnce = 4
 /// The most files, and the most of their tag bytes, a chunk of a batch plans before it writes,
 /// so a change to a thousand files' art doesn't hold every plan at once.
 let chunkFiles = 32
@@ -189,14 +190,21 @@ extension TagWriter {
 }
 
 /// Runs `work` for each of `count` indices, at most `atOnce` at a time, and returns what each
-/// gave, in order.
+/// gave, in order. Each worker is a thread of its own: the work blocks on file I/O, and
+/// `concurrentPerform` runs its iterations one after another when the pool's threads are busy.
 private func concurrently<T: Sendable>(
-    _ count: Int, atOnce: Int, _ work: @Sendable (Int) -> T
+    _ count: Int, atOnce: Int, _ work: @escaping @Sendable (Int) -> T
 ) -> [T] {
     let slots = Slots<T>(count: count)
-    DispatchQueue.concurrentPerform(iterations: min(atOnce, count)) { _ in
-        while let index = slots.nextIndex() { slots.store(work(index), at: index) }
+    let done = DispatchGroup()
+    for _ in 0..<min(atOnce, count) {
+        done.enter()
+        Thread {
+            while let index = slots.nextIndex() { slots.store(work(index), at: index) }
+            done.leave()
+        }.start()
     }
+    done.wait()
     return slots.values
 }
 
