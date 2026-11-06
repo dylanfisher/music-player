@@ -27,6 +27,9 @@ actor RendererSession {
     /// Polls in a row that find it playing or paused other than the engine said before the
     /// engine is told: one alone may be a reply from before the last Play or Pause.
     static let disagreeingPolls = 2
+    /// Polls in a row that find it stopped at a track's end, holding a next track it took, before
+    /// it counts as not playing next tracks: one alone may come as it changes tracks.
+    static let stoppedAtEndPolls = 2
     /// How close to its end, by the app's clock or the last position polled, a track that
     /// stopped must have been to count as played out.
     static let endSlackSeconds = 3.0
@@ -434,6 +437,9 @@ actor RendererSession {
     /// track itself, or stops it when nothing is next.
     private func lead(past current: Loaded) async {
         logger.notice("\(self.renderer.name) hadn't moved on by the track's end; the app does")
+        if next?.sent == true {
+            ignoresNextURI("it played on past a track's end instead of the next track it took")
+        }
         guard next != nil else {
             await send(AVTransport.stop)
             guard self.current === current else { return }
@@ -491,10 +497,21 @@ actor RendererSession {
             )
             return release()
         }
-        // Given the next track, a renderer that stops at the end may be on its way to it; the
-        // app's own clock decides when it has waited long enough.
-        guard next?.sent != true else { return }
+        if next?.sent == true {
+            current.stoppedPolls += 1
+            guard current.stoppedPolls >= Self.stoppedAtEndPolls else { return }
+            ignoresNextURI("it stopped at a track's end instead of playing the next track it took")
+        }
         await ended(current)
+    }
+
+    /// The renderer took a next track with `SetNextAVTransportURI` and didn't play it. From now
+    /// on, while this session lasts, each track goes with `SetAVTransportURI` and Play once the
+    /// last has ended, so the next one doesn't wait on the renderer either.
+    private func ignoresNextURI(_ reason: String) {
+        gapless = .afterStop(reason)
+        logger.notice("\(self.renderer.name): \(reason); each track now starts after the last")
+        publish(signalPath())
     }
 
     /// `current` is over: the next track starts with set-URI and Play, after a gap, or nothing

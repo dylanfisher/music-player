@@ -342,13 +342,18 @@ private func output(
         Array(fake.commands.prefix(3)) == [
             "SetAVTransportURI", "Play", "SetNextAVTransportURI",
         ])
-    #expect(fake.actions.filter { $0 == "SetAVTransportURI" }.count == 1)
     var gapless: RendererGapless?
     while gapless != .nextURI, let path = await paths.next() {
         if case .renderer(let sink) = path.sink { gapless = sink.gapless }
     }
-    // With nothing after it, the second track plays out and the output finishes.
-    await log.wait(for: ["started 1", "ended 1", "started 2", "ended 2", "finished 2"])
+    // The track after goes the same way, and with nothing after it, it plays out and the output
+    // finishes.
+    output.setNext(item(3))
+    await log.wait(for: [
+        "started 1", "ended 1", "started 2", "ended 2", "started 3", "ended 3", "finished 3",
+    ])
+    #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 2)
+    #expect(fake.actions.filter { $0 == "SetAVTransportURI" }.count == 1)
     await eventually("nothing loaded") { output.position() == nil }
 }
 
@@ -379,19 +384,47 @@ private func output(
     #expect(gapless == .afterStop("its AVTransport has no SetNextAVTransportURI"))
 }
 
-@Test func aRendererThatStopsInsteadOfTakingTheNextTrackGetsItOnTheAppsClock() async throws {
-    let fake = try await FakeRenderer.denon(trackSeconds: 1)
+/// Why the output says the renderer isn't gapless, once it says so; nil if it hasn't within
+/// five seconds.
+private func notGaplessReason(_ output: RendererOutput) async -> String? {
+    await withTaskGroup(of: String?.self) { group in
+        group.addTask {
+            for await path in output.signalPaths {
+                if case .renderer(let sink) = path.sink, case .afterStop(let reason) = sink.gapless
+                {
+                    return reason
+                }
+            }
+            return nil
+        }
+        group.addTask {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            return nil
+        }
+        let first = await group.next() ?? nil
+        group.cancelAll()
+        return first
+    }
+}
+
+@Test func aRendererThatTakesTheNextTrackAndStopsIsGivenEachTrackItself() async throws {
+    let fake = try await FakeRenderer.denon(trackSeconds: 5)
     fake.ignoresNext()
+    fake.lagsBy(5)
     let (output, log) = try await output(fake)
     defer { output.close() }
-    let started = ProcessInfo.processInfo.systemUptime
-    output.load(item(1, "short"), startSeconds: 0, playing: true)
-    output.setNext(item(2))
-    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 8)
-    // Given the next track, a stop isn't acted on at once: the app waits out the track's
-    // length and its margin, then sends the next track itself.
-    #expect(ProcessInfo.processInfo.systemUptime - started >= 2.5)
-    #expect(fake.commands.filter { $0 == "SetAVTransportURI" }.count == 2)
+    output.load(item(1, "medium"), startSeconds: 0, playing: true)
+    output.setNext(item(2, "medium"))
+    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 15)
+    #expect(
+        await notGaplessReason(output)
+            == "it stopped at a track's end instead of playing the next track it took")
+    // The second track in a row goes the same way, without a next URI it would ignore.
+    output.setNext(item(3, "short"))
+    await log.wait(
+        for: ["started 1", "ended 1", "started 2", "ended 2", "started 3"], seconds: 15)
+    #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 1)
+    #expect(fake.setTransportURIs.map(\.stateBefore) == [.stopped, .stopped, .stopped])
 }
 
 @Test func aRendererThatStallsMidTrackIsWaitedForNotCutShort() async throws {
@@ -448,6 +481,14 @@ private func output(
     let took = ProcessInfo.processInfo.systemUptime - started
     #expect(took >= 2.5, "\(took) s")
     #expect(fake.commands.suffix(2) == ["SetAVTransportURI", "Play"])
+    #expect(
+        await notGaplessReason(output)
+            == "it played on past a track's end instead of the next track it took")
+    // Commands run in order, so once the Pause has gone, the next track has been handled.
+    output.setNext(item(3, "short"))
+    output.pause()
+    await eventually("the pause") { fake.commands.last == "Pause" }
+    #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 1)
 }
 
 @Test func aRendererBufferingAheadNeverFetchesADeadURL() async throws {
