@@ -118,3 +118,35 @@ private let dsfRefusal = "Tags in DSF files can't be written yet"
     #expect(mixed.fields[.title]?.first?.isEditable == true)
     #expect(mixed.saveButton.isEnabled)
 }
+
+/// A Save error takes the line beside the buttons, and the note about the files that can't be
+/// saved comes back at the next change.
+@MainActor @Test func theReadOnlyNoteComesBackAfterASaveError() throws {
+    let editor = TagEditorWindow(paths: ["/a.dsf", "/b.flac"])
+    defer { editor.close() }
+    var saves = 0
+    editor.saved = { _ in saves += 1 }
+    editor.load(
+        TagEditorModel(tracks: [
+            track("/a.dsf", title: "A", readOnly: dsfRefusal), track("/b.flac", title: "B"),
+        ]))
+    let note = "Tags in DSF files can't be written yet. Save writes only the other 1 file."
+    #expect(editor.problemLabel.stringValue == note)
+
+    let type = { (field: TagEditField, text: String) in
+        let view = try #require(editor.fields[field]?.first)
+        view.stringValue = text
+        editor.controlTextDidChange(
+            Notification(name: NSControl.textDidChangeNotification, object: view))
+    }
+    try type(.trackNumber, "not a number")
+    editor.saveButton.performClick(nil)
+    #expect(saves == 0)
+    #expect(editor.problemLabel.stringValue != note, "the error shows")
+
+    try type(.trackNumber, "3")
+    #expect(editor.problemLabel.stringValue == note)
+    editor.saveButton.performClick(nil)
+    #expect(saves == 1)
+    #expect(editor.problemLabel.stringValue == note)
+}

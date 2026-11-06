@@ -52,6 +52,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// Save failed.
     let problemLabel = NSTextField(labelWithString: "Reading tags…")
     let saveButton = NSButton(title: "Save", target: nil, action: nil)
+    /// Whether the line shows why Save failed, in place of its note.
+    private var showsSaveError = false
     /// Says, as soon as such a field is edited, that saving keeps one of its several values.
     private let collapseLabel = NSTextField(wrappingLabelWithString: "")
     private var isClosed = false
@@ -179,11 +181,13 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     func replaceArt(_ image: Data, mimeType: String) {
         model?.replaceArt(image, mimeType: mimeType)
         showArt()
+        clearSaveError()
     }
 
     func removeArt() {
         model?.removeArt()
         showArt()
+        clearSaveError()
     }
 
     func close() {
@@ -547,6 +551,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     private func showEdited() {
         guard let model else { return }
+        clearSaveError()
         for (field, views) in labels {
             for view in views { showLabel(view, field, edited: model.isEdited(field)) }
         }
@@ -620,6 +625,14 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         showEdited()
     }
 
+    /// Puts back the line's note about files that can't be saved, which a Save error replaced,
+    /// once the user changes something.
+    private func clearSaveError() {
+        guard showsSaveError else { return }
+        showsSaveError = false
+        showNote(model?.readOnlyNote ?? "", color: .secondaryLabelColor)
+    }
+
     private func showNote(_ text: String, color: NSColor) {
         problemLabel.stringValue = text
         problemLabel.toolTip = text.isEmpty ? nil : text
@@ -633,9 +646,12 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     @objc private func saveClicked() {
         guard let model else { return }
         do {
-            saved(try model.edit())
+            let edit = try model.edit()
+            clearSaveError()
+            saved(edit)
         } catch {
             showNote(error.description, color: .systemRed)
+            showsSaveError = true
             NSSound.beep()
         }
     }
