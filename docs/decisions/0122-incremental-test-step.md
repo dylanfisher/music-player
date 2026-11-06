@@ -50,9 +50,10 @@ Package.swift, and `./scripts/check` runs it.
 ## Consequences
 
 - The suite's tests have to be deterministic and independent of each other, as
-  [ADR 0023](0023-failure-table.md) already has them: a target is trusted to pass again on unchanged inputs, whatever else runs
-  beside it. A test that passes alone but fails at full parallelism can hide until the next
-  `--fresh`. Run `--fresh` before a release, and when a race is suspected.
+  [ADR 0023](0023-failure-table.md) already has them: a target is trusted to pass again on
+  unchanged inputs, whatever else runs beside it. A test that passes alone but fails at full parallelism can hide until the next
+  `--fresh`. Run `--fresh` at each retrospective (docs/plan.md), before a release, and when a
+  race is suspected.
 - A new test that reads a file outside Sources and Tests needs an entry in `readByTests`, or an
   edit to that file won't rerun it.
 - A file under Sources or Tests outside every target's folder fails the step, since Package.swift

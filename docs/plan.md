@@ -27,12 +27,15 @@ a workflow to run phases N–M of docs/plan.md". For each phase, the orchestrati
    It fixes every confirmed finding, then reruns only the checks those fixes can fail. A full
    `./scripts/check` runs once, before step 4, and its test step reruns only the test targets
    edited since its last pass.
-4. **Records.** It ticks the phase's boxes, adds a "Result" line with measured numbers, commits,
-   and fast-forwards `main` to the branch. It never pushes.
+4. **Records.** It ticks the phase's boxes, adds a "Result" line with measured numbers and what
+   the phase cost (each subagent's tokens, tool calls and wall time), commits, and fast-forwards
+   `main` to the branch. It never pushes.
 5. **Archives.** It moves the finished phase, unchanged, to the end of the archive's phases. A
    checkpoint the phase leaves pending gets a line in [Waiting on the owner](#waiting-on-the-owner)
    pointing at the archived text.
-6. **Continues.** A hardware checkpoint doesn't stop the run. It's recorded as pending, and the
+6. **Looks back** every third phase archived since the last
+   [retrospective](#retrospective), and runs one.
+7. **Continues.** A hardware checkpoint doesn't stop the run. It's recorded as pending, and the
    run moves on to the next phase that doesn't depend on its result. When the run ends, it lists
    every pending checkpoint at once: what to push, what to run on which machine, and what to
    paste back.
@@ -154,7 +157,24 @@ Run after every phase, before ticking it off.
 - [ ] **Docs:** an ADR in `docs/decisions/` for every non-obvious choice. AGENTS.md boundaries
       updated if the phase created something that must not be edited directly, keeping AGENTS.md
       under ~50 lines.
-- [ ] **Result line** written: what shipped, the benchmark numbers, and anything deferred.
+- [ ] **Result line** written: what shipped, the benchmark numbers, what the phase cost, and
+      anything deferred.
+
+## Retrospective
+
+Every third phase, and before a long run ends, the orchestrator adds a dated entry at the top of
+[retrospectives.md](retrospectives.md):
+
+- Tokens and wall time per phase since the last entry, from the Result lines, and where they
+  went: reading code, test iterations, gate runs, review rounds, waiting on probes.
+- What changes because of it, in this plan, AGENTS.md, a script or a brief, with the reason.
+  Make the change in the same commit as the entry.
+- Cleanup: `git worktree list`, then remove every worktree no running agent is using and run
+  `git worktree prune`. Each one holds a full `.build`, several gigabytes.
+
+Then `./scripts/test --fresh` and `./scripts/check`. The full run catches what the gate's
+incremental test step can miss ([ADR 0122](decisions/0122-incremental-test-step.md)): a race
+that shows only with the whole suite running at once.
 
 ## Performance budgets
 
@@ -284,8 +304,8 @@ Not phases yet. Each becomes one when the owner asks.
   album artist when tags change, with Move and Consolidate Library. It moves and renames music
   files, which AGENTS.md allows only `TagWriter` and Move to Trash to touch, so it needs an ADR
   and the owner's go-ahead first. Watched folders cover adding music meanwhile.
-- **Discogs lookup:** superseded by [recommendations.md](recommendations.md), which uses local
-  data dumps and needs no token. The API version: fetch release data from the Discogs API and
+- **Discogs lookup:** superseded by [recommendations.md](recommendations.md), where a separate
+  service on mbp2021 does the lookup from local data dumps. The API version: fetch release data from the Discogs API and
   offer it as a tag edit the user confirms in the tag editor, written through `TagWriter` (ADR 0020). Start with files that
   already carry `DISCOGS_RELEASE_ID` (39 of the 159 reference files), which need one
   `GET /releases/{id}` and no matching. Searching for other files needs a Discogs token, which

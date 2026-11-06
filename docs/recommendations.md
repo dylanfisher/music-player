@@ -1,21 +1,52 @@
 # Discogs lookup and recommendations
 
-A plan for two features built on open data dumps instead of web APIs:
+A plan for two features built on open data dumps:
 
-1. **Local Discogs lookup.** Find a library album's Discogs release in a local copy of the
-   Discogs catalog and offer its data as a tag edit the user confirms in the tag editor,
-   written through `TagWriter` (ADR 0020).
+1. **Discogs lookup.** Find a library album's Discogs release in a local copy of the Discogs
+   catalog and offer its data as a tag edit the user confirms in the tag editor, written
+   through `TagWriter` (ADR 0020).
 2. **Recommendations.** Suggest albums and artists the owner doesn't have, from how records
    are connected in the Discogs catalog and from what other people listen to together.
 
-Not a phase yet. It replaces the API-based "Discogs lookup" item under Later in
-[plan.md](plan.md): a local copy needs no Discogs token, so the no-secrets rule holds, and a
-lookup makes no network connection.
+Both run in a separate service, **music-recommender**, in its own repo at
+`~/projects/music-recommender`, written in Rust and hosted on mbp2021. The player is its
+client over the LAN. Not a phase yet. It replaces the API-based "Discogs lookup" item under
+Later in [plan.md](plan.md).
+
+## How it's built
+
+```
+ NAS (seed, 2026-11 only)       data.discogs.com, data.metabrainz.org
+          │                                   │ monthly, checksummed
+          ▼                                   ▼
+ ┌─────────────────────── mbp2021: music-recommender ───────────────────────┐
+ │ fetch → import → similarity → catalog database (local disk)              │
+ │                                    │      Discogs API (ratings, token)    │
+ │                          HTTP API, Bonjour, shared token                 │
+ └────────────────────────────────────┬─────────────────────────────────────┘
+                                      │ LAN
+           ┌──────────────────────────┼──────────────────────────┐
+     player (this Mac)          player (mbp2021)          player (mbp2015)
+```
+
+- **mbp2021 hosts it.** An M1 Max with 64 GB and 1.5 TB free. The dumps and the database live
+  on its local disk, so imports and queries never read the NAS. Nothing runs on the 2015
+  MacBook Pro except the player, which only sends requests.
+- **The service owns all the third-party data.** It downloads the dumps, imports them,
+  computes similarity, fetches Discogs ratings and answers queries. The player keeps no copy.
+- **The player stays the only writer of music files.** The service suggests a lookup match;
+  the player shows it in the tag editor and `TagWriter` writes it after the user confirms.
+  The service never sees a music file.
+- **Why Rust:** streaming parsers for about 150 GB of XML and JSON, sparse matrix work for the
+  similarity step, and one binary to run as a service. It shares no code with the player; the
+  HTTP API is the only contract between them.
 
 ## The dumps
 
 Downloaded on 2026-11-06 to the NAS, outside the watched folders (`/Volumes/music/library` and
-`/Volumes/music/dsd`). Each file was checked against its publisher's SHA-256 checksum.
+`/Volumes/music/dsd`). Each file was checked against its publisher's SHA-256 checksum. These
+copies seed the service's first import: it copies them to mbp2021's disk, and the owner then
+deletes the NAS folders. Later months download straight to mbp2021.
 
 | Folder | File | Size | License | Dump date |
 |---|---|---|---|---|
@@ -114,9 +145,10 @@ served by its online API, so similarity is computed locally from the statistics 
 
 ## Matching the library to Discogs
 
-The library has 43,382 tracks in 6,541 albums. The index doesn't store Discogs ids, and the tag
-reader doesn't read `DISCOGS_RELEASE_ID`, though some files have it (39 of the 159 reference
-files). In order of confidence:
+The service does the matching, from what the player sends about an album. The library has
+43,382 tracks in 6,541 albums. The index doesn't store Discogs ids, and the tag reader doesn't
+read `DISCOGS_RELEASE_ID`, though some files have it (39 of the 159 reference files). In order
+of confidence:
 
 1. **A Discogs release id in the tags.** No matching needed. The tag reader and the index gain
    the field.
@@ -165,33 +197,98 @@ candidate album or artist:
 2. **Listening together (ListenBrainz).** Artist-to-artist similarity from co-occurrence in
    listeners' top-artist lists, weighted so artists everyone plays don't dominate. Joined to
    Discogs through the MusicBrainz links.
-3. **Ratings (Discogs API, optional).** Average rating and have/want counts per release. The API
-   without a token allows about 25 requests a minute and looks up by id only, which is enough
-   since the local catalog supplies the ids: about 4½ hours, once, for the library's albums,
-   then fetching only the top few hundred candidates of a recommendation list. It is the app's
-   first outbound internet connection, so ADR 0025 gains rows for it.
+3. **Ratings (Discogs API).** Average rating and have/want counts per release, fetched by the
+   service with a Discogs personal token at 60 requests a minute, paced by the rate-limit
+   headers. The local catalog supplies the ids, so no search is needed: about 2 hours, once,
+   for the library's albums, then only the top few hundred candidates of a recommendation
+   list. Cached in the service's database and refreshed slowly.
 
 What the owner has and likes seeds the score: albums in the library, play counts, loved tracks
-and ratings from the index. Albums already in the library are never suggested.
+and ratings, which the player sends as a profile. Albums already in the library are never
+suggested.
 
-## Storage and import
+## The service
 
-- The derived data goes in its own SQLite file, not `library.sqlite`: the trimmed catalog
-  (releases, tracks, artists, labels, credits, masters, the MusicBrainz links) and the
-  precomputed similarity tables. Only the fields above are kept.
-- The import reads each dump as a stream (the releases XML is about 80 GB uncompressed), runs off
-  the main thread, and can resume after an interruption.
-- A monthly Discogs dump replaces the catalog file whole. Pre-release, stored data has one
-  shape, so a schema change means a fresh import.
-- On the 2015 MacBook Pro a full import will likely take hours. It may be built on a faster Mac
-  and the file copied over; that's a performance budget row once measured.
+- **Fetch.** Once a month it checks the three sources for a newer dump, downloads it to
+  mbp2021 within each source's rate limit (one request at a time to `data.discogs.com`, waiting
+  out any `Retry-After`), and checks it against the published checksum before use. A failed
+  or mismatched download is reported and the current database stays in use.
+- **Import.** Reads each dump as a stream (the releases XML is about 80 GB uncompressed) and
+  keeps only the fields above: releases, tracks, artists and their relations, labels, credits,
+  masters, the MusicBrainz-to-Discogs links and ListenBrainz's per-user stats. It resumes after
+  an interruption.
+- **Similarity.** Computes the top neighbors per artist (and per release, if album-level
+  proves worth it) from the ListenBrainz stats, and the catalog connections from Discogs.
+- **Swap.** Each monthly rebuild writes a new database next to the current one and replaces it
+  when complete, so queries never see a half-built catalog. Ratings carry over by Discogs id.
+- **Answer.** An HTTP API on the LAN, advertised by Bonjour.
 
-## Open questions for the owner
+Its own AGENTS.md, conventions, tests and performance budgets live in its repo. The storage
+engine (SQLite or another) is that repo's decision.
 
-- **Reading the NAS.** AGENTS.md says no tool touches the NAS. The import only reads these dump
-  folders, but the boundary needs an explicit exception and an ADR.
-- **Where the derived database lives**, and how big it may be on the 2015 MacBook Pro.
-- **The Discogs API for ratings:** wanted at all, and with a user-supplied token (a secret, so
-  how it's stored) or without one at the slower rate.
-- **Where recommendations appear:** a library-browser section, the Now Playing view, or a
-  separate window.
+## Between the player and the service
+
+- **Finding it.** The service advertises itself by Bonjour; the player finds it with
+  Network.framework (available on macOS 12). An address in the player's `config.json`
+  overrides discovery.
+- **The token.** One shared token, set in the service's config and in each player's
+  `config.json`, sent in an `Authorization: Bearer` header on every request. Decided by the
+  owner on 2026-11-06. It is the player's first secret, so it needs an ADR; the player writes
+  `config.json` as owner-only (mode 0600) while it holds a token, and never copies the token
+  into the index, the state file, logs or the sync folder. The Discogs token is the
+  service's, kept in its own config on mbp2021.
+- **Requests**, in outline (the service's repo defines the API):
+  - **Profile:** the player sends its library: album artist, title, track count and durations,
+    catalog numbers, barcodes and Discogs ids where tagged, with play counts, loved tracks and
+    ratings. The service keeps the latest profile and matches it to the catalog.
+  - **Recommendations:** for the whole library or a seed artist or album, a list of albums
+    and artists with a score, the signals behind it and a reason in words.
+  - **Lookup:** for one album, ranked Discogs release candidates with their fields mapped to
+    the player's tag fields.
+- **Untrusted replies.** The player treats every reply as input from a LAN device (ADR 0025):
+  a size cap, a timeout and typed errors. ADR 0025 gains rows for the client and the token.
+- **When the service isn't answering**, the views say so and name the address tried; nothing
+  falls back silently.
+
+## In the player
+
+- **Recommended** in the sidebar, laid out like Listening Stats (ADR 0102): a panel of cards
+  over a list, here of albums and artists not in the library, each with its reason. A window
+  for the full view with filters (style, era, label), like Year in Review's window.
+- **Lookup in the tag editor:** a "Look Up on Discogs" action showing the candidates; choosing
+  one fills the fields for the user to confirm, as any other tag edit.
+- **The tag reader and the index** gain `DISCOGS_RELEASE_ID`, so tagged albums are sent with
+  their ids.
+- **Settings:** the service address override and the token.
+
+## Build order
+
+1. **Prototype (throwaway).** A script on this Mac over the data already unpacked in the
+   scratchpad: artist similarity from the ListenBrainz all-time stats, the Discogs catalog
+   connections, and top-50 lists for the whole library and a few seed artists with their
+   reasons. The owner judges them, which settles the weighting and whether the catalog
+   connections earn their import. Deleted afterwards.
+2. **The service.** The music-recommender repo on mbp2021: fetch, import, similarity, swap and
+   the HTTP API, with the lookup and recommendation requests.
+3. **The player's client.** The token ADR and the ADR 0025 rows, Bonjour discovery, the
+   profile, and `DISCOGS_RELEASE_ID` in the tag reader and the index.
+4. **The player's views.** The Recommended source and window, and Look Up in the tag editor.
+5. **Ratings.** The Discogs API fetch in the service, once the first four work without it.
+
+## Decided
+
+Answers from the owner on 2026-11-06:
+
+| Question | Answer |
+|---|---|
+| Where it runs | mbp2021, with the dumps and database on its local disk |
+| Repo | `~/projects/music-recommender`, separate from the player |
+| Language | Rust |
+| Discogs lookup | In the service; the player writes tags as before |
+| Connection | HTTP on the LAN with one shared token, kept in config files |
+| Discovery | Bonjour, with an address in `config.json` as the override |
+| Discogs ratings | Yes, through the API with a Discogs token |
+| Updates | Automatic monthly download, verify and rebuild |
+| NAS copies | Seed the first import, then deleted by the owner |
+| Prototype | A throwaway script first, judged before the repo is started |
+| Where recommendations appear | A Recommended sidebar source like Listening Stats, and a window |
