@@ -131,6 +131,17 @@ func filesAfterOnesThatFailFirstAreStillWritten(_ inPlace: Bool) throws {
     expectChanged(writer.undoLast(), [urls[failing]])
 }
 
+/// A path named twice in a batch is written once.
+@Test func aPathNamedTwiceIsWrittenOnce() throws {
+    let url = try Sample.flac.copy()
+    let original = try Data(contentsOf: url)
+    let writer = scratchWriter()
+    expectChanged(writer.write(titleEdit, to: [url.path, url.path]), [url])
+    #expect(try tags(url).title == "Edited")
+    expectChanged(writer.undoLast(), [url])
+    #expect(try Data(contentsOf: url) == original)
+}
+
 /// A batch lists each folder once for the temp files earlier writes left, and removes each
 /// file's (ADR 0108).
 @Test func aBatchListsEachFolderOnce() throws {

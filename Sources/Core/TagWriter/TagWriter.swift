@@ -28,9 +28,12 @@ public struct TagWriter: Sendable {
     /// place together (ADR 0108); any other file goes through its temp file when it's reached.
     /// `progress` is told of each file read and each written, from the threads writing them.
     public func write(
-        _ edit: TagEdit, to paths: [String],
+        _ edit: TagEdit, to requested: [String],
         progress: @escaping @Sendable (TagWriteProgress) -> Void = { _ in }
     ) -> TagWriteReport {
+        // Once each, so a path named twice isn't written by two threads at once.
+        var named = Set<String>()
+        let paths = requested.filter { named.insert($0).inserted }
         let counter = WriteProgressCounter(total: paths.count, report: progress)
         var report = recoverInterrupted()
         let entry: TagUndoJournal.Entry
