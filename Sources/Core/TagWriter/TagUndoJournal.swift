@@ -116,14 +116,23 @@ public struct TagUndoJournal: Sendable {
     /// A new, empty edit after the newest one.
     package func newEntry() throws(TagWriteError) -> Entry {
         let sequence = (try sequences(in: directory).last ?? 0) + 1
-        let folder = directory.appendingPathComponent(name(sequence))
+        let entry = Entry(
+            sequence: sequence, folder: directory.appendingPathComponent(name(sequence)))
+        try makeFolder(of: entry)
+        return entry
+    }
+
+    /// Makes `entry`'s folder if it isn't there: removing an edit's last file removes its
+    /// folder, and a batch whose first files fail goes on adding to the same edit.
+    private func makeFolder(of entry: Entry) throws(TagWriteError) {
+        guard !FileManager.default.fileExists(atPath: entry.folder.path) else { return }
         do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: entry.folder, withIntermediateDirectories: true)
         } catch {
-            throw journalError("can't make \(folder.path): \(error)")
+            throw journalError("can't make \(entry.folder.path): \(error)")
         }
         try syncFolder(directory.path)
-        return Entry(sequence: sequence, folder: folder)
     }
 
     /// Adds one file to `entry`: its old bytes and its record, each flushed with its folder, then
@@ -131,6 +140,7 @@ public struct TagUndoJournal: Sendable {
     package func append(_ record: FileRecord, oldBytes: [[UInt8]], to entry: Entry)
         throws(TagWriteError) -> Handle
     {
+        try makeFolder(of: entry)
         let handle = Handle(entry: entry, number: (try sequences(in: entry.folder).last ?? 0) + 1)
         try writeDurably(oldBytes, to: handle.bytes.path, drive: false)
         try writeDurably([Array(try encode(record))], to: handle.record.path, drive: false)
@@ -148,6 +158,7 @@ public struct TagUndoJournal: Sendable {
     func appendInPlace(_ files: [(record: FileRecord, oldBytes: [UInt8])], to entry: Entry)
         throws(TagWriteError) -> [Handle]
     {
+        try makeFolder(of: entry)
         let first = (try sequences(in: entry.folder).last ?? 0) + 1
         var handles: [Handle] = []
         do throws(TagWriteError) {

@@ -111,6 +111,26 @@ func aBatchCrashedAfterEachStepIsPutRight(_ step: BatchStep) throws {
     #expect(try tags(urls[0]).title != "Edited")
 }
 
+/// Files that fail before they're written take their records out of the edit, which can leave
+/// its folder empty and gone; the files after them are still journaled and written.
+@Test(arguments: [true, false])
+func filesAfterOnesThatFailFirstAreStillWritten(_ inPlace: Bool) throws {
+    let failing = inPlace ? chunkFiles : 1
+    let urls = try (0...failing).map { _ in try Sample.flac.copy() }
+    let refused = Set(urls.prefix(failing).map(\.path))
+    var writer = scratchWriter()
+    writer.faults.writesInPlace = inPlace
+    writer.faults.beforeReplacing = { path, _ in
+        if refused.contains(path) { throw POSIXError(.EIO) }
+    }
+    let report = writer.write(titleEdit, to: urls.map(\.path))
+    #expect(report.failures.map(\.kind) == Array(repeating: .writeFailed, count: failing))
+    #expect(report.changed == [urls[failing].path])
+    #expect(report.notWritten == [])
+    #expect(try tags(urls[failing]).title == "Edited")
+    expectChanged(writer.undoLast(), [urls[failing]])
+}
+
 /// A batch lists each folder once for the temp files earlier writes left, and removes each
 /// file's (ADR 0108).
 @Test func aBatchListsEachFolderOnce() throws {
