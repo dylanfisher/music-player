@@ -259,6 +259,8 @@ struct MP4File {
             }
         }
         notes.append(audioAfterMoov ? "moov before mdat" : "moov after mdat")
+        // Its tags grow in place, past the end of the file (ADR 0108).
+        if moovIndex == top.count - 1 { notes.append("moov last") }
         let tables = Set(moov.chunkOffsetTables().map { moov[$0].type })
         notes.append("chunk offsets: \(tables.sorted().joined(separator: ", "))")
         if moov.indexPath(Self.ilstPath) == nil { notes.append("no udta/meta/ilst") }

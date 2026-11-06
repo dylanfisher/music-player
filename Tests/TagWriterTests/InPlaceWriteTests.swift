@@ -133,6 +133,56 @@ func aSaveThroughTheTempFileLeavesRoomForTheNext(_ sample: Sample) throws {
     }
 }
 
+/// An MP4 with `moov` last grows in place past its old end (ADR 0108): the same file, the audio
+/// and every byte before the edit where they were, and undo cuts it back to the original.
+@Test func anMP4WithMoovLastGrowsInPlace() throws {
+    let url = try mp4WithMoovLast()
+    let original = try Data(contentsOf: url)
+    let payload = try readTagLayout(at: url).payload
+    let before = try identity(url)
+    let writer = scratchWriter()
+    let long = TagEdit(values: [.title: String(repeating: "Grown ", count: 200)])
+    expectChanged(writer.write(long, to: [url.path]), [url])
+    #expect(try identity(url).inode == before.inode, "written in place")
+    let grown = try Data(contentsOf: url)
+    #expect(grown.count > original.count)
+    let moov = try #require(try readTagLayout(at: url).blocks.first { $0.path == "moov" })
+    #expect(grown[..<moov.range.lowerBound] == original[..<moov.range.lowerBound])
+    #expect(try readTagLayout(at: url).payload == payload)
+    #expect(try tags(url).title == long.values[.title])
+    // The rewrite left room, so the next edit keeps the size.
+    expectChanged(writer.write(titleEdit, to: [url.path]), [url])
+    #expect(try Data(contentsOf: url).count == grown.count)
+    expectChanged(writer.undoLast(), [url])
+    expectChanged(writer.undoLast(), [url])
+    #expect(try Data(contentsOf: url) == original)
+}
+
+/// A crash part way through a write that grows the file, and one after it landed: recovery
+/// cuts a torn one back to the original and keeps one that landed.
+@Test(arguments: [1, 9, Int.max])
+func anMP4GrowingInPlaceCutShortIsPutRight(_ bytes: Int) throws {
+    let url = try mp4WithMoovLast()
+    let original = try Data(contentsOf: url)
+    let long = TagEdit(values: [.title: String(repeating: "Grown ", count: 200)])
+    var crashing = scratchWriter()
+    crashing.faults.tornWriteBytes = bytes
+    _ = crashing.write(long, to: [url.path])
+
+    let writer = TagWriter(journal: crashing.journal)
+    let report = writer.recoverInterrupted()
+    #expect(report.failures == [])
+    #expect(try markers(writer).isEmpty)
+    if bytes == Int.max {
+        #expect(report.changed == [])
+        #expect(try tags(url).title == long.values[.title])
+        expectChanged(writer.undoLast(), [url])
+    } else {
+        #expect(report.changed == [url.path])
+    }
+    #expect(try Data(contentsOf: url) == original)
+}
+
 /// A crash part way through the one write leaves the tag torn; the next call puts the original
 /// back from the journal, byte for byte, and there is nothing left to undo.
 @Test(arguments: [Sample.flac, .mp4, .mp3v24, .aiffV24, .wavID3])

@@ -81,31 +81,12 @@ func editsAfterARewriteFitInItsPadding(_ sample: Sample) throws {
     #expect(after.payload == grown.payload)
 }
 
-/// The fixture MP4 with `moov` moved after `mdat`, as 61 of the corpus files have it.
-private func mp4WithMoovLast() throws -> URL {
-    let url = try Sample.mp4.copy()
-    let reader = ByteReader(try FileSource(path: url.path))
-    let file = try MP4File(reader)
-    #expect(file.audioAfterMoov)
-    var moov = file.moov
-    let mdat = file.mdats[0]
-    let ftyp = file.top[0].atom
-    for table in moov.chunkOffsetTables() {
-        try moov[table].shiftChunkOffsets(by: ftyp.body.upperBound - mdat.start, from: 0)
-    }
-    let bytes = try Data(contentsOf: url)
-    var moved = bytes[ftyp.start..<ftyp.body.upperBound]
-    moved += bytes[mdat.start..<mdat.body.upperBound]
-    moved += moov.serialized()
-    try moved.write(to: url)
-    return url
-}
-
 @Test func moovAfterTheAudioGrowsAtTheEnd() throws {
     let url = try mp4WithMoovLast()
     let original = try Data(contentsOf: url)
     let before = try readTagLayout(at: url)
     #expect(before.notes.contains("moov after mdat"))
+    #expect(before.notes.contains("moov last"))
     let writer = scratchWriter()
     let edit = TagEdit(values: [.title: String(repeating: "Perälä ", count: 400)])
     expectChanged(writer.write(edit, to: [url.path]), [url])

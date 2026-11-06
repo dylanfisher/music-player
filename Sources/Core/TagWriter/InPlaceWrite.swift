@@ -3,11 +3,14 @@ import Foundation
 import Metadata
 
 /// A write in place: the one run of bytes an edit changes in the original, when the new tags
-/// fit the room the old ones had, so the file keeps its size and every other byte stays where
-/// it is (ADR 0107).
+/// fit the room the old ones had, so every byte outside the run stays where it is (ADR 0107).
+/// The run may also go past the original's end, when the tags are last in the file, as in an
+/// MP4 with `moov` after its audio: the file grows and nothing before the run moves (ADR 0108).
 struct InPlacePlan {
     var offset: Int
     var newBytes: [UInt8]
+    /// The original's bytes from `offset`, as many as `newBytes` replace: fewer when the file
+    /// grows, since the original ends first.
     var oldBytes: [UInt8]
     /// The file's size once written.
     var size: Int
@@ -15,8 +18,8 @@ struct InPlacePlan {
     var region: Range<Int> { offset..<offset + newBytes.count }
 
     /// The plan for the file `segments` make, from the first byte that differs from the
-    /// original to the last; nil when the file would have another size or a kept range would
-    /// move, or when no byte changes.
+    /// original to the last; nil when the file would be shorter, when a kept range would move,
+    /// when a file that grows would change bytes beside its audio, or when no byte changes.
     init?(
         _ segments: [Segment], size: Int, source: MeteredSource, payload: [Range<Int>], path: String
     ) throws(TagWriteError) {
@@ -24,18 +27,24 @@ struct InPlacePlan {
         var written: [(offset: Int, bytes: [UInt8])] = []
         for segment in segments {
             switch segment {
-            case .original(let range): guard range.lowerBound == offset else { return nil }
+            case .original(let range):
+                // An empty range keeps nothing, as the end of a file whose tags are last.
+                guard range.isEmpty || range.lowerBound == offset else { return nil }
             case .bytes(let bytes): written.append((offset, bytes))
             }
             offset += segment.count
         }
-        guard offset == size else { return nil }
+        guard offset >= size else { return nil }
+        let newSize = offset
         var lower = Int.max
         var upper = Int.min
         for (start, bytes) in written {
-            let old = try read(source, start..<start + bytes.count, path)
-            guard let first = bytes.indices.first(where: { bytes[$0] != old[$0] }),
-                let last = bytes.indices.last(where: { bytes[$0] != old[$0] })
+            // Bytes past the original's end differ from it, since it has none there.
+            let old =
+                start < size ? try read(source, start..<min(start + bytes.count, size), path) : []
+            let differs = { (index: Int) in index >= old.count || bytes[index] != old[index] }
+            guard let first = bytes.indices.first(where: differs),
+                let last = bytes.indices.last(where: differs)
             else { continue }
             lower = min(lower, start + first)
             upper = max(upper, start + last + 1)
@@ -43,12 +52,15 @@ struct InPlacePlan {
         guard lower < upper else { return nil }
         let region = lower..<upper
         guard payload.allSatisfy({ !$0.overlaps(region) }) else {
+            // A file that grows with a header before its audio, as an AIFF whose `FORM` size
+            // changes, goes through the temp file.
+            if newSize > size { return nil }
             throw TagWriteError(
                 path: path, kind: .checkFailed,
                 detail: "the tags written in place would change the audio")
         }
-        oldBytes = try read(source, region, path)
-        newBytes = oldBytes
+        oldBytes = try read(source, lower..<min(upper, size), path)
+        newBytes = oldBytes + [UInt8](repeating: 0, count: region.count - oldBytes.count)
         for (start, bytes) in written {
             let overlap = (start..<start + bytes.count).clamped(to: region)
             guard !overlap.isEmpty else { continue }
@@ -57,7 +69,7 @@ struct InPlacePlan {
                 with: bytes[overlap.lowerBound - start..<overlap.upperBound - start])
         }
         self.offset = lower
-        self.size = size
+        self.size = newSize
     }
 
     /// The region as the journal keeps it.
@@ -67,13 +79,14 @@ struct InPlacePlan {
             newSHA256: sha256(newBytes))
     }
 
-    /// How the original is put back together from the edited file: the edited file's bytes
-    /// around the region, the journaled old bytes in it.
+    /// How the original of `size` bytes is put back together from the edited file: the edited
+    /// file's bytes around the region, the journaled old bytes in it. A file that grew ends
+    /// with the old bytes.
     func restore(size: Int) -> [TagUndoJournal.RestoreSegment] {
         var segments: [TagUndoJournal.RestoreSegment] = []
         if offset > 0 { segments.append(.edited(lowerBound: 0, upperBound: offset)) }
         segments.append(.old(length: oldBytes.count))
-        if region.upperBound < size {
+        if offset + oldBytes.count < size {
             segments.append(.edited(lowerBound: region.upperBound, upperBound: size))
         }
         return segments
@@ -126,15 +139,18 @@ func regionState(
 }
 
 /// The original as the plan would leave it, so the reader can check the new tags before a
-/// byte of the original is written.
+/// byte of the original is written. Past the original's end, only the plan has bytes.
 struct PlannedSource: ByteSource {
     let original: MeteredSource
     let plan: InPlacePlan
 
-    var size: Int { original.size }
+    var size: Int { plan.size }
 
     func read(_ range: Range<Int>) throws(ParseFailure) -> [UInt8] {
-        var bytes = try original.read(range)
+        let kept = range.clamped(to: 0..<original.size)
+        var bytes =
+            (kept.isEmpty ? [] : try original.read(kept))
+            + [UInt8](repeating: 0, count: range.count - kept.count)
         let overlap = range.clamped(to: plan.region)
         if !overlap.isEmpty {
             bytes.replaceSubrange(

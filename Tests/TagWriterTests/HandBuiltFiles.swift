@@ -69,6 +69,27 @@ func mp4WithCo64() throws -> URL {
     return url
 }
 
+/// The fixture MP4 with `moov` moved after `mdat` and last in the file, as 61 of the corpus
+/// files have it.
+func mp4WithMoovLast() throws -> URL {
+    let url = try Sample.mp4.copy()
+    let reader = ByteReader(try FileSource(path: url.path))
+    let file = try MP4File(reader)
+    #expect(file.audioAfterMoov)
+    var moov = file.moov
+    let mdat = file.mdats[0]
+    let ftyp = file.top[0].atom
+    for table in moov.chunkOffsetTables() {
+        try moov[table].shiftChunkOffsets(by: ftyp.body.upperBound - mdat.start, from: 0)
+    }
+    let bytes = try Data(contentsOf: url)
+    var moved = bytes[ftyp.start..<ftyp.body.upperBound]
+    moved += bytes[mdat.start..<mdat.body.upperBound]
+    moved += moov.serialized()
+    try moved.write(to: url)
+    return url
+}
+
 /// `sample` with its ID3 chunk moved in front of the audio chunk.
 func formWithID3BeforeAudio(_ sample: Sample) throws -> URL {
     let url = try sample.copy()
