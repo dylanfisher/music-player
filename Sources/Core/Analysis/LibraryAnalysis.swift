@@ -156,10 +156,10 @@ public actor LibraryAnalysis {
     /// Where the pass stands, from the index. Call it while no run goes.
     public func standing() async throws -> Standing {
         let files = try await cache.analysisFiles()
-        let left = files.pending.count > files.failed
+        let left = !files.pending.isEmpty
         return Standing(
             paused: files.unfinished && left
-                ? Progress(stage: .paused, analyzed: files.done, total: files.total) : nil,
+                ? Progress(stage: .paused, analyzed: files.tried, total: files.total) : nil,
             everyFileTried: files.total > 0 && !left)
     }
 
@@ -177,7 +177,7 @@ public actor LibraryAnalysis {
             report(progress)
             return progress
         }
-        progress.analyzed = files.done
+        progress.analyzed = files.tried
         progress.total = files.total
         // A run with nothing to do says only that it's done.
         if !files.pending.isEmpty {

@@ -82,15 +82,17 @@ extension LibraryIndex {
         let finished = try statement("SELECT finished FROM \(analysisRunTable)").map {
             try $0.int(0) != 0
         }
-        let pending = files.filter { !$0.done }
+        let left = files.filter { !$0.done }
+        let pending = left.filter { !$0.failed }
         return AnalysisFiles(
-            pending: pending.map { ($0.path, $0.stamp) }, done: files.count - pending.count,
-            failed: pending.filter(\.failed).count, unfinished: finished == [false])
+            pending: pending.map { ($0.path, $0.stamp) }, done: files.count - left.count,
+            failed: left.count - pending.count, unfinished: finished == [false])
     }
 
     /// Starts a run of Analyze Library: `again` from now, so every file measured before counts
-    /// as not done, and otherwise from where the last run started. Forgets the last run's
-    /// failures, which the run tries again.
+    /// as not done, and forgets the last run's failures, which it tries again; otherwise from
+    /// where the last run started, keeping its failures, so a run carried on doesn't read
+    /// them again or count fewer files done than it stopped at.
     func beginAnalysisRun(again: Bool, now: Date = Date()) throws {
         try database.transaction {
             if again {
@@ -100,6 +102,7 @@ extension LibraryIndex {
                     VALUES (1, ?, 0)
                     """
                 ).run(now.timeIntervalSince1970)
+                try statement("DELETE FROM \(analysisFailuresTable)").run()
             } else {
                 try statement(
                     """
@@ -108,7 +111,6 @@ extension LibraryIndex {
                     """
                 ).run()
             }
-            try statement("DELETE FROM \(analysisFailuresTable)").run()
         }
     }
 

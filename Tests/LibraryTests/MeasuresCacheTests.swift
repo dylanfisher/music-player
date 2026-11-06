@@ -139,10 +139,14 @@ private let silent = FileMeasures(
     }
     try relaunched.finishAnalysisRun()
     done = try relaunched.analysisFiles()
-    #expect(done.failed == files.count - 1 && !done.unfinished)
-    // The next run tries the failures again.
+    #expect(done.failed == files.count - 1 && done.pending.isEmpty && !done.unfinished)
+    #expect(done.tried == files.count)
+    // Carrying on keeps the failures, out of what's left; a run again tries them.
     try relaunched.beginAnalysisRun(again: false)
-    #expect(try relaunched.analysisFiles().failed == 0)
+    #expect(try relaunched.analysisFiles().failed == files.count - 1)
+    try relaunched.beginAnalysisRun(again: true, now: Date(timeIntervalSince1970: 4_000))
+    let fresh = try relaunched.analysisFiles()
+    #expect(fresh.failed == 0 && fresh.pending.count == files.count)
 }
 
 /// Measures stored before the run's tables were added count as done, so the owner's library

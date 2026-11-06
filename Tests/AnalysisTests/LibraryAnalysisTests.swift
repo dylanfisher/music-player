@@ -260,21 +260,55 @@ private final class UnderWay: @unchecked Sendable {
     #expect(heard.paths.filter { $0 == "store " + library.paths[2] }.count == 3)
     #expect(ended.analyzed == 3 && ended.failed == 1 && ended.unstored == 1)
     #expect(ended.text == "Library analyzed: 3 files, 1 couldn't be stored; the log says why")
-    #expect(try await cache.analysisFiles().pending.map(\.path) == [library.paths[2]])
+    let files = try await cache.analysisFiles()
+    #expect(files.pending.isEmpty && files.failed == 1)
 }
 
 private struct SQLiteBusy: Error {}
 
-@Test func aFileThatFailsIsCountedAndTriedAgainNextRun() async throws {
+@Test func aFileThatFailsIsCountedAndReadAgainByARunAgain() async throws {
     let library = try ScannedFixtures()
+    let heard = Heard()
     let pass = LibraryAnalysis(
         cache: library.cache(),
         analyze: { path in
+            heard.ask(path)
             guard path != library.paths[1] else { throw AnalysisError.nonFiniteSample }
             return clean
         }, scanRunning: { false }, report: { _ in })
     let ended = await pass.start().value
     #expect(ended.analyzed == 3 && ended.failed == 1)
     #expect(ended.text == "Library analyzed: 3 files, 1 couldn't be read; the log says why")
-    #expect(try await library.cache().analysisFiles().pending.map(\.path) == [library.paths[1]])
+    #expect(try await pass.standing() == .init(paused: nil, everyFileTried: true))
+    _ = await pass.start(again: true).value
+    #expect(heard.paths.filter { $0 == library.paths[1] }.count == 2)
+}
+
+/// A run carried on after a pause doesn't read a file that failed before the pause again, and
+/// its count goes on from where it stopped, the failure counted.
+@Test func aRunCarriedOnKeepsItsFailures() async throws {
+    let library = try ScannedFixtures()
+    let heard = Heard()
+    let pass = LibraryAnalysis(
+        cache: library.cache(),
+        analyze: { path in
+            heard.ask(path)
+            if path == library.paths[0] { throw AnalysisError.nonFiniteSample }
+            if path == library.paths[1], heard.paths.filter({ $0 == path }).count == 1 {
+                try await Task.sleep(nanoseconds: 60_000_000_000)
+            }
+            return clean
+        }, filesAtOnce: 1, scanRunning: { false }, report: heard.report)
+    let run = await pass.start()
+    try await eventually { heard.paths.count == 2 }
+    await pass.pause()
+    let paused = await run.value
+    #expect(paused.stage == .paused && paused.analyzed == 1 && paused.total == 3)
+    #expect(try await pass.standing().paused?.analyzed == 1)
+
+    let reportsBefore = heard.progress.count
+    let resumed = await pass.start().value
+    #expect(resumed.stage == .finished && resumed.analyzed == 3 && resumed.total == 3)
+    #expect(heard.progress.dropFirst(reportsBefore).first?.analyzed == 1)
+    #expect(heard.paths.filter { $0 == library.paths[0] }.count == 1)
 }
