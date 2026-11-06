@@ -20,7 +20,6 @@ struct FLACFile {
 
     /// The most a block's 24-bit length holds.
     static let maximumBlockBytes = 1 << 24 - 1
-    static let rewritePaddingBytes = 2048
     static let marker = Array(flacMarker.utf8)
 
     var size: Int
@@ -90,11 +89,13 @@ struct FLACFile {
             delta = 0
         }
         if delta != 0 {
+            let tagBytes = blocks.filter { $0.type != BlockType.padding.rawValue }
+                .reduce(0) { $0 + 4 + $1.body.count }
+            let room = zeros(min(rewritePaddingBytes(tagBytes: tagBytes), Self.maximumBlockBytes))
             if let padding = blocks.lastIndex(where: { $0.type == BlockType.padding.rawValue }) {
-                blocks[padding].body = zeros(Self.rewritePaddingBytes)
+                blocks[padding].body = room
             } else {
-                blocks.append(
-                    Block(type: BlockType.padding.rawValue, body: zeros(Self.rewritePaddingBytes)))
+                blocks.append(Block(type: BlockType.padding.rawValue, body: room))
             }
         }
         var bytes = Self.marker

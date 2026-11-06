@@ -4,8 +4,6 @@ import Metadata
 /// edit doesn't name are written back byte for byte, in their order.
 struct ID3Tag {
     static let headerBytes = 10
-    /// What a rewritten tag leaves free for later edits, so most of them fit in place.
-    static let rewritePaddingBytes = 2048
 
     var version: UInt8
     var flags: UInt8
@@ -111,7 +109,8 @@ struct ID3Tag {
     /// The tag in its own space if the frames fit there, otherwise with fresh padding.
     func rewritten() throws(ParseFailure) -> [UInt8] {
         if byteCount > 0, let bytes = try serialized(byteCount: byteCount) { return bytes }
-        let total = Self.headerBytes + framesByteCount + Self.rewritePaddingBytes
+        let total =
+            Self.headerBytes + framesByteCount + rewritePaddingBytes(tagBytes: framesByteCount)
         guard let bytes = try serialized(byteCount: total) else {
             throw .malformed(at: start, "an ID3 tag sized for its frames doesn't hold them")
         }

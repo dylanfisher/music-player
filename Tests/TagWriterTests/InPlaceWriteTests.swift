@@ -59,6 +59,34 @@ func aTagPastThePaddingGoesThroughATempFile(_ sample: Sample) throws {
     #expect(try Data(contentsOf: url) == original)
 }
 
+/// A save past the padding leaves room for the next edits (ADR 0108): 64 KiB, or as much again
+/// as the tag when that's more, so 30 KB of lyrics, or a cover as big as the one there, is then
+/// written in place.
+@Test(arguments: [Sample.flac, .flacWithArt, .mp4, .mp4WithArt, .mp3v24, .mp3v24WithArt, .aiffV24])
+func aSaveThroughTheTempFileLeavesRoomForTheNext(_ sample: Sample) throws {
+    let url = try sample.copy()
+    let writer = scratchWriter()
+    let long = String(repeating: "Long ", count: try readTagLayout(at: url).paddingBytes / 5 + 100)
+    expectChanged(writer.write(TagEdit(values: [.title: long]), to: [url.path]), [url])
+    let layout = try readTagLayout(at: url)
+    let tagBytes = layout.blocks.filter { [.field, .art].contains($0.kind) }
+        .reduce(0) { $0 + $1.range.count }
+    #expect(layout.paddingBytes >= max(64 * 1024, tagBytes) - 8, "\(layout.paddingBytes)")
+
+    let before = try identity(url)
+    let lyrics = TagEdit(values: [.lyrics: String(repeating: "La la ", count: 5_000)])
+    expectChanged(writer.write(lyrics, to: [url.path]), [url])
+    #expect(try identity(url).inode == before.inode, "the lyrics written in place")
+    if let image = try art(url) {
+        let before = try identity(url)
+        let cover = TagEdit(
+            art: .replace(
+                pngImage(side: Int(Double(image.count).squareRoot())), mimeType: pngMIMEType))
+        expectChanged(writer.write(cover, to: [url.path]), [url])
+        #expect(try identity(url).inode == before.inode, "a cover as big written in place")
+    }
+}
+
 /// A crash part way through the one write leaves the tag torn; the next call puts the original
 /// back from the journal, byte for byte, and there is nothing left to undo.
 @Test(arguments: [Sample.flac, .mp4, .mp3v24, .aiffV24, .wavID3])

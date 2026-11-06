@@ -2,8 +2,6 @@ import Metadata
 
 /// An MP4 file's top-level atoms, with `moov` in memory and `mdat` left in the file.
 struct MP4File {
-    /// What a `moov` that has to grow past its padding gets as new padding, in `meta`.
-    static let rewritePaddingBytes = 2048
     /// `meta/hdlr` as iTunes writes it: the "mdir" handler from "appl", with an empty name.
     static let metadataHandler: [UInt8] =
         [0, 0, 0, 0, 0, 0, 0, 0] + Array("mdirappl".utf8) + [UInt8](repeating: 0, count: 9)
@@ -93,7 +91,8 @@ struct MP4File {
         }
         if delta != 0 {
             // The audio moves anyway, so leave room for the next edits.
-            addPadding(Self.rewritePaddingBytes, to: &moov, ilstPath: path)
+            addPadding(
+                rewritePaddingBytes(tagBytes: moov[path].byteCount), to: &moov, ilstPath: path)
             delta = moov.byteCount - oldSize
             if audioAfterMoov {
                 for table in moov.chunkOffsetTables() {
