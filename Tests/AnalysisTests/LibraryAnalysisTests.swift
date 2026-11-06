@@ -145,6 +145,37 @@ private func eventually(_ condition: () -> Bool) async throws {
     #expect(heard.paths == library.paths)
 }
 
+/// A store that fails is tried again without reading the file again; one that keeps failing
+/// counts as a store failure, not a read.
+@Test func aStoreThatFailsIsTriedAgainWithoutAnotherRead() async throws {
+    let library = try ScannedFixtures()
+    let heard = Heard()
+    let cache = try library.cache()
+    let pass = LibraryAnalysis(
+        cache: cache,
+        analyze: { path in
+            heard.ask(path)
+            return clean
+        },
+        store: { measures, path, stamp in
+            heard.ask("store " + path)
+            let tries = heard.paths.filter { $0 == "store " + path }.count
+            // The first file's first try, and every try for the last.
+            if (path == library.paths[0] && tries == 1) || path == library.paths[2] {
+                throw SQLiteBusy()
+            }
+            try await cache.store(measures, path: path, stamp: stamp)
+        }, scanRunning: { false }, report: { _ in })
+    let ended = await pass.start().value
+    #expect(heard.paths.filter { !$0.hasPrefix("store ") } == library.paths, "read once")
+    #expect(heard.paths.filter { $0 == "store " + library.paths[2] }.count == 3)
+    #expect(ended.analyzed == 3 && ended.failed == 1 && ended.unstored == 1)
+    #expect(ended.text == "Library analyzed: 3 files, 1 couldn't be stored; the log says why")
+    #expect(try await cache.filesToAnalyze().map(\.path) == [library.paths[2]])
+}
+
+private struct SQLiteBusy: Error {}
+
 @Test func aFileThatFailsIsCountedAndTriedAgainNextRun() async throws {
     let library = try ScannedFixtures()
     let pass = LibraryAnalysis(
