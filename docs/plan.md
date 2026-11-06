@@ -321,13 +321,13 @@ writes only the FLAC.
 
 #### 48b. Listening Stats
 
-- [ ] **48b.1 Rolling periods.** Past Week, Past Month, Past Year and All Time replace This
+- [x] **48b.1 Rolling periods.** Past Week, Past Month, Past Year and All Time replace This
       Week, This Month and This Year: the last 7, 30 and 365 days up to today. The year menu
       stays as it is. The bench rows rename their periods.
-- [ ] **48b.2 Totals box height.** When the totals box shares a row with Plays per Day, it fits
+- [x] **48b.2 Totals box height.** When the totals box shares a row with Plays per Day, it fits
       the height of the Plays per Day cards, laid out in columns rather than one tall list.
-- [ ] **48b.3 Smaller cards wider.** The smaller cards' maximum width goes up slightly.
-- [ ] **48b.4 Save as Playlist asks first.** A sheet asks for the playlist's name, filled in with
+- [x] **48b.3 Smaller cards wider.** The smaller cards' maximum width goes up slightly.
+- [x] **48b.4 Save as Playlist asks first.** A sheet asks for the playlist's name, filled in with
       the name the current logic makes, and creates the playlist only on confirm.
 
 Plan, part 48b (ADR 0109, amending 0102):
@@ -356,7 +356,16 @@ Plan, part 48b (ADR 0109, amending 0102):
   row and two; the column widths over a range of widths; the sheet, its name, a changed name
   saved, and Cancel saving nothing.
 
-Result (draft): shipped 48b.1 to 48b.4 (ADR 0109, amends 0102). Past Week, Past Month and Past
+Gate, part 48b: two review rounds; the medium (Save as Playlist from Year in Review saved
+the panel's list, behind the review window) and three lows fixed (the table's days past midnight,
+a failed read narrowing the table, the table listed twice a period change); the audit clean.
+Bench, back to back against main at 5294a32: opening Stats 321–322 ms against 325–350 ms,
+changing the period 223–227 ms against 222–223 ms, both in budget; the earlier misses were the
+machine's load. `./scripts/check` passes but for `aRendererThatMovedIsFoundAgainByItsUDN`, which
+passed three runs alone. Open with the owner: 300-point columns (3 columns at 1,200 points, where
+280 keeps 4), and Year in Review from Past Year opening the calendar year.
+
+Result, part 48b: shipped 48b.1 to 48b.4 (ADR 0109, amends 0102). Past Week, Past Month and Past
 Year are the last 7, 30 and 365 local days, today included; a saved list's name for them is its
 days. The totals fill their row beside Plays per Day, their figures in two rows of three; the
 columns are 300 points or more (a one-column card 300 to 455 wide once two fit, from 270 to
