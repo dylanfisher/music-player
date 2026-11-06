@@ -280,6 +280,38 @@ Implementation plan:
   test-only run of the new build, then an import of this Mac's Swinsian copy.
 - ADR 0033 and 0038 amended in place, with their "Amended" lines.
 
+Result (draft until the gate passes): shipped 46.1 to 46.3 as planned, amending ADR 0033 and
+0038. An import logs `totals`, the player's totals for each path, and `imported_plays` keeps the
+highest any machine's import reported; an import or a merge adds only what passes it. A `counts`
+line is skipped without a problem. Building the rebuilt `imports` part sets each play count to
+its history rows, so each Mac opens with its own and synced plays only, and the window shows
+once that 11,282 import counts were discarded.
+
+46.4, on copies taken at 20:48 of both indexes, both logs and both Swinsian libraries: opened
+with this build, this Mac had 137 plays and mbp2015 135, and 137 each after a sync. Importing
+this Mac's Swinsian (43,293 plays, no growth since the copy given at 19:30) with the prefix
+`/Volumes/music-1` to `/Volumes/music` matched all 43,368 of its paths and added 43,293 plays to
+11,172 tracks: 43,430 here. After the sync mbp2015 had 43,411: the same, less 19 plays on 14
+tracks under `music/dsd`, a folder mbp2015 doesn't watch (ADR 0038 skips them). Importing
+mbp2015's own Swinsian there as well, which counts 179 plays more on some tracks (43,400 in
+all), raised both by those 179: 43,609 here and 43,590 there, the higher of the two Swinsians for
+each track. Without the prefix only 12,479 paths match; the owner's first import must have used
+it.
+
+What the owner does:
+1. **Both Macs, before any import:** install this build and open it once with the share mounted.
+   Update mbp2015 first, or keep its app quit until it's updated: a build before this one reads
+   the `totals` lines as unknown events and passes them for good. Each Mac shows a notice that
+   the import counts were discarded, and its play counts drop to the plays made in this app.
+2. **This Mac only:** quit Swinsian, then Import from Swinsian…, with "Replace the path prefix"
+   set to `/Volumes/music-1` → `/Volumes/music`, as the first import had. The preview should add 43,293
+   plays, or more if Swinsian has gained since.
+3. **mbp2015:** nothing to import. Its next sync, on launch or after a scan, brings this Mac's
+   totals. Importing mbp2015's own Swinsian there too, with the same prefix, is optional and
+   safe: it adds only the plays that library has past this Mac's (179 on 5 November).
+4. **Check:** a few tracks show the same play count on both Macs: Swinsian's count plus the
+   plays made in this app.
+
 ### 47. Faster tag writes
 
 The owner reports that saving tags is very slow, worst with several tracks selected, and asks
