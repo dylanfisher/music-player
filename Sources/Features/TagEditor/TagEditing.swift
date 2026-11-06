@@ -209,10 +209,13 @@ public final class TagEditing {
     }
 
     /// Back and Forward in an info window: shows the tab `step` places on in `keyWindow`,
-    /// wrapping at the ends. False, doing nothing, when `keyWindow` isn't an info window.
+    /// wrapping at the ends. A sheet on an info window, such as the batch question, takes the
+    /// keys and nothing moves, neither the tabs behind it nor the main window. False, doing
+    /// nothing, when `keyWindow` is neither.
     public func stepTab(_ step: Int, in keyWindow: NSWindow?) -> Bool {
-        guard let editor = editors.first(where: { $0.window === keyWindow }) else { return false }
-        editor.stepTab(step)
+        let window = keyWindow?.sheetParent ?? keyWindow
+        guard let editor = editors.first(where: { $0.window === window }) else { return false }
+        if editor.window === keyWindow { editor.stepTab(step) }
         return true
     }
 

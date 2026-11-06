@@ -368,6 +368,28 @@ private final class Titles: @unchecked Sendable {
     first.stepTab(-1)
 }
 
+/// With a sheet on an info window, Back and Forward are taken and move nothing: not the tabs
+/// behind the sheet, and not the main window.
+@MainActor
+@Test func backAndForwardDoNothingWhileASheetIsOnAnInfoWindow() async throws {
+    let editing = makeEditing(Seen())
+    editing.open(["/a.flac"], over: window)
+    let info = try #require(editor(editing, ["/a.flac"]))
+    info.window.orderFront(nil)
+    defer { info.close() }
+    let sheet = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    info.window.beginSheet(sheet, completionHandler: nil)
+    defer { info.window.endSheet(sheet) }
+    try await eventually { sheet.sheetParent === info.window }
+    let tab = info.shownTab
+
+    #expect(editing.stepTab(1, in: sheet), "the browser doesn't go forward")
+    #expect(editing.stepTab(-1, in: sheet), "the browser doesn't go back")
+    #expect(info.shownTab == tab)
+}
+
 /// Get Info on a DSF, a DSDIFF and a FLAC shows all three; Save writes only the FLAC, at once
 /// as one file, and the DSD files are left as they were.
 @MainActor
