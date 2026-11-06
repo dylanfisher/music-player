@@ -36,11 +36,15 @@ Show Spectrum makes one when asked.
 
 **Waiting for scans.** Before each file the pass asks whether a scan runs, as the status bar
 shows it, and while one does waits a second at a time, saying so in the status bar. A scan
-that starts during a file waits for nothing; the file finishes.
+that starts during a file waits for nothing; the file finishes. Every scan the watcher runs
+ends with `.scanned` or `.scanFailed`, retries that fail the same way included, so the status
+bar never shows a scan that stopped.
 
 **Pause stops at once.** Pausing cancels the file under way at its next FFT frame; the next
 run reads it again. A file that fails is logged, counted, and listed again next run; nothing
-is stored for it.
+is stored for it. A store that fails, as when a scan holds the index past SQLite's timeout,
+is tried three times a second apart before the file counts as not stored, so a busy index
+doesn't cost another read.
 
 **Status.** "Analyzing library: 40 of 1,200" follows the scans and a tag save in the status
 bar, with its bar filling when neither runs; "Library analysis paused: 40 of 1,200" stays
