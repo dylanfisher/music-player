@@ -51,7 +51,8 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     plan.roundedRatings = 2
     #expect(
         plan.preview.rows.contains(
-            ImportPreview.Row(change: "Ratings", count: "3 tracks, 2 from a half star rounded up")))
+            ImportPreview.Row(
+                change: "Ratings, new", count: "3 tracks, 2 from a half star rounded up")))
     let lines = plan.detailLines
     let source = "/s/Library.sqlite"
     #expect(lines.filter { $0.hasPrefix("\(source): not in the library: ") }.count == 100)
@@ -93,7 +94,7 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     #expect(
         preview.rows == [
             ImportPreview.Row(change: "Play counts", count: "+1,204 on 2 tracks"),
-            ImportPreview.Row(change: "Last plays dated in Listening Stats", count: "2 tracks"),
+            ImportPreview.Row(change: "Last plays, dated in Listening Stats", count: "2 tracks"),
             ImportPreview.Row(change: "New playlists", count: "1"),
         ])
     #expect(preview.unchanged == "No change: last played, date added, ratings, loved")

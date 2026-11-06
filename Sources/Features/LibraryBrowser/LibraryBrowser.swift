@@ -2143,9 +2143,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         _ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat,
         ofSubviewAt dividerIndex: Int
     ) -> CGFloat {
-        // Stats keeps its header and a row of cards; the columns can be dragged shut.
+        // Stats keeps its header and a row of cards, unless the table's room above leaves
+        // less; the columns can be dragged shut.
         guard shownPanel === statsPanel else { return proposedMinimumPosition }
-        return max(proposedMinimumPosition, CGFloat(AppState.statsHeightRange.lowerBound))
+        return min(
+            max(proposedMinimumPosition, CGFloat(AppState.statsHeightRange.lowerBound)),
+            splitView.bounds.height - 120)
     }
 
     /// A hidden pane's divider would still draw as a line over the table.

@@ -1,6 +1,7 @@
 import DisplayText
 import Foundation
 import Library
+import Settings
 
 /// The words for an import's preview and its report (ADR 0033). Every name and path came from
 /// another program's file, so each is escaped as a playlist file's are (ADR 0032).
@@ -10,35 +11,35 @@ extension ImportPlan {
     var preview: ImportPreview {
         var rows: [ImportPreview.Row] = []
         var unchanged: [String] = []
-        func field(_ name: String, _ change: String, on changed: Int, _ count: String) {
+        // A field that changes nothing is named in the "No change" line by its row's words up
+        // to the comma, lowercased: "Last played, later" as "last played".
+        func field(_ change: String, on changed: Int, _ count: String) {
             if changed > 0 {
                 rows.append(ImportPreview.Row(change: change, count: count))
             } else {
-                unchanged.append(name)
+                let name = change.prefix { $0 != "," }
+                unchanged.append(name.prefix(1).lowercased() + name.dropFirst())
             }
         }
         field(
-            "play counts", "Play counts", on: tracksGainingPlays,
+            "Play counts", on: tracksGainingPlays,
             "+\(number(playsAdded)) on \(tracks(tracksGainingPlays))")
         if library.player == .iTunes {
             field(
-                "skip counts", "Skip counts", on: tracksGainingSkips,
+                "Skip counts", on: tracksGainingSkips,
                 "+\(number(skipsAdded)) on \(tracks(tracksGainingSkips))")
         }
-        field("last played", "Last played, later", on: lastPlayed, tracks(lastPlayed))
+        field("Last played, later", on: lastPlayed, tracks(lastPlayed))
+        field("Last plays, dated in Listening Stats", on: datedLastPlays, tracks(datedLastPlays))
+        field("Date added, earlier", on: dateAdded, tracks(dateAdded))
         field(
-            "last plays dated in Listening Stats", "Last plays dated in Listening Stats",
-            on: datedLastPlays, tracks(datedLastPlays))
-        field("date added", "Date added, earlier", on: dateAdded, tracks(dateAdded))
-        field(
-            "ratings", "Ratings", on: ratings,
+            "Ratings, new", on: ratings,
             tracks(ratings)
                 + (roundedRatings > 0
                     ? ", \(number(roundedRatings)) from a half star rounded up" : ""))
-        field("loved", "Loved", on: loved, tracks(loved))
+        field(TrackColumn.loved.title, on: loved, tracks(loved))
         field(
-            "playlists", "New playlists", on: playlists.count,
-            number(playlists.count) + newPlaylistNotes)
+            "New playlists", on: playlists.count, number(playlists.count) + newPlaylistNotes)
         return ImportPreview(
             heading: "\(tracks(library.tracks.count)) read: \(number(matched)) in this library,"
                 + " \(number(missedCount)) not"
