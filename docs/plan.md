@@ -457,6 +457,31 @@ Plan, part 48c (ADR 0111):
   three tracks failing with one cause give that cause and fix; two causes give both counts.
 - Order: this plan, 48c.1, 48c.2, 48c.3, 48c.4, the ADR, the result.
 
+Result, part 48c (draft, before the gate): shipped 48c.1 to 48c.5 (ADR 0111). Every error
+that can stop playback has a message for people beside its description, and the status bar
+shows it: "Couldn't play So What.dsf: ADI-2 DAC can't play DSD64: DoP needs exclusive access,
+and hog mode is off for this device". A question mark follows a problem in the status bar,
+and it or the line opens the Playback Problem window with the track and its format, the
+device and its format, hog mode, the error's full text and the playback modules' log lines
+of the last 10 minutes, which Copy Details copies; log values not marked public read as
+`<private>`. DoP refused for hog mode shows a dialog at once whose Turn On Hog Mode button,
+and the details window's, set `output.hogMode` for the device in use and play the track
+again; hog mode held by another app names it, with no button. Tracks failing in a row stop
+on their one cause and its fix, or list each cause with its count and a Show Details button.
+`tracks(_:)` moved from LibraryBrowser to DisplayText for the dialog. Tests: every case of
+the playback, output, renderer and metadata errors has a plain message; a problem keeps the
+message and the full text; the recent log lines come back with their category; the status
+bar's question mark and line open the details, and another message has neither; the report
+has the track, the device, hog mode, the error and the log lines, and Copy copies it; DSD on
+a null device with hog mode off gives the message and fix, and with hog mode on the replay
+plays; a DSD album with hog mode off stops on that fix; tracks in a row with one cause give
+it, with two give both counts; the dialogs' text and buttons; the details window's fix
+button. For the owner: play a DSD file on the ADI-2 with hog mode off, check the dialog
+says DSD needs exclusive access, click Turn On Hog Mode and hear it play, and check Hog Mode
+is on in the Output menu for the ADI-2 only. Turn it off again, play the file, click the
+message in the status bar (or its question mark), check the window names the ADI-2, its
+format and "Hog mode: off", then Copy Details and paste it into a note.
+
 #### 48d. The window comes back as it was left
 
 The owner quit and relaunched, and the track list had lost the column it was sorted by. The
