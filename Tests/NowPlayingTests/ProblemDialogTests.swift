@@ -138,13 +138,14 @@ private func inARow(_ problems: [PlaybackProblem]) -> ShownProblem {
     window.window.close()
 }
 
-/// A fix plays the track again only while the queue's current entry is still the one that
-/// failed, so it never interrupts what played since.
+/// A fix plays the track again while its entry is still the current one, or nothing plays,
+/// so it never interrupts another track the user moved on to.
 @MainActor @Test func aFixPlaysTheTrackAgainOnlyWhileItsStillCurrent() throws {
     let model = NowPlayingModel { _ in nil }
     var state = update(.queueChanged).state
     state.order = [1, 0]
     state.currentIndex = 1
+    state.status = .playing
     model.apply(
         PlaybackUpdate(
             state: state, event: .trackFailed(urls[1], entry: 1, PlaybackProblem(NoHogMode()))))
@@ -155,9 +156,14 @@ private func inARow(_ problems: [PlaybackProblem]) -> ShownProblem {
     var movedOn = state
     movedOn.currentIndex = 0
     #expect(throws: ReplayRefusal.movedOn(urls[1])) { try shown.replayPosition(in: movedOn) }
-    var replaced = state
+    movedOn.status = .paused
+    #expect(throws: ReplayRefusal.movedOn(urls[1])) { try shown.replayPosition(in: movedOn) }
+    // Stopped on another entry, nothing plays to interrupt.
+    movedOn.status = .stopped
+    #expect(try shown.replayPosition(in: movedOn) == 0)
+    var replaced = movedOn
     replaced.queue = [urls[0], urls[0]]
-    #expect(throws: ReplayRefusal.movedOn(urls[1])) { try shown.replayPosition(in: replaced) }
+    #expect(throws: ReplayRefusal.gone(urls[1])) { try shown.replayPosition(in: replaced) }
     var none = shown
     none.entry = nil
     #expect(throws: ReplayRefusal.noTrack) { try none.replayPosition(in: state) }
@@ -166,4 +172,18 @@ private func inARow(_ problems: [PlaybackProblem]) -> ShownProblem {
     let stopped = inARow([PlaybackProblem(NoHogMode()), PlaybackProblem(NoHogMode())])
     model.apply(update(.failed(stopped.problem)))
     #expect(model.problem?.entry == 0 && model.problem?.track == urls[0])
+
+    // A run started mid-queue: the engine stops pointing at the queue's start, and the fix
+    // plays the run's first failed entry.
+    let run = PlaybackProblem(
+        PlaybackError.failedInARow([
+            FailedTrack(url: urls[1], entry: 1, problem: PlaybackProblem(NoHogMode()))
+        ]))
+    var ended = update(.failed(run)).state
+    ended.status = .stopped
+    ended.currentIndex = 0
+    model.apply(PlaybackUpdate(state: ended, event: .failed(run)))
+    let midQueue = try #require(model.problem)
+    #expect(midQueue.entry == 1 && midQueue.track == urls[1])
+    #expect(try midQueue.replayPosition(in: ended) == 1)
 }

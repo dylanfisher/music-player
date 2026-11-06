@@ -13,15 +13,17 @@ public struct ShownProblem: Equatable, Sendable {
     /// What the status bar says.
     var headline: String
 
-    /// Where in `state`'s play order to play the track again once a fix is made: only while
-    /// the engine's current entry is still that track, so a fix never interrupts what played
-    /// since. Throws why not otherwise.
+    /// Where in `state`'s play order to play the track again once a fix is made: while the
+    /// queue's entry still holds the track and it's the current one, or nothing plays, as
+    /// after tracks failed in a row, when the engine points back at the queue's start. A fix
+    /// never interrupts another track playing. Throws why not otherwise.
     public func replayPosition(in state: PlaybackState) throws(ReplayRefusal) -> Int {
         guard let track, let entry else { throw .noTrack }
-        guard state.currentIndex == entry, state.queue.indices.contains(entry),
-            state.queue[entry] == track,
+        guard state.queue.indices.contains(entry), state.queue[entry] == track,
             let position = state.order.firstIndex(of: entry)
-        else { throw .movedOn(track) }
+        else { throw .gone(track) }
+        let idle = state.status == .stopped || state.currentIndex == nil
+        guard state.currentIndex == entry || idle else { throw .movedOn(track) }
         return position
     }
 }
@@ -29,13 +31,17 @@ public struct ShownProblem: Equatable, Sendable {
 /// Why a fix doesn't play its track again.
 public enum ReplayRefusal: Error, Equatable, CustomStringConvertible {
     case noTrack
+    /// The queue's entry no longer holds the track.
+    case gone(URL)
+    /// Another track is playing or paused.
     case movedOn(URL)
 
     public var description: String {
         switch self {
         case .noTrack: "the problem isn't about a track in the queue"
+        case .gone(let url): "the queue no longer has \(url.lastPathComponent) where it failed"
         case .movedOn(let url):
-            "the queue's current track is no longer \(url.lastPathComponent), the one that failed"
+            "another track than \(url.lastPathComponent), the one that failed, is playing or paused"
         }
     }
 }

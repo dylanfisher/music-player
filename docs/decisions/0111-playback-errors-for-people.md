@@ -39,9 +39,10 @@ nothing offered to turn hog mode on, and tracks failing in a row ended on a coun
   nor the device, so every DSD track refused for it has one cause. A problem with a fix shows a dialog at once,
   and the details window shows the fix as a button. Either sets `output.hogMode`, which the
   config mirrors from the device in use, so the existing settings path saves the device's
-  profile and moves the output to it. It plays the track again only while the engine's
-  current queue entry is still the one that failed, which the event carries; otherwise it
-  logs why. A fix for a device that is no longer the output beeps. Hog mode held by another
+  profile and moves the output to it. It plays the failed queue entry again, which the event
+  carries, while that entry still holds the track and is the current one or nothing plays,
+  as after tracks fail in a row from mid-queue and the engine points back at its start. With
+  another track playing or paused, or the entry changed, it only logs why. A fix for a device that is no longer the output beeps. Hog mode held by another
   app names that app, from its pid's process name, with no fix; a device that reads as held
   by no one after the app asked for it says so, naming no app.
 - **Tracks failing in a row say why.** `PlaybackError.failedInARow` carries each track and

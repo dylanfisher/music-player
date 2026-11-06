@@ -466,7 +466,7 @@ device and its format, hog mode, the error's full text and the playback modules'
 of the last 10 minutes, which Copy Details copies; log values not marked public read as
 `<private>`. DoP refused for hog mode shows a dialog at once whose Turn On Hog Mode button,
 and the details window's, set `output.hogMode` for the device in use and play the track
-again while it is still the queue's current one (otherwise the log says why); hog mode held
+again unless another track plays or is paused, or the queue moved it (then the log says why); hog mode held
 by another app names it, with no button, and held by no one says so. Tracks failing in a row stop
 on their one cause and its fix (a DSD64 and DSD128 album too), a fix every cause shares, or list each cause with its count and a Show Details button.
 `tracks(_:)` moved from LibraryBrowser to DisplayText for the dialog. Tests: every case of
