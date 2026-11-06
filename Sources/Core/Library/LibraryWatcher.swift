@@ -149,11 +149,11 @@ public final class LibraryWatcher: @unchecked Sendable {
 
     /// Reads `files`, which the tag editor just wrote, again at once, on a queue of their own:
     /// not behind a running scan and not waiting for playback, since the user is looking at
-    /// them. A file in `parsed`, as the tag writer read it back, is stored from that. Sends
-    /// `edited` when they're stored. Their folders are rescanned after, as
-    /// `rescan(directories:)` does, in case a scan read a file before the write and stores it
-    /// after; that rescan finds them unchanged.
-    public func rescan(files: [String], parsed: [String: ParsedFile] = [:]) {
+    /// them. A file in `parsed`, as the tag writer read it back, is stored from that unless it
+    /// changed since. Sends `edited` when they're stored. Their folders are rescanned after,
+    /// as `rescan(directories:)` does, in case a scan read a file before the write and stores
+    /// it after; that rescan finds them unchanged.
+    public func rescan(files: [String], parsed: [String: StampedParse] = [:]) {
         editQueue.async { [scanner, events] in
             do {
                 events(.edited(try scanner.rescan(files: files, parsed: parsed)))

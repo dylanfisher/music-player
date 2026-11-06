@@ -20,6 +20,11 @@ struct FileIdentity: Equatable {
             Int(info.st_mtimespec.tv_sec) * 1_000_000_000 + Int(info.st_mtimespec.tv_nsec)
     }
 
+    /// `parsed`, read from the file when it was this.
+    func stamp(_ parsed: ParsedFile) -> StampedParse {
+        StampedParse(parsed: parsed, sizeBytes: size, modifiedNanoseconds: modifiedNanoseconds)
+    }
+
     init(path: String) throws(TagWriteError) {
         var info = stat()
         guard lstat(path, &info) == 0 else {

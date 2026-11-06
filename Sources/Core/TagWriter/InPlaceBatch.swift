@@ -101,13 +101,13 @@ extension TagWriter {
                 records[index].setEdited(identity)
                 do throws(TagWriteError) {
                     try journal.confirm(records[index], at: handles[index])
-                    results.append(.success(.changed(parsed, problem: nil)))
+                    results.append(.success(.changed(identity.stamp(parsed), problem: nil)))
                 } catch {
                     logger.error("\(error.description)")
                     results.append(
                         .success(
                             .changed(
-                                parsed,
+                                identity.stamp(parsed),
                                 problem: TagWriteError(
                                     path: job.path, kind: .journal,
                                     detail: "written, but its undo record couldn't be confirmed:"
@@ -162,9 +162,12 @@ extension TagWriter {
                     throw TagWriteError(path: job.path, kind: .writeFailed, detail: "\(error)")
                 }
             }
+            // Before the read-back, so a change another app makes after it shows as a newer
+            // mtime than the parse's, and the rescan reads the file again.
+            let written = try identity(job.path)
             let parsed = try readBack(
                 job.plan, path: job.path, original: job.original, expected: job.expected)
-            return .written(parsed, try identity(job.path))
+            return .written(parsed, written)
         } catch {
             if error.detail == crashDetail { return .crashed }
             logger.error("\(error.description)")

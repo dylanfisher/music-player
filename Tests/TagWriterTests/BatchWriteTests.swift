@@ -150,7 +150,8 @@ func filesAfterOnesThatFailFirstAreStillWritten(_ inPlace: Bool) throws {
 }
 
 /// The report carries what the reader read back from each file written, in place or through
-/// the temp file, so the library can store it without reading the file again (ADR 0108).
+/// the temp file, with the size and mtime the file had then, so the library can store it
+/// without reading the file again unless it changed since (ADR 0108).
 @Test(arguments: [true, false])
 func aWriteReportsWhatItReadBack(_ fits: Bool) throws {
     let url = try Sample.flac.copy()
@@ -158,10 +159,14 @@ func aWriteReportsWhatItReadBack(_ fits: Bool) throws {
     let title = fits ? "Edited" : String(repeating: "Long ", count: 20_000)
     let report = scratchWriter().write(TagEdit(values: [.title: title]), to: [url.path])
     expectChanged(report, [url])
-    #expect((try identity(url).inode == before.inode) == fits, "in place or through the temp file")
+    let after = try identity(url)
+    #expect((after.inode == before.inode) == fits, "in place or through the temp file")
     let read = try readMetadata(at: url)
-    #expect(report.parsed[url.path]?.metadata == read.metadata)
-    #expect(report.parsed[url.path]?.warnings == read.warnings)
+    let stamp = try #require(report.parsed[url.path])
+    #expect(stamp.parsed.metadata == read.metadata)
+    #expect(stamp.parsed.warnings == read.warnings)
+    #expect(stamp.sizeBytes == after.size)
+    #expect(stamp.modifiedNanoseconds == after.modifiedNanoseconds)
 }
 
 /// A batch counts each file read and each written, in order, the files written in place

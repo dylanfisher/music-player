@@ -672,16 +672,45 @@ private struct RetitledReads: ScanFileAccess {
     let files = library.manifest.files.filter { $0.malformation == nil }
     let given = library.path(files[0])
     let read = library.path(files[1])
-    var parsed = try readMetadata(at: URL(fileURLWithPath: given, isDirectory: false))
-    parsed.metadata.tags.title = "Read back"
     let scanner = LibraryScanner(
         databaseURL: library.databaseURL,
         access: RetitledReads(edited: given, title: "Read again"))
 
-    let summary = try scanner.rescan(files: [given, read], parsed: [given: parsed])
+    let summary = try scanner.rescan(files: [given, read], parsed: [given: try readBack(given)])
     #expect(summary.read == 2)
     #expect(try library.index().track(path: given)?.title == "Read back")
     let readTitle = try readMetadata(at: URL(fileURLWithPath: read, isDirectory: false))
         .metadata.tags.title
     #expect(try library.index().track(path: read)?.title == readTitle)
+}
+
+/// A file another app changes between its write and the rescan has a new mtime, so the
+/// writer's parse no longer applies and the file is read again (ADR 0108).
+@Test func aRescanReadsAFileThatChangedSinceItsWrite() throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let path = library.path(library.manifest.files.first { $0.malformation == nil }!)
+    let stamp = try readBack(path)
+    var times = [
+        timespec(tv_sec: 0, tv_nsec: Int(UTIME_OMIT)), timespec(tv_sec: 2_000_000_000, tv_nsec: 0),
+    ]
+    #expect(utimensat(AT_FDCWD, path, &times, 0) == 0)
+    let scanner = LibraryScanner(
+        databaseURL: library.databaseURL, access: RetitledReads(edited: path, title: "Read again"))
+
+    _ = try scanner.rescan(files: [path], parsed: [path: stamp])
+    #expect(try library.index().track(path: path)?.title == "Read again")
+}
+
+/// The file at `path` parsed with the title "Read back", stamped with its size and mtime now,
+/// as the tag writer hands it over.
+private func readBack(_ path: String) throws -> StampedParse {
+    var parsed = try readMetadata(at: URL(fileURLWithPath: path, isDirectory: false))
+    parsed.metadata.tags.title = "Read back"
+    var info = stat()
+    #expect(lstat(path, &info) == 0)
+    return StampedParse(
+        parsed: parsed, sizeBytes: Int(info.st_size),
+        modifiedNanoseconds: Int(info.st_mtimespec.tv_sec) * 1_000_000_000
+            + Int(info.st_mtimespec.tv_nsec))
 }

@@ -172,10 +172,10 @@ public struct LibraryScanner: Sendable {
     /// mtime say: the tag editor just wrote them, and a folder scan would wait behind other
     /// scans and, on a network volume, for playback. A file the index doesn't hold is skipped,
     /// since only a folder scan knows whether its folder includes it. A file in `parsed`, as
-    /// the tag writer read it back, is stored from that rather than read again; on a NAS that
-    /// saves its opens and reads. Blocks, so call it off the main thread and outside Swift
-    /// concurrency's threads.
-    public func rescan(files paths: [String], parsed: [String: ParsedFile] = [:]) throws
+    /// the tag writer read it back, is stored from that rather than read again, while its size
+    /// and mtime are still the ones it was parsed at; on a NAS that saves its opens and reads.
+    /// Blocks, so call it off the main thread and outside Swift concurrency's threads.
+    public func rescan(files paths: [String], parsed: [String: StampedParse] = [:]) throws
         -> ScanSummary
     {
         let index = try LibraryIndex(at: databaseURL)
@@ -219,9 +219,12 @@ public struct LibraryScanner: Sendable {
         return summary
     }
 
-    /// The file at `path` read again, or as `parsed` says it reads, with its size and mtime as
-    /// a directory listing gives them, so the next folder scan finds it unchanged.
-    private func scannedAgain(_ path: String, known: KnownFile, parsed: ParsedFile?) -> Rescanned {
+    /// The file at `path` read again, or as `parsed` says it reads if it hasn't changed since,
+    /// with its size and mtime as a directory listing gives them, so the next folder scan finds
+    /// it unchanged.
+    private func scannedAgain(_ path: String, known: KnownFile, parsed: StampedParse?)
+        -> Rescanned
+    {
         let values: URLResourceValues
         do {
             values = try URL(fileURLWithPath: path, isDirectory: false).resourceValues(forKeys: [
@@ -233,6 +236,16 @@ public struct LibraryScanner: Sendable {
         }
         guard let size = values.fileSize, let modified = values.contentModificationDate else {
             return .issue(ScanIssue(kind: .unreadable, path: path, detail: noSizeOrMtime))
+        }
+        // After the size and mtime stored, so a change between them and this stat makes the
+        // parse stale and the file is read again; the next folder scan then reads it once more.
+        let parsed = parsed.flatMap { stamp -> ParsedFile? in
+            var info = stat()
+            guard lstat(path, &info) == 0, Int(info.st_size) == stamp.sizeBytes,
+                Int(info.st_mtimespec.tv_sec) * 1_000_000_000 + Int(info.st_mtimespec.tv_nsec)
+                    == stamp.modifiedNanoseconds
+            else { return nil }
+            return stamp.parsed
         }
         return .file(
             ScannedFile(

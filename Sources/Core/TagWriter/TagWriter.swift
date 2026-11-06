@@ -179,7 +179,7 @@ public struct TagWriter: Sendable {
         case unchanged
         /// Written and read back as the reader reads it; `problem` is set when its undo record
         /// couldn't be brought up to date.
-        case changed(ParsedFile, problem: TagWriteError?)
+        case changed(StampedParse, problem: TagWriteError?)
     }
 
     /// What one file of a batch needs once it's read.
@@ -292,12 +292,12 @@ public struct TagWriter: Sendable {
                 record.setEdited(final)
                 try journal.update(record, at: handle!)
             }
-            return .done(.changed(parsed, problem: nil))
+            return .done(.changed(temp.identity.stamp(parsed), problem: nil))
         } catch {
             logger.error("\(error.description)")
             return .done(
                 .changed(
-                    parsed,
+                    temp.identity.stamp(parsed),
                     problem: TagWriteError(
                         path: path, kind: .journal,
                         detail: "written, but its undo record couldn't be updated: \(error.detail)")
@@ -672,9 +672,10 @@ public struct TagWriteReport: Equatable, Sendable {
     public var nothingToUndo = false
     /// The files a batch didn't reach because it stopped (a full disk, a broken journal).
     public var notWritten: [String] = []
-    /// What the reader read back from each file a write changed, so the library can store it
-    /// without reading the file again (ADR 0108). Undo and recovery leave it empty.
-    public var parsed: [String: ParsedFile] = [:]
+    /// What the reader read back from each file a write changed, with the file's size and
+    /// mtime right after the write, so the library can store it without reading the file
+    /// again unless it changed since (ADR 0108). Undo and recovery leave it empty.
+    public var parsed: [String: StampedParse] = [:]
 
     init() {}
 }
