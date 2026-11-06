@@ -98,7 +98,7 @@ run residue bash -c '
 '
 
 # swift-format checks layout and its lint rules (.swift-format) in one pass.
-run format    swift format lint --strict --recursive --parallel Package.swift Sources Tests scripts/arch.swift scripts/dupes.swift scripts/surface.swift scripts/icon-mask.swift
+run format    swift format lint --strict --recursive --parallel Package.swift Sources Tests scripts/arch.swift scripts/dupes.swift scripts/surface.swift scripts/icon-mask.swift scripts/smb-copy-probe.swift
 # Strict concurrency and warnings-as-errors are set in Package.swift, so a clean build is the typecheck.
 run typecheck swift build --build-tests
 run arch      swift scripts/arch.swift
