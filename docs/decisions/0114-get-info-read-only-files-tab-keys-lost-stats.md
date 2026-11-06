@@ -24,7 +24,8 @@ line in the status bar the owner didn't see.
   line, truncated, with the whole text in its tooltip, so no message makes the row taller.
 - **Back and Forward step the key info window's tabs**, wrapping at the ends, and act on the
   main window otherwise. The app's Back and Forward handlers ask `TagEditing` first. The keys
-  stay whatever Back and Forward are bound to.
+  stay whatever Back and Forward are bound to. While a sheet is on an info window, the keys
+  do nothing: they don't change the tabs behind it or the library.
 - **The formats the writer refuses are one fact**, `FileFormat.tagWriteRefusal` in TagWriter
   ("Tags in DSF files can't be written yet"), which `TagFile` throws with. `editorTagFacts`
   checks it before parsing a `TagFile`, so a DSF or DSDIFF file is read by Metadata's reader
