@@ -8,8 +8,8 @@ import Playback
 
 /// What one pass over a file found: its measures and its spectrogram.
 public struct AnalysisResult: Equatable, Sendable {
-    var measures: FileMeasures
-    var spectrogram: Spectrogram
+    public var measures: FileMeasures
+    public var spectrogram: Spectrogram
 }
 
 enum AnalysisError: Error, Equatable, CustomStringConvertible {

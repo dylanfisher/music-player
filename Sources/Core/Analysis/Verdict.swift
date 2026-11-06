@@ -4,18 +4,18 @@ import Library
 
 /// What the measures suggest is wrong with a file, with one line that names its numbers. A
 /// cutoff is evidence, not proof, so those two say "suspect"; the others are exact.
-struct Verdict: Equatable, Sendable {
-    enum Kind: String, CaseIterable, Sendable, Codable {
+public struct Verdict: Equatable, Sendable {
+    public enum Kind: String, CaseIterable, Sendable, Codable {
         case lossyOrigin, upsampled, paddedBits, fakeStereo, clipped
     }
 
-    var kind: Kind
-    var text: String
+    public var kind: Kind
+    public var text: String
 }
 
 /// The verdicts `measures` earn, in `Verdict.Kind` order. A lossy file gets no lossy-origin
 /// verdict: its cutoff is its own encoder's.
-func verdicts(_ measures: FileMeasures) -> [Verdict] {
+public func verdicts(_ measures: FileMeasures) -> [Verdict] {
     var found: [Verdict] = []
     let lossless = losslessFormatIDs.contains(measures.formatID)
     if let cutoff = measures.cutoffHz {
@@ -62,6 +62,6 @@ func verdicts(_ measures: FileMeasures) -> [Verdict] {
 }
 
 /// 16012.3 -> "16.0": a measured frequency to a tenth of a kilohertz.
-func kilohertzText(_ hertz: Double) -> String {
+public func kilohertzText(_ hertz: Double) -> String {
     String(format: "%.1f", hertz / 1000)
 }

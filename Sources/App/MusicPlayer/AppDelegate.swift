@@ -142,6 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var spectrograms = SpectrogramStore(directory: paths.spectrogramDirectory)
     /// Made on first use by `fileAnalyzer()`.
     var analyzer: FileAnalyzer?
+    private(set) lazy var spectrumWindows = makeSpectrumWindows()
     private let stalls = StallDetector { NSApp.currentEvent.map { eventName($0.type) } }
 
     /// `measuring` runs `WindowMeasurement` once the table first draws rows, then quits.

@@ -1,10 +1,51 @@
 import Analysis
+import Commands
 import Foundation
 import Library
+import Log
+import Spectrum
+
+private let logger = moduleLogger()
 
 /// Show Spectrum and `music-player analyze` (ADR 0115): both analyze the selection, or the
 /// command line's paths, through the analyzer's caches.
 extension AppDelegate {
+    func registerSpectrumCommands(_ dispatcher: CommandDispatcher) {
+        dispatcher.handle(
+            .showSpectrum,
+            enabled: { [weak self] in self?.window != nil && self?.hasSelectedTracks() == true },
+            run: { [weak self] in
+                self?.withSelectedPaths { paths in
+                    guard let self else { return }
+                    if let problem = AnalysisRequestError(fileCount: paths.count) {
+                        self.browser?.report("Show Spectrum: \(problem)")
+                        return
+                    }
+                    self.spectrumWindows.show(paths.map { ($0, self.spectrumTitle(of: $0)) })
+                }
+            })
+    }
+
+    func makeSpectrumWindows() -> SpectrumWindows {
+        SpectrumWindows { [weak self] path, progress in
+            guard let analyzer = try await self?.fileAnalyzer() else { throw CancellationError() }
+            return try await analyzer.result(of: path, progress: progress)
+        }
+    }
+
+    /// The track's title from the library, or its file's name.
+    private func spectrumTitle(of path: String) -> String {
+        var row: TrackRow?
+        do {
+            row = try trackLookup?(path)
+        } catch {
+            logger.error("couldn't look up \(path) for its spectrum: \(error)")
+        }
+        return row?.title
+            ?? URL(fileURLWithPath: path, isDirectory: false).deletingPathExtension()
+            .lastPathComponent
+    }
+
     /// The analyzer, made on first use: it opens a connection of its own to the library.
     func fileAnalyzer() throws -> FileAnalyzer {
         if let analyzer { return analyzer }

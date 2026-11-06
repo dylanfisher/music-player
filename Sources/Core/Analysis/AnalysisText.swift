@@ -5,7 +5,7 @@ import Playback
 
 /// "FLAC · 96 kHz · 24-bit stored, 16 effective · stereo · 5:00": the codec, the rate, the
 /// stored and effective bits where there are any, the channels and the length.
-func formatLine(_ measures: FileMeasures) -> String {
+public func formatLine(_ measures: FileMeasures) -> String {
     let format = SignalFormat(
         formatID: measures.formatID, sampleRateHz: measures.sampleRateHz,
         bitsPerChannel: measures.storedBits.map(UInt32.init), channels: UInt32(measures.channels),
@@ -25,7 +25,7 @@ func formatLine(_ measures: FileMeasures) -> String {
 
 /// Each measure's name and value, as the Spectrum window lists them and the command line
 /// prints them.
-func measureItems(_ measures: FileMeasures) -> [(name: String, value: String)] {
+public func measureItems(_ measures: FileMeasures) -> [(name: String, value: String)] {
     [
         (
             "Cutoff",
@@ -57,7 +57,7 @@ func measureItems(_ measures: FileMeasures) -> [(name: String, value: String)] {
 }
 
 /// The line the window and the command line show when no verdict applies.
-let noVerdictText = "No problems found"
+public let noVerdictText = "No problems found"
 
 /// What `music-player analyze` prints for each file: its path, format line, measures and
 /// verdicts.

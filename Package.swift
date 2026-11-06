@@ -178,6 +178,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Spectrum",
+            dependencies: ["Analysis", "DisplayText", "Library"],
+            path: "Sources/Features/Spectrum",
+            swiftSettings: strictSwift
+        ),
+        .target(
             name: "SettingsWindow",
             dependencies: ["Commands", "KeyChord", "Log", "Settings"],
             path: "Sources/Features/SettingsWindow",
@@ -205,8 +211,8 @@ let package = Package(
                 "Library",
                 "LibraryBrowser", "LocalNetwork", "LocalSocket", "Log", "Metadata", "NowPlaying",
                 "Playback", "PlaylistEditor", "QueueView", "Palette", "Receiver", "Scripting",
-                "SQLite", "Settings", "SettingsWindow", "TagEditor", "TagWriter", "UPnP",
-                "UPnPOutput",
+                "SQLite", "Settings", "SettingsWindow", "Spectrum", "TagEditor", "TagWriter",
+                "UPnP", "UPnPOutput",
             ],
             path: "Sources/App/MusicPlayer",
             swiftSettings: strictSwift
@@ -402,6 +408,11 @@ let package = Package(
         .testTarget(
             name: "ScriptingTests",
             dependencies: ["Commands", "LocalSocket", "Playback", "Scripting", "Settings"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "SpectrumTests",
+            dependencies: ["Analysis", "Library", "Spectrum"],
             swiftSettings: strictSwift
         ),
         .testTarget(
