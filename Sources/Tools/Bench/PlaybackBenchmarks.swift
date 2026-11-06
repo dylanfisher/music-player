@@ -1,3 +1,4 @@
+import Analysis
 import Darwin
 import DisplayText
 import Fixtures
@@ -28,6 +29,7 @@ private struct LoadedSoak {
     var underrunFrames: Int
     var scans: Int
     var searches: Int
+    var analyses: Int
     /// The footprint `soakTroughDelaySeconds` after each scan that ended once settled.
     var troughsMB: [Double]
     var settledMB: Double
@@ -41,13 +43,15 @@ private struct LoadedSoak {
     }
 }
 
-/// Plays on repeat for `soakSeconds` while a full scan into a new index runs every 5 minutes and
-/// a search every second, the load a first scan of the NAS puts beside playback. Each scan and
+/// Plays on repeat for `soakSeconds` while a full scan into a new index runs every 5 minutes, a
+/// search every second, and analysis of a 5-minute 24/96 FLAC one after another (phase 45): the
+/// load a first scan of the NAS puts beside playback, with the Spectrum window busy. Each scan and
 /// the search have their own connections, as in the app. Run once, for both soak benchmarks.
 private let loadedSoak = Result { () throws -> LoadedSoak in
     let library = try scannedLibrary.get()
     let queries = try typedQueries(library.index)
     let directory = try defaultPlaybackFixturesDirectory()
+    let analyzed = try analysisFixture(.hiRes, seconds: 300, in: directory)
     let queue =
         [try hiResTrack(in: directory)]
         + (try rampAlbum(sampleRateHz: 44_100, bitsPerSample: 16, in: directory)).tracks
@@ -61,7 +65,7 @@ private let loadedSoak = Result { () throws -> LoadedSoak in
         try playing(queue, speed: 1, repeatMode: .all) { session in
             let load = SoakLoad(
                 folder: library.folder, scratch: scratch, searchDatabase: library.databaseURL,
-                queries: queries)
+                queries: queries, analyzed: analyzed)
             let start = DispatchTime.now().uptimeNanoseconds
             func elapsed() -> Double { Double(DispatchTime.now().uptimeNanoseconds - start) / 1e9 }
             var settledMB: Double?
@@ -82,10 +86,11 @@ private let loadedSoak = Result { () throws -> LoadedSoak in
                 if let failure = load.failure { throw failure }
                 Thread.sleep(forTimeInterval: 1)
             }
-            let (scans, searches) = try load.stop()
+            let (scans, searches, analyses) = try load.stop()
             let endMB = try footprintMB()
             return LoadedSoak(
                 underrunFrames: session.underrunFrames(), scans: scans, searches: searches,
+                analyses: analyses,
                 troughsMB: troughsMB, settledMB: try settledMB ?? footprintMB(), endMB: endMB,
                 peakMB: max(peakMB, endMB))
         }
@@ -101,11 +106,14 @@ private final class SoakLoad: @unchecked Sendable {
     /// Seconds from the start at which each scan ended.
     private var ends: [Double] = []
     private var searches = 0
+    private var analyses = 0
     private var firstFailure: (any Error)?
     private let done = DispatchGroup()
     private let start = DispatchTime.now().uptimeNanoseconds
 
-    init(folder: WatchedFolder, scratch: URL, searchDatabase: URL, queries: [String]) {
+    init(
+        folder: WatchedFolder, scratch: URL, searchDatabase: URL, queries: [String], analyzed: URL
+    ) {
         loop(every: soakScanIntervalSeconds) { [self] in
             let databaseURL = scratch.appendingPathComponent("scan.sqlite")
             for suffix in ["", Database.walSuffix, Database.shmSuffix] {
@@ -131,6 +139,12 @@ private final class SoakLoad: @unchecked Sendable {
             let text = lock.withLock { queries[searches % queries.count] }
             _ = try connection.trackIDs(TrackFilter(search: text), sortedBy: .artist)
             lock.withLock { searches += 1 }
+        }
+        // As the Spectrum window's analysis runs, at utility priority, without a pause.
+        loop(every: 0) { [self] in
+            Thread.current.qualityOfService = .utility
+            _ = try analyzeFile(at: analyzed)
+            lock.withLock { analyses += 1 }
         }
     }
 
@@ -162,13 +176,14 @@ private final class SoakLoad: @unchecked Sendable {
         }
     }
 
-    /// Waits for a scan under way to finish, and returns how many scans and searches ran.
-    func stop() throws -> (scans: Int, searches: Int) {
+    /// Waits for a scan and an analysis under way to finish, and returns how many scans,
+    /// searches and analyses ran.
+    func stop() throws -> (scans: Int, searches: Int, analyses: Int) {
         lock.withLock { running = false }
         done.wait()
         return try lock.withLock {
             if let firstFailure { throw firstFailure }
-            return (scans, searches)
+            return (scans, searches, analyses)
         }
     }
 }
@@ -306,7 +321,8 @@ let playbackBenchmarks = [
                         + "./scripts/bench --soak 3600 for the hour", soakSeconds),
                 "under load: \(soak.scans) full scans of the fixture library into a new index,"
                     + String(format: " one every %.0f s,", soakScanIntervalSeconds)
-                    + " and \(soak.searches) searches, one a second",
+                    + " \(soak.searches) searches, one a second, and \(soak.analyses)"
+                    + " analyses of a 5-minute 24/96 FLAC, one after another",
             ])
     },
     Benchmark(
