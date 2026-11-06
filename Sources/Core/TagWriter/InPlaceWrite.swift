@@ -1,4 +1,5 @@
 import Darwin
+import Foundation
 import Metadata
 
 /// A write in place: the one run of bytes an edit changes in the original, when the new tags
@@ -8,6 +9,8 @@ struct InPlacePlan {
     var offset: Int
     var newBytes: [UInt8]
     var oldBytes: [UInt8]
+    /// The file's size once written.
+    var size: Int
 
     var region: Range<Int> { offset..<offset + newBytes.count }
 
@@ -54,6 +57,14 @@ struct InPlacePlan {
                 with: bytes[overlap.lowerBound - start..<overlap.upperBound - start])
         }
         self.offset = lower
+        self.size = size
+    }
+
+    /// The region as the journal keeps it.
+    var journaled: TagUndoJournal.InPlaceRegion {
+        TagUndoJournal.InPlaceRegion(
+            offset: offset, oldSHA256: sha256(oldBytes), newLength: newBytes.count,
+            newSHA256: sha256(newBytes))
     }
 
     /// How the original is put back together from the edited file: the edited file's bytes
@@ -76,6 +87,41 @@ private func read(_ source: MeteredSource, _ range: Range<Int>, _ path: String)
         return try source.read(range)
     } catch {
         throw TagWriteError(path: path, kind: .unreadable, detail: error.detail)
+    }
+}
+
+/// What a file holds where its write in place goes (ADR 0108).
+enum RegionState {
+    /// The new bytes, at the size the write leaves: it landed.
+    case new
+    /// The old bytes, at the original's size: it hadn't started.
+    case old
+    /// Neither: it was cut short.
+    case torn
+}
+
+/// Reads where `record`'s write in place goes in its file, through a descriptor that doesn't
+/// cache, so a network volume answers from the server. Only the region is read: the write
+/// touches nothing else.
+func regionState(
+    _ record: TagUndoJournal.FileRecord, _ region: TagUndoJournal.InPlaceRegion,
+    faults: WriteFaults
+) throws(TagWriteError) -> RegionState {
+    do throws(ParseFailure) {
+        let source = try MeteredSource(path: record.path, faults: faults)
+        func holds(_ length: Int, _ hash: Data) throws(ParseFailure) -> Bool {
+            guard region.offset + length <= source.size else { return false }
+            return sha256(try source.read(region.offset..<region.offset + length)) == hash
+        }
+        let newSize = max(record.originalSize, region.offset + region.newLength)
+        if source.size == newSize, try holds(region.newLength, region.newSHA256) { return .new }
+        if source.size == record.originalSize, try holds(record.oldByteCount, region.oldSHA256) {
+            return .old
+        }
+        return .torn
+    } catch {
+        throw TagWriteError(
+            path: record.path, kind: .unreadable, detail: error.error(path: record.path).detail)
     }
 }
 

@@ -59,6 +59,52 @@ func aTagPastThePaddingGoesThroughATempFile(_ sample: Sample) throws {
     #expect(try Data(contentsOf: url) == original)
 }
 
+/// The audio a write in place never touches isn't read, before or after (ADR 0108): a long
+/// track costs what a short one does.
+@Test(arguments: [Sample.flac, .flacWithArt, .mp3v24])
+func aWriteInPlaceReadsOnlyAroundTheTag(_ sample: Sample) throws {
+    let audioBytes = 16 * 1024 * 1024
+    let url = try grownCopy(sample, by: audioBytes)
+    var writer = scratchWriter()
+    let calls = FileCalls(&writer)
+    let before = try identity(url)
+    expectChanged(writer.write(titleEdit, to: [url.path]), [url])
+    #expect(try identity(url).inode == before.inode, "written in place")
+    #expect(try tags(url).title == "Edited")
+    #expect(calls.bytesRead < audioBytes / 8, "\(calls.bytesRead) bytes read")
+}
+
+/// The record keeps the region's offset and its old and new bytes' hashes, not the whole
+/// file's; recovery reads only the region to tell a torn write from one that landed.
+@Test func aWriteInPlaceIsJournaledAndRecoveredByItsRegion() throws {
+    let audioBytes = 16 * 1024 * 1024
+    let url = try grownCopy(.flac, by: audioBytes)
+    let original = try Data(contentsOf: url)
+    var crashing = scratchWriter()
+    crashing.faults.tornWriteBytes = 1
+    _ = crashing.write(titleEdit, to: [url.path])
+    let entry = try #require(
+        try FileManager.default.contentsOfDirectory(atPath: crashing.journal.directory.path)
+            .filter { !$0.contains(".") }.sorted().last)
+    let json = try #require(
+        try JSONSerialization.jsonObject(
+            with: Data(
+                contentsOf: crashing.journal.directory.appendingPathComponent(entry)
+                    .appendingPathComponent("00000001.json"))) as? [String: Any])
+    #expect(json["originalSHA256"] == nil)
+    let region = try #require(json["inPlace"] as? [String: Any])
+    #expect(Set(region.keys) == ["offset", "oldSHA256", "newLength", "newSHA256"])
+
+    var writer = TagWriter(journal: crashing.journal)
+    let calls = FileCalls(&writer)
+    expectChanged(writer.recoverInterrupted(), [url])
+    #expect(try Data(contentsOf: url) == original)
+    let reads = calls.all.filter { if case .read = $0 { true } else { false } }
+    // The region, then the restored temp file's region; the copy into the temp file is an
+    // APFS clone here.
+    #expect(calls.bytesRead < audioBytes / 8, "\(calls.bytesRead) bytes in \(reads.count) reads")
+}
+
 /// A save past the padding leaves room for the next edits (ADR 0108): 64 KiB, or as much again
 /// as the tag when that's more, so 30 KB of lyrics, or a cover as big as the one there, is then
 /// written in place.

@@ -83,7 +83,7 @@ public struct TagWriter: Sendable {
             var older: [String: (TagUndoJournal.Handle, TagUndoJournal.FileRecord)]?
             for (handle, record) in files.reversed() {
                 // Its write in place couldn't be finished; the journal keeps it for the next try.
-                guard record.unconfirmedSHA256 == nil else {
+                guard !journal.isUnconfirmed(handle) else {
                     report.failures.append(
                         TagWriteError(
                             path: record.path, kind: .writeFailed,
@@ -167,9 +167,6 @@ public struct TagWriter: Sendable {
             ? try InPlacePlan(
                 segments, size: before.size, source: source, payload: file.payload, path: path)
             : nil
-        let hashes = try fileHashes(
-            path, payload: file.payload, faults: faults,
-            replacing: plan.map { ($0.offset, $0.newBytes) })
         let expected = Expected(
             tags: target, audio: current.metadata.audio,
             art: try expectedArt(art, current, source, path))
@@ -184,8 +181,9 @@ public struct TagWriter: Sendable {
         if let plan {
             return try writeInPlace(
                 plan, path: path, before: before, source: source, original: file,
-                hashes: hashes, expected: expected, entry: entry)
+                expected: expected, entry: entry)
         }
+        let hashes = try fileHashes(path, payload: file.payload, faults: faults)
         let (restore, oldBytes) = try restoreSegments(
             segments, from: source, path: path, size: before.size)
         let temp = try writeTemp(segments, from: path, identity: before, faults: faults)
@@ -231,13 +229,13 @@ public struct TagWriter: Sendable {
         }
     }
 
-    /// Writes one file's new tags over its old ones in place (ADR 0107). The plan is read back
-    /// from the file as it would be before a byte is written; the old bytes are journaled and
-    /// flushed before the original is touched; the file is read back after. A failure once the
-    /// write has started puts the original back from the journal.
+    /// Writes one file's new tags over its old ones in place (ADR 0107, 0108). The plan is read
+    /// back from the file as it would be before a byte is written; the old bytes are journaled
+    /// and flushed before the original is touched; the region and the tags are read back after.
+    /// A failure once the write has started puts the original back from the journal.
     private func writeInPlace(
         _ plan: InPlacePlan, path: String, before: FileIdentity, source: MeteredSource,
-        original: TagFile, hashes: FileHashes, expected: Expected, entry: TagUndoJournal.Entry
+        original: TagFile, expected: Expected, entry: TagUndoJournal.Entry
     ) throws(TagWriteError) -> Outcome {
         _ = try checkParsed(
             PlannedSource(original: source, plan: plan), original: original, path: path,
@@ -251,9 +249,8 @@ public struct TagWriter: Sendable {
         }
         try removeLeftoverTemps(for: path, faults)
         var record = TagUndoJournal.FileRecord(
-            path: path, edited: before, original: before, originalSHA256: Data(hashes.full),
-            restore: plan.restore(size: before.size),
-            unconfirmedSHA256: hashes.edited.map(Data.init))
+            path: path, edited: before, original: before, originalSHA256: nil,
+            restore: plan.restore(size: before.size), inPlace: plan.journaled)
         let handle = try journal.append(record, oldBytes: [plan.oldBytes], to: entry)
         var wrote = false
         do throws(TagWriteError) {
@@ -272,13 +269,7 @@ public struct TagWriter: Sendable {
                     throw TagWriteError(path: path, kind: .writeFailed, detail: "\(error)")
                 }
             }
-            let readBack = try checkEdited(
-                path, original: original, path: path, hashes: hashes, expected: expected)
-            guard readBack.full == hashes.edited else {
-                throw TagWriteError(
-                    path: path, kind: .checkFailed,
-                    detail: "the file doesn't read back as the bytes written to it")
-            }
+            _ = try readBack(plan, path: path, original: original, expected: expected)
         } catch {
             // A crash leaves the file and the journal as they are, for recovery to finish.
             if error.detail == crashDetail { throw error }
@@ -353,15 +344,17 @@ public struct TagWriter: Sendable {
                 detail: "the file whose tags were being written in place is gone")
         }
         let current = try identity(path)
-        guard current.inode == record.originalInode, current.size == record.originalSize else {
+        guard let region = record.inPlace, current.inode == record.originalInode,
+            (record.originalSize...max(record.originalSize, region.offset + region.newLength))
+                .contains(current.size)
+        else {
             try journal.remove(handle)
             throw TagWriteError(
                 path: path, kind: .changedSinceEdit,
                 detail: "the file was replaced after its tags were being written in place, so"
                     + " that write isn't finished")
         }
-        if Data(try fileHashes(path, payload: [], faults: faults).full) == record.unconfirmedSHA256
-        {
+        if try regionState(record, region, faults: faults) == .new {
             var landed = record
             landed.setEdited(current)
             try journal.confirm(landed, at: handle)
@@ -374,20 +367,18 @@ public struct TagWriter: Sendable {
             try journal.remove(handle)
             throw TagWriteError(
                 path: path, kind: .changedSinceEdit,
-                detail: "its write in place was interrupted, and it changed outside its tags"
-                    + " since, so it's left as it is: \(error.detail)")
+                detail: "its write in place was interrupted, and its journaled bytes don't put"
+                    + " it back, so it's left as it is: \(error.detail)")
         }
     }
 
     /// Puts the original back after a write in place that didn't finish, and drops its
-    /// record; returns whether the file had to be rewritten, which it doesn't when it already
-    /// hashes as the original.
+    /// record; returns whether the file had to be rewritten, which it doesn't when its region
+    /// still holds the old bytes.
     private func putBackOriginal(
         _ record: TagUndoJournal.FileRecord, at handle: TagUndoJournal.Handle, oldBytes: [UInt8]
     ) throws(TagWriteError) -> Bool {
-        if Data(try fileHashes(record.path, payload: [], faults: faults).full)
-            == record.originalSHA256
-        {
+        if let region = record.inPlace, try regionState(record, region, faults: faults) == .old {
             try journal.remove(handle)
             logger.notice("\(record.path) still holds its original tags")
             return false
@@ -408,7 +399,8 @@ public struct TagWriter: Sendable {
 
     /// Puts back the original of one journaled file, and returns the restored file's identity.
     /// The file must be as the edit left it unless `requireEdited` is false, as for a write in
-    /// place that didn't finish; the restored file must hash as the original either way.
+    /// place that didn't finish. The restored file must hash as the original, or for a write in
+    /// place have its size and hold the journaled old bytes, which must match their hash.
     private func restore(
         _ record: TagUndoJournal.FileRecord, oldBytes: [UInt8], requireEdited: Bool = true
     ) throws(TagWriteError) -> FileIdentity {
@@ -418,6 +410,11 @@ public struct TagWriter: Sendable {
             throw TagWriteError(
                 path: path, kind: .changedSinceEdit,
                 detail: "the file changed after the tag edit, so the edit isn't undone")
+        }
+        if let region = record.inPlace, sha256(oldBytes) != region.oldSHA256 {
+            throw TagWriteError(
+                path: path, kind: .checkFailed,
+                detail: "the journaled bytes don't match the hash they were journaled with")
         }
         try requireWritable(path, faults)
         var cursor = 0
@@ -431,11 +428,21 @@ public struct TagWriter: Sendable {
         }
         let temp = try writeTemp(segments, from: path, identity: before, faults: faults)
         do throws(TagWriteError) {
-            let restored = try fileHashes(temp.path, payload: [], faults: faults)
-            guard restored.full == Array(record.originalSHA256) else {
-                throw TagWriteError(
-                    path: path, kind: .checkFailed,
-                    detail: "the restored file doesn't match the original's hash")
+            if let region = record.inPlace {
+                var restored = record
+                restored.path = temp.path
+                guard try regionState(restored, region, faults: faults) == .old else {
+                    throw TagWriteError(
+                        path: path, kind: .checkFailed,
+                        detail: "the restored file doesn't hold the original's tag bytes")
+                }
+            } else {
+                let restored = try fileHashes(temp.path, payload: [], faults: faults)
+                guard Data(restored.full) == record.originalSHA256 else {
+                    throw TagWriteError(
+                        path: path, kind: .checkFailed,
+                        detail: "the restored file doesn't match the original's hash")
+                }
             }
             try finish(path, temp: temp, before: before)
         } catch {
@@ -493,13 +500,12 @@ public struct TagWriter: Sendable {
         }
     }
 
-    /// Reads the edited file `edited` (a temp file, or the original once written in place)
-    /// back with the reader and checks it against what was meant, its audio payload by hash.
-    /// Returns its hashes, from the one pass that read it whole.
+    /// Reads the temp file `edited` back with the reader and checks it against what was meant,
+    /// its audio payload by hash. Returns what the reader read.
     private func checkEdited(
         _ edited: String, original: TagFile, path: String, hashes: FileHashes,
         expected: Expected
-    ) throws(TagWriteError) -> FileHashes {
+    ) throws(TagWriteError) -> ParsedFile {
         let source: MeteredSource
         do throws(ParseFailure) {
             source = try MeteredSource(path: edited, faults: faults)
@@ -508,8 +514,7 @@ public struct TagWriter: Sendable {
                 path: path, kind: .checkFailed,
                 detail: "the new file doesn't read: \(error.error(path: edited).detail)")
         }
-        var readBack: FileHashes?
-        _ = try checkParsed(source, original: original, path: path, expected: expected) {
+        return try checkParsed(source, original: original, path: path, expected: expected) {
             file throws(TagWriteError) in
             let read = try fileHashes(edited, payload: file.payload, faults: faults)
             guard read.payload == hashes.payload else {
@@ -517,18 +522,49 @@ public struct TagWriter: Sendable {
                     path: path, kind: .checkFailed,
                     detail: "the audio in the new file isn't the same as the original's")
             }
-            readBack = read
         }
-        return readBack!
+    }
+
+    /// Reads a write in place back from the disk (ADR 0108): its size and the region, through
+    /// a new descriptor that doesn't cache, so a network volume answers from the server, against
+    /// the bytes written; then the tags, audio format, art and chunk offsets, with the audio
+    /// where the original's is. Only the region changed, so nothing else is read whole.
+    /// Returns what the reader read.
+    private func readBack(
+        _ plan: InPlacePlan, path: String, original: TagFile, expected: Expected
+    ) throws(TagWriteError) -> ParsedFile {
+        func failed(_ detail: String) -> TagWriteError {
+            TagWriteError(path: path, kind: .checkFailed, detail: detail)
+        }
+        let source: MeteredSource
+        let region: [UInt8]
+        do throws(ParseFailure) {
+            source = try MeteredSource(path: path, faults: faults)
+            region = try source.size == plan.size ? source.read(plan.region) : []
+        } catch {
+            throw failed("the new file doesn't read: \(error.error(path: path).detail)")
+        }
+        guard source.size == plan.size else {
+            throw failed("the file is \(source.size) bytes after the write, not \(plan.size)")
+        }
+        guard region == plan.newBytes else {
+            throw failed("the file doesn't read back as the bytes written to it")
+        }
+        return try checkParsed(source, original: original, path: path, expected: expected) {
+            edited throws(TagWriteError) in
+            guard edited.payload == original.payload else {
+                throw failed("the audio in the new file isn't where the original's is")
+            }
+        }
     }
 
     /// Reads a new file through `source` and checks its tags, audio format, art and MP4 chunk
     /// offsets against what was meant; `payload` checks its audio, right after the audio's
-    /// size. Returns the new file's layout.
+    /// size. Returns what the reader read.
     private func checkParsed(
         _ source: some ByteSource, original: TagFile, path: String, expected: Expected,
         payload: (TagFile) throws(TagWriteError) -> Void
-    ) throws(TagWriteError) -> TagFile {
+    ) throws(TagWriteError) -> ParsedFile {
         func failed(_ detail: String) -> TagWriteError {
             TagWriteError(path: path, kind: .checkFailed, detail: detail)
         }
@@ -561,7 +597,7 @@ public struct TagWriter: Sendable {
                 "the art reads back as \(newArt?.count ?? 0) bytes, not \(expected.art?.count ?? 0)"
             )
         }
-        return edited
+        return reread
     }
 
     /// The file at `path` opened once, with its tags as the reader reads them and its layout as

@@ -7,7 +7,8 @@ import Foundation
 /// bytes the edit replaced. A batch appends per file, so its cost grows with its size, not its
 /// square, and every record is on the disk before its music file is replaced or overwritten.
 /// A file written in place also gets a marker in `tag-undo` itself until its write is
-/// confirmed, so the writer finds an interrupted one without reading every record (ADR 0107).
+/// confirmed, so the writer finds an interrupted one without reading every record (ADR 0107);
+/// the marker alone says the write is unconfirmed (ADR 0108).
 public struct TagUndoJournal: Sendable {
     /// Edits kept; older ones are dropped once a new one is written.
     package static let capacity = 50
@@ -65,18 +66,18 @@ public struct TagUndoJournal: Sendable {
         var originalSize: Int
         var originalModifiedNanoseconds: Int
         var originalInode: UInt64
-        /// The original's SHA-256, which the restored file must match.
-        var originalSHA256: Data
+        /// A write through the temp file's: the original's SHA-256, which the restored file
+        /// must match. Nil for a write in place, which `inPlace` checks instead.
+        var originalSHA256: Data?
         var restore: [RestoreSegment]
-        /// Set from before a write in place starts until its read-back passes: the SHA-256 the
-        /// whole file has once the write lands. Until then the edited identity is the
-        /// original's, and a file found with neither hash is one the write tore.
-        var unconfirmedSHA256: Data?
+        /// A write in place's: the bytes it changes and what they hold before and after
+        /// (ADR 0108). Until the write is confirmed the edited identity is the original's.
+        var inPlace: InPlaceRegion?
 
         package init(
             path: String, editedSize: Int, editedModifiedNanoseconds: Int, editedInode: UInt64,
             originalSize: Int, originalModifiedNanoseconds: Int, originalInode: UInt64,
-            originalSHA256: Data, restore: [RestoreSegment], unconfirmedSHA256: Data? = nil
+            originalSHA256: Data?, restore: [RestoreSegment], inPlace: InPlaceRegion? = nil
         ) {
             self.path = path
             self.editedSize = editedSize
@@ -87,8 +88,20 @@ public struct TagUndoJournal: Sendable {
             self.originalInode = originalInode
             self.originalSHA256 = originalSHA256
             self.restore = restore
-            self.unconfirmedSHA256 = unconfirmedSHA256
+            self.inPlace = inPlace
         }
+    }
+
+    /// Where a write in place goes and what it finds there: the old bytes, which the record's
+    /// bytes file holds, before the write, and the new bytes after. Recovery and undo check
+    /// these instead of hashing the whole file, since the write touches nothing else.
+    package struct InPlaceRegion: Codable, Equatable, Sendable {
+        var offset: Int
+        var oldSHA256: Data
+        /// More than the old bytes' length when the file grows at its end, as an MP4 with
+        /// `moov` last does.
+        var newLength: Int
+        var newSHA256: Data
     }
 
     /// How the original is put back together: the next `length` bytes of the record's bytes
@@ -111,7 +124,7 @@ public struct TagUndoJournal: Sendable {
         return Entry(sequence: sequence, folder: folder)
     }
 
-    /// Adds one file to `entry`: its old bytes and its record, and for an unconfirmed record its
+    /// Adds one file to `entry`: its old bytes and its record, and for a write in place its
     /// marker, each flushed with its folder, then the drive's cache, so all of it is durable
     /// before the music file is replaced or overwritten.
     package func append(_ record: FileRecord, oldBytes: [[UInt8]], to entry: Entry)
@@ -121,7 +134,7 @@ public struct TagUndoJournal: Sendable {
         try writeDurably(oldBytes, to: handle.bytes.path, drive: false)
         try writeDurably([Array(try encode(record))], to: handle.record.path, drive: false)
         try syncFolder(entry.folder.path)
-        if record.unconfirmedSHA256 != nil {
+        if record.inPlace != nil {
             try writeDurably([], to: handle.marker.path, drive: false)
             try syncFolder(directory.path)
         }
@@ -131,20 +144,22 @@ public struct TagUndoJournal: Sendable {
         return handle
     }
 
-    /// Records that a write in place landed and read back: `record` is saved without its
-    /// unconfirmed hash, through the drive's cache, then the marker goes, so a power cut can't
-    /// keep the marker's removal and lose the record's. A marker left behind is harmless:
-    /// `unconfirmed` removes one whose record is confirmed.
+    /// Records that a write in place landed and read back: `record` is saved with the file's
+    /// identity, through the drive's cache, then the marker goes. A marker left behind is
+    /// harmless: recovery finds the new bytes and confirms the record again.
     func confirm(_ record: FileRecord, at handle: Handle) throws(TagWriteError) {
-        var confirmed = record
-        confirmed.unconfirmedSHA256 = nil
-        try update(confirmed, at: handle)
+        try update(record, at: handle)
         try removeMarker(handle)
     }
 
+    /// Whether the write in place `handle` records is still unconfirmed: its marker is there.
+    func isUnconfirmed(_ handle: Handle) -> Bool {
+        FileManager.default.fileExists(atPath: handle.marker.path)
+    }
+
     /// The records whose write in place a crash or a failure left unconfirmed, found by their
-    /// markers. A marker whose record is gone or confirmed is removed; a record that doesn't
-    /// read is deleted and reported, as `latest` does.
+    /// markers. A marker whose record is gone or isn't a write in place is removed; a record
+    /// that doesn't read is deleted and reported, as `latest` does.
     func unconfirmed() throws(TagWriteError)
         -> (files: [(Handle, FileRecord)], discarded: [TagWriteError])
     {
@@ -179,7 +194,7 @@ public struct TagUndoJournal: Sendable {
                 try remove(handle)
                 continue
             }
-            if record.unconfirmedSHA256 == nil {
+            if record.inPlace == nil {
                 try removeMarker(handle)
             } else {
                 files.append((handle, record))
@@ -359,15 +374,15 @@ public struct TagUndoJournal: Sendable {
 
 extension TagUndoJournal.FileRecord {
     init(
-        path: String, edited: FileIdentity, original: FileIdentity, originalSHA256: Data,
-        restore: [TagUndoJournal.RestoreSegment], unconfirmedSHA256: Data? = nil
+        path: String, edited: FileIdentity, original: FileIdentity, originalSHA256: Data?,
+        restore: [TagUndoJournal.RestoreSegment], inPlace: TagUndoJournal.InPlaceRegion? = nil
     ) {
         self.init(
             path: path, editedSize: edited.size,
             editedModifiedNanoseconds: edited.modifiedNanoseconds, editedInode: edited.inode,
             originalSize: original.size, originalModifiedNanoseconds: original.modifiedNanoseconds,
             originalInode: original.inode, originalSHA256: originalSHA256, restore: restore,
-            unconfirmedSHA256: unconfirmedSHA256)
+            inPlace: inPlace)
     }
 
     /// Records `identity` as the edited file's.

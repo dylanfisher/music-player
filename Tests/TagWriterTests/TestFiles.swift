@@ -95,6 +95,38 @@ func pngImage(side: Int) -> Data {
     return Data(bytes)
 }
 
+/// The file system calls a writer made, from whichever threads made them.
+final class FileCalls: @unchecked Sendable {
+    // `calls` is guarded by `lock`.
+    private let lock = NSLock()
+    private var calls: [FileCall] = []
+
+    /// Makes `writer` tell this of each call.
+    init(_ writer: inout TagWriter) {
+        writer.faults.fileCall = { [self] call in lock.withLock { calls.append(call) } }
+    }
+
+    var all: [FileCall] { lock.withLock { calls } }
+
+    var bytesRead: Int {
+        all.reduce(0) { total, call in
+            if case .read(let bytes) = call { total + bytes } else { total }
+        }
+    }
+
+    func reset() { lock.withLock { calls = [] } }
+}
+
+/// A copy of `sample` with `bytes` more audio at its end, as a long hi-res track has.
+func grownCopy(_ sample: Sample, by bytes: Int) throws -> URL {
+    let url = try sample.copy()
+    let handle = try FileHandle(forWritingTo: url)
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data(count: bytes))
+    try handle.close()
+    return url
+}
+
 /// Fails unless `report` changed exactly `paths`.
 func expectChanged(
     _ report: TagWriteReport, _ paths: [URL], sourceLocation: SourceLocation = #_sourceLocation
