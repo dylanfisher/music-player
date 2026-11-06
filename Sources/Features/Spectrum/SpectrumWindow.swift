@@ -17,8 +17,10 @@ final class SpectrumWindow: NSWindowController, NSWindowDelegate {
     private let spectrograms: [SpectrogramView]
     private let verdictLabels: [NSTextField]
     private let measuresLabel = NSTextField(wrappingLabelWithString: "")
-    private let average = AverageSpectrumView()
+    let average = AverageSpectrumView()
     private let legends: [NSTextField]
+    /// With two files or more: how each differs from the first, in sentences.
+    let differences = NSTextView.scrollableTextView()
     private let readout = NSTextField(labelWithString: " ")
     /// Called once the window has closed.
     var closed: () -> Void = {}
@@ -53,7 +55,7 @@ final class SpectrumWindow: NSWindowController, NSWindowDelegate {
     private func build(in window: NSWindow) {
         var rows: [NSView] = []
         for index in model.files.indices {
-            titles[index].stringValue = model.files[index].title
+            titles[index].stringValue = model.heading(index)
             titles[index].font = .boldSystemFont(ofSize: NSFont.systemFontSize)
             titles[index].lineBreakMode = .byTruncatingMiddle
             if model.files.count > 1 { titles[index].textColor = SpectrumColors.files[index] }
@@ -112,14 +114,42 @@ final class SpectrumWindow: NSWindowController, NSWindowDelegate {
             legend.lineBreakMode = .byTruncatingTail
         }
         let scale = DecibelScaleView()
-        let right = NSStackView(views: [averageTitle, average] + legends + [scale])
+        var below: [NSView] = []
+        if model.files.count > 1 {
+            let differencesTitle = NSTextField(labelWithString: "Differences")
+            differencesTitle.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+            below = [differencesTitle, differences]
+            differences.hasVerticalScroller = true
+            differences.drawsBackground = false
+            if let text = differences.documentView as? NSTextView {
+                text.isEditable = false
+                text.drawsBackground = false
+                // A gap after each sentence, as one that wraps would run into the next.
+                let paragraphs = NSMutableParagraphStyle()
+                paragraphs.paragraphSpacing = 4
+                text.typingAttributes = [
+                    .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+                    .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraphs,
+                ]
+                text.textContainerInset = .zero
+                text.textContainer?.lineFragmentPadding = 0
+                text.setAccessibilityLabel("Differences")
+            }
+        }
+        let right = NSStackView(views: [averageTitle, average] + legends + [scale] + below)
         right.orientation = .vertical
         right.alignment = .leading
         right.spacing = 4
-        for view in [average] + legends + [scale] as [NSView] {
+        for view in [average] + legends + [scale] + below.dropFirst() as [NSView] {
             view.widthAnchor.constraint(equalTo: right.widthAnchor).isActive = true
         }
         average.setContentHuggingPriority(.defaultLow, for: .vertical)
+        if !below.isEmpty {
+            right.setCustomSpacing(12, after: scale)
+            // Once they share an ancestor: the sentences share the column's height with the
+            // chart.
+            differences.heightAnchor.constraint(equalTo: average.heightAnchor).isActive = true
+        }
 
         readout.textColor = .secondaryLabelColor
         readout.font = .monospacedDigitSystemFont(
@@ -177,6 +207,10 @@ final class SpectrumWindow: NSWindowController, NSWindowDelegate {
         if model.files.count == 1 {
             measuresLabel.stringValue = model.measures(0).map { "\($0.name): \($0.value)" }
                 .joined(separator: "\n")
+        } else if let text = differences.documentView as? NSTextView {
+            // Set only when it changes, so a refresh doesn't scroll it back to the top.
+            let comparison = model.comparisonText
+            if text.string != comparison { text.string = comparison }
         }
     }
 

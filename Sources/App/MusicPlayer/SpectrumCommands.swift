@@ -40,7 +40,7 @@ extension AppDelegate {
                         self.browser?.report("Show Spectrum: \(problem)")
                         return
                     }
-                    self.spectrumWindows.show(paths.map { ($0, self.spectrumTitle(of: $0)) })
+                    self.spectrumWindows.show(paths.map { ($0, self.spectrumRow(of: $0)) })
                 }
             })
     }
@@ -52,17 +52,15 @@ extension AppDelegate {
         }
     }
 
-    /// The track's title from the library, or its file's name.
-    private func spectrumTitle(of path: String) -> String {
-        var row: TrackRow?
+    /// The track's row in the library, for its spectrum's header; nil, so the window names
+    /// it by its file, when the index doesn't have it.
+    private func spectrumRow(of path: String) -> TrackRow? {
         do {
-            row = try trackLookup?(path)
+            return try trackLookup?(path)
         } catch {
             logger.error("couldn't look up \(path) for its spectrum: \(error)")
+            return nil
         }
-        return row?.title
-            ?? URL(fileURLWithPath: path, isDirectory: false).deletingPathExtension()
-            .lastPathComponent
     }
 
     /// The measures in the index, on a connection of their own, opened on first use.

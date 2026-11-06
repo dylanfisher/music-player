@@ -566,11 +566,11 @@ once, while playing.
 
 #### 50d. Spectrum window
 
-- [ ] **50d.1 Album and file size.** Each file's header names its album beside the title and
+- [x] **50d.1 Album and file size.** Each file's header names its album beside the title and
       ends with the file's size ("So Many Questions — Album · PCM · 44.1 kHz · … · 4:16 ·
       44.8 MB"); the window opens with the `TrackRow`s it already looks titles up in, the size
       from the index, formatted as the track table's Size column formats it.
-- [ ] **50d.2 What differs, in words.** With two or more files, a "Differences" box under the
+- [x] **50d.2 What differs, in words.** With two or more files, a "Differences" box under the
       average spectrum explains how each file differs from the first, in plain sentences
       for someone who doesn't read spectra, from the measures and the average spectra the
       window already has, no new reads: a lower cutoff ("B stops at 16 kHz and A goes on to
@@ -585,7 +585,62 @@ once, while playing.
       `AnalysisRules`; the sentences are built in Analysis's text, testable without a window.
       Tests: the owner's case (a 16-bit WAV and a 24-bit FLAC of one master: format, bits
       and size differ, a little more above 16 kHz in the WAV), a lossy-origin copy, a louder remaster.
-- [ ] Record ADR 0120, amending 0115.
+- [x] Record ADR 0120, amending 0115.
+
+Implementation plan, part 50d (ADR 0120):
+
+1. **Promotion.** The file size text, `ByteCountFormatter` in `.file` style, written twice now
+   (the track table's Size column, the tag editor's `FileRow.sizeText`), moves to
+   `DisplayText` as `fileSizeText`, for its third caller. Its own commit.
+2. **Header (50d.1).** `SpectrumModel.File` gains the album and the size, made from the
+   `TrackRow` the app already looks the title up in (`File(path:row:)`, the file's name when
+   the index has no row), so `SpectrumWindows.show` takes paths and rows. The title reads
+   "Title — Album", the analyzed status line ends with the size. Each file gets a short name
+   for the legend and the sentences: its title, or where titles repeat, its file type ("the
+   FLAC"), or else its place ("file 2"). The legend shows the names, not the format lines the
+   headers already show.
+3. **Differences (50d.2).** `Differences.swift` in Analysis: `ComparedFile` (a name, the
+   result, the size) and `differences(_:from:)`, one sentence per difference of a later file
+   from the first, in order: cutoff, level, DR, true peak over 0, clipping, bass, treble and
+   above 16 kHz (band power from the average spectra, matched by frequency, against the
+   overall level), length, rate, bits, format, size; then, when none of the sound measures
+   differ, that they sound the same as far as the measures tell and that only the samples
+   could prove it. Level is the power summed over the average spectrum from 20 Hz to the lower
+   Nyquist, so "about". Thresholds in `AnalysisRules`. Tests: the owner's WAV and FLAC, a
+   lossy-origin copy, a louder remaster, and each sentence either side of its threshold.
+4. **Window (50d.2).** A "Differences" title and a scrolling text view under the legend and
+   the dB scale, sharing the right column's height with the chart, only with two or more
+   files; it fills once every file has finished, each later file's sentences in a paragraph.
+   Test: the window with 8 analyzed files lays out with the chart and the differences both
+   tall enough to read, and writes a picture to `.build/snapshots`.
+5. **ADR 0120**, amending 0115: the header, the names, the sentences and their thresholds,
+   and why the level is an estimate.
+
+Gate, part 50d: the review's five points, fixed in their own commit: the cutoff and rate
+sentences both describing one upsampled file, a lossy file at a higher rate called upsampled,
+a 32 kHz file's lost highs called beyond hearing, and the closing line saying a silent file, a
+mono one, or a pair whose spectra couldn't be compared sounded the same (now a silence and a
+channels sentence, and no closing line without the spectra). Row 0's DC weighting across rates
+and the missing bit rate of lossy files are recorded in ADR 0120, not fixed. `./scripts/check`
+passes; under the other parts' load, the Settings window's color tests failed twice and pass
+alone.
+
+Result, part 50d: shipped as planned (ADR 0120). The header reads "So Many Questions —
+Album" and its format line ends with the index's size ("· 44.8 MB"); `fileSizeText` is the
+one size text in `DisplayText`. Files of one title are named by type ("the WAV", "(WAV)" in
+the header), then by place. With two files or more, a Differences box under the legend
+says how each later file differs from the first, in sentences, once all have finished. Tests:
+the owner's WAV and FLAC (dither above 16 kHz, 24 against 16 bits, compressed against
+uncompressed, size, then "sound the same as far as these measures can tell"), a lossy-origin
+copy, a loud remaster (5 dB louder, DR 6 against 12, true peak, clipping, 3 dB more bass),
+each threshold either side, padded bits, rates, a lossy file, mono and silence, the fixtures'
+16/44.1 noise against its 96 kHz upsampling (the same level once matched by frequency), the
+model's names and comparison, and the window with 8 files (picture in
+`.build/snapshots/spectrum-window.png`). Owner steps: select the WAV and the FLAC of "So Many
+Questions", Show Spectrum, and read the
+Differences box (each file against the top one); say whether each sentence matches what you hear, and whether the thresholds
+(1 dB level and bands, DR 2, 1 kHz cutoff) say too much or too little. Then try a remaster
+against its original.
 
 ### 10. Web remote
 

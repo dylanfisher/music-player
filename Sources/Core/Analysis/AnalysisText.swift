@@ -7,11 +7,7 @@ import Settings
 /// "FLAC · 96 kHz · 24-bit stored, 16 effective · stereo · 5:00": the codec, the rate, the
 /// stored and effective bits where there are any, the channels and the length.
 public func formatLine(_ measures: FileMeasures) -> String {
-    let format = SignalFormat(
-        formatID: measures.formatID, sampleRateHz: measures.sampleRateHz,
-        bitsPerChannel: measures.storedBits.map(UInt32.init), channels: UInt32(measures.channels),
-        isFloat: measures.isFloat)
-    var parts = [format.codecName, "\(kilohertz(measures.sampleRateHz)) kHz"]
+    var parts = [codecName(measures), "\(kilohertz(measures.sampleRateHz)) kHz"]
     if let stored = measures.storedBits {
         let effective = measures.effectiveBits.map { ", \($0) effective" } ?? ""
         parts.append(
@@ -22,6 +18,15 @@ public func formatLine(_ measures: FileMeasures) -> String {
     parts.append(channelsText(measures.channels))
     parts.append(clock(measures.durationSeconds))
     return parts.joined(separator: " · ")
+}
+
+/// "FLAC", "PCM", "AAC": the codec as the signal path names it.
+func codecName(_ measures: FileMeasures) -> String {
+    SignalFormat(
+        formatID: measures.formatID, sampleRateHz: measures.sampleRateHz,
+        bitsPerChannel: measures.storedBits.map(UInt32.init), channels: UInt32(measures.channels),
+        isFloat: measures.isFloat
+    ).codecName
 }
 
 /// Each measure's name and value, as the Spectrum window lists them and the command line

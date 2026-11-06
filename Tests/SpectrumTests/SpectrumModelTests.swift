@@ -7,7 +7,7 @@ import Testing
 
 /// A result whose spectrogram has 10 columns, each row's cells at `level(row)` dB, and whose
 /// measures are a clean 16-bit FLAC's at `rateHz`.
-private func result(rateHz: Double, cutoffHz: Double? = nil, level: (Int) -> Double = { _ in -60 })
+func result(rateHz: Double, cutoffHz: Double? = nil, level: (Int) -> Double = { _ in -60 })
     -> AnalysisResult
 {
     let cells = (0..<10).flatMap { _ in
@@ -24,6 +24,15 @@ private func result(rateHz: Double, cutoffHz: Double? = nil, level: (Int) -> Dou
             columns: 10, cells: cells,
             averageDB: (0..<Spectrogram.rows).map { Float(level($0)) }, nyquistHz: rateHz / 2,
             durationSeconds: 100))
+}
+
+/// A file titled `title` at "/<title, lowercased>.<type, lowercased>".
+func file(
+    _ title: String, album: String? = nil, sizeBytes: Int? = nil, type: String = "FLAC"
+) -> SpectrumModel.File {
+    SpectrumModel.File(
+        path: "/\(title.lowercased()).\(type.lowercased())", title: title, album: album,
+        sizeBytes: sizeBytes, fileType: type)
 }
 
 private final class Calls: @unchecked Sendable {
@@ -55,7 +64,7 @@ private struct Unreadable: Error, CustomStringConvertible {
 }
 
 @MainActor @Test func eachFileShowsItsProgressThenItsResult() async {
-    let model = SpectrumModel(files: [("/a.flac", "A"), ("/b.flac", "B"), ("/c.flac", "C")])
+    let model = SpectrumModel(files: [file("A"), file("B"), file("C")])
     var seen: [String] = []
     model.changed = { seen.append(model.status(0)) }
     model.start { path, progress in
@@ -73,14 +82,14 @@ private struct Unreadable: Error, CustomStringConvertible {
     // The axis reaches the highest Nyquist, and its lines stop under it.
     #expect(model.topHz == 48_000)
     #expect(model.referenceLines == [16_000, 19_000, 20_000, 22_050, 24_000])
-    #expect(model.legend(1) == "B — FLAC · 96 kHz · 16-bit stored, 16 effective · stereo · 1:40")
+    #expect(model.legend(1) == "B")
     #expect(model.legend(2) == "C")
     #expect(model.verdictLines(0) == [noVerdictText])
     #expect(model.verdictLines(2).isEmpty)
 }
 
 @MainActor @Test func atMostTwoFilesAreAnalyzedAtOnce() async {
-    let files = (0..<AnalysisRules.comparedFiles).map { ("/\($0).flac", "\($0)") }
+    let files = (0..<AnalysisRules.comparedFiles).map { file("\($0)") }
     let model = SpectrumModel(files: files)
     let calls = Calls()
     model.start { _, _ in
@@ -95,7 +104,7 @@ private struct Unreadable: Error, CustomStringConvertible {
 }
 
 @MainActor @Test func closingCancelsTheFilesStillAnalyzed() async {
-    let model = SpectrumModel(files: [("/a.flac", "A"), ("/b.flac", "B"), ("/c.flac", "C")])
+    let model = SpectrumModel(files: [file("A"), file("B"), file("C")])
     let calls = Calls()
     model.start { _, _ in
         calls.begin()
@@ -118,7 +127,7 @@ private struct Unreadable: Error, CustomStringConvertible {
 }
 
 @MainActor @Test func thePointerReadsTimeFrequencyAndLevel() async {
-    let model = SpectrumModel(files: [("/a.flac", "A"), ("/b.flac", "B")])
+    let model = SpectrumModel(files: [file("A"), file("B")])
     model.start { path, _ in
         path == "/a.flac"
             ? result(rateHz: 44_100, level: { $0 < 256 ? -40 : -120 })
@@ -138,4 +147,68 @@ private struct Unreadable: Error, CustomStringConvertible {
 @Test func theFloorOfTheScaleReadsAsUnderIt() {
     #expect(decibelsText(-150) == "under -150 dB")
     #expect(decibelsText(-63.4) == "-63 dB")
+}
+
+@MainActor @Test func theHeaderNamesTheAlbumAndEndsWithTheSize() async {
+    let model = SpectrumModel(files: [
+        file("So Many Questions", album: "Album", sizeBytes: 44_812_345), file("B"),
+    ])
+    model.start { _, _ in result(rateHz: 44_100) }
+    await model.finished()
+    #expect(model.heading(0) == "So Many Questions — Album")
+    #expect(model.heading(1) == "B")
+    #expect(
+        model.status(0)
+            == "FLAC · 44.1 kHz · 16-bit stored, 16 effective · stereo · 1:40 · 44.8 MB")
+    // A file the index doesn't have has no size to show.
+    #expect(model.status(1) == "FLAC · 44.1 kHz · 16-bit stored, 16 effective · stereo · 1:40")
+}
+
+@Test func aFileTheIndexDoesntHaveIsNamedByItsFile() {
+    let file = SpectrumModel.File(path: "/Music/01 Intro.flac", row: nil)
+    #expect(file.title == "01 Intro")
+    #expect(file.album == nil)
+    #expect(file.sizeBytes == nil)
+    #expect(file.fileType == "FLAC")
+}
+
+@MainActor @Test func filesOfOneTitleAreNamedByTheirTypeThenByTheirPlace() {
+    let model = SpectrumModel(files: [
+        file("Song", type: "WAV"), file("Song"), file("Other"), file("Song"),
+    ])
+    #expect(model.names == ["the WAV", "file 2", "Other", "file 4"])
+    #expect(model.heading(0) == "Song (WAV)")
+    #expect(model.heading(1) == "Song")
+    #expect((0..<4).map(model.legend) == ["The WAV", "File 2", "Other", "File 4"])
+}
+
+@MainActor @Test func eachLaterFileIsComparedWithTheFirstOnceAllHaveFinished() async {
+    let model = SpectrumModel(files: [
+        file("Song", type: "WAV"), file("Song"), file("Broken"), file("Copy"),
+    ])
+    #expect(model.comparisonText == "Shown once every file is analyzed")
+    model.start { path, _ in
+        if path == "/broken.flac" { throw Unreadable() }
+        return result(rateHz: 44_100, cutoffHz: path == "/copy.flac" ? 16_000 : nil)
+    }
+    await model.finished()
+    // The file that failed is left out; the others are each compared with the WAV.
+    #expect(model.comparison.count == 2)
+    #expect(model.comparison[0].last?.hasPrefix("The FLAC and the WAV sound the same") == true)
+    #expect(model.comparison[1].first?.hasPrefix("Copy stops at 16.0 kHz") == true)
+    #expect(
+        model.comparisonText
+            == model.comparison.map { $0.joined(separator: "\n") }.joined(separator: "\n\n"))
+}
+
+@MainActor @Test func oneFileAnalyzedHasNothingToCompare() async {
+    let model = SpectrumModel(files: [file("A"), file("B")])
+    model.start { path, _ in
+        if path == "/b.flac" { throw Unreadable() }
+        return result(rateHz: 44_100)
+    }
+    await model.finished()
+    #expect(model.comparison.isEmpty)
+    #expect(
+        model.comparisonText == "Fewer than two files were analyzed, so there's nothing to compare")
 }

@@ -30,6 +30,33 @@ public enum AnalysisRules {
     static let dynamicRangeBlockSeconds = 3.0
     static let dynamicRangeLoudestShare = 0.2
 
+    /// What two files have to differ by for the Spectrum window's differences to say so (ADR
+    /// 0120). Cutoffs: under this a fall is the same filter measured twice.
+    static let differentCutoffHz = 1000.0
+    /// The overall level, from the average spectra: about the smallest change a listener
+    /// hears.
+    static let differentLevelDB = 1.0
+    /// The level is summed from here up, as rows under it are a DC offset, not sound.
+    static let levelFromHz = 20.0
+    /// A band against the midrange: bass from `levelFromHz` up to it, treble from it up to
+    /// `topBandFromHz`.
+    static let differentBandDB = 1.0
+    static let midrangeHz = 250.0...4000.0
+    /// The top band, from here to where both files stop, where lossy encoders cut and
+    /// noise-shaped dither goes.
+    static let topBandFromHz = 16_000.0
+    /// DR scores: one apart is the meters' rounding.
+    static let differentDynamicRange = 2
+    /// Lengths: under this is a gap or a fade trimmed.
+    static let differentLengthSeconds = 2.0
+    /// Sizes, as a share of the larger: under this is tags and art.
+    static let differentSizeShare = 0.05
+    /// The highest frequency people hear, about: a rate whose Nyquist is under it loses
+    /// audible highs.
+    static let hearingLimitHz = 20_000.0
+    /// A true peak over this is over full scale between samples.
+    static let overFullScaleDBTP = 0.0
+
     /// The most files Show Spectrum compares, and `music-player analyze` takes.
     public static let comparedFiles = 8
 }

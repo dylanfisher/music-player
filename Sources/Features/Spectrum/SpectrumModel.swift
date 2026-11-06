@@ -23,7 +23,13 @@ public final class SpectrumModel {
     public struct File: Equatable {
         public var path: String
         public var title: String
-        public var state: State
+        var album: String?
+        /// As the index has it; nil for a file it doesn't.
+        var sizeBytes: Int?
+        /// The extension, uppercased, as `TrackRow.fileType`: what tells two files of one
+        /// title apart.
+        var fileType: String
+        public var state: State = .waiting
     }
 
     /// Frequencies lossy encoders and sample rates stop at, drawn as dotted lines.
@@ -39,11 +45,11 @@ public final class SpectrumModel {
     var changed: () -> Void = {}
     private var work: Task<Void, Never>?
 
-    init(files: [(path: String, title: String)]) {
+    init(files: [File]) {
         precondition(
             !files.isEmpty && files.count <= AnalysisRules.comparedFiles,
             "the window shows 1 to \(AnalysisRules.comparedFiles) files")
-        self.files = files.map { File(path: $0.path, title: $0.title, state: .waiting) }
+        self.files = files
     }
 
     /// Analyzes every file through `analyze`, `filesAtOnce` at a time, in order.
@@ -138,31 +144,95 @@ public final class SpectrumModel {
     func averageReadout(y: Double) -> String? {
         guard (0...1).contains(y) else { return nil }
         let hertz = y * topHz
-        let levels = zip(files, results).compactMap { file, result -> String? in
+        let levels = zip(names, results).compactMap { name, result -> String? in
             guard let spectrogram = result?.spectrogram, hertz < spectrogram.nyquistHz else {
                 return nil
             }
             let row = min(
                 Spectrogram.rows - 1, Int(hertz / spectrogram.nyquistHz * Double(Spectrogram.rows)))
             let level = decibelsText(Double(spectrogram.averageDB[row]))
-            return files.count == 1 ? level : "\(file.title) \(level)"
+            return files.count == 1 ? level : "\(name) \(level)"
         }
         guard !levels.isEmpty else { return nil }
         return "\(kilohertzLabel(hertz)) · " + levels.joined(separator: " · ")
     }
 
-    /// The legend's line for file `index`: its title and format.
-    func legend(_ index: Int) -> String {
-        guard let measures = results[index]?.measures else { return files[index].title }
-        return "\(files[index].title) — \(formatLine(measures))"
+    /// The legend's line for file `index`: its name, in its color, as the differences call it;
+    /// the header above its spectrogram has its format.
+    func legend(_ index: Int) -> String { naming[index].opening }
+
+    /// File `index`'s header: its title and album, and its file type where that's what its
+    /// name tells it apart by.
+    func heading(_ index: Int) -> String {
+        let file = files[index]
+        let album = file.album.map { " — \($0)" } ?? ""
+        let type = naming[index].byType ? " (\(file.fileType))" : ""
+        return file.title + album + type
     }
 
-    /// The line under file `index`'s title: its progress, its format, or why it failed.
+    /// What the legend and the differences call each file: its title, or where titles repeat,
+    /// its file type ("the FLAC"), or where that repeats too, its place ("file 2").
+    var names: [String] { naming.map(\.name) }
+
+    /// Each file's name inside a sentence and at its start, and whether it's its file type.
+    private var naming: [(name: String, opening: String, byType: Bool)] {
+        files.indices.map { index in
+            let file = files[index]
+            let sameTitle = files.filter { $0.title == file.title }
+            if sameTitle.count == 1 { return (file.title, file.title, false) }
+            if sameTitle.filter({ $0.fileType == file.fileType }).count == 1 {
+                return ("the \(file.fileType)", "The \(file.fileType)", true)
+            }
+            return ("file \(index + 1)", "File \(index + 1)", false)
+        }
+    }
+
+    /// How each later analyzed file differs from the first, a paragraph each, once every file
+    /// has finished; empty until then, and with fewer than two analyzed.
+    var comparison: [[String]] {
+        guard allFinished else { return [] }
+        let named = naming
+        let compared = files.indices.compactMap { index in
+            results[index].map {
+                ComparedFile(
+                    name: named[index].name, openingName: named[index].opening, result: $0,
+                    sizeBytes: files[index].sizeBytes)
+            }
+        }
+        guard let first = compared.first, compared.count > 1 else { return [] }
+        return compared.dropFirst().map { differences($0, from: first) }
+    }
+
+    /// The Differences box's text: a paragraph of `comparison` each, a sentence a line, or why
+    /// there's none.
+    var comparisonText: String {
+        let paragraphs = comparison
+        if !paragraphs.isEmpty {
+            return paragraphs.map { $0.joined(separator: "\n") }.joined(separator: "\n\n")
+        }
+        return allFinished
+            ? "Fewer than two files were analyzed, so there's nothing to compare"
+            : "Shown once every file is analyzed"
+    }
+
+    private var allFinished: Bool {
+        files.allSatisfy {
+            switch $0.state {
+            case .analyzed, .failed: true
+            case .waiting, .analyzing: false
+            }
+        }
+    }
+
+    /// The line under file `index`'s title: its progress, its format and size, or why it
+    /// failed.
     func status(_ index: Int) -> String {
         switch files[index].state {
         case .waiting: "Waiting to start"
         case .analyzing(let share): "Analyzing… \(Int((share * 100).rounded()))%"
-        case .analyzed(let result): formatLine(result.measures)
+        case .analyzed(let result):
+            formatLine(result.measures)
+                + (files[index].sizeBytes.map { " · " + fileSizeText($0) } ?? "")
         case .failed(let reason): "Couldn't analyze: \(reason)"
         }
     }
@@ -177,6 +247,18 @@ public final class SpectrumModel {
     /// File `index`'s measures, named, once analyzed.
     func measures(_ index: Int) -> [(name: String, value: String)] {
         results[index].map { measureItems($0.measures) } ?? []
+    }
+}
+
+extension SpectrumModel.File {
+    /// The file at `path`, named as the index has it, or by its file name where the index has
+    /// no row.
+    init(path: String, row: TrackRow?) {
+        let url = URL(fileURLWithPath: path, isDirectory: false)
+        self.init(
+            path: path, title: row?.title ?? url.deletingPathExtension().lastPathComponent,
+            album: row?.album, sizeBytes: row?.sizeBytes,
+            fileType: row?.fileType ?? url.pathExtension.uppercased())
     }
 }
 

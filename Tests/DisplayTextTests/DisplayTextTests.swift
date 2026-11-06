@@ -22,6 +22,11 @@ func formatsKilohertz(hertz: Double, expected: String) {
     #expect(kilohertzLabel(19_960) == "20.0 kHz")
 }
 
+@Test func aFileSizeReadsAsTheFinderShowsIt() {
+    #expect(fileSizeText(44_812_345) == "44.8 MB")
+    #expect(fileSizeText(900) == "900 bytes")
+}
+
 @Test func bitDepthReadsTheSameForAnyIntegerType() {
     #expect(bitDepth(24) == "24-bit")
     #expect(bitDepth(UInt32(32)) == "32-bit")
