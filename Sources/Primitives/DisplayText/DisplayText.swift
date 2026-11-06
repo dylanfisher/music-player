@@ -47,6 +47,15 @@ public func depthText(bits: UInt32, isFloat: Bool) -> String {
     bitDepth(bits) + (isFloat ? " float" : "")
 }
 
+/// 1 -> "mono", 2 -> "stereo", 6 -> "6 channels".
+public func channelsText(_ count: some BinaryInteger) -> String {
+    switch count {
+    case 1: "mono"
+    case 2: "stereo"
+    default: "\(count) channels"
+    }
+}
+
 /// 1204 -> "1,204", in the user's locale.
 public func number(_ value: Int) -> String {
     NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)

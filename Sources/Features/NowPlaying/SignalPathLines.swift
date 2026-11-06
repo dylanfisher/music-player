@@ -50,7 +50,7 @@ func signalPathLines(_ path: SignalPath?) -> SignalPathLines {
         lines.stages.append(
             .init(
                 title: "File", value: value(of: track.file),
-                note: note([track.file.codecName, channels(track.file.channels)]),
+                note: note([track.file.codecName, channelsText(track.file.channels)]),
                 changes: false))
     }
     switch path.sink {
@@ -101,7 +101,7 @@ private func decoderStage(_ track: TrackSignal) -> SignalPathLines.Stage {
     let mix = to < from ? "downmixed from \(from)" : nil
     return .init(
         title: track.isConverted ? "Converted" : "Decoder", value: value(of: track.decoded),
-        note: note([channels(to), mix]), changes: true)
+        note: note([channelsText(to), mix]), changes: true)
 }
 
 /// DoP is never scaled, so the digital volume doesn't apply while it plays (ADR 0064).
@@ -191,14 +191,6 @@ private func value(of format: SignalFormat) -> String {
 private func note(_ parts: [String?]) -> String {
     let joined = parts.compactMap { $0 }.joined(separator: " · ")
     return joined.prefix(1).uppercased() + joined.dropFirst()
-}
-
-private func channels(_ count: UInt32) -> String {
-    switch count {
-    case 1: "mono"
-    case 2: "stereo"
-    default: "\(count) channels"
-    }
 }
 
 /// `24-bit` or `32-bit float`.
