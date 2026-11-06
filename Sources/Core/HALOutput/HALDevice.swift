@@ -8,7 +8,8 @@ import Playback
 private let logger = moduleLogger()
 
 enum HALDeviceError: PlaybackFailure {
-    case hogModeHeld(by: pid_t)
+    /// `app` is the holder's process name, nil when it can't be read.
+    case hogModeHeld(by: pid_t, app: String?)
     case noOutputStream
     case noBitPerfectFormat(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32)
     /// Nothing to convert a track to: no PCM format, or only non-mixable ones without hog mode.
@@ -17,7 +18,7 @@ enum HALDeviceError: PlaybackFailure {
 
     var description: String {
         switch self {
-        case .hogModeHeld(let pid):
+        case .hogModeHeld(let pid, _):
             "another process (pid \(pid)) has exclusive access to the device"
         case .noOutputStream: "the device has no output stream"
         case .noBitPerfectFormat(let rate, let channels, let bits):
@@ -30,13 +31,22 @@ enum HALDeviceError: PlaybackFailure {
 
     var userMessage: String {
         switch self {
-        case .hogModeHeld: "another app has the device to itself"
+        case .hogModeHeld(_, let app):
+            "\(app ?? "another app") has the device to itself, so nothing else can play to it"
         case .noOutputStream: "the device has no output"
         case .noBitPerfectFormat(let rate, let channels, _):
             "the device can't play \(channels) channels at \(kilohertz(rate)) kHz unchanged"
         case .noPCMFormat: "the device has no format the app can play to"
         case .didNotSettle: "the device didn't switch to the track's format in time"
         }
+    }
+
+    /// Hog mode held by `pid`, named by its process name.
+    static func held(by pid: pid_t) -> HALDeviceError {
+        var name = [UInt8](repeating: 0, count: 256)
+        let length = proc_name(pid, &name, UInt32(name.count))
+        let app = length > 0 ? String(decoding: name.prefix(Int(length)), as: UTF8.self) : nil
+        return .hogModeHeld(by: pid, app: app)
     }
 }
 
@@ -60,7 +70,7 @@ final class HALDevice: PCMDevice {
             id, address(kAudioDevicePropertyStreams, scope: kAudioObjectPropertyScopeOutput))
         guard let stream = streams.first else { throw HALDeviceError.noOutputStream }
         let owner: pid_t = try readScalar(id, address(kAudioDevicePropertyHogMode))
-        guard owner == -1 || owner == getpid() else { throw HALDeviceError.hogModeHeld(by: owner) }
+        guard owner == -1 || owner == getpid() else { throw HALDeviceError.held(by: owner) }
 
         self.id = id
         self.name = name
@@ -70,7 +80,7 @@ final class HALDevice: PCMDevice {
         guard hogMode else { return }
         try writeScalar(id, address(kAudioDevicePropertyHogMode), getpid())
         let newOwner: pid_t = try readScalar(id, address(kAudioDevicePropertyHogMode))
-        guard newOwner == getpid() else { throw HALDeviceError.hogModeHeld(by: newOwner) }
+        guard newOwner == getpid() else { throw HALDeviceError.held(by: newOwner) }
         logger.info("device \(id, privacy: .public): took hog mode")
     }
 

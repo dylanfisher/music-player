@@ -16,7 +16,8 @@ enum DeviceOutputError: PlaybackFailure {
     /// or one cut short while it played does.
     case endedEarly(atSeconds: Double, ofSeconds: Double)
     /// A DSD track the device can't carry as DoP unchanged.
-    case cannotPlayDSD(device: String, dsdRateHz: Int, carrierRateHz: Double, DoPRefusal)
+    case cannotPlayDSD(
+        device: String, deviceUID: String, dsdRateHz: Int, carrierRateHz: Double, DoPRefusal)
     /// The device format the DoP reader was handed can't hold DoP words unchanged.
     case noDoPLayout(SignalFormat)
     /// The device's format has fewer channels than the track but more than two, and only stereo
@@ -30,7 +31,7 @@ enum DeviceOutputError: PlaybackFailure {
             String(format: "the audio ends at %.1f s of %.1f s; the file is cut short", at, length)
         case .noVolumeForFormat(let format):
             "the digital volume can't scale samples in this device format: \(format)"
-        case .cannotPlayDSD(let device, let dsd, let carrier, let refusal):
+        case .cannotPlayDSD(let device, _, let dsd, let carrier, let refusal):
             "\(device) can't play \(sampleRateText(dsd)): "
                 + {
                     switch refusal {
@@ -56,12 +57,17 @@ enum DeviceOutputError: PlaybackFailure {
         case .outOfMemory: "the Mac is out of memory for playback"
         case .noVolumeForFormat:
             "the digital volume can't work in the device's format; turn it off to play"
-        case .cannotPlayDSD(let device, let dsd, let carrier, .noFormat):
+        case .cannotPlayDSD(let device, _, let dsd, let carrier, .noFormat):
             "\(device) can't play \(sampleRateText(dsd)): none of its formats at"
                 + " \(kilohertz(carrier)) kHz can carry DoP"
         case .noDoPLayout: "the device's format can't carry DSD as DoP"
         case .endedEarly, .cannotPlayDSD, .noChannelMix: description
         }
+    }
+
+    var fix: PlaybackFix? {
+        guard case .cannotPlayDSD(_, let uid, _, _, .noHogMode) = self else { return nil }
+        return .turnOnHogMode(deviceUID: uid)
     }
 }
 
@@ -449,7 +455,8 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             }
             if let refusal {
                 throw DeviceOutputError.cannotPlayDSD(
-                    device: provider.deviceName, dsdRateHz: Int(track.file.sampleRateHz),
+                    device: provider.deviceName, deviceUID: provider.deviceUID,
+                    dsdRateHz: Int(track.file.sampleRateHz),
                     carrierRateHz: rate, refusal)
             }
         }

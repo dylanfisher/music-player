@@ -36,6 +36,11 @@ public final class NowPlayingBar: NSObject {
     public let statusBar = StatusBarParts()
     /// Called when the playback problem in the status bar is clicked.
     public var problemOpened: (ShownProblem) -> Void = { _ in }
+    /// Called with a fix the user chose for a problem, and the track to play again once it's
+    /// made.
+    public var fixRequested: (PlaybackFix, URL?) -> Void = { _, _ in }
+    /// Shows a problem's dialog as a sheet over the window; tests replace it.
+    var showDialog: (ProblemDialog) -> Void = { _ in }
     /// What the window's title says while a track plays.
     public var windowTitle = TitleTemplate.windowTitle {
         didSet { show() }
@@ -56,6 +61,8 @@ public final class NowPlayingBar: NSObject {
     /// its updates itself.
     private var windowShows = true
     private var occlusion: NSObjectProtocol?
+    /// The window the bar is in, which a problem's dialog shows over.
+    private weak var window: NSWindow?
 
     private let previousButton = NSButton()
     private let playButton = NSButton()
@@ -83,6 +90,7 @@ public final class NowPlayingBar: NSObject {
             guard let self, let problem = model.problem else { return }
             problemOpened(problem)
         }
+        showDialog = { [weak self] in self?.present($0) }
         setEnabled(false)
         show()
     }
@@ -91,6 +99,7 @@ public final class NowPlayingBar: NSObject {
     /// minimized, hidden, covered or behind a locked screen. It counts as showing until the
     /// first change, since a window not yet on screen reports itself hidden.
     public func follow(_ window: NSWindow) {
+        self.window = window
         occlusion = NotificationCenter.default.addObserver(
             forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
         ) { [weak self, weak window] _ in
@@ -172,6 +181,30 @@ public final class NowPlayingBar: NSObject {
         show()
         tickWhilePlaying()
         if !model.isPlaying { Task { await showPosition() } }
+        switch update.event {
+        case .trackFailed?, .failed?:
+            if let shown = model.problem, let dialog = ProblemDialog(shown) { showDialog(dialog) }
+        default: break
+        }
+    }
+
+    /// Shows `dialog` over the window, unless a sheet is up there already, as when several
+    /// tracks fail for the same reason one after another.
+    private func present(_ dialog: ProblemDialog) {
+        guard let window, window.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        alert.messageText = dialog.title
+        alert.informativeText = dialog.text
+        for button in dialog.buttons { alert.addButton(withTitle: button.title) }
+        alert.beginSheetModal(for: window) { [weak self] response in
+            let index =
+                response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
+            guard let self, dialog.buttons.indices.contains(index) else { return }
+            switch dialog.buttons[index] {
+            case .fix(let fix): fixRequested(fix, dialog.shown.track)
+            case .cancel: break
+            }
+        }
     }
 
     private func tickWhilePlaying() {

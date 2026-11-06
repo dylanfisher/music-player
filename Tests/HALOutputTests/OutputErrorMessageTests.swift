@@ -1,4 +1,5 @@
 import CoreAudio
+import Foundation
 import Testing
 
 @testable import Fixtures
@@ -19,10 +20,12 @@ private let errors: [any PlaybackFailure] =
     ]
     + [DoPRefusal.noRate, .noFormat, .noHogMode].map {
         DeviceOutputError.cannotPlayDSD(
-            device: "ADI-2 DAC", dsdRateHz: 2_822_400, carrierRateHz: 176_400, $0)
+            device: "ADI-2 DAC", deviceUID: "ADI-2", dsdRateHz: 2_822_400, carrierRateHz: 176_400,
+            $0)
     }
     + [
-        HALDeviceError.hogModeHeld(by: 4242), .noOutputStream,
+        HALDeviceError.hogModeHeld(by: 4242, app: nil), .hogModeHeld(by: 4242, app: "Audirvana"),
+        .noOutputStream,
         .noBitPerfectFormat(sampleRateHz: 96_000, channels: 2, minimumBits: 24), .noPCMFormat,
         .didNotSettle("96 kHz"),
     ] as [any PlaybackFailure]
@@ -43,11 +46,27 @@ private let errors: [any PlaybackFailure] =
     #expect(!readsAsPlainText("\(HALError(selector: kAudioDevicePropertyHogMode, status: 560))"))
 }
 
-@Test func theHogModeRefusalSaysWhyInPlainWords() {
-    let refusal = DeviceOutputError.cannotPlayDSD(
-        device: "ADI-2 DAC", dsdRateHz: 2_822_400, carrierRateHz: 176_400, .noHogMode)
+/// Only hog mode being off has a fix: the app can't give a device a rate or a format.
+@Test func theHogModeRefusalSaysWhyAndCarriesItsFix() {
+    let refusals = [DoPRefusal.noHogMode, .noRate, .noFormat].map {
+        DeviceOutputError.cannotPlayDSD(
+            device: "ADI-2 DAC", deviceUID: "ADI-2", dsdRateHz: 2_822_400, carrierRateHz: 176_400,
+            $0)
+    }
     #expect(
-        refusal.userMessage
+        refusals[0].userMessage
             == "ADI-2 DAC can't play DSD64: DoP needs exclusive access, and hog mode is off for"
             + " this device")
+    #expect(refusals.map(\.fix) == [.turnOnHogMode(deviceUID: "ADI-2"), nil, nil])
+    #expect(errors.filter { $0.fix != nil }.count == 1)
+}
+
+/// Hog mode held by another app names it, and has no fix: only that app can let go.
+@Test func hogModeHeldNamesTheAppHoldingIt() {
+    let held = HALDeviceError.held(by: getpid())
+    let name = ProcessInfo.processInfo.processName
+    #expect(held.userMessage.hasPrefix(String(name.prefix(16))), "\(held.userMessage)")
+    #expect(held.userMessage.hasSuffix(" has the device to itself, so nothing else can play to it"))
+    #expect(held.fix == nil)
+    #expect(HALDeviceError.hogModeHeld(by: 4242, app: nil).userMessage.hasPrefix("another app "))
 }

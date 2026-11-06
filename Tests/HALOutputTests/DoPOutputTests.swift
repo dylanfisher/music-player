@@ -221,6 +221,30 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     #expect(noHog.device.captured.isEmpty && mixable.device.captured.isEmpty)
 }
 
+/// With hog mode off the refusal carries the fix, and once it's on for that device, as the
+/// app's fix turns it on and moves the output to the new profile, the track plays again.
+@Test func theHogModeFixTurnsItOnAndThePlayAgainPlays() async throws {
+    let track = try dsdTrack("fixed", bytes: 4096, seed: 4)
+    let rig = try await Rig()
+    rig.device.setHogModeSetting(false)
+    await rig.engine.setQueue([track.url])
+    await rig.engine.play()
+    let failed = try await rig.wait { if case .trackFailed = $0.event { true } else { false } }
+    guard case .trackFailed(_, let problem) = failed.event else { return }
+    #expect(problem.fix == .turnOnHogMode(deviceUID: rig.device.deviceUID))
+    try await rig.wait(for: .finished)
+
+    rig.device.setHogModeSetting(true)
+    rig.output.use(DeviceChoice(provider: rig.device, digitalVolume: false, gain: 1, formats: nil))
+    await rig.engine.play(at: 0)
+    try await rig.wait(for: .trackStarted(index: 0))
+    try await rig.wait(for: .finished)
+    let carried = try unpack(try #require(rig.device.captured.first).samples)
+    #expect(
+        carried.indices.map { Array(carried[$0].prefix(track.expected[$0].count)) }
+            == track.expected)
+}
+
 /// DoP silence frames after the last frame of `audio` in what the device took.
 private func idleFrames(after audio: [UInt8], in carried: [UInt8]) -> Int {
     (carried.count - audio.count) / 2

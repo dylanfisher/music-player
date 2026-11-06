@@ -1,11 +1,14 @@
 import AppKit
+import Foundation
 import Log
+import Playback
 
 private let logger = moduleLogger()
 
 /// The details of the playback problem the status bar shows: what went wrong, the track and
 /// its format, the output device and its format, hog mode, the error's full text and the
-/// playback modules' recent log lines, with Copy for a bug report (ADR 0111).
+/// playback modules' recent log lines, with Copy for a bug report, and the problem's fix as a
+/// button when it has one (ADR 0111).
 @MainActor
 public final class PlaybackProblemWindow: NSObject {
     let window: NSPanel
@@ -14,6 +17,9 @@ public final class PlaybackProblemWindow: NSObject {
     /// The report's text, which can be selected and copied.
     let details: NSTextView
     let copyButton = NSButton(title: "Copy Details", target: nil, action: nil)
+    let fixButton = NSButton(title: "", target: nil, action: nil)
+    /// Called with the fix the button makes, and the track to play again once it's made.
+    public var fixRequested: (PlaybackFix, URL?) -> Void = { _, _ in }
     private(set) var report: ProblemReport?
     /// Where Copy puts the text; tests give it a pasteboard of their own.
     var pasteboard = NSPasteboard.general
@@ -39,7 +45,10 @@ public final class PlaybackProblemWindow: NSObject {
         scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 240).isActive = true
         copyButton.target = self
         copyButton.action = #selector(copy(_:))
-        let bar = NSStackView(views: [copyButton])
+        fixButton.target = self
+        fixButton.action = #selector(fix)
+        let bar = NSStackView(views: [fixButton, copyButton])
+        bar.detachesHiddenViews = true
         let stack = NSStackView(views: [headline, scroll, bar])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -84,6 +93,14 @@ public final class PlaybackProblemWindow: NSObject {
         self.report = report
         headline.stringValue = report.shown.headline
         details.string = report.text
+        let fix = report.shown.problem.fix
+        fixButton.isHidden = fix == nil
+        fixButton.title = fix?.buttonTitle ?? ""
+    }
+
+    @objc private func fix() {
+        guard let shown = report?.shown, let fix = shown.problem.fix else { return }
+        fixRequested(fix, shown.track)
     }
 
     @objc func copy(_ sender: Any?) {
