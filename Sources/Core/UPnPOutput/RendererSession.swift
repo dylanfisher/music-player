@@ -605,7 +605,14 @@ actor RendererSession {
             "\(self.renderer.name, privacy: .public): \(reason, privacy: .public); each track now starts after the last"
         )
         publish(signalPath())
-        await send(AVTransport.setNextURI("", metadata: ""))
+        // A renderer that doesn't answer this isn't lost: it's still playing, and the next
+        // track goes out next whatever it holds.
+        do throws(SOAPProblem) {
+            try await control.send(AVTransport.setNextURI("", metadata: ""))
+        } catch {
+            logger.notice(
+                "\(self.renderer.name, privacy: .public) kept the next track it took: \(error)")
+        }
     }
 
     /// `current` is over: the next track starts with set-URI and Play, after a gap, or nothing
