@@ -15,8 +15,8 @@ public struct ShownProblem: Equatable, Sendable {
 
     /// Where in `state`'s play order to play the track again once a fix is made: while the
     /// queue's entry still holds the track and it's the current one, or nothing plays, as
-    /// after tracks failed in a row, when the engine points back at the queue's start. A fix
-    /// never interrupts another track playing. Throws why not otherwise.
+    /// after tracks failed in a row. A fix never interrupts another track playing, and never
+    /// plays a different one. Throws why not otherwise.
     public func replayPosition(in state: PlaybackState) throws(ReplayRefusal) -> Int {
         guard let track, let entry else { throw .noTrack }
         guard state.queue.indices.contains(entry), state.queue[entry] == track,
@@ -43,6 +43,21 @@ public enum ReplayRefusal: Error, Equatable, CustomStringConvertible {
         case .movedOn(let url):
             "another track than \(url.lastPathComponent), the one that failed, is playing or paused"
         }
+    }
+
+    /// What the alert says once `fix` is made but its track isn't played again.
+    public func notice(after fix: PlaybackFix) -> (title: String, text: String) {
+        let text =
+            switch self {
+            case .noTrack: "Press Play to play."
+            case .gone(let url):
+                "The queue no longer has \(url.lastPathComponent) where it failed, so it isn't"
+                    + " played again. Play it from the list."
+            case .movedOn(let url):
+                "Another track is playing or paused, so \(url.lastPathComponent) isn't played"
+                    + " again. Play it from the list when you're ready."
+            }
+        return (fix.madeTitle, text)
     }
 }
 

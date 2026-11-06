@@ -10,6 +10,9 @@
 // And it fails an `import AppKit` in a Core module other than those in `appKitCore`: Core is
 // the domain, testable without a window, except for the bars' column views (ADR 0085), which
 // two features share. `--appkit-only <core root>` runs just that rule, for scripts/arch-test.
+//
+// And it fails a log interpolation that marks a path or URL `privacy: .public` (ADR 0118).
+// `--log-paths-only <root>` runs just that rule, for scripts/arch-test.
 import Foundation
 
 /// The Core modules that may import AppKit.
@@ -98,6 +101,57 @@ func statProblems(root: String) -> [String] {
     return problems
 }
 
+/// Where a log interpolation marks a path or URL public, under `root`: the log keeps paths
+/// private, hashed where lines about one file need matching (ADRs 0025 and 0118). An
+/// interpolation is the text from `\(` to the parenthesis that closes it, on one line; one of
+/// `logText(_:without:)` passes, as it takes the path only to leave it out.
+func logPathProblems(root: String) -> [String] {
+    var problems: [String] = []
+    let named = try! NSRegularExpression(pattern: "\\b[A-Za-z]*(path|Path|url|Url|URL)\\b")
+    let walk = FileManager.default.enumerator(atPath: root)
+    while let relative = walk?.nextObject() as? String {
+        guard relative.hasSuffix(".swift") else { continue }
+        let path = root + "/" + relative
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else {
+            problems.append("\(path): unreadable")
+            continue
+        }
+        for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: false)
+            .enumerated()
+        {
+            let chars = Array(line)
+            var start = 0
+            while start + 1 < chars.count {
+                guard chars[start] == "\\", chars[start + 1] == "(" else {
+                    start += 1
+                    continue
+                }
+                var depth = 0
+                var end = start + 1
+                while end < chars.count {
+                    if chars[end] == "(" { depth += 1 }
+                    if chars[end] == ")" {
+                        depth -= 1
+                        if depth == 0 { break }
+                    }
+                    end += 1
+                }
+                let interpolation = String(chars[start..<min(end + 1, chars.count)])
+                let range = NSRange(interpolation.startIndex..., in: interpolation)
+                // `logText(_:without:)` takes the path to leave it out.
+                if interpolation.contains("privacy: .public"),
+                    !interpolation.hasPrefix("\\(logText("),
+                    named.firstMatch(in: interpolation, range: range) != nil
+                {
+                    problems.append("\(path):\(index + 1): a path or URL is logged public")
+                }
+                start = end
+            }
+        }
+    }
+    return problems
+}
+
 func finish(_ problems: [String], _ success: String) -> Never {
     if problems.isEmpty {
         print(success)
@@ -114,6 +168,9 @@ if arguments.count == 3, arguments[1] == "--urls-only" {
 }
 if arguments.count == 3, arguments[1] == "--appkit-only" {
     finish(appKitProblems(root: arguments[2]), "no Core module but BarView imports AppKit")
+}
+if arguments.count == 3, arguments[1] == "--log-paths-only" {
+    finish(logPathProblems(root: arguments[2]), "no path is logged public")
 }
 
 // Tier -> tiers it may depend on. Must match the Tiers table in docs/map.md.
@@ -168,7 +225,8 @@ for target in targets where target["type"] as? String != "test" {
 
 problems += statProblems(root: "Sources")
 problems += appKitProblems(root: "Sources/Core")
+problems += logPathProblems(root: "Sources")
 finish(
     problems,
     "\(tierOf.count) targets, dependency direction holds, no URL stats a path, AppKit only in"
-        + " \(appKitCore.sorted().joined(separator: ", ")) of Core")
+        + " \(appKitCore.sorted().joined(separator: ", ")) of Core, no path logged public")

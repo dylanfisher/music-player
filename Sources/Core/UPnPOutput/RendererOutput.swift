@@ -116,7 +116,8 @@ public final class RendererOutput: Output, @unchecked Sendable {
     }
 
     public func setVolume(_ gain: Double) {
-        logger.error("\(self.renderer.name) has no volume the app sets; asked for \(gain)")
+        logger.error(
+            "\(self.renderer.name, privacy: .public) has no volume the app sets; asked for \(gain)")
     }
 
     public func position() -> OutputPosition? { shared.position(at: now()) }
@@ -141,7 +142,8 @@ public final class RendererOutput: Output, @unchecked Sendable {
             do throws(SOAPProblem) {
                 try await control.send(AVTransport.stop)
             } catch {
-                logger.notice("\(name) wasn't stopped on close: \(error)")
+                logger.notice(
+                    "\(name, privacy: .public) wasn't stopped on close: \(error, privacy: .public)")
             }
         }
     }

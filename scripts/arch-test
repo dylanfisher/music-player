@@ -52,5 +52,32 @@ for line in 2 4 5 6; do
     { printf 'arch-test: no AppKit finding at Index.swift:%s in:\n%s\n' "$line" "$out" >&2; problems=$((problems + 1)); }
 done
 
+# The log rule: paths hashed or private and names public pass; a path or URL marked public
+# fails at lines 2, 3 and 4.
+mkdir -p "$base/log-good" "$base/log-bad"
+cat > "$base/log-good/Good.swift" <<'SWIFT'
+logger.error("\(url.path, privacy: .private(mask: .hash)): \(logText(error, without: url.path), privacy: .public)")
+logger.notice("\(self.renderer.name, privacy: .public) took \(uri, privacy: .public) from \(url.path)")
+SWIFT
+cat > "$base/log-bad/Bad.swift" <<'SWIFT'
+logger.error("\(name, privacy: .public)")
+logger.error("\(track.url.path, privacy: .public): \(error)")
+logger.info("\(item.url, privacy: .public) \(fileURL, privacy: .public)")
+logger.info("\(name, privacy: .public) \(String(path.dropFirst()), privacy: .public)")
+SWIFT
+if ! out=$(swift scripts/arch.swift --log-paths-only "$base/log-good" 2>&1); then
+  printf 'arch-test: the good log tree failed:\n%s\n' "$out" >&2
+  problems=$((problems + 1))
+fi
+out=$(swift scripts/arch.swift --log-paths-only "$base/log-bad" 2>&1)
+for line in 2 3 4; do
+  printf '%s\n' "$out" | grep -q "Bad.swift:$line: " ||
+    { printf 'arch-test: no log finding at Bad.swift:%s in:\n%s\n' "$line" "$out" >&2; problems=$((problems + 1)); }
+done
+if printf '%s\n' "$out" | grep -q "Bad.swift:1: "; then
+  printf 'arch-test: a public name was taken for a path in:\n%s\n' "$out" >&2
+  problems=$((problems + 1))
+fi
+
 [ "$problems" = 0 ] && echo "arch rule catches each planted call"
 exit "$problems"

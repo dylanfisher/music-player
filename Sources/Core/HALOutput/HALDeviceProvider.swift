@@ -121,7 +121,7 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
         do {
             return try liveDeviceID() != nil
         } catch {
-            logger.error("can't read the device list: \(error)")
+            logger.error("can't read the device list: \(error, privacy: .public)")
             return false
         }
     }
@@ -185,7 +185,9 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
                 state = .notConnected
             }
         } catch {
-            logger.error("can't read \(self.deviceName)'s state: \(error)")
+            logger.error(
+                "can't read \(self.deviceName, privacy: .public)'s state: \(error, privacy: .public)"
+            )
             state = .unreadable("\(error)")
         }
         stateChanged(state)
@@ -199,7 +201,7 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
             do {
                 id = try deviceID(uid: deviceUID)
             } catch {
-                logger.error("can't read the device list: \(error)")
+                logger.error("can't read the device list: \(error, privacy: .public)")
                 return
             }
             guard id != aliveListenerDevice else { return }
@@ -253,7 +255,7 @@ public final class HALDeviceProvider: PCMDeviceProvider, @unchecked Sendable {
         do {
             try restoreDefaultOutputs(snapshot)
         } catch {
-            logger.error("restoring the default outputs failed: \(error)")
+            logger.error("restoring the default outputs failed: \(error, privacy: .public)")
         }
     }
 

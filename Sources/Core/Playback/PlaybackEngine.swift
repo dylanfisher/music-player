@@ -40,6 +40,9 @@ public actor PlaybackEngine {
     private var completing = false
     /// The item that finished while `completing`, handled once the queue is whole.
     private var finishedEarly: OutputItem.ID?
+    /// Tracks that failed while `completing`, published once the queue is whole, with their
+    /// entries in it, so a fix plays the track the user chose and not the queue's first.
+    private var failedEarly: [FailedTrack] = []
     /// Next or Previous pressed while `completing`, applied to the whole queue.
     private var heldSkip: Skip?
     /// Play Next and Add to Queue called while `completing`, applied in order to the whole queue.
@@ -124,6 +127,7 @@ public actor PlaybackEngine {
         queueGeneration += 1
         completing = false
         finishedEarly = nil
+        failedEarly = []
         heldSkip = nil
         heldEdits = []
         failuresInARow = []
@@ -171,6 +175,13 @@ public actor PlaybackEngine {
         }
         completing = false
         let position = queue.replace(with: urls, first: first, shuffled: shuffled)!
+        // Everything that failed so far was the one track, entry 0 of its queue.
+        failuresInARow = failuresInARow.map {
+            FailedTrack(url: $0.url, entry: first, problem: $0.problem)
+        }
+        failedEarly = failedEarly.map {
+            FailedTrack(url: $0.url, entry: first, problem: $0.problem)
+        }
         if let current = currentItem { currentItem = (current.id, position) }
         cursor = position
         // The output may hold the started track as its next (repeat modes). Keep it when the
@@ -199,9 +210,13 @@ public actor PlaybackEngine {
         releaseHeld(skipping: false)
     }
 
-    /// Replays what was held while the queue was being read: edits in order, then a Next or
-    /// Previous if one was pressed (which stands in for the track's end), else the end.
+    /// Replays what was held while the queue was being read: failures, edits in order, then a
+    /// Next or Previous if one was pressed (which stands in for the track's end), else the end.
     private func releaseHeld(skipping: Bool) {
+        for track in failedEarly {
+            publish(.trackFailed(track.url, entry: track.entry, track.problem))
+        }
+        failedEarly = []
         // Edits clear what is pending when they end a window, so take it first.
         let edits = heldEdits
         heldEdits = []
@@ -583,8 +598,14 @@ public actor PlaybackEngine {
                 url: queue.url(at: failed), entry: queue.entry(at: failed),
                 problem: PlaybackProblem(error))
             failuresInARow.append(track)
-            logger.error("\(track.url.path): \(error)")
-            publish(.trackFailed(track.url, entry: track.entry, track.problem))
+            logger.error(
+                "\(track.url.path, privacy: .private(mask: .hash)): \(logText(error, without: track.url.path), privacy: .public)"
+            )
+            if completing {
+                failedEarly.append(track)
+            } else {
+                publish(.trackFailed(track.url, entry: track.entry, track.problem))
+            }
             if id == nextItem?.id { skip(after: failed) }
         case .finished(let id):
             guard let currentItem, id == currentItem.id else { return }
@@ -604,15 +625,23 @@ public actor PlaybackEngine {
                 load(nextItem.position, startSeconds: 0, playing: state.status == .playing)
                 return
             }
-            cursor = 0
+            let stoppedRun = failuresInARow.count >= Self.failureLimit
+            // Stopped by a run of failures, Play tries the run's first track again; at the
+            // queue's end, Play starts from the top.
+            cursor =
+                stoppedRun
+                ? failuresInARow.first.flatMap { queue.order.firstIndex(of: $0.entry) } ?? 0 : 0
             self.currentItem = nil
             self.nextItem = nil
-            state.currentIndex = queue.order.isEmpty ? nil : queue.entry(at: 0)
+            state.currentIndex = queue.order.isEmpty ? nil : queue.entry(at: cursor)
             state.status = .stopped
             state.durationSeconds = nil
-            if failuresInARow.count >= Self.failureLimit {
+            if stoppedRun {
                 let error = PlaybackError.failedInARow(failuresInARow)
-                logger.error("\(error)")
+                // Each track's error is on its own line, without its path; a cause's message
+                // can be an error's whole text, so the run's line has only the count.
+                logger.error(
+                    "\(PlaybackProblem.failedInARow(self.failuresInARow.count), privacy: .public)")
                 publish(.failed(PlaybackProblem(error)))
             } else {
                 publish(.finished)
@@ -659,7 +688,7 @@ public actor PlaybackEngine {
             nextItem = nil
             resumeSeconds = nil
             state.status = .stopped
-            logger.error("output failed: \(error)")
+            logger.error("output failed: \(error, privacy: .public)")
             publish(.failed(PlaybackProblem(error)))
         }
     }

@@ -354,7 +354,7 @@ resizing the window clears it, and whether the timeline or Stats was shown befor
 
 #### 50b. Playback: the hog mode fix plays the track you chose; the log
 
-- [ ] **50b.1 Turn On plays the chosen track.** With hog mode off, double-clicking a DSD
+- [x] **50b.1 Turn On plays the chosen track.** With hog mode off, double-clicking a DSD
       track and choosing Turn On in the dialog started the first row instead. Probe:
       `play(starting:)` plays a one-track queue until the full list arrives (ADR 0078), and
       DoP's refusal comes before the full queue does, so `FailedTrack.entry` is 0, not the
@@ -366,7 +366,7 @@ resizing the window clears it, and whether the timeline or Stats was shown befor
       never plays a different track; and a fix that can't replay says why where the user is
       looking, not only in the log. Test: `play(starting: urls[2])` with a gated fill and a
       refusal before the gate opens, then the fix replaying entry 2.
-- [ ] **50b.2 Log values in Copy Details.** The owner asked whether playback log lines should be
+- [x] **50b.2 Log values in Copy Details.** The owner asked whether playback log lines should be
       public so Copy Details shows their values instead of `<private>`. Decision (the owner can
       overrule it): the log's values that are the app's own or the device's are public: errors,
       OSStatus codes, formats, device and renderer names. Track paths stay private, logged
@@ -374,6 +374,72 @@ resizing the window clears it, and whether the timeline or Stats was shown befor
       Details already prints the failed track's path and error in plain text. Make
       `renderer.name`'s privacy consistent in `RendererSession`. Update ADR 0025's row 35 and
       its `rg` check.
+
+Plan, part 50b (ADR 0118, amending 0025 and 0111):
+- Probe: confirmed by a test before any fix. `play(starting:)` loads the one-track queue, and
+  `DeviceOutput.loadTrack` refuses DoP without hog mode synchronously, so `.trackFailed` goes
+  out with entry 0 and `.finished` is held for the queue. `complete()` moves the cursor to the
+  row, the held end skips on, the album's next two tracks fail too and the engine stops with
+  causes `[0, 3, 4]` and the cursor on entry 0. The dialog, shown for the first failure, keeps
+  entry 0, and `replayPosition` finds row 0's track there and refuses with `.gone`, which only
+  the log says.
+- 50b.1 (`Core/Playback`): while `completing`, a failure is recorded but its event is held,
+  as the end already is; `complete()` moves every failure recorded so far to the started
+  track's entry in the whole queue, and the held events go out first when the hold is
+  released, so the event, the dialog and the run's causes carry the row. Abandoned, they go out
+  with entry 0, right for the queue that stays. A run of failures that stops playback leaves
+  the cursor on its first track, not entry 0, so Play tries the chosen track again.
+  `replayPosition` is unchanged and still never plays a different track.
+- 50b.1 (`Features/NowPlaying`, `App`): `ReplayRefusal.notice(after:)` says, for a fix made
+  whose track isn't played again, why and what to do; the app shows it as an alert sheet on
+  the window the fix was asked from (the main window under the dialog, or the details window).
+- 50b.2 (`Core/Log`, `Core/Playback`, `Core/HALOutput`, `Core/UPnPOutput`): the decoder's and
+  DSD reader's errors (`MetadataError`) name the file's path in their description, so
+  `logText(_:without:)` in Log gives an error's text with the track's path replaced by "the
+  track's file", logged public beside the path logged with `.private(mask: .hash)`. Errors about no
+  track (HAL, OSStatus, SOAP, device description, DeviceOutput's and the renderer's) name no
+  path and are logged public, as are device names, UIDs, renderer names and addresses and
+  four-character codes. A run's line logs only its count, as a cause's message can be an
+  error's whole text; each track's own line has its error. `serving <renderer>: …` stays private: the HTTP server's problems can
+  name a served file's path. Every `renderer.name` in `RendererSession` and `RendererOutput`
+  is public.
+- Tests: `play(starting: urls[2])` with a gated fill and a refusal before the gate opens, then
+  two more refusals: the events and causes say entries 2, 3 and 4, the engine stops on entry
+  2, and playing it loads the chosen track; a failure before a queue that couldn't be read
+  still goes out, with entry 0; the refusal's notice; `logText` removes a `MetadataError`'s
+  path; and a line logged as the engine logs a failure reads back in `recentLogLines` with
+  the error and a hash, not the path or `<private>`.
+- Order: this plan, 50b.1's engine fix, its notice, 50b.2, the ADR and the result.
+
+Gate, part 50b: one review, which found nothing above low. Fixed: the run's log line now logs
+only its count, as a cause's message can be a non-`PlaybackFailure` error's whole text; the
+log rule also catches camelCase names (`fileURL`, `filePath`); the ADR names `logText`'s
+exact-path limit and the short queue that ends rather than stops. Left as accepted: a failure
+held while the queue is read waits as long as the read does; a failure of a track removed
+during the read still goes out and its fix refuses with `.gone`. `./scripts/check` passes; the
+two color-well tests in SettingsWindowTests failed in two of four runs on this loaded machine,
+and on the base commit too.
+
+Result, part 50b: shipped 50b.1 and 50b.2 (ADR 0118, amending 0025 and 0111). The cause was
+as probed and a test confirmed it before the fix: a play from a list fails its first track
+against the one-track queue, so the failure named entry 0, the run's causes read `[0, 3, 4]`
+and the engine stopped on entry 0. While the queue is read a failure's event is now held, as
+the track's end is, and goes out with the track's entry in the whole queue; a run of failures
+that stops playback leaves the cursor on its first track, so Play and the fix play the chosen
+track. A fix whose track can't be played again says why in an alert on the window it was
+asked from. The playback modules log errors, device and renderer names, UIDs, addresses and
+codes public, a track's path as a hash and its error with the path replaced by "the track's
+file"; `scripts/arch.swift` fails a path or URL logged public. Tests: the DSD album played
+from its third row with the refusal before the queue, events and causes on entries 2 to 4,
+stopped on entry 2 and playing it loads that track; a held failure goes out with entry 0 when
+the queue can't be read; the refusal's alert text; a failure logged as the engine logs one
+reads back from the log store with its error and a hash, no path and no `<private>`; the
+arch rule's planted cases. For the owner: with hog mode off, double-click the third track of
+a DSD album, choose Turn On Hog Mode, and check that track plays; turn hog mode off again,
+play a DSD track, Cancel the dialog, click the status bar's problem to open its details, play
+a FLAC track, click Turn On Hog Mode in the details and check an alert says why the DSD track
+isn't played; open a problem's details, Copy Details, and check the log lines show
+errors and device names, and paths only as `<mask.hash: …>`.
 
 #### 50c. Analyze Library and Scan Library
 

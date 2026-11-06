@@ -164,6 +164,11 @@ private func inARow(_ problems: [PlaybackProblem]) -> ShownProblem {
     var replaced = movedOn
     replaced.queue = [urls[0], urls[0]]
     #expect(throws: ReplayRefusal.gone(urls[1])) { try shown.replayPosition(in: replaced) }
+    // Said in an alert, not only the log.
+    let fix = PlaybackFix.turnOnHogMode(deviceUID: "ADI-2")
+    let gone = ReplayRefusal.gone(urls[1]).notice(after: fix)
+    #expect(gone.title == "Hog mode is on for this device")
+    #expect(gone.text.contains(urls[1].lastPathComponent) && gone.text.contains("isn't played"))
     var none = shown
     none.entry = nil
     #expect(throws: ReplayRefusal.noTrack) { try none.replayPosition(in: state) }

@@ -1324,6 +1324,53 @@ private actor Gate {
     #expect(await engine.state.status == .playing)
 }
 
+/// A DSD album played from its third track with hog mode off: the refusal comes before the
+/// queue does, and the failure is still about the third entry, so the fix plays that one.
+@Test func aFailureBeforeTheQueueArrivesNamesTheEntryInIt() async throws {
+    let five = (0..<5).map { URL(fileURLWithPath: "/music/\($0).dsf") }
+    let hog = Unplayable(why: "hog mode is off", fix: .turnOnHogMode(deviceUID: "ADI-2"))
+    let output = FakeOutput()
+    let engine = PlaybackEngine(output: output)
+    let updates = await Updates(engine)
+    let gate = Gate()
+    let filling = await engine.play(starting: five[2]) {
+        await gate.wait()
+        return (five, 2)
+    }
+    await engine.handle(.trackFailed(1, hog))
+    await engine.handle(.finished(1))
+    await gate.release()
+    try await filling.value
+    for _ in 1..<PlaybackEngine.failureLimit {
+        let loaded = output.takeCalls().compactMap { call -> OutputItem.ID? in
+            if case .load(let id, _, _, _) = call { id } else { nil }
+        }
+        let id = try #require(loaded.last)
+        await engine.handle(.trackFailed(id, hog))
+        await engine.handle(.finished(id))
+    }
+    #expect(
+        await eventually {
+            updates.events.contains { if case .failed = $0 { true } else { false } }
+        })
+
+    let failed = updates.events.compactMap { event -> Int? in
+        if case .trackFailed(_, let entry, _) = event { entry } else { nil }
+    }
+    #expect(failed == [2, 3, 4])
+    guard case .failed(let problem) = updates.events.last else {
+        Issue.record("no failure: \(updates.events)")
+        return
+    }
+    #expect(problem.causes.map(\.entries) == [[2, 3, 4]])
+    // Stopped on the track the run started with, so Play tries it again.
+    let state = await engine.state
+    #expect(state.status == .stopped && state.currentIndex == 2)
+    _ = output.takeCalls()
+    await engine.play(at: try #require(state.order.firstIndex(of: 2)))
+    #expect(output.takeCalls().first == .load(8, five[2], startSeconds: 0, playing: true))
+}
+
 @Test func aQueueThatLacksTheStartedTrackIsReported() async {
     let engine = PlaybackEngine(output: FakeOutput())
     let filling = await engine.play(starting: urls[0]) { ([urls[1], urls[2]], 0) }
@@ -1371,6 +1418,26 @@ private func eventually(_ condition: () -> Bool) async -> Bool {
     await #expect(throws: NoQueue.self) { try await filling.value }
     #expect(await engine.state.status == .stopped)
     #expect(await eventually { updates.events.contains(.finished) })
+}
+
+/// A failure held for the queue goes out once the queue isn't coming, about the one track.
+@Test func aFailureBeforeAQueueThatCouldntBeReadIsStillReported() async throws {
+    let engine = PlaybackEngine(output: FakeOutput())
+    let updates = await Updates(engine)
+    let gate = Gate()
+    let filling = await engine.play(starting: urls[0]) {
+        await gate.wait()
+        throw NoQueue()
+    }
+    await engine.handle(.trackFailed(1, Broken()))
+    await engine.handle(.finished(1))
+    #expect(!updates.events.contains { if case .trackFailed = $0 { true } else { false } })
+    await gate.release()
+    await #expect(throws: NoQueue.self) { try await filling.value }
+    #expect(
+        await eventually {
+            updates.events.contains(.trackFailed(urls[0], entry: 0, PlaybackProblem(Broken())))
+        })
 }
 
 @Test func aQueueWithoutTheStartedTrackLeavesItToEndNormally() async throws {
