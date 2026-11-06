@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-03
 - **Status:** accepted
+- **Amended by:** [0106](0106-column-groupings-in-the-config-file.md): the groupings are saved
+  in the config file as `browser.columnGroupings`; the selections stay in the state file.
 
 ## Context
 

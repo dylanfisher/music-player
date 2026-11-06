@@ -5858,9 +5858,54 @@ click a row in Year in Review, and time Stats on the 2015 MacBook Pro.
 
 #### 44d. Column groupings in the config file
 
-- [ ] **44d.1** Each browser column's grouping is saved in `config.json` and restored at launch;
+- [x] **44d.1** Each browser column's grouping is saved in `config.json` and restored at launch;
       the selection in each column stays in the state file. Find out first why the owner's
       `state.json` holds no `browser.columns`.
+
+Plan, part 44d (ADR 0106, amending 0069):
+- Probe (done before this plan, on copies of the owner's files and the unified log): the state
+  file holds only values that differ from their defaults, and the owner's columns are hidden
+  (`window.browserVisible` false), which selects All in each, so default groupings write
+  nothing. Groupings picked earlier were lost: until a75656f a column at All was saved without
+  its required `selection`, so the next launch discarded the whole state file, which the log
+  shows once (2026-11-05 11:49:48, code 3). The 2015 MacBook Pro's state file holds no
+  `browser.columns` either, and mbp2021 has none.
+- Settings: `browser.columnGroupings`, a list of three groupings, `.windowState` so the Settings
+  window shows no row, checked as `browser.columns` is (three, none twice), the check shared.
+  `BrowserColumn.restored` gives the launch's columns: the config's groupings when the file
+  gives them, a saved selection only where its grouping is the config's. Tests: the key is
+  added under its comment to a file without it and reads back, each bad value blocks the file
+  and refuses a change, and the restore keeps and drops selections.
+- LibraryBrowser: the header menu asks for the groupings through `groupingsChosen` and changes
+  nothing itself; `setGroupings` regroups, each changed column at All. Tests: both.
+- App: the choice sets the key, then regroups; a refused set shows an alert. A config change of
+  the key regroups when the file gives it. `WindowSettings` reads the columns through
+  `restored`. Test: a launch's columns with the key, without it, with no file and with a blocked
+  file.
+- Check the owner's `config.json` and `state.json` copies decode, and that a choice patches the
+  config copy with only the key's lines.
+
+Result, part 44d: shipped 44d.1 (ADR 0106, amending 0069). Why `browser.columns` was missing:
+the state file writes only values that differ from their defaults; the owner's columns are
+hidden, which puts each at All, and at the default groupings that is the default. Groupings
+chosen before a75656f (2026-11-05 11:53) were lost when the state file was discarded over a
+column at All saved without its `selection`, once in the log at 11:49:48; nothing was chosen
+since. Each column's grouping is now `browser.columnGroupings` in `config.json`, a list such as
+`["genres", "artists", "albums"]` under a comment, synced with the file; the selections stay in
+`state.json`, whose `browser.columns` keeps its shape. At launch the columns take the config's
+groupings, and a saved selection stays only in a column still grouped as it was saved; a file
+without the key, or a blocked one, leaves the state file's columns. A right-click choice writes
+the key and then regroups, so the columns never show groupings the file refused; a hand edit
+regroups while the app runs, the changed columns at All; an edit that removes the key leaves
+the columns as they are. A bad value (not three, one twice, an unknown grouping) blocks the
+file as ADR 0082 has, with the banner naming the line, and a choice is refused with an alert.
+The owner's config and state copies decode with no problem; a choice adds only the key's lines
+after `library.fileViewer`. Checked by tests only: the app's wiring of the choice and of a hand
+edit (the parts each have tests, `AppDelegate` none). For the owner: right-click a column's
+header, pick a grouping, quit and relaunch; the config gains the key, and editing it by hand
+regroups the columns at once. `./scripts/check` passes but for `theGlassHeadersAreFrosted`,
+which reads the window's pixels from the screen and fails the same way on 186df18 without this
+part, alone and in the suite, while other agents use this Mac's screen.
 
 #### 44e. Tags written in place
 
