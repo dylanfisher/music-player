@@ -675,7 +675,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             written += count
             if count == 0 { return }
             // The pass publishes the position only once the refill is done, which on a NAS is
-            // hundreds of milliseconds after a seek's audio, fading in, has started to play.
+            // hundreds of milliseconds after a seek's audio, fading in, has started to play. A
+            // gapless boundary the IO proc passed meanwhile goes first, or the position would read
+            // past the end of the track before it.
+            announceBoundaries(stream)
             publishPosition()
             if limit == .max, condition.withLock({ !pending.isEmpty }) { return }
         }
