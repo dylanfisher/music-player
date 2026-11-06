@@ -556,6 +556,26 @@ private final class ShiftedClock: @unchecked Sendable {
     #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 1)
 }
 
+@Test func aRendererWellShortOfTheEndAtTheDeadlineIsWaitedFor() async throws {
+    let fake = try await FakeRenderer.denon(trackSeconds: 5)
+    let clock = ShiftedClock()
+    let output = try RendererOutput(
+        renderer: try await discovered(fake), serverInterface: loopback, pollSeconds: pollSeconds,
+        timeoutSeconds: 1, now: clock.now)
+    let log = EventLog(output)
+    defer { output.close() }
+    output.load(item(1, "medium"), startSeconds: 0, playing: true)
+    output.setNext(item(2))
+    await eventually("the next track handed over") { fake.nextTrackURI != "" }
+    await eventually("three seconds played") { fake.playedSeconds > 3 }
+    // The app's clock runs past the end while the renderer has two seconds left.
+    clock.advance(by: 5)
+    await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 10)
+    // It went on to the next track by itself, still gapless.
+    #expect(fake.setTransportURIs.count == 1)
+    #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 1)
+}
+
 @Test func aRendererStoppedOnlyAroundATrackChangeStaysGapless() async throws {
     let fake = try await FakeRenderer.denon(trackSeconds: 1)
     fake.changesTracksThroughStops()

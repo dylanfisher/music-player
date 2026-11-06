@@ -114,3 +114,17 @@ private let margin = RendererClock.leadMarginSeconds
     #expect(clock.stallSeconds > 4)
     #expect(clock.stallSeconds <= 4.2 + 1)
 }
+
+@Test func waitingForARendererMovesTheEndWithinTheCap() {
+    var clock = polled(to: 62) { $0 }
+    // At the deadline it's three seconds short: the end comes three seconds from now.
+    let first = clock.waitFor(remainingSeconds: 3, at: 62)
+    #expect(first)
+    #expect(clock.deadline == 65 + margin)
+    // Far short, it waits up to the cap and no more.
+    let second = clock.waitFor(remainingSeconds: 30, at: 67)
+    #expect(second)
+    #expect(clock.stallSeconds == RendererClock.stallCapSeconds)
+    let third = clock.waitFor(remainingSeconds: 30, at: 72)
+    #expect(!third)
+}

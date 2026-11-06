@@ -30,6 +30,10 @@ actor RendererSession {
     /// Polls in a row that find it stopped at a track's end, holding a next track it took, before
     /// it counts as not playing next tracks: one alone may come as it changes tracks.
     static let stoppedAtEndPolls = 2
+    /// How far short of its end a renderer that took the next track, and is still on this one
+    /// at the clock's deadline, may be and count as playing on past it rather than behind the
+    /// clock: positions come in whole seconds.
+    static let leadShortSeconds = 1.0
     /// How close to its end, by the app's clock or the last position polled, a track that
     /// stopped must have been to count as played out.
     static let endSlackSeconds = 3.0
@@ -505,6 +509,16 @@ actor RendererSession {
                     return advance(from: current, to: next, gapless: true)
                 }
                 if position.trackURI.isEmpty || sameURI(position.trackURI, current.uri) {
+                    // Well short of the end, it's behind the clock, not ignoring the next
+                    // track: the end waits for it, within the cap on how far it moves.
+                    let length = current.clock.durationSeconds
+                    if let seconds = position.seconds, seconds < length - Self.leadShortSeconds,
+                        current.clock.waitFor(remainingSeconds: length - seconds, at: now())
+                    {
+                        return logger.notice(
+                            "\(self.renderer.name, privacy: .public) is at \(seconds) of \(length) s at the track's end by the clock; the app waits for it"
+                        )
+                    }
                     await ignoresNextURI(Self.playedOnInsteadOfNext)
                 }
             } catch {

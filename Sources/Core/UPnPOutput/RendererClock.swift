@@ -83,6 +83,17 @@ struct RendererClock {
         isRunning = true
     }
 
+    /// Moves the end so that it comes `remainingSeconds` after `now`, for a renderer that far
+    /// short of the end at the deadline, within `stallCapSeconds`. False when the cap leaves no
+    /// room to wait.
+    mutating func waitFor(remainingSeconds: Double, at now: Double) -> Bool {
+        let needed = remainingSeconds + seconds(at: now) - durationSeconds
+        let moved = min(Self.stallCapSeconds, max(stallSeconds, needed))
+        guard moved > stallSeconds else { return false }
+        stallSeconds = moved
+        return true
+    }
+
     /// A poll found the renderer playing at `polledSeconds`. When it's further behind the clock
     /// than its least lag by more than `behindToleranceSeconds`, `stalledPolls` running, while
     /// the clock is short of the end, it stalled, and the end moves later to match: never
