@@ -642,6 +642,27 @@ Differences box (each file against the top one); say whether each sentence match
 (1 dB level and bands, DR 2, 1 kHz cutoff) say too much or too little. Then try a remaster
 against its original.
 
+Gate, phase 50: two Sonnet reviews of the merged branch; nine findings, each fixed in its own
+commit. The measures cache opens its connection on first use, on its actor, so the launch's
+read of where Analyze Library stands doesn't wait on SQLite on the main thread while the scan
+holds the index. A scan the watcher's stop cancels, as a folder removed or a Settings change
+does, ends with `scanStopped`, so the status bar drops it and its pause instead of showing
+"Scan paused" with a Resume that does nothing. A run carried on keeps its failures, so it
+doesn't read those files again and its count doesn't step back; only Again forgets them. A
+pause after the last file started, which the file finishes through, ends the run as finished.
+Analyze Library counts as running once the user starts it, so a scan's end before the first
+report doesn't show it paused (no test: the app delegate holds it). `Stage.isRunning` and
+`HealthPanel.analysisCommand(for:)` say once which stages run and which command the buttons
+run. A paused scan's bar stands still, empty while it still lists folders. Library Health
+opens at 110 points at least, its header, the analysis line and a row of tiles, over columns
+dragged shut, and its divider stops there (ADR 0117). A window resize that moves the divider
+clears the height last placed, so the next panel is placed again. Accepted, in ADR 0119: a
+forgotten Pause Scan holds other scans and sync pushes until resumed, as a playback hold does,
+and Resume Scan while playback holds a network scan leaves it held until playback stops.
+The Settings window's two color tests failed the first full runs, as on 50c's branch before
+its fix; that fix, a 30 s wait for the color saves, is taken onto this branch, and
+`./scripts/check` passes.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
