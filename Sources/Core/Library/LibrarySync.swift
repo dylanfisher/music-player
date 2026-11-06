@@ -348,6 +348,7 @@ private struct SyncCursor {
                     }
                     head = record
                     return
+                } catch .retiredCounts {
                 } catch {
                     note("line \(number) \(error)")
                 }

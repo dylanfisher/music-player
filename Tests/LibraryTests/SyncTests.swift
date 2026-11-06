@@ -506,6 +506,73 @@ private func syncAll(_ machines: [Machine]) throws {
     #expect(try rebuilt.track(path: a.path("x.flac"))?.playCount == 7)
 }
 
+extension Machine {
+    /// Imports a Swinsian library that counts `plays` plays and `skips` skips of `name`.
+    func importSwinsian(_ name: String, plays: Int, skips: Int = 0) throws {
+        var library = PlayerLibrary(player: .swinsian, source: "/tmp/swinsian.sqlite")
+        var track = PlayerTrack(path: path(name))
+        track.plays = plays
+        track.skips = skips
+        library.tracks = [track]
+        _ = try index.applyImport(library, prefix: nil)
+    }
+
+    func counts(_ name: String) throws -> [Int] {
+        let track = try #require(try track(name))
+        return [track.playCount, track.skipCount]
+    }
+}
+
+@Test(arguments: [
+    // Both import before either syncs, A first or B first.
+    ["a", "b", "sync"], ["b", "a", "sync"],
+    // One imports and syncs, then the other imports what it has already read.
+    ["a", "sync", "b", "sync"], ["b", "sync", "a", "sync"],
+    // Each syncs between the imports.
+    ["sync", "a", "sync", "b", "sync"],
+])
+func theSameLibraryImportedOnTwoMachinesCountsOnce(_ steps: [String]) throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    try a.scanned("x.flac")
+    try b.scanned("x.flac")
+    // A play recorded on each Mac is counted on both, whatever the imports do.
+    try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_000)
+    try b.index.recordPlay(b.path("x.flac"), at: 1_700_000_100)
+    for step in steps {
+        switch step {
+        case "a": try a.importSwinsian("x.flac", plays: 7, skips: 2)
+        case "b": try b.importSwinsian("x.flac", plays: 7, skips: 2)
+        default: try syncAll([a, b])
+        }
+    }
+    #expect(try a.counts("x.flac") == [9, 2])
+    #expect(try b.counts("x.flac") == [9, 2])
+    #expect(try a.history("x.flac") == 2)
+    #expect(try b.history("x.flac") == 2)
+}
+
+@Test func anImportAfterTheSourceGainedPlaysAddsOnlyTheGainOnEveryMachine() throws {
+    let nas = try SimulatedNAS()
+    let (a, b) = try machines(2, nas).pair
+    try a.scanned("x.flac")
+    try b.scanned("x.flac")
+    try a.importSwinsian("x.flac", plays: 7)
+    try b.importSwinsian("x.flac", plays: 7)
+    try syncAll([a, b])
+    try b.index.recordPlay(b.path("x.flac"), at: 1_700_000_000)
+    // The source gained 3 plays, and B imports it.
+    try b.importSwinsian("x.flac", plays: 10)
+    #expect(try b.counts("x.flac") == [11, 0])
+    try syncAll([a, b])
+    #expect(try a.counts("x.flac") == [11, 0])
+    // An older copy of the source, on either Mac, adds nothing and takes nothing away.
+    try a.importSwinsian("x.flac", plays: 8)
+    try syncAll([a, b])
+    #expect(try a.counts("x.flac") == [11, 0])
+    #expect(try b.counts("x.flac") == [11, 0])
+}
+
 @Test func anImportsLastPlayReachesTheOtherMachinesThoughItsPlayedLaterHere() throws {
     let nas = try SimulatedNAS()
     let (a, b) = try machines(2, nas).pair

@@ -7,6 +7,8 @@
   [0028](0028-network-folders-by-share.md), [0033](0033-import-from-other-players.md)
 - **Amended by:** [0098](0098-scan-adds-by-folder-hog-mode-off-ember-icon.md): a scan's new
   files go in the log as one `addedFiles` event a folder.
+- **Amended:** phase 46 (an import's `totals` in place of `counts`, merged by the higher; a
+  `counts` line is skipped).
 
 ## Context
 
@@ -57,7 +59,7 @@ the config file but music files, through the tag writer.
   |---|---|
   | `play` | `path`, `at` (seconds since 1970) |
   | `skip` | `path` |
-  | `counts` | `path`, `player`, `plays`, `skips`, `lastPlayed` (a time or null): an import's counts |
+  | `totals` | `path`, `player`, `plays`, `skips`, `lastPlayed` (a time or null): a player's totals as this machine's imports hold them |
   | `rating` | `path`, `stars` (0 clears) |
   | `loved` | `path`, `loved` |
   | `disliked` | `path`: Dislike; `loved` and `disliked` share one field ([0048](0048-like-and-dislike.md)) |
@@ -158,11 +160,17 @@ the config file but music files, through the tag writer.
   play of a file never scanned does (0022): the stats wait there for the scan to find the
   file. A path under none of its share folders is skipped, and the count reported: a Mac that
   doesn't watch that folder doesn't keep its stats.
-- **The import** (0033) runs on one machine and writes events for what it changed: `counts`
-  for the plays and skips it added, with the player, and `rating`, `loved`, `added` and each
-  playlist. Merging `counts` adds them to what that player's imports counted here too, so an
-  import of the same library on another Mac, or on this one after its stats were rebuilt from
-  the logs, adds only what grew instead of counting it all again.
+- **The import** (0033) runs on one machine and writes events for what it changed: `totals`
+  for the player's play and skip totals of each path it changed, the highest this machine
+  holds, and `rating`, `loved`, `added` and each playlist. Merging `totals` raises the totals
+  recorded here to the event's and adds only what they gained, so applying one twice, an
+  import of the same library on another Mac before or after the sync, or one on this Mac after
+  its stats were rebuilt from the logs, counts the source's plays once. A path's play count is
+  the plays recorded on every machine plus each player's highest total.
+- **A `counts` line**, which earlier builds wrote with the plays and skips an import added, is
+  skipped without a problem. Two Macs that imported one library each counted the other's on
+  top of their own, and a delta can't tell those apart from two real sets of plays. The app
+  never rewrites a log, so the lines stay.
 - **Nothing from before this build is sent.** The log starts with this build, and a playlist
   made before it is sent whole at its next change.
 
@@ -187,6 +195,9 @@ and then counted, shown in the window's problems list. The rest of the log carri
 - **The machine ID in the state file**, as the plan said — rejected for the reason under
   Identity.
 - **Per-entry playlist merging** — rejected above.
+- **An import's deltas, `counts`,** added on every machine that read them — rejected after it
+  doubled the owner's Swinsian plays: two Macs importing the same library each sent the whole
+  count, and each added the other's to its own.
 - **Rejecting or holding back events past the skew bound** — rejected: holding back stalls a
   log until the clocks agree, and rejecting splits the machines for good.
 - **Sending every existing stat at the first sync** — rejected: plays from before this build

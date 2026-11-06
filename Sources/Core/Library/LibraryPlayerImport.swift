@@ -50,11 +50,10 @@ extension LibraryIndex {
         for id in order {
             guard let theirs = merged[id], let our = ours[id] else { continue }
             let before = recorded[id] ?? ImportedCounts(plays: 0, skips: 0)
-            let now = ImportedCounts(plays: theirs.plays, skips: theirs.skips)
+            let totals = before.raised(to: ImportedCounts(plays: theirs.plays, skips: theirs.skips))
             var update = TrackUpdate(
-                pathID: id, plays: max(0, now.plays - before.plays),
-                skips: max(0, now.skips - before.skips),
-                imported: now == before ? nil : now, loves: theirs.loved && !our.hasOpinion)
+                pathID: id, plays: totals.plays - before.plays, skips: totals.skips - before.skips,
+                totals: totals, loves: theirs.loved && !our.hasOpinion)
             if let played = theirs.lastPlayedSeconds, played > our.lastPlayedSeconds ?? -.infinity {
                 update.lastPlayedSeconds = played
                 plan.lastPlayed += 1
@@ -149,14 +148,15 @@ extension LibraryIndex {
                 {
                     // Their last played, which the other machines keep as its dated play too.
                     try logSync(pathID: id, roots) {
-                        .counts(
-                            path: $0, player: library.player, plays: update.plays,
-                            skips: update.skips,
+                        .totals(
+                            path: $0, player: library.player, plays: update.totals.plays,
+                            skips: update.totals.skips,
                             lastPlayed: update.importedLastPlayed ?? update.lastPlayedSeconds)
                     }
                 }
-                if let counts = update.imported {
-                    try recordCounts.run(library.player.rawValue, id, counts.plays, counts.skips)
+                if update.plays > 0 || update.skips > 0 {
+                    try recordCounts.run(
+                        library.player.rawValue, id, update.totals.plays, update.totals.skips)
                 }
                 if let seconds = update.addedSeconds {
                     try added.run(seconds, id)
@@ -208,8 +208,8 @@ package let recordImportedLastPlaySQL = """
 /// `seconds` rounded down to a whole second, as history's times are.
 func wholeSeconds(_ seconds: Double) -> Int64 { Int64(seconds.rounded(.down)) }
 
-/// Records the play and skip counts a player's import brought for a path, given the player,
-/// the path's ID and the counts.
+/// Records a player's totals for a path, given the player, the path's ID and the totals, which
+/// the caller has raised from those recorded (`ImportedCounts.raised(to:)`).
 package let recordImportedCountsSQL =
     "INSERT OR REPLACE INTO \(importedPlaysTable) (player, path_id, play_count, skip_count)"
     + " VALUES (?, ?, ?, ?)"

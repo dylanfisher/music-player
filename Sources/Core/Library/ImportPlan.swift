@@ -84,9 +84,9 @@ struct TrackUpdate: Equatable, Sendable {
     var pathID: Int64
     var plays: Int
     var skips: Int
-    /// The source's totals, recorded so the next import adds only what grew; nil when they
-    /// equal what's recorded.
-    var imported: ImportedCounts?
+    /// The player's totals for the track after the import: the higher of the source's and the
+    /// highest any machine's import recorded. `plays` and `skips` are what they gained.
+    var totals: ImportedCounts
     var lastPlayedSeconds: Double?
     /// The source's last play, to record as its dated play; nil when it isn't later than the
     /// one recorded.
@@ -96,13 +96,19 @@ struct TrackUpdate: Equatable, Sendable {
     var loves: Bool
 
     var writesNothing: Bool {
-        plays == 0 && skips == 0 && imported == nil && lastPlayedSeconds == nil
+        plays == 0 && skips == 0 && lastPlayedSeconds == nil
             && importedLastPlayed == nil && addedSeconds == nil && rating == nil && !loves
     }
 }
 
-/// A player's play and skip counts for one track at its last import.
+/// A player's play and skip counts for one track, as its imports read them.
 struct ImportedCounts: Equatable, Sendable {
     var plays: Int
     var skips: Int
+
+    /// Each count the higher of these and `other`'s: a path's imported plays for one player
+    /// are the highest total any machine's import reported, never a sum (ADR 0033).
+    func raised(to other: ImportedCounts) -> ImportedCounts {
+        ImportedCounts(plays: max(plays, other.plays), skips: max(skips, other.skips))
+    }
 }

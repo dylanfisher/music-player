@@ -10,8 +10,8 @@ private let playlist = String(repeating: "ab", count: 16)
 private let everyEvent: [SyncEvent] = [
     .play(path: "music/a.flac", at: 1_700_000_000.25),
     .skip(path: "music/a.flac"),
-    .counts(path: "music/a.flac", player: .swinsian, plays: 3, skips: 1, lastPlayed: nil),
-    .counts(path: "music/a.flac", player: .iTunes, plays: 0, skips: 0, lastPlayed: 12.5),
+    .totals(path: "music/a.flac", player: .swinsian, plays: 3, skips: 1, lastPlayed: nil),
+    .totals(path: "music/a.flac", player: .iTunes, plays: 0, skips: 0, lastPlayed: 12.5),
     .rating(path: "music/Caf\u{e9} \"q\"\\b.flac", stars: 0),
     .loved(path: "music/line\nbreak.flac", loved: true),
     .disliked(path: "music/a.flac"),
@@ -342,6 +342,22 @@ private func folder(with lines: [String], name: String = String(repeating: "c", 
 
 private func record(_ seq: Int64, _ event: SyncEvent) -> String {
     SyncRecord(seq: seq, clock: SyncClock(ms: clock.ms + seq, counter: 0), event: event).line
+}
+
+@Test func anImportsCountsInAnEarlierBuildsShapeAreSkippedWithoutAProblem() throws {
+    let (sync, index) = try folder(with: [
+        #"{"seq":1,"ms":1800000000001,"n":0,"event":"counts","path":"music/library/a.flac","player":"swinsian","plays":5,"skips":0,"lastPlayed":null}"#,
+        record(
+            2,
+            .totals(
+                path: "music/library/a.flac", player: .swinsian, plays: 3, skips: 0,
+                lastPlayed: nil)),
+    ])
+    let report = try index.sync(folder: "sync", at: sync.path)
+    #expect(report.problems.isEmpty, "\(report.problems)")
+    #expect(report.applied == 1)
+    let plays = try index.database.prepare("SELECT play_count FROM plays").map { try $0.int(0) }
+    #expect(plays == [3])
 }
 
 @Test func movesReadOutOfOrderAndLatePlaysFollowTheChain() throws {

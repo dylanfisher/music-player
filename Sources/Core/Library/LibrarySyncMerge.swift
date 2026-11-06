@@ -42,21 +42,25 @@ extension LibraryIndex {
         case .skip(let path):
             guard let id = try mergedPathID(path, seenAt: seconds, &merge) else { return nil }
             try addCounts(id, plays: 0, skips: 1, lastPlayed: nil)
-        case .counts(let path, let player, let plays, let skips, let lastPlayed):
+        case .totals(let path, let player, let plays, let skips, let lastPlayed):
             guard let id = try mergedPathID(path, seenAt: seconds, &merge) else { return nil }
-            try addCounts(id, plays: plays, skips: skips, lastPlayed: lastPlayed)
-            // So an import of the same library here, or after a rebuild, adds only what grew.
-            if plays > 0 || skips > 0 {
+            // Only what passes the totals recorded here counts, so the same library imported
+            // on two machines, or here too, counts once.
+            let before =
                 try statement(
-                    """
-                    INSERT INTO \(importedPlaysTable) (player, path_id, play_count, skip_count)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT (player, path_id) DO UPDATE SET
-                        play_count = play_count + excluded.play_count,
-                        skip_count = skip_count + excluded.skip_count
-                    """
-                ).run(player.rawValue, id, plays, skips)
+                    "SELECT play_count, skip_count FROM \(importedPlaysTable)"
+                        + " WHERE player = ? AND path_id = ?"
+                ).map(player.rawValue, id) {
+                    ImportedCounts(plays: try $0.int(0), skips: try $0.int(1))
+                }.first ?? ImportedCounts(plays: 0, skips: 0)
+            let totals = before.raised(to: ImportedCounts(plays: plays, skips: skips))
+            if totals != before {
+                try statement(recordImportedCountsSQL).run(
+                    player.rawValue, id, totals.plays, totals.skips)
             }
+            try addCounts(
+                id, plays: totals.plays - before.plays, skips: totals.skips - before.skips,
+                lastPlayed: lastPlayed)
             // The event's last played is the other player's, its dated play (ADR 0105).
             if let lastPlayed {
                 try statement(recordImportedLastPlaySQL).run(

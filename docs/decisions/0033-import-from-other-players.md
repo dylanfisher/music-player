@@ -12,6 +12,8 @@
   layout, from its preferences file.
   [0105](0105-stats-clicks-filter-and-imported-last-plays.md): each import's last played is kept
   apart, as one dated play for Listening Stats.
+- **Amended:** phase 46 (a player's imported plays are the highest total any machine's import
+  reported, never a sum across machines; the import logs totals, ADR 0038).
 
 ## Context
 
@@ -139,7 +141,7 @@ are built in or hold other playlists, so they're skipped and counted.
 
 | Field | Rule |
 |---|---|
-| Plays, skips | ours plus what the source has gained since its last import of that track |
+| Plays, skips | ours plus what the source's totals pass the highest any machine's import of that player recorded for the track |
 | Last played | the later of ours and theirs |
 | Date added | the earlier of ours (`paths.added_seconds`) and theirs |
 | Rating | theirs, only where we have none and theirs is 1 to 5 stars |
@@ -149,8 +151,11 @@ are built in or hold other playlists, so they're skipped and counted.
 - **Plays add no history rows.** The other player kept no date for each play, and the timeline
   lists real plays only. Last played is set, so History (one row a track) lists them.
 - **A second import adds nothing new.** A schema part of its own, `imports`, keeps each player's
-  imported play and skip counts per path ID (`imported_plays`). An import adds the difference
-  from those, never less than 0, and records the new ones; every other rule is a maximum, a
+  imported play and skip totals per path ID (`imported_plays`): the highest any machine's import
+  of that player reported, this one's or one synced (0038), never a sum across machines. An
+  import adds what the source's totals pass those, never less than 0, and records the higher;
+  so two Macs importing one library, in either order and before or after they sync, count it
+  once, and an older copy of the source takes nothing away. Every other rule is a maximum, a
   minimum, a union or "only where none", and a playlist of the same name is skipped, so running
   the same import again changes nothing, and running a newer Swinsian library adds only the
   plays since. The baseline is per player, not per source file: a fresh copy of the same library

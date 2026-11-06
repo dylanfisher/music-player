@@ -5,8 +5,10 @@ import Foundation
 enum SyncEvent: Equatable, Sendable {
     case play(path: String, at: Double)
     case skip(path: String)
-    /// Plays and skips an import from `player` added, and its Last Played.
-    case counts(
+    /// The plays and skips `player`'s imports counted for the path, the highest any machine
+    /// recorded, and its Last Played. Totals, not what an import added, so a merge takes the
+    /// higher and applying one twice changes nothing.
+    case totals(
         path: String, player: PlayerLibrary.Player, plays: Int, skips: Int, lastPlayed: Double?)
     /// 0 clears the rating.
     case rating(path: String, stars: Int)
@@ -109,7 +111,7 @@ extension SyncEvent {
         switch self {
         case .play: .play
         case .skip: .skip
-        case .counts: .counts
+        case .totals: .totals
         case .rating: .rating
         case .loved: .loved
         case .disliked: .disliked
@@ -128,7 +130,7 @@ extension SyncEvent {
         switch self {
         case .play(let path, let at): [(.path, .string(path)), (.at, .number(at))]
         case .skip(let path): [(.path, .string(path))]
-        case .counts(let path, let player, let plays, let skips, let lastPlayed):
+        case .totals(let path, let player, let plays, let skips, let lastPlayed):
             [
                 (.path, .string(path)), (.player, .string(player.rawValue)),
                 (.plays, .integer(Int64(plays))),
@@ -169,8 +171,10 @@ enum SyncKey: String {
 
 /// What `event` names in a log line.
 enum SyncEventName: String {
-    case play, skip, counts, rating, loved, disliked, added, addedFiles, move, playlistCreate
+    case play, skip, totals, rating, loved, disliked, added, addedFiles, move, playlistCreate
     case playlistRename
+    /// What an import added, which earlier builds logged and this one skips (`retiredCounts`).
+    case counts
     case playlistRules, playlistEntries, playlistDelete
 }
 
@@ -202,13 +206,14 @@ extension SyncEvent {
         case .play:
             self = .play(path: try fields.path(.path), at: try fields.take(.at).seconds(.at))
         case .skip: self = .skip(path: try fields.path(.path))
-        case .counts:
+        case .counts: throw .retiredCounts
+        case .totals:
             let lastPlayed = try fields.take(.lastPlayed)
             let player = try fields.take(.player).string(.player)
             guard let known = PlayerLibrary.Player(rawValue: player) else {
                 throw .bad(.player, "isn't a player an import reads")
             }
-            self = .counts(
+            self = .totals(
                 path: try fields.path(.path), player: known,
                 plays: Int(try fields.take(.plays).integer(.plays, in: SyncRecord.countRange)),
                 skips: Int(try fields.take(.skips).integer(.skips, in: SyncRecord.countRange)),
@@ -277,6 +282,9 @@ package enum SyncLineProblem: Error, Equatable, CustomStringConvertible {
     case unknownKey(String)
     case unknownEvent(String)
     case badValue(String, String)
+    /// A `counts` line, an import's deltas, which two imports of one library on two machines
+    /// counted twice. Skipped without a problem: the app never rewrites a log (ADR 0038).
+    case retiredCounts
 
     static func bad(_ key: SyncKey, _ reason: String) -> SyncLineProblem {
         .badValue(key.rawValue, reason)
@@ -289,6 +297,7 @@ package enum SyncLineProblem: Error, Equatable, CustomStringConvertible {
         case .unknownKey(let key): "has the unknown key \"\(key)\""
         case .unknownEvent(let name): "has the unknown event \"\(name)\""
         case .badValue(let key, let reason): "\"\(key)\" \(reason)"
+        case .retiredCounts: "is an import's counts in the shape of an earlier build"
         }
     }
 }
