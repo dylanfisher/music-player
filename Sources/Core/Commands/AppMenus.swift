@@ -102,6 +102,7 @@ public enum AppMenus {
                     .command(.importSwinsian), .command(.importITunes), .separator,
                     .command(.addFolder), .command(.showWatchedFolders), .command(.checkHealth),
                     .command(.analyzeLibrary), .command(.pauseLibraryAnalysis),
+                    .command(.pauseScan), .command(.resumeScan),
                     .command(.showStats), .command(.showYearInReview), .command(.rescanNow),
                     .command(.resolveLostStats), .command(.restoreRemoved),
                     .setting(settings.pausePollingDuringPlayback.key),

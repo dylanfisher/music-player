@@ -1,9 +1,11 @@
 import AppKit
+import Commands
 import Foundation
 import KeyChord
 import Settings
 import Testing
 
+@testable import Analysis
 @testable import Library
 @testable import LibraryBrowser
 
@@ -217,14 +219,65 @@ import Testing
         }
     }
     // The first progress refreshes at once and the next waits its interval.
-    browser.showAnalysis(("Analyzing library: 0 of 2", 0), stopped: false)
+    browser.showAnalysis(.init(stage: .analyzing, analyzed: 0, total: 2), stopped: false)
     try await waitForRefreshes(1)
-    browser.showAnalysis(("Analyzing library: 1 of 2", 0.5), stopped: false)
-    browser.showAnalysis(("Library analysis paused: 1 of 2", 0.5), stopped: true)
+    browser.showAnalysis(.init(stage: .analyzing, analyzed: 1, total: 2), stopped: false)
+    browser.showAnalysis(.init(stage: .paused, analyzed: 1, total: 2), stopped: true)
     try await waitForRefreshes(2)
     try await Task.sleep(
         nanoseconds: UInt64((LibraryBrowser.refreshIntervalSeconds + 0.5) * 1e9))
     #expect(refreshes == 2)
+}
+
+/// The status bar's buttons after the scans' text and Analyze Library's pause or carry on
+/// each, through the commands, and Library Health shows the same run with the file under way
+/// (ADR 0119).
+@MainActor @Test func theScanAndTheAnalysisEachHaveAPauseButton() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 100, groupByAlbumArtist: false, thumbnails: nil)
+    await browser.load(BrowserState(source: nil))
+    var ran: [CommandID] = []
+    browser.runCommand = { ran.append($0) }
+    #expect(browser.scanPauseButton.isHidden && browser.analysisPauseButton.isHidden)
+
+    browser.libraryChanged(.scanning(folder: "/music", ScanProgress()))
+    #expect(!browser.scanPauseButton.isHidden && browser.scanPauseButton.toolTip == "Pause Scan")
+    browser.scanPauseButton.performClick(nil)
+    browser.libraryChanged(.scanPaused(folder: "/music", true))
+    #expect(browser.scanPauseButton.toolTip == "Resume Scan" && browser.scanIsPaused)
+    browser.scanPauseButton.performClick(nil)
+    #expect(ran == [.pauseScan, .resumeScan])
+
+    var progress = LibraryAnalysis.Progress(stage: .analyzing, analyzed: 1_240, total: 43_368)
+    progress.file = "So Many Questions.flac"
+    browser.showAnalysis(progress)
+    #expect(browser.analysisPauseButton.toolTip == "Pause Library Analysis")
+    browser.analysisPauseButton.performClick(nil)
+    let health = browser.healthPanel
+    #expect(
+        health.analysisLabel.stringValue
+            == "Analyzing library: 1,240 of 43,368 · So Many Questions.flac")
+    #expect(health.analysisButton.title == "Pause Library Analysis" && !health.analysisBar.isHidden)
+    health.analysisButton.performClick(nil)
+
+    progress.stage = .paused
+    browser.showAnalysis(progress)
+    #expect(browser.analysisPauseButton.toolTip == "Analyze Library")
+    #expect(health.analysisLabel.stringValue == "Library analysis paused: 1,240 of 43,368")
+    #expect(health.analysisButton.title == "Analyze Library")
+    browser.analysisPauseButton.performClick(nil)
+    #expect(
+        ran.dropFirst(2) == [.pauseLibraryAnalysis, .pauseLibraryAnalysis, .analyzeLibrary])
+
+    // Done, Library Health keeps the button alone, under the title the app gives.
+    browser.showAnalysis(nil)
+    browser.analyzeLibraryTitle = "Analyze Library Again…"
+    #expect(browser.analysisPauseButton.isHidden && health.analysisBar.isHidden)
+    #expect(
+        health.analysisButton.title == "Analyze Library Again…" && !health.analysisButton.isHidden)
 }
 
 @MainActor @Test func leftAndRightMoveBetweenThePanesAndGoToTheRegistryElsewhere() throws {

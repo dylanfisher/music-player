@@ -48,3 +48,16 @@ private func dispatcher() throws -> CommandDispatcher {
     #expect(dispatcher.key([KeyChord("=", [.command, .shift]), KeyChord("+", .command)]) == .ran)
     #expect(ran)
 }
+
+/// A command's title as it would run now, for the menus and the palette; none for one that
+/// keeps its registered title.
+@MainActor @Test func aHandlerCanNameItsCommandAsItWouldRunNow() throws {
+    let dispatcher = try dispatcher()
+    var again = false
+    dispatcher.handle(play, title: { again ? "Play Again" : "Play" }, run: {})
+    dispatcher.handle(stop) {}
+    #expect(dispatcher.title(play) == "Play")
+    again = true
+    #expect(dispatcher.title(play) == "Play Again")
+    #expect(dispatcher.title(stop) == nil && dispatcher.title(bigger) == nil)
+}

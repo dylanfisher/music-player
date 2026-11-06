@@ -89,6 +89,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var edited: () -> Void = {}
     /// Called with the paths of removed tracks the user restored, whose folders need a scan.
     public var restored: ([String]) -> Void = { _ in }
+    /// Runs a command, as the menu would: the status bar's and Library Health's buttons for a
+    /// scan and Analyze Library.
+    public var runCommand: (CommandID) -> Void = { _ in }
     /// Moves the files Remove… was confirmed for to the Trash; tests replace it.
     var trash: ([URL]) async -> TrashOutcome = moveToTrash
     /// The watched folders as the settings hold them, for Locate… to check a folder is in one.
@@ -170,6 +173,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Whether the scan bar moves on its own, which only it does while the status bar shows.
     private(set) var scanIndicatorAnimates = false
     private let scanLabel = NSTextField(labelWithString: "")
+    /// Pause Scan or Resume Scan, after the scans' text, and Pause Library Analysis or Analyze
+    /// Library after Analyze Library's (ADR 0119).
+    let scanPauseButton = NSButton()
+    private let analysisLabel = NSTextField(labelWithString: "")
+    let analysisPauseButton = NSButton()
+    /// Where Analyze Library is, while it runs or is paused.
+    private var analysisProgress: LibraryAnalysis.Progress?
+    /// What the two buttons run now; nil while one is hidden.
+    private(set) var scanButtonCommand: CommandID?
+    private(set) var analysisButtonCommand: CommandID?
     private let problemsButton = NSButton()
     private(set) var status = LibraryStatus()
     private var browserHeight: Int
@@ -323,6 +336,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
         healthPanel.select = { [weak self] check in self?.show(.health(check)) }
         healthPanel.checkAgain = { [weak self] in self?.runHealth() }
+        healthPanel.runCommand = { [weak self] in self?.runCommand($0) }
         content.addChild(healthPanel)
         wireStats()
         content.addChild(statsPanel)
@@ -340,9 +354,18 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         // The lists' font, so the bar reads as part of the tables, as Swinsian's does.
         statusLabel.font = TextCell.font
         statusLabel.lineBreakMode = .byTruncatingTail
-        scanLabel.font = TextCell.font
-        scanLabel.textColor = .secondaryLabelColor
-        scanLabel.lineBreakMode = .byTruncatingTail
+        for label in [scanLabel, analysisLabel] {
+            label.font = TextCell.font
+            label.textColor = .secondaryLabelColor
+            label.lineBreakMode = .byTruncatingTail
+        }
+        for button in [scanPauseButton, analysisPauseButton] {
+            button.isBordered = false
+            button.imagePosition = .imageOnly
+            button.setContentHuggingPriority(.required, for: .horizontal)
+            button.target = self
+            button.action = #selector(activityButtonClicked)
+        }
         scanIndicator.style = .bar
         scanIndicator.controlSize = .small
         scanIndicator.minValue = 0
@@ -357,7 +380,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusLabel.addGestureRecognizer(
             NSClickGestureRecognizer(target: self, action: #selector(showNextTotals)))
         statusLabel.alignment = .center
-        for view in [scanIndicator, scanLabel] { statusLeading.addArrangedSubview(view) }
+        for view in [scanIndicator, scanLabel, scanPauseButton, analysisLabel, analysisPauseButton]
+        {
+            statusLeading.addArrangedSubview(view)
+        }
         statusTrailing.addArrangedSubview(problemsButton)
         for stack in [statusLeading, statusTrailing] {
             stack.detachesHiddenViews = true
@@ -371,9 +397,16 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusHeight = statusArea.heightAnchor.constraint(equalToConstant: 0)
         statusHeight?.isActive = true
         layOutStatusBar()
-        scanLabel.setContentCompressionResistancePriority(
-            CenteredRow.textCompressionPriority, for: .horizontal)
-        for view in [scanIndicator, scanLabel, problemsButton] { view.isHidden = true }
+        for label in [scanLabel, analysisLabel] {
+            label.setContentCompressionResistancePriority(
+                CenteredRow.textCompressionPriority, for: .horizontal)
+        }
+        for view in [
+            scanIndicator, scanLabel, scanPauseButton, analysisLabel, analysisPauseButton,
+            problemsButton,
+        ] {
+            view.isHidden = true
+        }
         timeline.view.isHidden = true
         let stack = NSStackView(views: [split, timeline.view])
         stack.orientation = .vertical
@@ -890,14 +923,12 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         showActivity()
     }
 
-    /// Shows what Analyze Library says while it runs or is paused, and how far along it is,
-    /// beside the scans' line; nil once it's done. While it runs the table refreshes as during
-    /// a scan, so its measure columns fill in; once it has `stopped`, at its end or paused, the
-    /// table refreshes at once and Library Health counts the measures.
-    public func showAnalysis(_ progress: (text: String, fraction: Double)?, stopped: Bool) {
-        status.analysisText = progress?.text
-        status.analysisFraction = progress?.fraction ?? 0
-        showActivity()
+    /// Shows where Analyze Library is while it runs or is paused, beside the scans' line and in
+    /// Library Health; nil once it's done. While it runs the table refreshes as during a scan,
+    /// so its measure columns fill in; once it has `stopped`, at its end or paused, the table
+    /// refreshes at once and Library Health counts the measures.
+    public func showAnalysis(_ progress: LibraryAnalysis.Progress?, stopped: Bool) {
+        showAnalysis(progress)
         if stopped {
             refreshNow()
             runHealth()
@@ -906,14 +937,66 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
+    /// Shows a run the app found paused at launch, with nothing to refresh.
+    public func showAnalysis(_ progress: LibraryAnalysis.Progress?) {
+        analysisProgress = progress
+        status.analysisText = progress?.text
+        status.analysisFraction = progress?.fraction ?? 0
+        showActivity()
+        healthPanel.showAnalysis(progress, analyzeTitle: analyzeLibraryTitle)
+    }
+
+    /// Analyze Library's title as it would run now, which the app sets: "Analyze Library
+    /// Again…" once every file was tried.
+    public var analyzeLibraryTitle = AppCommands.title(of: .analyzeLibrary) {
+        didSet { showAnalysis(analysisProgress) }
+    }
+
     /// Whether a scan is under way, as the status bar shows it.
     public var isScanning: Bool { status.isScanning }
 
-    /// The activity line: the scans, a save and Analyze Library, and their bar.
+    /// Whether the status bar shows a scan, running or paused, and whether Pause Scan holds it.
+    public var showsScan: Bool { status.scanText != nil }
+    public var scanIsPaused: Bool { status.scanIsPaused }
+
+    /// Whether Analyze Library is running, not paused, as last shown.
+    private var analysisRuns: Bool {
+        [.analyzing, .waitingForScan].contains(analysisProgress?.stage)
+    }
+
+    /// The activity line: the scans and a save, then Analyze Library, each with its button,
+    /// and their bar.
     private func showActivity() {
-        scanLabel.stringValue = status.activityText ?? ""
-        scanLabel.isHidden = status.activityText == nil
+        scanLabel.stringValue = status.scanAndSaveText ?? ""
+        scanLabel.isHidden = status.scanAndSaveText == nil
+        analysisLabel.stringValue = status.analysisText ?? ""
+        analysisLabel.isHidden = status.analysisText == nil
+        scanButtonCommand =
+            status.scanText == nil ? nil : status.scanIsPaused ? .resumeScan : .pauseScan
+        analysisButtonCommand =
+            analysisProgress == nil ? nil : analysisRuns ? .pauseLibraryAnalysis : .analyzeLibrary
+        show(scanPauseButton, scanButtonCommand)
+        show(analysisPauseButton, analysisButtonCommand)
         showScanProgress()
+    }
+
+    /// Shows `button` with the symbol and tooltip for `command`, or hides it when there's
+    /// none. A command that starts or resumes something shows play.
+    private func show(_ button: NSButton, _ command: CommandID?) {
+        button.isHidden = command == nil
+        guard let command else { return }
+        let resumes = [.resumeScan, .analyzeLibrary].contains(command)
+        let title =
+            command == .analyzeLibrary ? analyzeLibraryTitle : AppCommands.title(of: command)
+        button.image = NSImage(
+            systemSymbolName: resumes ? SymbolName.play : SymbolName.pause,
+            accessibilityDescription: title)
+        button.toolTip = title
+    }
+
+    @objc private func activityButtonClicked(_ button: NSButton) {
+        let command = button === scanPauseButton ? scanButtonCommand : analysisButtonCommand
+        if let command { runCommand(command) }
     }
 
     /// A bar that fills as the scans read or a save writes, or moves on its own while a scan

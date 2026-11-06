@@ -344,7 +344,8 @@ let package = Package(
         .testTarget(
             name: "LibraryBrowserTests",
             dependencies: [
-                "Artwork", "DisplayText", "Fixtures", "KeyChord", "Library", "LibraryBrowser",
+                "Analysis", "Artwork", "Commands", "DisplayText", "Fixtures", "KeyChord", "Library",
+                "LibraryBrowser",
                 "Metadata", "Playback", "SQLite", "Settings",
             ],
             swiftSettings: strictSwift

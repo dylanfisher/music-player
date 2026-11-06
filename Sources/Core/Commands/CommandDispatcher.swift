@@ -20,6 +20,7 @@ public final class CommandDispatcher {
         var run: () -> Void
         var isEnabled: () -> Bool
         var isOn: (() -> Bool)?
+        var title: (() -> String)?
     }
 
     public private(set) var bindings: KeyBindings
@@ -40,20 +41,23 @@ public final class CommandDispatcher {
     }
 
     /// `run` does the command; `enabled` says whether it can now; `isOn` gives a toggle its
-    /// check mark.
+    /// check mark; `title` names it as it would run now, in the menus and the palette.
     public func handle(
         _ id: CommandID, enabled: @escaping () -> Bool = { true }, isOn: (() -> Bool)? = nil,
-        run: @escaping () -> Void
+        title: (() -> String)? = nil, run: @escaping () -> Void
     ) {
         precondition(bindings.defaults.command(id) != nil, "\(id) isn't a registered command")
         precondition(handlers[id] == nil, "\(id) has two handlers")
-        handlers[id] = Handler(run: run, isEnabled: enabled, isOn: isOn)
+        handlers[id] = Handler(run: run, isEnabled: enabled, isOn: isOn, title: title)
     }
 
     public func isEnabled(_ id: CommandID) -> Bool { handlers[id]?.isEnabled() ?? false }
 
     /// Nil for a command that isn't a toggle.
     public func isOn(_ id: CommandID) -> Bool? { handlers[id]?.isOn?() }
+
+    /// The title the command has now; nil for one whose title is always its registered one.
+    public func title(_ id: CommandID) -> String? { handlers[id]?.title?() }
 
     /// Runs the command if it's on now; false when it's off or has no handler.
     @discardableResult

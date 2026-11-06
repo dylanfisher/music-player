@@ -146,6 +146,7 @@ final class MainMenu: NSObject, NSMenuItemValidation {
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard let id = item.representedObject as? CommandID else { return true }
         item.state = dispatcher.isOn(id) == true ? .on : .off
+        if !item.isHidden, let title = dispatcher.title(id) { item.title = title }
         return dispatcher.isEnabled(id)
     }
 

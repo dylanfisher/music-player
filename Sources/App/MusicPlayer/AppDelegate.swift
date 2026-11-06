@@ -146,6 +146,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var libraryAnalysis: LibraryAnalysis?
     /// Where Analyze Library was at its last report; nil when it isn't running or paused.
     var libraryAnalysisStage: LibraryAnalysis.Progress.Stage?
+    /// Whether every file was tried since the last run started, as the pass last said, so
+    /// Analyze Library reads the whole library again (ADR 0119).
+    var libraryAnalysisEveryFileTried = false
     private(set) lazy var spectrumWindows = makeSpectrumWindows()
     private let stalls = StallDetector { NSApp.currentEvent.map { eventName($0.type) } }
 
@@ -324,6 +327,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let folders = Set(paths.map { ($0 as NSString).deletingLastPathComponent })
             self?.watcher?.rescan(directories: folders.sorted())
         }
+        browser.runCommand = { [weak self] id in
+            if self?.dispatcher?.run(id) != true { NSSound.beep() }
+        }
         browser.watchedFolders = { settings[\.watchedFolders] }
         browser.watch = { [weak self] url in self?.watch(url, settings) }
         browser.firstRowsDrawn = { [weak self] in self?.interactive() }
@@ -375,6 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startScripting()
         applyReceiverSetting()
         startWatching(settings)
+        showLibraryAnalysisStanding()
         shareChanges = ShareChangeObserver { [weak self] in self?.watcher?.sharesMayHaveMoved() }
         if let snapshotURL {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.snapshotDelaySeconds) {
@@ -823,8 +830,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard
             let watcher = startedWatcher(
                 settings, databaseURL: libraryFileURL(in: paths.dataDirectory),
-                events: reportingLaunch
-                    ? reportingLaunchEnd(browser.watcherEvents) : browser.watcherEvents)
+                events: analysisStandingFollowing(
+                    reportingLaunch
+                        ? reportingLaunchEnd(browser.watcherEvents) : browser.watcherEvents))
         else {
             // No folder has a scan to wait for.
             if reportingLaunch { FileHandle.standardOutput.write(launchedLine) }

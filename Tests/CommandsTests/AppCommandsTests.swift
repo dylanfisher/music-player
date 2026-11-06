@@ -56,8 +56,8 @@ import Testing
     #expect(AppCommands.all().filter(\.takesPaths).map(\.id) == [.showSpectrum])
 }
 
-/// Analyze Library runs from the File menu, so the palette and the command line, and its pause
-/// beside it (ADR 0116).
+/// Analyze Library runs from the File menu, so the palette and the command line, its pause
+/// beside it (ADR 0116), and Pause Scan and Resume Scan after them (ADR 0119).
 @Test func analyzeLibraryAndItsPauseFollowLibraryHealthInTheFileMenu() throws {
     let file = try #require(AppMenus.sections(appName: "Test").first { $0.title == "File" })
     let ids = file.entries.compactMap { entry in
@@ -65,9 +65,13 @@ import Testing
     }
     let health = try #require(ids.firstIndex(of: .checkHealth))
     #expect(
-        Array(ids[health...].prefix(3)) == [.checkHealth, .analyzeLibrary, .pauseLibraryAnalysis])
+        Array(ids[health...].prefix(5)) == [
+            .checkHealth, .analyzeLibrary, .pauseLibraryAnalysis, .pauseScan, .resumeScan,
+        ])
     #expect(AppCommands.title(of: .analyzeLibrary) == "Analyze Library")
     #expect(AppCommands.title(of: .pauseLibraryAnalysis) == "Pause Library Analysis")
+    #expect(AppCommands.title(of: .pauseScan) == "Pause Scan")
+    #expect(AppCommands.title(of: .resumeScan) == "Resume Scan")
 }
 
 @Test func everyReceiverInputAndSoundModeIsACommand() {

@@ -120,13 +120,13 @@ public actor LibraryAnalysis {
     }
 
     /// What the index says of the pass while no run goes (ADR 0119).
-    struct Standing: Equatable, Sendable {
+    public struct Standing: Equatable, Sendable {
         /// A run that stopped before its end, paused or by a quit, as the status shows it; nil
         /// when the last run went through every file, or nothing is left.
-        var paused: Progress?
+        public var paused: Progress?
         /// Whether every file was tried since the last run started, so Analyze Library would
         /// read the whole library again.
-        var everyFileTried: Bool
+        public var everyFileTried: Bool
     }
 
     /// Starts a run, or returns the one going. The run goes over what the index has left to
@@ -154,7 +154,7 @@ public actor LibraryAnalysis {
     }
 
     /// Where the pass stands, from the index. Call it while no run goes.
-    func standing() async throws -> Standing {
+    public func standing() async throws -> Standing {
         let files = try await cache.analysisFiles()
         let left = files.pending.count > files.failed
         return Standing(

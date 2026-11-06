@@ -158,7 +158,7 @@ extension AppDelegate {
                 else {
                     return nil
                 }
-                var title = command.title
+                var title = dispatcher.title(command.id) ?? command.title
                 if let key = toggles[command.id] {
                     title = SettingCommand.paletteTitle(
                         title, isOn: settings.isOn(key))
