@@ -136,11 +136,6 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     try await waitFor("the week's tracks") {
         Set(browser.model.trackIDs) == Set(album.map(\.id) + [sixDaysAgo.id])
     }
-    // The table keeps to the days the report counted, once it has arrived.
-    try await waitFor("the report's days") {
-        browser.model.filter.statsSpan != nil
-            && browser.model.filter.statsSpan == browser.statsModel.report?.span
-    }
 
     // The library puts the columns back at their own height.
     browser.show(nil)
@@ -151,6 +146,28 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     // Stats' row shows the week again.
     browser.showStats()
     try await waitFor("Stats again") { browser.model.filter.source == .stats(.week) }
+}
+
+@MainActor @Test func aPeriodsReportListsItsTableOnceWhenItsDaysAreTheTables() async throws {
+    let (browser, _, _, album) = try await playedBrowser()
+    browser.showStats(.month)
+    try await waitFor("the month") {
+        browser.statsModel.periodReport != nil && !browser.model.trackIDs.isEmpty
+    }
+    var reloads: [BrowserChange.Reason] = []
+    let changed = browser.model.changed
+    browser.model.changed = { change in
+        reloads.append(change.reason)
+        changed(change)
+    }
+    browser.statsPanel.choosePeriod(.week)
+    try await waitFor("the week") {
+        browser.statsModel.periodReport != nil
+            && Set(browser.model.trackIDs) == Set(album.map(\.id))
+    }
+    try await Task.sleep(nanoseconds: 300_000_000)
+    // The source change's listing alone; the report's days were the ones it used.
+    #expect(reloads == [.user], "\(reloads)")
 }
 
 @MainActor @Test func aRowNarrowsStatsTableToItsTracksAndClickedAgainListsThemAll() async throws {

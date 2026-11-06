@@ -479,11 +479,15 @@ public final class BrowserModel {
     }
 
     /// Keeps Stats' table for `period` to `span`, the days of the report its panel shows, and
-    /// lists it again (ADR 0109). A reload under way is dropped for this one, since it would
-    /// write over the span with the filter it started from.
+    /// lists it again when those aren't the days it was listed for (ADR 0109). A reload under
+    /// way is dropped for this one, since it would write over the span with the filter it
+    /// started from.
     func showStatsSpan(_ span: PlaySpan?, of period: StatsPeriod) async {
         guard pending.source == .stats(period), pending.statsSpan != span else { return }
+        let listed = pending.statsSpan ?? period.span()
         pending.statsSpan = span
+        // The usual case: the table was just listed for these days, by the period's.
+        guard listed != span else { return }
         await reload(panesFrom: 0, reason: .libraryChanged)
     }
 
