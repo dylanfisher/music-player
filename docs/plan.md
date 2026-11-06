@@ -371,6 +371,35 @@ ADR numbers: 0117 to 50a if it needs one, 0118 to 50b, 0119 to 50c, 0120 to 50d.
       and size differ, a little more above 16 kHz in the WAV), a lossy-origin copy, a louder remaster.
 - [ ] Record ADR 0120, amending 0115.
 
+Implementation plan, part 50d (ADR 0120):
+
+1. **Promotion.** The file size text, `ByteCountFormatter` in `.file` style, written twice now
+   (the track table's Size column, the tag editor's `FileRow.sizeText`), moves to
+   `DisplayText` as `fileSizeText`, for its third caller. Its own commit.
+2. **Header (50d.1).** `SpectrumModel.File` gains the album and the size, made from the
+   `TrackRow` the app already looks the title up in (`File(path:row:)`, the file's name when
+   the index has no row), so `SpectrumWindows.show` takes paths and rows. The title reads
+   "Title — Album", the analyzed status line ends with the size. Each file gets a short name
+   for the legend and the sentences: its title, or where titles repeat, its file type ("the
+   FLAC"), or else its place ("file 2"). The legend shows the names, not the format lines the
+   headers already show.
+3. **Differences (50d.2).** `Differences.swift` in Analysis: `ComparedFile` (a name, the
+   result, the size) and `differences(_:from:)`, one sentence per difference of a later file
+   from the first, in order: cutoff, level, DR, true peak over 0, clipping, bass, treble and
+   above 16 kHz (band power from the average spectra, matched by frequency, against the
+   overall level), length, rate, bits, format, size; then, when none of the sound measures
+   differ, that they sound the same as far as the measures tell and that only the samples
+   could prove it. Level is the power summed over the average spectrum from 20 Hz to the lower
+   Nyquist, so "about". Thresholds in `AnalysisRules`. Tests: the owner's WAV and FLAC, a
+   lossy-origin copy, a louder remaster, and each sentence either side of its threshold.
+4. **Window (50d.2).** A "Differences" title and a scrolling text view under the legend and
+   the dB scale, sharing the right column's height with the chart, only with two or more
+   files; it fills once every file has finished, each later file's sentences in a paragraph.
+   Test: the window with 8 analyzed files lays out with the chart and the differences both
+   tall enough to read, and writes a picture to `.build/snapshots`.
+5. **ADR 0120**, amending 0115: the header, the names, the sentences and their thresholds,
+   and why the level is an estimate.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
