@@ -13,7 +13,8 @@
   [0105](0105-stats-clicks-filter-and-imported-last-plays.md): each import's last played is kept
   apart, as one dated play for Listening Stats.
 - **Amended:** phase 46 (a player's imported plays are the highest total any machine's import
-  reported, never a sum across machines; the import logs totals, ADR 0038).
+  reported, never a sum across machines; the import logs totals, ADR 0038; rebuilding the
+  import counts takes their plays out of the play counts).
 
 ## Context
 
@@ -162,6 +163,12 @@ are built in or hold other playlists, so they're skipped and counted.
   counts as the same, and so do two different Swinsian databases or two different XML exports,
   which share one baseline, so the second adds only plays past the first's count for each track.
   A separate part keeps a change to it from discarding the stats (0031).
+- **Rebuilding `imports` takes the imports' plays out.** The part is made empty, so the plays
+  the counts hold from imports would be added again by the next import. Building it sets each
+  path's play count to its history rows, the plays recorded here and synced, which hold every
+  play but an import's. Skips have no history, so an import's skips stay and count again at its
+  next import; only iTunes imports skips. The owner then imports once, on any one Mac, and the
+  others read its totals (0038).
 - **The preview sheet** shows only the current plan: a preview that fails clears the counts and
   keeps Import off until one succeeds.
 - **Preview, then one transaction.** The preview reads the library and computes the plan without

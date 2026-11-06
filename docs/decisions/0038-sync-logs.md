@@ -170,7 +170,8 @@ the config file but music files, through the tag writer.
 - **A `counts` line**, which earlier builds wrote with the plays and skips an import added, is
   skipped without a problem. Two Macs that imported one library each counted the other's on
   top of their own, and a delta can't tell those apart from two real sets of plays. The app
-  never rewrites a log, so the lines stay.
+  never rewrites a log, so the lines stay, and the import counts they made are discarded with
+  the `imports` part, which takes their plays out of the play counts (0033).
 - **Nothing from before this build is sent.** The log starts with this build, and a playlist
   made before it is sent whole at its next change.
 

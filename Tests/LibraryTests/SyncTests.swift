@@ -38,12 +38,15 @@ private final class Machine {
     let nas: SimulatedNAS
     var nowMs: Int64 = 1_800_000_000_000
 
-    init(_ nas: SimulatedNAS, mount: String) throws {
+    /// A new Mac, or with `databaseURL` the one whose database that is, opened again.
+    init(_ nas: SimulatedNAS, mount: String, databaseURL: URL? = nil) throws {
         self.nas = nas
         self.mount = mount
-        let home = nas.root.appendingPathComponent("home-\(UUID().uuidString)")
-        databaseURL = home.appendingPathComponent("library.sqlite")
-        index = try LibraryIndex(at: databaseURL)
+        self.databaseURL =
+            databaseURL
+            ?? nas.root.appendingPathComponent("home-\(UUID().uuidString)")
+            .appendingPathComponent("library.sqlite")
+        index = try LibraryIndex(at: self.databaseURL)
         index.wallClockMs = { [unowned self] in nowMs }
         _ = try index.locate(
             [WatchedFolder(path: folderInShare, share: share, kind: .network)],
@@ -51,6 +54,9 @@ private final class Machine {
     }
 
     var id: String { get throws { try index.machineID() } }
+
+    /// This Mac with its database opened again, as at the app's next launch.
+    func reopened() throws -> Machine { try Machine(nas, mount: mount, databaseURL: databaseURL) }
 
     /// The absolute path of `name` in the library here.
     func path(_ name: String) -> String { mount + "/" + folderInShare + "/" + name }
@@ -550,6 +556,28 @@ func theSameLibraryImportedOnTwoMachinesCountsOnce(_ steps: [String]) throws {
     #expect(try b.counts("x.flac") == [9, 2])
     #expect(try a.history("x.flac") == 2)
     #expect(try b.history("x.flac") == 2)
+}
+
+@Test func afterBothMachinesRebuildTheirImportCountsOneImportRestoresThemOnBoth() throws {
+    let nas = try SimulatedNAS()
+    var (a, b) = try machines(2, nas).pair
+    try a.scanned("x.flac")
+    try b.scanned("x.flac")
+    try a.index.recordPlay(a.path("x.flac"), at: 1_700_000_000)
+    try a.importSwinsian("x.flac", plays: 7)
+    try b.importSwinsian("x.flac", plays: 7)
+    try syncAll([a, b])
+    for machine in [a, b] {
+        try machine.index.database.execute(
+            "UPDATE schema_identity SET sql = 'older' WHERE part = 'imports'")
+    }
+    (a, b) = (try a.reopened(), try b.reopened())
+    #expect(try a.counts("x.flac") == [1, 0])
+    #expect(try b.counts("x.flac") == [1, 0])
+    try b.importSwinsian("x.flac", plays: 8)
+    try syncAll([a, b])
+    #expect(try a.counts("x.flac") == [9, 0])
+    #expect(try b.counts("x.flac") == [9, 0])
 }
 
 @Test func anImportAfterTheSourceGainedPlaysAddsOnlyTheGainOnEveryMachine() throws {

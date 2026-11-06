@@ -329,8 +329,8 @@ private let dislikedSchema = """
     """
 
 private let importsSchema = """
-    -- The play and skip counts each player's last import brought, by path; an import adds the
-    -- difference.
+    -- Each player's play and skip totals for a path, the highest any machine's import reported;
+    -- an import here or synced adds what passes them.
     CREATE TABLE \(importedPlaysTable) (
         player TEXT NOT NULL,
         path_id INTEGER NOT NULL REFERENCES paths (id),
@@ -338,6 +338,10 @@ private let importsSchema = """
         skip_count INTEGER NOT NULL,
         PRIMARY KEY (player, path_id)
     );
+    -- Made empty, so no import's plays may stay in the counts, or the next import would add them
+    -- again: each path's play count becomes its history, the plays recorded here and synced.
+    -- Skips have no history, so an import's skips stay and count again at its next import.
+    UPDATE plays SET play_count = (SELECT count(*) FROM history h WHERE h.path_id = plays.path_id);
     """
 
 private let importedLastPlaysSchema = """

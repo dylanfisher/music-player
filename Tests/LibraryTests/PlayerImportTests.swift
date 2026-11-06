@@ -76,6 +76,23 @@ private func track(
     #expect(try index.loggedPlayCount() == 1)
 }
 
+@Test func rebuildingTheImportCountsTakesTheirPlaysOutAndTheNextImportPutsThemBack() throws {
+    let (testLibrary, index, rows) = try scanned()
+    try index.recordPlay(rows[0].path, at: 3_000)
+    let library = player([track(rows[0].path, plays: 5), track(rows[1].path, plays: 2)])
+    _ = try index.applyImport(library, prefix: nil)
+    // Counts doubled by an earlier build, where the recorded totals no longer say how.
+    try index.database.execute("UPDATE plays SET play_count = play_count + 7")
+    try index.database.execute("UPDATE schema_identity SET sql = 'older' WHERE part = 'imports'")
+    let rebuilt = try testLibrary.index()
+    let ids = [rows[0].id, rows[1].id]
+    #expect(try rebuilt.rows(ids: ids).map(\.playCount) == [1, 0])
+    #expect(try rebuilt.discards().first?.text.hasSuffix("(rows: imported_plays 2)") == true)
+    _ = try rebuilt.applyImport(library, prefix: nil)
+    #expect(try rebuilt.rows(ids: ids).map(\.playCount) == [6, 2])
+    #expect(try rebuilt.loggedPlayCount() == 1)
+}
+
 @Test func historyListsOnlyTracksWithARecordedPlay() throws {
     let (_, index, rows) = try scanned()
     _ = try index.applyImport(
