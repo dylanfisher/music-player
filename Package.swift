@@ -129,6 +129,14 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Analysis",
+            dependencies: ["DisplayText", "HALOutput", "Library", "Log", "Metadata", "Playback"],
+            path: "Sources/Core/Analysis",
+            swiftSettings: strictSwift,
+            // Accelerate, for the FFTs, is a system framework on macOS 12.
+            linkerSettings: [.linkedFramework("Accelerate")]
+        ),
+        .target(
             name: "Commands",
             dependencies: ["DisplayText", "KeyChord", "Log", "Receiver", "Settings"],
             path: "Sources/Core/Commands",
@@ -251,12 +259,18 @@ let package = Package(
         .executableTarget(
             name: "Bench",
             dependencies: [
-                "Artwork", "Commands", "DisplayText", "Fixtures", "HALOutput", "Library",
+                "Analysis", "Artwork", "Commands", "DisplayText", "Fixtures", "HALOutput",
+                "Library",
                 "LibraryBrowser",
                 "Metadata", "Palette", "Playback", "QueueView", "SQLite", "Settings", "TagEditor",
                 "TagWriter",
             ],
             path: "Sources/Tools/Bench",
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "AnalysisTests",
+            dependencies: ["Analysis", "Fixtures", "Library", "Metadata"],
             swiftSettings: strictSwift
         ),
         .testTarget(

@@ -186,11 +186,12 @@ public func sineNoiseTrack(
 }
 
 /// Writes PCM from `sample` as WAV, then encodes it with afconvert's `arguments`, FLAC unless
-/// given others, unless `url` already exists. Works in a scratch directory and renames the result
-/// into place, so a test running at the same time never sees half a file.
-private func makeEncoded(
+/// given others, and that again with `then` when given, unless `url` already exists. Works in a
+/// scratch directory and renames the result into place, so a test running at the same time
+/// never sees half a file.
+func makeEncoded(
     at url: URL, sampleRateHz: Int, bitsPerSample: Int, channels: Int = 2, frames: Int,
-    afconvert arguments: [String] = ["-f", "flac", "-d", "flac"],
+    afconvert arguments: [String] = ["-f", "flac", "-d", "flac"], then second: [String]? = nil,
     sample: (_ frame: Int, _ channel: Int) -> Int32
 ) throws {
     let manager = FileManager.default
@@ -202,12 +203,18 @@ private func makeEncoded(
     try manager.createDirectory(at: scratch, withIntermediateDirectories: true)
     let made = Result {
         let wav = scratch.appendingPathComponent("source.wav")
-        let encoded = scratch.appendingPathComponent("encoded.\(url.pathExtension)")
+        var encoded = scratch.appendingPathComponent(
+            "encoded.\(second == nil ? url.pathExtension : "pass1")")
         try writeWAV(
             at: wav, sampleRateHz: sampleRateHz, bitsPerSample: bitsPerSample, channels: channels,
             frames: frames,
             sample: sample)
         try runAfconvert(arguments + [wav.path, encoded.path])
+        if let second {
+            let again = scratch.appendingPathComponent("encoded.\(url.pathExtension)")
+            try runAfconvert(second + [encoded.path, again.path])
+            encoded = again
+        }
         guard rename(encoded.path, url.path) == 0 else {
             throw FixtureError.unexpectedSeed(
                 "couldn't move \(encoded.path) into place: errno \(errno)")

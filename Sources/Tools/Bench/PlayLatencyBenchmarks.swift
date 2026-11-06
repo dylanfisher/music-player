@@ -140,7 +140,7 @@ private let estimatedHALDelays = NullDevice.HALDelays(
 private let systemRateHz = 48_000.0
 /// The slow simulated NAS's cost for a file the decoder reads: opening it is an operation plus
 /// the median wait on the NAS's disks, and every read an operation.
-private let nasFileLatency = FileLatency(
+let nasFileLatency = FileLatency(
     openSeconds: slowNAS.operationSeconds + (slowNAS.fileDelay?.medianSeconds ?? 0),
     readSeconds: slowNAS.operationSeconds)
 /// Runs of each case; the median is reported.

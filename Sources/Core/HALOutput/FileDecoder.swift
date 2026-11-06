@@ -2,12 +2,12 @@ import AudioToolbox
 import Foundation
 
 /// Reads any file AudioToolbox can decode (FLAC, ALAC, WAV, AIFF, …) as PCM in a format the
-/// caller chooses. Use from one thread.
-final class FileDecoder {
+/// caller chooses. Use from one thread. Analysis reads files through it too.
+package final class FileDecoder {
     /// The format stored in the file. For compressed formats `mBitsPerChannel` is 0.
-    let fileFormat: AudioStreamBasicDescription
+    package let fileFormat: AudioStreamBasicDescription
     /// Frames at the file's own rate.
-    let lengthFrames: Int64
+    package let lengthFrames: Int64
     private let file: ExtAudioFileRef
     /// Set when the file is read through `FileLatency`'s callbacks, which it must outlive.
     private let slowFile: SlowFile?
@@ -18,7 +18,7 @@ final class FileDecoder {
     private(set) var nextFrame: Int64 = 0
 
     /// With `latency`, every read AudioToolbox makes waits as on a network volume.
-    init(url: URL, latency: FileLatency? = nil) throws {
+    package init(url: URL, latency: FileLatency? = nil) throws {
         var file: ExtAudioFileRef?
         if let latency {
             let slowFile = try SlowFile(url: url, latency: latency)
@@ -72,7 +72,7 @@ final class FileDecoder {
     }
 
     /// Sets the format `read` produces. Must be interleaved PCM with the file's channel count.
-    func setOutputFormat(_ format: AudioStreamBasicDescription) throws {
+    package func setOutputFormat(_ format: AudioStreamBasicDescription) throws {
         var format = format
         try throwIfError(
             "ExtAudioFileSetProperty(ClientDataFormat)",
@@ -90,7 +90,7 @@ final class FileDecoder {
     }
 
     /// Decodes up to `frames` frames into `buffer`. Returns how many were decoded: 0 at the end.
-    func read(into buffer: UnsafeMutableRawPointer, frames: UInt32) throws -> UInt32 {
+    package func read(into buffer: UnsafeMutableRawPointer, frames: UInt32) throws -> UInt32 {
         precondition(bytesPerFrame > 0, "setOutputFormat must be called before read")
         var frames = frames
         var list = AudioBufferList(

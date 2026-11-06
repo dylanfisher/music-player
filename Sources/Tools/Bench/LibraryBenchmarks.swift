@@ -308,7 +308,7 @@ func typedQueries(_ index: LibraryIndex) throws -> [String] {
 private func format(_ milliseconds: Double) -> String { String(format: "%.2f", milliseconds) }
 
 /// Samples the footprint every 10 ms on its own thread until stopped.
-private final class PeakFootprint: @unchecked Sendable {
+final class PeakFootprint: @unchecked Sendable {
     // Every field but `done` is guarded by `lock`.
     private let lock = NSLock()
     private var peakMB = 0.0

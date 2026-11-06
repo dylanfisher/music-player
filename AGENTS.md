@@ -8,7 +8,7 @@ Instructions for AI coding agents working in this repo. Humans: see [README.md](
 - **Language:** Swift 6 language mode, strict concurrency; toolchain from the Xcode in `.xcode-version`. C for the real-time audio core.
 - **Platform:** macOS 12+ (`Package.swift`); it must run on a 2015 MacBook Pro. Guard newer APIs with `#available`.
 - **Package manager:** SwiftPM only — no `.xcodeproj`. `scripts/bundle` builds the `.app`.
-- **Frameworks:** AppKit, CoreAudio (HAL), MediaPlayer (media keys, Now Playing), system SQLite, Network.framework (UPnP/DLNA, from phase 9). Tests: Swift Testing.
+- **Frameworks:** AppKit, CoreAudio (HAL), MediaPlayer (media keys, Now Playing), system SQLite, Network.framework (UPnP/DLNA, from phase 9), Accelerate (vDSP, for the analysis's FFTs). Tests: Swift Testing.
 - **Layout:** `Sources/<Tier>/<Module>`, tests in `Tests/<Module>Tests` — tiers and search recipes: [docs/map.md](docs/map.md)
 
 ## Commands

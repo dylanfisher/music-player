@@ -38,7 +38,7 @@ func throwIfError(_ operation: String, _ status: OSStatus) throws {
 
 /// Renders a CoreAudio four-character code such as `'lpcm'`. Codes with non-printable bytes,
 /// which most plain OSStatus values have, come back as hex.
-func fourCharCode(_ code: UInt32) -> String {
+package func fourCharCode(_ code: UInt32) -> String {
     let bytes = [24, 16, 8, 0].map { UInt8(truncatingIfNeeded: code >> $0) }
     guard bytes.allSatisfy({ (0x20...0x7E).contains($0) }) else {
         return "0x" + String(code, radix: 16)

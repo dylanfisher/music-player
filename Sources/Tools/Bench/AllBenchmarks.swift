@@ -10,3 +10,4 @@ let benchmarks =
     + paletteBenchmarks
     + playbackBenchmarks + playLatencyBenchmarks + timeToSoundBenchmarks + scrubBenchmarks
     + tagWriterBenchmarks + tagEditorBenchmarks + tagBatchBenchmarks
+    + analysisBenchmarks
