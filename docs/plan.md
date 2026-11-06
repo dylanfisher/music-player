@@ -286,6 +286,37 @@ ADR numbers: 0117 to 50a if it needs one, 0118 to 50b, 0119 to 50c, 0120 to 50d.
       scrolls, source changes and Stats shown and hidden. Owner check: when it shows again,
       whether View > Hide Status Bar or resizing the window clears it.
 
+Plan, part 50a (ADR 0117):
+- Probe: reproduced 50a.1 in a test. From the timeline, which hides the whole split, to Stats,
+  the split is unhidden and the divider placed in the same pass, in the split's hidden bounds,
+  so it ends at 0, and the next layout pass saves that 0 as Stats' height. A plain playlist
+  before Stats, with Show Browser on or off, keeps the height.
+- 50a.1, 50a.2 (`Core/Settings`, `Features/LibraryBrowser`, `App`): `AppState.statsHeightRange`
+  with a least height that holds the header and the Totals card; `fillPanelSlot` and
+  `restoreSplit` place the divider after a layout pass and record the height the slot got; the
+  split's delegate keeps Stats at least that tall; the split is a `DividerDragSplitView` that
+  says while `mouseDown` tracks a drag, and only then is a height saved, the columns' too.
+  Tests: Show Browser on and off, Stats after a playlist, the timeline and a playlist again at
+  its height; a drag saved and stopped at the least height, layout passes and a window resize
+  saving nothing; the panel's header and Totals card inside the least height.
+- 50a.3 (`Features/LibraryBrowser`): the marked row at 0.28 alpha, hover's 0.18 kept, both
+  named on `StatsListView`. Test: the marked row drawn into a bitmap, its alpha between.
+- 50a.4 (`Features/LibraryBrowser`): `LibraryStatus.summary` drops the discard notice; the
+  problems list keeps it. Test: the summary without it, the problem still listed.
+- 50a.5 (`Features/LibraryBrowser`): `ImportPlan.preview`, an `ImportPreview` of a heading,
+  rows of what changes and how many (Skip counts only from iTunes), the fields with nothing
+  to change in one "No change:" line, and notes (ratings kept, playlists skipped, rows merged,
+  tracks with no file, problems). The sheet shows the heading, an `NSGridView` of the rows,
+  the dimmed line and the notes in one wrapping line, at the same width. Tests: the rows for
+  a plan from each player; the fit test with the table and the dimmed line, and its snapshot.
+- 50a.6 (`Features/LibraryBrowser`): the first candidate is 50a.1's fix. For the second, a
+  probe drew an art cell in a row view that draws its subviews into its layer: setting the
+  album line redraws the row's layer, and clearing it clears the line, so there is nothing to
+  fix there. Test: after long scrolls both ways and a change of order, every row view on
+  screen has its own row's line and its art cell its own album line.
+- Order: this plan, 50a.4, 50a.3, 50a.1 and 50a.2 with the ADR, 50a.6's test, 50a.5, the
+  result.
+
 #### 50b. Playback: the hog mode fix plays the track you chose; the log
 
 - [ ] **50b.1 Turn On plays the chosen track.** With hog mode off, double-clicking a DSD
