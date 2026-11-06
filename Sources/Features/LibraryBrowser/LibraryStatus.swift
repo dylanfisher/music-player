@@ -29,6 +29,10 @@ struct LibraryStatus: Equatable, Sendable {
     /// far along it is, from 0 to 1.
     var savingText: String?
     var savingFraction = 0.0
+    /// What Analyze Library says while it runs or is paused, such as "Analyzing library: 40 of
+    /// 1,200", and how far along it is.
+    var analysisText: String?
+    var analysisFraction = 0.0
 
     init() {}
 
@@ -111,18 +115,23 @@ struct LibraryStatus: Equatable, Sendable {
         return Double(values.map(\.read).reduce(0, +)) / Double(values.map(\.toRead).reduce(0, +))
     }
 
-    /// The line beside the bar that fills: the scans and a tag save, either or both; nil while
-    /// neither runs.
+    /// The line beside the bar that fills: the scans, a tag save and Analyze Library, any of
+    /// them; nil while none runs.
     var activityText: String? {
-        let parts = [scanText, savingText].compactMap { $0 }
+        let parts = [scanText, savingText, analysisText].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    /// How far that bar is filled: the scans' fraction while any scans, else the save's. Nil
-    /// for a bar that moves on its own, or none.
+    /// How far that bar is filled: the scans' fraction while any scans, else the save's, else
+    /// the analysis's. Nil for a bar that moves on its own, or none.
     var activityFraction: Double? {
-        scanText != nil ? scanFraction : savingText.map { _ in savingFraction }
+        if scanText != nil { return scanFraction }
+        if savingText != nil { return savingFraction }
+        return analysisText.map { _ in analysisFraction }
     }
+
+    /// Whether a scan is under way, which Analyze Library waits for.
+    var isScanning: Bool { !scanning.isEmpty }
 
     /// "3 files and 1 folder with problems", the title of the button that lists them. Notices
     /// that count nothing still have a list to show. Nil when there's nothing to list.

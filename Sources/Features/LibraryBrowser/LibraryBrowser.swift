@@ -886,7 +886,27 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         showActivity()
     }
 
-    /// The scans' and a save's line, and their bar.
+    /// Shows what Analyze Library says while it runs or is paused, and how far along it is,
+    /// beside the scans' line; nil once it's done. The table refreshes as during a scan, so its
+    /// measure columns fill in.
+    public func showAnalysis(_ progress: (text: String, fraction: Double)?) {
+        status.analysisText = progress?.text
+        status.analysisFraction = progress?.fraction ?? 0
+        showActivity()
+        scheduleRefresh()
+    }
+
+    /// Analyze Library stopped, at its end or paused: the table shows its last measures, and
+    /// Library Health counts them.
+    public func analysisStopped() {
+        refreshNow()
+        runHealth()
+    }
+
+    /// Whether a scan is under way, as the status bar shows it.
+    public var isScanning: Bool { status.isScanning }
+
+    /// The activity line: the scans, a save and Analyze Library, and their bar.
     private func showActivity() {
         scanLabel.stringValue = status.activityText ?? ""
         scanLabel.isHidden = status.activityText == nil

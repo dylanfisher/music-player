@@ -140,8 +140,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var thumbnails = ThumbnailStore(directory: paths.thumbnailDirectory)
     /// The Spectrum window's spectrograms, kept beside the thumbnails (ADR 0115).
     lazy var spectrograms = SpectrogramStore(directory: paths.spectrogramDirectory)
-    /// Made on first use by `fileAnalyzer()`.
+    /// Made on first use by `measuresCache()`, `fileAnalyzer()` and `libraryPass()`.
+    var measures: MeasuresCache?
     var analyzer: FileAnalyzer?
+    var libraryAnalysis: LibraryAnalysis?
+    /// Where Analyze Library was at its last report; nil when it isn't running or paused.
+    var libraryAnalysisStage: LibraryAnalysis.Progress.Stage?
     private(set) lazy var spectrumWindows = makeSpectrumWindows()
     private let stalls = StallDetector { NSApp.currentEvent.map { eventName($0.type) } }
 

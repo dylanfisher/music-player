@@ -15,6 +15,12 @@ public actor MeasuresCache {
         try index.measures(path: path, stamp: stamp)
     }
 
+    /// The tracks' files Analyze Library has still to analyze, with the index's stamp for each:
+    /// those with no measures, or whose file changed since.
+    public func filesToAnalyze() throws -> [(path: String, stamp: FileStamp)] {
+        try index.filesToAnalyze()
+    }
+
     public func store(_ measures: FileMeasures, path: String, stamp: FileStamp) throws {
         try index.storeMeasures(measures, path: path, stamp: stamp)
     }

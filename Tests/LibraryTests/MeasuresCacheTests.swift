@@ -41,6 +41,30 @@ private let silent = FileMeasures(
     #expect(try await cache.measures(path: "/a.flac", stamp: stamp) == nil)
 }
 
+@Test func theFilesToAnalyzeAreTheTracksWithoutMeasuresOfTheFileAsIndexed() async throws {
+    let library = try TestLibrary()
+    _ = try library.scan()
+    let index = try library.index()
+    let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    let analyzable = rows.filter { !["dsf", "dff"].contains($0.fileType.lowercased()) }
+    #expect(analyzable.count < rows.count)
+    let cache = try MeasuresCache(databaseURL: library.databaseURL)
+    let before = try await cache.filesToAnalyze()
+    #expect(before.map(\.path) == analyzable.map(\.path).sorted())
+    #expect(
+        before.map(\.stamp)
+            == analyzable.sorted { $0.path < $1.path }.map {
+                FileStamp(sizeBytes: $0.sizeBytes, modifiedSeconds: $0.modifiedSeconds)
+            })
+
+    // One analyzed as indexed, one from before its file changed.
+    try await cache.store(measured, path: before[0].path, stamp: before[0].stamp)
+    var older = before[1].stamp
+    older.sizeBytes += 1
+    try await cache.store(measured, path: before[1].path, stamp: older)
+    #expect(try await cache.filesToAnalyze().map(\.path) == before.dropFirst().map(\.path))
+}
+
 @Test func measuresRebuiltOnTheirOwnKeepTheStatsAndReportNothing() throws {
     let library = try TestLibrary()
     let index = try library.index()

@@ -29,6 +29,24 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
     #expect(status.activityText == nil && status.activityFraction == nil)
 }
 
+/// Analyze Library shows after the scans and a save, its bar filling while neither runs, and
+/// says a scan is under way while one is.
+@Test func libraryAnalysisShowsAfterTheScansAndASave() {
+    var status = LibraryStatus()
+    status.analysisText = "Analyzing library: 40 of 1,200"
+    status.analysisFraction = 0.25
+    #expect(status.activityText == "Analyzing library: 40 of 1,200")
+    #expect(status.activityFraction == 0.25 && !status.isScanning)
+    status.savingText = "Saving tags: 3 of 20"
+    status.savingFraction = 0.4
+    #expect(status.activityText == "Saving tags: 3 of 20 · Analyzing library: 40 of 1,200")
+    #expect(status.activityFraction == 0.4)
+    status.apply(.scanning(folder: "/Volumes/music/library", ScanProgress()))
+    #expect(status.isScanning)
+    status.apply(.scanFailed(folder: "/Volumes/music/library", reason: "gone"))
+    #expect(!status.isScanning)
+}
+
 @Test func statusShowsTracksScansAndProblemsApart() {
     var status = LibraryStatus()
     #expect(

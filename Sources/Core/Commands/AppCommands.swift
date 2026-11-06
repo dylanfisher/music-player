@@ -62,6 +62,9 @@ extension CommandID {
     public static let showStats = CommandID("library.stats")
     public static let showYearInReview = CommandID("library.yearInReview")
     public static let rescanNow = CommandID("library.rescanNow")
+    /// Analyzes every file not analyzed yet, or changed since, until paused (ADR 0116).
+    public static let analyzeLibrary = CommandID("library.analyzeLibrary")
+    public static let pauseLibraryAnalysis = CommandID("library.pauseAnalysis")
     public static let resolveLostStats = CommandID("library.resolveLostStats")
     public static let restoreRemoved = CommandID("library.restoreRemoved")
     public static let revealInFinder = CommandID("track.revealInFinder")
@@ -227,6 +230,9 @@ public enum AppCommands {
             Command(.showYearInReview, "Show Year in Review"),
             // Not from links: it ignores the playback pause, so a page could keep the NAS busy.
             Command(.rescanNow, "Rescan All"),
+            // Not from links either: it reads every file on the NAS.
+            Command(.analyzeLibrary, "Analyze Library"),
+            Command(.pauseLibraryAnalysis, "Pause Library Analysis"),
             Command(.resolveLostStats, "Resolve Lost Stats…"),
             Command(.restoreRemoved, "Restore Removed Tracks…"),
             Command(

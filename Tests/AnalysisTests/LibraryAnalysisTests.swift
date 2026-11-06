@@ -1,0 +1,160 @@
+import Foundation
+import Metadata
+import Settings
+import Testing
+
+@testable import Analysis
+@testable import Fixtures
+@testable import Library
+
+/// A library of three analysis fixtures, scanned into a database of its own.
+private struct ScannedFixtures {
+    let databaseURL: URL
+    /// The files' paths, in the order the pass takes them.
+    let paths: [String]
+
+    init() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("library-analysis-\(UUID().uuidString)")
+        let music = directory.appendingPathComponent("Music")
+        try FileManager.default.createDirectory(at: music, withIntermediateDirectories: true)
+        let fixtures = try defaultPlaybackFixturesDirectory()
+        var paths: [String] = []
+        for (name, fixture) in [
+            ("a", AnalysisFixture.lowPass16k), ("b", .padded), ("c", .fullBand),
+        ] {
+            let file = music.appendingPathComponent("\(name).flac")
+            try FileManager.default.copyItem(
+                at: try analysisFixture(fixture, in: fixtures), to: file)
+            paths.append(file.path)
+        }
+        databaseURL = libraryFileURL(in: directory)
+        let summary = try LibraryScanner(databaseURL: databaseURL).scan(
+            WatchedFolder(path: music.path, kind: .local))
+        #expect(summary.read == 3 && summary.failed == 0)
+        self.paths = paths
+    }
+
+    func cache() throws -> MeasuresCache { try MeasuresCache(databaseURL: databaseURL) }
+}
+
+/// What a run reported and which files it was asked to analyze, as they come.
+private final class Heard: @unchecked Sendable {
+    private let lock = NSLock()
+    private var reported: [LibraryAnalysis.Progress] = []
+    private var asked: [String] = []
+    private var scanning = false
+
+    func report(_ progress: LibraryAnalysis.Progress) {
+        lock.withLock { reported.append(progress) }
+    }
+    func ask(_ path: String) { lock.withLock { asked.append(path) } }
+    var progress: [LibraryAnalysis.Progress] { lock.withLock { reported } }
+    var paths: [String] { lock.withLock { asked } }
+    var scanRuns: Bool {
+        get { lock.withLock { scanning } }
+        set { lock.withLock { scanning = newValue } }
+    }
+}
+
+/// Measures that earn no verdict, for a stand-in analysis.
+private let clean = FileMeasures(
+    formatID: "flac", sampleRateHz: 44_100, storedBits: 16, channels: 2, isFloat: false,
+    durationSeconds: 6, cutoffHz: nil, cutoffSteepnessDBPerKHz: nil, effectiveBits: 16,
+    identicalChannels: false, peakDBFS: -1, truePeakDBTP: -0.9, clippedRuns: 0,
+    dynamicRange: 10)
+
+/// Waits up to 10 s for `condition`.
+private func eventually(_ condition: () -> Bool) async throws {
+    for _ in 0..<1000 where !condition() { try await Task.sleep(nanoseconds: 10_000_000) }
+    #expect(condition())
+}
+
+@Test func aRunMeasuresEveryFileAndARunAfterARelaunchFindsNoneLeft() async throws {
+    let library = try ScannedFixtures()
+    let heard = Heard()
+    let pass = LibraryAnalysis(
+        cache: try library.cache(), scanRunning: { false }, report: heard.report)
+    let ended = await pass.start().value
+    #expect(ended.stage == .finished)
+    #expect(ended.analyzed == 3 && ended.total == 3 && ended.failed == 0)
+    #expect(heard.progress.map(\.analyzed) == [0, 1, 2, 3, 3])
+    #expect(ended.text == "Library analyzed: 3 files")
+
+    let index = try LibraryIndex(at: library.databaseURL)
+    let rows = try index.rows(ids: try index.trackIDs(sortedBy: .path))
+    #expect(rows.map { $0.cutoffHz.map { ($0 / 1000).rounded() } } == [16, nil, nil])
+    #expect(rows.map(\.effectiveBits) == [16, 16, 16])
+
+    // A new pass, as after a relaunch, reads what the index holds and analyzes nothing.
+    let relaunched = LibraryAnalysis(
+        cache: try library.cache(),
+        analyze: { path in
+            heard.ask(path)
+            return clean
+        }, scanRunning: { false }, report: { _ in })
+    let again = await relaunched.start().value
+    #expect(again.total == 0 && again.stage == .finished)
+    #expect(heard.paths.isEmpty)
+}
+
+@Test func pausingStopsAtOnceAndTheNextRunReadsTheStoppedFileAgain() async throws {
+    let library = try ScannedFixtures()
+    let heard = Heard()
+    let pass = LibraryAnalysis(
+        cache: try library.cache(),
+        analyze: { path in
+            heard.ask(path)
+            // The second file takes until the run is paused, the first time.
+            if path == library.paths[1], heard.paths.filter({ $0 == path }).count == 1 {
+                try await Task.sleep(nanoseconds: 60_000_000_000)
+            }
+            return clean
+        }, scanRunning: { false }, report: heard.report)
+    let run = await pass.start()
+    try await eventually { heard.paths.count == 2 }
+    await pass.pause()
+    let paused = await run.value
+    #expect(paused.stage == .paused && paused.analyzed == 1 && paused.total == 3)
+    #expect(paused.text == "Library analysis paused: 1 of 3")
+
+    let resumed = await pass.start().value
+    #expect(resumed.stage == .finished && resumed.analyzed == 2 && resumed.total == 2)
+    #expect(
+        heard.paths == [library.paths[0], library.paths[1], library.paths[1], library.paths[2]])
+}
+
+@Test func aRunWaitsWhileAScanRunsAndGoesOnWhenItEnds() async throws {
+    let library = try ScannedFixtures()
+    let heard = Heard()
+    heard.scanRuns = true
+    let pass = LibraryAnalysis(
+        cache: try library.cache(),
+        analyze: { path in
+            heard.ask(path)
+            return clean
+        }, scanRunning: { heard.scanRuns }, report: heard.report)
+    let run = await pass.start()
+    try await eventually { heard.progress.last?.stage == .waitingForScan }
+    #expect(heard.progress.last?.text == "Analyzing library: 0 of 3, waiting for the scan")
+    try await Task.sleep(nanoseconds: 200_000_000)
+    #expect(heard.paths.isEmpty)
+    heard.scanRuns = false
+    let ended = await run.value
+    #expect(ended.stage == .finished && ended.analyzed == 3)
+    #expect(heard.paths == library.paths)
+}
+
+@Test func aFileThatFailsIsCountedAndTriedAgainNextRun() async throws {
+    let library = try ScannedFixtures()
+    let pass = LibraryAnalysis(
+        cache: try library.cache(),
+        analyze: { path in
+            guard path != library.paths[1] else { throw AnalysisError.nonFiniteSample }
+            return clean
+        }, scanRunning: { false }, report: { _ in })
+    let ended = await pass.start().value
+    #expect(ended.analyzed == 3 && ended.failed == 1)
+    #expect(ended.text == "Library analyzed: 3 files, 1 couldn't be read; the log says why")
+    #expect(try await library.cache().filesToAnalyze().map(\.path) == [library.paths[1]])
+}

@@ -8,9 +8,34 @@ import Spectrum
 private let logger = moduleLogger()
 
 /// Show Spectrum and `music-player analyze` (ADR 0115): both analyze the selection, or the
-/// command line's paths, through the analyzer's caches.
+/// command line's paths, through the analyzer's caches. Analyze Library (ADR 0116) measures
+/// the whole library into the same index.
 extension AppDelegate {
     func registerSpectrumCommands(_ dispatcher: CommandDispatcher) {
+        dispatcher.handle(
+            .analyzeLibrary,
+            enabled: { [weak self] in
+                guard let self, window != nil else { return false }
+                return libraryAnalysisStage == nil || libraryAnalysisStage == .paused
+            },
+            run: { [weak self] in
+                guard let self else { return }
+                do {
+                    let pass = try libraryPass()
+                    Task { await pass.start() }
+                } catch {
+                    browser?.report("Analyze Library: \(error)")
+                }
+            })
+        dispatcher.handle(
+            .pauseLibraryAnalysis,
+            enabled: { [weak self] in
+                [.analyzing, .waitingForScan].contains(self?.libraryAnalysisStage)
+            },
+            run: { [weak self] in
+                guard let pass = self?.libraryAnalysis else { return }
+                Task { await pass.pause() }
+            })
         dispatcher.handle(
             .showSpectrum,
             enabled: { [weak self] in self?.window != nil && self?.hasSelectedTracks() == true },
@@ -46,14 +71,54 @@ extension AppDelegate {
             .lastPathComponent
     }
 
-    /// The analyzer, made on first use: it opens a connection of its own to the library.
+    /// The measures in the index, on a connection of their own, opened on first use.
+    private func measuresCache() throws -> MeasuresCache {
+        if let measures { return measures }
+        let made = try MeasuresCache(databaseURL: libraryFileURL(in: paths.dataDirectory))
+        measures = made
+        return made
+    }
+
+    /// The analyzer, made on first use.
     func fileAnalyzer() throws -> FileAnalyzer {
         if let analyzer { return analyzer }
-        let made = FileAnalyzer(
-            measures: try MeasuresCache(databaseURL: libraryFileURL(in: paths.dataDirectory)),
-            spectrograms: spectrograms)
+        let made = FileAnalyzer(measures: try measuresCache(), spectrograms: spectrograms)
         analyzer = made
         return made
+    }
+
+    /// Analyze Library, made on first use. It waits while the status bar shows a scan, and
+    /// reports to it in the order it went.
+    private func libraryPass() throws -> LibraryAnalysis {
+        if let libraryAnalysis { return libraryAnalysis }
+        let made = LibraryAnalysis(
+            cache: try measuresCache(),
+            scanRunning: { [weak self] in await self?.browser?.isScanning ?? false },
+            report: { [weak self] progress in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.libraryAnalysisReported(progress) }
+                }
+            })
+        libraryAnalysis = made
+        return made
+    }
+
+    private func libraryAnalysisReported(_ progress: LibraryAnalysis.Progress) {
+        switch progress.stage {
+        case .analyzing, .waitingForScan:
+            libraryAnalysisStage = progress.stage
+            browser?.showAnalysis((progress.text, progress.fraction))
+        case .paused:
+            libraryAnalysisStage = .paused
+            browser?.showAnalysis((progress.text, progress.fraction))
+            browser?.analysisStopped()
+        case .finished:
+            libraryAnalysisStage = nil
+            browser?.showAnalysis(nil)
+            browser?.analysisStopped()
+            // A run that read every file says nothing more: Library Health counts what it found.
+            if progress.failed > 0 || progress.problem != nil { browser?.report(progress.text) }
+        }
     }
 
     /// What `music-player analyze` prints for `paths`, or for the selected tracks when there

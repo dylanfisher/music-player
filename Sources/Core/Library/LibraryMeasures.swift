@@ -1,3 +1,4 @@
+import Foundation
 import Metadata
 
 extension LibraryIndex {
@@ -23,6 +24,27 @@ extension LibraryIndex {
                 peakDBFS: row.optionalDouble(10), truePeakDBTP: row.optionalDouble(11),
                 clippedRuns: try row.int(12), dynamicRange: row.optionalInt(13))
         }.first
+    }
+
+    /// Every track's file with no measures made from it as the index has it, with that stamp,
+    /// in path order, so a pass over a share reads a folder at a time. DSD files are left out,
+    /// as analysis refuses them.
+    func filesToAnalyze() throws -> [(path: String, stamp: FileStamp)] {
+        try statement(
+            """
+            SELECT f.path, f.size_bytes, f.modified_seconds FROM tracks t
+            JOIN files f ON f.id = t.file_id
+            LEFT JOIN \(measuresTable) m ON m.path = f.path AND m.size_bytes = f.size_bytes
+                AND m.modified_seconds = f.modified_seconds
+            WHERE m.path IS NULL
+            ORDER BY f.path
+            """
+        ).map { row in
+            (
+                try row.text(0),
+                FileStamp(sizeBytes: try row.int(1), modifiedSeconds: try row.double(2))
+            )
+        }.filter { !dsdFileExtensions.contains(($0.path as NSString).pathExtension.lowercased()) }
     }
 
     /// Keeps `measures` for `path` as `stamp` describes the file, replacing any row before.

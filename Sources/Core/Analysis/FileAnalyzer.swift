@@ -84,11 +84,11 @@ public final class FileAnalyzer: Sendable {
     }
 }
 
-/// `body` on a task of its own at utility priority, cancelled when the caller's task is.
-private func offMain<T: Sendable>(_ body: @escaping @Sendable () throws -> T) async rethrows
-    -> T
-{
-    let task = Task.detached(priority: .utility) { try body() }
+/// `body` on a task of its own at `priority`, cancelled when the caller's task is.
+func offMain<T: Sendable>(
+    priority: TaskPriority = .utility, _ body: @escaping @Sendable () throws -> T
+) async rethrows -> T {
+    let task = Task.detached(priority: priority) { try body() }
     return try await withTaskCancellationHandler {
         try await task.value
     } onCancel: {
