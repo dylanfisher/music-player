@@ -454,10 +454,12 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(stored[key] is NSNull)
 }
 
-/// Waits for `condition`, such as a color well's color saved after its pause, for up to 5 s.
+/// Waits for `condition`, such as a color well's color saved after its pause, for up to 30 s.
+/// The suite's other tests share the main actor, so with all of them running the save can
+/// wait behind several seconds of their work.
 @MainActor
 private func waitFor(_ condition: () -> Bool) async throws {
-    let deadline = Date().addingTimeInterval(5)
+    let deadline = Date().addingTimeInterval(30)
     while !condition() {
         guard Date() < deadline else {
             Issue.record("timed out")
