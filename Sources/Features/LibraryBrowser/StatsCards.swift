@@ -57,7 +57,8 @@ final class StatsCards {
 
     init(listLength: Int = StatsReport.listLength, listHeightPoints: CGFloat = 214) {
         self.listLength = listLength
-        totalsCard = StatsCard(title: "Totals", body: figures, columns: 4, heightPoints: 92)
+        totalsCard = StatsCard(
+            title: "Totals", body: figures, columns: 4, heightPoints: 92, fillsRow: true)
         chartCard = StatsCard(title: barsTitle(.day), body: chart, columns: 2)
         clockCard = StatsCard(title: "When You Listen", body: grid)
         firstKind.selectedSegment = 0

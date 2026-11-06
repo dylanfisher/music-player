@@ -296,3 +296,43 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     #expect(statsPlaylistPeriod(.chosenYear(2024), nil) == "2024")
     #expect(statsPlaylistPeriod(.all, nil) == "All Time")
 }
+
+/// The panel's cards, their totals filled, in a flow `width` points wide, laid out.
+@MainActor private func flowedCards(width: CGFloat) -> (StatsCards, StatsFlowView) {
+    let cards = StatsCards()
+    let report = StatsReport(
+        PeriodScan(
+            span: nil, paths: [], buckets: [], bucketSeconds: 3600, libraryTracks: 1,
+            undatedPlays: 0), firstPlays: FirstPlays(), calendar: .current)
+    cards.figures.figures = StatsCards.figures(report)
+    let flow = StatsFlowView(frame: NSRect(x: 0, y: 0, width: width, height: 900))
+    flow.cards = cards.all
+    flow.layoutSubtreeIfNeeded()
+    return (cards, flow)
+}
+
+/// How many rows the figures are in, and how many in the widest.
+@MainActor private func figureRows(_ figures: StatsFigures) -> (rows: Int, widest: Int) {
+    let tops = figures.columns.map(\.frame.minY)
+    let counts = Dictionary(grouping: tops, by: { $0 }).values.map(\.count)
+    return (counts.count, counts.max() ?? 0)
+}
+
+@MainActor @Test func theTotalsBesidePlaysPerDayAreAsTallAsItInTwoRows() {
+    let (cards, _) = flowedCards(width: 2000)
+    let totals = cards.totalsCard.frame
+    let chart = cards.chartCard.frame
+    #expect(totals.minY == chart.minY && totals.maxX < chart.minX, "\(totals) \(chart)")
+    #expect(totals.height == chart.height)
+    #expect(figureRows(cards.figures) == (2, 3))
+    for column in cards.figures.columns {
+        #expect(column.frame.maxY <= cards.figures.bounds.height)
+        #expect(column.frame.width > 100)
+    }
+
+    // On a row of their own they keep their height, the figures in one row.
+    let (narrow, _) = flowedCards(width: 1000)
+    #expect(narrow.totalsCard.frame.height == narrow.totalsCard.heightPoints)
+    #expect(narrow.chartCard.frame.minY > narrow.totalsCard.frame.maxY)
+    #expect(figureRows(narrow.figures) == (1, 6))
+}

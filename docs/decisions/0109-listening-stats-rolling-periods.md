@@ -1,8 +1,8 @@
-# 0109. Listening Stats: rolling periods
+# 0109. Listening Stats: rolling periods, the totals beside the chart, a named list
 
 - **Date:** 2026-11-06
 - **Status:** accepted
-- **Amends:** [0102](0102-listening-stats.md) (the periods, a saved list's name)
+- **Amends:** [0102](0102-listening-stats.md) (the periods, the cards' flow, a saved list)
 
 ## Context
 
@@ -24,6 +24,11 @@ month the calendar periods held a day or two of plays.
   year is in the year menu, which stays as it is.
 - **A saved list's name** for a rolling period is its days ("Top Artists, Oct 8 – Nov 6, 2026",
   "Nov 7, 2025 – Nov 6, 2026"), not the year its first day is in; a chosen year's is the year.
+
+- **The totals fill their row.** Where the totals share a row with Plays per Day (six columns or
+  more), the flow makes them as tall as the row's tallest card, and the figures go into two rows
+  of three, each row in the middle of its half; on a row of their own they keep 92 points and
+  one row. A card says whether it fills its row, so the rule isn't tied to the two cards' places.
 
 ## Alternatives considered
 

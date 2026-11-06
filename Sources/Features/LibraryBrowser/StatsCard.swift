@@ -3,24 +3,28 @@ import AppKit
 /// One card of Listening Stats: a title, a line beside it that the body can change (what a
 /// hovered bar holds), an optional control at the right, and the body below, on a rounded
 /// background drawn as the health tiles' are. `columns` is how many of the flow's columns it
-/// spans; `heightPoints` its height.
+/// spans; `heightPoints` its height, or the least it takes when it `fillsRow`.
 final class StatsCard: NSView {
     let titleLabel = NSTextField(labelWithString: "")
     let detailLabel = NSTextField(labelWithString: "")
     let body: NSView
     let columns: Int
     let heightPoints: CGFloat
+    /// Whether the flow makes it as tall as the tallest card in its row, as the totals are
+    /// beside Plays per Day.
+    let fillsRow: Bool
     private let background = NSBox()
 
     static let insetPoints: CGFloat = 12
 
     init(
         title: String, body: NSView, accessory: NSView? = nil, columns: Int = 1,
-        heightPoints: CGFloat = 214
+        heightPoints: CGFloat = 214, fillsRow: Bool = false
     ) {
         self.body = body
         self.columns = columns
         self.heightPoints = heightPoints
+        self.fillsRow = fillsRow
         super.init(frame: .zero)
         background.boxType = .custom
         background.borderWidth = 1
@@ -75,7 +79,8 @@ final class StatsCard: NSView {
 
 /// Cards in rows, as many columns as fit at `minimumColumnPoints` each sharing the width
 /// evenly, each card spanning its columns (no more than there are); a card that doesn't fit in
-/// a row starts the next. As tall as its rows, so a scroll view scrolls them.
+/// a row starts the next, and one that fills its row is as tall as the row's tallest. As tall as
+/// its rows, so a scroll view scrolls them.
 final class StatsFlowView: NSView {
     static let spacingPoints: CGFloat = 10
     var minimumColumnPoints: CGFloat = 270
@@ -101,24 +106,32 @@ final class StatsFlowView: NSView {
         let fitting = max(1, Int((width + spacing) / (minimumColumnPoints + spacing)))
         let columns = min(fitting, maximumColumns ?? fitting)
         let columnWidth = (width - CGFloat(columns - 1) * spacing) / CGFloat(columns)
-        var column = 0
-        var top: CGFloat = 0
-        var rowHeight: CGFloat = 0
+        var rows: [[StatsCard]] = []
+        var column = columns
         for card in cards {
             let span = min(card.columns, columns)
             if column + span > columns {
-                top += rowHeight + spacing
+                rows.append([])
                 column = 0
-                rowHeight = 0
             }
-            card.frame = NSRect(
-                x: insetPoints + CGFloat(column) * (columnWidth + spacing), y: top,
-                width: CGFloat(span) * columnWidth + CGFloat(span - 1) * spacing,
-                height: card.heightPoints)
+            rows[rows.count - 1].append(card)
             column += span
-            rowHeight = max(rowHeight, card.heightPoints)
         }
-        let fitted = cards.isEmpty ? 0 : top + rowHeight + insetPoints
+        var top: CGFloat = 0
+        for row in rows {
+            let rowHeight = row.map(\.heightPoints).max() ?? 0
+            var x = insetPoints
+            for card in row {
+                let span = CGFloat(min(card.columns, columns))
+                let cardWidth = span * columnWidth + (span - 1) * spacing
+                card.frame = NSRect(
+                    x: x, y: top, width: cardWidth,
+                    height: card.fillsRow ? rowHeight : card.heightPoints)
+                x += cardWidth + spacing
+            }
+            top += rowHeight + spacing
+        }
+        let fitted = rows.isEmpty ? 0 : top - spacing + insetPoints
         if height.constant != fitted { height.constant = fitted }
     }
 }
