@@ -139,8 +139,10 @@ private final class TwoDevices: @unchecked Sendable {
     #expect(rig.speakers.captured.isEmpty)
     let resumed = try #require(rig.dac.captured.last)
     #expect(rig.dac.captured.count == 2)
-    let frame = Int(resumeAt * 96_000)
-    #expect(contiguousFrames(of: album, from: frame, in: resumed.samples)?.start == 0)
+    // Faded in, since it carries on mid-track.
+    let fade = fadeFrames(96_000)
+    let frame = Int(resumeAt * 96_000) + fade
+    #expect(contiguousFrames(of: album, from: frame, in: resumed.samples)?.start == fade)
 }
 
 @Test func theLostDeviceComingBackLeavesOutputWhereItPlays() async throws {

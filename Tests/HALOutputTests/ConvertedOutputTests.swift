@@ -73,12 +73,12 @@ func aFloatOnlyDevicePlaysAnAlbumConvertedWithoutASeam(rate: Int, bits: Int) asy
     await rig.engine.play()
     try await rig.wait(for: .trackStarted(index: 0))
     try await Task.sleep(nanoseconds: 100_000_000)
-    await rig.engine.pause()
-    try await Task.sleep(nanoseconds: 50_000_000)
-    // Stopped, the position is what the device took, counted at its rate.
+    try await pause(rig)
+    // Stopped, the position is what the IO proc took, counted at the device's rate.
     let pulled = frames(rig.device.captured[0]).count
     let stopped = try #require(await rig.engine.position())
-    #expect(abs(stopped - Double(pulled) / deviceRateHz) < 1e-6)
+    let taken = framesTaken(rig.device.captured[0].samples, float: true)
+    #expect(abs(stopped - Double(taken) / deviceRateHz) < 1e-6)
 
     await rig.engine.seek(toSeconds: 0.5)
     try await Task.sleep(nanoseconds: 50_000_000)
@@ -87,14 +87,16 @@ func aFloatOnlyDevicePlaysAnAlbumConvertedWithoutASeam(rate: Int, bits: Int) asy
     await rig.engine.play()
     try await rig.wait(for: .finished)
 
-    // After what played before the pause, the sine carries on from half a second in.
+    // After what played before the pause, the sine carries on from half a second in, once the
+    // play's fade-in is over.
     let played = frames(rig.device.captured[0])
     let remaining = Int(((Double(album.trackFrames[0]) / 44_100 - 0.5) * deviceRateHz).rounded(.up))
     try #require(played.count >= pulled + remaining)
+    let settled = pulled + max(edgeFrames, fadeFrames(deviceRateHz))
     #expect(
         largestError(
             played, album, from: pulled, atSeconds: 0.5,
-            (pulled + edgeFrames)..<(pulled + remaining - edgeFrames)) < tolerance)
+            settled..<(pulled + remaining - edgeFrames)) < tolerance)
 }
 
 @Test func aConvertedTrackShowsAsConvertedInTheSignalPath() async throws {
@@ -309,13 +311,12 @@ private func joinFrame(_ album: SineAlbum, from frame: Int = 0) -> Int {
     await rig.engine.setQueue(album.tracks)
     await rig.engine.play()
     try await rig.wait(for: .trackStarted(index: 1))
-    await rig.engine.pause()
-    try await Task.sleep(nanoseconds: 50_000_000)
-    let pulled = frames(rig.device.captured[0]).count
+    try await pause(rig)
+    let taken = framesTaken(rig.device.captured[0].samples, float: true)
     let position = try #require(await rig.engine.position())
     // Announced once the device had taken the join, and counted from it.
-    #expect(pulled >= joinFrame(album))
-    #expect(abs(position - Double(pulled - joinFrame(album)) / deviceRateHz) < 1e-6)
+    #expect(taken >= joinFrame(album))
+    #expect(abs(position - Double(taken - joinFrame(album)) / deviceRateHz) < 1e-6)
 }
 
 @Test func aDoubleClickWhileConvertingRestartsTheConverterOnTheOpenDevice() async throws {
@@ -325,8 +326,7 @@ private func joinFrame(_ album: SineAlbum, from frame: Int = 0) -> Int {
     await rig.engine.play()
     try await rig.wait(for: .trackStarted(index: 0))
     try await Task.sleep(nanoseconds: 100_000_000)
-    await rig.engine.pause()
-    try await Task.sleep(nanoseconds: 50_000_000)
+    try await pause(rig)
     let pulled = frames(rig.device.captured[0]).count
     let second = album.tracks[1]
     let filling = await rig.engine.play(starting: second) { ([second], 0) }
@@ -353,23 +353,24 @@ private func joinFrame(_ album: SineAlbum, from frame: Int = 0) -> Int {
     await rig.engine.setQueue(album.tracks)
     await rig.engine.play()
     try await rig.wait(for: .trackStarted(index: 0))
-    await rig.engine.pause()
-    try await Task.sleep(nanoseconds: 50_000_000)
+    try await pause(rig)
     let before = frames(rig.device.captured[0]).count
     // The second track is already queued in the converter, well inside the last 4 s.
     await rig.engine.seek(toSeconds: 0.8)
     await rig.engine.play()
     try await rig.wait(for: .trackStarted(index: 1))
-    await rig.engine.pause()
-    try await Task.sleep(nanoseconds: 50_000_000)
+    try await pause(rig)
     let played = frames(rig.device.captured[0])
+    let taken = framesTaken(rig.device.captured[0].samples, float: true)
     let join = before + joinFrame(album, from: 35_280)
     let position = try #require(await rig.engine.position())
-    #expect(abs(position - Double(played.count - join) / deviceRateHz) < 1e-6)
+    #expect(abs(position - Double(taken - join) / deviceRateHz) < 1e-6)
+    // Between the play's fade-in and the pause's fade-out.
+    let fade = fadeFrames(deviceRateHz)
     #expect(
         largestError(
             played, album, from: before, atSeconds: 0.8,
-            (before + edgeFrames)..<(played.count - 10)) < tolerance)
+            (before + max(edgeFrames, fade))..<(taken - fade)) < tolerance)
 }
 
 /// The output on its own, with each item's id its index in `urls`.

@@ -116,6 +116,36 @@ private func unpack(_ samples: [Int32], allowingGaps: Bool = false) throws -> [[
     #expect(carried[0].count < track.expected[0].count)
 }
 
+/// DoP doesn't fade (ADR 0110): a pause stops the device at once and a play starts it on the
+/// next pair of frames, so every byte carried is the track's and the markers never break.
+@Test func aPauseAPlayAndASeekKeepTheMarkersAndBytesOfDoP() async throws {
+    let track = try dsdTrack("paused", bytes: 2 * 352_800, seed: 5)
+    let rig = try await Rig(speed: 2)
+    await rig.engine.setQueue([track.url])
+    await rig.engine.play()
+    try await rig.wait(for: .trackStarted(index: 0))
+    try await Task.sleep(nanoseconds: 100_000_000)
+    try await pause(rig)
+    await rig.engine.play()
+    try await Task.sleep(nanoseconds: 100_000_000)
+    await rig.engine.seek(toSeconds: 1.5)
+    try await Task.sleep(nanoseconds: 50_000_000)
+    try await pause(rig)
+    await rig.engine.play()
+    try await rig.wait(for: .finished)
+
+    let carried = try unpack(rig.device.captured[0].samples, allowingGaps: true)
+    // Unscaled and in order across the pause: at least the 0.4 s of track time before the seek.
+    let kept = zip(carried[0], track.expected[0]).prefix { $0 == $1 }.count
+    #expect(kept > 100_000)
+    // Then from 1.5 s, across the second pause, to the end.
+    let tail = track.expected[0].suffix(from: 2 * 264_600)
+    func audio(_ bytes: some BidirectionalCollection<UInt8>) -> [UInt8] {
+        Array(bytes.reversed().drop { $0 == dsdIdleByte }.reversed())
+    }
+    #expect(audio(carried[0]).suffix(audio(tail).count) == audio(tail)[...])
+}
+
 @Test func theVolumeNeverReachesDoP() async throws {
     let track = try dsdTrack("loud", bytes: 60_000, seed: 4)
     let rig = try await Rig(digitalVolume: true)

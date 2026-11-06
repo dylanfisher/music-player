@@ -1,4 +1,5 @@
 import Foundation
+import HALRender
 import Testing
 
 @testable import Fixtures
@@ -93,6 +94,25 @@ final class Rig: @unchecked Sendable {
     var events: [PlaybackEvent] { seen.compactMap(\.event) }
 }
 
+/// The frames a fade takes at `rate`.
+func fadeFrames(_ rate: Double) -> Int { Int(HALRenderFadeFrames(rate)) }
+
+/// Pauses and waits for the device to stop, which it does once the fade-out has played.
+func pause(_ rig: Rig) async throws {
+    await rig.engine.pause()
+    try await waitUntil { !rig.device.isRunning }
+}
+
+/// How many of a paused run's frames the IO proc took from the ring buffer: up to the fade-out's
+/// last frame, which is silent, and not the silence the device pulled after it. `float` samples
+/// are float bits, where that last frame can be -0.
+func framesTaken(_ samples: [Int32], float: Bool = false) -> Int {
+    let frames = samples.count / 2
+    let silent = { (sample: Int32) in sample == 0 || (float && sample == Int32.min) }
+    let lastSound = (0..<frames).last { !silent(samples[2 * $0]) || !silent(samples[2 * $0 + 1]) }
+    return (lastSound ?? -1) + 2
+}
+
 func album(_ rate: Int, _ bits: Int) throws -> RampAlbum {
     try rampAlbum(
         sampleRateHz: rate, bitsPerSample: bits, in: try defaultPlaybackFixturesDirectory())
@@ -181,9 +201,11 @@ func contiguousFrames(of album: RampAlbum, from first: Int = 0, in samples: [Int
     await rig.engine.play()
     try await rig.wait(for: .finished)
 
+    // Untouched once the play's fade-in is over.
     let samples = rig.device.captured[0].samples
-    let after = try #require(contiguousFrames(of: album, from: 48_000, in: samples))
-    #expect(after.count == album.trackFrames[0] - 48_000)
+    let from = 48_000 + fadeFrames(96_000)
+    let after = try #require(contiguousFrames(of: album, from: from, in: samples))
+    #expect(after.count == album.trackFrames[0] - from)
 }
 
 @Test func losingTheDevicePausesAndItsReturnLetsPlaybackResume() async throws {
@@ -208,9 +230,11 @@ func contiguousFrames(of album: RampAlbum, from first: Int = 0, in samples: [Int
 
     await rig.engine.play()
     try await rig.wait(for: .finished)
+    // Faded in, since it carries on mid-track.
     let resumed = try #require(rig.device.captured.last)
-    let frame = Int(resumeAt * 96_000)
-    #expect(contiguousFrames(of: album, from: frame, in: resumed.samples)?.start == 0)
+    let fade = fadeFrames(96_000)
+    let frame = Int(resumeAt * 96_000) + fade
+    #expect(contiguousFrames(of: album, from: frame, in: resumed.samples)?.start == fade)
 }
 
 @Test func playingWithTheDeviceUnpluggedReportsItLost() async throws {
@@ -512,8 +536,7 @@ private func doubleClick(_ second: URL, after first: URL, on rig: Rig) async thr
     await rig.engine.play()
     try await rig.wait(for: .trackStarted(index: 0))
     try await Task.sleep(nanoseconds: 100_000_000)
-    await rig.engine.pause()
-    try await Task.sleep(nanoseconds: 50_000_000)
+    try await pause(rig)
     let pulled = rig.device.captured[0].samples.count / 2
     let filling = await rig.engine.play(starting: second) { ([second], 0) }
     try await filling.value
@@ -666,7 +689,7 @@ private func doubleClick(_ second: URL, after first: URL, on rig: Rig) async thr
 }
 
 /// Polls `condition` every 5 ms for up to 5 s.
-private func waitUntil(_ condition: () -> Bool) async throws {
+func waitUntil(_ condition: () -> Bool) async throws {
     let deadline = Date().addingTimeInterval(5)
     while !condition() {
         guard Date() < deadline else { throw TimedOut(seen: "the condition never held") }
@@ -694,8 +717,7 @@ private func copies(of album: RampAlbum) throws -> [URL] {
     await rig.engine.setQueue(tracks)
     await rig.engine.play()
     try await rig.wait(for: .trackStarted(index: 0))
-    await rig.engine.pause()
-    try await Task.sleep(nanoseconds: 50_000_000)
+    try await pause(rig)
     let pulled = rig.device.captured[0].samples.count / 2
     // Opening the file again would fail now.
     try FileManager.default.removeItem(at: tracks[1])
@@ -720,8 +742,7 @@ private func copies(of album: RampAlbum) throws -> [URL] {
     try await rig.wait(for: .trackStarted(index: 0))
     // The first track is shorter than the ring buffer, so decoding moved on at once.
     try await Task.sleep(nanoseconds: 100_000_000)
-    await rig.engine.pause()
-    try await Task.sleep(nanoseconds: 50_000_000)
+    try await pause(rig)
     let pulled = rig.device.captured[0].samples.count / 2
     try FileManager.default.removeItem(at: tracks[0])
     await rig.engine.seek(toSeconds: 0.5)
@@ -729,11 +750,12 @@ private func copies(of album: RampAlbum) throws -> [URL] {
     try await rig.wait(for: .finished)
 
     #expect(!rig.events.contains { if case .trackFailed = $0 { true } else { false } })
-    // From half a second in, through the second track without a gap.
+    // From half a second in, once the fade-in is over, through the second track without a gap.
+    let fade = fadeFrames(44_100)
     let after = try #require(
-        contiguousFrames(of: album, from: 22_050, in: rig.device.captured[0].samples))
-    #expect(after.start == pulled)
-    #expect(after.count == album.totalFrames - 22_050)
+        contiguousFrames(of: album, from: 22_050 + fade, in: rig.device.captured[0].samples))
+    #expect(after.start == pulled + fade)
+    #expect(after.count == album.totalFrames - 22_050 - fade)
 }
 
 /// On a NAS the control thread can take a while to do a seek, and until it has, the position

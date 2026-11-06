@@ -142,6 +142,10 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     private var playing = false
     /// Whether the device is calling the IO proc.
     private var running = false
+    /// A pause the IO proc is fading out for; the device stops once the fade has played.
+    private var pausing = false
+    /// When the IO proc first read as silent for that pause.
+    private var silentAt: Double?
     /// When the ring buffer was found empty with nothing left to decode.
     private var drainedAt: Double?
     /// The device went away while in use, so its return is worth reporting.
@@ -324,7 +328,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         case .pause:
             playing = false
             cancelFirstSound()
-            stopIO()
+            pauseIO()
             returnDue = true
         case .stop:
             unload()
@@ -399,7 +403,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
                 cannotPlay(item, error)
                 return
             }
-            if playing { startIfReady() } else { stopIO() }
+            if playing { startIfReady() } else { pauseIO() }
         } else {
             let from = stream?.outputFormat
             stopIO(resuming: (item.id, startSeconds))
@@ -755,6 +759,7 @@ public final class DeviceOutput: Output, @unchecked Sendable {
             return
         }
         if stream.isHalfEmpty { fill(stream) }
+        if pausing { finishPause(stream) }
         announceBoundaries(stream)
         let consumed = HALRenderConsumedBytes(stream.render)
         // The IO proc has taken a sample of what the last load or seek queued; it can't end the
@@ -869,7 +874,14 @@ public final class DeviceOutput: Output, @unchecked Sendable {
     // MARK: The device
 
     private func startIfReady() {
-        guard playing, !running, let device, let stream else { return }
+        guard playing, let device, let stream else { return }
+        // A play during a pause's fade-out fades back in from where the fade is.
+        HALRenderSetSilenced(stream.render, false)
+        pausing = false
+        silentAt = nil
+        guard !running else { return }
+        // Audio that doesn't start at a track's first frame cuts in, so it fades in.
+        HALRenderPrepareStart(stream.render, position() > 0)
         do {
             try device.start(stream.render)
             running = true
@@ -881,9 +893,35 @@ public final class DeviceOutput: Output, @unchecked Sendable {
         }
     }
 
+    /// Pauses: the IO proc fades out and `finishPause` stops it once the fade has played. A
+    /// stream that doesn't fade stops at once (ADR 0110).
+    private func pauseIO() {
+        guard running, let stream, stream.fades else {
+            stopIO()
+            return
+        }
+        HALRenderSetSilenced(stream.render, true)
+        pausing = true
+    }
+
+    /// Stops the device once the IO proc has faded out and the device has had its latency to
+    /// play the fade, which a stop straight away would cut off.
+    private func finishPause(_ stream: RenderStream) {
+        guard running, HALRenderIsSilent(stream.render) else { return }
+        let now = uptime()
+        guard let since = silentAt else {
+            silentAt = now
+            return
+        }
+        guard now - since >= stream.format.latencySeconds else { return }
+        stopIO()
+    }
+
     /// Stops the IO proc. If the device is gone, playback resumes at `resume`, by default the
     /// track playing and where it is.
     private func stopIO(resuming resume: (item: OutputItem.ID?, seconds: Double)? = nil) {
+        pausing = false
+        silentAt = nil
         guard running, let device, let stream else { return }
         let resume = resume ?? (segments.first?.item.id, position())
         running = false
@@ -1271,6 +1309,9 @@ private final class RenderStream {
     /// Carries DoP, which the IO proc copies and never scales, so writes come in pairs of
     /// frames and every track starts on an even frame, where the markers expect it.
     let isDoP: Bool
+    /// Whether the IO proc fades a pause, a play and a seek: not for DoP, or a layout it can't
+    /// scale, which stop and start at once (ADR 0110).
+    let fades: Bool
     /// How DoP sits in the device's samples, for the tail; nil for PCM or a format DoP can't use,
     /// which the reader refuses.
     private let dopLayout: DoPLayout?
@@ -1301,9 +1342,10 @@ private final class RenderStream {
         } else if withGain {
             throw DeviceOutputError.noVolumeForFormat(format.summary)
         } else {
-            // The gain stays at unity, so the IO proc never looks at the layout.
-            samples = HALRenderSamplesInt32
+            // The gain stays at unity, and pauses and seeks cut instead of fading.
+            samples = HALRenderSamplesOpaque
         }
+        fades = samples != HALRenderSamplesOpaque
         self.format = format
         bytesPerFrame = Int(stream.mBytesPerFrame)
         dopLayout = isDoP ? DoPLayout(stream, channels: Int(stream.mChannelsPerFrame)) : nil
@@ -1323,7 +1365,10 @@ private final class RenderStream {
             let ring = RingBufferCreate(
                 Int(stream.mSampleRate * Self.bufferSeconds) * bytesPerFrame)
         else { throw DeviceOutputError.outOfMemory }
-        guard let render = HALRenderCreate(ring, samples) else {
+        guard
+            let render = HALRenderCreate(
+                ring, samples, stream.mBytesPerFrame, stream.mSampleRate)
+        else {
             RingBufferDestroy(ring)
             throw DeviceOutputError.outOfMemory
         }

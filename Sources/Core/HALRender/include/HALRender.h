@@ -23,14 +23,16 @@ typedef enum {
     /// Also 24-bit samples aligned high in 4 bytes.
     HALRenderSamplesInt32,
     HALRenderSamplesFloat32,
-    /// Bytes the IO proc copies and never scales, whatever the gain: DoP, whose markers any
-    /// change breaks.
+    /// Bytes the IO proc copies and never scales or fades, whatever the gain: DoP, whose markers
+    /// any change breaks, or a layout it can't scale.
     HALRenderSamplesOpaque,
 } HALRenderSampleKind;
 
-/// Does not take ownership of `source`, which must outlive the IO proc. The gain starts at 1, which
-/// copies samples untouched. Not real-time safe.
-HALRender *_Nullable HALRenderCreate(RingBuffer *source, HALRenderSampleKind samples);
+/// Does not take ownership of `source`, which must outlive the IO proc. `bytesPerFrame` and
+/// `sampleRateHz` describe the device format, which sets how many frames a fade takes. The gain
+/// starts at 1, which copies samples untouched. Not real-time safe.
+HALRender *_Nullable HALRenderCreate(RingBuffer *source, HALRenderSampleKind samples,
+                                     uint32_t bytesPerFrame, double sampleRateHz);
 
 /// Not real-time safe. The IO proc must have been stopped.
 void HALRenderDestroy(HALRender *render);
@@ -53,6 +55,10 @@ uint64_t HALRenderConsumedBytes(const HALRender *render);
 /// the current one finishes untouched. A newer discard replaces one the IO proc hasn't reached.
 /// Shortfalls after a skip, until the IO proc next fills a whole buffer, are not underruns. Only
 /// one producer may call this.
+///
+/// A discard that drops what is playing fades: the IO proc plays what a fade-out needs of the
+/// audio before `toByte` fading out, then what follows fading in. A discard ahead plays every
+/// byte before it untouched.
 void HALRenderDiscard(HALRender *render, uint64_t fromByte, uint64_t toByte);
 
 /// Producer side. True while the producer has nothing more to write for now, at the end of the
@@ -62,6 +68,24 @@ void HALRenderSetDraining(HALRender *render, bool draining);
 /// Any thread. Linear amplitude from 0 to 1, applied from the next IO cycle with a ramp across that
 /// buffer so the change doesn't click.
 void HALRenderSetGain(HALRender *render, float gain);
+
+/// How many frames a fade takes at `sampleRateHz`: about 5 ms, at least 1.
+uint32_t HALRenderFadeFrames(double sampleRateHz);
+
+/// Producer side. Silenced, the IO proc fades out over `HALRenderFadeFrames` and then writes
+/// silence without taking anything from `source`, so playback can stop where the fade ended.
+/// Not silenced, it fades back in from wherever the fade is. A layout it can't scale is never
+/// faded: it plays on until the device stops.
+void HALRenderSetSilenced(HALRender *render, bool silenced);
+
+/// Any thread. True once the IO proc has finished the fade the latest `HALRenderSetSilenced(true)`
+/// asked for, or at once for a stream it never fades; false while it isn't silenced.
+bool HALRenderIsSilent(const HALRender *render);
+
+/// Producer side, only while the IO proc is stopped, just before it starts. With `fadesIn` the
+/// first cycle fades in from silence; without it, plays at full gain. A discard posted while
+/// stopped then drops what it skips at once, since none of that played.
+void HALRenderPrepareStart(HALRender *render, bool fadesIn);
 
 /// A CoreAudio IO proc. `clientData` is a `HALRender *`. Copies bytes from the ring buffer into the
 /// first output buffer, so the producer must write them in the device's format. Pads any shortfall
