@@ -554,7 +554,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         case .keptIndex:
             // No scan ends for it at launch, so the first report runs now.
             if health.report == nil && !health.isRunning { runHealth() }
-        case .scanFailed:
+        case .scanFailed, .scanStopped:
             refreshNow()
         case .removed:
             refreshNow()

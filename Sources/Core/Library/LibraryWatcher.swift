@@ -381,7 +381,11 @@ public final class LibraryWatcher: @unchecked Sendable {
 
     private func finished(_ job: WatchJob, _ result: Result<ScanSummary, any Error>) {
         control = nil
-        guard state != nil else { return }
+        guard state != nil else {
+            // Stopped, so it ends with no outcome; the window still shows it, maybe paused.
+            events(.scanStopped(folder: job.folder.path))
+            return
+        }
         switch result {
         case .success(let summary):
             state?.finished(now: Date())

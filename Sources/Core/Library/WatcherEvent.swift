@@ -7,13 +7,16 @@ public enum WatcherEvent: Sendable {
     /// most once per `LibraryWatcher.progressIntervalSeconds`.
     case scanning(folder: String, ScanProgress)
     /// Pause Scan held the running scan of the watched folder at this path, or, false, Resume
-    /// Scan let it go on. Its `scanned` or `scanFailed` ends the pause too.
+    /// Scan let it go on. Its `scanned`, `scanFailed` or `scanStopped` ends the pause too.
     case scanPaused(folder: String, Bool)
     case scanned(folder: String, ScanSummary)
     /// Files the tag editor wrote were read again and stored (`LibraryWatcher.rescan(files:)`).
     case edited(ScanSummary)
     /// The scan stopped because the database failed. What it stored before then stays.
     case scanFailed(folder: String, reason: String)
+    /// `LibraryWatcher.stop()` cancelled the scan of the watched folder at this path, as when
+    /// a folder is removed or Settings restart the watcher. What it stored stays.
+    case scanStopped(folder: String)
     /// At start, the network folder at this path shows what the index holds, and is first
     /// polled `pollIntervalMinutes` later.
     case keptIndex(folder: String)

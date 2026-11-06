@@ -77,6 +77,17 @@ private func totals(_ count: Int, sizeBytes: Int = 0, seconds: Double = 0) -> Tr
     #expect(!status.scanIsPaused && status.scanText == nil)
 }
 
+/// A scan the watcher's stop cancelled, as when a folder is removed, leaves the status bar, and
+/// a pause of it with it, so no dead Resume stays.
+@Test func aStoppedScanLeavesTheStatusBarWithItsPause() {
+    var status = LibraryStatus()
+    status.apply(.scanning(folder: "/Volumes/music/library", ScanProgress()))
+    status.apply(.scanPaused(folder: "/Volumes/music/library", true))
+    status.apply(.scanStopped(folder: "/Volumes/music/library"))
+    #expect(status.scanText == nil && !status.scanIsPaused && !status.isScanning)
+    #expect(status.failures.isEmpty)
+}
+
 @Test func statusShowsTracksScansAndProblemsApart() {
     var status = LibraryStatus()
     #expect(

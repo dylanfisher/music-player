@@ -51,14 +51,14 @@ struct LibraryStatus: Equatable, Sendable {
                 pausedScan = nil
             }
         case .scanned(let folder, let summary):
-            scanning[folder] = nil
-            if pausedScan == folder { pausedScan = nil }
+            scanEnded(folder)
             failures[folder] = nil
             folderIssues[folder] = summary.issues.isEmpty ? nil : summary.issues
         case .scanFailed(let folder, let reason):
-            scanning[folder] = nil
-            if pausedScan == folder { pausedScan = nil }
+            scanEnded(folder)
             failures[folder] = reason
+        case .scanStopped(let folder):
+            scanEnded(folder)
         case .synced(let report):
             syncProblems = report.problems
         case .syncFailed(let reason):
@@ -66,6 +66,11 @@ struct LibraryStatus: Equatable, Sendable {
         case .removed, .folders, .keptIndex, .launchScansEnded, .edited:
             break
         }
+    }
+
+    private mutating func scanEnded(_ folder: String) {
+        scanning[folder] = nil
+        if pausedScan == folder { pausedScan = nil }
     }
 
     /// Whether there's anything for the problems list to show. `fileIssueCount` counts only

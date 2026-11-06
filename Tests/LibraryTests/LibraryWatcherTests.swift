@@ -123,6 +123,16 @@ private final class LockedEvents: @unchecked Sendable {
         }
     }
 
+    /// The folder of each scan the watcher's stop cancelled, in order.
+    var stopped: [String] {
+        lock.withLock {
+            events.compactMap { event in
+                guard case .scanStopped(let folder) = event else { return nil }
+                return folder
+            }
+        }
+    }
+
     /// The folder of each scan that failed, in order.
     var failedScans: [String] {
         lock.withLock {
@@ -565,4 +575,26 @@ private final class GatedAccess: ScanFileAccess, @unchecked Sendable {
     #expect(received.paused == [true, false])
     #expect(try index.trackCount() == library.readableCount)
     #expect(received.scanned.first?.1.read == library.manifest.files.count)
+}
+
+/// Stopping the watcher, as removing a folder does, ends a paused scan with `scanStopped`, so
+/// the window doesn't keep showing it paused.
+@Test func stoppingEndsAPausedScanWithAnEvent() async throws {
+    let library = try TestLibrary()
+    let access = GatedAccess(readsBeforeGate: 20)
+    let received = LockedEvents()
+    let watcher = LibraryWatcher(
+        scanner: LibraryScanner(
+            databaseURL: library.databaseURL, networkReaders: 4, access: access, batchSize: 1),
+        mounts: FakeMounts(), events: received.append)
+    watcher.start(
+        folders: [WatchedFolder(path: library.root, kind: .network)],
+        rescanNetworkFoldersAtLaunch: false, pausePollingDuringPlayback: true)
+    #expect(try await eventually(within: 20) { access.isHeld })
+    watcher.pauseScan()
+    #expect(try await eventually(within: 20) { received.paused == [true] })
+    watcher.stop()
+    access.open()
+    #expect(try await eventually(within: 20) { received.stopped == [library.root] })
+    #expect(received.scanned.isEmpty && received.failedScans.isEmpty)
 }
