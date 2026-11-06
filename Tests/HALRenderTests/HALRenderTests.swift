@@ -238,6 +238,22 @@ private func renderInt32(_ fixture: Fixture, frames: Int) -> [Int32] {
     #expect(renderInt32(fixture, frames: 6) == [250, 500, 750, 1000, 1000, 1000])
 }
 
+@Test func aPauseWithTooLittleQueuedEndsSilentAndStaysSo() throws {
+    let fixture = try Fixture(samples: HALRenderSamplesInt32)
+    fixture.write(bytes([Int32](repeating: 1000, count: 2)))
+    _ = renderInt32(fixture, frames: 1)
+    HALRenderSetSilenced(fixture.state, true)
+    #expect(renderInt32(fixture, frames: 4) == [750, 0, 0, 0])
+    #expect(HALRenderIsSilent(fixture.state))
+
+    // Audio that arrives while paused waits for the play, which fades it in.
+    fixture.write(bytes([Int32](repeating: 1000, count: 8)))
+    #expect(renderInt32(fixture, frames: 4) == [0, 0, 0, 0])
+    #expect(HALRenderConsumedBytes(fixture.state) == 2 * 4)
+    HALRenderSetSilenced(fixture.state, false)
+    #expect(renderInt32(fixture, frames: 5) == [250, 500, 750, 1000, 1000])
+}
+
 @Test func aPlayDuringAFadeOutTurnsBackFromWhereTheGainIs() throws {
     let fixture = try Fixture(samples: HALRenderSamplesInt32)
     fixture.write(bytes([Int32](repeating: 1000, count: 16)))

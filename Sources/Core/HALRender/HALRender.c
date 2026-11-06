@@ -364,6 +364,9 @@ OSStatus HALRenderIOProc(AudioObjectID device, const AudioTimeStamp *now,
                 applyFade(render, bytes, heldFrames, 0);
                 applyFade(render, bytes + heldBytes, (copied - heldBytes) / render->bytesPerFrame,
                           silenced ? 0 : render->fadeFrames);
+                // Too little was queued to finish the fade-out: it ends in the silence after the
+                // last frame, or the rest of it would play as a blip once the ring filled.
+                if (silenced && copied - heldBytes < wanted) render->fadeStep = 0;
             }
         }
         if (copied == size) {
