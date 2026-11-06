@@ -41,8 +41,7 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 Set by the owner on 2026-11-05. Earlier run orders are in the archive.
 
-1. Phase 45, after the owner answers its open questions: 45a, then 45b and 45c if the owner
-   wants them.
+1. Phase 45 next: 45a, then 45b.
 2. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
@@ -266,12 +265,11 @@ A cutoff is evidence, not proof: old analog masters, quiet music and some master
 early, and a 320k MP3 can reach 20 kHz. So the cutoff verdicts say "suspect" and the
 spectrogram is there for the owner to decide. Effective bits and identical channels are exact.
 
-Open questions for the owner, before the run:
-
-1. Is Analyze Library (45b) wanted, or only analysis of the tracks the owner picks?
-2. Is the live visualizer (45c) wanted?
-3. Should the verdict thresholds be tuned on the owner's own known-good and known-bad files? If
-   so, which folder holds copies of them (never the library itself)?
+The owner's answers (2026-11-05): the whole-library pass is wanted, but runs only when the
+user starts it. A live visualizer isn't wanted yet; it's in Later. The owner has no
+known-good or known-bad files to tune the thresholds on, so they're set from the generated
+fixtures (45a.8) and the published cutoffs of common lossy encoders, and the owner's
+checkpoint compares flagged files with Spek.
 
 #### 45a. Analysis and the Spectrum window
 
@@ -321,15 +319,15 @@ Open questions for the owner, before the run:
       simulated NAS; the analysis's peak memory. A soak run with analysis going shows no
       underruns.
 - [ ] **Hardware checkpoint (owner):** on the 2015 MacBook Pro, show the spectrum of a 24/192
-      track and of 8 tracks at once while music plays; report the times and any dropout. Check
-      the verdicts against files the owner already knows, or against Spek.
+      track and of 8 tracks at once while music plays; report the times and any dropout. Open a
+      few flagged and unflagged files in Spek and say whether the verdicts agree.
 
 #### 45b. The library pass
 
-Only if the owner answers yes to question 1.
-
 - [ ] **45b.1 Analyze Library.** A command that analyzes every file not yet analyzed, or
-      changed, one at a time at background priority, pausing while a scan runs. It shows
+      changed, one at a time at background priority, pausing while a scan runs. It runs only
+      when the user starts it, from the menu, the palette or the command line: never at launch,
+      after a scan, or on a schedule, and files a scan adds aren't analyzed until the next run. It shows
       progress in the status area, can be paused, and resumes after a relaunch from what the
       index already holds. On the NAS the reading is the cost, so it reads each file once.
 - [ ] **45b.2 Library Health.** Tiles for suspect lossy origin, suspect upsampled, padded
@@ -342,22 +340,6 @@ Only if the owner answers yes to question 1.
       budget.
 - [ ] **Hardware checkpoint (owner):** run Analyze Library on the real library from the DAC
       Mac; report the time, the counts per tile, and a handful of flagged files checked by eye.
-
-#### 45c. Live visualizer
-
-Only if the owner answers yes to question 2.
-
-- [ ] **45c.1 Tap.** The decoder thread copies what it decodes for the device into a second
-      ring buffer (`Sources/Primitives/RingBuffer`) before the device's ring, so the IO proc
-      and the bit-perfect path don't change. The tap does nothing while no view shows it.
-- [ ] **45c.2 View.** A spectrum (bars or a line, log frequency) and an optional scrolling
-      spectrogram, drawn at the display's rate at most, from the tap, in a panel or window the
-      owner places; it shows the track's own samples, before any conversion for the device.
-      DoP isn't shown.
-- [ ] **45c.3 Speed.** CPU while playing 24/192 FLAC with the view shown and hidden, as bench
-      rows; hidden costs nothing over today's budget.
-- [ ] **Hardware checkpoint (owner):** the view on the 2015 MacBook Pro while 24/192 plays;
-      CPU and any dropout.
 
 ## Later
 
@@ -378,6 +360,14 @@ Not phases yet. Each becomes one when the owner asks.
   internet connection, so ADR 0025 gains rows for it; responses are paced by the rate-limit
   headers and cached in the index, and tests use recorded JSON. MusicBrainz with AcoustID is the
   alternative to weigh: no key, and it matches by fingerprint.
+- **Live visualizer (TBD):** a spectrum of what's playing, asked for on 2026-11-05 with phase 45
+  and put off. The decoder thread would copy what it decodes into a second ring buffer
+  (`Sources/Primitives/RingBuffer`) before the device's ring, so the IO proc and the
+  bit-perfect path don't change, and do nothing while no view shows it. The view draws bars
+  or a line on a log frequency axis, or a scrolling spectrogram, at the display's rate at most,
+  from the track's own samples before any conversion for the device; DoP isn't shown. Bench
+  rows for CPU while 24/192 FLAC plays with the view shown and hidden, and an old Mac
+  checkpoint.
 - **Waveform seek bar:** the analysis pass of phase 45 could also store a waveform per track
   for the seek bar.
 - **Compressed sync logs:** asked in phase 44 and answered, not built. The sync design
