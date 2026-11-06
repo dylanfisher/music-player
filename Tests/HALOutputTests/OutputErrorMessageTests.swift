@@ -25,6 +25,7 @@ private let errors: [any PlaybackFailure] =
     }
     + [
         HALDeviceError.hogModeHeld(by: 4242, app: nil), .hogModeHeld(by: 4242, app: "Audirvana"),
+        .hogModeNotTaken,
         .noOutputStream,
         .noBitPerfectFormat(sampleRateHz: 96_000, channels: 2, minimumBits: 24), .noPCMFormat,
         .didNotSettle("96 kHz"),
@@ -68,4 +69,15 @@ private let errors: [any PlaybackFailure] =
     #expect(held.userMessage.hasSuffix(" has the device to itself, so nothing else can play to it"))
     #expect(held.fix == nil)
     #expect(HALDeviceError.hogModeHeld(by: 4242, app: nil).userMessage.hasPrefix("another app "))
+}
+
+/// No owner after asking for hog mode isn't another app holding it, so no app is named.
+@Test func hogModeHeldByNoOneIsWordedApart() {
+    let none = HALDeviceError.notTaken(owner: -1)
+    #expect(none.userMessage == "the device didn't give the app exclusive access for hog mode")
+    #expect(none.fix == nil)
+    guard case .hogModeHeld(by: 4242, _) = HALDeviceError.notTaken(owner: 4242) else {
+        Issue.record("another owner isn't named as holding hog mode")
+        return
+    }
 }

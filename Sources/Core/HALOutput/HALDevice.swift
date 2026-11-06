@@ -10,6 +10,8 @@ private let logger = moduleLogger()
 enum HALDeviceError: PlaybackFailure {
     /// `app` is the holder's process name, nil when it can't be read.
     case hogModeHeld(by: pid_t, app: String?)
+    /// The device reads as held by no one after the app asked for hog mode.
+    case hogModeNotTaken
     case noOutputStream
     case noBitPerfectFormat(sampleRateHz: Double, channels: UInt32, minimumBits: UInt32)
     /// Nothing to convert a track to: no PCM format, or only non-mixable ones without hog mode.
@@ -20,6 +22,7 @@ enum HALDeviceError: PlaybackFailure {
         switch self {
         case .hogModeHeld(let pid, _):
             "another process (pid \(pid)) has exclusive access to the device"
+        case .hogModeNotTaken: "the device's hog mode owner is still -1 after taking it"
         case .noOutputStream: "the device has no output stream"
         case .noBitPerfectFormat(let rate, let channels, let bits):
             "the device has no \(bits > 0 ? "non-mixable " : "")\(channels)-channel integer format"
@@ -33,12 +36,19 @@ enum HALDeviceError: PlaybackFailure {
         switch self {
         case .hogModeHeld(_, let app):
             "\(app ?? "another app") has the device to itself, so nothing else can play to it"
+        case .hogModeNotTaken: "the device didn't give the app exclusive access for hog mode"
         case .noOutputStream: "the device has no output"
         case .noBitPerfectFormat(let rate, let channels, _):
             "the device can't play \(channels) channels at \(kilohertz(rate)) kHz unchanged"
         case .noPCMFormat: "the device has no format the app can play to"
         case .didNotSettle: "the device didn't switch to the track's format in time"
         }
+    }
+
+    /// Why taking hog mode failed when the device reads as held by `owner` afterwards: another
+    /// process, or no one (-1).
+    static func notTaken(owner: pid_t) -> HALDeviceError {
+        owner == -1 ? .hogModeNotTaken : held(by: owner)
     }
 
     /// Hog mode held by `pid`, named by its process name.
@@ -80,7 +90,7 @@ final class HALDevice: PCMDevice {
         guard hogMode else { return }
         try writeScalar(id, address(kAudioDevicePropertyHogMode), getpid())
         let newOwner: pid_t = try readScalar(id, address(kAudioDevicePropertyHogMode))
-        guard newOwner == getpid() else { throw HALDeviceError.held(by: newOwner) }
+        guard newOwner == getpid() else { throw HALDeviceError.notTaken(owner: newOwner) }
         logger.info("device \(id, privacy: .public): took hog mode")
     }
 
