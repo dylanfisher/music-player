@@ -90,7 +90,8 @@ public final class SpectrogramStore: @unchecked Sendable {
         return data
     }
 
-    /// Nil for bytes of any other length than their columns make, as from an earlier shape.
+    /// Nil for bytes of any other length than their columns make, as from an earlier shape, or
+    /// whose Nyquist frequency or length isn't a positive number, as from damage.
     static func decode(_ data: Data) -> Spectrogram? {
         let bytes = [UInt8](data)
         guard bytes.count >= headerBytes else { return nil }
@@ -102,13 +103,16 @@ public final class SpectrogramStore: @unchecked Sendable {
         guard columns > 0, columns <= Spectrogram.maximumColumns,
             bytes.count == headerBytes + cellBytes + 4 * Spectrogram.rows
         else { return nil }
+        let nyquistHz = Double(bitPattern: word(4, 8))
+        let durationSeconds = Double(bitPattern: word(12, 8))
+        guard nyquistHz.isFinite, nyquistHz > 0, durationSeconds.isFinite, durationSeconds > 0
+        else { return nil }
         let average = (0..<Spectrogram.rows).map { row in
             Float(bitPattern: UInt32(word(headerBytes + cellBytes + 4 * row, 4)))
         }
         return Spectrogram(
             columns: columns, cells: Array(bytes[headerBytes..<headerBytes + cellBytes]),
-            averageDB: average, nyquistHz: Double(bitPattern: word(4, 8)),
-            durationSeconds: Double(bitPattern: word(12, 8)))
+            averageDB: average, nyquistHz: nyquistHz, durationSeconds: durationSeconds)
     }
 
     /// Removes the least recently used spectrograms until the store is within its capacity,

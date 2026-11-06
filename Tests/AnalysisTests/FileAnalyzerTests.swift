@@ -120,6 +120,14 @@ private final class Shares: @unchecked Sendable {
     // Bytes of any other length are an earlier shape, or damage.
     #expect(SpectrogramStore.decode(SpectrogramStore.encode(spectrogram).dropLast()) == nil)
     #expect(SpectrogramStore.decode(Data()) == nil)
+    for (nyquistHz, durationSeconds) in [
+        (Double.nan, 12.5), (0, 12.5), (-48_000, 12.5), (48_000, .infinity), (48_000, 0),
+    ] {
+        var damaged = spectrogram
+        damaged.nyquistHz = nyquistHz
+        damaged.durationSeconds = durationSeconds
+        #expect(SpectrogramStore.decode(SpectrogramStore.encode(damaged)) == nil)
+    }
 }
 
 @Test func aSpectrogramThatDoesntDecodeIsRemoved() throws {
