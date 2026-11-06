@@ -424,6 +424,37 @@ runs in its own worktree. ADR 0112 records the new timing and amends ADR 0041.
       with a short track among them; each next one starts within about 2 s. Send back the log
       lines from 48e.1.
 
+Implementation plan (ADR 0112, amending 0041), all in `UPnPOutput` and its tests:
+
+1. **48e.1 trace.** `RendererSession.poll` logs at notice level, with public interpolations so
+   `log show` prints them, every poll's transport state and status, the renderer's position,
+   duration and `TrackURI`, and the app's clock, while the clock is within 15 s of the track's
+   end or less than 15 s has passed since the last track change. `setNext` logs an accepted
+   `SetNextAVTransportURI`; the lead, a stop at the end and a renderer marked as ignoring the
+   next URI are logged too. Every line starts "track change:", so one predicate finds them.
+2. **48e.2 clock.** A new value type, `RendererClock` (its own file), holds the app's clock for
+   the loaded track: where it was, when, whether it runs, and how far stalls moved the end. It
+   starts at the first poll that finds the renderer playing, pauses and resumes with the
+   transport (not from the polled position), and a seek or start sets it. A poll moves the end
+   later only by how much more the renderer is behind the clock than its least lag since its
+   position first moved, two polls running, while the clock is short of the end, and by at
+   most `RendererClock.stallCapSeconds` (10 s) a run of the clock. `leadMarginSeconds` and
+   `behindToleranceSeconds` move to it. `holdBack` and `Loaded.deadline` go. `stopped` counts
+   a stop as the end when the clock or the last polled position is within `endSlackSeconds`
+   of the end.
+3. **48e.3 ignored next URI.** A stop at the end, two polls running, with the next URI
+   accepted, or the clock's deadline passing with it accepted, sets `gapless` to `.afterStop`
+   with the reason and publishes the path; the next track then goes with `SetAVTransportURI`
+   and Play at once, and every later one too, since `setNext` sends the next URI only while
+   `gapless` is `.nextURI`. `findAgain` resets it, as now, for a renderer at a new address.
+4. **48e.4 tests.** `FakeRenderer.lagsBy(_:)` reports positions that many seconds behind.
+   `RendererOutputTests`: a lagging renderer without the next URI that stops at its end; a
+   lagging renderer that accepts and ignores the next URI, three tracks in a row with one
+   `SetNextAVTransportURI` sent; the mid-track stall test stalls 4 s once the position moved;
+   the gapless test plays three tracks with one `SetAVTransportURI`. `RendererClockTests`: a
+   steady lag moves nothing, a stall moves the end by its length, a long one by the cap, a
+   renderer stuck past the end moves nothing, pause and resume, seeks.
+
 ### 49. Click-free play, pause and seek
 
 The owner hears a pop when they play and pause quickly, and asks for the slight fade other
