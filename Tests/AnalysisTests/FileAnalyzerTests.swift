@@ -1,10 +1,10 @@
 import Foundation
-import Library
 import Metadata
 import Testing
 
 @testable import Analysis
 @testable import Fixtures
+@testable import Library
 
 /// A folder of its own holding a copy of a fixture, a library and a spectrogram store.
 private struct Scratch {
@@ -82,6 +82,18 @@ private final class Shares: @unchecked Sendable {
     #expect(
         try await scratch.analyzer.result(of: scratch.file.path) { shares.append($0) } == analyzed)
     #expect(shares.values.count > 10)
+}
+
+@Test func aMeasuresCacheThatFailsIsLoggedAndTheAnalysisStillReturned() async throws {
+    let scratch = try Scratch()
+    // The table gone, as a cache the index can't read or write.
+    try LibraryIndex(at: libraryFileURL(in: scratch.directory.appendingPathComponent("data")))
+        .database.execute("DROP TABLE measures")
+    let shares = Shares()
+    let result = try await scratch.analyzer.result(of: scratch.file.path) { shares.append($0) }
+    #expect(result.measures.cutoffHz != nil)
+    #expect(shares.values.count > 10)
+    #expect(try await scratch.analyzer.measures(of: scratch.file.path) == result.measures)
 }
 
 @Test func aMissingFileFails() async throws {

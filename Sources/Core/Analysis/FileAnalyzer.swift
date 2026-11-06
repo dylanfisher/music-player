@@ -1,12 +1,17 @@
 import Foundation
 import HALOutput
 import Library
+import Log
 import Metadata
+
+private let logger = moduleLogger()
 
 /// Analysis behind its two caches: the measures in the index and the spectrograms in the
 /// Caches folder, each kept for the file as its size and modification time describe it, so a
 /// file that changed is analyzed again (ADR 0115). The analysis runs on a task of its own at
-/// utility priority, cancelled with the task that awaits it.
+/// utility priority, cancelled with the task that awaits it. A cache that can't be read or
+/// written, as the index while a scan holds it past its timeout, is logged and the file
+/// analyzed, or its result returned, without it.
 public final class FileAnalyzer: Sendable {
     private let measures: MeasuresCache
     private let spectrograms: SpectrogramStore
@@ -27,7 +32,7 @@ public final class FileAnalyzer: Sendable {
         of path: String, progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> AnalysisResult {
         let stamp = try await offMain { try fileStamp(path) }
-        if let measured = try await measures.measures(path: path, stamp: stamp),
+        if let measured = await cachedMeasures(path, stamp: stamp),
             let spectrogram = await offMain({
                 self.spectrograms.spectrogram(path: path, stamp: stamp)
             })
@@ -44,7 +49,7 @@ public final class FileAnalyzer: Sendable {
         of path: String, progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> FileMeasures {
         let stamp = try await offMain { try fileStamp(path) }
-        if let measured = try await measures.measures(path: path, stamp: stamp) {
+        if let measured = await cachedMeasures(path, stamp: stamp) {
             progress(1)
             return measured
         }
@@ -60,9 +65,22 @@ public final class FileAnalyzer: Sendable {
                 at: URL(fileURLWithPath: path, isDirectory: false), latency: latency,
                 progress: progress)
         }
-        try await measures.store(result.measures, path: path, stamp: stamp)
+        do {
+            try await measures.store(result.measures, path: path, stamp: stamp)
+        } catch {
+            logger.error("couldn't keep the measures of \(path): \(error)")
+        }
         await offMain { self.spectrograms.store(result.spectrogram, path: path, stamp: stamp) }
         return result
+    }
+
+    private func cachedMeasures(_ path: String, stamp: FileStamp) async -> FileMeasures? {
+        do {
+            return try await measures.measures(path: path, stamp: stamp)
+        } catch {
+            logger.error("couldn't read the kept measures of \(path): \(error)")
+            return nil
+        }
     }
 }
 
