@@ -511,6 +511,55 @@ worktree and merge last. ADR 0113 records the list if it needs one.
 - [ ] **Owner check in the running app:** sort by a column, change the window, quit, relaunch;
       everything is where it was.
 
+Plan, part 48d (ADR 0113):
+- Probe: the sort is saved only inside `browser.trackTable`, and the table reports that layout
+  only when a column moves, resizes, shows or hides; a sort alone reports nothing, so a sort
+  with no column change since is lost at quit. A second loss: `BrowserModel.load` shows the
+  saved source in the table's sort, so a manual playlist, History or Stats saved as the source
+  opens out of its own order; a sort chosen inside one of those is lost too. The other pieces
+  as they stand (48d.2):
+  - source: `playback.resume`'s `source` (ADR 0095). Survives.
+  - sort: lost, as above. Fixed by 48d.1.
+  - columns, their order and widths: `browser.trackTable`, saved as they change; the
+    timeline's own in `browser.timelineTable`. Survive.
+  - the panes' selections and groupings: `browser.columns`, saved at each change. Survive.
+  - the search: saved nowhere. Fixed: `browser.search` in the state file.
+  - the selection: `playback.resume`'s `selected`, one track, the last selected row. A
+    selection of several tracks comes back as that one; left as ADR 0095 has it.
+  - the scroll: `playback.resume`'s `top`, the first visible track, at the top. Survives to the
+    row; the offset within the row stays out, as ADR 0095 has it.
+  - the split sizes: `window.sidebarWidth`, `window.browserHeight`, `window.statsHeight`,
+    `window.queueWidth`. Survive.
+  - the queue panel: `window.queueVisible` and its width. Survives; so do the sidebar, the
+    browser, the toolbar, the status bar and the signal path's visibility.
+  - the window's frame: `window.frame`, saved on each move and resize, including the screen-
+    sized frame while in full screen, which then opens as a plain window covering the screen.
+    Fixed: a frame isn't saved while in full screen, so the window opens at the frame it had
+    before. Full screen itself isn't put back.
+- 48d.1 (`Features/LibraryBrowser`, `Core/Settings`): `BrowserModel.tableSort` is the sort of
+  the sources without one of their own (the one `queueSort` already works out), and the
+  table's layout carries it, so a playlist's order is never saved as the table's. The table
+  reports its layout after a reload that changed it. `load` enters the saved source as a
+  click on it does, so it opens in its own sort. A sort chosen in a source with its own is
+  `BrowserState.sourceSort`, saved as `browser.sourceSort` (a new `SourceSort`: the source,
+  column and direction), and put back when the loaded source is that one. Tests: a sort saved
+  and loaded in a new browser gives the same sort and first rows; a manual playlist loads in
+  its order, and in the sort chosen in it once one was, and leaving it goes back to the
+  table's.
+- 48d.2 (`Features/LibraryBrowser`, `Core/Settings`, `App`): `BrowserState.search`, saved as
+  `browser.search` and loaded into the field and the filter; only while the toolbar has the
+  search field, since a search no field shows would narrow the table unseen. `MainWindow`
+  skips the frame while in full screen. The browser's layout saves move from `AppDelegate` to
+  `MainWindow`, beside the split's, so a test window saves what the app does. Tests: the
+  search across a load, and none without the field; no frame saved in full screen.
+- 48d.3 (`MusicPlayerTests`): `MainWindowFixture` takes a home to reuse and loads what it
+  saved. One test changes the source, sort, a column's width, a pane, the search, the
+  selection, the scroll, the sidebar, browser and queue sizes, the queue panel and the frame;
+  flushes the saver and writes the play state; opens a second window on the same home; and
+  checks each came back.
+- Order: this plan, 48d.1, the window's saves moved, 48d.2, 48d.3, the ADR, the bench and the
+  result.
+
 #### 48e. The receiver moves on to the next track
 
 Playing to the Denon, a track ends and the next never starts. The session waits for the
