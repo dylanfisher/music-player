@@ -17,6 +17,9 @@ final class HealthPanel: NSViewController, SourcePanel {
     static let tileHeightPoints: CGFloat = 46
     static let spacingPoints: CGFloat = 8
     static let insetPoints: CGFloat = 12
+    /// The least height the panel opens at or is dragged to: the header, the analysis line and
+    /// a row of tiles (ADR 0117). The columns, whose height it shares, can still be shut.
+    static let leastHeightPoints = 110
 
     /// A tile clicked, and Check Again.
     var select: (HealthCheck) -> Void = { _ in }

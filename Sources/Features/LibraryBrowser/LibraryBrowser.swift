@@ -449,9 +449,21 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         placedHeight = Int(panelSlot.frame.height.rounded())
     }
 
-    /// The slot's height for what it holds: the Stats panel's own, or the columns' (which the
-    /// health panel shares).
-    var slotHeight: Int { shownPanel === statsPanel ? statsHeight : browserHeight }
+    /// The slot's height for what it holds: the Stats panel's own, or the columns', which the
+    /// health panel shares, at least its least height.
+    var slotHeight: Int {
+        if shownPanel === statsPanel { return statsHeight }
+        if shownPanel === healthPanel { return max(browserHeight, HealthPanel.leastHeightPoints) }
+        return browserHeight
+    }
+
+    /// The least height of the panel shown, which its divider keeps; nil for the columns,
+    /// which can be dragged shut.
+    private var leastSlotHeight: Int? {
+        if shownPanel === statsPanel { return AppState.statsHeightRange.lowerBound }
+        if shownPanel === healthPanel { return HealthPanel.leastHeightPoints }
+        return nil
+    }
 
     /// Loads everything, selecting what `saved` names where it still exists. A play state
     /// saved at quit, `resume`, gives the source in place of `saved`'s, and its selected track
@@ -2220,12 +2232,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         _ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat,
         ofSubviewAt dividerIndex: Int
     ) -> CGFloat {
-        // Stats keeps its header and a row of cards, unless the table's room above leaves
-        // less; the columns can be dragged shut.
-        guard shownPanel === statsPanel else { return proposedMinimumPosition }
-        return min(
-            max(proposedMinimumPosition, CGFloat(AppState.statsHeightRange.lowerBound)),
-            splitView.bounds.height - 120)
+        // A panel keeps its header and a row of cards or tiles, unless the table's room
+        // above leaves less.
+        guard let least = leastSlotHeight else { return proposedMinimumPosition }
+        return min(max(proposedMinimumPosition, CGFloat(least)), splitView.bounds.height - 120)
     }
 
     /// A hidden pane's divider would still draw as a line over the table.

@@ -153,6 +153,36 @@ private func browserInWindow(browserHeight: Int = 150) async throws -> (
     #expect(sidebar.selectedSource == nil && sidebar.outline.selectedRow >= 0)
 }
 
+/// With the columns dragged shut, Library Health still opens at its least height, its header,
+/// analysis line and first row of tiles inside it, and a drag stops there; the columns still
+/// shut.
+@MainActor @Test func healthOpensAtItsLeastHeightOverShutColumns() async throws {
+    let (browser, window, split) = try await browserInWindow(browserHeight: 0)
+    window.orderFront(nil)
+    defer { window.orderOut(nil) }
+    let slot = split.arrangedSubviews[0]
+    let least = CGFloat(HealthPanel.leastHeightPoints)
+    browser.checkHealth()
+    try await waitFor("the panel") { browser.shownPanel === browser.healthPanel }
+    window.layoutIfNeeded()
+    #expect(abs(slot.frame.height - least) <= 1)
+    let panel = browser.healthPanel.view
+    let first = try #require(browser.healthPanel.tiles[HealthCheck.allCases[0]])
+    let tile = panel.convert(first.bounds, from: first)
+    #expect(tile.minY >= 0 && tile.maxY <= panel.bounds.maxY, "\(tile) in \(panel.bounds)")
+    let line = panel.convert(
+        browser.healthPanel.analysisButton.bounds, from: browser.healthPanel.analysisButton)
+    #expect(line.minY > tile.maxY, "the analysis line above the tiles")
+    try dragDivider(of: split, to: 10)
+    #expect(abs(slot.frame.height - least) <= 1)
+
+    browser.show(nil)
+    try await waitFor("the library") { browser.shownPanel == nil }
+    window.layoutIfNeeded()
+    try dragDivider(of: split, to: 0)
+    #expect(slot.frame.height <= 1)
+}
+
 @MainActor @Test func aTileTakesTheClickOnItsLabels() throws {
     let panel = HealthPanel()
     _ = panel.view

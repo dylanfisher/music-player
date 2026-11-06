@@ -22,6 +22,12 @@ height and checks. A saved height out of the range is discarded and the default 
 Stats shows, the split's delegate keeps the divider at least that far down. The columns keep
 `0...2000`, where 0 hides them.
 
+Library Health shares the columns' height, so it has a least height of its own,
+`HealthPanel.leastHeightPoints`, 110 points: its header, Analyze Library's line and a row of
+tiles; a test lays the panel out at that height and checks. It opens at the columns' height or
+that, whichever is more, and while it shows the delegate keeps the divider at least that far
+down. A drag of it saves the columns' height, as before.
+
 **Placed after layout.** The browser lays out the split's superview before it moves the
 divider, and the split after, as `MainSplit.restore` does, and records the height the slot
 got, which a short window can make less than asked, so the next change of panel tries again.
@@ -45,3 +51,5 @@ saves nothing. This applies to the columns' height too.
 
 - A height saved as 0 before this is discarded at the next launch; Stats opens at 380.
 - Dragging Stats' divider up stops at 130 points.
+- Library Health opens at 110 points over columns dragged shut, and its divider stops there; a
+  drag of it leaves the columns at least that tall until they're dragged shut again.
