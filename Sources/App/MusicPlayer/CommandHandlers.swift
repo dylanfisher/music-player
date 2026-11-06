@@ -24,11 +24,16 @@ extension AppDelegate {
         dispatcher.handle(.showWatchedFolders) { [weak self] in
             self?.settingsWindowController()?.show(.folders)
         }
-        dispatcher.handle(.checkHealth, enabled: hasWindow) { [weak self] in
-            // From Settings too, which is in front then.
-            self?.window?.window.makeKeyAndOrderFront(nil)
-            self?.browser?.checkHealth()
-        }
+        dispatcher.handle(
+            .checkHealth, enabled: hasWindow,
+            isOn: { [weak self] in self?.browser?.showsHealth == true },
+            run: { [weak self] in
+                guard let self, let browser else { return }
+                // From Settings too, which is in front then.
+                window?.window.makeKeyAndOrderFront(nil)
+                let path = currentTrackPath
+                Task { await browser.toggleHealth(playingPath: path) }
+            })
         dispatcher.handle(.showStats, enabled: hasWindow) { [weak self] in
             self?.window?.window.makeKeyAndOrderFront(nil)
             self?.browser?.showStats()

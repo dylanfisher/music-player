@@ -253,3 +253,31 @@ private func browserInWindow(browserHeight: Int = 150) async throws -> (
     }
     #expect(whole.count * 4 >= HealthCheck.allCases.count * 3, "\(whole)")
 }
+
+/// Show Library Health shows it, and while it shows hides it, at the playing track when there
+/// is one.
+@MainActor @Test func showLibraryHealthTogglesBackToThePlayingTrack() async throws {
+    let (browser, window, _) = try await browserInWindow()
+    await browser.toggleHealth(playingPath: nil)
+    try await waitFor("the panel") { browser.shownPanel != nil }
+    #expect(browser.showsHealth)
+
+    await browser.toggleHealth(playingPath: nil)
+    #expect(browser.model.filter.source == nil)
+    #expect(!browser.showsHealth)
+    window.layoutIfNeeded()
+    #expect(browser.shownPanel == nil)
+    #expect(browser.showsColumns)
+
+    // Playing a track a check lists: the library shows it selected, not the check.
+    await browser.toggleHealth(playingPath: nil)
+    try await waitFor("the panel again") { browser.showsHealth }
+    try await waitFor("the report") { browser.health.report != nil }
+    let report = try #require(browser.health.report)
+    let id = try #require(report[.noAlbumArtist].trackIDs.last)
+    let path = try #require(try browser.index.paths(ids: [id])[id])
+    await browser.toggleHealth(playingPath: path)
+    #expect(browser.model.filter.source == nil)
+    let selected = try await browser.selectedPaths()
+    #expect(selected == [path])
+}

@@ -221,8 +221,14 @@ extension AppDelegate {
                 outputs: { [weak self] in self?.outputOptionsNow() ?? [] },
                 searchOutputs: { [weak self] in self?.searchOutputs() },
                 chooseOutput: { [weak self] in self?.chooseOutput($0) },
-                showHealth: { [weak dispatcher] in
-                    if dispatcher?.run(.checkHealth) != true { NSSound.beep() }
+                showHealth: { [weak self, weak dispatcher] in
+                    // A button that says Show doesn't hide it: with it showing, the main window
+                    // comes forward.
+                    if self?.browser?.showsHealth == true {
+                        self?.window?.window.makeKeyAndOrderFront(nil)
+                    } else if dispatcher?.run(.checkHealth) != true {
+                        NSSound.beep()
+                    }
                 }))
         settingsWindow = controller
         return controller

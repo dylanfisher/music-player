@@ -549,6 +549,31 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         runHealth()
     }
 
+    /// Whether Library Health shows over the track table.
+    public var showsHealth: Bool {
+        if case .health = model.filter.source { true } else { false }
+    }
+
+    /// Show Library Health: shows it, or, while it shows, hides it and shows the track at
+    /// `playingPath` as Show Current Track does, in what the window showed when its play
+    /// started or else in the library. With nothing playing, or a play started from Library
+    /// Health, it shows the whole library.
+    public func toggleHealth(playingPath: String?) async {
+        guard showsHealth else { return checkHealth() }
+        let id = playingPath.flatMap { trackID(path: $0) }
+        let start = model.playSource
+        let startedInHealth = if case .health = start?.source { true } else { false }
+        if let id, !startedInHealth, await reveal(trackID: id, in: start) { return }
+        if await model.showAll(), !searchField.stringValue.isEmpty {
+            searchField.stringValue = ""
+        }
+        guard let id else {
+            showSource()
+            return focusTracks()
+        }
+        await reveal(trackID: id)
+    }
+
     /// Opens Lost Stats over `window`, one lost file at a time, to give each one's stats to a
     /// track that matches it or dismiss it.
     public func resolveLostStats(over window: NSWindow) {
