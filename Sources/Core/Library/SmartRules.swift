@@ -290,8 +290,7 @@ let trackJoins = """
     LEFT JOIN plays p ON p.path_id = t.file_id
     LEFT JOIN ratings r ON r.path_id = t.file_id
     LEFT JOIN \(lovedTable) lv ON lv.path_id = t.file_id
-    LEFT JOIN \(measuresTable) m ON m.path = f.path AND m.size_bytes = f.size_bytes
-        AND m.modified_seconds = f.modified_seconds
+    LEFT JOIN \(currentMeasuresJoin)
     """
 
 private let secondsPerDay = 86_400.0

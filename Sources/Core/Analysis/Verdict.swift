@@ -1,6 +1,7 @@
 import DisplayText
 import Foundation
 import Library
+import Settings
 
 /// What the measures suggest is wrong with a file, with one line that names its numbers. A
 /// cutoff is evidence, not proof, so those two say "suspect"; the others are exact.
@@ -11,6 +12,24 @@ public struct Verdict: Equatable, Sendable {
 
     public var kind: Kind
     public var text: String
+}
+
+extension Verdict.Kind {
+    /// The Library Health check that lists the files with this verdict (ADR 0116).
+    var healthCheck: HealthCheck {
+        switch self {
+        case .lossyOrigin: .lossyOrigin
+        case .upsampled: .upsampled
+        case .paddedBits: .paddedBits
+        case .fakeStereo: .fakeStereo
+        case .clipped: .clipped
+        }
+    }
+}
+
+/// The Library Health checks `measures` earn, one per verdict, for `healthReport`.
+public func healthChecks(_ measures: FileMeasures) -> [HealthCheck] {
+    verdicts(measures).map(\.kind.healthCheck)
 }
 
 /// The verdicts `measures` earn, in `Verdict.Kind` order. A lossy file gets no lossy-origin

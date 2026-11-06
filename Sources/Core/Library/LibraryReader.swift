@@ -35,9 +35,13 @@ public actor LibraryReader {
 
     /// Builds the health report on a connection of its own, so the window's queries don't wait
     /// for it.
-    public nonisolated func healthReport() async throws -> HealthReport {
+    public nonisolated func healthReport(
+        measuredChecks: @escaping @Sendable (FileMeasures) -> [HealthCheck]
+    ) async throws -> HealthReport {
         let url = databaseURL
-        return try await Task.detached { try LibraryIndex(at: url).healthReport() }.value
+        return try await Task.detached {
+            try LibraryIndex(at: url).healthReport(measuredChecks: measuredChecks)
+        }.value
     }
 
     /// A connection for Listening Stats' reads, opened off the main thread.

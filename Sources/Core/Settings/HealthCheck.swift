@@ -23,4 +23,11 @@ public enum HealthCheck: String, CaseIterable, Sendable {
     case lostStats
     /// Paths the user removed from the library, which scans skip until restored (ADR 0050).
     case removed
+    /// What Analyze Library's measures suggest is wrong with a file (ADR 0116), one check per
+    /// verdict, over the files analyzed so far.
+    case lossyOrigin
+    case upsampled
+    case paddedBits
+    case fakeStereo
+    case clipped
 }

@@ -1,3 +1,4 @@
+import Analysis
 import Foundation
 import Library
 import Settings
@@ -11,7 +12,9 @@ let healthBenchmarks = [
         let index = library.index
         var reports: [HealthReport] = []
         let samples = try millisecondSamples(
-            (0..<10).map { _ in { reports.append(try index.healthReport()) } })
+            (0..<10).map { _ in
+                { reports.append(try index.healthReport(measuredChecks: healthChecks)) }
+            })
         guard let report = reports.last else { throw BenchError.expected("a report") }
         let found = HealthCheck.allCases.map { "\($0.rawValue) \(report[$0].count)" }
         return Measured(

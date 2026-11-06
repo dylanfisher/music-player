@@ -75,7 +75,10 @@ final class HealthPanel: NSViewController, SourcePanel {
     /// Shows the report's counts, or a dash for each before there is one, and when it ran.
     func show(report: HealthReport?, checkedAt: Date?, running: Bool) {
         _ = view
-        for (check, tile) in tiles { tile.count = report?[check].count }
+        for (check, tile) in tiles {
+            tile.count = report?[check].count
+            tile.summary = check.summary(analyzedCount: report?.analyzedCount)
+        }
         statusLabel.stringValue =
             if running {
                 "Checking…"
@@ -139,6 +142,14 @@ final class HealthTile: NSView {
     var isSelected = false {
         didSet { restyle() }
     }
+    /// What the check finds, and for a measured one how many files it covers.
+    var summary: String {
+        get { summaryLabel.stringValue }
+        set {
+            summaryLabel.stringValue = newValue
+            toolTip = newValue
+        }
+    }
     let titleLabel = NSTextField(labelWithString: "")
     let countLabel = NSTextField(labelWithString: "")
     let summaryLabel = NSTextField(labelWithString: "")
@@ -158,7 +169,6 @@ final class HealthTile: NSView {
             ofSize: NSFont.systemFontSize, weight: .semibold)
         countLabel.alignment = .right
         countLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        summaryLabel.stringValue = check.summary
         summaryLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         summaryLabel.lineBreakMode = .byTruncatingTail
         summaryLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -182,7 +192,7 @@ final class HealthTile: NSView {
             summaryLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
             summaryLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
         ])
-        toolTip = check.summary
+        summary = check.summary
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         restyle()

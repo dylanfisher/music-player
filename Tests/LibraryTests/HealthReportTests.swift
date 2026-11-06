@@ -33,7 +33,7 @@ import Testing
     // A file read before that can't be now loses its track, and leaves its playlist entry.
     try index.store([failed("/M/D/02.flac")])
 
-    let report = try index.healthReport()
+    let report = try index.healthReport(measuredChecks: { _ in [] })
     #expect(report[.unreadable].trackIDs.isEmpty)
     #expect(
         report[.unreadable].lines == [
@@ -73,8 +73,46 @@ import Testing
         Crafted(path: "/M/A/02.flac", title: "Two", album: "A", albumArtist: "X", number: 2)
             .scanned,
     ])
-    let report = try index.healthReport()
+    let report = try index.healthReport(measuredChecks: { _ in [] })
     #expect(HealthCheck.allCases.allSatisfy { report[$0].count == 0 })
+}
+
+/// The measured checks list the tracks whose current measures earn them, and count the tracks
+/// analyzed; measures of a file since changed, or of no track, count for nothing.
+@Test func theMeasuredChecksReadTheCurrentMeasuresOfTheTracks() throws {
+    let index = try craftedIndex(
+        ["/M/a.flac", "/M/b.flac", "/M/c.flac", "/M/d.flac"].map { Crafted(path: $0).scanned })
+    func measures(_ runs: Int) -> FileMeasures {
+        FileMeasures(
+            formatID: "flac", sampleRateHz: 44_100, storedBits: 16, channels: 2, isFloat: false,
+            durationSeconds: 200, cutoffHz: nil, cutoffSteepnessDBPerKHz: nil,
+            effectiveBits: 16, identicalChannels: false, peakDBFS: -1, truePeakDBTP: -1,
+            clippedRuns: runs, dynamicRange: 10)
+    }
+    // Crafted files are 1 byte, modified at 1 s.
+    let current = FileStamp(sizeBytes: 1, modifiedSeconds: 1)
+    try index.storeMeasures(measures(20), path: "/M/a.flac", stamp: current)
+    try index.storeMeasures(measures(0), path: "/M/b.flac", stamp: current)
+    try index.storeMeasures(
+        measures(20), path: "/M/c.flac", stamp: FileStamp(sizeBytes: 2, modifiedSeconds: 1))
+    try index.storeMeasures(measures(20), path: "/M/gone.flac", stamp: current)
+
+    let report = try index.healthReport(measuredChecks: { measures in
+        measures.clippedRuns > 10 ? [.clipped, .fakeStereo] : []
+    })
+    #expect(report.analyzedCount == 2)
+    #expect(report[.clipped].trackIDs == (try ids(index, ["/M/a.flac"])))
+    #expect(report[.fakeStereo].trackIDs == (try ids(index, ["/M/a.flac"])))
+    #expect(report[.lossyOrigin].count == 0)
+
+    #expect(HealthCheck.clipped.summary(analyzedCount: nil) == HealthCheck.clipped.summary)
+    #expect(
+        HealthCheck.clipped.summary(analyzedCount: 0)
+            == "Files with runs of samples at full scale; none analyzed yet")
+    #expect(
+        HealthCheck.clipped.summary(analyzedCount: 1204)
+            == "Files with runs of samples at full scale, of 1,204 files analyzed")
+    #expect(HealthCheck.noArt.summary(analyzedCount: 1204) == HealthCheck.noArt.summary)
 }
 
 @Test func theTitleSweepLinksNeighborsWithinASecondOnly() {
@@ -107,13 +145,13 @@ import Testing
     let filter = TrackFilter(source: .health(.noArt))
     // Nothing until a report is shown on this connection.
     #expect(try index.trackIDs(filter, sortedBy: .title).isEmpty)
-    try index.showHealth(try index.healthReport())
+    try index.showHealth(try index.healthReport(measuredChecks: { _ in [] }))
     #expect(try index.trackIDs(filter, sortedBy: .title) == (try ids(index, ["/M/C/01.flac"])))
     #expect(try index.albums(filter).isEmpty)
     #expect(try index.trackIDs(TrackFilter(source: .health(.noAlbum)), sortedBy: .title).count == 1)
     // A second report replaces the first.
     try index.store([Crafted(path: "/M/C/01.flac", title: "Two").scanned])
-    try index.showHealth(try index.healthReport())
+    try index.showHealth(try index.healthReport(measuredChecks: { _ in [] }))
     #expect(try index.trackIDs(filter, sortedBy: .title).isEmpty)
 }
 
@@ -150,7 +188,7 @@ import Testing
         Crafted(path: "/M/x/1.flac", title: "Same", seconds: 0).scanned,
         Crafted(path: "/M/y/1.flac", title: "Same", seconds: 0).scanned,
     ])
-    let report = try index.healthReport()
+    let report = try index.healthReport(measuredChecks: { _ in [] })
     #expect(report[.sameNumber].trackIDs.isEmpty)
     #expect(report[.mixedSampleRates].trackIDs.isEmpty)
     #expect(

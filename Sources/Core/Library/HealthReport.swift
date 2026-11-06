@@ -5,10 +5,14 @@ import Settings
 /// a scan ends.
 public struct HealthReport: Equatable, Sendable {
     private var findings: [HealthCheck: HealthFindings]
+    /// The tracks with measures made from their files as they are, which the measured checks
+    /// look at.
+    public private(set) var analyzedCount: Int
 
-    init(_ findings: [HealthCheck: HealthFindings]) {
+    init(_ findings: [HealthCheck: HealthFindings], analyzedCount: Int) {
         precondition(Set(findings.keys) == Set(HealthCheck.allCases), "a check is missing")
         self.findings = findings
+        self.analyzedCount = analyzedCount
     }
 
     public subscript(_ check: HealthCheck) -> HealthFindings {
@@ -65,7 +69,30 @@ extension HealthCheck {
         case .noAlbumArtist: "No Album Artist"
         case .lostStats: "Lost Stats"
         case .removed: "Removed"
+        case .lossyOrigin: "Lossy Origin"
+        case .upsampled: "Upsampled"
+        case .paddedBits: "Padded Bits"
+        case .fakeStereo: "Fake Stereo"
+        case .clipped: "Clipped"
         }
+    }
+
+    /// Whether the check reads Analyze Library's measures, and so covers only the files
+    /// analyzed.
+    var isMeasured: Bool {
+        switch self {
+        case .lossyOrigin, .upsampled, .paddedBits, .fakeStereo, .clipped: true
+        default: false
+        }
+    }
+
+    /// The summary, and for a measured check how many files it covers: "…, of 1,204 files
+    /// analyzed". `analyzedCount` is nil before any report.
+    public func summary(analyzedCount: Int?) -> String {
+        guard isMeasured, let analyzedCount else { return summary }
+        return analyzedCount == 0
+            ? "\(summary); none analyzed yet"
+            : "\(summary), of \(count(analyzedCount, "file")) analyzed"
     }
 
     /// What the check finds, for the row's tooltip.
@@ -85,23 +112,47 @@ extension HealthCheck {
         case .lostStats:
             "Plays, ratings and playlist entries of files that left, and the tracks they may have moved to"
         case .removed: "Tracks removed from the library, which scans skip until they're restored"
+        case .lossyOrigin: "Lossless files cut off where a lossy encoder cuts"
+        case .upsampled: "High-rate files whose content stops at a lower rate's limit"
+        case .paddedBits: "Files whose lowest bits are always zero"
+        case .fakeStereo: "Stereo files whose left and right are the same"
+        case .clipped: "Files with runs of samples at full scale"
         }
     }
 }
 
 extension LibraryIndex {
     /// Runs every check in one read, so they all see the same library while a scan writes.
-    public func healthReport() throws -> HealthReport {
+    /// `measuredChecks` says which measured checks a file's measures earn, as Analysis's
+    /// verdicts do, so the rules stay there.
+    public func healthReport(measuredChecks: (FileMeasures) -> [HealthCheck]) throws
+        -> HealthReport
+    {
         try database.deferredTransaction {
-            HealthReport(
+            let analyzed = try measuredTracks()
+            var measured: [HealthCheck: [Int64]] = [:]
+            for (id, measures) in analyzed {
+                for check in measuredChecks(measures) {
+                    precondition(check.isMeasured, "\(check) doesn't come from measures")
+                    measured[check, default: []].append(id)
+                }
+            }
+            return HealthReport(
                 Dictionary(
-                    uniqueKeysWithValues: try HealthCheck.allCases.map { ($0, try run($0)) }))
+                    uniqueKeysWithValues: try HealthCheck.allCases.map {
+                        ($0, try run($0, measured: measured))
+                    }), analyzedCount: analyzed.count)
         }
     }
 
-    /// One check. A new check is a case here and in `HealthCheck`.
-    private func run(_ check: HealthCheck) throws -> HealthFindings {
+    /// One check. A new check is a case here and in `HealthCheck`. `measured` holds each
+    /// measured check's tracks, in ID order.
+    private func run(_ check: HealthCheck, measured: [HealthCheck: [Int64]]) throws
+        -> HealthFindings
+    {
         switch check {
+        case .lossyOrigin, .upsampled, .paddedBits, .fakeStereo, .clipped:
+            return HealthFindings(trackIDs: measured[check] ?? [])
         case .unreadable:
             let others = try statement(
                 """

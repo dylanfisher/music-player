@@ -1,3 +1,4 @@
+import Analysis
 import AppKit
 import Artwork
 import BarView
@@ -283,7 +284,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         sidebarController.editRules = { playlist in owner?.editRules(playlist) }
         content = NSViewController()
         health = HealthModel(
-            build: { try await reader.healthReport() }, show: { try await reader.showHealth($0) })
+            build: { try await reader.healthReport(measuredChecks: healthChecks) },
+            show: { try await reader.showHealth($0) })
         statsModel = StatsModel { period in
             guard let owner else { throw CancellationError() }
             return try await owner.readStats(period)

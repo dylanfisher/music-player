@@ -11,7 +11,7 @@ private func report(_ id: Int64) -> HealthReport {
     HealthReport(
         Dictionary(
             uniqueKeysWithValues: HealthCheck.allCases.map { ($0, HealthFindings(trackIDs: [id])) }
-        ))
+        ), analyzedCount: 1)
 }
 
 @MainActor @Test func aRunThatFinishesAfterANewerOneIsDropped() async throws {
@@ -238,6 +238,18 @@ private func browserInWindow(browserHeight: Int = 150) async throws -> (
     try await waitFor("a report without the entry") {
         browser.health.report?[.missingEntries].count == 0
     }
+}
+
+/// A measured check's tile says how many files its count is over, once there's a report.
+@MainActor @Test func theMeasuredTilesSayHowManyFilesWereAnalyzed() throws {
+    let panel = HealthPanel()
+    _ = panel.view
+    let clipped = try #require(panel.tiles[.clipped])
+    #expect(clipped.summary == HealthCheck.clipped.summary)
+    panel.show(report: report(7), checkedAt: Date(), running: false)
+    #expect(clipped.summary == HealthCheck.clipped.summary + ", of 1 file analyzed")
+    #expect(clipped.toolTip == clipped.summary)
+    #expect(try #require(panel.tiles[.noArt]).summary == HealthCheck.noArt.summary)
 }
 
 /// At its narrowest, a tile shows most checks' descriptions whole.

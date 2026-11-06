@@ -1,3 +1,4 @@
+import Analysis
 import Fixtures
 import Foundation
 import Library
@@ -37,7 +38,9 @@ let moveBenchmarks = [
         let elapsed = try seconds { rescanned = try scanner.scan(folder) }
         // The report runs after the scan, over every move left ambiguous.
         var report: HealthReport?
-        let reportSeconds = try seconds { report = try index.healthReport() }
+        let reportSeconds = try seconds {
+            report = try index.healthReport(measuredChecks: healthChecks)
+        }
         let lost = report?[.lostStats].otherCount ?? 0
         guard let summary = rescanned, summary.moved > 0, summary.moved + lost == tracks.count
         else {

@@ -21,15 +21,15 @@ import Testing
     #expect(try index.trackCount() == count - 1)
     // It didn't leave, so its rating isn't offered to another track.
     #expect(try index.lostFiles().isEmpty)
-    #expect(try index.healthReport()[.removed].lines == [path])
-    #expect(try index.healthReport()[.removed].pathIDs == [id])
+    #expect(try index.healthReport(measuredChecks: { _ in [] })[.removed].lines == [path])
+    #expect(try index.healthReport(measuredChecks: { _ in [] })[.removed].pathIDs == [id])
 
     #expect(try index.restoreRemoved([id]) == [path])
     _ = try library.scan()
     let row = try #require(try index.rows(ids: [id]).first)
     #expect(row.path == path)
     #expect(row.rating == 4)
-    #expect(try index.healthReport()[.removed].count == 0)
+    #expect(try index.healthReport(measuredChecks: { _ in [] })[.removed].count == 0)
 }
 
 @Test func aDismissedProblemStaysDismissedAcrossConnections() throws {
@@ -59,7 +59,7 @@ import Testing
     #expect(try index.track(path: path) == nil)
     _ = try library.scan()
     #expect(try index.lostFiles().isEmpty)
-    #expect(try index.healthReport()[.removed].count == 0)
+    #expect(try index.healthReport(measuredChecks: { _ in [] })[.removed].count == 0)
 
     try FileManager.default.moveItem(atPath: trashed, toPath: path)
     _ = try library.scan()

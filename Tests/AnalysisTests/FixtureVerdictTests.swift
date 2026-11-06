@@ -3,6 +3,7 @@ import Testing
 
 @testable import Analysis
 @testable import Fixtures
+@testable import Library
 
 /// What each generated fixture should be found to be: one verdict for each problem it was
 /// made with, none for a clean one.
@@ -28,6 +29,18 @@ private func analyzed(_ fixture: AnalysisFixture) throws -> AnalysisResult {
 func eachFixtureGetsTheVerdictsItWasMadeFor(_ fixture: AnalysisFixture) throws {
     let measures = try analyzed(fixture).measures
     #expect(verdicts(measures).map(\.kind) == expected[fixture], "\(measures)")
+}
+
+/// Library Health lists each fixture under the checks of its verdicts, and a clean one nowhere.
+@Test func eachVerdictIsALibraryHealthCheckOfItsOwn() throws {
+    #expect(
+        Verdict.Kind.allCases.map(\.healthCheck)
+            == [.lossyOrigin, .upsampled, .paddedBits, .fakeStereo, .clipped])
+    #expect(Verdict.Kind.allCases.allSatisfy { $0.healthCheck.isMeasured })
+    let padded = try analyzed(.padded).measures
+    let clean = try analyzed(.fullBand).measures
+    #expect(healthChecks(padded) == [.paddedBits])
+    #expect(healthChecks(clean).isEmpty)
 }
 
 @Test func theLowPassedFixturesCutOffWhereTheyWereCut() throws {

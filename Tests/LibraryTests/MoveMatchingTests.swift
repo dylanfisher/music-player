@@ -148,7 +148,7 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
             LostFile(id: one, path: "/M/1.flac", candidates: [new], matching: 1),
             LostFile(id: two, path: "/M/2.flac", candidates: [new], matching: 1),
         ])
-    let findings = try index.healthReport()[.lostStats]
+    let findings = try index.healthReport(measuredChecks: { _ in [] })[.lostStats]
     #expect(findings.trackIDs == [new])
     #expect(findings.lines == ["/M/1.flac: matching tracks: 1", "/M/2.flac: matching tracks: 1"])
     #expect(findings.pathIDs == [one, two])
@@ -167,7 +167,7 @@ private func gone(_ track: Crafted, in index: LibraryIndex) throws -> Int64 {
 
     try index.dismissLost([two])
     #expect(try index.lostFiles().isEmpty)
-    #expect(try index.healthReport()[.lostStats].count == 0)
+    #expect(try index.healthReport(measuredChecks: { _ in [] })[.lostStats].count == 0)
 }
 
 @Test func aDismissedPathIsLostAgainAfterItsFileIsRead() throws {

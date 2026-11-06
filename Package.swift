@@ -151,8 +151,8 @@ let package = Package(
         .target(
             name: "LibraryBrowser",
             dependencies: [
-                "Artwork", "BarView", "Commands", "DisplayText", "KeyChord", "Library", "Log",
-                "Metadata", "Playback", "Settings",
+                "Analysis", "Artwork", "BarView", "Commands", "DisplayText", "KeyChord", "Library",
+                "Log", "Metadata", "Playback", "Settings",
             ],
             path: "Sources/Features/LibraryBrowser",
             swiftSettings: strictSwift
