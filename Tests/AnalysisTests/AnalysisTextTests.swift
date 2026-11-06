@@ -27,16 +27,16 @@ private let lossy = FileMeasures(
 @Test func theMeasuresReadAsNamesAndValues() {
     let items = Dictionary(uniqueKeysWithValues: measureItems(padded).map { ($0.name, $0.value) })
     #expect(items["Cutoff"] == "22.1 kHz, falling 150 dB per kHz")
-    #expect(items["Effective bits"] == "16 of 24")
-    #expect(items["Left and right"] == "differ")
+    #expect(items["Effective Bits"] == "16 of 24")
+    #expect(items["Left and Right"] == "differ")
     #expect(items["Peak"] == "-0.1 dBFS")
-    #expect(items["True peak"] == "+0.4 dBTP")
-    #expect(items["Clipped runs"] == "3 of 3 or more samples")
-    #expect(items["Dynamic range"] == "DR7")
+    #expect(items["True Peak"] == "+0.4 dBTP")
+    #expect(items["Clipped Runs"] == "3 of 3 or more samples")
+    #expect(items["Dynamic Range"] == "DR7")
     let none = Dictionary(uniqueKeysWithValues: measureItems(lossy).map { ($0.name, $0.value) })
     #expect(none["Cutoff"] == "none: content reaches 22.05 kHz")
-    #expect(none["Effective bits"] == "not counted for float or lossy samples")
-    #expect(none["Left and right"] == "mono")
+    #expect(none["Effective Bits"] == "not counted for float or lossy samples")
+    #expect(none["Left and Right"] == "mono")
 }
 
 @Test func theReportListsEachFileWithItsVerdicts() {
@@ -44,7 +44,7 @@ private let lossy = FileMeasures(
     let blocks = report.components(separatedBy: "\n\n")
     #expect(blocks.count == 2)
     #expect(blocks[0].hasPrefix("/a.flac\n  FLAC · 96 kHz"))
-    #expect(blocks[0].contains("\n  Effective bits: 16 of 24\n"))
+    #expect(blocks[0].contains("\n  Effective Bits: 16 of 24\n"))
     #expect(blocks[0].hasSuffix("\n  16 effective bits of 24 stored: padded with zero bits"))
     #expect(blocks[0].contains("suspect upsampled"))
     #expect(blocks[1].hasSuffix("\n  \(noVerdictText)"))

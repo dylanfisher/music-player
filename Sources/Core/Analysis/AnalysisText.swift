@@ -38,22 +38,22 @@ public func measureItems(_ measures: FileMeasures) -> [(name: String, value: Str
             } ?? "none: content reaches \(kilohertz(measures.sampleRateHz / 2)) kHz"
         ),
         (
-            "Effective bits",
+            TrackColumn.effectiveBits.title,
             measures.effectiveBits.map { "\($0) of \(measures.storedBits ?? $0)" }
                 ?? (measures.isFloat ? "not counted for float or lossy samples" : "silent")
         ),
         (
-            "Left and right",
+            "Left and Right",
             measures.identicalChannels.map { $0 ? "identical" : "differ" }
                 ?? channelsText(measures.channels)
         ),
         ("Peak", measures.peakDBFS.map { String(format: "%.1f dBFS", $0) } ?? "silent"),
-        ("True peak", measures.truePeakDBTP.map(truePeakText) ?? "silent"),
+        (TrackColumn.truePeak.title, measures.truePeakDBTP.map(truePeakText) ?? "silent"),
         (
-            "Clipped runs",
+            "Clipped Runs",
             number(measures.clippedRuns) + " of \(AnalysisRules.clippedRunSamples) or more samples"
         ),
-        ("Dynamic range", measures.dynamicRange.map(dynamicRangeText) ?? "silent"),
+        (TrackColumn.dynamicRange.title, measures.dynamicRange.map(dynamicRangeText) ?? "silent"),
     ]
 }
 
