@@ -1,3 +1,4 @@
+import Analysis
 import Foundation
 import Library
 import LibraryBrowser
@@ -44,9 +45,7 @@ let readerBenchmarks = [
         name: "reader: second of two search keystrokes \(keystrokeGapMs) ms apart, idle (p95)",
         budget: Budget(appleSilicon: 20, oldMac: 80, unit: .milliseconds)
     ) {
-        let samples = try withLibraryCopy("keystrokes") {
-            try secondKeystrokes($0, scanning: false)
-        }
+        let samples = try withLibraryCopy("keystrokes") { try secondKeystrokes($0, .idle) }
         return Measured(value: p95(samples), notes: [slowestNote(samples)])
     },
     Benchmark(
@@ -55,12 +54,32 @@ let readerBenchmarks = [
             + " (p95)",
         budget: Budget(appleSilicon: 50, oldMac: 150, unit: .milliseconds)
     ) {
-        let samples = try withLibraryCopy("keystrokes-scan") {
-            try secondKeystrokes($0, scanning: true)
+        let samples = try withLibraryCopy("keystrokes-scan") { try secondKeystrokes($0, .scan) }
+        return Measured(value: p95(samples), notes: [slowestNote(samples)])
+    },
+    // Analyze Library writes a row a file, and the browser refreshes every 2 s while it runs,
+    // so search keeps the idle budget.
+    Benchmark(
+        name:
+            "reader: second of two search keystrokes \(keystrokeGapMs) ms apart, during Analyze"
+            + " Library (p95)",
+        budget: Budget(appleSilicon: 20, oldMac: 80, unit: .milliseconds)
+    ) {
+        let samples = try withLibraryCopy("keystrokes-analysis") {
+            try secondKeystrokes($0, .analysis)
         }
         return Measured(value: p95(samples), notes: [slowestNote(samples)])
     },
 ]
+
+/// What runs beside the keystrokes.
+private enum KeystrokeLoad {
+    case idle
+    /// Every file rescanned, again and again.
+    case scan
+    /// Analyze Library over every file, again and again.
+    case analysis
+}
 
 /// Runs `body` with a copy of the scanned fixture library's database, so what it writes doesn't
 /// reach the other benchmarks.
@@ -80,16 +99,19 @@ func withLibraryCopy<T>(_ name: String, _ body: (URL) throws -> T) throws -> T {
 
 /// Types pairs of search keystrokes into a browser over the library at `databaseURL`, as the
 /// search field sends them, and times the second of each from when it's typed until its rows and
-/// totals are read. `scanning` rescans every file meanwhile, with the browser's refreshes.
-private func secondKeystrokes(_ databaseURL: URL, scanning: Bool) throws -> [Double] {
+/// totals are read, with `load` running meanwhile and the browser refreshing as it does then.
+private func secondKeystrokes(_ databaseURL: URL, _ load: KeystrokeLoad) throws -> [Double] {
     let folder = try scannedLibrary.get().folder
-    let scan = scanning ? RepeatedScan(databaseURL, folder) : nil
-    let samples = Result { try typeKeystrokes(databaseURL, scanning: scanning) }
+    let scan = load == .scan ? RepeatedScan(databaseURL, folder) : nil
+    let analysis = load == .analysis ? try RepeatedAnalysis(databaseURL) : nil
+    let samples = Result { try typeKeystrokes(databaseURL, refreshing: load != .idle) }
     try scan?.stop()
+    let analyzed = try analysis?.stop()
+    if analyzed == 0 { throw BenchError.expected("files analyzed beside the keystrokes") }
     return try samples.get()
 }
 
-private func typeKeystrokes(_ databaseURL: URL, scanning: Bool) throws -> [Double] {
+private func typeKeystrokes(_ databaseURL: URL, refreshing: Bool) throws -> [Double] {
     try onMainActor {
         let reader = try LibraryReader(databaseURL: databaseURL)
         let model = BrowserModel(
@@ -103,7 +125,7 @@ private func typeKeystrokes(_ databaseURL: URL, scanning: Bool) throws -> [Doubl
             return (typed[index], typed[index + 1])
         }
         let refreshing = Task { @MainActor in
-            while scanning, !Task.isCancelled {
+            while refreshing, !Task.isCancelled {
                 try await Task.sleep(nanoseconds: UInt64(scanRefreshSeconds * 1e9))
                 // What `LibraryBrowser.refreshNow` reads, on the connection it reads them on.
                 await model.refresh()
@@ -140,6 +162,64 @@ private func typeKeystrokes(_ databaseURL: URL, scanning: Bool) throws -> [Doubl
             try await refreshing.value
         } catch is CancellationError {}
         return try samples.get()
+    }
+}
+
+/// Analyze Library over the library at `databaseURL`, its measures cleared at each end to go
+/// again, until stopped.
+final class RepeatedAnalysis: Sendable {
+    private let pass: LibraryAnalysis
+    private let runs: Task<Int, any Error>
+    private let stopping = Stopping()
+
+    private final class Stopping: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stopped = false
+        var isStopped: Bool {
+            get { lock.withLock { stopped } }
+            set { lock.withLock { stopped = newValue } }
+        }
+    }
+
+    init(_ databaseURL: URL) throws {
+        let pass = LibraryAnalysis(
+            cache: try MeasuresCache(databaseURL: databaseURL), scanRunning: { false },
+            report: { _ in })
+        self.pass = pass
+        let stopping = stopping
+        runs = Task.detached {
+            var analyzed = 0
+            while !stopping.isStopped {
+                let ended = await pass.start().value
+                analyzed += ended.analyzed - ended.failed
+                guard ended.stage == .finished else { break }
+                try Database(at: databaseURL).execute("DELETE FROM measures")
+            }
+            return analyzed
+        }
+    }
+
+    /// Pauses the run going and returns how many files were analyzed in all.
+    func stop() throws -> Int {
+        stopping.isStopped = true
+        let pass = pass
+        let runs = runs
+        return try waited {
+            // Again and again, as a run may start just after a pause.
+            let pausing = Task.detached {
+                while true {
+                    await pass.pause()
+                    do {
+                        try await Task.sleep(nanoseconds: 100_000_000)
+                    } catch {
+                        return
+                    }
+                }
+            }
+            let analyzed = try await runs.value
+            pausing.cancel()
+            return analyzed
+        }
     }
 }
 
