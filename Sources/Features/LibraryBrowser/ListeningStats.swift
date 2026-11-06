@@ -128,8 +128,8 @@ extension LibraryBrowser {
         }
     }
 
-    /// Makes a manual playlist of the tracks a list's rows were played through, in its order,
-    /// named for the list and the period, and shows it.
+    /// Asks for a name, filled in with the list's and the period's, then makes a manual playlist
+    /// of the tracks the list's rows were played through, in its order, and shows it.
     private func saveStatsList(_ list: StatsReport.List) {
         guard let report = statsModel.report else { return }
         let entries = Array(
@@ -139,9 +139,16 @@ extension LibraryBrowser {
             NSSound.beep()
             return
         }
+        guard let window = content.view.window else {
+            return self.report("couldn't save the list: the library window isn't open")
+        }
         let name = list.title + ", " + statsPlaylistPeriod(statsModel.period, report.span)
-        edit(playlistFailure(name), entriesChange: true) {
-            try await self.model.createPlaylist(named: name, rules: nil, trackIDs: ids)
+        askForName(StatsCards.saveTitle, button: "Save", initial: name, over: window) {
+            [weak self] name in
+            guard let self else { return }
+            edit(playlistFailure(name), entriesChange: true) {
+                try await self.model.createPlaylist(named: name, rules: nil, trackIDs: ids)
+            }
         }
     }
 

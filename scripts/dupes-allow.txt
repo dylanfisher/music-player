@@ -76,7 +76,7 @@ literal "Loved" | files Sources/Core/Library/ITunesLibrary.swift Sources/Core/Li
 literal "Playlists" | files Sources/Core/Library/ITunesLibrary.swift Sources/Features/LibraryBrowser/SidebarController.swift | the key Music writes in Library.xml and the sidebar's group title
 literal "Rename" | files Sources/App/MusicPlayer/PlaylistCommands.swift Sources/Features/LibraryBrowser/SidebarController.swift | the rename sheet's button and the sidebar menu's item that edits the name in its row, two controls that each say what they do
 literal "Reveal in Finder" | files Sources/Core/Commands/AppCommands.swift Sources/Features/SettingsWindow/GeneralPane.swift | the command reveals the selected track; the General pane's button reveals the config file
-literal "Save" | files Sources/App/MusicPlayer/PlaylistCommands.swift Sources/Features/TagEditor/TagEditorWindow.swift | the system's button title for confirming a sheet
+literal "Save" | files Sources/App/MusicPlayer/PlaylistCommands.swift Sources/Features/LibraryBrowser/ListeningStats.swift Sources/Features/TagEditor/TagEditorWindow.swift | the system's button title for confirming a sheet
 literal "Space" | files Sources/Core/Metadata/ID3v1Genres.swift Sources/Primitives/KeyChord/KeyChord.swift | an ID3v1 genre name and the space bar's name in a chord
 literal "Stop" | files Sources/Core/Commands/AppCommands.swift Sources/Core/UPnP/AVTransport.swift | the Stop command's title and AVTransport's Stop action, which the UPnP output sends a renderer
 literal "the file is empty" | files Sources/Core/Metadata/ReadMetadata.swift Sources/Core/Settings/ConfigFile.swift | an audio file with no bytes and an empty config file, in their own errors

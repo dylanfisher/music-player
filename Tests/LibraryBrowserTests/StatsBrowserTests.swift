@@ -223,17 +223,48 @@ private func playedBrowser() async throws -> (LibraryBrowser, NSWindow, NSSplitV
     review.close()
 }
 
-@MainActor @Test func aTopListIsSavedAsAPlaylistOfItsPlayedTracks() async throws {
-    let (browser, _, _, album) = try await playedBrowser()
+/// The text field of the sheet over `window`.
+@MainActor private func sheetField(over window: NSWindow) throws -> NSTextField {
+    let sheet = try #require(window.attachedSheet, "no sheet")
+    var views = [try #require(sheet.contentView)]
+    while let view = views.popLast() {
+        if let field = view as? NSTextField, field.isEditable { return field }
+        views += view.subviews
+    }
+    throw CocoaError(.featureUnsupported)
+}
+
+@MainActor @Test func aTopListIsSavedAsAPlaylistOfItsPlayedTracksUnderTheNameGiven()
+    async throws
+{
+    let (browser, window, _, album) = try await playedBrowser()
     browser.showStats(.week)
     try await waitFor("the report") {
         browser.statsModel.report != nil && !browser.statsModel.isLoading
     }
+    let report = try #require(browser.statsModel.report)
+    let made = "Top Artists, " + statsPlaylistPeriod(.week, report.span)
+    let before = browser.playlists.count
+
+    // Cancel saves nothing.
     browser.statsPanel.cards.actions.savePlaylist(.artists)
+    #expect(try sheetField(over: window).stringValue == made)
+    window.endSheet(try #require(window.attachedSheet), returnCode: .alertSecondButtonReturn)
+    try await Task.sleep(nanoseconds: 200_000_000)
+    #expect(browser.playlists.count == before)
+
+    // The sheet asks first; its button saves the name in its field.
+    browser.statsPanel.cards.actions.savePlaylist(.artists)
+    let field = try sheetField(over: window)
+    #expect(field.stringValue == made)
+    #expect(browser.playlists.count == before)
+    field.stringValue = "  This Week's Artists "
+    window.endSheet(try #require(window.attachedSheet), returnCode: .alertFirstButtonReturn)
     try await waitFor("the playlist") {
-        browser.playlists.contains { $0.name.hasPrefix("Top Artists, ") }
+        browser.playlists.contains { $0.name == "This Week's Artists" }
     }
-    let playlist = try #require(browser.playlists.first { $0.name.hasPrefix("Top Artists, ") })
+    let playlist = try #require(browser.playlists.first { $0.name == "This Week's Artists" })
+    #expect(browser.playlists.count == before + 1)
     try await waitFor("its tracks") { browser.model.filter.source == .playlist(playlist.id) }
     try await waitFor("its rows") { Set(browser.model.trackIDs) == Set(album.map(\.id)) }
 }

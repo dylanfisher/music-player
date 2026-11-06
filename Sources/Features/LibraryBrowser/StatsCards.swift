@@ -55,6 +55,9 @@ final class StatsCards {
     /// How many rows a top list shows; Year in Review shows fewer.
     let listLength: Int
 
+    /// What a list's save button does, and the title of the sheet it opens.
+    static let saveTitle = "Save as Playlist"
+
     init(listLength: Int = StatsReport.listLength, listHeightPoints: CGFloat = 214) {
         self.listLength = listLength
         totalsCard = StatsCard(
@@ -88,7 +91,7 @@ final class StatsCards {
             let save = NSButton(
                 image: NSImage(
                     systemSymbolName: "text.badge.plus",
-                    accessibilityDescription: "Save as Playlist")
+                    accessibilityDescription: Self.saveTitle)
                     ?? NSImage(),
                 target: target, action: #selector(ControlTarget.act(_:)))
             save.bezelStyle = .inline

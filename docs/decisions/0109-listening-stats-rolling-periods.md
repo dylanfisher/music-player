@@ -24,6 +24,9 @@ month the calendar periods held a day or two of plays.
   year is in the year menu, which stays as it is.
 - **A saved list's name** for a rolling period is its days ("Top Artists, Oct 8 – Nov 6, 2026",
   "Nov 7, 2025 – Nov 6, 2026"), not the year its first day is in; a chosen year's is the year.
+- **Save as Playlist asks first.** A list's button opens the sheet New Playlist uses over the
+  main window, its field filled with that name; Save makes the playlist under the name in the
+  field, Cancel makes none. The sheet moved from the app to LibraryBrowser so both reach it.
 
 - **The totals fill their row.** Where the totals share a row with Plays per Day (six columns or
   more), the flow makes them as tall as the row's tallest card, and the figures go into two rows
