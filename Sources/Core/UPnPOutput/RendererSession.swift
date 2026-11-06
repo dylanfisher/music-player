@@ -487,7 +487,7 @@ actor RendererSession {
                     return advance(from: current, to: next, gapless: true)
                 }
                 if position.trackURI.isEmpty || sameURI(position.trackURI, current.uri) {
-                    ignoresNextURI(
+                    await ignoresNextURI(
                         "it played on past a track's end instead of the next track it took")
                 }
             } catch {
@@ -558,20 +558,24 @@ actor RendererSession {
         if next?.sent == true {
             current.stoppedAtEndPolls += 1
             guard current.stoppedAtEndPolls >= Self.stoppedAtEndPolls else { return }
-            ignoresNextURI("it stopped at a track's end instead of playing the next track it took")
+            await ignoresNextURI(
+                "it stopped at a track's end instead of playing the next track it took")
+            guard self.current === current else { return }
         }
         await ended(current)
     }
 
     /// The renderer took a next track with `SetNextAVTransportURI` and didn't play it. From now
     /// on, while this session lasts, each track goes with `SetAVTransportURI` and Play once the
-    /// last has ended, so the next one doesn't wait on the renderer either.
-    private func ignoresNextURI(_ reason: String) {
+    /// last has ended, so the next one doesn't wait on the renderer either. The next track it
+    /// holds is taken back, so it can't go on to it later in place of the one the app sends.
+    private func ignoresNextURI(_ reason: String) async {
         gapless = .afterStop(reason)
         logger.notice(
             "\(self.renderer.name, privacy: .public): \(reason, privacy: .public); each track now starts after the last"
         )
         publish(signalPath())
+        await send(AVTransport.setNextURI("", metadata: ""))
     }
 
     /// `current` is over: the next track starts with set-URI and Play, after a gap, or nothing

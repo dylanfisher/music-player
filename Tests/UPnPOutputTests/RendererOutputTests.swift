@@ -419,11 +419,14 @@ private func notGaplessReason(_ output: RendererOutput) async -> String? {
     #expect(
         await notGaplessReason(output)
             == "it stopped at a track's end instead of playing the next track it took")
-    // The second track in a row goes the same way, without a next URI it would ignore.
+    // The next track it took was taken back.
+    #expect(fake.nextTrackURI == "")
+    // The second track in a row goes the same way, without a next URI it would ignore: the
+    // SetNextAVTransportURIs are the first track's and the one taking it back.
     output.setNext(item(3, "short"))
     await log.wait(
         for: ["started 1", "ended 1", "started 2", "ended 2", "started 3"], seconds: 15)
-    #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 1)
+    #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 2)
     #expect(fake.setTransportURIs.map(\.stateBefore) == [.stopped, .stopped, .stopped])
 }
 
@@ -485,10 +488,12 @@ private func notGaplessReason(_ output: RendererOutput) async -> String? {
         await notGaplessReason(output)
             == "it played on past a track's end instead of the next track it took")
     // Commands run in order, so once the Pause has gone, the next track has been handled.
+    #expect(fake.nextTrackURI == "")
     output.setNext(item(3, "short"))
     output.pause()
     await eventually("the pause") { fake.commands.last == "Pause" }
-    #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 1)
+    // The second track's and the one taking it back.
+    #expect(fake.commands.filter { $0 == "SetNextAVTransportURI" }.count == 2)
 }
 
 /// The system clock moved on by however much a test says, for the output's `now`.
