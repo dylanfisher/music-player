@@ -295,7 +295,8 @@ public struct TagWriter: Sendable {
                 record.setEdited(final)
                 try journal.update(record, at: handle!)
             }
-            return .done(.changed(temp.identity.stamp(parsed), problem: nil))
+            // Stamped as the renamed file is, so a rescan that stats it finds the same.
+            return .done(.changed(final.stamp(parsed), problem: nil))
         } catch {
             logger.error("\(error.description)")
             return .done(
@@ -387,6 +388,9 @@ public struct TagWriter: Sendable {
             preconditionFailure("only a write in place is put back")
         }
         if try regionState(record, region, faults: faults) == .old {
+            // What reads back may be only in the cache, after a put-back cut short before its
+            // flush; the record goes only once the old bytes are on the disk.
+            try flushDrive(of: record.path, faults: faults)
             try journal.remove(handle)
             logger.notice("\(record.path) still holds its original tags")
             return false
