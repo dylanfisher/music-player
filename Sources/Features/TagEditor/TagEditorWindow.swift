@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 /// An info window: tabs of fields as `TagEditorTab` lays them out, the art with Replace and
 /// Remove, the file's format, and Cancel and Save. It opens at once, before its files are read,
-/// saying so, and shows the fields once `load` hands it the tracks. Fields where the tracks
+/// at the size it keeps, saying so, and fills in the fields once `load` hands it the tracks. Fields where the tracks
 /// differ show "Mixed" until typed in, and a field typed differently from what it showed has a
 /// dot by its label. It edits a `TagEditorModel` and hands back the checked edit. Several can
 /// be open at once.
@@ -31,7 +31,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     var removeArtwork: () -> Void = {}
 
     /// A field can show on more than one tab, as the title does on Info and Sorting.
-    private var fields: [TagEditField: [NSTextField]] = [:]
+    private(set) var fields: [TagEditField: [NSTextField]] = [:]
     private var areas: [TagEditField: NSTextView] = [:]
     /// Shows "Mixed" in an empty text area, which has no placeholder of its own.
     private var areaPlaceholders: [TagEditField: NSTextField] = [:]
@@ -43,9 +43,14 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     private let largeArtView = NSImageView()
     private let artNote = NSTextField(labelWithString: "")
     private let artDetails = NSTextField(labelWithString: "")
+    private var replaceButtons: [NSButton] = []
     private var removeButtons: [NSButton] = []
     private var fileValues: [FileRow: NSTextField] = [:]
-    private let problemLabel = NSTextField(labelWithString: "")
+    /// Spins in the buttons row while the files are read; it keeps its space once stopped.
+    private let spinner = NSProgressIndicator()
+    /// One line beside the buttons: "Reading tags…", then why Save failed.
+    private let problemLabel = NSTextField(labelWithString: "Reading tags…")
+    private let saveButton = NSButton(title: "Save", target: nil, action: nil)
     /// Says, as soon as such a field is edited, that saving keeps one of its several values.
     private let collapseLabel = NSTextField(wrappingLabelWithString: "")
     private var isClosed = false
@@ -78,8 +83,13 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         window.isReleasedWhenClosed = false
         window.title = heading
         window.delegate = self
-        window.contentView = makeReading()
+        // The whole layout is made now, at the size it keeps, so nothing moves when the
+        // fields fill in.
+        window.contentView = makeContent()
         if let content = window.contentView { window.setContentSize(content.fittingSize) }
+        build(Self.lastTab)
+        tabs.selectTabViewItem(withIdentifier: Self.lastTab.rawValue)
+        showEditable()
     }
 
     /// The file's name, or how many tracks.
@@ -131,10 +141,10 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             return
         }
         self.model = model
-        window.contentView = makeContent()
-        if let content = window.contentView { window.setContentSize(content.fittingSize) }
-        build(Self.lastTab)
-        tabs.selectTabViewItem(withIdentifier: Self.lastTab.rawValue)
+        spinner.stopAnimation(nil)
+        problemLabel.stringValue = ""
+        problemLabel.textColor = .systemRed
+        showEditable()
         showValues()
         focusFirstField()
     }
@@ -148,6 +158,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         else { return }
         builtTabs.insert(tab)
         item.view = tabView(tab)
+        showEditable()
         showValues()
     }
 
@@ -184,23 +195,6 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
 
     // MARK: Layout
 
-    private func makeReading() -> NSView {
-        let spinner = NSProgressIndicator()
-        spinner.style = .spinning
-        spinner.controlSize = .small
-        spinner.startAnimation(nil)
-        let label = NSTextField(labelWithString: "Reading tags…")
-        label.textColor = .secondaryLabelColor
-        let row = NSStackView(views: [spinner, label])
-        let stack = NSStackView(views: [headingLabel(), row])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 14
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-        stack.widthAnchor.constraint(equalToConstant: Self.width).isActive = true
-        return stack
-    }
-
     private func headingLabel() -> NSTextField {
         let label = NSTextField(labelWithString: heading)
         label.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
@@ -224,15 +218,22 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         tabs.translatesAutoresizingMaskIntoConstraints = false
         tabs.heightAnchor.constraint(equalToConstant: Self.tabsHeight).isActive = true
 
-        problemLabel.textColor = .systemRed
-        problemLabel.lineBreakMode = .byWordWrapping
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isDisplayedWhenStopped = false
+        spinner.startAnimation(nil)
+        // One line, so a longer message doesn't make the row taller; the tooltip has it whole.
+        problemLabel.textColor = .secondaryLabelColor
+        problemLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        problemLabel.lineBreakMode = .byTruncatingTail
         problemLabel.setContentHuggingPriority(.init(1), for: .horizontal)
         problemLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancelClicked))
         cancel.keyEquivalent = "\u{1b}"
-        let save = NSButton(title: "Save", target: self, action: #selector(saveClicked))
-        save.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [problemLabel, cancel, save])
+        saveButton.target = self
+        saveButton.action = #selector(saveClicked)
+        saveButton.keyEquivalent = "\r"
+        let buttons = NSStackView(views: [spinner, problemLabel, cancel, saveButton])
 
         collapseLabel.textColor = .systemOrange
         collapseLabel.isHidden = true
@@ -433,6 +434,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             button.controlSize = size
             button.font = .systemFont(ofSize: NSFont.systemFontSize(for: size))
         }
+        replaceButtons.append(replace)
         removeButtons.append(remove)
         return NSStackView(views: [replace, remove])
     }
@@ -484,6 +486,17 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     }
 
     // MARK: Values
+
+    /// Lets the fields, the art buttons and Save be used once the files are read.
+    private func showEditable() {
+        let editable = model != nil
+        for view in fields.values.joined() { view.isEditable = editable }
+        for view in areas.values { view.isEditable = editable }
+        compilationBox.isEnabled = editable
+        for button in replaceButtons { button.isEnabled = editable }
+        for button in removeButtons { button.isEnabled = editable && model?.canRemoveArt == true }
+        saveButton.isEnabled = editable
+    }
 
     /// Puts the model's values in the fields, and the art. A field typed in keeps what was
     /// typed, which a tab made since shows too.
@@ -602,6 +615,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             saved(try model.edit())
         } catch {
             problemLabel.stringValue = error.description
+            problemLabel.toolTip = error.description
             NSSound.beep()
         }
     }
