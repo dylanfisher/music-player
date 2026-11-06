@@ -419,6 +419,44 @@ worktree and merge after them. ADR 0111 records the error model if it needs one.
 - [ ] **Owner check in the running app:** play a DSD file on the ADI-2 with hog mode off; turn
       it on from the dialog and hear it play. Click the stopped message and copy its details.
 
+Plan, part 48c (ADR 0111):
+- Probe: the engine turns each output error into `"\(error)"` for `PlaybackEvent.trackFailed`
+  and `.failed`, and `NowPlayingModel` prints it after "Playback stopped: " or "Couldn't play".
+  The errors that reach it are `PlaybackError`, `DeviceOutputError`, `HALDeviceError`,
+  `HALDeviceProviderError`, `HALError` and `OSStatusError` (HALOutput, the last two from
+  AudioToolbox decoding too), `MetadataError` (the DSD readers) and `RendererOutputError`.
+  The config's `output.hogMode` mirrors the in-use device's profile (`showInUse`), and
+  setting it switches that profile through `outputSettingsChanged`. Nothing reads the log.
+- 48c.1 (`Core/Playback`, each error's module, `Features/NowPlaying`, `App`): a protocol
+  `PlaybackFailure` in Playback asks for `userMessage`, a short lowercase clause in the style
+  of `RendererSession`'s reasons, and an optional `fix`. Each error above adopts it, the
+  message in a switch beside its `description`; `MetadataError` has its message in Metadata
+  by kind, and Playback (which now imports Metadata) declares the conformance. The events
+  carry a `PlaybackProblem` (message, the error's full text, fix); another error's message is
+  its description. The status bar shows the message; the command line and bench print the
+  full text. Tests: every case of each error has a message with no type name or code.
+- 48c.2 (`Core/Log`, `Features/NowPlaying`, `App`): `recentLogLines` reads the app's own
+  lines from `OSLogStore` for the current process. The status bar's format part gets a
+  question mark button, shown with a problem; it and a click on the message call
+  `NowPlayingBar.problemOpened`. `ProblemReport` builds the text from the problem, the
+  track's path and format, the last signal path's stages (the device and its format), the
+  hog mode setting and the playback modules' log lines of the last 10 minutes;
+  `PlaybackProblemWindow` (AppKit, as `ProblemsWindow`) shows it with Copy. Tests: the text
+  has the device and the log lines; the button shows and opens; Copy copies the text.
+- 48c.3 (`Core/Playback`, `Core/HALOutput`, `Features/NowPlaying`, `App`): `PlaybackFix`
+  has one case, turning hog mode on for a device by UID. DoP refused for hog mode carries it;
+  `hogModeHeld` names the app holding the device from its pid, with no fix. A problem with a
+  fix shows a dialog at once (`ProblemDialog`, a model with a thin `NSAlert`), and the
+  details window has the fix as a button; both call the app, which sets `output.hogMode` for
+  that device when it is the one in use and plays the track again. Tests: DSD on a null
+  device with hog mode off gives the message and fix, and with a hog mode provider swapped in
+  the replay plays; the dialog's text and buttons; the held message names the app.
+- 48c.4 (`Core/Playback`, `Features/NowPlaying`): `PlaybackError.failedInARow` carries each
+  failure, and its problem lists the causes with their track counts. One cause: the message
+  and dialog say it, with its fix; several: the counts, and a Show Details button. Tests:
+  three tracks failing with one cause give that cause and fix; two causes give both counts.
+- Order: this plan, 48c.1, 48c.2, 48c.3, 48c.4, the ADR, the result.
+
 #### 48d. The window comes back as it was left
 
 The owner quit and relaunched, and the track list had lost the column it was sorted by. The
