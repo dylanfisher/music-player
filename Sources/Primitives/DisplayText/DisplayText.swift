@@ -111,6 +111,9 @@ public enum SymbolName {
     public static let playlist = "music.note.list"
     /// Something the owner should look at: a problem count, an unreadable playlist.
     public static let problem = "exclamationmark.triangle"
+    /// Pause and play: playback's buttons, and the status bar's for a scan or Analyze Library.
+    public static let pause = "pause.fill"
+    public static let play = "play.fill"
 }
 
 /// Whether white text has more contrast than black on an opaque sRGB color, each component

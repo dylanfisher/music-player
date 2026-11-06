@@ -1,6 +1,7 @@
 import AppKit
 import Artwork
 import Commands
+import DisplayText
 import Library
 import Log
 import Playback
@@ -149,7 +150,7 @@ public final class NowPlayingBar: NSObject {
     static func setUpTransport(_ previous: NSButton, _ play: NSButton, _ next: NSButton) {
         for (button, symbol, label) in [
             (previous, "backward.fill", "Previous"),
-            (play, "play.fill", AppCommands.title(of: .play)), (next, "forward.fill", "Next"),
+            (play, SymbolName.play, AppCommands.title(of: .play)), (next, "forward.fill", "Next"),
         ] {
             button.bezelStyle = .texturedRounded
             button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
@@ -250,7 +251,8 @@ public final class NowPlayingBar: NSObject {
         let playing = model.isPlaying
         let title = AppCommands.title(of: playing ? .pause : .play)
         playButton.image = NSImage(
-            systemSymbolName: playing ? "pause.fill" : "play.fill", accessibilityDescription: title)
+            systemSymbolName: playing ? SymbolName.pause : SymbolName.play,
+            accessibilityDescription: title)
         playButton.toolTip = title
         enableSeekBars()
     }
