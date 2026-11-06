@@ -291,6 +291,23 @@ Implementation plan (ADR 0110):
    markers through pause, play and seek. Existing tests that expect a seek's first frame
    untouched skip the fade-in. Bench: the seek rows and a soak.
 
+Result (draft, before the gate): shipped as planned (ADR 0110). Pause, play, a seek and a click
+in the bar fade over 5 ms (`HALRenderFadeFrames`: 221 frames at 44.1 kHz, 960 at 192 kHz) in the
+IO proc; frames at full gain are untouched, checked bit for bit in Int16, Int24, Int32 and
+Float32. A pause stops the device once the fade has played, a few tens of ms later. DoP doesn't
+fade and stops at once, as before, with its markers in order through pause, play and seek. The
+fade-out delayed a seek's first audio by up to 5 ms, which made the scrub row's published
+position wait for the refill (153 ms median, bimodal); the position is now published after each
+chunk a refill writes. Bench: seek while decoded 6.6 ms, seek after decoding moved on 5.5 ms, a
+seek during the refill after another 6.5 ms (4.3 ms in phase 35: the 5 ms fade-out of the old
+audio comes first), Next 11.5 ms, double-click same rate 57 ms, other rate 162 ms; 20 s soak 0
+underruns, memory −0.21 MB; CPU at 24/192 1.19%; gaps 0 samples. Deferred: a stop, a device
+switch and a double-click on a track of another rate still cut. Owner checkpoint: on the ADI-2,
+play and pause quickly, seek with Option-arrow and click and drag in the progress bar, with
+PCM at 44.1 and 192 kHz: say whether the pops are gone and it still feels immediate, and that
+the signal path panel shows bit-perfect while playing; then the same with a DSD track, which
+doesn't fade, to say whether its pause or seek clicks.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
