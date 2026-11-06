@@ -15,7 +15,8 @@ private func compared(
     _ name: String, formatID: String = "flac", rateHz: Double = 44_100, storedBits: Int? = 16,
     effectiveBits: Int? = 16, cutoffHz: Double? = nil, durationSeconds: Double = 256,
     truePeakDBTP: Double = -0.3, clippedRuns: Int = 0, dynamicRange: Int? = 11,
-    sizeBytes: Int? = nil, level: (Double) -> Double = pink
+    sizeBytes: Int? = nil, channels: Int = 2, peakDBFS: Double? = -0.5,
+    level: (Double) -> Double = pink
 ) -> ComparedFile {
     let nyquist = rateHz / 2
     let average = (0..<Spectrogram.rows).map { row in
@@ -24,10 +25,10 @@ private func compared(
         return Float(cutoffHz.map { hertz >= $0 ? -140 : binDB } ?? binDB)
     }
     let measures = FileMeasures(
-        formatID: formatID, sampleRateHz: rateHz, storedBits: storedBits, channels: 2,
+        formatID: formatID, sampleRateHz: rateHz, storedBits: storedBits, channels: channels,
         isFloat: storedBits == nil, durationSeconds: durationSeconds, cutoffHz: cutoffHz,
         cutoffSteepnessDBPerKHz: cutoffHz.map { _ in 150 }, effectiveBits: effectiveBits,
-        identicalChannels: false, peakDBFS: -0.5, truePeakDBTP: truePeakDBTP,
+        identicalChannels: false, peakDBFS: peakDBFS, truePeakDBTP: truePeakDBTP,
         clippedRuns: clippedRuns, dynamicRange: dynamicRange)
     let spectrogram = Spectrogram(
         columns: 1, cells: [UInt8](repeating: 0, count: Spectrogram.rows), averageDB: average,
@@ -152,6 +153,39 @@ private func firstDifference(_ file: ComparedFile) -> String? {
         differences(compared("B", rateHz: 96_000, cutoffHz: 22_000), from: cd).first
             == "B is at 96 kHz and A at 44.1 kHz, but B's sound stops at 22.0 kHz: B was"
             + " probably upsampled, with nothing gained")
+}
+
+@Test func anUpsampledFileIsSaidOnceAndOnlyOfALosslessOne() {
+    let cd = compared("A")
+    // Its content stops at 20 kHz: the rate sentence says it, not the cutoff's too.
+    let upsampled = differences(compared("B", rateHz: 96_000, cutoffHz: 20_000), from: cd)
+    #expect(upsampled.filter { $0.contains("B's sound stops at 20.0 kHz") }.count == 1)
+    #expect(!upsampled.contains { $0.hasPrefix("B stops at") }, "\(upsampled)")
+    // A 48 kHz MP3's lowpass is its encoder's, not an upsampling.
+    let mp3 = compared(
+        "B", formatID: ".mp3", rateHz: 48_000, storedBits: nil, effectiveBits: nil,
+        cutoffHz: 16_000)
+    let found = differences(mp3, from: cd)
+    #expect(found.first?.hasSuffix("B's MP3 encoder dropped the highs to save space") == true)
+    #expect(!found.contains { $0.contains("upsampled") }, "\(found)")
+}
+
+@Test func aLowRateLosesHighsPeopleHear() {
+    #expect(
+        differences(compared("B", rateHz: 32_000), from: compared("A")).contains(
+            "A is at 44.1 kHz and B at 32 kHz: the higher rate adds only sound above 16 kHz,"
+                + " which B can't hold"))
+}
+
+@Test func monoAndSilenceAreNotTheSame() {
+    let mono = differences(compared("B", channels: 1), from: compared("A"))
+    #expect(mono.first == "A is stereo and B mono: they were mixed differently")
+    #expect(!mono.contains { $0.contains("sound the same") })
+    let silent = differences(compared("B", peakDBFS: nil), from: compared("A"))
+    #expect(
+        silent.first
+            == "B is silent and A isn't: B is probably damaged or the wrong file")
+    #expect(!silent.contains { $0.contains("sound the same") })
 }
 
 @Test func aLossyFileDropsDetail() {

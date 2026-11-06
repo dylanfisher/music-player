@@ -41,7 +41,9 @@ public func differences(_ file: ComparedFile, from first: ComparedFile) -> [Stri
         heard.append(sentence)
         sounds = sounds || isSound
     }
-    add(cutoffDifference(pair))
+    let upsampled = upsampledIndex(pair)
+    add(silenceDifference(pair))
+    add(cutoffDifference(pair, upsampled: upsampled))
     let spectra = SpectrumComparison(pair)
     add(spectra?.levelSentence)
     add(dynamicRangeDifference(pair))
@@ -49,12 +51,15 @@ public func differences(_ file: ComparedFile, from first: ComparedFile) -> [Stri
     add(clippingDifference(pair))
     for band in spectra?.bandSentences ?? [] { add(band.text, isSound: band.isSound) }
     add(lengthDifference(pair))
+    add(channelsDifference(pair))
     let stored = [
-        rateDifference(pair), bitsDifference(pair), formatDifference(pair),
-        sizeDifference(pair),
+        rateDifference(pair, upsampled: upsampled), bitsDifference(pair),
+        formatDifference(pair), sizeDifference(pair),
     ].compactMap { $0 }
+    // Without the spectra, as when one stops under the midrange, the level and the bands
+    // weren't compared, so nothing says they sound the same.
     let same =
-        sounds
+        sounds || spectra == nil
         ? []
         : [
             "\(file.openingName) and \(first.name) sound the same as far as these measures can"
@@ -89,10 +94,12 @@ private func only(
     }
 }
 
-private func cutoffDifference(_ pair: [ComparedFile]) -> String? {
+private func cutoffDifference(_ pair: [ComparedFile], upsampled: Int?) -> String? {
     guard let (high, low) = ordered(pair, by: \.topHz), let cutoff = low.measures.cutoffHz,
         high.topHz - cutoff >= AnalysisRules.differentCutoffHz
     else { return nil }
+    // The rate sentence says it: the one that stops lower is the one upsampled.
+    if let upsampled, pair[upsampled].topHz == low.topHz { return nil }
     let reach =
         high.measures.cutoffHz.map(kilohertzLabel)
         ?? "\(kilohertz(high.measures.sampleRateHz / 2)) kHz"
@@ -156,21 +163,46 @@ private func lengthDifference(_ pair: [ComparedFile]) -> String? {
         + " edit, a longer fade or more silence at the ends"
 }
 
-private func rateDifference(_ pair: [ComparedFile]) -> String? {
+/// The index in `pair` of the lossless file at the higher rate whose content stops about
+/// where the other's rate does: upsampled from a copy at that rate. The rate sentence says
+/// so, and the cutoff sentence leaves it out.
+private func upsampledIndex(_ pair: [ComparedFile]) -> Int? {
+    guard let (high, low) = ordered(pair, by: \.measures.sampleRateHz), high.lossless,
+        let cutoff = high.measures.cutoffHz,
+        cutoff <= low.measures.sampleRateHz / 2 + AnalysisRules.differentCutoffHz
+    else { return nil }
+    return pair[0].measures.sampleRateHz > pair[1].measures.sampleRateHz ? 0 : 1
+}
+
+private func rateDifference(_ pair: [ComparedFile], upsampled: Int?) -> String? {
     guard let (high, low) = ordered(pair, by: \.measures.sampleRateHz) else { return nil }
     let lowNyquist = low.measures.sampleRateHz / 2
     let rates =
         "\(high.openingName) is at \(kilohertz(high.measures.sampleRateHz)) kHz and"
         + " \(low.name) at \(kilohertz(low.measures.sampleRateHz)) kHz"
-    if let cutoff = high.measures.cutoffHz,
-        cutoff <= lowNyquist + AnalysisRules.differentCutoffHz
-    {
+    if upsampled != nil, let cutoff = high.measures.cutoffHz {
         return rates + ", but \(possessive(high.name)) sound stops at"
             + " \(kilohertzLabel(cutoff)): \(high.name) was probably upsampled, with nothing"
             + " gained"
     }
-    return rates + ": the higher rate adds only sound above \(kilohertz(lowNyquist)) kHz,"
-        + " beyond human hearing"
+    let above = "the higher rate adds only sound above \(kilohertz(lowNyquist)) kHz"
+    return rates + ": "
+        + (lowNyquist >= AnalysisRules.hearingLimitHz
+            ? above + ", beyond human hearing"
+            : above + ", which \(low.name) can't hold")
+}
+
+private func channelsDifference(_ pair: [ComparedFile]) -> String? {
+    guard let (more, fewer) = ordered(pair, by: \.measures.channels) else { return nil }
+    return "\(more.openingName) is \(channelsText(more.measures.channels)) and \(fewer.name)"
+        + " \(channelsText(fewer.measures.channels)): they were mixed differently"
+}
+
+/// A silent file, against one that isn't: nothing else about how they sound compares.
+private func silenceDifference(_ pair: [ComparedFile]) -> String? {
+    guard let (silent, other) = only(pair, { $0.measures.peakDBFS == nil }) else { return nil }
+    return "\(silent.openingName) is silent and \(other.name) isn't: \(silent.name) is probably"
+        + " damaged or the wrong file"
 }
 
 /// The level each bit of depth adds: 20 log10(2).

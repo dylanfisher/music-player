@@ -51,6 +51,9 @@ public enum AnalysisRules {
     static let differentLengthSeconds = 2.0
     /// Sizes, as a share of the larger: under this is tags and art.
     static let differentSizeShare = 0.05
+    /// The highest frequency people hear, about: a rate whose Nyquist is under it loses
+    /// audible highs.
+    static let hearingLimitHz = 20_000.0
     /// A true peak over this is over full scale between samples.
     static let overFullScaleDBTP = 0.0
 

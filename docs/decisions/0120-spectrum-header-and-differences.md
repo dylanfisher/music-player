@@ -34,7 +34,8 @@ no new reads, each threshold in `AnalysisRules`:
 
 | Sentence | When | What it says it means |
 |---|---|---|
-| Cutoff | one stops at a cutoff 1 kHz or more under the other's top | made from an MP3 or AAC, from a lower rate, its encoder's, or filtered, by its verdicts |
+| Silence | one silent, the other not | probably damaged or the wrong file |
+| Cutoff | one stops at a cutoff 1 kHz or more under the other's top, unless the rate sentence calls it upsampled | made from an MP3 or AAC, from a lower rate, its encoder's, or filtered, by its verdicts |
 | Level | 1 dB or more | turn it down to compare fairly |
 | DR | 2 or more apart | more compressed, typical of a loud remaster |
 | True peak | one over 0 dBTP, the other not | may distort in some players |
@@ -42,13 +43,15 @@ no new reads, each threshold in `AnalysisRules`:
 | Bass, treble | 20–250 Hz or 4–16 kHz differs from 250 Hz–4 kHz by 1 dB or more | a different EQ |
 | Above 16 kHz | the same, from 16 kHz to where both stop | noise-shaped dither when the one with more has fewer effective bits, else air or noise |
 | Length | 2 s or more | a different edit, fade or silence |
-| Rate | the rates differ | adds only what's above the lower Nyquist, or upsampled when its content stops there |
+| Channels | the counts differ | mixed differently |
+| Rate | the rates differ | adds only what's above the lower Nyquist, beyond hearing when that's 20 kHz or more; or, for a lossless file whose content stops there, upsampled |
 | Bits | effective or stored bits differ | padded, made from a copy with fewer, or detail too quiet to hear |
 | Format | the codecs differ | every sample kept either way, or a lossy one at best the same |
 | Size | both lossless and 5% or more apart | follows format, bits and rate, not the sound |
 
-The first nine are how the files would sound different (but the dither one). When none of
-them passes its threshold, the paragraph ends: "The FLAC and the WAV sound the same as far as
+The first eleven are how the files would sound different (but the dither one). When none of
+them passes its threshold, and the spectra could be compared (neither silent, and both
+reaching past the midrange), the paragraph ends: "The FLAC and the WAV sound the same as far as
 these measures can tell: only comparing their samples could prove the audio identical".
 Matching measures can't prove identical samples, so it never says the files are the same.
 
@@ -60,7 +63,9 @@ the same 8 FFT bins whatever the rate, so the power of a band is each row's powe
 share of the row inside it, and files at different rates compare by frequency, not row. It's
 unweighted, so the bass counts for most of it, and the sentence says "about". Bands are
 measured against the midrange, not the overall level, so a louder file isn't read as having
-more bass.
+more bass. Row 0 holds the DC bin and is counted for its share over 20 Hz, a larger share at
+96 kHz than at 44.1 kHz, so a large DC offset or rumble can tip the level or the bass of a pair
+at different rates.
 
 **Thresholds.** 1 dB is about the smallest level change a listener hears; DR scores one apart
 are the meters' rounding; 2 s covers a gap or a trimmed fade; 5% of size covers tags and art.
@@ -81,3 +86,5 @@ Like 0115's, they're a first guess until the owner compares files they know.
 - The `measures` table and `FileMeasures` don't change.
 - The sentences name a cause only as "probably" or "typical"; a difference past its
   threshold can still be harmless, and one under it can still be heard.
+- No bit rate is stored, so two lossy files of one codec and cutoff, at 128 and 320 kbps,
+  read as the same.
