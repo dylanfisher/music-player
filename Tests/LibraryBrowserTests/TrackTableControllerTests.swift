@@ -1363,3 +1363,42 @@ private func launchedTable(
     #expect(table.table.sortDescriptors.first?.key == year)
     #expect(table.table.sortDescriptors.first?.ascending == false)
 }
+
+/// After long scrolls and a change of order, every row view on screen, a recycled one too,
+/// has its own row's line, and its art cell its own album line, in the owner's appearance:
+/// column and album lines, no row lines.
+@MainActor @Test func recycledRowsKeepNoOtherRowsLine() async throws {
+    let (controller, model, _) = try await artTable(artWidth: 3 * RowListController.rowHeight)
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 400, height: 160), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = controller.view
+    window.layoutIfNeeded()
+    controller.apply(
+        TableAppearance(
+            columnLines: true, rowLines: false, albumLines: true, rowLineColor: nil,
+            albumLineColor: albumRed, playingRowColor: nil, alternatingRows: true,
+            rowHeight: .regular, artSize: .fit, glass: false))
+    let table = controller.table
+    let art = table.column(withIdentifier: NSUserInterfaceItemIdentifier("art"))
+    func check(_ step: String, shows end: Int) {
+        var shown: [Int] = []
+        table.enumerateAvailableRowViews { rowView, row in
+            shown.append(row)
+            let marked = rowView as? MarkedRowView
+            #expect(marked?.bottomLine == controller.line(below: row), "\(step), row \(row)")
+            let cell = table.view(atColumn: art, row: row, makeIfNecessary: false)
+            #expect(
+                (cell as? AlbumArtCell)?.albumLine == controller.albumLine(below: row),
+                "\(step), row \(row)'s art")
+        }
+        #expect(shown.contains(end), "\(step): \(shown)")
+    }
+    for ascending in [true, false] {
+        await model.setSort(.album, ascending: ascending)
+        _ = controller.scrollThroughEveryRow { _ in }
+        check("at the end", shows: model.trackIDs.count - 1)
+        controller.scroll(toRow: 0)
+        check("back at the top", shows: 0)
+    }
+}
