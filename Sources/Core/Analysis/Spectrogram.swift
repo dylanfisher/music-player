@@ -40,17 +40,11 @@ public struct Spectrogram: Equatable, Sendable {
     }
 
     static func cell(_ decibels: Double) -> UInt8 {
-        UInt8((255 * (1 - decibels / Self.floorDB)).rounded().clamped(to: 0...255))
+        UInt8(min(255, max(0, (255 * (1 - decibels / Self.floorDB)).rounded())))
     }
 
     /// The frequency in the middle of `row`.
     func frequencyHz(row: Int) -> Double {
         (Double(row) + 0.5) * nyquistHz / Double(Self.rows)
-    }
-}
-
-extension Comparable {
-    func clamped(to range: ClosedRange<Self>) -> Self {
-        min(max(self, range.lowerBound), range.upperBound)
     }
 }
