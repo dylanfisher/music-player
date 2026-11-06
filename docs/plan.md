@@ -360,8 +360,11 @@ Result (draft): shipped 48b.1 to 48b.4 (ADR 0109, amends 0102). Past Week, Past 
 Year are the last 7, 30 and 365 local days, today included; a saved list's name for them is its
 days. The totals fill their row beside Plays per Day, their figures in two rows of three; the
 columns are 300 points or more (a one-column card 300 to 455 wide once two fit, from 270 to
-410). Save as Playlist opens the New Playlist name sheet, moved to LibraryBrowser, filled with
-the made name. Bench on Apple Silicon, with two other agents building on the machine (load about
+410). Save as Playlist opens the New Playlist name sheet, moved to LibraryBrowser, over the
+window whose list it is, filled with the name made from the report it shows. The table under the
+panel keeps the shown report's days. Gate fixes: Year in Review saved the panel's list over the
+library window; after midnight the table and the cards counted different days. Bench on Apple
+Silicon, with two other agents building on the machine (load about
 4): changing the period 226 to 235 ms p95 (budget 250), Past Week 32, Past Month 36 to 37, Past
 Year 75 to 81, 2025 76 to 83, All Time 227 to 236; opening Stats on Past Month 332 to 609 ms over
 six runs, three over its 400 budget. Phase 44c measured 384 on a quiet machine, and the period

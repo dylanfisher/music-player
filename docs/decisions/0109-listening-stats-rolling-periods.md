@@ -20,14 +20,18 @@ month the calendar periods held a day or two of plays.
   new spans and titles; the saved source (`stats:week`), the command line's `--period week` and
   its JSON keep their words. Every reader of a period gets the span from one place, so the
   table under the panel, the reader and the command line agree.
+- **The table keeps the report's days.** A report keeps the days of when it was read; once it
+  arrives the table under the panel takes its span instead of reading the period's again, so
+  after midnight the cards and the table count the same days until the report is read again.
 - **Year in Review from Past Year** opens the year today is in, as it did from This Year; a past
   year is in the year menu, which stays as it is.
-- **A saved list's name** for a rolling period is its days ("Top Artists, Oct 8 – Nov 6, 2026",
-  "Nov 7, 2025 – Nov 6, 2026"), not the year its first day is in; a chosen year's is the year.
+- **A saved list's name** comes from the report shown: its days for a rolling period ("Top
+  Artists, Oct 8 – Nov 6, 2026", "Nov 7, 2025 – Nov 6, 2026"), not the year its first day is
+  in; the year for a whole year; All Time for no bounds.
 - **Save as Playlist asks first.** A list's button opens the sheet New Playlist uses over the
-  main window, its field filled with that name; Save makes the playlist under the name in the
-  field, Cancel makes none. The sheet moved from the app to LibraryBrowser so both reach it.
-
+  window the list is in, the panel's or Year in Review's, its field filled with that name, and
+  saves that window's list; Save makes the playlist under the name in the field, Cancel makes
+  none. The sheet moved from the app to LibraryBrowser so both reach it.
 - **The totals fill their row.** Where the totals share a row with Plays per Day (six columns or
   more), the flow makes them as tall as the row's tallest card, and the figures go into two rows
   of three, each row in the middle of its half; on a row of their own they keep 92 points and
