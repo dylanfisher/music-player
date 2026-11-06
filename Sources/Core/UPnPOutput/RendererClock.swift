@@ -1,7 +1,7 @@
 /// Where the loaded track is by the app's own clock, and when it's over by it (ADR 0112). A
 /// renderer's positions can lag what it plays by seconds, so the end never waits on one: the
 /// renderer's reports start the clock, pause and resume it, and show a stall, nothing more.
-struct RendererClock: Equatable {
+struct RendererClock {
     /// How long past a track's end, by the clock, the app waits for the renderer to move on
     /// before it sends the next track itself.
     static let leadMarginSeconds = 2.0
@@ -22,7 +22,7 @@ struct RendererClock: Equatable {
     let durationSeconds: Double
     private var anchorSeconds = 0.0
     private var anchorTime = 0.0
-    private(set) var isRunning = false
+    private var isRunning = false
     /// How much later than the track's length stalls have moved the end.
     private(set) var stallSeconds = 0.0
     /// `stallSeconds` when the lag was last measured from scratch, after a pause.

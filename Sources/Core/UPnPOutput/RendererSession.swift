@@ -399,7 +399,7 @@ actor RendererSession {
     private func trace(_ current: Loaded, _ transport: TransportInfo, _ position: PositionInfo) {
         let time = now()
         let nearEnd =
-            current.clock.seconds(at: time) >= current.track.durationSeconds - Self.traceSeconds
+            current.clock.seconds(at: time) >= current.clock.durationSeconds - Self.traceSeconds
         let afterChange = trackChangedAt.map { time - $0 < Self.traceSeconds } ?? false
         guard nearEnd || afterChange else { return }
         let line = Self.traceLine(
