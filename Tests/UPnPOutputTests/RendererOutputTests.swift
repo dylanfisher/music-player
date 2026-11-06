@@ -381,7 +381,7 @@ private func output(
             if case .afterStop = sink.gapless { break }
         }
     }
-    #expect(gapless == .afterStop("its AVTransport has no SetNextAVTransportURI"))
+    #expect(gapless == .afterStop(RendererSession.noNextURIAction))
 }
 
 /// Why the output says the renderer isn't gapless, once it says so; nil if it hasn't within
@@ -418,7 +418,7 @@ private func notGaplessReason(_ output: RendererOutput) async -> String? {
     await log.wait(for: ["started 1", "ended 1", "started 2"], seconds: 15)
     #expect(
         await notGaplessReason(output)
-            == "it stopped at a track's end instead of playing the next track it took")
+            == RendererSession.stoppedInsteadOfNext)
     // The next track it took was taken back.
     #expect(fake.nextTrackURI == "")
     // The second track in a row goes the same way, without a next URI it would ignore: the
@@ -485,7 +485,7 @@ private func notGaplessReason(_ output: RendererOutput) async -> String? {
     #expect(fake.commands.suffix(2) == ["SetAVTransportURI", "Play"])
     #expect(
         await notGaplessReason(output)
-            == "it played on past a track's end instead of the next track it took")
+            == RendererSession.playedOnInsteadOfNext)
     // Commands run in order, so once the Pause has gone, the next track has been handled.
     #expect(fake.nextTrackURI == "")
     output.setNext(item(3, "short"))

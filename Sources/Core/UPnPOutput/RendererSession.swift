@@ -41,6 +41,14 @@ actor RendererSession {
     /// is logged: what a renderer reports there decides when the next track starts.
     static let traceSeconds = 15.0
 
+    // Why a renderer isn't gapless, as the signal path panel shows it after "not gapless"; the
+    // log has the details.
+    static let noNextURIAction = "it can't be given the next track ahead"
+    static let refusedNextURI = "it refused the next track ahead"
+    static let unreadableActions = "its list of actions couldn't be read"
+    static let stoppedInsteadOfNext = "it stopped instead of playing the next track"
+    static let playedOnInsteadOfNext = "it played on instead of playing the next track"
+
     private final class Loaded {
         let item: OutputItem
         let track: RendererTrack
@@ -230,9 +238,10 @@ actor RendererSession {
                 if case .unreachable = error, let current {
                     return lose(current, error)
                 }
-                gapless = .afterStop("\(AVTransport.setNextURIAction) was refused: \(error)")
+                gapless = .afterStop(Self.refusedNextURI)
                 logger.error(
-                    "\(self.renderer.name): \(error); each track now starts after the last")
+                    "\(self.renderer.name, privacy: .public): \(AVTransport.setNextURIAction, privacy: .public) was refused: \(error); each track now starts after the last"
+                )
                 publish(signalPath())
             }
         }
@@ -496,8 +505,7 @@ actor RendererSession {
                     return advance(from: current, to: next, gapless: true)
                 }
                 if position.trackURI.isEmpty || sameURI(position.trackURI, current.uri) {
-                    await ignoresNextURI(
-                        "it played on past a track's end instead of the next track it took")
+                    await ignoresNextURI(Self.playedOnInsteadOfNext)
                 }
             } catch {
                 logger.notice("\(self.renderer.name) didn't answer at the track's end: \(error)")
@@ -567,8 +575,7 @@ actor RendererSession {
         if next?.sent == true {
             current.stoppedAtEndPolls += 1
             guard current.stoppedAtEndPolls >= Self.stoppedAtEndPolls else { return }
-            await ignoresNextURI(
-                "it stopped at a track's end instead of playing the next track it took")
+            await ignoresNextURI(Self.stoppedInsteadOfNext)
             guard self.current === current else { return }
         }
         await ended(current)
@@ -751,10 +758,12 @@ actor RendererSession {
         do throws(DescriptionProblem) {
             gapless =
                 try await control.actions().contains(AVTransport.setNextURIAction)
-                ? .nextURI : .afterStop("its AVTransport has no \(AVTransport.setNextURIAction)")
+                ? .nextURI : .afterStop(Self.noNextURIAction)
         } catch {
-            gapless = .afterStop("\(error)")
-            logger.notice("\(self.renderer.name): \(error)")
+            gapless = .afterStop(Self.unreadableActions)
+            logger.notice(
+                "\(self.renderer.name, privacy: .public): \(error); each track now starts after the last"
+            )
         }
     }
 

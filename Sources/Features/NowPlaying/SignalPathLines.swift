@@ -135,7 +135,7 @@ private func rendererStage(_ sink: RendererSink) -> SignalPathLines.Stage {
     switch sink.gapless {
     case .unknown: gapless = nil
     case .nextURI: gapless = "gapless"
-    case .afterStop: gapless = "not gapless"
+    case .afterStop(let reason): gapless = "not gapless: \(reason)"
     }
     let volume = sink.volumeIsReceivers ? "receiver's volume" : "its own volume"
     return .init(

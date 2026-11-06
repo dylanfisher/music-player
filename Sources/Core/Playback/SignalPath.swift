@@ -71,7 +71,8 @@ public enum RendererGapless: Sendable, Equatable {
     case unknown
     /// The next track is handed over with `SetNextAVTransportURI` while one plays.
     case nextURI
-    /// Each track is sent once the last has stopped, so there's a gap; says why.
+    /// Each track is sent once the last has stopped, so there's a gap; says why, in a short
+    /// clause the signal path panel shows after "not gapless".
     case afterStop(String)
 }
 

@@ -130,13 +130,13 @@ private func rendererPath(_ gapless: RendererGapless, receiver: Bool, playing: B
                 note: "Gapless · receiver's volume", changes: false),
         ])
     let other = signalPathLines(
-        rendererPath(.afterStop("its AVTransport has no X"), receiver: false, playing: false))
+        rendererPath(.afterStop("it can't take X"), receiver: false, playing: false))
     #expect(other.badge == "Nothing playing")
     #expect(
         other.stages == [
             .init(
                 title: "Denon AVR-X1800H", value: "Nothing loaded",
-                note: "Not gapless · its own volume", changes: false)
+                note: "Not gapless: it can't take X · its own volume", changes: false)
         ])
 }
 
