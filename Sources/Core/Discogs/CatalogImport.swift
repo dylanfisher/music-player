@@ -69,8 +69,7 @@ func runImport(
         // new one, never part of either. One that has the old one open gets an I/O error
         // from the system SQLite on its next read, so it opens the new one.
         guard rename(building.path, catalog.path) == 0 else {
-            throw CatalogImportError.unreadable(
-                building.lastPathComponent, String(cString: strerror(errno)))
+            throw CatalogImportError.unwritable(catalog.path, String(cString: strerror(errno)))
         }
     } catch {
         do {
@@ -78,7 +77,8 @@ func runImport(
         } catch let removal {
             logger.error("couldn't remove the unfinished catalog \(building.path): \(removal)")
         }
-        let failure = error as? CatalogImportError ?? .unreadable(building.path, "\(error)")
+        // Anything but the dumps' own errors is the catalog's file or its database.
+        let failure = error as? CatalogImportError ?? .unwritable(building.path, "\(error)")
         logger.error("the Discogs import of \(set.date) failed: \(failure)")
         throw failure
     }

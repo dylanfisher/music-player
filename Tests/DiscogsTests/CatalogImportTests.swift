@@ -175,3 +175,18 @@ private func expectFailure(
         try locate(DumpsFolder(path: "discogs", share: "smb://nas/other"), among: shares)
     }
 }
+
+@Test func aCatalogThatCantBeWrittenFailsSayingSo() throws {
+    let folder = try DumpFolder()
+    try folder.write(newDate, releases: newRelease)
+    // The catalog's folder is a file.
+    let blocked = folder.directory.appendingPathComponent("file", isDirectory: false)
+    try Data().write(to: blocked)
+    let catalog = blocked.appendingPathComponent("discogs.sqlite", isDirectory: false)
+    #expect {
+        try runImport(from: folder.dumps, to: catalog, outsideOf: []) { _ in }
+    } throws: { error in
+        guard case .unwritable(let path, _) = error as? CatalogImportError else { return false }
+        return path == catalog.appendingPathExtension("importing").path
+    }
+}

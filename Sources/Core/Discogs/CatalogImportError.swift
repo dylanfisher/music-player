@@ -3,6 +3,8 @@ public enum CatalogImportError: Error, Equatable, Sendable, CustomStringConverti
     /// The folder has no date with all four dumps and a checksum file listing them.
     case noDumpSet(folder: String, found: [String])
     case unreadable(String, String)
+    /// The new catalog couldn't be written, as on a full disk.
+    case unwritable(String, String)
     /// The checksum file has a line that isn't a SHA-256 and a file name.
     case badChecksumFile(String, line: Int)
     case checksumMismatch(String, expected: String, actual: String)
@@ -27,6 +29,7 @@ public enum CatalogImportError: Error, Equatable, Sendable, CustomStringConverti
                 + " files of one date and its CHECKSUM.txt listing them"
                 + (found.isEmpty ? "" : " (found \(found.joined(separator: ", ")))")
         case .unreadable(let file, let reason): "\(file) couldn't be read: \(reason)"
+        case .unwritable(let file, let reason): "the catalog \(file) couldn't be written: \(reason)"
         case .badChecksumFile(let file, let line):
             "\(file) line \(line) isn't a SHA-256 and a file name"
         case .checksumMismatch(let file, let expected, let actual):

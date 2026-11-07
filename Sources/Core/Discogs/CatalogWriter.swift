@@ -36,7 +36,7 @@ final class CatalogWriter {
             """)
         let mode = try database.prepare("PRAGMA journal_mode").map { try $0.text(0) }
         guard mode == ["memory"] else {
-            throw CatalogImportError.unreadable(url.lastPathComponent, "journal mode \(mode)")
+            throw CatalogImportError.unwritable(url.path, "journal mode \(mode)")
         }
         try database.execute(CatalogSchema.tables)
         insertLabel = try database.prepare("INSERT INTO labels (id, name) VALUES (?, ?)")
