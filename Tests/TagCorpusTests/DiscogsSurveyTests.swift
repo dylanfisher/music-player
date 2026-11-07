@@ -75,23 +75,23 @@ private func temporaryFolder() throws -> URL {
             mood: "Ambient, Dub Techno", grouping: "Label", label: "Label"),
         record(
             "/m/a/2.flac", releaseID: "1",
-            genre: "Electronic - Ambient, Dub Techno, Ambient, Dub Techno",
+            genre: "Electronic - Ambient, Dub Techno - Ambient, Dub Techno",
             mood: "Ambient, Dub Techno", grouping: "Other", label: "Label", artist: "Name (2)"),
     ]
     let report = surveyReport(records, folders: [])
     #expect(report.contains("GENRE as \"genre - styles\": 2 of 2"))
-    #expect(report.contains("  of those, the styles doubled: 1 of 2"))
-    #expect(report.contains("MOOD equal to GENRE's styles, once each: 2 of 2"))
+    #expect(report.contains("  of those, the styles repeated after another \" - \": 1 of 2"))
+    #expect(report.contains("MOOD equal to GENRE's styles: 2 of 2"))
     #expect(report.contains("GROUPING equal to LABEL: 1 of 2"))
     #expect(report.contains("ARTIST or ALBUMARTIST with a \"(2)\" suffix: 1 of 2; \"Name (2)\""))
 }
 
-@Test func genreLayoutSplitsTheGenreFromItsStylesAndFindsThemDoubled() {
-    let layout = GenreLayout("Electronic - Ambient, Dub Techno, Ambient, Dub Techno")
-    #expect(layout?.genre == "Electronic")
-    #expect(layout?.isDoubled == true)
-    #expect(layout?.distinctStyles == ["Ambient", "Dub Techno"])
-    #expect(GenreLayout("Electronic - Ambient")?.isDoubled == false)
+@Test func genreLayoutSplitsTheGenreFromItsStylesAndFindsThemRepeated() {
+    let layout = GenreLayout("Folk, World, & Country - Ambient, Dub Techno - Ambient, Dub Techno")
+    #expect(layout?.genre == "Folk, World, & Country")
+    #expect(layout?.styles == "Ambient, Dub Techno")
+    #expect(layout?.isRepeated == true)
+    #expect(GenreLayout("Electronic - Ambient")?.isRepeated == false)
     #expect(GenreLayout("Electronic, Rock") == nil)
     #expect(hasNumberSuffix("Name (2)"))
     #expect(!hasNumberSuffix("Name(2)"))

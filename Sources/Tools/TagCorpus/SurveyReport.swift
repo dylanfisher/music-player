@@ -29,6 +29,10 @@ func surveyReport(_ records: [SurveyRecord], folders: [URL]) -> String {
         out += customKeyLines(files)
     }
 
+    out.append(
+        "\n== Keys with DISCOGS in their name, by spelling: files in each format")
+    out += discogsKeySpellings(formats)
+
     let matched = read.filter { $0.custom[DiscogsKey.releaseID] != nil }
     out.append("\n== Conventions in the \(matched.count) files with DISCOGS_RELEASE_ID")
     out += conventionLines(matched)
@@ -99,25 +103,25 @@ private func samples(_ values: [String], limit: Int = 3) -> String {
         .joined(separator: " | ")
 }
 
-/// `GENRE` as YATE's template writes it for the owner: the first genre, " - ", then the styles.
+/// `GENRE` as YATE's template writes it for the owner: the genre, " - ", then the styles,
+/// joined with ", ". Discogs genre names hold commas themselves ("Folk, World, & Country"), so
+/// the genre is everything before the first " - ".
 struct GenreLayout: Equatable {
     var genre: String
-    var styles: [String]
+    /// The text after each " - ": the styles, more than once when the template repeated them.
+    var styleParts: [String]
 
     init?(_ text: String) {
-        guard let range = text.range(of: " - ") else { return nil }
-        genre = String(text[..<range.lowerBound])
-        styles = text[range.upperBound...].components(separatedBy: ", ")
+        let parts = text.components(separatedBy: " - ")
+        guard parts.count >= 2 else { return nil }
+        genre = parts[0]
+        styleParts = Array(parts.dropFirst())
     }
 
-    /// The styles written twice over, a template error.
-    var isDoubled: Bool {
-        styles.count >= 2 && styles.count.isMultiple(of: 2)
-            && Array(styles.prefix(styles.count / 2)) == Array(styles.suffix(styles.count / 2))
-    }
+    var styles: String { styleParts[0] }
 
-    /// The styles once each.
-    var distinctStyles: [String] { isDoubled ? Array(styles.prefix(styles.count / 2)) : styles }
+    /// The styles written more than once, " - " between them: a template error.
+    var isRepeated: Bool { styleParts.count >= 2 && Set(styleParts).count == 1 }
 }
 
 /// Counts of each convention among `files`, with samples.
@@ -128,33 +132,44 @@ private func conventionLines(_ files: [SurveyRecord]) -> [String] {
             "\(name): \(matching.count) of \(files.count); "
                 + samples(matching.compactMap(value), limit: 5))
     }
+    func histogram(_ name: String, _ values: [String], top: Int = 15) {
+        let counts = Dictionary(grouping: values) { $0 }.mapValues(\.count)
+            .sorted { ($0.value, $1.key) > ($1.value, $0.key) }.prefix(top)
+        lines.append(
+            "\(name), the \(top) most common: "
+                + counts.map { "\"\($0.key)\" \($0.value)" }.joined(separator: ", "))
+    }
     let genres = files.compactMap { file in file.genre.map { (file, $0) } }
     let layouts = genres.compactMap { file, genre in GenreLayout(genre).map { (file, $0) } }
     tally("GENRE set", genres.map(\.0), \.genre)
     tally("GENRE as \"genre - styles\"", layouts.map(\.0), \.genre)
     tally(
-        "  of those, more than one genre before \" - \"",
-        layouts.filter { $0.1.genre.contains(", ") }.map(\.0), \.genre)
-    tally("  of those, the styles doubled", layouts.filter { $0.1.isDoubled }.map(\.0), \.genre)
+        "  of those, the styles repeated after another \" - \"",
+        layouts.filter { $0.1.isRepeated }.map(\.0), \.genre)
+    tally(
+        "  of those, more than one \" - \" and not a repeat",
+        layouts.filter { $0.1.styleParts.count > 1 && !$0.1.isRepeated }.map(\.0), \.genre)
+    tally(
+        "  of those, no styles after \" - \"", layouts.filter { $0.1.styles.isEmpty }.map(\.0),
+        \.genre)
+    histogram("  their genre before \" - \"", layouts.map(\.1.genre))
     tally(
         "GENRE without \" - \"", genres.filter { GenreLayout($0.1) == nil }.map(\.0), \.genre)
 
     tally("MOOD set", files.filter { $0.mood != nil }, \.mood)
     tally(
-        "MOOD equal to GENRE's styles, once each",
-        layouts.filter { $0.0.mood == $0.1.distinctStyles.joined(separator: ", ") }.map(\.0),
-        \.mood)
+        "MOOD equal to GENRE's styles",
+        layouts.filter { $0.0.mood == $0.1.styles }.map(\.0), \.mood)
     tally(
-        "MOOD equal to GENRE's styles as written, doubled",
-        layouts.filter { $0.1.isDoubled && $0.0.mood == $0.1.styles.joined(separator: ", ") }
+        "MOOD equal to GENRE's repeated styles, \" - \" between them",
+        layouts.filter { $0.1.isRepeated && $0.0.mood == $0.1.styleParts.joined(separator: " - ") }
             .map(\.0), \.mood)
     tally(
         "MOOD set and neither",
         files.filter { file in
             guard let mood = file.mood else { return false }
             let layout = file.genre.flatMap(GenreLayout.init)
-            return mood != layout?.distinctStyles.joined(separator: ", ")
-                && mood != layout?.styles.joined(separator: ", ")
+            return mood != layout?.styles && mood != layout?.styleParts.joined(separator: " - ")
         }, { "\($0.mood!) (GENRE \($0.genre ?? "none"))" })
 
     tally("GROUPING set", files.filter { $0.grouping != nil }, \.grouping)
@@ -165,8 +180,16 @@ private func conventionLines(_ files: [SurveyRecord]) -> [String] {
         "GROUPING set and not LABEL",
         files.filter { $0.grouping != nil && $0.grouping != $0.label },
         { "\($0.grouping!) (LABEL \($0.label ?? "none"))" })
+    tally(
+        "GROUPING equal to LABEL's first label, before \" & \"",
+        files.filter {
+            $0.grouping != nil && $0.grouping != $0.label && $0.grouping == firstLabel($0)
+        },
+        { "\($0.grouping!) (LABEL \($0.label!))" })
     tally("LABEL set", files.filter { $0.label != nil }, \.label)
-    tally("LABEL with \", \"", files.filter { $0.label?.contains(", ") == true }, \.label)
+    tally(
+        "LABEL with \" & \" between labels", files.filter { $0.label?.contains(" & ") == true },
+        \.label)
     tally("CATALOGNUMBER set", files.filter { $0.catalogNumber != nil }, \.catalogNumber)
 
     let catalogKey = "DISCOGS_CATALOG_NUMBER"
@@ -177,10 +200,18 @@ private func conventionLines(_ files: [SurveyRecord]) -> [String] {
                 && file.custom[catalogKey] == "\(file.label!): \(file.catalogNumber!)"
         }, { $0.custom[catalogKey] })
     tally(
-        "\(catalogKey) set and not that",
+        "\(catalogKey) as \"LABEL's first label: CATALOGNUMBER\" where LABEL has several",
+        files.filter { file in
+            file.label?.contains(" & ") == true && file.catalogNumber != nil
+                && file.custom[catalogKey] == "\(firstLabel(file)!): \(file.catalogNumber!)"
+        }, { "\($0.custom[catalogKey]!) (LABEL \($0.label!))" })
+    tally(
+        "\(catalogKey) set and neither",
         files.filter { file in
             file.custom[catalogKey] != nil
                 && file.custom[catalogKey] != "\(file.label ?? ""): \(file.catalogNumber ?? "")"
+                && file.custom[catalogKey]
+                    != "\(firstLabel(file) ?? ""): \(file.catalogNumber ?? "")"
         },
         {
             "\($0.custom[catalogKey]!) (LABEL \($0.label ?? "none"), CATALOGNUMBER \($0.catalogNumber ?? "none"))"
@@ -217,16 +248,81 @@ private func conventionLines(_ files: [SurveyRecord]) -> [String] {
         files.filter { $0.custom[artistList] != nil && $0.custom[artistList] != $0.artist },
         { "\($0.custom[artistList]!) (ARTIST \($0.artist ?? "none"))" })
 
+    let anvKey = "DISCOGS_ANV_LIST"
+    let anvPairs = files.flatMap { file in
+        (file.custom[anvKey] ?? "").components(separatedBy: yateValueSeparator).compactMap {
+            pair -> (file: SurveyRecord, canonical: String, anv: String)? in
+            let sides = pair.components(separatedBy: "=")
+            return sides.count == 2 ? (file, sides[0], sides[1]) : nil
+        }
+    }
+    func artists(_ file: SurveyRecord) -> String {
+        [file.artist, file.albumArtist].compactMap { $0 }.joined(separator: " / ")
+    }
+    lines.append("\(anvKey) pairs, canonical=ANV: \(anvPairs.count)")
+    tally(
+        "  of those, ARTIST or ALBUMARTIST holds the canonical name, any (2) dropped",
+        anvPairs.filter { artists($0.file).contains(withoutNumberSuffix($0.canonical)) }.map(
+            \.file),
+        { $0.custom[anvKey] })
+    tally(
+        "  of those, it holds the ANV and not the canonical name",
+        anvPairs.filter {
+            !artists($0.file).contains(withoutNumberSuffix($0.canonical))
+                && artists($0.file).contains($0.anv)
+        }.map(\.file), { "\($0.custom[anvKey]!) (\(artists($0)))" })
+    tally(
+        "  of those, the canonical name has a (2) suffix",
+        anvPairs.filter { hasNumberSuffix($0.canonical) }.map(\.file),
+        { "\($0.custom[anvKey]!) (\(artists($0)))" })
+    tally(
+        "Custom values holding \"\(yateValueSeparator)\" between values",
+        files.filter { $0.custom.values.contains { $0.contains(yateValueSeparator) } },
+        { file in
+            file.custom.first { $0.value.contains(yateValueSeparator) }.map {
+                "\($0.key)=\($0.value)"
+            }
+        })
     tally(
         "ALBUM ending in a year in brackets",
         files.filter { $0.album.map(endsInBracketedYear) == true }, \.album)
     tally("MEDIA set", files.filter { $0.media != nil }, \.media)
+    histogram("MEDIA values", files.compactMap(\.media), top: 10)
     for (shape, count) in Dictionary(grouping: files.compactMap(\.date), by: dateShape)
         .mapValues(\.count).sorted(by: { $0.key < $1.key })
     {
         lines.append("DATE shaped \(shape): \(count) of \(files.count)")
     }
     return lines
+}
+
+/// What YATE puts between the values of one key, as in `DISCOGS_ARTIST_LIST`.
+private let yateValueSeparator = ";;;"
+
+/// The first of the labels LABEL joins with " & ".
+private func firstLabel(_ file: SurveyRecord) -> String? {
+    file.label?.components(separatedBy: " & ").first
+}
+
+/// Each key with DISCOGS in its name, with its files in each format, spellings that differ
+/// only in "_" against " " side by side.
+private func discogsKeySpellings(_ formats: [(key: String, value: [SurveyRecord])]) -> [String] {
+    var counts: [String: [String: Int]] = [:]
+    for (format, files) in formats {
+        for file in files {
+            for key in file.custom.keys where key.contains("DISCOGS") {
+                counts[key, default: [:]][format, default: 0] += 1
+            }
+        }
+    }
+    func folded(_ key: String) -> String {
+        key.replacingOccurrences(of: "_", with: "").replacingOccurrences(of: " ", with: "")
+    }
+    return counts.keys.sorted { (folded($0), $0) < (folded($1), $1) }.map { key in
+        key + ": "
+            + counts[key]!.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }
+            .joined(separator: ", ")
+    }
 }
 
 private func isDigits(_ text: String) -> Bool {
@@ -243,6 +339,12 @@ func hasNumberSuffix(_ name: String) -> Bool {
     let inner = name[name.index(after: open)..<name.index(before: name.endIndex)]
     return open > name.startIndex && name[name.index(before: open)] == " "
         && isDigits(String(inner))
+}
+
+/// `name` without a trailing " (2)".
+private func withoutNumberSuffix(_ name: String) -> String {
+    guard hasNumberSuffix(name), let open = name.lastIndex(of: "(") else { return name }
+    return String(name[..<name.index(before: open)])
 }
 
 private func endsInBracketedYear(_ title: String) -> Bool {
