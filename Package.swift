@@ -253,6 +253,12 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .executableTarget(
+            name: "DiscogsImport",
+            dependencies: ["Discogs", "Library", "Settings"],
+            path: "Sources/Tools/DiscogsImport",
+            swiftSettings: strictSwift
+        ),
+        .executableTarget(
             name: "FailureDrill",
             dependencies: ["Fixtures", "Library", "Log", "SQLite", "Settings", "TagWriter"],
             path: "Sources/Tools/FailureDrill",

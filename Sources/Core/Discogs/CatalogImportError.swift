@@ -1,5 +1,5 @@
 /// Why an import failed. The old catalog, if any, is still in use after every one of them.
-enum CatalogImportError: Error, Equatable, Sendable, CustomStringConvertible {
+public enum CatalogImportError: Error, Equatable, Sendable, CustomStringConvertible {
     /// The folder has no date with all four dumps and a checksum file listing them.
     case noDumpSet(folder: String, found: [String])
     case unreadable(String, String)
@@ -20,7 +20,7 @@ enum CatalogImportError: Error, Equatable, Sendable, CustomStringConvertible {
     /// Stopped by the caller.
     case stopped
 
-    var description: String {
+    public var description: String {
         switch self {
         case .noDumpSet(let folder, let found):
             "\(folder) has no complete Discogs dump: the releases, masters, artists and labels"

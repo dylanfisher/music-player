@@ -1,7 +1,7 @@
 import DisplayText
 
 /// Where an import is, as the window shows it.
-struct CatalogImportProgress: Equatable, Sendable {
+public struct CatalogImportProgress: Equatable, Sendable {
     enum Stage: Equatable, Sendable {
         case reading(DumpKind)
         /// Every file is read and checked; the lookups' indexes are being built.
@@ -13,7 +13,7 @@ struct CatalogImportProgress: Equatable, Sendable {
     /// The dump set's date, as its file names have it.
     var dumpDate: String
     /// The compressed bytes read so far, of `totalBytes`.
-    var bytesRead: Int
+    public var bytesRead: Int
     var totalBytes: Int
     /// The records imported so far, by dump.
     var records: [DumpKind: Int]
@@ -26,7 +26,7 @@ struct CatalogImportProgress: Equatable, Sendable {
     }
 
     /// "Importing releases: 1,234,567 so far (42%)", for the window and the log.
-    var text: String {
+    public var text: String {
         let percent = "\(Int(fraction * 100))%"
         switch stage {
         case .reading(let kind):

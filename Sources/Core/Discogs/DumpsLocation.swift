@@ -5,7 +5,7 @@ import Settings
 /// Where the dumps folder is now: its path, or under where its share is mounted, found the way
 /// the sync folder's share is (ADR 0028). Throws when the share isn't mounted, or when its name
 /// is mounted from more than one host and which one is meant isn't known.
-func locate(_ folder: DumpsFolder, among shares: [MountedShare])
+public func locate(_ folder: DumpsFolder, among shares: [MountedShare])
     throws(CatalogImportError) -> URL
 {
     switch Library.locate(SyncFolder(path: folder.path, share: folder.share), among: shares) {

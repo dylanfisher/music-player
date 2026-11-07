@@ -6,14 +6,14 @@ import Settings
 private let logger = moduleLogger()
 
 /// What an import made.
-struct CatalogImportSummary: Equatable, Sendable {
-    var dumpDate: String
-    var records: [DumpKind: Int]
+public struct CatalogImportSummary: Equatable, Sendable {
+    public var dumpDate: String
+    public var records: [DumpKind: Int]
     /// The compressed bytes read: the whole dump set.
-    var compressedBytes: Int
+    public var compressedBytes: Int
     /// The new catalog's size.
-    var catalogBytes: Int
-    var seconds: Double
+    public var catalogBytes: Int
+    public var seconds: Double
 }
 
 /// The least time between two progress reports: a few a second however many records go by.
@@ -26,7 +26,7 @@ private let reportIntervalSeconds = 0.25
 /// are the watched folders' paths as they're found now: the catalog must be outside all of
 /// them. `progress` hears each step, a few times a second, off the main thread. One import
 /// at a time may write a catalog.
-func importCatalog(
+public func importCatalog(
     from folder: URL, to catalog: URL, outsideOf watchedFolders: [String],
     progress: @escaping @Sendable (CatalogImportProgress) -> Void
 ) async throws -> CatalogImportSummary {

@@ -42,7 +42,7 @@ public struct AppPaths: Sendable {
     var discogsCatalogFile: URL { dataDirectory.appendingPathComponent("discogs.sqlite") }
 
     /// The Discogs catalog's file: `catalogPath`, the setting's value, or the default.
-    func discogsCatalogFile(_ catalogPath: String?) -> URL {
+    public func discogsCatalogFile(_ catalogPath: String?) -> URL {
         catalogPath.map { URL(fileURLWithPath: $0, isDirectory: false) } ?? discogsCatalogFile
     }
     /// The art column's thumbnails.
