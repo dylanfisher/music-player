@@ -1,7 +1,7 @@
 import Foundation
 
 /// One record of a dump, as `DumpParser` builds it.
-enum DumpRecord {
+enum DumpRecord: Sendable {
     case label(CatalogLabel)
     case artist(CatalogArtist)
     case master(CatalogMaster)

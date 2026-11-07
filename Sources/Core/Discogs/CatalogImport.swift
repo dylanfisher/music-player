@@ -94,7 +94,9 @@ private func build(
     _ set: DumpSet, into url: URL, progress: inout CatalogImportProgress,
     report: (CatalogImportProgress) -> Void
 ) throws {
-    let writer = try CatalogWriter(creatingAt: url)
+    let writer = try BackgroundCatalogWriter(creatingAt: url)
+    // A failure leaves no batch writing to the file when it's removed.
+    defer { writer.stop() }
     var lastReport = Date.distantPast
     var bytesBefore = 0
     for kind in DumpKind.allCases {
@@ -125,7 +127,7 @@ private func build(
 /// Reads one dump of `set` into `writer`, checking its hash at the end, and returns its
 /// compressed size. `step` hears the stream and the record count after each record.
 private func read(
-    _ set: DumpSet, _ kind: DumpKind, into writer: CatalogWriter,
+    _ set: DumpSet, _ kind: DumpKind, into writer: BackgroundCatalogWriter,
     step: (GzipStream, Int) -> Void
 ) throws -> Int {
     guard let url = set.files[kind], let expected = set.checksums[kind] else {

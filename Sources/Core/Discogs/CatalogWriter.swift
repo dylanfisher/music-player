@@ -3,16 +3,13 @@ import SQLite
 
 /// Writes a new catalog file from the records of a dump set (ADR 0130). Nothing else opens
 /// the file while it's written, so it keeps its journal in memory and skips the syncs: a
-/// failed import discards the file whole.
+/// failed import discards the file whole. Belongs to one thread, as its connection does.
 final class CatalogWriter {
-    /// Records a transaction holds: enough that a commit costs nothing next to its inserts.
-    static let recordsPerTransaction = 5000
     /// The page cache while writing, in KiB, as `cache_size` takes a negative number.
     static let cacheKiB = 256 * 1024
 
     private let database: Database
     private let encoder = JSONEncoder()
-    private var pending: [DumpRecord] = []
     private let insertLabel: Statement
     private let insertArtist: Statement
     private let insertMaster: Statement
@@ -25,12 +22,12 @@ final class CatalogWriter {
     init(creatingAt url: URL) throws {
         try removeDatabase(at: url)
         database = try Database(at: url)
-        // A file sort's temporary files, not memory, so building an index over millions of
-        // keys doesn't hold them all at once.
         // `Database` opens a file in WAL mode, which goes to a memory journal only by way of
         // the rollback journal; a catalog with no WAL can be read from a read-only folder. The
         // system SQLite refuses no journal at all (`SQLITE_DBCONFIG_DEFENSIVE`), and a memory
-        // journal holds only the pages a transaction changes that were there before it.
+        // journal holds only the pages a transaction changes that were there before it. A
+        // sort's temporary files go to disk, not memory, so building an index over millions
+        // of keys doesn't hold them all at once.
         try database.execute(
             """
             PRAGMA journal_mode = DELETE; PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF;
@@ -61,16 +58,10 @@ final class CatalogWriter {
             "INSERT INTO catno_keys (label_key, catno_key, release_id) VALUES (?, ?, ?)")
     }
 
-    /// Adds `record`, writing it with the ones before it in one transaction once there are
-    /// `recordsPerTransaction` of them.
-    func add(_ record: DumpRecord) throws {
-        pending.append(record)
-        if pending.count == Self.recordsPerTransaction { try writePending() }
-    }
-
-    private func writePending() throws {
+    /// Writes `records` in one transaction.
+    func write(_ records: [DumpRecord]) throws {
         try database.transaction {
-            for record in pending {
+            for record in records {
                 switch record {
                 case .label(let label): try insertLabel.run(label.id, label.name)
                 case .artist(let artist):
@@ -80,7 +71,6 @@ final class CatalogWriter {
                 }
             }
         }
-        pending.removeAll(keepingCapacity: true)
     }
 
     private func add(_ master: CatalogMaster) throws {
@@ -125,9 +115,8 @@ final class CatalogWriter {
         }
     }
 
-    /// Writes the last records, builds the indexes, and notes the dump the catalog is from.
+    /// Builds the indexes, and notes the dump the catalog is from.
     func finish(dumpDate: String) throws {
-        if !pending.isEmpty { try writePending() }
         try database.execute(CatalogSchema.indexes)
         try database.prepare("INSERT INTO catalog (dump_date, schema) VALUES (?, ?)")
             .run(dumpDate, CatalogSchema.identity)
