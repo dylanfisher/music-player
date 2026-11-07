@@ -37,6 +37,13 @@ public struct AppSettings: SettingsSchema {
         "library.rescanNetworkFoldersAtLaunch", title: "Rescan Network Folders at Launch",
         default: false,
         "Rescan every network folder when the app starts.")
+    public let copyAddedFiles = Setting(
+        "library.copyAddedFiles", title: "Copy Added Files into the Library Folder",
+        default: false,
+        "Files dropped on the window are copied in, by artist and album.")
+    public let libraryFolder = Setting<String?>(
+        "library.folder", title: "Library Folder", default: nil,
+        "Where added files are copied; it's watched once they are.")
     /// What `networkScanReaders` and `--scan --readers` accept; a scan starts that many threads.
     public static let networkScanReadersRange = 1...64
     public let networkScanReaders = Setting<Int?>(

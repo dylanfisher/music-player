@@ -55,6 +55,8 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     /// Show Library Health, in the Library section; nil in a pane without that section.
     private(set) var healthButton: NSButton?
     private var syncFolderButtons: (change: NSButton, open: NSButton, clear: NSButton)?
+    private var libraryFolderLabel: NSTextField?
+    private var libraryFolderButtons: (change: NSButton, clear: NSButton)?
     /// The template rows' lines under their fields, saying why the text typed isn't saved.
     private var templateProblems: [String: NSTextField] = [:]
     /// The color rows' wells, and their Default buttons, which set null.
@@ -387,6 +389,21 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             let stack = NSStackView(views: [folder, change, open, clear])
             stack.identifier = NSUserInterfaceItemIdentifier(row.key)
             return stack
+        case .libraryFolder:
+            let folder = NSTextField(labelWithString: "")
+            folder.lineBreakMode = .byTruncatingMiddle
+            folder.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            folder.setAccessibilityLabel(row.title)
+            let change = button("", #selector(chooseLibraryFolder(_:)))
+            let clear = button("Clear", #selector(clearLibraryFolder(_:)))
+            for button in [change, clear] {
+                button.identifier = NSUserInterfaceItemIdentifier(row.key)
+            }
+            libraryFolderLabel = folder
+            libraryFolderButtons = (change, clear)
+            let stack = NSStackView(views: [folder, change, clear])
+            stack.identifier = NSUserInterfaceItemIdentifier(row.key)
+            return stack
         case .output:
             let popUp = NSPopUpButton(frame: .zero, pullsDown: false)
             popUp.identifier = NSUserInterfaceItemIdentifier(row.key)
@@ -475,6 +492,15 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
             syncFolderButtons?.change.title = name == nil ? "Choose…" : "Change…"
             syncFolderButtons?.open.isEnabled = name != nil
             syncFolderButtons?.clear.isEnabled = name != nil
+        case .libraryFolder:
+            let path = model.text(row.key)
+            let enabled = model.isEnabled(row.key)
+            libraryFolderLabel?.stringValue = path.isEmpty ? noValueText : path
+            libraryFolderLabel?.toolTip = path.isEmpty ? nil : path
+            libraryFolderLabel?.textColor = enabled ? .labelColor : .disabledControlTextColor
+            libraryFolderButtons?.change.title = path.isEmpty ? "Choose…" : "Change…"
+            libraryFolderButtons?.change.isEnabled = enabled
+            libraryFolderButtons?.clear.isEnabled = enabled && !path.isEmpty
         case .barLayout:
             barBuilders[row.key]?.reload()
         case .color:
@@ -532,6 +558,34 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     }
 
     @objc private func chooseSyncFolder() { actions.chooseSyncFolder() }
+
+    /// Asks for the library folder in a sheet. Only its path is stored, so nothing here reads
+    /// the volume.
+    @objc private func chooseLibraryFolder(_ button: NSButton) {
+        guard let key = button.identifier?.rawValue, let window = view.window else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Choose"
+        panel.message =
+            "Choose the folder that files added to the library are copied into. Files already in"
+            + " it aren't moved or renamed."
+        let current = model.text(key)
+        if !current.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: current, isDirectory: true)
+        }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            guard let self else { return }
+            attempt { try model.setText(key, url.standardizedFileURL.path) }
+        }
+    }
+
+    @objc private func clearLibraryFolder(_ button: NSButton) {
+        guard let key = button.identifier?.rawValue else { return }
+        attempt { try model.clear(key) }
+    }
 
     @objc private func editBarLayout(_ sender: NSButton) {
         sender.identifier.map { showBarBuilder($0.rawValue) }

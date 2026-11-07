@@ -19,6 +19,8 @@ public final class GeneralModel {
         case folders
         /// The sync folder, with buttons to choose one and to clear it.
         case syncFolder
+        /// The library folder's path, with buttons to choose one and to clear it.
+        case libraryFolder
         /// The output device, picked from the devices and renderers found.
         case output
         /// The network renderer, which the output device's row lists and picks too.
@@ -69,7 +71,7 @@ public final class GeneralModel {
         case output, playCounts
         case library, sync, receiver
         /// Shown under the Watched Folders pane's list, as Swinsian has them.
-        case folderChanges, networkFolders
+        case folderChanges, libraryFolder, networkFolders
         /// The Appearance pane's.
         case theme, trackTable
         /// The Toolbar pane's, in the window's order from its top.
@@ -85,6 +87,7 @@ public final class GeneralModel {
             case .sync: "Sync"
             case .receiver: "Receiver"
             case .folderChanges: "Folder Changes"
+            case .libraryFolder: AppSettings().libraryFolder.title
             case .networkFolders: "Network Folders"
             case .theme: "Theme"
             case .trackTable: AppState().trackTable.title
@@ -105,6 +108,7 @@ public final class GeneralModel {
             case .sync: ["sync."]
             case .receiver: ["receiver."]
             case .folderChanges: [schema.removeMissingTracks.key, schema.rescanModifiedFiles.key]
+            case .libraryFolder: [schema.copyAddedFiles.key, schema.libraryFolder.key]
             case .networkFolders:
                 [schema.pausePollingDuringPlayback.key, schema.rescanNetworkFoldersAtLaunch.key]
             // `appearance` is every appearance key's prefix, so a new one shows here until it's
@@ -130,6 +134,7 @@ public final class GeneralModel {
         var switchKey: String? {
             switch self {
             case .receiver: AppSettings().receiverEnabled.key
+            case .libraryFolder: AppSettings().copyAddedFiles.key
             default: nil
             }
         }
@@ -196,6 +201,7 @@ public final class GeneralModel {
             switch setting.kind {
             case _ where setting.key == schema.outputDeviceUID.key: .output
             case _ where setting.key == schema.outputRenderer.key: .renderer
+            case _ where setting.key == schema.libraryFolder.key: .libraryFolder
             case .bool: .checkbox
             case .choice(let choices): .popUp(choices)
             case .integer: .number(whole: true, optional: false)
@@ -403,6 +409,8 @@ public final class GeneralModel {
             try set(key, number)
         case .text(let optional):
             try set(key, trimmed.isEmpty && optional ? NSNull() : trimmed)
+        case .libraryFolder:
+            try set(key, trimmed.isEmpty ? NSNull() : trimmed)
         case .template:
             // Saved as it's typed, so a keystroke that leaves the template as it is, a space
             // at the end, writes nothing.

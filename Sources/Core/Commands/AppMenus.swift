@@ -109,6 +109,7 @@ public enum AppMenus {
                     .setting(settings.rescanNetworkFoldersAtLaunch.key),
                     .setting(settings.removeMissingTracks.key),
                     .setting(settings.rescanModifiedFiles.key),
+                    .setting(settings.copyAddedFiles.key),
                     .setting(settings.groupByAlbumArtist.key),
                     .separator, .command(.revealInFinder), .setting(settings.fileViewer.key),
                     .command(.copyPath), .command(.addToPlaylist), .command(.removeTracks),

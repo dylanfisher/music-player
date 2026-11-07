@@ -270,12 +270,17 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let sections = model.sections
     #expect(
         sections.map(\.section) == [
-            .output, .playCounts, .library, .sync, .receiver, .folderChanges, .networkFolders,
+            .output, .playCounts, .library, .sync, .receiver, .folderChanges, .libraryFolder,
+            .networkFolders,
             .theme, .trackTable, .titles, .toolbarStatus, .statusBar,
         ])
     #expect(
         sections.first { $0.section == .networkFolders }?.rows.map(\.key) == [
             schema.pausePollingDuringPlayback.key, schema.rescanNetworkFoldersAtLaunch.key,
+        ])
+    #expect(
+        sections.first { $0.section == .libraryFolder }?.rows.map(\.key) == [
+            schema.copyAddedFiles.key, schema.libraryFolder.key,
         ])
     #expect(
         sections.first { $0.section == .folderChanges }?.rows.map(\.key) == [
@@ -623,6 +628,28 @@ private func waitFor(_ condition: () -> Bool) async throws {
     #expect(stored is NSNull)
     #expect(model.syncFolder("sync.folder") == nil)
 }
+@MainActor @Test func theLibraryFolderShowsItsPathAndWaitsForCopyAddedFiles() throws {
+    let schema = AppSettings()
+    var stored: [String: Any] = [:]
+    let model = GeneralModel(
+        settings: schema.settings, searcherInstalled: true, value: { stored[$0] },
+        set: { key, json in stored[key] = json }, isBlocked: { false })
+    #expect(model.rows.first { $0.key == schema.libraryFolder.key }?.control == .libraryFolder)
+    let pane = GeneralPane(
+        model: model, configPath: nil, actions: actions(), sections: [.libraryFolder])
+    #expect(labels(in: pane.view).contains(noValueText))
+    #expect(button("Choose…", in: pane.view)?.isEnabled == false)
+
+    try model.setOn(schema.copyAddedFiles.key, true)
+    try model.setText(schema.libraryFolder.key, "/Volumes/music/Library")
+    pane.reload()
+    #expect(labels(in: pane.view).contains("/Volumes/music/Library"))
+    #expect(button("Change…", in: pane.view)?.isEnabled == true)
+    #expect(button("Clear", in: pane.view)?.isEnabled == true)
+    try model.clear(schema.libraryFolder.key)
+    #expect(stored[schema.libraryFolder.key] is NSNull)
+}
+
 @Test func everySettingSaysWhatItDoesInOneShortSentence() {
     for setting in AppSettings().settings {
         let words = setting.summary.split(separator: " ")

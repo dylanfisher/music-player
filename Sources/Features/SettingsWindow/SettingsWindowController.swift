@@ -27,7 +27,7 @@ public final class SettingsWindowController: NSObject, NSToolbarDelegate {
             case .playback: [.output, .playCounts]
             case .appearance: [.theme, .trackTable]
             case .toolbar: [.titles, .toolbarStatus, .statusBar]
-            case .folders: [.folderChanges, .networkFolders]
+            case .folders: [.folderChanges, .libraryFolder, .networkFolders]
             }
         }
 
