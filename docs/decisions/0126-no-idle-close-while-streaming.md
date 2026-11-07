@@ -1,4 +1,4 @@
-# 0125. The file server doesn't close a connection for idling while it sends a body
+# 0126. The file server doesn't close a connection for idling while it sends a body
 
 - **Date:** 2026-11-06
 - **Status:** accepted
