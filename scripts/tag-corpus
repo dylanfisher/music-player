@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # The tag writer's run on the owner's reference corpus (ADR 0020). Not part of ./scripts/check.
 #   ./scripts/tag-corpus [<folder>]   lists every file's tag layout, read only
+#   ./scripts/tag-corpus --discogs-survey <folder>…
+#                                     reports the Discogs tags the files carry, read only, in
+#                                     .build/discogs-survey (ADR 0128)
 #   ./scripts/tag-corpus --round-trip makes APFS clones of the reference, edits, checks and
 #                                     undoes each, then injects failures, one on a full disk
 # The reference is only read. Every write goes to the clone folder, which is deleted and made

@@ -9,6 +9,9 @@ import Foundation
 // small disk image attached inside the clone folder. It writes nowhere else.
 //   TagCorpus --paths
 // prints the reference folder and the clone folder, one per line, for scripts/tag-corpus.
+//   TagCorpus --discogs-survey <folder>…
+// reads every audio file under the folders, read only, and reports the Discogs tags they carry
+// in .build/discogs-survey under the current directory, which is all it writes (ADR 0128).
 let arguments = Array(CommandLine.arguments.dropFirst())
 
 func fail(_ message: String) -> Never {
@@ -22,6 +25,10 @@ do {
         print(referenceCorpusPath)
         print(try cloneFolder().path)
         exit(0)
+    }
+    if arguments.first == discogsSurveyFlag {
+        let folders = arguments.dropFirst().map { URL(fileURLWithPath: $0, isDirectory: true) }
+        exit(try discogsSurvey(folders, output: surveyFolder()) == 0 ? 0 : 1)
     }
     guard arguments.first == roundTripFlag else {
         let folder = URL(fileURLWithPath: arguments.first ?? referenceCorpusPath, isDirectory: true)

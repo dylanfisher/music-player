@@ -238,7 +238,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "TagCorpus",
-            dependencies: ["Fixtures", "Metadata", "TagWriter"],
+            dependencies: ["Fixtures", "Library", "Metadata", "TagWriter"],
             path: "Sources/Tools/TagCorpus",
             swiftSettings: strictSwift
         ),
