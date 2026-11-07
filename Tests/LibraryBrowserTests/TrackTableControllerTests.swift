@@ -918,7 +918,8 @@ private func backgroundPixel(_ rowView: NSTableRowView, at point: NSPoint) throw
         } while Date() < deadline
         Issue.record("row \(row)'s art never hovered")
     }
-    table.scrollRowToVisible(pair.0)
+    // Both albums' first rows on screen: a point under the visible rows hovers nothing.
+    table.scrollRowToVisible(pair.1)
     window.displayIfNeeded()
     try await hover(pair.0)
     // Above the rows AppKit made after the hover was added.

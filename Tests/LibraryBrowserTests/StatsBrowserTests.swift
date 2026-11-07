@@ -281,8 +281,9 @@ func statsKeepsItsHeightAcrossSources(browserVisible: Bool) async throws {
         changed(change)
     }
     browser.statsPanel.choosePeriod(.week)
+    // The month lists the same tracks, so the week shows once its reload has come.
     try await waitFor("the week") {
-        browser.statsModel.periodReport != nil
+        !reloads.isEmpty && browser.statsModel.periodReport != nil
             && Set(browser.model.trackIDs) == Set(album.map(\.id))
     }
     try await Task.sleep(nanoseconds: 300_000_000)

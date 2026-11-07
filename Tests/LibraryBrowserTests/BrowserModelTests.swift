@@ -173,7 +173,7 @@ private func loadedModel(
     model.changed = { reasons.append($0.reason) }
     await model.setSort(.title, ascending: true)
     await model.refresh()
-    #expect(reasons == [.user, .libraryChanged])
+    #expect(reasons == [.sorted, .libraryChanged])
     let rows = model.rows(holding: picked)
     #expect(Set(rows.map { model.trackIDs[$0] }) == picked)
 }

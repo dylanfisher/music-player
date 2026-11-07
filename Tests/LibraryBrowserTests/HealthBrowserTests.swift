@@ -306,8 +306,10 @@ private func browserInWindow(browserHeight: Int = 150) async throws -> (
     #expect(browser.showsHealth)
 
     await browser.toggleHealth(playingPath: nil)
+    // The report landing meanwhile reloads the rows, which can apply the library after the
+    // toggle returns.
+    try await waitFor("the library") { !browser.showsHealth }
     #expect(browser.model.filter.source == nil)
-    #expect(!browser.showsHealth)
     window.layoutIfNeeded()
     #expect(browser.shownPanel == nil)
     #expect(browser.showsColumns)

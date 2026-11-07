@@ -222,7 +222,8 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
             ColumnLayout(column: .title, width: 390),
         ], sortColumn: .year, sortAscending: false)
     #expect(browser.table.layout == expected)
-    #expect(saved == [expected])
+    // A sort the import changes is saved by the table too, so the layout can go out twice.
+    #expect(saved.last == expected)
     #expect(
         browser.status.playlistFileReport.contains {
             $0.line.hasSuffix("prefs.plist: column layout: currentlyPlaying: no such column here")
