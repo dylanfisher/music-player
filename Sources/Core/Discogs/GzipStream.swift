@@ -3,10 +3,10 @@ import Darwin
 import Foundation
 import zlib
 
-/// A gzip file read as the stream of its inflated bytes, for `XMLParser` (ADR 0130): nothing is
-/// unpacked to disk, and the compressed bytes are hashed and counted as they're read, so the
-/// file is read once. Belongs to the thread that parses it.
-final class GzipStream: InputStream {
+/// A gzip file read as its inflated bytes (ADR 0130): nothing is unpacked to disk, and the
+/// compressed bytes are hashed and counted as they're read, so the file is read once. Belongs
+/// to the thread that reads it.
+final class GzipStream {
     /// How much one read of the file takes.
     static let readBytes = 1 << 20
 
@@ -20,7 +20,6 @@ final class GzipStream: InputStream {
     private var zlibStream = z_stream()
     private let input = UnsafeMutablePointer<UInt8>.allocate(capacity: GzipStream.readBytes)
     private var digest = CC_SHA256_CTX()
-    private var status = Stream.Status.notOpen
     /// Whether the last member's trailer was read and no data follows it.
     private var ended = false
 
@@ -37,7 +36,6 @@ final class GzipStream: InputStream {
             &zlibStream, 15 + 16, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size))
         guard result == Z_OK else { preconditionFailure("inflateInit2 returned \(result)") }
         CC_SHA256_Init(&digest)
-        super.init(data: Data())
     }
 
     deinit {
@@ -57,13 +55,9 @@ final class GzipStream: InputStream {
     /// Whether every byte of the file was inflated, through the last member's trailer.
     var isComplete: Bool { ended }
 
-    override func open() { status = .open }
-    override func close() { status = .closed }
-    override var streamStatus: Stream.Status { status }
-    override var streamError: (any Error)? { failure }
-    override var hasBytesAvailable: Bool { !ended && failure == nil }
-
-    override func read(_ buffer: UnsafeMutablePointer<UInt8>, maxLength length: Int) -> Int {
+    /// Inflates up to `length` bytes into `buffer`: the bytes inflated, 0 at the end of the
+    /// gzip data, or -1 with `failure` set.
+    func read(_ buffer: UnsafeMutablePointer<UInt8>, maxLength length: Int) -> Int {
         guard !ended, failure == nil, length > 0 else { return failure == nil ? 0 : -1 }
         zlibStream.next_out = buffer
         zlibStream.avail_out = UInt32(clamping: length)
@@ -71,11 +65,11 @@ final class GzipStream: InputStream {
         while Int(zlibStream.avail_out) == room {
             if zlibStream.avail_in == 0 {
                 let count = fill()
-                if count < 0 { return fail() }
+                if count < 0 { return -1 }
                 if count == 0 {
                     // The file ended inside a member: before its trailer.
                     failure = .truncated(url.lastPathComponent)
-                    return fail()
+                    return -1
                 }
             }
             let result = inflate(&zlibStream, Z_NO_FLUSH)
@@ -85,10 +79,9 @@ final class GzipStream: InputStream {
                 // A gzip file may hold several members one after another.
                 if zlibStream.avail_in == 0 {
                     let count = fill()
-                    if count < 0 { return fail() }
+                    if count < 0 { return -1 }
                     if count == 0 {
                         ended = true
-                        status = .atEnd
                         return room - Int(zlibStream.avail_out)
                     }
                 }
@@ -96,7 +89,7 @@ final class GzipStream: InputStream {
             default:
                 let message = zlibStream.msg.map { String(cString: $0) } ?? "zlib error \(result)"
                 failure = .corrupt(url.lastPathComponent, message)
-                return fail()
+                return -1
             }
         }
         return room - Int(zlibStream.avail_out)
@@ -120,17 +113,4 @@ final class GzipStream: InputStream {
         }
     }
 
-    private func fail() -> Int {
-        status = .error
-        return -1
-    }
-
-    override func getBuffer(
-        _ buffer: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>,
-        length: UnsafeMutablePointer<Int>
-    ) -> Bool { false }
-    override func schedule(in runLoop: RunLoop, forMode mode: RunLoop.Mode) {}
-    override func remove(from runLoop: RunLoop, forMode mode: RunLoop.Mode) {}
-    override func property(forKey key: Stream.PropertyKey) -> Any? { nil }
-    override func setProperty(_ property: Any?, forKey key: Stream.PropertyKey) -> Bool { false }
 }

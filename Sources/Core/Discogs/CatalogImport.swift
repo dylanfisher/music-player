@@ -42,9 +42,10 @@ public func importCatalog(
 }
 
 /// `importCatalog`'s work, on the calling thread; it stops when the calling task is cancelled.
+/// `batchBytes` is for tests, as `DumpBatches` takes it.
 func runImport(
     from folder: URL, to catalog: URL, outsideOf watchedFolders: [String],
-    progress report: (CatalogImportProgress) -> Void
+    batchBytes: Int = DumpBatches.batchBytes, progress report: (CatalogImportProgress) -> Void
 ) throws(CatalogImportError) -> CatalogImportSummary {
     let started = Date()
     let catalogPath = comparable(catalog.path)
@@ -61,7 +62,7 @@ func runImport(
     do {
         try FileManager.default.createDirectory(
             at: catalog.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try build(set, into: building, progress: &progress, report: report)
+        try build(set, into: building, batchBytes: batchBytes, progress: &progress, report: report)
         try flush(building)
         catalogBytes = try Database.sizeBytes(at: building)
         // rename(2) replaces the old file in one step: a reader opens the old catalog or the
@@ -91,7 +92,7 @@ func runImport(
 
 /// Writes the catalog of `set` at `url`, and closes it.
 private func build(
-    _ set: DumpSet, into url: URL, progress: inout CatalogImportProgress,
+    _ set: DumpSet, into url: URL, batchBytes: Int, progress: inout CatalogImportProgress,
     report: (CatalogImportProgress) -> Void
 ) throws {
     let writer = try BackgroundCatalogWriter(creatingAt: url)
@@ -103,7 +104,7 @@ private func build(
         progress.stage = .reading(kind)
         report(progress)
         var current = progress
-        let bytes = try read(set, kind, into: writer) { stream, records in
+        let bytes = try read(set, kind, into: writer, batchBytes: batchBytes) { stream, records in
             current.bytesRead = bytesBefore + stream.compressedBytesRead
             current.records[kind] = records
             if Date().timeIntervalSince(lastReport) >= reportIntervalSeconds {
@@ -127,28 +128,31 @@ private func build(
 /// Reads one dump of `set` into `writer`, checking its hash at the end, and returns its
 /// compressed size. `step` hears the stream and the record count after each record.
 private func read(
-    _ set: DumpSet, _ kind: DumpKind, into writer: BackgroundCatalogWriter,
+    _ set: DumpSet, _ kind: DumpKind, into writer: BackgroundCatalogWriter, batchBytes: Int,
     step: (GzipStream, Int) -> Void
 ) throws -> Int {
     guard let url = set.files[kind], let expected = set.checksums[kind] else {
         preconditionFailure("a complete set has every kind")
     }
     let stream = try GzipStream(file: url)
-    let parser = XMLParser(stream: stream)
+    var batches = DumpBatches(
+        stream, kind: kind, file: url.lastPathComponent, batchBytes: batchBytes)
     var records = 0
     // The parser, and with it `emit`, is gone once it has parsed.
-    let failure = withoutActuallyEscaping(step) { step in
+    try withoutActuallyEscaping(step) { step in
         let dump = DumpParser(kind: kind, file: url.lastPathComponent) { record in
             try writer.add(record)
             records += 1
             step(stream, records)
         }
-        dump.parse(parser)
-        return dump.failure
+        while let batch = try batches.next() {
+            if !dump.parse(batch.document, firstLine: batch.firstLine) {
+                throw dump.failure
+                    ?? CatalogImportError.malformed(
+                        url.lastPathComponent, line: batch.firstLine, "XMLParser stopped")
+            }
+        }
     }
-    // The stream's own failure says more than the parser's error about the end of its input.
-    if let failure = stream.failure { throw failure }
-    if let failure { throw failure }
     if Task.isCancelled { throw CatalogImportError.stopped }
     guard stream.isComplete else { throw CatalogImportError.truncated(url.lastPathComponent) }
     let actual = stream.sha256()

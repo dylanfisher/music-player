@@ -28,6 +28,8 @@ final class DumpParser: NSObject, XMLParserDelegate {
     private(set) var failure: (any Error)?
     private(set) var records = 0
     private weak var parser: XMLParser?
+    /// The lines of the file before the batch being parsed.
+    private var lineOffset = 0
 
     /// The open elements, the root's first; nil for a name the parser doesn't look at.
     private var stack: [DumpElement?] = []
@@ -63,12 +65,17 @@ final class DumpParser: NSObject, XMLParserDelegate {
         self.emit = emit
     }
 
-    /// Parses `parser`'s input to its end, or to the first failure.
-    func parse(_ parser: XMLParser) {
-        self.parser = parser
-        parser.delegate = self
-        parser.shouldResolveExternalEntities = false
-        parser.parse()
+    /// Parses one batch of whole records, whose first is on `firstLine` of the file, in an
+    /// autorelease pool of its own, and returns whether it got to its end.
+    func parse(_ document: Data, firstLine: Int) -> Bool {
+        autoreleasepool {
+            let parser = XMLParser(data: document)
+            self.parser = parser
+            lineOffset = firstLine - 1
+            parser.delegate = self
+            parser.shouldResolveExternalEntities = false
+            return parser.parse() && failure == nil
+        }
     }
 
     func parser(
@@ -148,9 +155,12 @@ final class DumpParser: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, parseErrorOccurred error: any Error) {
         if failure == nil {
             failure = CatalogImportError.malformed(
-                file, line: parser.lineNumber, (error as NSError).localizedDescription)
+                file, line: lineOffset + parser.lineNumber, (error as NSError).localizedDescription)
         }
     }
+
+    /// The line of the file the parser is on.
+    private var line: Int { lineOffset + (parser?.lineNumber ?? 0) }
 
     /// The open element's parent.
     private var parent: DumpElement? { stack.count > 1 ? stack[stack.count - 2] : nil }
@@ -160,7 +170,7 @@ final class DumpParser: NSObject, XMLParserDelegate {
     ) {
         guard element == record else {
             return stop(
-                .malformed(file, line: parser?.lineNumber ?? 0, "a <\(elementName)> in \(kind)"))
+                .malformed(file, line: line, "a <\(elementName)> in \(kind)"))
         }
         id = attributes[DumpAttribute.id.rawValue].flatMap { Int($0) }
         name = ""
@@ -176,7 +186,7 @@ final class DumpParser: NSObject, XMLParserDelegate {
     private func endRecord() {
         guard let id else {
             return stop(
-                .malformed(file, line: parser?.lineNumber ?? 0, "a \(record) with no id"))
+                .malformed(file, line: line, "a <\(record.rawValue)> with no id"))
         }
         let built: DumpRecord =
             switch kind {

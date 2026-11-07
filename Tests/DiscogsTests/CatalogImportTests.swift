@@ -89,14 +89,20 @@ private func expectFailure(
     try DiscogsDumpFixture.writeChecksums(date: newDate, in: folder.dumps)
     try expectFailure(folder, .corrupt(file.lastPathComponent, "incorrect header check"))
 
-    try DiscogsDumpFixture.writeGzip(Data("<artists><release id=\"1\"/></artists>".utf8), to: file)
-    try DiscogsDumpFixture.writeChecksums(date: newDate, in: folder.dumps)
-    #expect {
-        try folder.importCatalog()
-    } throws: { error in
-        guard case .malformed(let name, line: 1, let reason) = error as? CatalogImportError
-        else { return false }
-        return name == file.lastPathComponent && reason == "a <release> in artists"
+    for (xml, line, reason) in [
+        (
+            "<artists>\n<artist><name>No ID</name></artist>\n</artists>\n", 2,
+            "a <artist> with no id"
+        ),
+        (
+            "<artists>\n<artist><id>1</id></artist>\n<artist><id>2</id>", 3,
+            "the file ends inside a record"
+        ),
+        ("<releases>\n</releases>\n", 1, "no <artists>"),
+    ] {
+        try DiscogsDumpFixture.writeGzip(Data(xml.utf8), to: file)
+        try DiscogsDumpFixture.writeChecksums(date: newDate, in: folder.dumps)
+        try expectFailure(folder, .malformed(file.lastPathComponent, line: line, reason))
     }
 }
 

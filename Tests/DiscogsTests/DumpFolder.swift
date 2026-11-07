@@ -41,14 +41,17 @@ struct DumpFolder: ~Copyable {
     /// Imports the folder's newest set into the catalog, on this thread.
     @discardableResult
     func importCatalog(
-        outsideOf watched: [String] = [], progress: (CatalogImportProgress) -> Void = { _ in }
+        outsideOf watched: [String] = [], batchBytes: Int = DumpBatches.batchBytes,
+        progress: (CatalogImportProgress) -> Void = { _ in }
     ) throws(CatalogImportError) -> CatalogImportSummary {
-        try runImport(from: dumps, to: catalog, outsideOf: watched, progress: progress)
+        try runImport(
+            from: dumps, to: catalog, outsideOf: watched, batchBytes: batchBytes,
+            progress: progress)
     }
 
     /// Imports the set, then opens the catalog.
-    func importedCatalog() throws -> Catalog {
-        try importCatalog()
+    func importedCatalog(batchBytes: Int = DumpBatches.batchBytes) throws -> Catalog {
+        try importCatalog(batchBytes: batchBytes)
         return try Catalog(at: catalog)
     }
 

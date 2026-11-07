@@ -2,14 +2,16 @@ import Foundation
 import Testing
 
 @testable import Discogs
+@testable import Fixtures
 
 private let date = "20261101"
 
 @Test func aRecordWithEveryOptionalElementMissingIsKeptWithItsID() throws {
     let folder = try DumpFolder()
     try folder.write(
-        date, labels: #"<label><id>3</id></label>"#, artists: #"<artist><id>4</id></artist>"#,
-        masters: #"<master id="5"></master>"#, releases: #"<release id="6"></release>"#)
+        date, labels: "<label><id>3</id></label>\n", artists: "<artist><id>4</id></artist>\n",
+        masters: #"<master id="5"></master>"# + "\n",
+        releases: #"<release id="6"></release>"# + "\n")
     let catalog = try folder.importedCatalog()
     #expect(try catalog.label(id: 3) == CatalogLabel(id: 3, name: ""))
     #expect(try catalog.artist(id: 4) == CatalogArtist(id: 4, name: ""))
@@ -166,4 +168,35 @@ private let date = "20261101"
     #expect(CatalogTrack.seconds("285") == nil)
     #expect(CatalogTrack.seconds("4:4x") == nil)
     #expect(CatalogTrack.seconds("1:2:3:4") == nil)
+}
+
+@Test func recordsAreReadTheSameInBatchesOfAnySize() throws {
+    let folder = try DumpFolder()
+    let records = [
+        #"<release id="1"><title>Line One"#, "Line Two &lt;/release&gt;</title><notes>Notes",
+        "", "over lines</notes><tracklist><track><position>A</position><title>T</title>",
+        "</track></tracklist></release>",
+        #"<release id="2"><title>Second</title></release>"#,
+        #"<release id="3"><title>Third</title></release>"#, "",
+    ].joined(separator: "\n")
+    try folder.write(date, releases: records)
+    for batchBytes in [1, 40, 1 << 20] {
+        let catalog = try folder.importedCatalog(batchBytes: batchBytes)
+        #expect(
+            try catalog.release(id: 1)
+                == CatalogRelease(
+                    id: 1, title: "Line One\nLine Two </release>",
+                    tracks: [CatalogTrack(kind: .track, position: "A", title: "T")]),
+            "\(batchBytes)")
+        #expect(try catalog.release(id: 3)?.title == "Third", "\(batchBytes)")
+    }
+}
+
+@Test func aDumpOverOneBatchIsReadWhole() throws {
+    let folder = try DumpFolder()
+    let releases = DiscogsDumpFixture.syntheticReleases(count: 2500)
+    #expect(releases.utf8.count > DumpBatches.batchBytes)
+    try folder.write(date, releases: releases)
+    #expect(try folder.importCatalog().records[.releases] == 2500)
+    #expect(try Catalog(at: folder.catalog).release(id: 2500)?.tracks.count == 10)
 }
