@@ -352,7 +352,10 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
                 return
             case .userText:
                 let (description, value) = try userTextFrame(bytes, &reader.warnings)
-                guard let userField = userTextFields[description.uppercased()] else { return }
+                guard let userField = userTextFields[description.uppercased()] else {
+                    tags.setCustom(description, value, at: offset, warnings: &reader.warnings)
+                    return
+                }
                 field = userField
                 text = value
             case .picture: return

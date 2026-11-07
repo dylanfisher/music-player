@@ -61,6 +61,10 @@ public struct TrackTags: Equatable, Sendable {
     public var paymentURL: String?
     public var publisherURL: String?
     public var radioStationURL: String?
+    /// The keys no field above maps, by name uppercased, as taggers compare them: Vorbis
+    /// comment keys, ID3 `TXXX` descriptions and the names of MP4 freeform items whose `mean`
+    /// is `com.apple.iTunes` (ADR 0129). The first value of a name wins, as for the fields.
+    public var custom: [String: String] = [:]
 
     /// Whether no field is set, as for a file with no tag.
     package var isEmpty: Bool { self == TrackTags() }

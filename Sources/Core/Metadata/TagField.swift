@@ -113,16 +113,7 @@ extension TrackTags {
     mutating func set(
         _ field: TagField, _ text: String, at offset: Int, warnings: inout [MetadataWarning]
     ) {
-        var text = text
-        if let nul = text.firstIndex(of: "\u{0}") {
-            if text[nul...].contains(where: { $0 != "\u{0}" }) {
-                warnings.append(
-                    MetadataWarning(
-                        kind: .badText, offset: offset,
-                        detail: "text holds a NUL; read up to it"))
-            }
-            text = String(text[..<nul])
-        }
+        let text = upToNUL(text, at: offset, &warnings)
         guard !text.isEmpty else { return }
         if let property = field.textProperty {
             self[keyPath: property] = self[keyPath: property] ?? text
@@ -162,6 +153,16 @@ extension TrackTags {
         }
     }
 
+    /// Sets the custom key `name`, uppercased, from `text` unless it already has a value, with
+    /// `set`'s rules for empty text and a NUL.
+    mutating func setCustom(
+        _ name: String, _ text: String, at offset: Int, warnings: inout [MetadataWarning]
+    ) {
+        let text = upToNUL(text, at: offset, &warnings)
+        guard !name.isEmpty, !text.isEmpty else { return }
+        custom[name.uppercased()] = custom[name.uppercased()] ?? text
+    }
+
     /// Fields this lacks, taken from `other`.
     func filling(from other: TrackTags) -> TrackTags {
         var result = self
@@ -176,8 +177,22 @@ extension TrackTags {
             result[keyPath: field] = self[keyPath: field] ?? other[keyPath: field]
         }
         result.compilation = compilation || other.compilation
+        result.custom = custom.merging(other.custom) { mine, _ in mine }
         return result
     }
+}
+
+/// `text` up to its first NUL, with a warning naming `offset` when text follows the NUL.
+private func upToNUL(_ text: String, at offset: Int, _ warnings: inout [MetadataWarning])
+    -> String
+{
+    guard let nul = text.firstIndex(of: "\u{0}") else { return text }
+    if text[nul...].contains(where: { $0 != "\u{0}" }) {
+        warnings.append(
+            MetadataWarning(
+                kind: .badText, offset: offset, detail: "text holds a NUL; read up to it"))
+    }
+    return String(text[..<nul])
 }
 
 /// "3" or "3/12", with spaces around either number allowed. A missing total is nil, and so is a

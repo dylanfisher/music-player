@@ -118,7 +118,7 @@ private func id3Frames(version: UInt8) -> [Data] {
     #expect(try parse(id3Tag(frames) + mp3Rest).metadata.tags.grouping == "Grouping")
 }
 
-@Test func id3SkipsUnknownUserTextAndWarnsOnOneWithoutATerminator() throws {
+@Test func id3KeepsUnknownUserTextAsCustomAndWarnsOnOneWithoutATerminator() throws {
     let frames = [
         id3Frame("TXXX", Data([0]) + ascii("RELEASETYPE\0album")),
         id3Frame("TXXX", Data([0]) + ascii("BARCODE")),
@@ -126,6 +126,7 @@ private func id3Frames(version: UInt8) -> [Data] {
     ]
     let parsed = try parse(id3Tag(frames) + mp3Rest)
     #expect(parsed.metadata.tags.barcode == "123")
+    #expect(parsed.metadata.tags.custom == ["RELEASETYPE": "album"])
     #expect(parsed.warnings.map(\.kind) == [.unreadableField])
 }
 

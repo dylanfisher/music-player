@@ -248,20 +248,26 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
         } else if let field = freeformFields[name.uppercased()] {
             let text = try text(value, type, at: offset, &reader.warnings)
             items.tags.set(field, text, at: offset, warnings: &reader.warnings)
+        } else if textTypes[type] != nil {
+            // Other players keep binary data in freeform items of their own; only text is a field.
+            let text = try text(value, type, at: offset, &reader.warnings)
+            items.tags.setCustom(name, text, at: offset, warnings: &reader.warnings)
         }
     case .cover:
         break
     }
 }
 
+/// `data` atom type codes for text, and its encoding.
+private let textTypes: [UInt32: TextEncoding] = [1: .utf8, 2: .utf16BigEndian]
+
 private func text(
     _ value: Bytes, _ type: UInt32, at offset: Int, _ warnings: inout [MetadataWarning]
 ) throws(ParseFailure) -> String {
-    switch type {
-    case 1: TextEncoding.utf8.decode(value.array, at: offset, warnings: &warnings)
-    case 2: TextEncoding.utf16BigEndian.decode(value.array, at: offset, warnings: &warnings)
-    default: throw .malformed(at: offset, "MP4 text item with data type \(type)")
+    guard let encoding = textTypes[type] else {
+        throw .malformed(at: offset, "MP4 text item with data type \(type)")
     }
+    return encoding.decode(value.array, at: offset, warnings: &warnings)
 }
 
 /// `iTunSMPB` is hex fields separated by spaces: a zero, the priming frames, the remainder frames,
