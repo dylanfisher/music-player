@@ -710,8 +710,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         }
     }
 
-    /// Removes the tracks `ids` as the user chose. Only the files the Trash took leave the
-    /// library on `.trash`; the status bar says why the rest stayed.
+    /// Removes the tracks `ids` as the user chose. On `.trash`, the files the Trash refused
+    /// are removed from the library as on `.library`, and the status bar says why they stayed.
     func remove(_ ids: [Int64], _ choice: RemovalChoice) async {
         do {
             switch choice {
@@ -724,11 +724,14 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
                         paths[id].map { (URL(fileURLWithPath: $0, isDirectory: false), id) }
                     })
                 let outcome = await trash(Array(urls.keys))
-                try await reader.forgetTrashed(trackIDs: outcome.moved.compactMap { urls[$0] })
+                let trashed = outcome.moved.compactMap { urls[$0] }
+                try await reader.forgetTrashed(trackIDs: trashed)
+                let refused = ids.filter { !trashed.contains($0) }
+                try await reader.removeFromLibrary(trackIDs: refused)
                 if let failure = outcome.failure {
                     report(
-                        "couldn't move \(urls.count - outcome.moved.count) of the files to the"
-                            + " Trash: \(failure)")
+                        "couldn't move \(refused.count) of the files to the Trash, so only"
+                            + " removed them from the library: \(failure)")
                 }
             }
         } catch {

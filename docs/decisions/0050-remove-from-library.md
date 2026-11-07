@@ -7,6 +7,8 @@
   Removed row, and removes a Lost Stats one from the library.
   [0124](0124-drop-files-and-the-library-folder.md): a drop copies files into the library
   folder.
+  [0125](0125-trash-always-removes.md): the files the Trash refused are removed from the
+  library, and a file moved is one gone from its path.
 
 ## Context
 

@@ -47,7 +47,7 @@ private func removalBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64]) 
     #expect(try index.removedPaths().map(\.id) == [ids[1]])
 }
 
-@MainActor @Test func onlyTheFilesTheTrashTookLeaveTheLibrary() async throws {
+@MainActor @Test func theFilesTheTrashRefusedAreRemovedFromTheLibrary() async throws {
     let (browser, index, ids) = try removalBrowser()
     let paths = try index.paths(ids: ids)
     var given: [URL] = []
@@ -61,10 +61,13 @@ private func removalBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64]) 
     await browser.remove(ids, .trash)
     #expect(Set(given.map(\.path)) == Set(paths.values))
     #expect(try index.track(path: paths[ids[0]]!) == nil)
-    #expect(try index.track(path: paths[ids[1]]!) != nil)
-    // A trashed file isn't kept out of later scans.
-    #expect(try index.removedPaths().isEmpty)
-    #expect(browser.statusText == "couldn't move 1 of the files to the Trash: not permitted")
+    #expect(try index.track(path: paths[ids[1]]!) == nil)
+    // A trashed file isn't kept out of later scans; a refused one is.
+    #expect(try index.removedPaths().map(\.id) == [ids[1]])
+    #expect(
+        browser.statusText
+            == "couldn't move 1 of the files to the Trash, so only removed them from the library:"
+            + " not permitted")
 }
 
 @MainActor @Test func removingTakesTheSelectionOnlyWhileATrackListHasTheKeys() async throws {
