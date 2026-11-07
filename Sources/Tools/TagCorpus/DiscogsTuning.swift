@@ -16,12 +16,12 @@ struct TuningAlbum {
     var name: String
     var album: DiscogsAlbum
     var releaseID: Int
-    /// Each file's `DISCOGS_RELEASE_ORDINAL_POSITION`, by file id, where it has one.
+    /// Each file's `DISCOGS_RELEASE_ORDINAL_POSITION`, which counts from 0, by file id.
     var ordinals: [Int64: Int]
 }
 
 /// The survey's albums that every track gives one release id, in name order, the ids taken
-/// out of the tracks. With `titlesOnly` the label, catalog number and barcode go too, as an
+/// out of the tracks. With `titlesOnly` the label, catalog number, barcode, date and media go too, as an
 /// album YATE never tagged would have none of them.
 func tuningAlbums(_ records: [SurveyRecord], titlesOnly: Bool) -> [TuningAlbum] {
     let albums = Dictionary(grouping: records.filter { $0.format != nil }, by: \.albumKey)
@@ -58,7 +58,9 @@ func tuningAlbums(_ records: [SurveyRecord], titlesOnly: Bool) -> [TuningAlbum] 
             artist: first.albumArtist ?? (first.compilation ? nil : first.artist),
             label: titlesOnly ? nil : sorted.lazy.compactMap(\.label).first,
             catalogNumber: titlesOnly ? nil : sorted.lazy.compactMap(\.catalogNumber).first,
-            barcode: titlesOnly ? nil : sorted.lazy.compactMap(\.barcode).first, tracks: tracks)
+            barcode: titlesOnly ? nil : sorted.lazy.compactMap(\.barcode).first,
+            date: titlesOnly ? nil : sorted.lazy.compactMap(\.date).first,
+            media: titlesOnly ? nil : sorted.lazy.compactMap(\.media).first, tracks: tracks)
         tuning.append(
             TuningAlbum(
                 name: key.replacingOccurrences(of: "\u{1F}", with: " / "), album: album,
@@ -134,7 +136,7 @@ func tuningLines(
             for (file, ordinal) in album.ordinals {
                 guard let index = match.mapping[file] else { continue }
                 ordinalsCompared += 1
-                if index + 1 == ordinal { ordinalsAgreeing += 1 }
+                if index == ordinal { ordinalsAgreeing += 1 }
             }
         }
     }

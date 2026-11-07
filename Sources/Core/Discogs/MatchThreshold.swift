@@ -14,8 +14,8 @@ enum MatchThreshold {
     static let likelyTracklist = 0.6
     /// A file's length agrees with Discogs's within this many seconds, or this fraction of
     /// Discogs's, whichever is more.
-    static let durationSeconds = 3.0
-    static let durationFraction = 0.02
+    static let durationSeconds = 8.0
+    static let durationFraction = 0.05
     /// How much the share of agreeing durations counts beside the titles when candidates
     /// are ranked. A release without durations counts half.
     static let durationWeight = 0.25

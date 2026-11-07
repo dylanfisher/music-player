@@ -60,8 +60,8 @@ final class AlbumMatcher {
             chosen = best
             if !tagged.isEmpty {
                 tier = .incomplete
-            } else if best.isExact {
-                tier = tied ? .likely : .exact
+            } else if best.fitsTracklist {
+                tier = !tied && best.durationsAgree ? .exact : .likely
             } else {
                 tier = best.isLikely ? .likely : .incomplete
             }
@@ -85,22 +85,21 @@ final class AlbumMatcher {
     }
 
     /// The best of `scores`, and whether others were as good after the tie-break. The best are
-    /// every Exact one when any is, else those ranked highest; among them the tie-break picks,
-    /// and the first found of those it leaves.
+    /// every one that fits the tracklist when any does, else those ranked highest; among them
+    /// the tie-break picks, and the first found of those it leaves.
     private func choose(
         _ scores: [ReleaseScore], releases: [Int: CatalogRelease], album: DiscogsAlbum
     ) -> (ReleaseScore, tied: Bool) {
         let best: [ReleaseScore]
-        if scores.contains(where: \.isExact) {
-            best = scores.filter(\.isExact)
+        if scores.contains(where: \.fitsTracklist) {
+            best = scores.filter(\.fitsTracklist)
         } else {
             let top = scores.map(\.order).max { $0 < $1 }!
             best = scores.filter { score in
                 score.order.1 == top.1 && top.2 - score.rank <= MatchThreshold.tie
             }
         }
-        let left = Set(tieBreak(best.compactMap { releases[$0.releaseID] }, album: album).map(\.id))
-        let winner = best.first { left.contains($0.releaseID) }!
-        return (winner, left.count > 1)
+        let left = tieBreak(best, releases: releases, album: album)
+        return (left[0], left.count > 1)
     }
 }

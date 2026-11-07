@@ -17,13 +17,18 @@ struct ReleaseScore: Equatable, Sendable {
 
     var durationsAgree: Bool { durationsAgreeing == durationsCompared }
 
-    /// Same count, every title in order, and every known length agreeing.
-    var isExact: Bool { sameCount && titlesInOrder && durationsAgree }
+    /// Same count and every title in order: the releases that fit an album equally, which the
+    /// tie-break chooses among.
+    var fitsTracklist: Bool { sameCount && titlesInOrder }
+
+    /// Fits the tracklist, and every known length agrees.
+    var isExact: Bool { fitsTracklist && durationsAgree }
 
     var isLikely: Bool { sameCount && tracklist >= MatchThreshold.likelyTracklist }
 
-    /// What candidates are ordered by, best last: Exact, then Likely, then `rank`.
-    var order: (Int, Int, Double) { (isExact ? 1 : 0, isLikely ? 1 : 0, rank) }
+    /// What candidates are ordered by, best last: fitting the tracklist, then Likely, then
+    /// `rank`.
+    var order: (Int, Int, Double) { (fitsTracklist ? 1 : 0, isLikely ? 1 : 0, rank) }
 
     /// What candidates are ranked by after their tier: the tracklist, then the lengths.
     var rank: Double {

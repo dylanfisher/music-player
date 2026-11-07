@@ -8,8 +8,16 @@ import Testing
 private func release(
     _ id: Int, artist: String = "Persuader", anv: String? = nil, title: String = "Stockholm",
     master: Int? = nil, main: Bool = false, label: String = "Svek", catno: String = "SK 032",
-    format: String = "CD", barcode: String? = nil, tracks: [String]
+    format: String = "CD", descriptions: [String] = [], released: String? = nil,
+    barcode: String? = nil, tracks: [String]
 ) -> String {
+    let descriptionsXML =
+        descriptions.isEmpty
+        ? ""
+        : "<descriptions>"
+            + descriptions.map { "<description>\($0)</description>" }.joined()
+            + "</descriptions>"
+    let releasedXML = released.map { "<released>\($0)</released>" } ?? ""
     let anvXML = anv.map { "<anv>\($0)</anv>" } ?? ""
     let masterXML =
         master.map { #"<master_id is_main_release="\#(main)">\#($0)</master_id>"# } ?? ""
@@ -17,7 +25,7 @@ private func release(
         barcode.map { #"<identifiers><identifier type="Barcode" value="\#($0)"/></identifiers>"# }
         ?? ""
     return
-        #"<release id="\#(id)"><artists><artist><id>1</id><name>\#(artist)</name>\#(anvXML)</artist></artists><title>\#(title)</title><labels><label name="\#(label)" catno="\#(catno)" id="5"/></labels><formats><format name="\#(format)" qty="1"></format></formats>\#(masterXML)<tracklist>\#(tracks.joined())</tracklist>\#(barcodeXML)</release>"#
+        #"<release id="\#(id)"><artists><artist><id>1</id><name>\#(artist)</name>\#(anvXML)</artist></artists><title>\#(title)</title><labels><label name="\#(label)" catno="\#(catno)" id="5"/></labels><formats><format name="\#(format)" qty="1">\#(descriptionsXML)</format></formats>\#(releasedXML)\#(masterXML)<tracklist>\#(tracks.joined())</tracklist>\#(barcodeXML)</release>"#
         + "\n"
 }
 
@@ -50,11 +58,12 @@ private let stockholm = [
 private func album(
     _ titles: [String], seconds: [Double] = [285, 370, 300], artist: String? = "Persuader",
     title: String = "Stockholm", label: String? = nil, catalogNumber: String? = nil,
-    barcode: String? = nil, releaseIDs: [String?] = []
+    barcode: String? = nil, date: String? = nil, media: String? = nil,
+    releaseIDs: [String?] = []
 ) -> DiscogsAlbum {
     DiscogsAlbum(
         id: 1, title: title, artist: artist, label: label, catalogNumber: catalogNumber,
-        barcode: barcode,
+        barcode: barcode, date: date, media: media,
         tracks: titles.enumerated().map { number, title in
             DiscogsAlbum.Track(
                 fileID: Int64(100 + number), title: title,
@@ -159,6 +168,57 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     #expect(byNumber.tier == .exact)
     #expect(byNumber.releaseID == 11)
     #expect(byNumber.candidates.map(\.releaseID) == [10])
+}
+
+@Test func aNumberSpelledAsTheTagsSpellItBeatsOneThatOnlyFoldsTheSame() throws {
+    let releases =
+        release(10, master: 100, catno: "VIVACE1001", format: "File", tracks: stockholm)
+        + release(
+            11, master: 100, main: true, catno: "vivace1001", format: "Vinyl", tracks: stockholm)
+    let result = try match(
+        album(stockholmTitles, catalogNumber: "vivace1001"), masters: master(100, main: 11),
+        releases: releases)
+    #expect(result.tier == .exact)
+    #expect(result.releaseID == 11)
+}
+
+@Test func theTagsMediaThenTheirDateSettleReleasesOfOneNumber() throws {
+    let releases =
+        release(
+            10, master: 100, main: true, descriptions: ["Album"], released: "1999",
+            tracks: stockholm)
+        + release(
+            11, master: 100, format: "Vinyl", descriptions: ["LP", "Album"], released: "2001",
+            tracks: stockholm)
+        + release(
+            12, master: 100, format: "Vinyl", descriptions: ["LP", "Album"], released: "2003",
+            tracks: stockholm)
+    let byMedia = try match(
+        album(stockholmTitles, catalogNumber: "SK 032", media: "Vinyl (LP,Album)"),
+        masters: master(100, main: 10), releases: releases)
+    #expect(byMedia.tier == .likely)
+    #expect(byMedia.releaseID == 11)
+    let byDate = try match(
+        album(stockholmTitles, catalogNumber: "SK 032", date: "2003", media: "Vinyl (LP,Album)"),
+        masters: master(100, main: 10), releases: releases)
+    #expect(byDate.tier == .exact)
+    #expect(byDate.releaseID == 12)
+}
+
+@Test func aReleaseWhoseLengthsDisagreeStillTiesWithItsTwin() throws {
+    // Discogs's lengths are typed in by hand: the release with wrong ones may be the one.
+    let releases =
+        release(10, master: 100, tracks: stockholm)
+        + release(
+            11, master: 100,
+            tracks: ["Östermalm", "Gamla Stan", "Kungsholmen"].enumerated().map {
+                track("\($0.offset + 1)", $0.element)
+            })
+    let result = try match(
+        album(stockholmTitles, seconds: [285, 370, 420]), masters: master(100, main: 10),
+        releases: releases)
+    #expect(result.tier == .likely)
+    #expect(result.candidates.map(\.releaseID) == [11])
 }
 
 @Test func releasesThatFitEquallyAreSettledByTheBarcodeInTheTags() throws {
