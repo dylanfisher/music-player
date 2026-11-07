@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import DisplayText
 import Log
 import Settings
 
@@ -22,7 +23,7 @@ final class GeneralPane: NSViewController, NSTextFieldDelegate, NSMenuDelegate {
     /// panel changes it at every step, and each save writes the config file.
     static let colorPauseSeconds = 0.25
     /// The space around the pane's boxes.
-    static let margin = 20.0
+    static let margin = DialogMargin.value
     /// The space between a box's edge and its rows.
     private static let boxInset = 12.0
     /// The sections' boxes' look, which the bar builder's preview takes too.

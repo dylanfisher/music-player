@@ -27,6 +27,9 @@ final class PlayerImportSheet: NSObject {
     private let updateButton = NSButton(title: "Update Preview", target: nil, action: nil)
     let details = NSTextView()
     private let stack = NSStackView()
+    /// Holds `stack`, inset to where the alert's title and text start.
+    private let accessory = NSView()
+    private var accessoryInset: NSLayoutConstraint?
 
     /// Wide enough for a NAS path in the details without wrapping most of them.
     static let width = 640.0
@@ -97,7 +100,12 @@ final class PlayerImportSheet: NSObject {
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.detachesHiddenViews = true
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        accessory.addSubview(stack)
+        let inset = stack.leadingAnchor.constraint(equalTo: accessory.leadingAnchor)
+        accessoryInset = inset
         NSLayoutConstraint.activate([
+            inset, stack.topAnchor.constraint(equalTo: accessory.topAnchor),
             stack.widthAnchor.constraint(equalToConstant: Self.width),
             fields.widthAnchor.constraint(equalTo: stack.widthAnchor),
             scroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -105,7 +113,7 @@ final class PlayerImportSheet: NSObject {
             // The fields share what the label and button leave.
             fromField.widthAnchor.constraint(equalTo: toField.widthAnchor),
         ])
-        alert.accessoryView = stack
+        alert.accessoryView = accessory
     }
 
     /// Swinsian's columns when they were read.
@@ -152,9 +160,34 @@ final class PlayerImportSheet: NSObject {
         notesLabel.isHidden = preview?.notes.isEmpty ?? true
         alert.buttons.first?.isEnabled =
             plan.map { $0.changesSomething || columnsChosen != nil } ?? false
+        // The alert starts its title where it likes, apart from its accessory view, and moves
+        // the accessory when its width changes, so the inset is measured again until it holds.
+        sizeAccessory(inset: 0)
+        for _ in 0..<3 {
+            let gap = alertTitleGap()
+            if abs(gap) < 0.5 { break }
+            sizeAccessory(inset: (accessoryInset?.constant ?? 0) + gap)
+        }
+    }
+
+    /// Sizes the accessory to its stack with `inset` of room on each side, and the alert to it.
+    private func sizeAccessory(inset: CGFloat) {
+        accessoryInset?.constant = inset
         stack.layoutSubtreeIfNeeded()
-        stack.setFrameSize(stack.fittingSize)
+        let size = stack.fittingSize
+        accessory.setFrameSize(NSSize(width: size.width + 2 * inset, height: size.height))
+        // The window takes the accessory's size at the second layout.
         alert.layout()
+        alert.layout()
+    }
+
+    /// How far right of the stack the alert's title starts.
+    private func alertTitleGap() -> CGFloat {
+        guard let title = alert.window.contentView?.textField(showing: alert.messageText) else {
+            assertionFailure("The alert's title isn't in its window")
+            return 0
+        }
+        return title.windowAlignmentMinX - stack.windowAlignmentMinX
     }
 
     /// Fills the table with `rows`, hidden when there are none.
@@ -186,5 +219,19 @@ final class PlayerImportSheet: NSObject {
                 show(nil)
             }
         }
+    }
+}
+
+extension NSView {
+    /// Where the view's content starts, which a label's text does a little inside its frame.
+    fileprivate var windowAlignmentMinX: CGFloat {
+        superview?.convert(alignmentRect(forFrame: frame), to: nil).minX ?? frame.minX
+    }
+
+    /// The first text field at or under the view that shows `text`.
+    fileprivate func textField(showing text: String) -> NSTextField? {
+        if let field = self as? NSTextField, field.stringValue == text { return field }
+        for view in subviews { if let found = view.textField(showing: text) { return found } }
+        return nil
     }
 }

@@ -291,6 +291,17 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     let accessory = try #require(sheet.alert.accessoryView)
     #expect(accessory.fittingSize.width <= PlayerImportSheet.width + 1, "\(accessory.fittingSize)")
     #expect(sheet.toField.frame.width > 100, "\(sheet.toField.frame)")
+    // The alert's title starts where the rows do, which are as far from the right edge.
+    let content = try #require(sheet.alert.window.contentView)
+    func edges(of view: NSView) -> (left: CGFloat, right: CGFloat) {
+        let frame = view.superview?.convert(view.alignmentRect(forFrame: view.frame), to: nil)
+        return (frame?.minX ?? -1, content.bounds.width - (frame?.maxX ?? -1))
+    }
+    let title = try #require(textField(showing: "Import from Swinsian", in: content))
+    let scroll = try #require(sheet.details.enclosingScrollView)
+    #expect(abs(edges(of: title).left - edges(of: sheet.unchangedLabel).left) < 0.5)
+    #expect(abs(edges(of: scroll).left - edges(of: scroll).right) < 0.5, "\(edges(of: scroll))")
+    #expect(abs(edges(of: title).left - edges(of: scroll).left) < 0.5, "\(edges(of: title))")
     // A picture of the sheet for review, under .build.
     let view = try #require(sheet.alert.window.contentView)
     let image = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
@@ -301,4 +312,13 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     try FileManager.default.createDirectory(
         at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
     try #require(image.representation(using: .png, properties: [:])).write(to: out)
+}
+
+@MainActor
+private func textField(showing text: String, in view: NSView) -> NSTextField? {
+    if let field = view as? NSTextField, field.stringValue == text { return field }
+    for child in view.subviews {
+        if let found = textField(showing: text, in: child) { return found }
+    }
+    return nil
 }

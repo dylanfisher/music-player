@@ -259,10 +259,14 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 12
-        stack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 20, right: 20)
+        stack.edgeInsets = NSEdgeInsets(
+            top: DialogMargin.value, left: DialogMargin.value, bottom: DialogMargin.value,
+            right: DialogMargin.value)
         for view in [heading, tabs, collapseLabel, buttons] {
             view.translatesAutoresizingMaskIntoConstraints = false
-            view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+            view.widthAnchor.constraint(
+                equalTo: stack.widthAnchor, constant: -2 * DialogMargin.value
+            ).isActive = true
         }
         stack.widthAnchor.constraint(equalToConstant: Self.width).isActive = true
         return stack

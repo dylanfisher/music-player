@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 import Library
 
 /// The smart playlist editor: a sheet with the name, "Match all/any of these rules", a row of
@@ -93,10 +94,14 @@ public final class RuleEditorSheet: NSObject, NSTextFieldDelegate {
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 12
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        stack.edgeInsets = NSEdgeInsets(
+            top: DialogMargin.value, left: DialogMargin.value, bottom: DialogMargin.value,
+            right: DialogMargin.value)
         for view in [nameRow, buttons] {
             view.translatesAutoresizingMaskIntoConstraints = false
-            view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+            view.widthAnchor.constraint(
+                equalTo: stack.widthAnchor, constant: -2 * DialogMargin.value
+            ).isActive = true
         }
         stack.widthAnchor.constraint(equalToConstant: Self.width).isActive = true
         return stack

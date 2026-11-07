@@ -165,7 +165,7 @@ let package = Package(
         ),
         .target(
             name: "PlaylistEditor",
-            dependencies: ["Library"],
+            dependencies: ["DisplayText", "Library"],
             path: "Sources/Features/PlaylistEditor",
             swiftSettings: strictSwift
         ),
@@ -185,7 +185,7 @@ let package = Package(
         ),
         .target(
             name: "SettingsWindow",
-            dependencies: ["Commands", "KeyChord", "Log", "Settings"],
+            dependencies: ["Commands", "DisplayText", "KeyChord", "Log", "Settings"],
             path: "Sources/Features/SettingsWindow",
             swiftSettings: strictSwift
         ),

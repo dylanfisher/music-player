@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import DisplayText
 import KeyChord
 import Settings
 
@@ -54,10 +55,14 @@ final class ShortcutsPane: NSViewController, NSTableViewDataSource, NSTableViewD
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        stack.edgeInsets = NSEdgeInsets(
+            top: DialogMargin.value, left: DialogMargin.value, bottom: DialogMargin.value,
+            right: DialogMargin.value)
         for view in [search, scroll] {
             view.translatesAutoresizingMaskIntoConstraints = false
-            view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+            view.widthAnchor.constraint(
+                equalTo: stack.widthAnchor, constant: -2 * DialogMargin.value
+            ).isActive = true
         }
         stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([

@@ -1,4 +1,5 @@
 import AppKit
+import DisplayText
 import Foundation
 import Log
 import Playback
@@ -52,7 +53,9 @@ public final class PlaybackProblemWindow: NSObject {
         let stack = NSStackView(views: [headline, scroll, bar])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        stack.edgeInsets = NSEdgeInsets(
+            top: DialogMargin.value, left: DialogMargin.value, bottom: DialogMargin.value,
+            right: DialogMargin.value)
         for view in [headline, scroll] {
             view.widthAnchor.constraint(
                 equalTo: stack.widthAnchor,
