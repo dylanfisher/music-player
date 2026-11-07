@@ -1,4 +1,4 @@
-# 0123. Files dropped on the library window join the library, copied into a library folder if asked
+# 0124. Files dropped on the library window join the library, copied into a library folder if asked
 
 - **Date:** 2026-11-06
 - **Status:** accepted

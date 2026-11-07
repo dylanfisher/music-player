@@ -9,7 +9,7 @@ private let logger = moduleLogger()
 
 extension LibraryBrowser {
     /// Adds the audio files and folders at `urls`, dropped on the window, to the library
-    /// (ADR 0123). Those in a watched folder are scanned again. With Copy Added Files on, those
+    /// (ADR 0124). Those in a watched folder are scanned again. With Copy Added Files on, those
     /// outside the library folder are copied into it first. Folders no watched folder holds
     /// become watched once the user agrees in a sheet; Cancel adds nothing.
     func addFiles(_ urls: [URL]) async {

@@ -1,7 +1,7 @@
 import Foundation
 import Metadata
 
-/// Where a file copied into the library folder goes, relative to it (ADR 0123):
+/// Where a file copied into the library folder goes, relative to it (ADR 0124):
 /// `<album artist, else artist>/<album>/<disc-track title>.<extension>`, as Swinsian lays out
 /// its library folder. The track number has two digits, after the disc number and a hyphen when
 /// the album has more than one disc. A file with no track number is named by its title alone,

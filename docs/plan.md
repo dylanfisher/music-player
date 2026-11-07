@@ -301,7 +301,7 @@ Not phases yet. Each becomes one when the owner asks.
 
 - **Mini player:** a small window with art, transport and seek.
 - **Library folder:** files dropped on the window are copied into it
-  ([ADR 0123](decisions/0123-drop-files-and-the-library-folder.md)). Keeping it organized by
+  ([ADR 0124](decisions/0124-drop-files-and-the-library-folder.md)). Keeping it organized by
   album artist when tags change, Move and Consolidate Library move and rename music files,
   which AGENTS.md doesn't allow, so they need an ADR and the owner's go-ahead first.
 - **Discogs lookup:** superseded by [recommendations.md](recommendations.md), where a separate

@@ -1,7 +1,7 @@
 import Foundation
 import Settings
 
-/// What adding files dropped on the library window does (ADR 0123): which folders become
+/// What adding files dropped on the library window does (ADR 0124): which folders become
 /// watched once the user agrees, which directories already watched are scanned again, and which
 /// files are copied into the library folder first.
 public struct AddPlan: Equatable, Sendable {
