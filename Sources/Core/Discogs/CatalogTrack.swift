@@ -36,7 +36,7 @@ struct CatalogTrack: Equatable, Sendable {
     }
 
     /// Seconds in a Discogs duration, "4:45" or "1:02:03"; nil for an empty or unreadable
-    /// one.
+    /// one, including one too long for an `Int`, which the real dump has.
     static func seconds(_ text: String) -> Int? {
         let parts = text.split(separator: ":", omittingEmptySubsequences: false)
         guard (2...3).contains(parts.count) else { return nil }
@@ -45,7 +45,10 @@ struct CatalogTrack: Equatable, Sendable {
             guard let value = Int(part.trimmingCharacters(in: .whitespaces)), value >= 0 else {
                 return nil
             }
-            total = total * 60 + value
+            let (minutes, overflowed) = total.multipliedReportingOverflow(by: 60)
+            let (sum, sumOverflowed) = minutes.addingReportingOverflow(value)
+            guard !overflowed, !sumOverflowed else { return nil }
+            total = sum
         }
         return total
     }

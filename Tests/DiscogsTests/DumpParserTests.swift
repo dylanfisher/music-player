@@ -166,6 +166,8 @@ private let date = "20261101"
     #expect(CatalogTrack.seconds("0:00") == 0)
     #expect(CatalogTrack.seconds("") == nil)
     #expect(CatalogTrack.seconds("285") == nil)
+    #expect(CatalogTrack.seconds("9223372036854775807:00") == nil)
+    #expect(CatalogTrack.seconds("1:9223372036854775807") == nil)
     #expect(CatalogTrack.seconds("4:4x") == nil)
     #expect(CatalogTrack.seconds("1:2:3:4") == nil)
 }
