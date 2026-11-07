@@ -374,9 +374,11 @@ private func standWithPlaylist() async throws -> (
     let path = try #require(try await browser.selectedPaths().first)
     browser.table.table.selectRowIndexes([20], byExtendingSelection: false)
     let clicked = model.trackIDs[20]
+    model.settleSelection()
     await browser.showCurrentTrack(playingPath: path)
     #expect(stand.selectedIDs == [playing])
 
+    // Undo settles the selection ⌘L made, so redo comes back to it.
     #expect(browser.canUndoSelection)
     browser.undoSelection()
     await browser.stepping?.value
@@ -391,11 +393,12 @@ private func standWithPlaylist() async throws -> (
     #expect(stand.restores == 0)
 }
 
-@MainActor @Test func aRunOfArrowKeysIsUndoneInOneStep() async throws {
+@MainActor @Test func aRunOfArrowKeysIsUndoneInOneStepOnceItSettles() async throws {
     let stand = try await Stand()
     let browser = stand.browser
     browser.focusTracks()
     browser.table.table.selectRowIndexes([5], byExtendingSelection: false)
+    stand.model.settleSelection()
     for _ in 0..<3 { #expect(browser.moveSelection(.down, extending: false)) }
     #expect(browser.moveSelection(.down, extending: true))
     #expect(browser.table.table.selectedRowIndexes == [8, 9])
@@ -410,6 +413,7 @@ private func standWithPlaylist() async throws -> (
     let model = stand.model
     let inLibrary = model.trackIDs[40]
     browser.table.table.selectRowIndexes([40], byExtendingSelection: false)
+    model.settleSelection()
     await model.setSource(.playlist(playlist))
     browser.table.table.selectRowIndexes([0], byExtendingSelection: false)
     let inPlaylist = model.trackIDs[0]

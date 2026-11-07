@@ -74,6 +74,8 @@ public final class BrowserModel {
     var resumedFrom: TrackFilter?
     /// The track table's selections, for Undo Selection and Redo Selection.
     private(set) var selections = SelectionHistory()
+    /// The wait that makes the pending selection a step.
+    private var settling: Task<Void, Never>?
     /// The shown list's selected tracks and scroll, which a step keeps with the filter.
     var listPlace: () -> (selection: Set<Int64>, scroll: WindowPlace.Scroll?) = { ([], nil) }
     /// The source a change not yet applied visits, so History records only sources that showed.
@@ -439,9 +441,26 @@ public final class BrowserModel {
         history.play(played, replacing: replaced, from: place)
     }
 
-    /// Records the window as a selection step, after the track table's selection changed.
-    func recordSelection(_ cause: SelectionHistory.Cause) {
-        selections.record(place, cause: cause)
+    /// Notes the window as the selection that becomes a step once it stays put for
+    /// `SelectionHistory.settleDelay`, after the track table's selection changed.
+    func recordSelection() {
+        selections.note(place)
+        settling?.cancel()
+        settling = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: UInt64(SelectionHistory.settleDelay * 1e9))
+            } catch {
+                return
+            }
+            self?.settleSelection()
+        }
+    }
+
+    /// Makes the pending selection a step now, as the delay does.
+    func settleSelection() {
+        settling?.cancel()
+        settling = nil
+        selections.settle()
     }
 
     var canUndoSelection: Bool { selections.canUndo(from: place) }

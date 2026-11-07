@@ -122,7 +122,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     private var timelineLoad: Task<Void, Never>?
     /// What is changing the track table's selection now, for Undo Selection's steps; nil
     /// while a step is being shown, which records nothing.
-    private var selectionCause: SelectionHistory.Cause? = .jump
+    private var recordsSelection = true
     let panes: PanesController
     let sidebarController: SidebarController
     private let split = DividerDragSplitView()
@@ -835,10 +835,8 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     private func apply(_ change: BrowserChange) {
         if change.panes { panes.reload() }
-        selecting(.reload) {
-            table.reload(change)
-            if change.showsEverythingAgain { selectPlayingTrack() }
-        }
+        table.reload(change)
+        if change.showsEverythingAgain { selectPlayingTrack() }
         showTimelineIfItIsTheSource()
         showPanelOfTheSource()
         readStatsIfShownFirst()
@@ -1244,7 +1242,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Moves the selection of the list with the keys; false when none of them has the keys.
     public func moveSelection(_ move: RowMove, extending: Bool) -> Bool {
         switch focusedList {
-        case .tracks: selecting(.key) { table.move(move, extending: extending) }
+        case .tracks: table.move(move, extending: extending)
         case .pane(let column): panes.move(move, in: column)
         case .timeline: timeline.move(move, extending: extending)
         case nil: return false
@@ -1465,24 +1463,15 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
 
     private func stepSelection(back: Bool) async {
         guard let place = back ? model.undoSelection() : model.redoSelection() else { return }
-        selectionCause = nil
+        recordsSelection = false
         await show(place, visiting: true)
-        selectionCause = .jump
+        recordsSelection = true
     }
 
-    /// Records the track table's selection as a step, unless a step is being shown.
+    /// Notes the track table's selection for a step, unless a step is being shown.
     private func recordSelection() {
-        guard let selectionCause else { return }
-        model.recordSelection(selectionCause)
-    }
-
-    /// Runs `change`, recording the selection changes it makes as `cause`'s, unless a step is
-    /// being shown.
-    private func selecting(_ cause: SelectionHistory.Cause, _ change: () -> Void) {
-        guard selectionCause != nil else { return change() }
-        selectionCause = cause
-        change()
-        selectionCause = .jump
+        guard recordsSelection else { return }
+        model.recordSelection()
     }
 
     /// Runs `work` after the steps before it.
@@ -2195,9 +2184,9 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             searchChanged()
             focusTracks()
         case #selector(NSResponder.moveUp(_:)):
-            selecting(.key) { table.move(.up, extending: false) }
+            table.move(.up, extending: false)
         case #selector(NSResponder.moveDown(_:)):
-            selecting(.key) { table.move(.down, extending: false) }
+            table.move(.down, extending: false)
         default: return false
         }
         return true
