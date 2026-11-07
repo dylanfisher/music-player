@@ -283,7 +283,8 @@ import Testing
 
     // The pause buttons sit left of the bar, in Library Health and in the status bar.
     let line = try #require(health.analysisButton.superview as? NSStackView)
-    #expect(line.arrangedSubviews.prefix(3)
+    #expect(
+        line.arrangedSubviews.prefix(3)
             == [health.analysisButton, health.analysisBar, health.analysisLabel])
     let status = try #require(browser.analysisPauseButton.superview as? NSStackView)
     let order = status.arrangedSubviews
