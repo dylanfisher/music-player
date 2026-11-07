@@ -1,45 +1,60 @@
 import Foundation
 import Library
 
-/// The owner's order for releases that fit an album's tracklist equally (decided 2026-11-07):
-/// one whose barcode or catalog number the album's tags carry, then one on a digital or CD
-/// format rather than vinyl or another, then its master's main release. A number spelled as
-/// the tags spell it comes before one that only folds the same, then a release whose format the
-/// tags' `MEDIA` spells, then one dated as the tags' `DATE` (ADR 0131). Each step keeps the scores that pass it, when any do; more than one left is
-/// still a tie.
+/// The order for releases that fit an album's tracklist equally, which the owner approved on
+/// 2026-11-07 (ADR 0131): a barcode or catalog number spelled as the tags spell it, then one
+/// that folds the same, then the format the tags' `MEDIA` names, then the tags' `DATE`, then a
+/// digital or CD format rather than vinyl or another, then the master's main release. `MEDIA`
+/// and `DATE` match as written first, then as Discogs has since filled them in: more
+/// descriptions, a fuller date. A number on the first label, which is the one YATE writes,
+/// beats one on another, and a release with both the barcode and the number beats one with
+/// either. Each step keeps the scores that pass it best, when any pass; more than one left
+/// is still a tie.
 func tieBreak(
     _ scores: [ReleaseScore], releases: [Int: CatalogRelease], album: DiscogsAlbum
 ) -> [ReleaseScore] {
     let barcode = album.barcode.map(CatalogKey.barcode).flatMap { $0.isEmpty ? nil : $0 }
     let number = album.catalogNumber.flatMap(CatalogKey.catalogNumber)
-    let spelled = [album.barcode, album.catalogNumber].compactMap {
-        $0?.trimmingCharacters(in: .whitespaces)
-    }.filter { !$0.isEmpty }
-    let steps: [(CatalogRelease, ReleaseScore) -> Bool] = [
-        { release, _ in
-            release.barcodes.contains { spelled.contains($0) }
-                || release.labels.contains { $0.catalogNumber.map(spelled.contains) ?? false }
+    let spelledBarcode = album.barcode?.trimmingCharacters(in: .whitespaces)
+    let spelledNumber = album.catalogNumber?.trimmingCharacters(in: .whitespaces)
+    // Each step gives a release a weight; the releases of the highest weight above 0 stay.
+    // A catalog number counts double on the first label, which `CATALOGNUMBER` is (ADR 0128).
+    func numberWeight(_ release: CatalogRelease, _ same: (String) -> Bool) -> Int {
+        release.labels.enumerated().compactMap { index, label in
+            label.catalogNumber.map { same($0) ? (index == 0 ? 2 : 1) : 0 }
+        }.max() ?? 0
+    }
+    let steps: [(CatalogRelease) -> Int] = [
+        { release in
+            (spelledBarcode.map { release.barcodes.contains($0) ? 1 : 0 } ?? 0)
+                + (spelledNumber.map { number in numberWeight(release) { $0 == number } } ?? 0)
         },
-        { release, _ in
-            if let barcode, release.barcodes.map(CatalogKey.barcode).contains(barcode) {
-                return true
-            }
-            guard let number else { return false }
-            return release.labels.contains {
-                $0.catalogNumber.flatMap(CatalogKey.catalogNumber) == number
-            }
+        { release in
+            (barcode.map { release.barcodes.map(CatalogKey.barcode).contains($0) ? 1 : 0 } ?? 0)
+                + (number.map { number in
+                    numberWeight(release) { CatalogKey.catalogNumber($0) == number }
+                } ?? 0)
         },
-        { release, _ in album.media.map { release.formats.map(mediaText).contains($0) } ?? false },
-        { release, _ in album.date != nil && release.released == album.date },
-        { release, _ in release.formats.contains { preferredFormats.contains($0.name) } },
-        { release, _ in release.isMainRelease },
+        { release in
+            album.media.map { release.formats.map(mediaText).contains($0) ? 1 : 0 } ?? 0
+        },
+        { release in
+            album.media.map { media in release.formats.contains { fits(media, $0) } ? 1 : 0 }
+                ?? 0
+        },
+        { release in album.date != nil && release.released == album.date ? 1 : 0 },
+        { release in
+            guard let date = album.date, let released = release.released else { return 0 }
+            return datesFit(date, released) ? 1 : 0
+        },
+        { release in release.formats.contains { preferredFormats.contains($0.name) } ? 1 : 0 },
+        { release in release.isMainRelease ? 1 : 0 },
     ]
     var left = scores
     for step in steps where left.count > 1 {
-        let passing = left.filter { score in
-            releases[score.releaseID].map { step($0, score) } ?? false
-        }
-        if !passing.isEmpty { left = passing }
+        let weights = left.map { score in releases[score.releaseID].map(step) ?? 0 }
+        guard let top = weights.max(), top > 0 else { continue }
+        left = zip(left, weights).filter { $0.1 == top }.map(\.0)
     }
     return left
 }
@@ -52,4 +67,27 @@ let preferredFormats: Set<String> = ["File", "CD", "CDr", "SACD"]
 func mediaText(_ format: CatalogRelease.Format) -> String {
     format.descriptions.isEmpty
         ? format.name : "\(format.name) (\(format.descriptions.joined(separator: ",")))"
+}
+
+/// Whether the first format a `MEDIA` tag names is `format`, with its descriptions among the
+/// format's: "Vinyl (LP)" fits a release Discogs now lists as "Vinyl (LP,Stereo)".
+func fits(_ media: String, _ format: CatalogRelease.Format) -> Bool {
+    let first = media.components(separatedBy: "), ")[0]
+    guard let open = first.range(of: " (") else { return first == format.name }
+    guard first[..<open.lowerBound] == format.name else { return false }
+    let descriptions = first[open.upperBound...].trimmingCharacters(in: ["(", ")"])
+        .components(separatedBy: ",")
+    return Set(descriptions).isSubset(of: format.descriptions)
+}
+
+/// Whether two dates as Discogs writes them ("1965", "1965-01-00", "1965-01-15") are the same
+/// day as far as both say.
+func datesFit(_ a: String, _ b: String) -> Bool {
+    func known(_ date: String) -> String {
+        var date = date
+        while date.hasSuffix("-00") { date.removeLast(3) }
+        return date
+    }
+    let (a, b) = (known(a), known(b))
+    return a.count >= 4 && b.count >= 4 && (a.hasPrefix(b) || b.hasPrefix(a))
 }

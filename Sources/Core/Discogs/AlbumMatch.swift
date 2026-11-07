@@ -38,6 +38,9 @@ public struct AlbumMatch: Sendable {
     public var candidates: [MatchCandidate]
 
     public var releaseID: Int? { release?.id }
+
+    /// How many tracks the chosen release has as files hold them.
+    public var releaseTrackCount: Int { tracks.count }
 }
 
 /// How far a matching run has got.

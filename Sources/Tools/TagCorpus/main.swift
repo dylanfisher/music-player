@@ -15,7 +15,7 @@ import Settings
 // in .build/discogs-survey under the current directory, which is all it writes (ADR 0128).
 //   TagCorpus --discogs-tuning [--catalog <path>]
 // matches the survey's albums that carry a release id, with the ids hidden, against the catalog
-// (Application Support's by default), and writes .build/discogs-tuning/report.txt (ADR 0131).
+// (Application Support's discogs.sqlite by default), and writes .build/discogs-tuning/report.txt (ADR 0131).
 let arguments = Array(CommandLine.arguments.dropFirst())
 
 func fail(_ message: String) -> Never {

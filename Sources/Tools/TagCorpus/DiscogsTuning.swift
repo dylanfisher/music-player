@@ -74,6 +74,16 @@ private let ordinalKeys = [
     "DISCOGS_RELEASE_ORDINAL_POSITION", "DISCOGS RELEASE ORDINAL POSITION",
 ]
 
+/// How the release chosen for an album stands to the one its files were tagged with.
+enum Kinship: Equatable {
+    case same
+    /// Equal to it in every tag the matcher compares, which the owner decided on 2026-11-07
+    /// counts as the same (ADR 0131).
+    case twin
+    /// Another release, or none.
+    case other
+}
+
 /// Matches the survey's matched albums with their ids hidden, against `catalog`, once with
 /// their tags and once with titles only, and writes `report.txt` in `output`. Returns the
 /// report.
@@ -82,6 +92,7 @@ func discogsTuning(survey lines: URL, catalog: URL, output: URL) async throws ->
     let report = output.appendingPathComponent(reportName, isDirectory: false)
     try requireCorpusWrite(report.path, roots: [output])
     let records = try loadRecords(lines)
+    let releases = try Catalog(at: catalog)
     var out = ["Discogs matcher tuning: \(lines.path) against \(catalog.path)"]
     for titlesOnly in [false, true] {
         let albums = tuningAlbums(records, titlesOnly: titlesOnly)
@@ -93,11 +104,19 @@ func discogsTuning(survey lines: URL, catalog: URL, output: URL) async throws ->
             }
         }
         let seconds = Date().timeIntervalSince(started)
+        let kinships = try zip(albums, matches).map { album, match -> Kinship in
+            guard let chosen = match.releaseID else { return .other }
+            if chosen == album.releaseID { return .same }
+            guard let tagged = try releases.release(id: album.releaseID),
+                let release = try releases.release(id: chosen)
+            else { return .other }
+            return release.isTwin(of: tagged) ? .twin : .other
+        }
         out.append("")
         out += tuningLines(
-            albums, matches, seconds: seconds,
+            albums, matches, kinships: kinships, seconds: seconds,
             heading: titlesOnly
-                ? "Titles only: ids, label, catalog number and barcode hidden"
+                ? "Titles only: ids, label, catalog number, barcode, date and media hidden"
                 : "Tags: release ids hidden")
     }
     let text = out.joined(separator: "\n") + "\n"
@@ -106,33 +125,49 @@ func discogsTuning(survey lines: URL, catalog: URL, output: URL) async throws ->
     return text
 }
 
-/// One run's section of the report.
+/// One run's section of the report: the bar as the owner decided it on 2026-11-07, then the
+/// raw counts. A twin of the tagged release counts as it, and an album left Incomplete with
+/// the tagged release or a twin chosen, because its files are another count than the
+/// release's, is left out of the bar.
 func tuningLines(
-    _ albums: [TuningAlbum], _ matches: [AlbumMatch], seconds: Double, heading: String
+    _ albums: [TuningAlbum], _ matches: [AlbumMatch], kinships: [Kinship], seconds: Double,
+    heading: String
 ) -> [String] {
-    var out = ["== \(heading)", "\(albums.count) albums"]
     var tiers: [MatchTier: Int] = [:]
     var same = 0
+    var sameOrTwin = 0
+    var rawWrongExact = 0
+    var twins: [String] = []
+    var excluded: [String] = []
     var wrongExact: [String] = []
     var misses: [String] = []
     var found = 0
     var ordinalsCompared = 0
     var ordinalsAgreeing = 0
-    for (album, match) in zip(albums, matches) {
+    for ((album, match), kinship) in zip(zip(albums, matches), kinships) {
         tiers[match.tier, default: 0] += 1
-        let isSame = match.releaseID == album.releaseID
         let candidates = [match.releaseID].compactMap { $0 } + match.candidates.map(\.releaseID)
         if candidates.contains(album.releaseID) { found += 1 }
-        if isSame, match.tier == .exact || match.tier == .likely {
-            same += 1
+        let line =
+            "\(album.name): \(match.tier.rawValue), chose \(match.releaseID.map(String.init) ?? "none"),"
+            + " tagged \(album.releaseID), \(candidates.contains(album.releaseID) ? "a candidate" : "not found"),"
+            + " \(candidates.count) candidates"
+        let isFound = match.tier == .exact || match.tier == .likely
+        if isFound, kinship == .same { same += 1 }
+        if match.tier == .exact, kinship != .same { rawWrongExact += 1 }
+        if kinship == .twin { twins.append(line) }
+        if match.tier == .incomplete, kinship != .other,
+            match.releaseTrackCount != album.album.tracks.count
+        {
+            excluded.append(line)
+        } else if isFound, kinship != .other {
+            sameOrTwin += 1
+        } else if match.tier == .exact {
+            wrongExact.append(line)
         } else {
-            let line =
-                "\(album.name): \(match.tier.rawValue), chose \(match.releaseID.map(String.init) ?? "none"),"
-                + " tagged \(album.releaseID), \(candidates.contains(album.releaseID) ? "a candidate" : "not found"),"
-                + " \(candidates.count) candidates"
-            if match.tier == .exact { wrongExact.append(line) } else { misses.append(line) }
+            misses.append(line)
         }
-        if isSame {
+        if kinship == .same {
             for (file, ordinal) in album.ordinals {
                 guard let index = match.mapping[file] else { continue }
                 ordinalsCompared += 1
@@ -141,6 +176,19 @@ func tuningLines(
         }
     }
     let total = max(albums.count, 1)
+    let counted = max(albums.count - excluded.count, 1)
+    var out = ["== \(heading)", "\(albums.count) albums"]
+    out.append("-- The bar: at least 95% same or twin, and no Exact with neither")
+    out.append(
+        "Incomplete for another count, with the tagged release or a twin, left out: \(excluded.count)"
+    )
+    out.append("chosen a twin of the tagged release: \(twins.count)")
+    out.append(
+        String(
+            format: "Exact or Likely with the tagged release or a twin: %d of %d (%.1f%%)",
+            sameOrTwin, counted, 100 * Double(sameOrTwin) / Double(counted)))
+    out.append("Exact with a release neither the tagged one nor a twin: \(wrongExact.count)")
+    out.append("-- Raw")
     for tier in MatchTier.allCases {
         out.append("\(tier.rawValue): \(tiers[tier] ?? 0)")
     }
@@ -148,7 +196,7 @@ func tuningLines(
         String(
             format: "Exact or Likely with the tagged release: %d (%.1f%%)", same,
             100 * Double(same) / Double(total)))
-    out.append("Exact with another release: \(wrongExact.count)")
+    out.append("Exact with another release: \(rawWrongExact)")
     out.append(
         String(
             format: "tagged release among the candidates: %d (%.1f%%)", found,
@@ -159,9 +207,13 @@ func tuningLines(
     out.append(
         String(
             format: "%.1f s in all, %.1f ms an album", seconds, 1000 * seconds / Double(total)))
-    out.append("-- Exact with another release")
+    out.append("-- Exact with a release neither the tagged one nor a twin")
     out += wrongExact
-    out.append("-- The rest not Exact or Likely with the tagged release")
+    out.append("-- The rest counted and not Exact or Likely with the tagged release or a twin")
     out += misses
+    out.append("-- Twins chosen")
+    out += twins
+    out.append("-- Left out: Incomplete for another count")
+    out += excluded
     return out
 }

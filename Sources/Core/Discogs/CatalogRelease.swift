@@ -1,6 +1,6 @@
 /// A release as the catalog keeps it (ADR 0130): what the matcher compares and the mapping
 /// writes, and nothing else of the dump's.
-struct CatalogRelease: Equatable, Sendable {
+public struct CatalogRelease: Equatable, Sendable {
     struct Label: Equatable, Sendable, Codable {
         /// Nil for a label name Discogs doesn't link.
         var id: Int?

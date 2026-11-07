@@ -8,6 +8,7 @@ import Testing
 private func release(
     _ id: Int, artist: String = "Persuader", anv: String? = nil, title: String = "Stockholm",
     master: Int? = nil, main: Bool = false, label: String = "Svek", catno: String = "SK 032",
+    secondCatno: String? = nil,
     format: String = "CD", descriptions: [String] = [], released: String? = nil,
     barcode: String? = nil, tracks: [String]
 ) -> String {
@@ -18,6 +19,7 @@ private func release(
             + descriptions.map { "<description>\($0)</description>" }.joined()
             + "</descriptions>"
     let releasedXML = released.map { "<released>\($0)</released>" } ?? ""
+    let secondXML = secondCatno.map { #"<label name="Other" catno="\#($0)" id="6"/>"# } ?? ""
     let anvXML = anv.map { "<anv>\($0)</anv>" } ?? ""
     let masterXML =
         master.map { #"<master_id is_main_release="\#(main)">\#($0)</master_id>"# } ?? ""
@@ -25,7 +27,7 @@ private func release(
         barcode.map { #"<identifiers><identifier type="Barcode" value="\#($0)"/></identifiers>"# }
         ?? ""
     return
-        #"<release id="\#(id)"><artists><artist><id>1</id><name>\#(artist)</name>\#(anvXML)</artist></artists><title>\#(title)</title><labels><label name="\#(label)" catno="\#(catno)" id="5"/></labels><formats><format name="\#(format)" qty="1">\#(descriptionsXML)</format></formats>\#(releasedXML)\#(masterXML)<tracklist>\#(tracks.joined())</tracklist>\#(barcodeXML)</release>"#
+        #"<release id="\#(id)"><artists><artist><id>1</id><name>\#(artist)</name>\#(anvXML)</artist></artists><title>\#(title)</title><labels><label name="\#(label)" catno="\#(catno)" id="5"/>\#(secondXML)</labels><formats><format name="\#(format)" qty="1">\#(descriptionsXML)</format></formats>\#(releasedXML)\#(masterXML)<tracklist>\#(tracks.joined())</tracklist>\#(barcodeXML)</release>"#
         + "\n"
 }
 
@@ -180,6 +182,81 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
         releases: releases)
     #expect(result.tier == .exact)
     #expect(result.releaseID == 11)
+}
+
+@Test func theFirstLabelsNumberAndTheBarcodeTogetherCountMost() throws {
+    // CATALOGNUMBER is the first label's number: one on a second label counts less.
+    let labels =
+        release(10, master: 100, main: true, catno: "X 1", secondCatno: "8416", tracks: stockholm)
+        + release(11, master: 100, catno: "8416", format: "Vinyl", tracks: stockholm)
+    let first = try match(
+        album(stockholmTitles, catalogNumber: "8416"), masters: master(100, main: 10),
+        releases: labels)
+    #expect(first.tier == .exact)
+    #expect(first.releaseID == 11)
+    // Both releases have the barcode; only one has the number as well.
+    let both =
+        release(
+            10, master: 100, main: true, catno: "0888072340275", barcode: "8 88072 34027 5",
+            tracks: stockholm)
+        + release(
+            11, master: 100, catno: "FAN-34027", format: "Vinyl", barcode: "8 88072 34027 5",
+            tracks: stockholm)
+    let result = try match(
+        album(stockholmTitles, catalogNumber: "FAN-34027", barcode: "8 88072 34027 5"),
+        masters: master(100, main: 10), releases: both)
+    #expect(result.tier == .exact)
+    #expect(result.releaseID == 11)
+}
+
+@Test func mediaAndDatesFitWhatDiscogsHasSinceFilledIn() throws {
+    let releases =
+        release(10, master: 100, main: true, released: "1966", tracks: stockholm)
+        + release(
+            11, master: 100, format: "Vinyl", descriptions: ["LP", "Stereo"],
+            released: "1965-01-00", tracks: stockholm)
+        + release(
+            12, master: 100, format: "Vinyl", descriptions: ["LP", "Stereo"], released: "1966",
+            tracks: stockholm)
+    let result = try match(
+        album(stockholmTitles, date: "1965", media: "Vinyl (LP)"), masters: master(100, main: 10),
+        releases: releases)
+    #expect(result.tier == .exact)
+    #expect(result.releaseID == 11)
+    let format = CatalogRelease.Format(name: "Vinyl", descriptions: ["LP", "Album", "Stereo"])
+    #expect(fits("Vinyl (LP,Album)", format))
+    #expect(fits("Vinyl (LP), CD (Album)", format))
+    #expect(fits("Vinyl", format))
+    #expect(!fits("Vinyl (LP,Mono)", format))
+    #expect(!fits("CD (LP)", format))
+    #expect(datesFit("1965", "1965-01-00"))
+    #expect(datesFit("1965-01-15", "1965-01-00"))
+    #expect(!datesFit("1965-02-00", "1965-01-00"))
+    #expect(!datesFit("196", "1965"))
+}
+
+@Test func aTwinIsTheSameReleaseInEveryTagTheMatcherCompares() {
+    let base = CatalogRelease(
+        id: 1, title: "Stockholm", labels: [.init(name: "Svek", catalogNumber: "SK 032")],
+        formats: [.init(name: "Vinyl", descriptions: ["12\""])], country: "Sweden",
+        released: "1999", barcodes: ["7 18755 61492 1"],
+        tracks: [CatalogTrack(kind: .track, position: "A", title: "Östermalm")])
+    var twin = base
+    twin.id = 2
+    twin.labels.append(.init(name: "Distributor", catalogNumber: "D 1"))
+    twin.barcodes = ["718755614921", "123"]
+    twin.tracks[0].position = "1"
+    #expect(base.isTwin(of: twin))
+    for change in [
+        { (r: inout CatalogRelease) in r.country = "Germany" },
+        { $0.released = "2000" }, { $0.formats[0].descriptions = ["LP"] },
+        { $0.labels[0].catalogNumber = "SK 033" }, { $0.barcodes = ["1"] },
+        { $0.tracks[0].title = "Other" },
+    ] {
+        var other = base
+        change(&other)
+        #expect(!base.isTwin(of: other))
+    }
 }
 
 @Test func theTagsMediaThenTheirDateSettleReleasesOfOneNumber() throws {

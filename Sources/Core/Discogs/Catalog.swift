@@ -3,7 +3,7 @@ import SQLite
 
 /// The catalog an import built, opened read-only (ADR 0130). Belongs to one thread or actor,
 /// as its connection does.
-final class Catalog {
+public final class Catalog {
     /// A master, or a release with no master, that an album's artist and title fold to.
     enum TitleMatch: Equatable, Sendable {
         case master(Int)
@@ -18,7 +18,7 @@ final class Catalog {
 
     /// Opens the catalog at `url`. Throws `CatalogError.missing` when there's none, and
     /// `.builtByAnotherVersion` when its tables aren't the ones this build writes.
-    init(at url: URL) throws {
+    public init(at url: URL) throws {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw CatalogError.missing(url.path)
         }
@@ -32,7 +32,7 @@ final class Catalog {
         dumpDate = identity[0].date
     }
 
-    func release(id: Int) throws -> CatalogRelease? {
+    public func release(id: Int) throws -> CatalogRelease? {
         try database.prepare(
             """
             SELECT master_id, is_main_release, title, country, released, lists
