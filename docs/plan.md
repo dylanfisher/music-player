@@ -483,6 +483,45 @@ Implementation plan, part 51b (ADR 0130):
       order, bonus and hidden tracks, multi-disc sets, vinyl positions, sub-tracks, and
       `Artist (2)` and ANV names.
 
+Implementation plan, part 51c (ADR 0131):
+
+1. **The album side.** `DiscogsAlbum` in `Library`: the album's title and artist (album artist,
+   else artist), label, catalog number and barcode, and its tracks (file id, title, seconds,
+   disc and track numbers, release id) in disc and track order. `LibraryIndex.discogsAlbums()`
+   reads them from the index alone: the `tracks` table already has `publisher`,
+   `catalog_number` and `barcode`, the standard fields each reader maps YATE's `LABEL`,
+   `CATALOGNUMBER` and `BARCODE` to in every format, beside 51a's two ids, so no new columns
+   and no file reads over the NAS. Tests in `LibraryTests`.
+2. **Catalog.** `releaseIDs(master:)`, over the `releases_by_master` index. Test in
+   `CatalogLookupTests`.
+3. **Candidates (51.7).** `AlbumCandidates`: the album's release ids, then the barcode's
+   releases, then label plus catalog number (the whole `LABEL`, then each label of a
+   " & " list), then title matches for the artist and title, each master expanded to its
+   releases. Titles are also tried without a leading `[…]` and without trailing edition words
+   after " - "; artists also as the first of a "feat."/"&"/","/"vs." list, and Various
+   Artists as Discogs's "Various". Each release once, in the order found.
+4. **Scoring and tiers (51.8).** `ReleaseTracklist`: a release's playable tracks, headings
+   dropped (kept as tracks when no row has a position), index tracks as their sub-tracks or as
+   one track, whichever the album's count fits. `ReleaseScore`: titles folded with
+   `CatalogKey`, a similarity per pair, an in-order alignment that maps files to tracks when
+   the counts differ, durations within a tolerance. `TieBreak`: barcode or catalog number in
+   the tags, then File or CD over other formats, then the master's main release. `AlbumMatch`:
+   the tier, the chosen release, the other candidates scored, and the file to track mapping.
+   `MatchThreshold` holds every threshold once.
+5. **The API.** `matchAlbums(_:catalogAt:progress:)`, async: a detached task opens its own
+   `Catalog` (so a call after an import reads the new file), checks cancellation before each
+   album, and reports albums done of the total. Public only where the tuning tool calls it.
+6. **Tests (51.9).** `Tests/DiscogsTests`: fixture dumps imported into a catalog, albums built
+   by hand, one test per tier, the tie-break order, bonus and hidden tracks, multi-disc sets,
+   vinyl positions, sub-tracks, `Artist (2)` and ANV names, cancellation and progress.
+7. **Tuning (51.8).** `SurveyRecord` gains title, numbers, seconds and barcode, so the survey's
+   `files.jsonl` is the read-once cache of the watched folders. `TagCorpus --discogs-tuning
+   [--catalog <path>]` groups it into the survey's albums, keeps those with one release id on
+   every track, hides the ids, matches them, and writes `.build/discogs-tuning/report.txt`:
+   tiers, same-release rate, wrong Exacts with examples, time per album and in all.
+8. **ADR 0131**: candidates, scoring, tiers, thresholds and their tuning, the inputs from the
+   index.
+
 #### 51d. The mapping and the window
 
 - [ ] **51.10 Field mapping.** A list of Discogs fields, release-level and track-level, as
