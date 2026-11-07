@@ -53,3 +53,11 @@ private let masters = """
     }
     #expect(try catalog.titleMatches(artist: "Simon", title: "Stockholm") == [])
 }
+
+@Test func aMastersReleasesAreFoundByItsID() throws {
+    let folder = try DumpFolder()
+    try folder.write("20261101", masters: masters, releases: releases)
+    let catalog = try folder.importedCatalog()
+    #expect(try catalog.releaseIDs(master: 100) == [10, 11])
+    #expect(try catalog.releaseIDs(master: 999) == [])
+}

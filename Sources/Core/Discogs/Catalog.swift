@@ -78,6 +78,13 @@ final class Catalog {
         }.first
     }
 
+    /// The releases of the master `id`, in id order.
+    func releaseIDs(master id: Int) throws -> [Int] {
+        try database.prepare("SELECT id FROM releases WHERE master_id = ? ORDER BY id").map(id) {
+            try $0.int(0)
+        }
+    }
+
     /// The releases with `barcode`, however it's spaced or punctuated, in id order.
     func releaseIDs(barcode: String) throws -> [Int] {
         let key = CatalogKey.barcode(barcode)
