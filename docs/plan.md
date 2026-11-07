@@ -266,6 +266,8 @@ This table is the human copy. Each budget is defined in code next to its benchma
 | Memory that analysis adds at its peak (phase 45a) | < 10 MB | < 10 MB |
 | The second of two search keystrokes 50 ms apart, as above, while Analyze Library runs over every fixture file and the browser refreshes every 2 s (p95; phase 45b); the old Mac figure is an estimate until its checkpoint | < 20 ms | < 80 ms |
 | Analyze Library over 200 fixture files on the slow simulated NAS, two to four files at once at utility priority (phase 45b, 50c); the old Mac figure is an estimate until its checkpoint | < 15 s | < 40 s |
+| Import a 20,000-release fixture Discogs dump into a new catalog (phase 51b); the old Mac figure is an estimate until 51.13 | < 5 s | < 20 s |
+| The catalog of that fixture dump (phase 51b) | < 60 MB | < 60 MB |
 
 ## Phases
 

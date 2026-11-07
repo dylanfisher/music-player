@@ -282,7 +282,8 @@ let package = Package(
         .executableTarget(
             name: "Bench",
             dependencies: [
-                "Analysis", "Artwork", "Commands", "DisplayText", "Fixtures", "HALOutput",
+                "Analysis", "Artwork", "Commands", "Discogs", "DisplayText", "Fixtures",
+                "HALOutput",
                 "Library",
                 "LibraryBrowser",
                 "Metadata", "Palette", "Playback", "QueueView", "SQLite", "Settings", "TagEditor",

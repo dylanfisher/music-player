@@ -4,7 +4,7 @@ import zlib
 
 /// Discogs dump files for tests and the bench, in the dumps' format: gzipped XML named
 /// `discogs_<date>_<kind>.xml.gz`, and `discogs_<date>_CHECKSUM.txt` with each one's SHA-256.
-enum DiscogsDumpFixture {
+public enum DiscogsDumpFixture {
     /// The dumps' kinds, as their file names have them.
     static let kinds = ["labels", "artists", "masters", "releases"]
 
@@ -18,7 +18,7 @@ enum DiscogsDumpFixture {
 
     /// Writes a complete set: each kind's records inside its root element, gzipped, and the
     /// checksum file listing all four.
-    static func writeSet(
+    public static func writeSet(
         date: String, labels: String = "", artists: String = "", masters: String = "",
         releases: String, in folder: URL
     ) throws {
@@ -85,7 +85,7 @@ enum DiscogsDumpFixture {
     /// barcodes, credits and ten tracks with their own artists, for the bench: about the
     /// size of an average release in the 2026-11-01 dump without its videos and notes. Every
     /// fourth release has no master.
-    static func syntheticReleases(count: Int) -> String {
+    public static func syntheticReleases(count: Int) -> String {
         var xml = ""
         xml.reserveCapacity(count * 3000)
         for id in 1...max(count, 1) {
