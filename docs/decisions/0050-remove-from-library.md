@@ -5,6 +5,8 @@
 - **Amends:** [0020](0020-tag-writing.md), [0034](0034-folders-and-library-health.md)
 - **Amended by:** [0059](0059-problems-window-actions.md): the Problems window restores a
   Removed row, and removes a Lost Stats one from the library.
+  [0123](0123-drop-files-and-the-library-folder.md): a drop copies files into the library
+  folder.
 
 ## Context
 

@@ -4,7 +4,8 @@
 - **Status:** accepted
 - **Amended by:** [0023](0023-failure-table.md): the failure table, and the failures phase 14a
   changed how this reports. [0040](0040-gentle-network-rescans.md): network folders aren't
-  rescanned at launch.
+  rescanned at launch. [0123](0123-drop-files-and-the-library-folder.md): files dropped on the
+  window are rescanned, or their folders watched.
 
 ## Context
 

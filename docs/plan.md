@@ -300,10 +300,10 @@ Phases 10 and 13 are from the original plan and haven't been built.
 Not phases yet. Each becomes one when the owner asks.
 
 - **Mini player:** a small window with art, transport and seek.
-- **Library folder:** Swinsian's copy of newly added tracks into one folder, kept organized by
-  album artist when tags change, with Move and Consolidate Library. It moves and renames music
-  files, which AGENTS.md allows only `TagWriter` and Move to Trash to touch, so it needs an ADR
-  and the owner's go-ahead first. Watched folders cover adding music meanwhile.
+- **Library folder:** files dropped on the window are copied into it
+  ([ADR 0123](decisions/0123-drop-files-and-the-library-folder.md)). Keeping it organized by
+  album artist when tags change, Move and Consolidate Library move and rename music files,
+  which AGENTS.md doesn't allow, so they need an ADR and the owner's go-ahead first.
 - **Discogs lookup:** superseded by [recommendations.md](recommendations.md), where a separate
   service on mbp2021 does the lookup from local data dumps. The API version: fetch release data from the Discogs API and
   offer it as a tag edit the user confirms in the tag editor, written through `TagWriter` (ADR 0020). Start with files that
