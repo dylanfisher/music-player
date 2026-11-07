@@ -333,6 +333,41 @@ whole library and the other formats.
 - [ ] **51.3 Matched albums.** An album counts as matched when every track has the same
       `DISCOGS_RELEASE_ID`; mixed or partial ids are their own state, shown as Incomplete.
 
+Implementation plan, part 51a (ADRs 0128, 0129):
+
+1. **Reader (51.2).** `TrackTags.custom`, the non-standard keys by uppercased name, the first
+   value winning as for the other fields: every Vorbis key the reader doesn't map, every
+   `TXXX` description it doesn't map, and every `----` item whose `mean` is
+   `com.apple.iTunes` and whose `name` it doesn't map, apart from `iTunSMPB`. `filling(from:)`
+   fills them too. `DiscogsKey` in `Metadata` names `DISCOGS_RELEASE_ID` and
+   `DISCOGS_MASTER_ID` once. Tests in `MetadataTests` on hand-built FLAC, MP3 (2.3 and 2.4),
+   MP4 and WAV tags.
+2. **Survey (51.1).** `TagCorpus --discogs-survey <folder>…`: walks the folders, reads each
+   file once (`FileFormat`, then `parse`, through a read-only `FileSource`), and appends one
+   JSON line per file to `.build/discogs-survey/files.jsonl`, so a stopped run resumes where it
+   was; progress on standard error. Then `DiscogsSurvey` folds the lines into
+   `.build/discogs-survey/report.txt`: per format, each custom key's files, albums, sample
+   values and albums where it is constant; albums with a release id on all, some or no
+   tracks; and the conventions (`GENRE` as "genre - styles", doubled styles, `MOOD` against
+   the styles, `GROUPING` against the label, `Artist (2)` suffixes, artist names against
+   `DISCOGS_ARTIST_LIST`). Every write goes through `requireCorpusWrite` with the survey folder
+   as its only root. Tests in `TagCorpusTests` fold hand-made lines and run the walk on
+   generated fixtures in a temporary folder. Run in the background on `/Volumes/music/library`
+   and `/Volumes/music/dsd`.
+3. **Writer (51.2).** `TagEdit.custom`, name to text, empty text removing the key; a name
+   must be printable ASCII without `=` and not one the reader maps to a field. `TagGroup`
+   gains `.custom(name)`, which FLAC writes as a Vorbis comment, ID3 as `TXXX` and MP4 as a
+   `----:com.apple.iTunes:<name>` item, each replacing every key of that name. Tests in
+   `TagWriterTests` on generated fixtures in each format, and the round trip on the corpus
+   clones gains a custom-key edit.
+4. **Index (51.2, 51.3).** `discogs_release_id` and `discogs_master_id` on `tracks`, from
+   `TrackTags.custom`; the index's changed SQL rebuilds it on open, as any change does.
+   `LibraryIndex.discogsMatches()`: each album's state, matched (one release id on every
+   track), incomplete (some tracks without one, or several ids) or unmatched. Tests in
+   `LibraryTests` through a scan of generated fixtures.
+5. **ADRs.** 0128, the survey's findings and the exception that lets agents read the real
+   library, with AGENTS.md's boundary pointing at it; 0129, custom fields.
+
 #### 51b. The local catalog
 
 - [ ] **51.4 Import.** A streaming import of the releases, masters, artists and labels dumps,
