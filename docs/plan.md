@@ -540,6 +540,9 @@ releases (a duration too long for an `Int`, fixed in `72960469`) and had to star
       every byte, and the swap is unchanged.
 - [ ] **51.16 Fuzzing the dump parser.** A `DumpParser` target in `Tools/Fuzz`, so a record that
       traps is found on fixtures, not 20 minutes into a real import: Swift can't catch a trap.
+- [ ] **51.18 Name variations.** `title_keys` also holds each release's and master's artist
+      ANVs, so an album tagged with one is found by title, not only by its barcode or catalog
+      number (found in 51c's tuning; the owner chose 51e on 2026-11-07, as it reimports anyway).
 - [ ] **51.17 Tests.** A stop and a crash (a killed child process) at each stage, resumed to a
       catalog identical to an import run straight through; a checkpoint from another dump date;
       a damaged checkpoint; the bench's fixture import stopped halfway and resumed.
