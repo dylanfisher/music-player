@@ -202,6 +202,8 @@ private let indexSchema = """
         -- YATE's DISCOGS_RELEASE_ID and DISCOGS_MASTER_ID custom keys, as written (ADR 0129).
         discogs_release_id TEXT,
         discogs_master_id TEXT,
+        -- MEDIA, which YATE writes as the release's format, for the Discogs tie-break (ADR 0131).
+        media TEXT,
         codec TEXT NOT NULL,
         sample_rate_hz INTEGER NOT NULL,
         bits_per_sample INTEGER,

@@ -22,6 +22,8 @@ struct Crafted {
     var label: String? = nil
     var catalogNumber: String? = nil
     var barcode: String? = nil
+    var date: String? = nil
+    var media: String? = nil
 
     var scanned: ScannedFile {
         var tags = TrackTags()
@@ -35,6 +37,8 @@ struct Crafted {
         tags.publisher = label
         tags.catalogNumber = catalogNumber
         tags.barcode = barcode
+        tags.date = date
+        tags.media = media
         let audio = TrackAudio(
             codec: .flac, sampleRateHz: rateHz, bitsPerSample: 16, channels: 2,
             lengthFrames: Int(seconds * Double(rateHz)))

@@ -472,11 +472,11 @@ public final class LibraryIndex {
                 disc_number, disc_total, compilation, composer, comment, grouping,
                 catalog_number, barcode, bpm, musical_key, conductor, lyricist, publisher,
                 copyright, encoder, description, disc_subtitle, work, movement_number,
-                movement_name, original_date, discogs_release_id, discogs_master_id, codec,
-                sample_rate_hz, bits_per_sample, channels, length_frames, art_offset,
+                movement_name, original_date, discogs_release_id, discogs_master_id, media,
+                codec, sample_rate_hz, bits_per_sample, channels, length_frames, art_offset,
                 art_byte_count, art_mime_type, art_unsynchronised)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
         ).run(
             binding: [
@@ -487,7 +487,8 @@ public final class LibraryIndex {
                 tags.conductor, tags.lyricist, tags.publisher, tags.copyright, tags.encoder,
                 tags.description, tags.discSubtitle, tags.work, tags.movementNumber,
                 tags.movementName, tags.originalDate, tags.custom[DiscogsKey.releaseID],
-                tags.custom[DiscogsKey.masterID], audio.codec.rawValue, audio.sampleRateHz,
+                tags.custom[DiscogsKey.masterID], tags.media, audio.codec.rawValue,
+                audio.sampleRateHz,
                 audio.bitsPerSample, audio.channels, audio.lengthFrames, metadata.art?.offset,
                 metadata.art?.byteCount, metadata.art?.mimeType, metadata.art?.unsynchronised,
             ])
