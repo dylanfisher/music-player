@@ -30,6 +30,8 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
     /// How close to the last loaded row drawing may get before the next page is read.
     private static let loadAheadRows = 50
     private var typeSelect: TypeSelect?
+    /// The text cells' font, which follows the row height.
+    private var font = RowHeight.regular.font
 
     /// `library` is the track table's layout, whose columns the timeline shows until it has
     /// its own.
@@ -45,6 +47,14 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
         super.init(play: play, playNext: playNext)
         configure()
         show(Self.layout(following: library))
+    }
+
+    /// Draws the rows at the track table's Row Height setting, in its font.
+    func apply(rowHeight: RowHeight) {
+        guard rowHeight.points != table.rowHeight else { return }
+        table.rowHeight = rowHeight.points
+        font = rowHeight.font
+        table.reloadData()
     }
 
     private func configure() {
@@ -237,6 +247,7 @@ final class TimelineController: RowListController, NSTableViewDataSource, NSTabl
         case (_, nil): text = ""
         case (let column?, let track?): text = column.text(track, position: row)
         }
+        cell.font = font
         cell.text = text
         let missing = played.map { $0.track == nil } ?? false
         cell.textColor = missing ? .tertiaryLabelColor : .labelColor

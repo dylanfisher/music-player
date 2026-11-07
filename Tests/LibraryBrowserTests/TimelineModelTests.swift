@@ -396,3 +396,18 @@ private func waitUntil(_ condition: () -> Bool) async throws {
     #expect(throws: OnlyMissingFiles()) { try model.trackIDs(ofRows: [1, 2]) }
     #expect(try model.trackIDs(ofRows: [0, 1]) == [rows[0].id])
 }
+
+@MainActor @Test func theTimelineRowsAreTheTrackTablesHeightForEveryRowHeightSetting() throws {
+    let (browser, _, _) = try timelineBrowser()
+    let settings = AppSettings()
+    for rowHeight in RowHeight.allCases {
+        browser.setTableAppearance(
+            TableAppearance(
+                columnLines: false, rowLines: false, albumLines: false, rowLineColor: nil,
+                albumLineColor: nil, playingRowColor: nil, alternatingRows: true,
+                rowHeight: rowHeight, artSize: settings.artSize.defaultValue, glass: false))
+        #expect(browser.timeline.table.rowHeight == browser.table.table.rowHeight)
+        #expect(browser.timeline.table.rowHeight == rowHeight.points)
+        #expect(browser.timeline.table.intercellSpacing.height == 0)
+    }
+}

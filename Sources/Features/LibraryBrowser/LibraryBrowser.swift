@@ -1755,6 +1755,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// Follows the track table's `appearance.` settings.
     public func setTableAppearance(_ appearance: TableAppearance) {
         table.apply(appearance)
+        timeline.apply(rowHeight: appearance.rowHeight)
         // The timeline always alternates its rows; on glass, translucently.
         timeline.table.usesAlternatingRowBackgroundColors = !appearance.glass
         timeline.table.drawsTranslucentRows = appearance.glass
