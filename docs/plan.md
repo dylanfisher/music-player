@@ -395,6 +395,64 @@ Implementation plan, part 51a (ADRs 0128, 0129):
       missing, sub-tracks and headings, vinyl and `CD2-4` positions, a truncated file, a bad
       checksum, a stopped import leaving the old catalog in use.
 
+Implementation plan, part 51b (ADR 0130):
+
+1. **Settings (51.4).** `discogs.dumpsFolder`, a `DumpsFolder` (a path, or a share and the path
+   inside it, checked as `SyncFolder` is, through `folderLocationProblem`), null by default;
+   `discogs.catalogPath`, an absolute path or null for `AppPaths.discogsCatalogFile`
+   (`discogs.sqlite` in the data directory). `AppSettings.conflicts` refuses a catalog path
+   inside a watched folder stored by path, as it refuses the sync folder. The Settings window
+   hides both, as it hides Network Scan Readers: 51d's window picks the folder. Tests in
+   SettingsTests and the hidden-rows test in SettingsWindowTests.
+2. **Discogs module.** `Sources/Core/Discogs`, importing Library (for `MountedShare` and the
+   share lookup `locate(_:among:)` already finds the sync folder with), Log, Settings and
+   SQLite, linking the system zlib, with CryptoKit for SHA-256. In order, each with its tests:
+   - `CatalogKey`: the fold (the coverage count's rules, from music-recommender's
+     `fold.py`, with the title-only edition words) and the keys built from it: artist credit
+     keys (each name, all joined, all joined with "and"), title, barcode, label and catalog
+     number. Public, so 51c folds the library's side with the same code.
+   - `DumpSet`: the newest date in the folder whose four `discogs_<date>_<kind>.xml.gz`
+     files and `discogs_<date>_CHECKSUM.txt` are there and the checksum file lists all four;
+     its SHA-256 per file and total compressed size. `locateDumps(_:among:)` finds the
+     setting's folder on its share.
+   - `GzipStream`: an `InputStream` over a file descriptor that inflates with zlib as
+     `XMLParser` reads it, 1 MB at a time, hashing the compressed bytes and counting them for
+     progress. A file that ends before its gzip trailer, or bad data, fails the read with the
+     file's name; the hash is compared with the checksum file when the stream ends.
+   - `DumpParser`: an `XMLParserDelegate` per dump kind, building one record per element
+     (`CatalogRelease` with its tracks, headings and index tracks with their sub-tracks,
+     artists, credits, labels, formats, barcodes from the identifiers; `CatalogMaster`,
+     `CatalogArtist`, `CatalogLabel`), everything optional but the id, checking
+     `Task.isCancelled` every few hundred records.
+   - `CatalogSchema` and `CatalogWriter`: one row per release, master, artist and label,
+     the lists in the row as JSON, and key tables (`title_keys` for masters and releases
+     without a master, `barcode_keys`, `catno_keys`). Written with `journal_mode = OFF`,
+     `synchronous = OFF` and a large page cache, 5,000 records a transaction, the indexes
+     built after the last row.
+   - `CatalogImport`: `importCatalog(from:to:outsideOf:progress:)` checks the catalog path
+     against the located watched folders, picks the dump set, imports labels, artists,
+     masters, releases into `<catalog>.importing`, and renames it over the catalog only when
+     every file's hash matched and the indexes are built. A failure or a stop removes the new
+     file and throws; the old catalog is untouched. `Progress`: the stage, compressed bytes
+     read of the set's total, records so far, a line of text.
+   - `Catalog`: the read API, opened read-only: a release or master by id, release ids by
+     barcode and by label plus catalog number, and title matches (masters and master-less
+     releases) by artist and title.
+3. **Fixtures and tests (51.6).** `DiscogsDumpFixture` in `Tools/Fixtures`: writes gzipped
+   dump files and their checksum file from XML text, and a synthetic dump of N releases for
+   the bench. `Tests/DiscogsTests`: every optional element missing, sub-tracks and headings,
+   vinyl and `CD2-4` positions, the keys and lookups, a truncated gzip, a bad checksum, an
+   incomplete set skipped for an older complete one, a stopped import and a failed one each
+   leaving the old catalog in use.
+4. **Bench.** `DiscogsBenchmarks`: importing a 20,000-release fixture dump, and its catalog's
+   size, with rows in the budget table; 51.13 adds the real dump's numbers.
+5. **Tool.** `Sources/Tools/DiscogsImport`, an executable that imports a folder into a catalog
+   path (Application Support's by default) and logs progress lines, for the real import of
+   the 2026-11-01 dump on this Mac, run in the background with its log under `.build/`.
+6. **ADR 0130**: streaming, the schema and why the lists are JSON, the folding, the hash
+   checked as the file streams rather than in a pass before it, the atomic swap, the settings
+   keys.
+
 #### 51c. Matching
 
 - [ ] **51.7 Candidates.** For each album, in order: its release id (refresh); barcode; label
