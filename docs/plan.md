@@ -305,6 +305,8 @@ Decided by the owner on 2026-11-07:
 | Agents reading the real library | Allowed, read only, for 51.1's survey, 51.8's tuning and 51.13's budgets: the watched folders and the dumps folder, reports under `.build/`; an ADR records the exception to AGENTS.md's music files boundary |
 | The real import | An agent imports the 2026-11-01 dump on this Mac for 51.8 and 51.13 |
 | The dumps folder in `config.json` | A share and a path, the shape of `library.watchedFolders`, so a remount elsewhere still finds it |
+| MP3's Discogs links and credits | Read and written: YATE stores the `DISCOGS_*_URL` fields as `WXXX` frames and credits as `TIPL` (ADR 0128), so 51.2's custom fields gain both in 51d, and "Like my library" matches YATE in every format |
+| The API token (52.1) | The owner adds one, as `"discogs.token"` in `config.json`, before phase 52 runs |
 
 What the owner's matched albums carry, from a sample on 2026-11-07 (400 random FLAC albums, 90
 with a release id; all tagged by YATE): `DISCOGS_RELEASE_ID`, `DISCOGS_MASTER_ID` (as `m744074`),
