@@ -430,8 +430,8 @@ Implementation plan, part 51b (ADR 0130):
      `Task.isCancelled` every few hundred records.
    - `CatalogSchema` and `CatalogWriter`: one row per release, master, artist and label,
      the lists in the row as JSON, and key tables (`title_keys` for masters and releases
-     without a master, `barcode_keys`, `catno_keys`). Written with `journal_mode = OFF`,
-     `synchronous = OFF` and a large page cache, 5,000 records a transaction, the indexes
+     without a master, `barcode_keys`, `catno_keys`). Written with `journal_mode = MEMORY`,
+     `synchronous = OFF` and a large page cache, 2,000 records a transaction, the indexes
      built after the last row.
    - `CatalogImport`: `importCatalog(from:to:outsideOf:progress:)` checks the catalog path
      against the located watched folders, picks the dump set, imports labels, artists,
