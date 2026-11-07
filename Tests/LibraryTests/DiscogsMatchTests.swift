@@ -45,3 +45,35 @@ private func track(_ path: String, album: String, release: String?, master: Stri
     #expect(matches[albums["Partial"]!] == .incomplete)
     #expect(matches[albums["None"]!] == .unmatched)
 }
+
+@Test func anAlbumForTheMatcherComesFromTheIndexInDiscAndTrackOrder() throws {
+    let index = try craftedIndex([
+        Crafted(
+            path: "/m/a/3.flac", title: "Three", album: "A", albumArtist: "Band", disc: 2,
+            number: 1, seconds: 30, custom: [DiscogsKey.releaseID: "42"]
+        ).scanned,
+        Crafted(
+            path: "/m/a/1.flac", title: "One", album: "A", albumArtist: "Band", disc: 1,
+            number: 1, seconds: 10, label: nil
+        ).scanned,
+        Crafted(
+            path: "/m/a/2.flac", title: "Two", album: "A", albumArtist: "Band", disc: 1,
+            number: 2, rateHz: 48000, label: "Svek & Other", catalogNumber: "SK 032",
+            barcode: "0 1234"
+        ).scanned,
+        Crafted(path: "/m/b/1.flac", title: "Solo", album: "B").scanned,
+    ])
+    let albums = try index.discogsAlbums()
+    #expect(albums.map(\.title) == ["A", "B"])
+    let album = try #require(albums.first)
+    #expect(album.artist == "Band")
+    #expect(album.label == "Svek & Other")
+    #expect(album.catalogNumber == "SK 032")
+    #expect(album.barcode == "0 1234")
+    #expect(album.tracks.map(\.title) == ["One", "Two", "Three"])
+    #expect(album.tracks.map(\.seconds) == [10, 200, 30])
+    #expect(album.tracks.map(\.discNumber) == [1, 1, 2])
+    #expect(album.tracks.map(\.releaseID) == [nil, nil, "42"])
+    #expect(albums[1].artist == "Artist")
+    #expect(albums[1].label == nil)
+}

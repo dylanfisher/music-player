@@ -19,6 +19,9 @@ struct Crafted {
     var art = true
     var warning = false
     var custom: [String: String] = [:]
+    var label: String? = nil
+    var catalogNumber: String? = nil
+    var barcode: String? = nil
 
     var scanned: ScannedFile {
         var tags = TrackTags()
@@ -29,6 +32,9 @@ struct Crafted {
         tags.discNumber = disc
         tags.trackNumber = number
         tags.custom = custom
+        tags.publisher = label
+        tags.catalogNumber = catalogNumber
+        tags.barcode = barcode
         let audio = TrackAudio(
             codec: .flac, sampleRateHz: rateHz, bitsPerSample: 16, channels: 2,
             lengthFrames: Int(seconds * Double(rateHz)))
