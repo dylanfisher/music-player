@@ -490,8 +490,9 @@ Implementation plan, part 51c (ADR 0131):
    disc and track numbers, release id) in disc and track order. `LibraryIndex.discogsAlbums()`
    reads them from the index alone: the `tracks` table already has `publisher`,
    `catalog_number` and `barcode`, the standard fields each reader maps YATE's `LABEL`,
-   `CATALOGNUMBER` and `BARCODE` to in every format, beside 51a's two ids, so no new columns
-   and no file reads over the NAS. Tests in `LibraryTests`.
+   `CATALOGNUMBER` and `BARCODE` to in every format, beside 51a's two ids, so no file reads
+   over the NAS. (As built: the date and `MEDIA` too, `MEDIA` in a new column, for the
+   tie-break the tuning found.) Tests in `LibraryTests`.
 2. **Catalog.** `releaseIDs(master:)`, over the `releases_by_master` index. Test in
    `CatalogLookupTests`.
 3. **Candidates (51.7).** `AlbumCandidates`: the album's release ids, then the barcode's
