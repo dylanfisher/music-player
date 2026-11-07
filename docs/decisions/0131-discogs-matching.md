@@ -71,24 +71,29 @@ In the order found, each release once:
 - **No candidate**, and **Matched**: every track has one release id; that release is scored
   again for the refresh, and the others are listed.
 
-The tie-break among the releases that fit the tracklist (same count, every title in order),
-each step keeping the releases that pass when any do:
+The tie-break among the releases that fit the tracklist (same count, every title in order).
+Each step gives each release a weight and keeps those of the highest weight, when any is above
+0:
 
 1. a barcode or catalog number spelled as the tags spell it;
 2. a barcode or catalog number that folds as the tags' does;
-3. a format the tags' `MEDIA` spells, as YATE writes it: the name, then the descriptions in
-   brackets joined with ",";
-4. a release date that is the tags' `DATE`;
+3. a format the tags' `MEDIA` names: first as YATE writes it (the name, then the descriptions
+   in brackets joined with ","), then a format of that name holding the tags' descriptions
+   among its own;
+4. a release date that is the tags' `DATE`: first as written, then as far as both say
+   (`1965` and `1965-01-00`);
 5. File, CD, CDr or SACD over vinyl and the rest;
 6. the master's main release.
 
-Steps 1, 2, 5 and 6 are the owner's order (2026-11-07), step 1 split in two. Steps 3 and 4 are
-what else YATE copies from the release into the tags, placed before the format step because on
-the owner's albums they name the release he chose where the format step picks another: he
-tagged the vinyl over an identical download 27 times among the first wrong Exacts. Among
-releases that don't fit the tracklist, the best rank (tracklist, plus `durationWeight` times the
-share of agreeing lengths, a release without lengths counting half) is chosen, with the same
-tie-break.
+In steps 1 and 2 a catalog number on the first label weighs 2 and on another label 1, since
+`CATALOGNUMBER` is the first label's (ADR 0128), and a matching barcode adds 1, so a release
+with both beats one with either. Steps 3 and 4 match a release as Discogs has it now and then
+as it has since been filled in: the dump is newer than the tags, and releases gain
+descriptions and fuller dates. The owner approved this order on 2026-11-07: his own (barcode
+or catalog number, format, main release) with step 1 split in two and `MEDIA` and `DATE`,
+which YATE copies from the release, before the format. Among releases that don't fit the
+tracklist, the best rank (tracklist, plus `durationWeight` times the share of agreeing
+lengths, a release without lengths counting half) is chosen, with the same tie-break.
 
 The result per album is its tier, the chosen release, its tracks as files, each file's track,
 and the other candidates best first.
@@ -98,44 +103,61 @@ and the other candidates best first.
 Every threshold is a constant in `MatchThreshold`. `TagCorpus --discogs-tuning` takes the
 survey's cache of the watched folders (`.build/discogs-survey/files.jsonl`, read once, read
 only), keeps the albums whose every track has one release id, hides the ids and matches them
-against the real catalog, then again with the label, catalog number and barcode hidden too, as
-an album YATE never tagged would be. Its report is `.build/discogs-tuning/report.txt`.
+against the real catalog, then again with the label, catalog number, barcode, date and media
+hidden too, as an album YATE never tagged would be. Its report is `.build/discogs-tuning/report.txt`.
+
+**The bar,** as the owner decided it on 2026-11-07: at least 95% of the counted albums come
+back Exact or Likely with the tagged release or a twin of it, and none Exact with a release
+that is neither. A twin is equal to the tagged release in every tag the matcher compares, as
+YATE writes them: the tracklist as files hold it, the first label's catalog number, the first
+barcode, the release date, `MEDIA` and the country (`CatalogRelease.isTwin`). An album left
+Incomplete with the tagged release or a twin chosen, because its files are another count than
+the release's, isn't counted: the owner kept part of a release, or tracks Discogs doesn't list.
+Twins stay Exact. The report gives the bar, then the raw numbers as first measured.
 
 Tuned on 2026-11-07 with the 20261101 dump, 1,741 albums, on this Mac (`--discogs-tuning`,
 release build, one thread):
 
-| Run | Exact | Likely | Incomplete | No candidate | Same release, Exact or Likely | Exact, another release | Tagged release a candidate | Time |
+| Run | Left out | Twins | Same or twin, of those counted | Exact, neither |
+|---|---|---|---|---|
+| As built, tags | 52 | 16 | 1,565 of 1,689 (92.7%) | 50 |
+| As built, titles only | 38 | 7 | 1,012 of 1,703 (59.4%) | 245 |
+
+| Run, raw | Exact | Likely | Incomplete | No candidate | Same release, Exact or Likely | Exact, another release | Tagged release a candidate | Time |
 |---|---|---|---|---|---|---|---|---|
 | First, 3 s / 2%, the owner's steps only | 1,193 | 430 | 66 | 52 | 1,147 (65.9%) | 277 | 96.7% | 22.6 s, 13.0 ms an album |
-| As built, tags | 1,420 | 238 | 66 | 17 | 1,516 (87.1%) | 81 | 98.8% | 23.4 s, 13.5 ms an album |
-| As built, titles only | 1,073 | 484 | 68 | 116 | 1,005 (57.7%) | 251 | 92.4% | 3.1 s, 1.8 ms an album |
+| As built, tags | 1,440 | 218 | 66 | 17 | 1,549 (89.0%) | 61 | 98.8% | 24.8 s, 14.3 ms an album |
+| As built, titles only | 1,073 | 484 | 68 | 116 | 1,005 (57.7%) | 251 | 92.4% | 2.0 s, 1.2 ms an album |
 
 Where the files map to a track, the track is the one YATE's `DISCOGS_RELEASE_ORDINAL_POSITION`
-(counted from 0) names for 12,576 of 13,609 files.
+(counted from 0) names for 12,979 of 14,034 files.
 
-What moved the numbers: lengths out of the tie (277 to 223 wrong Exacts), the date and the
-spelled number (to 146), `MEDIA` (to 81), and a fix to the catalog (51 albums with no candidate
-to 17): the dumps write a release with no master as master 0, which the import kept, so no
-master-less release had title keys.
+What moved the raw wrong Exacts: lengths out of the tie (277 to 223), the date and the spelled
+number (to 146), `MEDIA` (to 81), and a fix to the catalog (51 albums with no candidate to 17):
+the dumps write a release with no master as master 0, which the import kept, so no
+master-less release had title keys. Then the first label's number, a barcode and a number
+together, and `MEDIA` and `DATE` as Discogs has since filled them in (to 61).
 
-**The bar isn't met: 87.1%, not 95%, and 81 Exact with another release, not none.** Why, from
-the report's examples:
+**The bar isn't met: 92.7%, not 95%, and 50 Exact with neither the tagged release nor a twin,
+not none.** The 50, from the report:
 
-- **Incomplete by design, 66.** 55 of them chose the tagged release: the owner kept part of a
-  release, or a release with tracks Discogs doesn't list. The plan's tiers make another count
-  Incomplete, and the bar counts it as a miss, so 96.2% is the most it can reach.
-- **Twins nothing in the tags tells apart, about 40 wrong Exacts.** The same tracklist, catalog
-  number, date, `MEDIA` and country, settled by the owner's format and main release steps the
-  other way from the owner's choice: Maurizio's M4.5 (tagged 712, chose 1075322, both German
-  12" vinyl of one number), Bitches Brew (37006 against 12032942), A Night In Tunisia (7153691
-  against 859105). Dropping those two steps leaves 41 wrong Exacts and 88.5%, so the steps cost
-  40 albums.
-- **Tags changed after YATE, or a release missing, the other 41.** A `DATE` that isn't the
-  tagged release's, track titles that no longer fit it, three tagged releases not in the dump.
+- **The tagged release doesn't fit the files, 17.** Another count than the files while another
+  release fits (9: Check Your Head, tagged 1710722; Cuspide Des Sirènes, tagged 28366390), titles the owner or Discogs
+  has changed since (5: Barbados Wild Horses, tagged 28206643; DJ-Kicks, tagged 9338298), and
+  the tagged release no longer in the dump (3: GAIA 11, tagged 28362274).
+- **The tags no longer say what the tagged release says, about 20.** Discogs has changed the
+  release's `MEDIA` or date since YATE tagged the files, beyond what step 3 and 4 fit, while
+  another release has what the tags say: Bitches Brew (the tags' `1970-06-00` is chosen 12032942's
+  date; tagged 37006 is now `1970-03-30`), A Night In Tunisia (tagged 7153691 has lost its date),
+  Ancient Tones (tagged 2110456), Atomic Bomb (tagged 1378781).
+- **Only the country tells them apart, about 13.** A Love Supreme (tagged US 857505, chose
+  Canada 2552888), Born Like This (tagged 1701916), Buena Vista Social Club (tagged 3321641).
+  The country isn't in the index or a tie-break step; adding it would change the approved
+  order.
+- The rest, a handful, differ only in the catalog number Discogs now gives the first label.
 
-Zero wrong Exacts needs the owner to decide one of: that a win by format or main release alone
-is Likely, not Exact; that the window's Exact counts these twins as right, since their tags
-differ only in the release id and what the format step chose; or a lower bar.
+The misses that aren't Exact are 74: Likely with another release where the tie stayed, the
+Incompletes with another release chosen, and the 17 albums with no candidate.
 
 ### Running it
 
@@ -157,6 +179,8 @@ the total.
 - **The release title as a tie-break step.** Not added: 8 wrong Exacts had the tagged
   release's title in the tags and the chosen one's differing, too few to add a step the owner
   didn't name.
+- **A number on any label weighing the same.** Rejected: `CATALOGNUMBER` is the first label's,
+  and a release that has it on a second label (a distributor's) is another pressing.
 - **Stopping at the first step that finds candidates.** Rejected: the window's Other Releases
   lists every candidate, and an Exact needs to know no other release fits as well.
 
@@ -168,4 +192,4 @@ writes; an album another tagger tagged falls through to the owner's steps, as th
 run shows. Any change to a
 threshold is tested by rerunning the tuning on the cache. Title lookups match the catalog's
 canonical artist names only, as the catalog keeps no ANV keys; an album tagged with an ANV is
-found by its barcode or catalog number.
+found by its barcode or catalog number. Title keys for name variations are planned for 51e.

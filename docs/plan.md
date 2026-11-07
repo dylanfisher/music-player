@@ -478,7 +478,10 @@ Implementation plan, part 51b (ADR 0130):
       - **No candidate**, and **Matched** (already has a release id; refresh offered).
       Thresholds are named constants, tuned on the owner's matched albums: run on them with
       their ids hidden, at least 95% of them should come back Exact or Likely with the same
-      release, and none Exact with a different one.
+      release or a twin of it, and none Exact with a release that is neither (decided by the
+      owner on 2026-11-07). A twin is equal to the tagged release in every tag the matcher
+      compares (tracklist, catalog number, barcode, date, `MEDIA`, country) and stays Exact;
+      albums left Incomplete because the owner kept another track count aren't counted.
 - [ ] **51.9 Tests.** Albums from fixtures against a fixture catalog for each tier, the tie-break
       order, bonus and hidden tracks, multi-disc sets, vinyl positions, sub-tracks, and
       `Artist (2)` and ANV names.
