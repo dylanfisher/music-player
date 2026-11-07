@@ -18,6 +18,7 @@ struct Crafted {
     var rateHz = 44100
     var art = true
     var warning = false
+    var custom: [String: String] = [:]
 
     var scanned: ScannedFile {
         var tags = TrackTags()
@@ -27,6 +28,7 @@ struct Crafted {
         tags.albumArtist = albumArtist
         tags.discNumber = disc
         tags.trackNumber = number
+        tags.custom = custom
         let audio = TrackAudio(
             codec: .flac, sampleRateHz: rateHz, bitsPerSample: 16, channels: 2,
             lengthFrames: Int(seconds * Double(rateHz)))
