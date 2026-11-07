@@ -125,7 +125,7 @@ func surveyRecord(_ path: String) -> SurveyRecord {
         let reader = ByteReader(try FileSource(path: path))
         let format = try FileFormat(reader)
         return SurveyRecord(
-            path: path, format: format.rawValue, tags: try parse(reader).metadata.tags)
+            path: path, format: format.rawValue, metadata: try parse(reader).metadata)
     } catch {
         return SurveyRecord(path: path, failure: error.error(path: path).description)
     }

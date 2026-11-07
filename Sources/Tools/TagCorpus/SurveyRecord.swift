@@ -1,8 +1,8 @@
 import Foundation
 import Metadata
 
-/// What the Discogs survey keeps of one file: the fields its report compares, and every custom
-/// key. One JSON line each in `files.jsonl`.
+/// What the Discogs survey keeps of one file: the fields its report compares, what the matcher's
+/// tuning compares (ADR 0131), and every custom key. One JSON line each in `files.jsonl`.
 struct SurveyRecord: Codable, Equatable, Sendable {
     var path: String
     /// `FileFormat`'s raw value; nil when the file couldn't be read.
@@ -20,6 +20,13 @@ struct SurveyRecord: Codable, Equatable, Sendable {
     var catalogNumber: String?
     var media: String?
     var date: String?
+    var title: String?
+    var trackNumber: Int?
+    var discNumber: Int?
+    var barcode: String?
+    /// The audio's length. Not optional, so a line from before the tuning fails to load rather
+    /// than reading as a file of no length.
+    var seconds = 0.0
     var custom: [String: String] = [:]
 
     init(path: String, failure: String) {
@@ -27,7 +34,8 @@ struct SurveyRecord: Codable, Equatable, Sendable {
         self.failure = failure
     }
 
-    init(path: String, format: String, tags: TrackTags) {
+    init(path: String, format: String, metadata: TrackMetadata) {
+        let tags = metadata.tags
         self.path = path
         self.format = format
         album = tags.album
@@ -41,6 +49,11 @@ struct SurveyRecord: Codable, Equatable, Sendable {
         catalogNumber = tags.catalogNumber
         media = tags.media
         date = tags.date
+        title = tags.title
+        trackNumber = tags.trackNumber
+        discNumber = tags.discNumber
+        barcode = tags.barcode
+        seconds = Double(metadata.audio.lengthFrames) / Double(metadata.audio.sampleRateHz)
         custom = tags.custom
     }
 

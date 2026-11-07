@@ -105,7 +105,10 @@ private func temporaryFolder() throws -> URL {
     try FileManager.default.createDirectory(at: music, withIntermediateDirectories: true)
     let first = music.appendingPathComponent("01.flac", isDirectory: false)
     let second = music.appendingPathComponent("02.flac", isDirectory: false)
-    try flac(["ALBUM=Album", "DISCOGS_RELEASE_ID=42", "DISCOGS_MASTER_ID=m7"]).write(to: first)
+    try flac([
+        "ALBUM=Album", "TITLE=One", "TRACKNUMBER=1", "DISCNUMBER=2", "BARCODE=0123",
+        "DISCOGS_RELEASE_ID=42", "DISCOGS_MASTER_ID=m7",
+    ]).write(to: first)
     try flac(["ALBUM=Album", "DISCOGS_RELEASE_ID=42"]).write(to: second)
     try Data("not audio".utf8).write(to: music.appendingPathComponent("cover.jpg"))
     let before = try FileManager.default.attributesOfItem(atPath: first.path)
@@ -117,6 +120,12 @@ private func temporaryFolder() throws -> URL {
     let records = try loadRecords(lines)
     #expect(records.map(\.path) == [first.path, second.path])
     #expect(records[0].custom == ["DISCOGS_RELEASE_ID": "42", "DISCOGS_MASTER_ID": "m7"])
+    // What the matcher's tuning compares.
+    #expect(records[0].title == "One")
+    #expect(records[0].trackNumber == 1)
+    #expect(records[0].discNumber == 2)
+    #expect(records[0].barcode == "0123")
+    #expect(records[0].seconds == 0.1)
     let report = try String(
         contentsOf: output.appendingPathComponent("report.txt", isDirectory: false),
         encoding: .utf8)
