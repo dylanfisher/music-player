@@ -300,6 +300,9 @@ Decided by the owner on 2026-11-07:
 | Which tags are written | A YATE-style mapping the user edits. By default each Discogs field goes one to one to its own tag; the owner configures it to their layout (genre and styles below), saved as a preset |
 | Where the dumps are | A folder set in `config.json`, the same one music-recommender reads, so both use one copy of the data; each builds its own database from it |
 | zlib | Fine to link (the system library) |
+| Agents reading the real library | Allowed, read only, for 51.1's survey, 51.8's tuning and 51.13's budgets: the watched folders and the dumps folder, reports under `.build/`; an ADR records the exception to AGENTS.md's music files boundary |
+| The real import | An agent imports the 2026-11-01 dump on this Mac for 51.8 and 51.13 |
+| The dumps folder in `config.json` | A share and a path, the shape of `library.watchedFolders`, so a remount elsewhere still finds it |
 
 What the owner's matched albums carry, from a sample on 2026-11-07 (400 random FLAC albums, 90
 with a release id; all tagged by YATE): `DISCOGS_RELEASE_ID`, `DISCOGS_MASTER_ID` (as `m744074`),
