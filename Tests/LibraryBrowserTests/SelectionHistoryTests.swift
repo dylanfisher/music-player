@@ -14,7 +14,7 @@ private func place(
         scroll: top.map { WindowPlace.Scroll(id: $0, offset: 0) })
 }
 
-/// Notes `place` and lets it settle, as five quiet seconds do.
+/// Notes `place` and lets it settle, as two quiet seconds do.
 private func record(_ history: inout SelectionHistory, _ place: WindowPlace) {
     history.note(place)
     history.settle()

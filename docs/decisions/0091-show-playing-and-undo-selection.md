@@ -3,7 +3,7 @@
 - **Date:** 2026-11-04
 - **Status:** accepted
 - **Amended by:** [0123](0123-undo-selection-settles.md): a selection becomes a step once it has
-  stayed put for 5 seconds, replacing the coalescing below.
+  stayed put for 2 seconds, replacing the coalescing below.
 
 ## Context
 

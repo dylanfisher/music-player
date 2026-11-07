@@ -5,7 +5,7 @@ import Settings
 /// from Back and Forward, and playback is no part of it.
 struct SelectionHistory: Equatable, Sendable {
     /// The seconds a selection stays put before it becomes a step.
-    static let settleDelay = 5.0
+    static let settleDelay = 2.0
 
     /// The most steps kept; the oldest go first.
     static let limit = 100
