@@ -6,7 +6,7 @@
 # An oracle writes and checks test files from the formats' specs, apart from the reader and the
 # writer, so a wrong ID in Metadata fails a test instead of agreeing with itself. It hides only
 # what it shares with the modules it checks.
-oracle Sources/Tools/Fixtures | checks Sources/Core/Metadata Sources/Core/TagWriter | the fixture generator writes every tag format from its spec, independent of Metadata and TagWriter
+oracle Sources/Tools/Fixtures | checks Sources/Core/Discogs Sources/Core/Metadata Sources/Core/TagWriter | the fixture generator writes every tag format and the Discogs dumps from their specs, independent of Metadata, TagWriter and Discogs
 
 block b013e447 x4 | files Sources/Core/Library/SmartRules.swift Sources/Core/Settings/SourceSort.swift Sources/Core/Settings/TrackTableLayout.swift Sources/Core/Settings/VisitLog.swift | each strict Codable type's memberwise init, CodingKeys and rejectUnknownKeys decoder; the fields differ, so only the shape repeats
 block 6c9817bb x3 | files Sources/Core/Library/SmartRules.swift Sources/Core/Settings/SourceSort.swift Sources/Core/Settings/VisitLog.swift | each strict Codable type's memberwise init, CodingKeys and rejectUnknownKeys decoder; the fields differ, so only the shape repeats
@@ -27,6 +27,8 @@ literal "--scan" | files Sources/App/MusicPlayer/CommandLineArguments.swift Sour
 literal "\(…) isn't an option" | files Sources/App/MusicPlayer/CommandLineArguments.swift Sources/Core/Scripting/ScriptArguments.swift Sources/Tools/Fuzz/main.swift Sources/Tools/TagCorpus/Arguments.swift | the app's, the music-player tool's, the fuzzer's and the tag corpus's message for an unknown flag, four programs' command lines
 literal "\(…) needs \(…)" | files Sources/App/MusicPlayer/CommandLineArguments.swift Sources/Tools/FailureDrill/DrillCommand.swift | the app's and FailureDrill's message for a flag without its value
 literal "\(…) only goes with \(…)" | files Sources/App/MusicPlayer/CommandLineArguments.swift Sources/Core/Scripting/ScriptArguments.swift Sources/Tools/TagCorpus/Arguments.swift | the app's, the music-player tool's and the tag corpus's message for a flag given without the one it needs
+literal "Barcode" | files Sources/Core/Discogs/DumpParser.swift Sources/Core/Library/TrackColumnTitle.swift | the identifier type the Discogs dumps give barcodes and the Barcode column's title
+literal "artists" | files Sources/Core/Library/LibraryIndex.swift Sources/Tools/Fixtures/DiscogsDumpFixture.swift | the library's artists table and the Discogs artists dump the fixtures name from its spec
 literal "aiff" | files Sources/Core/Library/DirectoryWalk.swift Sources/Tools/Fixtures/Seed.swift Sources/Tools/TagCorpus/Survey.swift | the scanner's audio extensions and the extensions the fixtures and the corpus give files, which follow the format, not the scanner
 literal "audio/flac" | files Sources/Core/UPnPOutput/RendererTrack.swift Sources/Tools/Fuzz/NetworkTargets.swift | the type a FLAC file is offered as, and a token the fuzzer puts into sink lists it reads
 literal "Bench" | files Sources/Tools/Bench/PlaylistBenchmarks.swift Sources/Tools/Bench/SettingsBenchmarks.swift | names Bench gives its test playlist and the app it builds menus for
@@ -68,7 +70,7 @@ literal "repeat" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Core/
 literal "Search" | files Sources/App/MusicPlayer/MainToolbar.swift Sources/Features/LibraryBrowser/LibraryBrowser.swift | the search item's label in the toolbar's customization sheet and the search field's placeholder
 literal "MusicPlayer" | files Sources/Core/Log/ModuleLogger.swift Sources/Tools/Bench/WindowBenchmarks.swift | the executable Bench launches, named by Package.swift, and the app's data folder, named in Log
 literal "name" | files Sources/Core/Metadata/MP4.swift Sources/Core/UPnP/AVTransport.swift | MP4's name atom of a freeform item and the element a UPnP service description names an action in
-literal "none" | files Sources/App/MusicPlayer/ScanCommand.swift Sources/Tools/TagCorpus/Survey.swift Sources/Tools/TagCorpus/SurveyReport.swift | --scan's summary with no issues, and the tag corpus surveys' word for an empty value
+literal "none" | files Sources/App/MusicPlayer/ScanCommand.swift Sources/Core/Discogs/CatalogKey.swift Sources/Tools/TagCorpus/Survey.swift Sources/Tools/TagCorpus/SurveyReport.swift | --scan's summary with no issues, the catalog number Discogs writes for a release without one, and the tag corpus surveys' word for an empty value
 literal "null" | files Sources/Core/Library/SyncEvent.swift Sources/Tools/Fuzz/FuzzTarget.swift | JSON's null, in the sync log's writer and reader and among the fuzzer's JSON tokens
 literal "path" | files Sources/Core/Analysis/AnalysisText.swift Sources/Features/SettingsWindow/GeneralModel.swift Sources/Tools/Fuzz/FuzzTarget.swift | a folder's key in the config file, a file's key in music-player analyze --json, and a sync log's key the fuzzer reads with Foundation, apart from the log's own parser
 literal "paths" | files Sources/Core/Library/LibrarySchema.swift Sources/Tools/Fuzz/FuzzTarget.swift | the paths table, and a sync log's key the fuzzer reads with Foundation, apart from the log's own parser

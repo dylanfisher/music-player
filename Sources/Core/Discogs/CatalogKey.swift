@@ -1,0 +1,72 @@
+import Foundation
+
+/// The folded keys the catalog is looked up by, and the fold that makes them (ADR 0130). The
+/// library's tags go through the same functions, so a lookup compares like with like: these
+/// are the rules music-recommender's coverage count used on 2026-11-06.
+enum CatalogKey {
+    /// `text` lowercased, with accents and a leading "The" dropped, `&` as "and", a Discogs
+    /// `(2)` suffix removed, and everything but letters and digits removed. A `title` also
+    /// loses bracketed edition words, such as "(Remastered)" or "[Deluxe Edition]".
+    static func fold(_ text: String, title: Bool = false) -> String {
+        var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        text = replacing(suffix, in: text)
+        if title { text = replacing(editionWords, in: text) }
+        text = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+            .replacingOccurrences(of: "&", with: " and ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("the ") { text.removeFirst(4) }
+        var folded = String.UnicodeScalarView()
+        folded.append(contentsOf: text.unicodeScalars.filter(isKept))
+        return String(folded)
+    }
+
+    /// The artist keys a credit of several artists can match: each name alone, and all of
+    /// them run together with and without "and", so the library's "A & B" finds Discogs's
+    /// [A, B]. Empty names are left out.
+    static func artistKeys(_ names: [String]) -> Set<String> {
+        let folded = names.map { fold($0) }.filter { !$0.isEmpty }
+        var keys = Set(folded)
+        if folded.count > 1 {
+            keys.insert(folded.joined())
+            keys.insert(folded.joined(separator: "and"))
+        }
+        return keys
+    }
+
+    /// The key a barcode is looked up by: its letters and digits, so "0 7464-63628-2 2" and
+    /// "074646362822" are one.
+    static func barcode(_ text: String) -> String { fold(text) }
+
+    /// The key a catalog number is looked up by, with its label's folded name. Nil for no
+    /// number: Discogs writes "none" for a release without one.
+    static func catalogNumber(_ text: String) -> String? {
+        let folded = fold(text)
+        return folded.isEmpty || folded == "none" ? nil : folded
+    }
+
+    private static func replacing(_ pattern: NSRegularExpression, in text: String) -> String {
+        pattern.stringByReplacingMatches(
+            in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "")
+    }
+
+    private static func isKept(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.properties.isAlphabetic || scalar.properties.numericType != nil
+    }
+
+    /// Discogs's suffix that tells apart artists or labels of the same name: "Soleil (2)".
+    private static let suffix = regex(#"\s*\(\d+\)$"#)
+    /// A bracketed part of a title naming an edition rather than the album.
+    private static let editionWords = regex(
+        #"\s*[\[(][^\])]*\b(remaster\w*|deluxe|edition|sacd|expanded|anniversary|reissue|bonus|mono|stereo|special|limited|collector'?s|hi-?res|24[- ]?bit|\d+ ?khz|cd ?\d+|dis[ck] ?\d+)\b[^\])]*[\])]"#,
+        options: .caseInsensitive)
+
+    private static func regex(_ pattern: String, options: NSRegularExpression.Options = [])
+        -> NSRegularExpression
+    {
+        do {
+            return try NSRegularExpression(pattern: pattern, options: options)
+        } catch {
+            preconditionFailure("\(pattern) isn't a regular expression: \(error)")
+        }
+    }
+}

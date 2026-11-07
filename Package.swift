@@ -137,6 +137,14 @@ let package = Package(
             swiftSettings: strictSwift
         ),
         .target(
+            name: "Discogs",
+            dependencies: ["DisplayText", "Library", "Log", "SQLite", "Settings"],
+            path: "Sources/Core/Discogs",
+            swiftSettings: strictSwift,
+            // The system library, which the SDK's zlib module declares.
+            linkerSettings: [.linkedLibrary("z")]
+        ),
+        .target(
             name: "Commands",
             dependencies: ["DisplayText", "KeyChord", "Log", "Receiver", "Settings"],
             path: "Sources/Core/Commands",
@@ -228,7 +236,9 @@ let package = Package(
             name: "Fixtures",
             dependencies: ["HALOutput", "HALRender", "Library", "LocalNetwork", "Log", "Metadata"],
             path: "Sources/Tools/Fixtures",
-            swiftSettings: strictSwift
+            swiftSettings: strictSwift,
+            // Gzip for the Discogs dump fixtures.
+            linkerSettings: [.linkedLibrary("z")]
         ),
         .executableTarget(
             name: "GenerateFixtures",
@@ -293,6 +303,11 @@ let package = Package(
         .testTarget(
             name: "CommandsTests",
             dependencies: ["Commands", "KeyChord", "Receiver", "Settings"],
+            swiftSettings: strictSwift
+        ),
+        .testTarget(
+            name: "DiscogsTests",
+            dependencies: ["Discogs", "Fixtures", "Library", "SQLite", "Settings"],
             swiftSettings: strictSwift
         ),
         .testTarget(
