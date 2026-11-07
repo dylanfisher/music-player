@@ -25,6 +25,8 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     var dropTracks: (Int64, [Int64]) -> Void = { _, _ in }
     /// Playlist files, by URL, dropped on the sidebar.
     var dropPlaylistFiles: ([URL]) -> Void = { _ in }
+    /// Audio files and folders, by URL, dropped on the sidebar, for the library.
+    var dropFiles: ([URL]) -> Void = { _ in }
     /// A new name, already trimmed and different, for the playlist with this ID.
     var renamePlaylist: (Int64, String) -> Void = { _, _ in }
     /// The context menu's Duplicate, Delete… and Edit Smart Playlist…, for the row clicked.
@@ -261,8 +263,10 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         proposedItem item: Any?,
         proposedChildIndex index: Int
     ) -> NSDragOperation {
-        if !playlistFileURLs(info.draggingPasteboard).isEmpty {
-            // A file goes to the playlists, not to the row it's over.
+        if !playlistFileURLs(info.draggingPasteboard).isEmpty
+            || !addableFileURLs(info.draggingPasteboard).isEmpty
+        {
+            // A file goes to the playlists or the library, not to the row it's over.
             outlineView.setDropItem(nil, dropChildIndex: NSOutlineViewDropOnItemIndex)
             return .copy
         }
@@ -280,6 +284,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         let files = playlistFileURLs(info.draggingPasteboard)
         if !files.isEmpty {
             dropPlaylistFiles(files)
+            return true
+        }
+        let audio = addableFileURLs(info.draggingPasteboard)
+        if !audio.isEmpty {
+            dropFiles(audio)
             return true
         }
         guard case .playlist(let playlist) = (item as? SidebarNode)?.kind, playlist.isManual

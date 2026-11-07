@@ -103,6 +103,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         askForFolder
     var confirmWatch: @MainActor (String, NSWindow, @escaping (Bool) -> Void) -> Void =
         askToWatch
+    /// Whether Copy Added Files is on, and the library folder, for a drop of files.
+    public var libraryFolder: () -> (copy: Bool, folder: String?) = { (false, nil) }
+    /// Scans these directories, in watched folders, again: a drop's, and its copies'.
+    public var rescanDirectories: ([String]) -> Void = { _ in }
+    /// A drop's question before it watches new folders, which tests replace.
+    var confirmAdding: @MainActor ([String], NSWindow, @escaping (Bool) -> Void) -> Void =
+        askToAddFolders
     /// Runs the command a key press in one of the browser's lists is bound to.
     public var keyCommand: ([KeyChord]) -> CommandDispatcher.KeyOutcome = { _ in .unbound }
     /// Called once, when the table or the timeline first draws rows, or once loading finds none
@@ -236,6 +243,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             owner?.recordSelection()
             owner?.selectionChanged()
         }
+        table.dropFiles = { urls in Task { await owner?.addFiles(urls) } }
         table.rateClicked = { id, stars in
             owner?.edit("couldn't rate the track") { try await model.rate([id], stars: stars) }
         }
@@ -289,6 +297,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             }
         }
         sidebarController.dropPlaylistFiles = { urls in owner?.importPlaylists(from: urls) }
+        sidebarController.dropFiles = { urls in Task { await owner?.addFiles(urls) } }
         sidebarController.renamePlaylist = { id, name in owner?.renamePlaylist(id, to: name) }
         sidebarController.duplicatePlaylist = { playlist in owner?.duplicatePlaylist(playlist) }
         sidebarController.deletePlaylist = { playlist in owner?.confirmDeletePlaylist(playlist) }
@@ -938,6 +947,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         showActivity()
     }
 
+    /// Shows how far a drop's copy into the library folder is; nil once it's done.
+    func showCopying(_ progress: (text: String, fraction: Double)?) {
+        status.copyingText = progress?.text
+        status.copyingFraction = progress?.fraction ?? 0
+        showActivity()
+    }
+
     /// Shows where Analyze Library is while it runs or is paused, beside the scans' line and in
     /// Library Health; nil once it's done. While it runs the table refreshes as during a scan,
     /// so its measure columns fill in; once it has `stopped`, at its end or paused, the table
@@ -1171,12 +1187,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// once its scan ends.
     func locate(_ miss: String, in folder: URL) async {
         let path = folder.standardizedFileURL.path
-        let roots: [String]
-        do {
-            roots = try await reader.lastKnownFolders(watchedFolders()).map(\.path)
-        } catch {
-            return report("couldn't read the watched folders: \(error)")
-        }
+        guard let roots = await watchedRoots() else { return }
         guard roots.contains(where: { isPath(path, inOrAt: $0) }) else {
             guard let window = problems?.window else { return }
             confirmWatch(path, window) { [weak self] yes in
@@ -1187,6 +1198,17 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             return
         }
         await matchAgain(miss, under: path)
+    }
+
+    /// Where each watched folder is now, as the index last found it, or nil once it has
+    /// reported that it couldn't read them.
+    func watchedRoots() async -> [String]? {
+        do {
+            return try await reader.lastKnownFolders(watchedFolders()).map(\.path)
+        } catch {
+            report("couldn't read the watched folders: \(error)")
+            return nil
+        }
     }
 
     /// Imports the last import's misses under the folder `miss` was in again, from `folder`,
@@ -1690,6 +1712,14 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     /// `rows` when there are any.
     private func finishPlaylistFile(_ summary: String, _ rows: [Problem]) {
         status.playlistFileReport = rows
+        showStatus()
+        show(failure: summary)
+        if !rows.isEmpty { showProblems() }
+    }
+
+    /// Says what a drop of files added, and lists what it couldn't in the Problems window.
+    func finishAdding(_ summary: String, _ rows: [Problem]) {
+        status.addedFilesReport = rows
         showStatus()
         show(failure: summary)
         if !rows.isEmpty { showProblems() }

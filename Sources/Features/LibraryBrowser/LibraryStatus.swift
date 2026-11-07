@@ -22,6 +22,8 @@ struct LibraryStatus: Equatable, Sendable {
     var notices: [String] = []
     /// What the last playlist import or export couldn't carry over.
     var playlistFileReport: [Problem] = []
+    /// What the last drop of files on the window couldn't add.
+    var addedFilesReport: [Problem] = []
     /// What the health check shown found that the table can't list, and how many such items.
     var healthProblems: [Problem] = []
     var healthOtherCount = 0
@@ -31,6 +33,10 @@ struct LibraryStatus: Equatable, Sendable {
     /// far along it is, from 0 to 1.
     var savingText: String?
     var savingFraction = 0.0
+    /// What a drop's copy into the library folder says while it runs, such as "Copying into
+    /// the library folder: 3 of 20", and how far along it is.
+    var copyingText: String?
+    var copyingFraction = 0.0
     /// What Analyze Library says while it runs or is paused, such as "Analyzing library: 40 of
     /// 1,200", and how far along it is.
     var analysisText: String?
@@ -129,9 +135,9 @@ struct LibraryStatus: Equatable, Sendable {
             + paused.map { "Scan paused: " + $0 }).joined(separator: " · ")
     }
 
-    /// The scans' text and a tag save's, the first part of the activity line.
+    /// The scans' text, a tag save's and a copy's, the first part of the activity line.
     var scanAndSaveText: String? {
-        let parts = [scanText, savingText].compactMap { $0 }
+        let parts = [scanText, savingText, copyingText].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -150,18 +156,19 @@ struct LibraryStatus: Equatable, Sendable {
         return Double(values.map(\.read).reduce(0, +)) / Double(values.map(\.toRead).reduce(0, +))
     }
 
-    /// The line beside the bar that fills: the scans, a tag save and Analyze Library, any of
-    /// them; nil while none runs.
+    /// The line beside the bar that fills: the scans, a tag save, a copy and Analyze Library,
+    /// any of them; nil while none runs.
     var activityText: String? {
         let parts = [scanAndSaveText, analysisText].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// How far that bar is filled: the scans' fraction while any scans, else the save's, else
-    /// the analysis's. Nil for a bar that moves on its own, or none.
+    /// the copy's, else the analysis's. Nil for a bar that moves on its own, or none.
     var activityFraction: Double? {
         if scanText != nil { return scanFraction }
         if savingText != nil { return savingFraction }
+        if copyingText != nil { return copyingFraction }
         return analysisText.map { _ in analysisFraction }
     }
 
@@ -189,7 +196,7 @@ struct LibraryStatus: Equatable, Sendable {
     var problems: [Problem] {
         let after = syncProblems + folderLines.map(\.line)
         return
-            (notices.map { Problem($0) } + playlistFileReport + healthProblems
+            (notices.map { Problem($0) } + playlistFileReport + addedFilesReport + healthProblems
             + after.map { Problem($0) }).filter { !dismissed.contains($0.line) }
     }
 

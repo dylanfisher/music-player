@@ -332,6 +332,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         browser.watchedFolders = { settings[\.watchedFolders] }
         browser.watch = { [weak self] url in self?.watch(url, settings) }
+        browser.libraryFolder = { (settings[\.copyAddedFiles], settings[\.libraryFolder]) }
+        browser.rescanDirectories = { [weak self] directories in
+            self?.watcher?.rescan(directories: directories)
+        }
         browser.firstRowsDrawn = { [weak self] in self?.interactive() }
         let keyCommand = { [weak self] (chords: [KeyChord]) in
             self?.dispatcher?.key(chords) ?? .unbound

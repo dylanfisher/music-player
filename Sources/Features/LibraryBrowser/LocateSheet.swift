@@ -22,12 +22,17 @@ func askForFolder(locating miss: String, over window: NSWindow, answer: @escapin
     }
 }
 
+/// "Watch “Music”?", the question before the folder at `path` becomes watched.
+func watchQuestion(_ path: String) -> String {
+    "Watch “\(terminalSafe((path as NSString).lastPathComponent))”?"
+}
+
 /// Asks over `window` whether to watch `folder`, which no watched folder holds, so its files
 /// join the library and Locate… can match them; answers true for Watch.
 @MainActor
 func askToWatch(_ folder: String, over window: NSWindow, answer: @escaping (Bool) -> Void) {
     let alert = NSAlert()
-    alert.messageText = "Watch “\(terminalSafe((folder as NSString).lastPathComponent))”?"
+    alert.messageText = watchQuestion(folder)
     alert.informativeText =
         "\(terminalSafe(folder)) isn't in a watched folder, so its files aren't in the library."
         + " Watch it, and the misses are matched again once its scan ends."

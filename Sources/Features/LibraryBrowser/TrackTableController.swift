@@ -53,6 +53,8 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
     var selectionChanged: () -> Void = {}
     /// A click in the Rating column: the clicked track and the stars to give it, 0 to clear.
     var rateClicked: (Int64, Int) -> Void = { _, _ in }
+    /// Audio files and folders, by URL, dropped on the table from another app.
+    var dropFiles: ([URL]) -> Void = { _ in }
     /// Runs a click's rating once a double-click can no longer follow it.
     var afterDoubleClickInterval: (@escaping @MainActor () -> Void) -> Void = { rate in
         Task { @MainActor in
@@ -151,7 +153,7 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         table.takeKey = { [weak self] event in self?.takeKey(event) ?? false }
         table.action = #selector(clicked)
         table.edgeToEdgeColumn = columnIdentifier(.art)
-        table.registerForDraggedTypes([trackIDsType])
+        table.registerForDraggedTypes([trackIDsType, .fileURL])
         // Rows go only to the sidebar and to other rows, never to another app.
         table.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
         table.setDraggingSourceOperationMask([], forLocal: false)
@@ -763,11 +765,16 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         model.trackIDs.indices.contains(row) ? trackDragItem(model.trackIDs[row]) : nil
     }
 
-    /// Rows move only within a manual playlist shown in its own order, between rows.
+    /// Rows move only within a manual playlist shown in its own order, between rows. Files from
+    /// another app go to the library, so they drop on the whole table.
     func tableView(
         _ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int,
         proposedDropOperation dropOperation: NSTableView.DropOperation
     ) -> NSDragOperation {
+        if info.draggingSource == nil, !addableFileURLs(info.draggingPasteboard).isEmpty {
+            tableView.setDropRow(-1, dropOperation: .on)
+            return .copy
+        }
         guard info.draggingSource as? NSTableView === table, model.canReorder else { return [] }
         tableView.setDropRow(row, dropOperation: .above)
         return .move
@@ -777,6 +784,12 @@ final class TrackTableController: RowListController, NSTableViewDataSource, NSTa
         _ tableView: NSTableView, acceptDrop info: any NSDraggingInfo, row: Int,
         dropOperation: NSTableView.DropOperation
     ) -> Bool {
+        if info.draggingSource == nil {
+            let files = addableFileURLs(info.draggingPasteboard)
+            guard !files.isEmpty else { return false }
+            dropFiles(files)
+            return true
+        }
         let ids = draggedTrackIDs(info.draggingPasteboard)
         guard !ids.isEmpty, model.canReorder else { return false }
         actions.move(ids, row)
