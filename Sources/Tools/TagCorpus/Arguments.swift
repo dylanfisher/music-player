@@ -2,15 +2,30 @@ let roundTripFlag = "--round-trip"
 let fullDiskFlag = "--full-disk"
 let pathsFlag = "--paths"
 let discogsSurveyFlag = "--discogs-survey"
+let discogsTuningFlag = "--discogs-tuning"
+let catalogFlag = "--catalog"
 
 /// Why `arguments` can't run, or nil.
 func argumentProblem(_ arguments: [String]) -> String? {
     let roundTripTakes = "\(roundTripFlag) takes only \(fullDiskFlag)"
     if let unknown = arguments.first(where: {
         $0.hasPrefix("--")
-            && ![roundTripFlag, fullDiskFlag, pathsFlag, discogsSurveyFlag].contains($0)
+            && ![
+                roundTripFlag, fullDiskFlag, pathsFlag, discogsSurveyFlag, discogsTuningFlag,
+                catalogFlag,
+            ].contains($0)
     }) {
         return "\(unknown) isn't an option"
+    }
+    if let index = arguments.firstIndex(of: discogsTuningFlag) {
+        guard index == 0 else { return "\(discogsTuningFlag) goes first" }
+        if arguments.count == 1 { return nil }
+        guard arguments.count == 3, arguments[1] == catalogFlag, !arguments[2].hasPrefix("--")
+        else { return "\(discogsTuningFlag) takes only \(catalogFlag) <path>" }
+        return nil
+    }
+    if arguments.contains(catalogFlag) {
+        return "\(catalogFlag) only goes with \(discogsTuningFlag)"
     }
     if let index = arguments.firstIndex(of: discogsSurveyFlag) {
         guard index == 0 else { return "\(discogsSurveyFlag) goes first" }

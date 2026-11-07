@@ -1,4 +1,5 @@
 import Foundation
+import Settings
 
 // The tag writer's real-world test, on the owner's reference corpus (ADR 0020):
 //   TagCorpus [<folder>]
@@ -12,6 +13,9 @@ import Foundation
 //   TagCorpus --discogs-survey <folder>…
 // reads every audio file under the folders, read only, and reports the Discogs tags they carry
 // in .build/discogs-survey under the current directory, which is all it writes (ADR 0128).
+//   TagCorpus --discogs-tuning [--catalog <path>]
+// matches the survey's albums that carry a release id, with the ids hidden, against the catalog
+// (Application Support's by default), and writes .build/discogs-tuning/report.txt (ADR 0131).
 let arguments = Array(CommandLine.arguments.dropFirst())
 
 func fail(_ message: String) -> Never {
@@ -29,6 +33,17 @@ do {
     if arguments.first == discogsSurveyFlag {
         let folders = arguments.dropFirst().map { URL(fileURLWithPath: $0, isDirectory: true) }
         exit(try discogsSurvey(folders, output: surveyFolder()) == 0 ? 0 : 1)
+    }
+    if arguments.first == discogsTuningFlag {
+        let catalog =
+            arguments.count == 3
+            ? URL(fileURLWithPath: arguments[2], isDirectory: false)
+            : try AppPaths.standard().discogsCatalogFile(nil)
+        print(
+            try await discogsTuning(
+                survey: surveyFolder().appendingPathComponent("files.jsonl", isDirectory: false),
+                catalog: catalog, output: tuningFolder()))
+        exit(0)
     }
     guard arguments.first == roundTripFlag else {
         let folder = URL(fileURLWithPath: arguments.first ?? referenceCorpusPath, isDirectory: true)

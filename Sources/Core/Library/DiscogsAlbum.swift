@@ -1,16 +1,16 @@
 /// An album as the Discogs matcher compares it with releases (ADR 0131): what its tags say
 /// about the release, and its tracks in order.
-struct DiscogsAlbum: Equatable, Sendable {
-    struct Track: Equatable, Sendable {
-        var fileID: Int64
-        var title: String?
-        var seconds: Double
-        var discNumber: Int?
-        var trackNumber: Int?
+public struct DiscogsAlbum: Equatable, Sendable {
+    public struct Track: Equatable, Sendable {
+        public var fileID: Int64
+        public var title: String?
+        public var seconds: Double
+        public var discNumber: Int?
+        public var trackNumber: Int?
         /// `DISCOGS_RELEASE_ID`, as written.
-        var releaseID: String?
+        public var releaseID: String?
 
-        init(
+        public init(
             fileID: Int64, title: String?, seconds: Double, discNumber: Int? = nil,
             trackNumber: Int? = nil, releaseID: String? = nil
         ) {
@@ -23,18 +23,18 @@ struct DiscogsAlbum: Equatable, Sendable {
         }
     }
 
-    var id: Int64
-    var title: String
+    public var id: Int64
+    public var title: String
     /// The album artist, else the track artist; nil for a compilation without one.
-    var artist: String?
+    public var artist: String?
     /// `LABEL`, which can name several labels joined with " & " (ADR 0128).
-    var label: String?
-    var catalogNumber: String?
-    var barcode: String?
+    public var label: String?
+    public var catalogNumber: String?
+    public var barcode: String?
     /// In disc and track order.
-    var tracks: [Track]
+    public var tracks: [Track]
 
-    init(
+    public init(
         id: Int64, title: String, artist: String?, label: String? = nil,
         catalogNumber: String? = nil, barcode: String? = nil, tracks: [Track]
     ) {

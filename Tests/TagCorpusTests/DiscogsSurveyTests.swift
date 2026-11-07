@@ -157,3 +157,31 @@ private func temporaryFolder() throws -> URL {
     #expect(argumentProblem([discogsSurveyFlag]) != nil)
     #expect(argumentProblem(["/m", discogsSurveyFlag]) != nil)
 }
+
+@Test func theTuningTakesTheAlbumsWithOneReleaseIDAndHidesIt() {
+    var first = record("/m/a/2.flac", album: "One", releaseID: "7", label: "Svek")
+    first.trackNumber = 2
+    first.custom["DISCOGS RELEASE ORDINAL POSITION"] = "2"
+    var second = record("/m/a/1.flac", album: "One", releaseID: "7")
+    second.trackNumber = 1
+    second.catalogNumber = "SK 032"
+    let records = [
+        first, second, record("/m/b/1.flac", album: "Mixed", releaseID: "1"),
+        record("/m/b/2.flac", album: "Mixed", releaseID: "2"),
+        record("/m/c/1.flac", album: "None", releaseID: nil),
+    ]
+    let albums = tuningAlbums(records, titlesOnly: false)
+    #expect(albums.map(\.releaseID) == [7])
+    let album = albums[0].album
+    #expect(album.tracks.map(\.trackNumber) == [1, 2])
+    #expect(album.tracks.allSatisfy { $0.releaseID == nil })
+    #expect(album.label == "Svek")
+    #expect(album.catalogNumber == "SK 032")
+    #expect(albums[0].ordinals == [album.tracks[1].fileID: 2])
+    let bare = tuningAlbums(records, titlesOnly: true)[0].album
+    #expect(bare.label == nil && bare.catalogNumber == nil && bare.barcode == nil)
+    #expect(argumentProblem([discogsTuningFlag]) == nil)
+    #expect(argumentProblem([discogsTuningFlag, catalogFlag, "/c.sqlite"]) == nil)
+    #expect(argumentProblem([discogsTuningFlag, catalogFlag]) != nil)
+    #expect(argumentProblem([catalogFlag, "/c.sqlite"]) != nil)
+}
