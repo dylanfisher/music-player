@@ -44,6 +44,22 @@ enum CatalogKey {
         return folded.isEmpty || folded == "none" ? nil : folded
     }
 
+    /// The other spellings of a library album's title to look it up by, as music-recommender's
+    /// prototype found them: without a leading bracketed catalog number, and without edition
+    /// words after a dash. Each differs from `title` and from the others, and isn't empty.
+    static func titleVariants(_ title: String) -> [String] {
+        var variants: [String] = []
+        for variant in [
+            replacing(leadingBrackets, in: title), replacing(trailingEditionWords, in: title),
+        ] {
+            let trimmed = variant.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, trimmed != title, !variants.contains(trimmed) {
+                variants.append(trimmed)
+            }
+        }
+        return variants
+    }
+
     private static func replacing(_ pattern: NSRegularExpression, in text: String) -> String {
         pattern.stringByReplacingMatches(
             in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "")
@@ -55,10 +71,19 @@ enum CatalogKey {
 
     /// Discogs's suffix that tells apart artists or labels of the same name: "Soleil (2)".
     private static let suffix = regex(#"\s*\(\d+\)$"#)
+    /// Words that name an edition of an album rather than the album.
+    private static let editionWordList =
+        #"remaster\w*|deluxe|edition|sacd|expanded|anniversary|reissue|bonus|mono|stereo|special|limited|collector'?s|hi-?res|24[- ]?bit|\d+ ?khz|cd ?\d+|dis[ck] ?\d+"#
     /// A bracketed part of a title naming an edition rather than the album.
     private static let editionWords = regex(
-        #"\s*[\[(][^\])]*\b(remaster\w*|deluxe|edition|sacd|expanded|anniversary|reissue|bonus|mono|stereo|special|limited|collector'?s|hi-?res|24[- ]?bit|\d+ ?khz|cd ?\d+|dis[ck] ?\d+)\b[^\])]*[\])]"#,
+        #"\s*[\[(][^\])]*\b("# + editionWordList + #")\b[^\])]*[\])]"#,
         options: .caseInsensitive)
+    /// The same words after a dash at the end of a title: "Album - 2011 Remaster".
+    private static let trailingEditionWords = regex(
+        #"\s+[-–—]\s+[^-–—]*\b("# + editionWordList + #")\b[^-–—]*$"#,
+        options: .caseInsensitive)
+    /// A catalog number in brackets before a title: "[SK 032] Stockholm".
+    private static let leadingBrackets = regex(#"^\s*\[[^\]]*\]\s*"#)
 
     private static func regex(_ pattern: String, options: NSRegularExpression.Options = [])
         -> NSRegularExpression

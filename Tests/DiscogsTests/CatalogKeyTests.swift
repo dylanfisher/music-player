@@ -43,3 +43,13 @@ import Testing
     #expect(CatalogKey.catalogNumber("none") == nil)
     #expect(CatalogKey.catalogNumber(" - ") == nil)
 }
+
+@Test func aTitleIsAlsoTriedWithoutALeadingCatalogNumberOrTrailingEditionWords() {
+    #expect(CatalogKey.titleVariants("[SK 032] Stockholm") == ["Stockholm"])
+    #expect(CatalogKey.titleVariants("Stockholm - 2011 Remaster") == ["Stockholm"])
+    #expect(CatalogKey.titleVariants("Live – Deluxe Edition") == ["Live"])
+    #expect(CatalogKey.titleVariants("Stockholm") == [])
+    // A dash that isn't before edition words is part of the title.
+    #expect(CatalogKey.titleVariants("Side A - Side B") == [])
+    #expect(CatalogKey.titleVariants("[SK 032]") == [])
+}
