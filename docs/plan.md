@@ -417,10 +417,12 @@ Implementation plan, part 51b (ADR 0130):
      files and `discogs_<date>_CHECKSUM.txt` are there and the checksum file lists all four;
      its SHA-256 per file and total compressed size. `locateDumps(_:among:)` finds the
      setting's folder on its share.
-   - `GzipStream`: an `InputStream` over a file descriptor that inflates with zlib as
-     `XMLParser` reads it, 1 MB at a time, hashing the compressed bytes and counting them for
-     progress. A file that ends before its gzip trailer, or bad data, fails the read with the
-     file's name; the hash is compared with the checksum file when the stream ends.
+   - `GzipStream`: a file descriptor read 1 MB at a time and inflated with zlib, hashing
+     the compressed bytes and counting them for progress. A file that ends before its gzip
+     trailer, or bad data, fails the read with the file's name; the hash is compared with the
+     checksum file when the stream ends. `DumpBatches` cuts the inflated bytes into batches of
+     whole records, each parsed by its own `XMLParser` in an autorelease pool (added after
+     the first real import held 1.8 GB in `XMLParser`'s autoreleased strings).
    - `DumpParser`: an `XMLParserDelegate` per dump kind, building one record per element
      (`CatalogRelease` with its tracks, headings and index tracks with their sub-tracks,
      artists, credits, labels, formats, barcodes from the identifiers; `CatalogMaster`,

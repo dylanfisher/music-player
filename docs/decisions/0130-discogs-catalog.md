@@ -34,10 +34,17 @@ for a catalog of its own (51.13).
 - **The set** is the newest date in the folder with `discogs_<date>_{labels,artists,masters,
   releases}.xml.gz` and a `discogs_<date>_CHECKSUM.txt` listing all four, so a month still
   downloading is passed over for the last complete one.
-- **Streaming.** Each file is read once, 1 MB at a time, through an `InputStream` that
-  inflates it with zlib as `XMLParser` reads. Nothing is unpacked to disk. The parser
-  builds one record per top-level element and passes over the subtrees nothing is kept from
-  (videos, notes, companies, profiles, aliases) without collecting their text.
+- **Streaming.** Each file is read once, 1 MB at a time, and inflated with zlib as it's
+  read. Nothing is unpacked to disk. The inflated bytes are cut into batches of whole
+  records, about 4 MB each, and `XMLParser` parses each batch as a document of its own, in
+  an autorelease pool of its own. `XMLParser` autoreleases every string it hands its
+  delegate and drains nothing until its parse returns: parsing a whole dump from an
+  `InputStream`, as first built, held 1.8 GB by the 7 millionth release, and kept reading
+  the file to its end after a stop. The dumps write each record on a line of its own, so a
+  batch ends where a record's closing tag ends a line; text can't hold a tag, as XML
+  escapes its `<`. A dump laid out otherwise fails to parse rather than being read wrong. The
+  parser builds one record per top-level element and passes over the subtrees nothing is
+  kept from (videos, notes, companies, profiles, aliases) without collecting their text.
 - **The checksum** file is read and checked for all four names before anything is imported;
   each file's SHA-256 is taken from the bytes as they stream and compared at its end. A
   separate pass before the import would read the 12.6 GB from the NAS twice to learn
