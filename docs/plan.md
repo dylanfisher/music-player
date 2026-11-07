@@ -47,7 +47,8 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 
-1. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
+1. Phase 51, then 52 (set by the owner on 2026-11-07).
+2. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
 ## Waiting on the owner
@@ -270,6 +271,171 @@ This table is the human copy. Each budget is defined in code next to its benchma
 
 Phases 10 and 13 are from the original plan and haven't been built.
 
+### 51. Discogs tagger
+
+A window, opened like Year in Review, that matches library albums to Discogs releases and
+writes their tags through `TagWriter` once the user has reviewed them. Asked for on 2026-11-07.
+This round reads only a local catalog built from the Discogs dumps; the API is phase 52, and an
+LLM review of incomplete matches is under Later. The lookup moved out of music-recommender into
+the player on 2026-11-07; the service (`~/projects/music-recommender` on mbp2021, whose
+`docs/recommendations.md` is the design for it) keeps the recommendations. Workflow and field
+names are modeled on YATE's Discogs Wizard
+(`https://2manyrobots.com/YateResources/InAppHelp/Discogs.html`), whose tags the owner's
+matched albums already carry.
+
+51a (`Core/Metadata`, `Core/TagWriter`, `Core/Library`, `Tools/TagCorpus`) and 51b (a new
+`Core` module for the catalog) touch different modules, so they run in parallel worktrees and
+merge a, then b. 51c needs both, and 51d needs 51c. ADR numbers: 0128 and 0129 to 51a (the
+survey's findings, custom fields), 0130 to 51b, 0131 to 51c, 0132 and 0133 to 51d (the
+mapping, one confirmation for a match set).
+
+Decided by the owner on 2026-11-07:
+
+| Question | Answer |
+|---|---|
+| Where the catalog and the matching live | The player: a local SQLite catalog built from the dumps, matched in Swift; the API (52) reuses the same matcher |
+| An album is matched when | Its files carry `DISCOGS_RELEASE_ID` |
+| Several releases match a tracklist equally | Tie-break by barcode or catalog number in the tags, then a digital or CD format over vinyl, then the master's main release; still tied, the album drops to Likely |
+| A field that already has a different value | Per-field replace or fill-empty, set once in a saved mapping, then applied to a whole match set |
+| Which tags are written | A YATE-style mapping the user edits. By default each Discogs field goes one to one to its own tag; the owner configures it to their layout (genre and styles below), saved as a preset |
+| Where the dumps are | A folder set in `config.json`, the same one music-recommender reads, so both use one copy of the data; each builds its own database from it |
+| zlib | Fine to link (the system library) |
+
+What the owner's matched albums carry, from a sample on 2026-11-07 (400 random FLAC albums, 90
+with a release id; all tagged by YATE): `DISCOGS_RELEASE_ID`, `DISCOGS_MASTER_ID` (as `m744074`),
+`DISCOGS_RELEASE_ORDINAL_POSITION`, `DISCOGS_CATALOG_NUMBER` (as `Label: catno`),
+`DISCOGS_ARTIST_LIST`, `DISCOGS_IMPORT_SETTINGS`, the `DISCOGS_*_URL` fields (release, master,
+artist, album artist, label, artwork), `LABEL`, `CATALOGNUMBER`, `MEDIA` (as
+`File (WAV,Album,Remastered)`), `INVOLVEDPEOPLE`, `PRODUCER` and `TRACK_NUMBER_TEXT`. The owner's
+own layout, which the mapping must be able to reproduce but doesn't default to: `GENRE` is the
+first genre, " - ", then the styles (`Electronic - Ambient, Dub Techno`; some files repeat the
+styles twice, a YATE template error not to copy), `MOOD` holds the styles and `GROUPING` the
+label. Album titles are Discogs's, with no year added. The survey (51.1) checks this over the
+whole library and the other formats.
+
+#### 51a. Survey and fields
+
+- [ ] **51.1 Survey (read only, the owner's ask).** A `TagCorpus` mode that reads every file in
+      the watched folders and reports, per format: each `DISCOGS_*` and other non-standard key
+      with how many files and albums carry it, sample values, and which keys are constant
+      within an album. Also how many albums have `DISCOGS_RELEASE_ID` on every track, on some,
+      or none, and the conventions around it (the genre, style and grouping layout,
+      `Artist (2)` suffixes, ANVs). Written to a file under `.build/`, never to the
+      library. Its findings become 51.10's "Like my library" preset and an ADR.
+- [ ] **51.2 Custom fields read and written.** The tag reader exposes non-standard keys
+      (Vorbis comments, ID3 `TXXX`, MP4 `----:com.apple.iTunes:<name>`) by name, and `TagEdit`
+      can set or remove a custom key in each format, with tests on generated fixtures and the
+      corpus clones. `DISCOGS_RELEASE_ID` and `DISCOGS_MASTER_ID` are stored in the index
+      (columns on `tracks`), the rest is read from the file when needed.
+- [ ] **51.3 Matched albums.** An album counts as matched when every track has the same
+      `DISCOGS_RELEASE_ID`; mixed or partial ids are their own state, shown as Incomplete.
+
+#### 51b. The local catalog
+
+- [ ] **51.4 Import.** A streaming import of the releases, masters, artists and labels dumps,
+      read in place from the dumps folder in `config.json`, `/Volumes/music/discogs` on the
+      owner's Macs (the NAS folder music-recommender reads too, as `~/mnt/music/discogs`; it is
+      only read, never written or copied), into `discogs.sqlite` in Application Support (a path in
+      `config.json` overrides it; it must be outside every watched folder). The newest complete
+      dump set in the folder is used. Gzip read through the system zlib as a stream and XML
+      with `XMLParser`; nothing is unpacked to disk, since the gzip is read only once per
+      import and the window only ever queries the SQLite catalog. The checksum file is
+      checked first. A new import writes a new file and replaces the old one when complete, so
+      the window never sees a half-built catalog; a failed import is reported and the old
+      catalog stays. Started from the window ("Import Discogs Dump…", choosing the folder),
+      with progress, and it can be stopped.
+- [ ] **51.5 What's kept.** Per release: id, master id and whether it's the main release, title,
+      artists (id, name, ANV, join), labels with catalog numbers, formats with descriptions,
+      country, release date, genres, styles, barcodes, and the credits the mapping can use.
+      Per track: position, title, duration, track artists and credits; headings and sub-tracks
+      kept with their type so the matcher can fold them. Per artist: name and name variations.
+      Per label: name. Folded keys (lowercased, accents and a leading "The" dropped, `&` as "and",
+      `Artist (2)` suffixes and edition words in brackets removed, punctuation and spaces
+      removed; the folding the 2026-11-06 coverage count used) indexed for
+      artist plus title, barcode, and label plus catalog number.
+- [ ] **51.6 Tests.** Small fixtures in the dump's format: a release with every optional element
+      missing, sub-tracks and headings, vinyl and `CD2-4` positions, a truncated file, a bad
+      checksum, a stopped import leaving the old catalog in use.
+
+#### 51c. Matching
+
+- [ ] **51.7 Candidates.** For each album, in order: its release id (refresh); barcode; label
+      plus catalog number; folded album artist plus title against masters and against releases
+      without a master. Titles are also tried with a leading `[catalog number]` or trailing edition
+      words removed (music-recommender's prototype found 390 library titles with the first).
+- [ ] **51.8 Scoring.** Each candidate scored on track count, the tracklist (folded titles
+      compared in order, Discogs positions and headings folded), durations within a tolerance
+      where Discogs has them, then the tie-break the owner decided. The result is the file to
+      track mapping and a tier:
+      - **Exact:** same track count, every title matches in order, durations agree where
+        present, and one release wins the tie-break.
+      - **Likely:** same track count and the tracklist matches above a threshold, or exact but
+        still tied after the tie-break.
+      - **Incomplete:** a different track count, a weak tracklist match, or a partial id.
+      - **No candidate**, and **Matched** (already has a release id; refresh offered).
+      Thresholds are named constants, tuned on the owner's matched albums: run on them with
+      their ids hidden, at least 95% of them should come back Exact or Likely with the same
+      release, and none Exact with a different one.
+- [ ] **51.9 Tests.** Albums from fixtures against a fixture catalog for each tier, the tie-break
+      order, bonus and hidden tracks, multi-disc sets, vinyl positions, sub-tracks, and
+      `Artist (2)` and ANV names.
+
+#### 51d. The mapping and the window
+
+- [ ] **51.10 Field mapping.** A list of Discogs fields, release-level and track-level, as
+      YATE's Release screen shows them. Each has a target tag (a standard field or a custom
+      key), a mode (replace, fill empty only, or off) and, where it needs one, a format:
+      the join between values, ANV or canonical artist names, `(2)` suffixes kept or dropped,
+      full date or year, and a template that builds a tag from several Discogs fields (the
+      owner's `GENRE` is `{genre} - {styles}`). The default is one to one: genres to `GENRE`,
+      styles to `STYLE`, label to `LABEL`, and so on, each Discogs field to its own tag. Any
+      field can be sent to another tag or to several (styles to `MOOD` too, label to
+      `GROUPING`). Saved in the settings (ADR 0003), set once and used for every album. Presets:
+      "One to one" (the default), "Minimal" (release id, label, catalog number, year) and the
+      user's own, saved by name; the owner's layout from 51.1 is saved as "Like my library".
+- [ ] **51.11 The window.** Toolbar: source (Local catalog; API and Both are shown disabled
+      until 52), scope (whole library, the albums selected in the library window, or only
+      unmatched albums), Analyze, Field Mapping…. A tab per tier with its count; each tab is an
+      album list. The selected album shows the chosen release (artist, title, label, catalog
+      number, country, year, format) and, side by side, the album's tracks against the release's
+      with each row marked matched, different or missing. "Other Releases…" lists the
+      candidates with filters by artist, title, country, label and format (YATE's release
+      list), and choosing one rescores the album. For Likely and Incomplete albums, the rows
+      can be dragged to change which file gets which track (YATE's mapping screen). Analysis
+      runs off the main thread with progress and can be stopped.
+- [ ] **51.12 Review and apply.** Each album has a "View Changes" sheet: per file and field, the
+      current value against the value the mapping writes, with a checkbox each (YATE's import
+      screen). "Apply to All in Exact" (and in Likely) opens one confirmation sheet with the
+      counts of albums, files and fields changed, then writes through `TagWriter` as a batch with
+      the existing progress and undo. Rejected albums and chosen releases are remembered in the
+      index, so a second session doesn't redo the review. Nothing is written before the user
+      confirms, and an ADR records that one confirmation for a reviewed match set is the
+      confirmation AGENTS.md's music files boundary asks for.
+- [ ] **51.13 Budgets.** Rows for the import's time and the catalog's size, Analyze over the
+      whole library, one album's candidates, and opening the window, measured on fixtures and
+      on the real catalog on this Mac. On a Mac without a catalog (the 2015 MacBook Pro) the
+      window says so and offers the import; nothing falls back silently.
+- [ ] **Owner check:** import the 2026-11-01 dump, analyze the whole library, review the Exact
+      tab, apply it, and check a few albums' tags in YATE.
+
+### 52. Discogs API
+
+- [ ] **52.1 The token.** An optional Discogs personal access token, the player's first secret:
+      an ADR, the AGENTS.md "no secrets" line rewritten for it, kept only in `config.json` at
+      mode 0600, never copied elsewhere.
+      Without a token the API is used unauthenticated, within its lower rate limit.
+- [ ] **52.2 The client.** Search and release requests, paced by the rate-limit headers, with a
+      size cap, a timeout and typed errors, cached in the index by release id. ADR 0025 gains
+      rows for the app's first outbound internet connection. Tests use recorded JSON, never the
+      real API.
+- [ ] **52.3 Sources.** The window's API and Both: Both searches the catalog first and the API
+      for albums with no candidate or releases newer than the dump. The matcher and the mapping
+      are the same for both.
+- [ ] **52.4 Artwork.** The dumps have no images; with a token, the mapping's Artwork field
+      fetches the release's primary image and writes it as the cover through `TagWriter`.
+- [ ] **Owner check:** the same with the token, on this Mac and the 2015 MacBook Pro, which has
+      no catalog.
+
 ### 10. Web remote
 
 - [ ] **API:** HTTP plus WebSocket JSON on the phase 9 server. It exposes the command registry,
@@ -304,17 +470,9 @@ Not phases yet. Each becomes one when the owner asks.
   ([ADR 0124](decisions/0124-drop-files-and-the-library-folder.md)). Keeping it organized by
   album artist when tags change, Move and Consolidate Library move and rename music files,
   which AGENTS.md doesn't allow, so they need an ADR and the owner's go-ahead first.
-- **Discogs lookup:** superseded by [recommendations.md](recommendations.md), where a separate
-  service on mbp2021 does the lookup from local data dumps. The API version: fetch release data from the Discogs API and
-  offer it as a tag edit the user confirms in the tag editor, written through `TagWriter` (ADR 0020). Start with files that
-  already carry `DISCOGS_RELEASE_ID` (39 of the 159 reference files), which need one
-  `GET /releases/{id}` and no matching. Searching for other files needs a Discogs token, which
-  breaks the no-secrets rule, so the owner decides how a user-supplied token is stored first.
-  Candidates are matched per album by track count and durations, with Discogs positions
-  (`A1`, `CD2-4`), headings and `Artist (2)` names folded. It is the app's first outbound
-  internet connection, so ADR 0025 gains rows for it; responses are paced by the rate-limit
-  headers and cached in the index, and tests use recorded JSON. MusicBrainz with AcoustID is the
-  alternative to weigh: no key, and it matches by fingerprint.
+- **LLM review of incomplete matches:** after phase 51, a model reads an Incomplete album's
+  files and its candidates and proposes a release and a mapping, which lands in Likely for the
+  user to review. Needs the model, its key and what is sent decided first.
 - **Live visualizer (TBD):** a spectrum of what's playing, asked for on 2026-11-05 with phase 45
   and put off. The decoder thread would copy what it decodes into a second ring buffer
   (`Sources/Primitives/RingBuffer`) before the device's ring, so the IO proc and the
