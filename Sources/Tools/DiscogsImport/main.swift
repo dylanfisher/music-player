@@ -36,7 +36,17 @@ let settings: ConfigStore<AppSettings>
 let shares: [MountedShare]
 do {
     paths = try AppPaths.standard()
-    settings = try ConfigStore.strict(AppSettings(), fileURL: paths.configFile) { _, _, _ in nil }
+    // As the app reads it: unknown keys are skipped with a warning, anything else stops.
+    settings = ConfigStore(
+        AppSettings(), fileURL: paths.configFile, check: { _, _, _ in nil }, creating: false)
+    guard !settings.blocked else {
+        fail(
+            "\(paths.configFile.path): \(settings.problems.map { "\($0)" }.joined(separator: "; "))"
+        )
+    }
+    for problem in settings.problems {
+        FileHandle.standardError.write(Data("warning: \(paths.configFile.path): \(problem)\n".utf8))
+    }
     shares = try SystemShareMounts().mountedShares()
 } catch {
     fail("\(error)")
