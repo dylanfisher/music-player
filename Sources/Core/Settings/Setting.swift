@@ -85,6 +85,16 @@ extension Setting where Value == Double {
     }
 }
 
+extension Setting where Value == String? {
+    /// The absolute path of a file the app writes, or null.
+    init(_ key: String, title: String, filePath defaultValue: String?, _ summary: String) {
+        self.init(key, title, defaultValue, summary, Value.kind) { path in
+            guard let path, !(path.hasPrefix("/") && !path.hasSuffix("/")) else { return nil }
+            return .invalid("path \"\(path)\" isn't the absolute path of a file")
+        }
+    }
+}
+
 extension Setting where Value == [ToolbarItem] {
     /// A toolbar's items, left to right. Only the spaces may appear more than once, since
     /// `NSToolbar` raises on any other item inserted twice.

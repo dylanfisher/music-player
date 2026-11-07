@@ -53,6 +53,12 @@ public struct AppSettings: SettingsSchema {
     public let syncFolder = Setting<SyncFolder?>(
         "sync.folder", title: "Sync Folder", default: nil,
         "A folder outside your music where your Macs share plays and ratings.")
+    public let discogsDumpsFolder = Setting<DumpsFolder?>(
+        "discogs.dumpsFolder", title: "Discogs Dumps Folder", default: nil,
+        "The folder of Discogs's monthly dumps, read to build the catalog.")
+    public let discogsCatalogPath = Setting<String?>(
+        "discogs.catalogPath", title: "Discogs Catalog", filePath: nil,
+        "The catalog's file, outside your music; none keeps it with the library.")
     public let groupByAlbumArtist = Setting(
         "library.groupByAlbumArtist", title: "Group by Album Artist", default: true,
         "List album artists, not every track artist, in the Artist pane.")
@@ -138,15 +144,29 @@ public struct AppSettings: SettingsSchema {
         "What the status bar shows, around its centered middle.")
 
     public func conflicts(_ values: [String: any SettingValue]) -> [SettingConflict] {
-        guard let sync = values[syncFolder.key] as? SyncFolder,
-            let folders = values[watchedFolders.key] as? [WatchedFolder],
+        let folders = values[watchedFolders.key] as? [WatchedFolder] ?? []
+        var conflicts: [SettingConflict] = []
+        if let sync = values[syncFolder.key] as? SyncFolder,
             let watched = folders.first(where: sync.isInside)
-        else { return [] }
-        return [
-            SettingConflict(
-                key: syncFolder.key,
-                reason: "it's inside the watched folder \"\(watched.path)\"; the sync folder must"
-                    + " be outside every watched folder, since the app writes its log there")
-        ]
+        {
+            conflicts.append(
+                SettingConflict(
+                    key: syncFolder.key,
+                    reason: "it's inside the watched folder \"\(watched.path)\"; the sync folder"
+                        + " must be outside every watched folder, since the app writes its log there"
+                ))
+        }
+        if let catalog = values[discogsCatalogPath.key] as? String,
+            let watched = folders.first(where: {
+                $0.share == nil && isPath(standardized(catalog), inOrAt: standardized($0.path))
+            })
+        {
+            conflicts.append(
+                SettingConflict(
+                    key: discogsCatalogPath.key,
+                    reason: "it's inside the watched folder \"\(watched.path)\"; the catalog must"
+                        + " be outside every watched folder, since the app writes it"))
+        }
+        return conflicts
     }
 }

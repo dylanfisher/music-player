@@ -37,6 +37,14 @@ public struct AppPaths: Sendable {
     }
 
     public var stateFile: URL { dataDirectory.appendingPathComponent("state.json") }
+    /// The Discogs catalog the dumps are imported into, unless `discogs.catalogPath` names
+    /// another file (ADR 0130).
+    var discogsCatalogFile: URL { dataDirectory.appendingPathComponent("discogs.sqlite") }
+
+    /// The Discogs catalog's file: `catalogPath`, the setting's value, or the default.
+    func discogsCatalogFile(_ catalogPath: String?) -> URL {
+        catalogPath.map { URL(fileURLWithPath: $0, isDirectory: false) } ?? discogsCatalogFile
+    }
     /// The art column's thumbnails.
     public var thumbnailDirectory: URL { cacheDirectory.appendingPathComponent("Thumbnails") }
     /// The Spectrum window's spectrograms (phase 45).
