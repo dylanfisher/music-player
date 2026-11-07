@@ -378,7 +378,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         statusLabel.addGestureRecognizer(
             NSClickGestureRecognizer(target: self, action: #selector(showNextTotals)))
         statusLabel.alignment = .center
-        for view in [scanIndicator, scanLabel, scanPauseButton, analysisLabel, analysisPauseButton]
+        for view in [scanPauseButton, analysisPauseButton, scanIndicator, scanLabel, analysisLabel]
         {
             statusLeading.addArrangedSubview(view)
         }

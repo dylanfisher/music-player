@@ -278,6 +278,16 @@ import Testing
     #expect(browser.analysisPauseButton.isHidden && health.analysisBar.isHidden)
     #expect(
         health.analysisButton.title == "Analyze Library Again…" && !health.analysisButton.isHidden)
+    #expect(health.analysisLabel.stringValue == HealthPanel.analyzeDescription)
+    #expect(!health.analysisLabel.isHidden)
+
+    // The pause buttons sit left of the bar, in Library Health and in the status bar.
+    let line = try #require(health.analysisButton.superview as? NSStackView)
+    #expect(line.arrangedSubviews.prefix(3)
+            == [health.analysisButton, health.analysisBar, health.analysisLabel])
+    let status = try #require(browser.analysisPauseButton.superview as? NSStackView)
+    let order = status.arrangedSubviews
+    #expect(order.prefix(2) == [browser.scanPauseButton, browser.analysisPauseButton])
 }
 
 @MainActor @Test func leftAndRightMoveBetweenThePanesAndGoToTheRegistryElsewhere() throws {

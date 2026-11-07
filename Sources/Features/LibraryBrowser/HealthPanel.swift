@@ -20,6 +20,9 @@ final class HealthPanel: NSViewController, SourcePanel {
     /// The least height the panel opens at or is dragged to: the header, the analysis line and
     /// a row of tiles (ADR 0117). The columns, whose height it shares, can still be shut.
     static let leastHeightPoints = 110
+    /// What the analysis line says beside its button while no run is shown (ADR 0115, 0116).
+    static let analyzeDescription =
+        "Reads each file to measure its peaks, clipping, dynamic range, bit depth and frequency cutoff, for the checks below."
 
     /// A tile clicked, and Check Again.
     var select: (HealthCheck) -> Void = { _ in }
@@ -110,7 +113,7 @@ final class HealthPanel: NSViewController, SourcePanel {
         analysisButton.action = #selector(analysisClicked)
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let line = NSStackView(views: [analysisBar, analysisLabel, analysisButton, spacer])
+        let line = NSStackView(views: [analysisButton, analysisBar, analysisLabel, spacer])
         line.alignment = .centerY
         line.spacing = Self.spacingPoints
         line.detachesHiddenViews = true
@@ -124,10 +127,11 @@ final class HealthPanel: NSViewController, SourcePanel {
         let running = progress?.stage.isRunning == true
         analysisBar.isHidden = progress == nil
         analysisBar.doubleValue = progress?.fraction ?? 0
-        analysisLabel.isHidden = progress == nil
         analysisLabel.stringValue =
-            ([progress?.text] + [running ? progress?.file : nil]).compactMap { $0 }
-            .joined(separator: " · ")
+            progress == nil
+            ? Self.analyzeDescription
+            : ([progress?.text] + [running ? progress?.file : nil]).compactMap { $0 }
+                .joined(separator: " · ")
         analysisCommand = Self.analysisCommand(for: progress?.stage)
         analysisButton.title = running ? AppCommands.title(of: analysisCommand) : analyzeTitle
     }
