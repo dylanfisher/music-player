@@ -137,7 +137,8 @@ struct ID3Tag {
             } else {
                 blocks.append(
                     TagBlock(
-                        "\(prefix)/\(frame.id)", range, .field, fields: id3Fields(of: frame)))
+                        "\(prefix)/\(frame.id)", range, .field, group: frame.group(version: version)
+                    ))
             }
             cursor = range.upperBound
         }
@@ -147,10 +148,6 @@ struct ID3Tag {
         return blocks
     }
 
-    /// The fields an edit replaces this frame for.
-    private func id3Fields(of frame: ID3Frame) -> Set<TagEditField> {
-        Set(frame.group(version: version)?.fields ?? [])
-    }
 }
 
 /// One frame: its 10-byte header and its body, as read or as made.
@@ -182,14 +179,16 @@ struct ID3Frame: Equatable {
     }
 
     /// The group whose edit replaces this frame, as the reader reads it: a frame of the group's
-    /// fields, a `TXXX` by its description, and of `COMM` and `USLT` only the one without a
-    /// description, since players keep their own data in described ones.
+    /// fields, a `TXXX` by its description, a custom key's when no field has it, and of `COMM`
+    /// and `USLT` only the one without a description, since players keep their own data in
+    /// described ones.
     func group(version: UInt8) -> TagGroup? {
         if id == id3UserTextFrameID {
             guard let description = userTextDescription(version: version)?.uppercased() else {
                 return nil
             }
             return TagGroup.of(matching: { id3UserTextDescriptions(for: $0).contains(description) })
+                ?? TagGroup.custom(named: description)
         }
         guard let group = TagGroup.of(matching: { id3FrameIDs(for: $0).contains(id) }) else {
             return nil

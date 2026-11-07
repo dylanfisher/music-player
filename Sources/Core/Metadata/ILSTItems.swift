@@ -95,6 +95,9 @@ private let itemKinds: [String: ItemKind] = Dictionary(
 /// The `mean` of the iTunes freeform items.
 package let iTunesMean = "com.apple.iTunes"
 
+/// The freeform item iTunes keeps AAC's gapless length in, which isn't a custom key.
+package let iTunesGaplessName = "iTunSMPB"
+
 /// iTunes freeform item names, compared uppercased, and the fields they set.
 private let freeformFields: [String: TagField] = Dictionary(
     uniqueKeysWithValues: mp4WrittenKeys.compactMap { field, key in
@@ -242,7 +245,7 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
         items.tags.set(.genre, id3v1Genres[index], at: offset, warnings: &reader.warnings)
     case .freeform:
         guard mean == iTunesMean, let name else { return }
-        if name == "iTunSMPB" {
+        if name == iTunesGaplessName {
             let text = try text(value, type, at: offset, &reader.warnings)
             items.gaplessLength = try gaplessLength(text, at: offset)
         } else if let field = freeformFields[name.uppercased()] {

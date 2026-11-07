@@ -137,7 +137,9 @@ struct FLACFile {
         let (vendor, comments) = try vorbisComments(body, base: 0)
         var kept = comments.map(\.raw)
         for group in groups {
-            let keys = Set(group.readerFields.flatMap { vorbisKeys(for: $0) })
+            let keys =
+                group.customKey.map { [$0] }
+                ?? Set(group.readerFields.flatMap { vorbisKeys(for: $0) })
             let isReplaced = { (raw: [UInt8]) in keys.contains(vorbisKey(raw)) }
             let first = kept.firstIndex(where: isReplaced)
             kept.removeAll(where: isReplaced)
@@ -152,6 +154,7 @@ struct FLACFile {
     private func vorbisValues(_ group: TagGroup, _ tags: TrackTags) -> [(
         key: String, value: String
     )] {
+        if let name = group.customKey { return group.text(in: tags).map { [(name, $0)] } ?? [] }
         let keys = group.readerFields.map { field in
             guard let key = vorbisWrittenKey(for: field) else {
                 preconditionFailure("\(field) has no Vorbis key")
@@ -191,11 +194,8 @@ struct FLACFile {
                 blocks.append(TagBlock("\(name)/count", count..<count + 4, .header))
                 for comment in comments {
                     let key = vorbisKey(comment.raw)
-                    let group = TagGroup.of(matching: { vorbisKeys(for: $0).contains(key) })
                     blocks.append(
-                        TagBlock(
-                            "\(name)/\(key)", comment.range, .field,
-                            fields: Set(group?.fields ?? [])))
+                        TagBlock("\(name)/\(key)", comment.range, .field, group: vorbisGroup(key)))
                 }
             case .streamInfo, nil:
                 blocks.append(TagBlock(name, body, .other))
@@ -232,4 +232,10 @@ func vorbisComments(_ body: [UInt8], base: Int) throws(ParseFailure)
 /// A comment's key, uppercased as the reader compares it.
 func vorbisKey(_ raw: [UInt8]) -> String {
     latin1(raw.prefix { $0 != UInt8(ascii: "=") }).uppercased()
+}
+
+/// The group whose edit replaces a comment of `key`, uppercased: a field's, else the custom
+/// key's.
+func vorbisGroup(_ key: String) -> TagGroup? {
+    TagGroup.of(matching: { vorbisKeys(for: $0).contains(key) }) ?? TagGroup.custom(named: key)
 }

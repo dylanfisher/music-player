@@ -40,12 +40,16 @@ package struct TagBlock: Equatable, Sendable {
     package var kind: Kind
     /// The fields whose edit replaces this block. Empty for blocks no edit replaces.
     package var fields: Set<TagEditField>
+    /// The custom key, uppercased, whose edit replaces this block; nil for any other block.
+    var customKey: String?
 
-    init(_ path: String, _ range: Range<Int>, _ kind: Kind, fields: Set<TagEditField> = []) {
+    /// `group` is the one whose edit replaces the block.
+    init(_ path: String, _ range: Range<Int>, _ kind: Kind, group: TagGroup? = nil) {
         self.path = path
         self.range = range
         self.kind = kind
-        self.fields = fields
+        fields = Set(group?.fields ?? [])
+        customKey = group?.customKey
     }
 }
 

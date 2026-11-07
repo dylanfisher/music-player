@@ -187,14 +187,20 @@ struct MP4File {
             switch writtenKey(field) {
             case .item(let type):
                 return [MP4Box(type: type, body: dataAtom(utf8TextType, Array(text.utf8)))]
-            case .freeform(let name):
-                let body =
-                    fullAtom(MP4Type.mean, Array(iTunesMean.utf8))
-                    + fullAtom(MP4Type.name, Array(name.utf8))
-                    + dataAtom(utf8TextType, Array(text.utf8))
-                return [MP4Box(type: MP4ItemType.freeform, body: body)]
+            case .freeform(let name): return [freeformItem(name, text)]
             }
+        case .custom(let name):
+            return group.text(in: tags).map { [freeformItem(name, $0)] } ?? []
         }
+    }
+
+    /// An iTunes freeform item, `----:com.apple.iTunes:<name>`, holding `text`.
+    private func freeformItem(_ name: String, _ text: String) -> MP4Box {
+        let body =
+            fullAtom(MP4Type.mean, Array(iTunesMean.utf8))
+            + fullAtom(MP4Type.name, Array(name.utf8))
+            + dataAtom(utf8TextType, Array(text.utf8))
+        return MP4Box(type: MP4ItemType.freeform, body: body)
     }
 
     /// A 16-bit integer item, as iTunes writes `tmpo`, `©mvi` and `©mvc`.
@@ -283,7 +289,7 @@ struct MP4File {
                 return [
                     TagBlock(
                         String(path.dropLast(box.type.count)) + mp4ItemKey(box), range, .field,
-                        fields: Set(box.group?.fields ?? []))
+                        group: box.group)
                 ]
             }
             return [TagBlock(path, range, .other)]

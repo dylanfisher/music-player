@@ -36,9 +36,12 @@ package func untouchedBlockDifferences(original: URL, edited: URL, edit: TagEdit
 
 private func kept(_ layout: TagLayout, _ edit: TagEdit) -> [TagBlock] {
     let edited = Set(edit.values.keys)
+    let editedCustom = Set(edit.custom.keys.map { $0.uppercased() })
     return layout.blocks.filter { block in
         switch block.kind {
-        case .field: block.fields.isDisjoint(with: edited)
+        case .field:
+            block.fields.isDisjoint(with: edited)
+                && !(block.customKey.map(editedCustom.contains) ?? false)
         case .art: edit.art == nil
         case .other: true
         case .header, .padding, .chunkOffsets, .audio: false

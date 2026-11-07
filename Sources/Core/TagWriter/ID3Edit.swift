@@ -42,9 +42,15 @@ extension ID3Tag {
         let text = group.isPair ? numberPairText(group.numbers(in: tags)) : group.text(in: tags)
         guard let text else { return [] }
         if group == .text(.date), version == 3 { return try v23DateFrames(text) }
-        let field = group.readerFields[0]
-        guard var key = id3WrittenKey(for: field, version: version) else {
-            preconditionFailure("\(field) has no ID3 frame")
+        var key: ID3Key
+        if let name = group.customKey {
+            key = .userText(name)
+        } else {
+            let field = group.readerFields[0]
+            guard let written = id3WrittenKey(for: field, version: version) else {
+                preconditionFailure("\(field) has no ID3 frame")
+            }
+            key = written
         }
         if group == .text(.originalDate), version == 3, text.count == 4,
             text.allSatisfy({ $0.isASCII && $0.isNumber })

@@ -199,7 +199,7 @@ extension MP4Box {
     }
 
     /// The group whose edit replaces this `ilst` item, as the reader reads it: by its type, or
-    /// an iTunes freeform item by its `name`.
+    /// an iTunes freeform item by its `name`, a custom key's when no field has it.
     var group: TagGroup? {
         guard type == MP4ItemType.freeform else {
             return TagGroup.of(matching: { mp4ItemTypes(for: $0).contains(type) })
@@ -209,6 +209,7 @@ extension MP4Box {
             let name = parts.first(where: { $0.type == MP4Type.name })?.text.uppercased()
         else { return nil }
         return TagGroup.of(matching: { mp4FreeformNames(for: $0).contains(name) })
+            ?? TagGroup.custom(named: name)
     }
 }
 

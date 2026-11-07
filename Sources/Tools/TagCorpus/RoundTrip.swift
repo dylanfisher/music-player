@@ -103,6 +103,12 @@ struct RoundTrip {
             result.append(
                 ("added \(field.rawValue)", TagEdit(values: [field: "Added by the round trip"])))
         }
+        // A custom key: replaced where the file has one, as a Discogs refresh does, else added.
+        let custom =
+            tags.custom.keys.sorted().first {
+                (try? TagEdit(custom: [$0: "Round trip"]).applied(to: tags)) != nil
+            } ?? DiscogsKey.releaseID
+        result.append(("custom key \(custom)", TagEdit(custom: [custom: "Round trip"])))
         // Larger art: random pixels, so its size follows its area.
         let side = Int((Double(artBytes) * 1.5 / 2).squareRoot()) + 64
         result += [

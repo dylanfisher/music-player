@@ -52,14 +52,21 @@ public enum ArtChange: Equatable, Sendable {
 public struct TagEdit: Equatable, Sendable {
     /// The new text of each changed field. Empty text clears the field.
     public var values: [TagEditField: String]
+    /// The new text of each changed custom key, by name, compared uppercased (ADR 0129). Empty
+    /// text removes the key.
+    public var custom: [String: String]
     public var art: ArtChange?
 
-    public init(values: [TagEditField: String] = [:], art: ArtChange? = nil) {
+    public init(
+        values: [TagEditField: String] = [:], custom: [String: String] = [:],
+        art: ArtChange? = nil
+    ) {
         self.values = values
+        self.custom = custom
         self.art = art
     }
 
-    public var isEmpty: Bool { values.isEmpty && art == nil }
+    public var isEmpty: Bool { values.isEmpty && custom.isEmpty && art == nil }
 
     /// `tags` with this edit's values. Throws for a value no format can hold as written, so the
     /// editor can show the problem before anything is written.
@@ -83,6 +90,16 @@ public struct TagEdit: Equatable, Sendable {
                 }
             }
         }
+        for (name, text) in custom.sorted(by: { $0.key < $1.key }) {
+            if let problem = customKeyProblem(name) {
+                throw TagValueError(field: nil, text: text, detail: problem, customKey: name)
+            }
+            guard !text.unicodeScalars.contains(where: { $0.value == 0 }) else {
+                throw TagValueError(
+                    field: nil, text: text, detail: "can't hold a NUL character", customKey: name)
+            }
+            result.custom[name.uppercased()] = text.nilIfEmpty
+        }
         if case .replace(_, let mimeType) = art, !artMIMETypes.contains(mimeType) {
             throw TagValueError(
                 field: nil, text: mimeType, detail: "art must be a JPEG or PNG image")
@@ -96,14 +113,33 @@ let artMIMETypes: Set<String> = [jpegMIMEType, pngMIMEType]
 
 /// A value the edit can't write.
 public struct TagValueError: Error, Equatable, CustomStringConvertible {
-    /// Nil for the art.
+    /// Nil for the art and a custom key.
     public var field: TagEditField?
     public var text: String
     public var detail: String
+    /// The custom key's name, as the edit gave it; nil for a field and the art.
+    var customKey: String? = nil
 
     public var description: String {
-        "\(field?.rawValue ?? "art") \"\(text)\" \(detail)"
+        "\(customKey ?? field?.rawValue ?? "art") \"\(text)\" \(detail)"
     }
+}
+
+/// Why no format can hold a custom key named `name`, or nil: Vorbis comment names are printable
+/// ASCII without "=", and a name the reader maps to a field would be read back as that field.
+private func customKeyProblem(_ name: String) -> String? {
+    guard !name.isEmpty,
+        name.unicodeScalars.allSatisfy({ (0x20...0x7D).contains($0.value) && $0 != "=" })
+    else { return "isn't a custom key's name: printable ASCII without \"=\"" }
+    let upper = name.uppercased()
+    let fieldNames = TagField.allCases.flatMap { field in
+        vorbisKeys(for: field).union(id3UserTextDescriptions(for: field))
+            .union(mp4FreeformNames(for: field))
+    }
+    guard !fieldNames.contains(upper), upper != iTunesGaplessName.uppercased() else {
+        return "is a field's name, not a custom key's"
+    }
+    return nil
 }
 
 /// Empty text clears; otherwise a whole number from 1 to `maximumNumber`.
