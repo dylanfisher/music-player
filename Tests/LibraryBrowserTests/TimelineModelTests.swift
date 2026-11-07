@@ -357,6 +357,23 @@ private func waitUntil(_ condition: () -> Bool) async throws {
     #expect(browser.timelineModel.entries.first?.trackID == rows[1].id)
 }
 
+@MainActor @Test func theTimelineShowsOnlyOnceItsPlaysAreRead() async throws {
+    let (browser, index, rows) = try timelineBrowser()
+    try index.recordPlay(rows[0].path, at: 1)
+    await browser.load(BrowserState(source: nil))
+    var rowsWhenShown: [Int] = []
+    let observation = browser.timeline.view.observe(\.isHidden) { view, _ in
+        MainActor.assumeIsolated {
+            if !view.isHidden { rowsWhenShown.append(browser.timelineModel.entries.count) }
+        }
+    }
+    defer { observation.invalidate() }
+    browser.show(.timeline)
+    try await waitUntil { !rowsWhenShown.isEmpty }
+    // Never empty on screen before its rows, which would flash.
+    #expect(rowsWhenShown == [1])
+}
+
 @MainActor @Test func aTimelineSelectionActsOnEachTrackOnce() async throws {
     let (browser, index, rows) = try timelineBrowser()
     // Newest first: b, a, a.

@@ -291,6 +291,23 @@ import Testing
     #expect(order.prefix(2) == [browser.scanPauseButton, browser.analysisPauseButton])
 }
 
+@MainActor @Test func loadingGivesTheKeysToTheTrackTable() async throws {
+    let databaseURL = try browserLibrary.get().databaseURL
+    let browser = LibraryBrowser(
+        reader: try LibraryReader(databaseURL: databaseURL),
+        index: try LibraryIndex(at: databaseURL), layout: AppState().trackTable.defaultValue,
+        browserHeight: 150, groupByAlbumArtist: false,
+        thumbnails: nil)
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 600), styleMask: [.titled],
+        backing: .buffered, defer: false)
+    window.contentView = NSStackView(views: [browser.sidebar.view, browser.content.view])
+    // Where a window opening puts them: its first key view.
+    #expect(window.makeFirstResponder(browser.focusAreas[0]))
+    await browser.load(BrowserState(source: nil))
+    #expect(window.firstResponder === browser.focusAreas.last)
+}
+
 @MainActor @Test func leftAndRightMoveBetweenThePanesAndGoToTheRegistryElsewhere() throws {
     let databaseURL = try browserLibrary.get().databaseURL
     let browser = LibraryBrowser(

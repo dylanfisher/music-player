@@ -127,6 +127,10 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     let timeline: TimelineController
     /// The timeline's load since it last showed, which Show Current Track waits for.
     private var timelineLoad: Task<Void, Never>?
+    /// The timeline's span while it is the source, shown or still loading; nil otherwise.
+    private var timelineSource: PlaySpan??
+    /// Counts the timeline's loads, so only the latest swaps it in.
+    private var timelineLoads = 0
     /// What is changing the track table's selection now, for Undo Selection's steps; nil
     /// while a step is being shown, which records nothing.
     private var recordsSelection = true
@@ -507,6 +511,7 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
             report("couldn't read or forget what a stats rebuild discarded: \(error)")
         }
         showSource()
+        focusTracks()
         await countIssues()
     }
 
@@ -867,23 +872,34 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
     public var canSort: Bool { !showsTimeline }
 
     /// Swaps the timeline in for the panes and the track table, or back, as the source
-    /// changes. The timeline loads afresh each time it shows.
+    /// changes. The timeline loads afresh each time it shows, and is swapped in once its
+    /// newest page is read, so it never shows empty before its rows.
     private func showTimelineIfItIsTheSource() {
-        let shows = showsTimeline
         let span: PlaySpan? = if case .plays(let span) = model.filter.source { span } else { nil }
-        guard timeline.view.isHidden == shows || (shows && timelineModel.span != span) else {
+        let source: PlaySpan?? = showsTimeline ? .some(span) : nil
+        guard source != timelineSource else { return }
+        timelineSource = source
+        searchField.isEnabled = source == nil
+        timelineLoads += 1
+        guard source != nil else {
+            swapTimeline(in: false)
+            timelineModel.clear()
             return
         }
+        let mine = timelineLoads
+        timelineModel.span = span
+        timelineLoad = Task {
+            await timelineModel.load()
+            if mine == timelineLoads { swapTimeline(in: true) }
+        }
+    }
+
+    /// Shows the timeline, or the panes and the track table, keeping the keys in the list.
+    private func swapTimeline(in shows: Bool) {
+        guard timeline.view.isHidden == shows else { return }
         let hadKeys = focusedList != nil
         split.isHidden = shows
         timeline.view.isHidden = !shows
-        searchField.isEnabled = !shows
-        if shows {
-            timelineModel.span = span
-            timelineLoad = Task { await timelineModel.load() }
-        } else {
-            timelineModel.clear()
-        }
         if hadKeys { focusTracks() }
     }
 
