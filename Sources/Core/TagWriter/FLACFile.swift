@@ -154,7 +154,7 @@ struct FLACFile {
     private func vorbisValues(_ group: TagGroup, _ tags: TrackTags) -> [(
         key: String, value: String
     )] {
-        if let name = group.customKey { return group.text(in: tags).map { [(name, $0)] } ?? [] }
+        if let name = group.customName { return group.text(in: tags).map { [(name, $0)] } ?? [] }
         let keys = group.readerFields.map { field in
             guard let key = vorbisWrittenKey(for: field) else {
                 preconditionFailure("\(field) has no Vorbis key")

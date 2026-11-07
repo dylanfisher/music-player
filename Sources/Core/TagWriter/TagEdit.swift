@@ -52,8 +52,9 @@ public enum ArtChange: Equatable, Sendable {
 public struct TagEdit: Equatable, Sendable {
     /// The new text of each changed field. Empty text clears the field.
     public var values: [TagEditField: String]
-    /// The new text of each changed custom key, by name, compared uppercased (ADR 0129). Empty
-    /// text removes the key.
+    /// The new text of each changed custom key, by name (ADR 0129). Names are compared
+    /// uppercased, and a key is written as spelled here, replacing every key of its name in any
+    /// case. Empty text removes the key.
     public var custom: [String: String]
     public var art: ArtChange?
 
@@ -89,6 +90,12 @@ public struct TagEdit: Equatable, Sendable {
                     throw TagValueError(field: field, text: text, detail: "isn't 1 or 0")
                 }
             }
+        }
+        let names = Dictionary(grouping: custom.keys) { $0.uppercased() }
+        if let same = names.values.first(where: { $0.count > 1 }) {
+            throw TagValueError(
+                field: nil, text: same.sorted().joined(separator: ", "),
+                detail: "name one key in different cases", customKey: same.sorted()[0])
         }
         for (name, text) in custom.sorted(by: { $0.key < $1.key }) {
             if let problem = customKeyProblem(name) {

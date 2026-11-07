@@ -16,7 +16,9 @@ extension ID3Tag {
     ) throws(ParseFailure) {
         if let art { try applyArt(art, artOffset: artOffset) }
         for group in groups {
-            var replaced = { [version] (frame: ID3Frame) in frame.group(version: version) == group }
+            var replaced = { [version] (frame: ID3Frame) in
+                frame.group(version: version)?.isReplaced(by: group) == true
+            }
             var writtenID: String?
             // iTunes's grouping frame wins over `TIT1` and leaves `TIT1` to the work, so an edit
             // of a tag that has one stays in it.
@@ -43,7 +45,7 @@ extension ID3Tag {
         guard let text else { return [] }
         if group == .text(.date), version == 3 { return try v23DateFrames(text) }
         var key: ID3Key
-        if let name = group.customKey {
+        if let name = group.customName {
             key = .userText(name)
         } else {
             let field = group.readerFields[0]

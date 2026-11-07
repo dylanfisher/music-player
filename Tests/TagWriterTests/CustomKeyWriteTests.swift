@@ -32,7 +32,7 @@ func aCustomKeyIsSetReplacedRemovedAndUndone(_ sample: Sample) throws {
 
     let set = TagEdit(
         values: [.title: "Titled"],
-        custom: ["DISCOGS_RELEASE_ID": "1234567", "discogs_master_id": "m744074"])
+        custom: ["DISCOGS_RELEASE_ID": "1234567", "DISCOGS_MASTER_ID": "m744074"])
     expectChanged(writer.write(set, to: [url.path]), [url])
     let written = try tags(url)
     #expect(written == (try set.applied(to: originalTags)))
@@ -48,7 +48,7 @@ func aCustomKeyIsSetReplacedRemovedAndUndone(_ sample: Sample) throws {
     }
     #expect(try untouchedBlockDifferences(original: pristine, edited: url, edit: set) == [])
 
-    let replaced = TagEdit(custom: ["Discogs_Release_ID": "7654321"])
+    let replaced = TagEdit(custom: ["DISCOGS_RELEASE_ID": "7654321"])
     expectChanged(writer.write(replaced, to: [url.path]), [url])
     #expect(try tags(url).custom["DISCOGS_RELEASE_ID"] == "7654321")
     #expect(try tags(url).custom["DISCOGS_MASTER_ID"] == "m744074")
@@ -78,6 +78,22 @@ func aCustomKeyIsSetReplacedRemovedAndUndone(_ sample: Sample) throws {
     #expect(report.failures.isEmpty)
 }
 
+@Test(arguments: [Sample.flac, .mp4, .mp3v24])
+func aCustomKeyIsWrittenAsSpelledAndReplacesItsNameInAnyCase(_ sample: Sample) throws {
+    let url = try sample.copy()
+    let writer = scratchWriter()
+    let name = "Discogs Release Notes"
+    expectChanged(writer.write(TagEdit(custom: [name: "First"]), to: [url.path]), [url])
+    let spelled = try Data(contentsOf: url)
+    #expect(spelled.range(of: Data(name.utf8)) != nil, "written as spelled")
+    expectChanged(
+        writer.write(TagEdit(custom: ["DISCOGS RELEASE NOTES": "Second"]), to: [url.path]), [url])
+    #expect(try tags(url).custom["DISCOGS RELEASE NOTES"] == "Second")
+    let layout = try readTagLayout(at: url)
+    #expect(layout.blocks.filter { $0.customKey == "DISCOGS RELEASE NOTES" }.count == 1)
+    #expect(try Data(contentsOf: url).range(of: Data(name.utf8)) == nil, "the old spelling went")
+}
+
 @Test func aCustomKeyMustBeNamedSoEveryFormatHoldsItAndNoFieldReadsIt() {
     for name in ["", "A=B", "Perälä", "TAB\tKEY"] {
         #expect(throws: TagValueError.self, "\(name)") {
@@ -94,6 +110,9 @@ func aCustomKeyIsSetReplacedRemovedAndUndone(_ sample: Sample) throws {
     }
     let error = TagValueError(field: nil, text: "x", detail: "is bad", customKey: "KEY")
     #expect(error.description == "KEY \"x\" is bad")
+    #expect(throws: TagValueError.self) {
+        try TagEdit(custom: ["KEY": "x", "key": "y"]).applied(to: TrackTags())
+    }
     #expect(TagEdit(custom: ["A": ""]).isEmpty == false)
 }
 

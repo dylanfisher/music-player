@@ -56,7 +56,7 @@ struct MP4File {
         var ilst = moov[path]
         if let art { applyArt(art, to: &ilst) }
         for group in groups {
-            let isReplaced = { (item: MP4Box) in item.group == group }
+            let isReplaced = { (item: MP4Box) in item.group?.isReplaced(by: group) == true }
             let new = items(group, tags)
             let first = ilst.children!.firstIndex(where: isReplaced)
             ilst.children!.removeAll(where: isReplaced)

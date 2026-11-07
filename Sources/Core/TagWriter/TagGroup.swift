@@ -7,8 +7,8 @@ enum TagGroup: Hashable, CaseIterable {
     case text(TagField)
     case track, disc, movement
     case compilation, bpm
-    /// A key no field maps, by its name uppercased (ADR 0129): a Vorbis comment, a `TXXX` or an
-    /// iTunes freeform item of that name.
+    /// A key no field maps, by its name as the edit or the file spells it (ADR 0129): a Vorbis
+    /// comment, a `TXXX` or an iTunes freeform item of that name, compared uppercased.
     case custom(String)
 
     /// The fields' groups; a custom key's isn't among them.
@@ -28,14 +28,21 @@ enum TagGroup: Hashable, CaseIterable {
         }
     }
 
-    /// The custom key's name, uppercased; nil for a field's group.
-    var customKey: String? {
+    /// The custom key's name, uppercased, as keys are compared; nil for a field's group.
+    var customKey: String? { customName?.uppercased() }
+
+    /// The custom key's name as spelled, which a writer writes; nil for a field's group.
+    var customName: String? {
         if case .custom(let name) = self { name } else { nil }
     }
 
     /// The custom key `name`'s group; nil for no name, which no format can hold.
-    static func custom(named name: String) -> TagGroup? {
-        name.isEmpty ? nil : .custom(name.uppercased())
+    static func custom(named name: String) -> TagGroup? { name.isEmpty ? nil : .custom(name) }
+
+    /// Whether an edit of `group` replaces what this group holds: the same field, or a custom
+    /// key of the same name in any case.
+    func isReplaced(by group: TagGroup) -> Bool {
+        customKey.map { $0 == group.customKey } ?? (self == group)
     }
 
     /// The reader's fields, whose keys in each format are the ones this group replaces. A pair's
@@ -58,7 +65,7 @@ enum TagGroup: Hashable, CaseIterable {
         case .text(let field): field.textProperty.flatMap { tags[keyPath: $0] }
         case .compilation: tags.compilation ? "1" : nil
         case .bpm: tags.bpm.map(String.init)
-        case .custom(let name): tags.custom[name]
+        case .custom: tags.custom[customKey!]
         case .track, .disc, .movement:
             preconditionFailure("\(self) holds a pair; use numbers(in:)")
         }
@@ -91,7 +98,7 @@ enum TagGroup: Hashable, CaseIterable {
         let fields = allCases.filter { group in
             group.fields.contains { edit.values[$0] != nil }
         }
-        let custom = Set(edit.custom.keys.compactMap(custom(named:))).sorted {
+        let custom = edit.custom.keys.compactMap(custom(named:)).sorted {
             $0.customKey! < $1.customKey!
         }
         return (fields + custom).filter { !$0.same(old, new) }
