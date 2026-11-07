@@ -41,7 +41,7 @@ do {
             : try AppPaths.standard().discogsCatalogFile(nil)
         print(
             try await discogsTuning(
-                survey: surveyFolder().appendingPathComponent("files.jsonl", isDirectory: false),
+                survey: surveyFolder().appendingPathComponent(surveyLinesName, isDirectory: false),
                 catalog: catalog, output: tuningFolder()))
         exit(0)
     }

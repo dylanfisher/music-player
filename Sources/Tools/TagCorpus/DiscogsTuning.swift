@@ -79,7 +79,7 @@ private let ordinalKeys = [
 /// report.
 func discogsTuning(survey lines: URL, catalog: URL, output: URL) async throws -> String {
     try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-    let report = output.appendingPathComponent("report.txt", isDirectory: false)
+    let report = output.appendingPathComponent(reportName, isDirectory: false)
     try requireCorpusWrite(report.path, roots: [output])
     let records = try loadRecords(lines)
     var out = ["Discogs matcher tuning: \(lines.path) against \(catalog.path)"]

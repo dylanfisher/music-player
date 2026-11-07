@@ -9,14 +9,19 @@ func surveyFolder() -> URL {
         .appendingPathComponent(".build/discogs-survey", isDirectory: true)
 }
 
+/// The survey's lines, one per file, in its folder: the read-once cache the tuning reads too.
+let surveyLinesName = "files.jsonl"
+/// The name of the survey's report and the tuning's, each in its own folder.
+let reportName = "report.txt"
+
 /// Reads every audio file under `folders`, read only, appending a line per file to
 /// `files.jsonl` in `output`, then writes `report.txt` there from every line. A file already in
 /// `files.jsonl` isn't read again, so a stopped run resumes where it was. Progress goes to
 /// standard error. Returns how many files couldn't be read.
 func discogsSurvey(_ folders: [URL], output: URL) throws -> Int {
     try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-    let lines = output.appendingPathComponent("files.jsonl", isDirectory: false)
-    let report = output.appendingPathComponent("report.txt", isDirectory: false)
+    let lines = output.appendingPathComponent(surveyLinesName, isDirectory: false)
+    let report = output.appendingPathComponent(reportName, isDirectory: false)
     for file in [lines, report] { try requireCorpusWrite(file.path, roots: [output]) }
 
     var records = try loadRecords(lines)
