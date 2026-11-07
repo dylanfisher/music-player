@@ -106,7 +106,7 @@ private let dsfRefusal = "Tags in DSF files can't be written yet"
     #expect(!title.isEditable)
     #expect(!editor.saveButton.isEnabled)
     #expect(editor.problemLabel.stringValue == "Tags in DSF files can't be written yet.")
-    editor.saveButton.performClick(nil)
+    click(editor.saveButton)
     #expect(saves == 0)
 
     let mixed = TagEditorWindow(paths: ["/a.dsf", "/b.flac"])
@@ -140,13 +140,13 @@ private let dsfRefusal = "Tags in DSF files can't be written yet"
             Notification(name: NSControl.textDidChangeNotification, object: view))
     }
     try type(.trackNumber, "not a number")
-    editor.saveButton.performClick(nil)
+    click(editor.saveButton)
     #expect(saves == 0)
     #expect(editor.problemLabel.stringValue != note, "the error shows")
 
     try type(.trackNumber, "3")
     #expect(editor.problemLabel.stringValue == note)
-    editor.saveButton.performClick(nil)
+    click(editor.saveButton)
     #expect(saves == 1)
     #expect(editor.problemLabel.stringValue == note)
 }

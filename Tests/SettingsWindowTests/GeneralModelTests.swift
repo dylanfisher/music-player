@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import Fixtures
 import Foundation
 import Testing
 
@@ -214,13 +215,13 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     #expect(!pane.removeButton.isEnabled)
     pane.table.selectRowIndexes([1], byExtendingSelection: false)
     #expect(pane.removeButton.isEnabled)
-    pane.removeButton.performClick(nil)
+    click(pane.removeButton)
     #expect(removed == [1])
     func button(_ title: String, in view: NSView) -> NSButton? {
         if let button = view as? NSButton, button.title == title { return button }
         return view.subviews.lazy.compactMap { button(title, in: $0) }.first
     }
-    try #require(button("Add…", in: pane.view)).performClick(nil)
+    try click(#require(button("Add…", in: pane.view)))
     #expect(added == 1)
 }
 
@@ -235,7 +236,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     pane.table.selectRowIndexes([0, 2], byExtendingSelection: false)
     #expect(pane.rescanButton.isEnabled)
     #expect(!pane.removeButton.isEnabled, "Remove takes one folder")
-    pane.rescanButton.performClick(nil)
+    click(pane.rescanButton)
     #expect(rescanned == [[0, 2]])
 
     let menu = try #require(pane.table.menu)
@@ -397,11 +398,11 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let pane = GeneralPane(
         model: model, configPath: nil, actions: actions(), sections: [.receiver])
     _ = pane.view
-    pane.disclosures[schema.receiverAddress.key]?.performClick(nil)
+    try click(#require(pane.disclosures[schema.receiverAddress.key]))
     let address = try #require(view(schema.receiverAddress.key, in: pane.view) as? NSTextField)
     #expect(!address.isEnabled)
     let toggle = try #require(view(schema.receiverEnabled.key, in: pane.view) as? NSButton)
-    toggle.performClick(nil)
+    click(toggle)
     #expect(stored[schema.receiverEnabled.key] as? Bool == true)
     #expect(address.isEnabled)
 }
@@ -419,9 +420,9 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     let row = try #require(pane.fallbackRows[key])
     let triangle = try #require(pane.disclosures[key])
     #expect(row.isHidden)
-    triangle.performClick(nil)
+    click(triangle)
     #expect(!row.isHidden)
-    triangle.performClick(nil)
+    click(triangle)
     #expect(row.isHidden)
     // An address in the config file shows the row open.
     stored[key] = "192.0.2.45"
@@ -455,7 +456,7 @@ private func modelWithFolders() -> GeneralModel { modelWithFoldersAndValues().0 
     pane.reload()
     #expect(reset.isEnabled)
     #expect(abs((well.color.usingColorSpace(.sRGB)?.alphaComponent ?? 0) - 0.5) < 0.01)
-    reset.performClick(nil)
+    click(reset)
     #expect(stored[key] is NSNull)
 }
 
@@ -510,7 +511,7 @@ private func waitFor(_ condition: () -> Bool) async throws {
     #expect(stored[key] as? String == "#FF000080")
     #expect(saves == 1, "one save for the steps of one change")
     #expect(reset.isEnabled)
-    reset.performClick(nil)
+    click(reset)
     #expect(stored[key] is NSNull)
     #expect(well.color == .gridColor)
     #expect(!reset.isEnabled)
@@ -583,10 +584,10 @@ private func waitFor(_ condition: () -> Bool) async throws {
         sections: [.sync])
     _ = pane.view
     #expect(labels(in: pane.view).contains("sync"))
-    try #require(button("Change…", in: pane.view)).performClick(nil)
-    try #require(button("Open", in: pane.view)).performClick(nil)
+    try click(#require(button("Change…", in: pane.view)))
+    try click(#require(button("Open", in: pane.view)))
     #expect((chosen, opened) == (1, 1))
-    try #require(button("Clear", in: pane.view)).performClick(nil)
+    try click(#require(button("Clear", in: pane.view)))
     #expect(stored is NSNull)
     pane.reload()
     #expect(labels(in: pane.view).contains(noValueText))
@@ -803,7 +804,7 @@ private func helpButton(in view: NSView) -> NSButton? {
     #expect(field.stringValue == "{album} — {title}")
     let button = try #require(helpButton(in: pane.view))
     #expect(button.toolTip == help)
-    button.performClick(nil)
+    click(button)
     let popover = try #require(pane.tokensPopover)
     #expect(popover.isShown)
     let content = try #require(popover.contentViewController?.view)
@@ -906,7 +907,7 @@ private func visibleLabels(in view: NSView) -> [String] {
         let edit = try #require(view(setting.key, in: pane.view) as? NSButton)
         #expect(edit.title == "Edit \(position + 1)…")
         #expect(edit.accessibilityLabel() == setting.title)
-        edit.performClick(nil)
+        click(edit)
         #expect(pane.barBuilders[setting.key]?.window.title.contains(setting.title) == true)
     }
     // All three on the line the first one starts.
@@ -956,10 +957,10 @@ private func visibleLabels(in view: NSView) -> [String] {
     let closed = pane.view.frame.height
     let top = window.frame.maxY
     #expect(closed == pane.view.fittingSize.height)
-    triangle.performClick(nil)
+    click(triangle)
     window.layoutIfNeeded()
     #expect(pane.view.frame.height > closed)
-    triangle.performClick(nil)
+    click(triangle)
     window.layoutIfNeeded()
     #expect(pane.view.frame.height == closed)
     #expect(window.frame.maxY == top)

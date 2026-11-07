@@ -1,4 +1,5 @@
 import AppKit
+import Fixtures
 import Foundation
 import Testing
 
@@ -60,7 +61,7 @@ private let devicePath = SignalPath(
         try await Task.sleep(nanoseconds: 5_000_000)
     }
     #expect(window.details.string.hasSuffix("10:41:07.215 Playback error: /m/So What.dsf: refused"))
-    window.copyButton.performClick(nil)
+    click(window.copyButton)
     #expect(window.pasteboard.string(forType: .string) == window.details.string)
     window.window.close()
 }

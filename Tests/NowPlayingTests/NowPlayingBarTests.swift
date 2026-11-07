@@ -249,7 +249,7 @@ private func points(of box: SeekBox, in view: NSView) -> [NSPoint] {
     bar.apply(
         update(.trackFailed(urls[1], entry: 1, PlaybackProblem(DeviceStopped())), duration: nil))
     #expect(!bar.statusBar.problemButton.isHidden)
-    bar.statusBar.problemButton.performClick(nil)
+    click(bar.statusBar.problemButton)
     let format = try #require(bar.statusBar.view(for: .format) as? NSStackView)
     let label = try #require(format.arrangedSubviews.first as? NSTextField)
     let click = try #require(label.gestureRecognizers.first as? NSClickGestureRecognizer)

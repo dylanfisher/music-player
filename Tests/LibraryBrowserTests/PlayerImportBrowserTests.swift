@@ -211,7 +211,7 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
     browser.tableLayoutChanged = { saved.append($0) }
     try await confirmImport(browser, library) { sheet in
         #expect(sheet.columnsBox.isEnabled)
-        sheet.columnsBox.performClick(nil)
+        click(sheet.columnsBox)
     }
     #expect(
         browser.statusText
@@ -240,7 +240,7 @@ private func emptyPlan(_ prefix: PathPrefix? = nil) -> ImportPlan {
         columns: .success(columns))
     let skipped = "/p.plist: column layout: currentlyPlaying: no such column here"
     #expect(sheet.details.string == "Every track matched.")
-    sheet.columnsBox.performClick(nil)
+    click(sheet.columnsBox)
     #expect(sheet.details.string.contains(skipped))
 }
 

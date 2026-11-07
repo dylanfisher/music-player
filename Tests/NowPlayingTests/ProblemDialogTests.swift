@@ -1,5 +1,6 @@
 import AppKit
 import Artwork
+import Fixtures
 import Foundation
 import Testing
 
@@ -128,7 +129,7 @@ private func inARow(_ problems: [PlaybackProblem]) -> ShownProblem {
         headline: "Couldn't play a.dsf")
     window.show(ProblemReport(fixable, path: nil, hogMode: false))
     #expect(!window.fixButton.isHidden && window.fixButton.title == "Turn On Hog Mode")
-    window.fixButton.performClick(nil)
+    click(window.fixButton)
     #expect(
         asked.map(\.0) == [.turnOnHogMode(deviceUID: "ADI-2")] && asked.first?.1.track == urls[0])
     var damaged = fixable

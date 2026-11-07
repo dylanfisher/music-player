@@ -1,5 +1,6 @@
 import AppKit
 import DisplayText
+import Fixtures
 import Settings
 import Testing
 
@@ -326,7 +327,7 @@ func statsKeepsItsHeightAcrossSources(browserVisible: Bool) async throws {
             && browser.statsModel.period == .year
     }
     #expect(albums.marked != nil)
-    panel.filterButton.performClick(nil)
+    click(panel.filterButton)
     try await waitFor("every track") { browser.model.filter.stats == nil }
     #expect(panel.filterButton.isHidden)
     #expect(albums.marked == nil)
@@ -418,19 +419,17 @@ func statsKeepsItsHeightAcrossSources(browserVisible: Bool) async throws {
     let report = try #require(browser.statsModel.report)
     let made = "Top Artists, " + statsPlaylistPeriod(report.span)
     let before = browser.playlists.count
-    // A click by its action: `performClick` runs the main run loop, which ends the test
-    // process once the loop has nothing left to wait for.
     let save = try #require(browser.statsPanel.cards.saveButtons[.artists])
 
     // Cancel saves nothing.
-    _ = save.sendAction(save.action, to: save.target)
+    click(save)
     #expect(try sheetField(over: window).stringValue == made)
     window.endSheet(try #require(window.attachedSheet), returnCode: .alertSecondButtonReturn)
     try await Task.sleep(nanoseconds: 200_000_000)
     #expect(browser.playlists.count == before)
 
     // The sheet asks first; its button saves the name in its field.
-    _ = save.sendAction(save.action, to: save.target)
+    click(save)
     let field = try sheetField(over: window)
     #expect(field.stringValue == made)
     #expect(browser.playlists.count == before)
@@ -462,7 +461,7 @@ func statsKeepsItsHeightAcrossSources(browserVisible: Bool) async throws {
     #expect(tracks.count == 1)
     let before = browser.playlists.count
     let save = try #require(review.cards.saveButtons[.tracks])
-    _ = save.sendAction(save.action, to: save.target)
+    click(save)
     #expect(window.attachedSheet == nil)
     let field = try sheetField(over: reviewWindow)
     #expect(field.stringValue == "Top Tracks, \(year)")

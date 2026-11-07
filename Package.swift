@@ -435,7 +435,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SettingsWindowTests",
-            dependencies: ["Commands", "KeyChord", "Settings", "SettingsWindow"],
+            dependencies: ["Commands", "Fixtures", "KeyChord", "Settings", "SettingsWindow"],
             swiftSettings: strictSwift
         ),
         .testTarget(

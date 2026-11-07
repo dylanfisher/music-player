@@ -27,16 +27,32 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if [ "${#args[@]}" -gt 0 ]; then exec swift test "${args[@]}"; fi
+# swift_test <args> — swift test, failing also when a test process started a run and never
+# printed its summary: one that exits 0 partway through otherwise passes (ADR 0127).
+swift_test() {
+  local log status=0 started ended
+  log=$(mktemp)
+  swift test "$@" 2>&1 | tee "$log" || status=$?
+  started=$(grep -c '^◇ Test run started\.$' "$log" || true)
+  ended=$(grep -cE '^[✔✘] Test run with ' "$log" || true)
+  rm -f "$log"
+  if [ "$started" != "$ended" ]; then
+    echo "$((started - ended)) of $started test runs ended without a summary: a test process exited partway through" >&2
+    return 1
+  fi
+  return "$status"
+}
+
+if [ "${#args[@]}" -gt 0 ]; then swift_test "${args[@]}"; exit; fi
 
 # run <test targets, one per line, or `all`> — swift test over just those targets.
 run() {
   case "$1" in
     "") echo "no test reads what changed — skipped" ;;
-    all) swift test ;;
+    all) swift_test ;;
     *)
       echo "running $(tr '\n' ' ' <<<"$1")"
-      swift test --filter "^($(paste -sd '|' - <<<"$1"))\."
+      swift_test --filter "^($(paste -sd '|' - <<<"$1"))\."
       ;;
   esac
 }

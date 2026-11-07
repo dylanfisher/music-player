@@ -1,4 +1,5 @@
 import AppKit
+import Fixtures
 import Foundation
 import Settings
 import Testing
@@ -84,7 +85,7 @@ private func problemsBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64])
     window.table.selectRowIndexes([1], byExtendingSelection: false)
     #expect(window.buttons[.remove]?.isEnabled == true)
     #expect(window.buttons[.restore]?.isEnabled == false)
-    window.buttons[.remove]?.performClick(nil)
+    try click(#require(window.buttons[.remove]))
     #expect(acted.count == 1 && acted[0].0 == .remove && acted[0].1 == [rows[1]])
     window.table.selectRowIndexes([0, 1], byExtendingSelection: false)
     #expect(window.buttons[.remove]?.isEnabled == false)
@@ -107,12 +108,12 @@ private func problemsBrowser() throws -> (LibraryBrowser, LibraryIndex, [Int64])
     for selection in [IndexSet(), [1], [0, 1, 2]] {
         window.table.selectRowIndexes(selection, byExtendingSelection: false)
         #expect(window.buttons[.dismissAll]?.isEnabled == true)
-        window.buttons[.dismissAll]?.performClick(nil)
+        try click(#require(window.buttons[.dismissAll]))
         #expect(acted.last?.0 == .dismissAll && acted.last?.1 == rows, "\(Array(selection))")
     }
     window.refresh([])
     #expect(window.buttons[.dismissAll]?.isEnabled == false)
-    window.buttons[.dismissAll]?.performClick(nil)
+    try click(#require(window.buttons[.dismissAll]))
     #expect(acted.count == 3)
 }
 

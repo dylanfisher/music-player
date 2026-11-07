@@ -1,4 +1,5 @@
 import AppKit
+import Fixtures
 import Testing
 
 @testable import Commands
@@ -160,7 +161,7 @@ private func nextTurn() async {
     _ = NSApplication.shared
     var seen: [CommandID] = []
     for _ in AppMenus.repeatCommands {
-        button.performClick(nil)
+        click(button)
         seen.append(mode)
     }
     #expect(seen == [.repeatAll, .repeatOne, .repeatOff])
@@ -181,7 +182,7 @@ private func nextTurn() async {
     item.validate()
     #expect(button.isEnabled)
     #expect(button.state == .off)
-    button.performClick(nil)
+    click(button)
     #expect(shuffling)
     #expect(button.state == .on)
 }

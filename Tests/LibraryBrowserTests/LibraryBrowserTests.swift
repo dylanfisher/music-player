@@ -1,5 +1,6 @@
 import AppKit
 import Commands
+import Fixtures
 import Foundation
 import KeyChord
 import Settings
@@ -245,30 +246,30 @@ import Testing
 
     browser.libraryChanged(.scanning(folder: "/music", ScanProgress()))
     #expect(!browser.scanPauseButton.isHidden && browser.scanPauseButton.toolTip == "Pause Scan")
-    browser.scanPauseButton.performClick(nil)
+    click(browser.scanPauseButton)
     browser.libraryChanged(.scanPaused(folder: "/music", true))
     #expect(browser.scanPauseButton.toolTip == "Resume Scan" && browser.scanIsPaused)
-    browser.scanPauseButton.performClick(nil)
+    click(browser.scanPauseButton)
     #expect(ran == [.pauseScan, .resumeScan])
 
     var progress = LibraryAnalysis.Progress(stage: .analyzing, analyzed: 1_240, total: 43_368)
     progress.file = "So Many Questions.flac"
     browser.showAnalysis(progress)
     #expect(browser.analysisPauseButton.toolTip == "Pause Library Analysis")
-    browser.analysisPauseButton.performClick(nil)
+    click(browser.analysisPauseButton)
     let health = browser.healthPanel
     #expect(
         health.analysisLabel.stringValue
             == "Analyzing library: 1,240 of 43,368 · So Many Questions.flac")
     #expect(health.analysisButton.title == "Pause Library Analysis" && !health.analysisBar.isHidden)
-    health.analysisButton.performClick(nil)
+    click(health.analysisButton)
 
     progress.stage = .paused
     browser.showAnalysis(progress)
     #expect(browser.analysisPauseButton.toolTip == "Analyze Library")
     #expect(health.analysisLabel.stringValue == "Library analysis paused: 1,240 of 43,368")
     #expect(health.analysisButton.title == "Analyze Library")
-    browser.analysisPauseButton.performClick(nil)
+    click(browser.analysisPauseButton)
     #expect(
         ran.dropFirst(2) == [.pauseLibraryAnalysis, .pauseLibraryAnalysis, .analyzeLibrary])
 
