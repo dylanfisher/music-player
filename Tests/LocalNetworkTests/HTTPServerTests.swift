@@ -222,6 +222,17 @@ private final class Fixture: @unchecked Sendable {
     #expect(try await fixture.get(fixture.target("track")).status == 200)
 }
 
+@Test func aBodyOfManyChunksGoesWholeAndTheConnectionCloses() async throws {
+    let fixture = try Fixture()
+    try await fixture.start()
+    let body = (0..<(3 * HTTPServer<String>.chunkBytes + 7)).map { UInt8(truncatingIfNeeded: $0) }
+    try Data(body).write(to: fixture.folder.appendingPathComponent("long"))
+    let reply = try await fixture.get(fixture.target("long"))
+    #expect(reply.status == 200)
+    #expect(reply.body.count == body.count)
+    #expect(reply.body.elementsEqual(body))
+}
+
 @Test func aBodyGoesWholeToAPeerThatStopsReadingPastTheIdleTime() async throws {
     let fixture = try Fixture()
     try await fixture.start(idleSeconds: 0.5)

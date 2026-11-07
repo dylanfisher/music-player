@@ -266,7 +266,8 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
             })
     }
 
-    /// Sends the file's bytes a chunk at a time, each after the last is taken. No idle timer
+    /// Sends the file's bytes a chunk at a time, each after the last is taken, all in the one
+    /// final message: a final message sent while another is incomplete never goes. No idle timer
     /// runs while they go: a renderer that has buffered ahead, or is paused, takes nothing for
     /// as long as it likes, and closing on it cuts the track short (ADR 0125).
     private func send(_ client: Client, from offset: UInt64, through last: UInt64) {
@@ -286,8 +287,7 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
         let next = offset + UInt64(count)
         let isLast = next > last
         client.connection.send(
-            content: Data(chunk), contentContext: isLast ? .finalMessage : .defaultMessage,
-            isComplete: isLast,
+            content: Data(chunk), contentContext: .finalMessage, isComplete: isLast,
             completion: .contentProcessed { [self] error in
                 if error != nil || isLast {
                     end(client)
