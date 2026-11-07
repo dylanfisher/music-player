@@ -20,8 +20,8 @@ public struct HTTPServedFile: Sendable, Equatable {
 /// request time; an unknown token is 404 before `resolve` or the file system sees it. Requests
 /// are `GET` or `HEAD` with the bound address as `Host`, no body and at most one range. At most
 /// `connectionCap` connections at once, each closed when its request head isn't whole within
-/// `headSeconds`, however slowly it trickles in, after `idleSeconds` without progress and
-/// after its one reply.
+/// `headSeconds`, however slowly it trickles in, after `idleSeconds` without progress before
+/// its reply's body starts, and after its one reply.
 ///
 /// 9b's UPnP output is its caller: it starts a server when a renderer is chosen and stops it
 /// when none is in use.
@@ -266,10 +266,13 @@ public final class HTTPServer<Key: Hashable & Sendable>: @unchecked Sendable {
             })
     }
 
-    /// Sends the file's bytes a chunk at a time, each after the last is taken.
+    /// Sends the file's bytes a chunk at a time, each after the last is taken. No idle timer
+    /// runs while they go: a renderer that has buffered ahead, or is paused, takes nothing for
+    /// as long as it likes, and closing on it cuts the track short (ADR 0125).
     private func send(_ client: Client, from offset: UInt64, through last: UInt64) {
         guard clients[ObjectIdentifier(client)] != nil, let file = client.file else { return }
-        touch(client)
+        client.idle?.cancel()
+        client.idle = nil
         let count = Int(min(UInt64(Self.chunkBytes), last - offset + 1))
         var chunk = [UInt8](repeating: 0, count: count)
         let read = chunk.withUnsafeMutableBytes {

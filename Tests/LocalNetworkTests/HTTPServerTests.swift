@@ -222,6 +222,73 @@ private final class Fixture: @unchecked Sendable {
     #expect(try await fixture.get(fixture.target("track")).status == 200)
 }
 
+@Test func aBodyGoesWholeToAPeerThatStopsReadingPastTheIdleTime() async throws {
+    let fixture = try Fixture()
+    try await fixture.start(idleSeconds: 0.5)
+    // Far more than the loopback socket buffers hold, so the server waits on the peer.
+    let size = 16 * 1024 * 1024
+    try Data(count: size).write(to: fixture.folder.appendingPathComponent("large"))
+    let peer = try SlowPeer(port: fixture.server.port)
+    defer { peer.close() }
+    try peer.send(
+        "GET \(fixture.target("large")) HTTP/1.1\r\nHost: \(fixture.host)\r\n\r\n")
+    // A renderer that has buffered ahead takes nothing for a while.
+    try await Task.sleep(nanoseconds: 1_500_000_000)
+    let reply = try peer.receiveAll()
+    let end = try #require(reply.firstRange(of: Array("\r\n\r\n".utf8)))
+    #expect(reply.count - end.upperBound == size)
+}
+
+/// A client on a blocking socket with a small receive buffer, which takes bytes only when
+/// asked, as a renderer that buffers ahead does; `LoopbackConnection` reads all the time.
+private final class SlowPeer {
+    private let fd: Int32
+
+    init(port: UInt16) throws {
+        fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { throw POSIXError(.init(rawValue: errno)!) }
+        var buffer: Int32 = 16 * 1024
+        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buffer, socklen_t(MemoryLayout<Int32>.size))
+        var timeout = timeval(tv_sec: 5, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let connected = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard connected == 0 else {
+            let error = POSIXError(.init(rawValue: errno)!)
+            Darwin.close(fd)
+            throw error
+        }
+    }
+
+    func send(_ text: String) throws {
+        let bytes = Array(text.utf8)
+        guard write(fd, bytes, bytes.count) == bytes.count else {
+            throw POSIXError(.init(rawValue: errno)!)
+        }
+    }
+
+    /// Everything up to the server's close; a reset or a 5 s wait throws.
+    func receiveAll() throws -> [UInt8] {
+        var received: [UInt8] = []
+        var chunk = [UInt8](repeating: 0, count: 64 * 1024)
+        while true {
+            let count = read(fd, &chunk, chunk.count)
+            guard count >= 0 else { throw POSIXError(.init(rawValue: errno)!) }
+            if count == 0 { return received }
+            received += chunk[..<count]
+        }
+    }
+
+    func close() { Darwin.close(fd) }
+}
+
 @Test func aConnectionFromOffTheSubnetIsRefused() async throws {
     let fixture = try Fixture()
     try await fixture.start(accepts: { _ in false })
