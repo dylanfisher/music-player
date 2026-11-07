@@ -61,3 +61,15 @@ private let masters = """
     #expect(try catalog.releaseIDs(master: 100) == [10, 11])
     #expect(try catalog.releaseIDs(master: 999) == [])
 }
+
+@Test func aReleaseTheDumpGivesMasterZeroHasNoMasterAndIsFoundByItsTitle() throws {
+    let folder = try DumpFolder()
+    try folder.write(
+        "20261101",
+        releases:
+            #"<release id="20"><artists><artist><id>7</id><name>Seraphim Rytm</name></artist></artists><title>Andromeda</title><master_id is_main_release="false">0</master_id></release>"#
+            + "\n")
+    let catalog = try folder.importedCatalog()
+    #expect(try catalog.release(id: 20)?.masterID == nil)
+    #expect(try catalog.titleMatches(artist: "Seraphim Rytm", title: "Andromeda") == [.release(20)])
+}

@@ -270,7 +270,9 @@ final class DumpParser: NSObject, XMLParserDelegate {
         case (.release, .title): release.title = trimmed(text)
         case (.release, .country): release.country = nonEmpty(text)
         case (.release, .released): release.released = nonEmpty(text)
-        case (.release, .masterID): release.masterID = Int(trimmed(text))
+        // The dumps write a release without a master as master 0.
+        case (.release, .masterID):
+            release.masterID = Int(trimmed(text)).flatMap { $0 > 0 ? $0 : nil }
         case (_, .artist): endArtist(inList: parent)
         case (.genres, .genre): nonEmpty(text).map { release.genres.append($0) }
         case (.styles, .style): nonEmpty(text).map { release.styles.append($0) }
