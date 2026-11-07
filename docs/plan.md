@@ -287,9 +287,10 @@ matched albums already carry.
 
 51a (`Core/Metadata`, `Core/TagWriter`, `Core/Library`, `Tools/TagCorpus`) and 51b (a new
 `Core` module for the catalog) touch different modules, so they run in parallel worktrees and
-merge a, then b. 51c needs both, and 51d needs 51c. ADR numbers: 0128 and 0129 to 51a (the
-survey's findings, custom fields), 0130 to 51b, 0131 to 51c, 0132 and 0133 to 51d (the
-mapping, one confirmation for a match set).
+merge a, then b. 51c needs both, and 51d needs 51c; 51e needs 51d's import button. ADR
+numbers: 0128 and 0129 to 51a (the survey's findings, custom fields), 0130 to 51b, 0131 to 51c,
+0132 and 0133 to 51d (the mapping, one confirmation for a match set), 0134 to 51e (resuming an
+import).
 
 Decided by the owner on 2026-11-07:
 
@@ -519,6 +520,29 @@ Implementation plan, part 51b (ADR 0130):
       window says so and offers the import; nothing falls back silently.
 - [ ] **Owner check:** import the 2026-11-01 dump, analyze the whole library, review the Exact
       tab, apply it, and check a few albums' tags in YATE.
+
+#### 51e. An import that resumes
+
+Asked for by the owner on 2026-11-07, after the first real import trapped at 76% of the
+releases (a duration too long for an `Int`, fixed in `72960469`) and had to start over.
+
+- [ ] **51.14 Checkpoints.** A table in `<catalog>.importing` holds the dump date, the files
+      finished, and for the current file the last record committed, its compressed and bit
+      offsets, the last 32 KB inflated (zlib's `zran.c` access point) and the SHA-256 state
+      (CommonCrypto's `CC_SHA256_CTX`, since CryptoKit's can't be saved). Written in the same
+      transaction as its batch, every few minutes of input, so a checkpoint always matches the
+      rows.
+- [ ] **51.15 Resume.** An import that finds a `.importing` file of the same dump date carries
+      on from its checkpoint: it seeks to the offset, restores the inflate state with
+      `inflatePrime` and `inflateSetDictionary` and the hash, and goes on; one of another date,
+      or without a checkpoint, is removed and the import starts over. The window shows
+      "Resume Import" and "Start Over" after a stop, a quit or a crash. The hash still covers
+      every byte, and the swap is unchanged.
+- [ ] **51.16 Fuzzing the dump parser.** A `DumpParser` target in `Tools/Fuzz`, so a record that
+      traps is found on fixtures, not 20 minutes into a real import: Swift can't catch a trap.
+- [ ] **51.17 Tests.** A stop and a crash (a killed child process) at each stage, resumed to a
+      catalog identical to an import run straight through; a checkpoint from another dump date;
+      a damaged checkpoint; the bench's fixture import stopped halfway and resumed.
 
 ### 52. Discogs API
 
