@@ -177,8 +177,9 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     @objc private func cancel() { endSheet() }
 
     @objc private func ok() {
-        guard draft.problem == nil else { return NSSound.beep() }
+        // Ending the edit in a field commits its text to the draft, so check it after.
         window?.makeFirstResponder(nil)
+        guard draft.problem == nil else { return NSSound.beep() }
         result = draft
         endSheet()
     }
