@@ -66,11 +66,12 @@ private let release = CatalogRelease(
     ],
     tracks: [song("1", "Hey Hey"), song("2", "Ho Ho")])
 
+/// The files as the window reads them, ids from 1 in order.
 private func albumFiles(_ urls: [URL]) throws -> [AlbumFile] {
-    try urls.enumerated().map { index, url in
-        AlbumFile(
-            id: Int64(index + 1), path: url.path, metadata: try readMetadata(at: url).metadata)
-    }
+    let (files, problems) = readAlbumFiles(
+        urls.enumerated().map { (id: Int64($0.offset + 1), path: $0.element.path) })
+    try #require(problems == [])
+    return files
 }
 
 @Test(arguments: WrittenSample.allCases, DiscogsPreset.all.map(\.name))
@@ -83,11 +84,32 @@ func aMappingsEditsWriteAndReadBackAsMeant(_ sample: WrittenSample, _ preset: St
         journal: TagUndoJournal(
             dataDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(
                 "discogs-journal-\(UUID().uuidString)", isDirectory: true)))
-    for (path, edit) in try set.edits() {
-        let report = writer.write(edit, to: [path])
-        #expect(report.failures == [], "\(path)")
-        #expect(report.changed == [path])
-    }
+    // One batch, a different edit per file, as Apply writes a match set (ADR 0133).
+    let report = writer.write(try set.edits())
+    #expect(report.failures == [])
+    #expect(report.changed == urls.map(\.path))
     let again = changeSet(for: try albumFiles(urls), match: match(release), mapping: mapping)
     #expect(again.files.flatMap(\.changes) == [])
+}
+
+@Test func aFileThatCantBeReadIsAProblemAndTheRestAreRead() throws {
+    let urls = try WrittenSample.flac.copies()
+    let missing = urls[0].deletingLastPathComponent().appendingPathComponent(
+        "gone.flac", isDirectory: false)
+    let read = Counted()
+    let (files, problems) = readAlbumFiles(
+        [(1, urls[0].path), (2, missing.path), (3, urls[1].path)], read: { read.set($0) })
+    #expect(files.map(\.id) == [1, 3])
+    #expect(problems.count == 1)
+    #expect(problems.first?.contains("gone.flac") == true)
+    #expect(read.value == 3)
+}
+
+/// The latest count a read reported, from its threads.
+private final class Counted: @unchecked Sendable {
+    private let lock = NSLock()
+    private var latest = 0
+
+    func set(_ value: Int) { lock.withLock { latest = max(latest, value) } }
+    var value: Int { lock.withLock { latest } }
 }

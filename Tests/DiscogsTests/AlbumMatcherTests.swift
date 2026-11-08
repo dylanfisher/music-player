@@ -467,14 +467,14 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     try folder.importCatalog()
     let albums = (0..<3).map { _ in album(stockholmTitles) }
     let heard = Heard()
-    let matches = try await matchAlbums(albums, catalogAt: folder.catalog) { heard.add($0) }
+    let matches = try await matchAlbums(albums, catalogAt: folder.catalog, choosing: [:]) { heard.add($0) }
     #expect(matches.map(\.tier) == [.exact, .exact, .exact])
     #expect(heard.all.map(\.albumsDone) == [1, 2, 3])
     #expect(heard.all.allSatisfy { $0.albumCount == 3 })
 
     let task = Task {
         withUnsafeCurrentTask { $0?.cancel() }
-        return try await matchAlbums(albums, catalogAt: folder.catalog) { _ in }
+        return try await matchAlbums(albums, catalogAt: folder.catalog, choosing: [:]) { _ in }
     }
     await #expect(throws: CancellationError.self) { try await task.value }
 }
@@ -482,8 +482,70 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
 @Test func matchingWithoutACatalogSaysSo() async throws {
     let folder = try DumpFolder()
     await #expect(throws: CatalogError.missing(folder.catalog.path)) {
-        try await matchAlbums([album(stockholmTitles)], catalogAt: folder.catalog) { _ in }
+        try await matchAlbums([album(stockholmTitles)], catalogAt: folder.catalog, choosing: [:]) { _ in }
     }
+}
+
+@Test func aChosenReleaseIsTheMatchTieredByItsOwnScore() throws {
+    let folder = try DumpFolder()
+    try folder.write(
+        "20261101",
+        releases: release(10, tracks: stockholm)
+            + release(
+                11, title: "Elsewhere", catno: "X 1",
+                tracks: [track("1", "Östermalm"), track("2", "Gamla Stan"), track("3", "Other")])
+            + release(12, title: "Unrelated", catno: "Y 1", tracks: [track("1", "Nothing")]))
+    let matcher = AlbumMatcher(try folder.importedCatalog())
+    #expect(try matcher.match(album(stockholmTitles)).releaseID == 10)
+    let likely = try matcher.match(album(stockholmTitles), choosing: 11)
+    #expect(likely.releaseID == 11)
+    #expect(likely.tier == .likely)
+    #expect(likely.candidates.map(\.releaseID) == [10])
+    // Chosen though no key finds it: another title and catalog number.
+    let unrelated = try matcher.match(album(stockholmTitles), choosing: 12)
+    #expect(unrelated.releaseID == 12)
+    #expect(unrelated.tier == .incomplete)
+    // A choice the catalog doesn't have leaves the matcher's own.
+    #expect(try matcher.match(album(stockholmTitles), choosing: 99).releaseID == 10)
+}
+
+@Test func theTracklistsSideBySideMarkEachRowAndADraggedRowSwaps() throws {
+    var result = try match(
+        album(["Östermalm", "Gamla Stan (Edit)", "Bonus"], seconds: [285, 370, 100]),
+        releases: release(10, tracks: stockholm))
+    let album = album(
+        ["Östermalm", "Gamla Stan (Edit)", "Bonus"], seconds: [285, 370, 100])
+    #expect(
+        result.comparison(of: album).map(\.state) == [.matched, .matched, .different])
+    result.assign(101, to: 2)
+    let rows = result.comparison(of: album)
+    #expect(rows.map(\.fileID) == [100, 102, 101])
+    #expect(rows.map(\.state) == [.matched, .different, .different])
+    result.assign(102, to: nil)
+    let unmapped = result.comparison(of: album)
+    #expect(unmapped.map(\.fileID) == [100, nil, 101, 102])
+    #expect(unmapped.map(\.state) == [.matched, .missing, .different, .missing])
+    #expect(unmapped[1].releaseTitle == "Gamla Stan")
+    #expect(unmapped[3].fileTitle == "Bonus")
+}
+
+@Test func aReleasesSummaryIsWhatTheWindowShows() async throws {
+    let folder = try DumpFolder()
+    try folder.write(
+        "20261101",
+        releases: release(
+            10, artist: "Persuader (2)", secondCatno: "O 2", format: "Vinyl",
+            descriptions: ["LP", "Album"], released: "2000-03-00", country: "Sweden",
+            tracks: stockholm))
+    try folder.importCatalog()
+    let summaries = try await releaseSummaries([99, 10], catalogAt: folder.catalog)
+    #expect(
+        summaries == [
+            ReleaseSummary(
+                id: 10, artist: "Persuader", title: "Stockholm", label: "Svek & Other",
+                catalogNumber: "SK 032", country: "Sweden", year: "2000",
+                format: "Vinyl (LP,Album)")
+        ])
 }
 
 /// The progress a run reported, from its thread.

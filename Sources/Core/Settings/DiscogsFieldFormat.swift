@@ -43,7 +43,7 @@ public struct DiscogsFieldFormat: Codable, Equatable, Sendable {
     /// Per format, since YATE writes credits differently in each.
     public var credits: PerTagFormat<CreditStyle>?
 
-    init(
+    public init(
         join: String? = nil, names: Names? = nil, suffixes: Suffixes? = nil,
         date: DateForm? = nil, template: String? = nil, credits: PerTagFormat<CreditStyle>? = nil
     ) {

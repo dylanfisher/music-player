@@ -13,7 +13,7 @@ public struct DiscogsFieldRule: Codable, Equatable, Sendable {
     public var targets: [DiscogsTarget]
     public var format: DiscogsFieldFormat
 
-    init(
+    public init(
         _ mode: Mode, _ targets: [DiscogsTarget], format: DiscogsFieldFormat = DiscogsFieldFormat()
     ) {
         self.mode = mode

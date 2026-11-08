@@ -5,54 +5,60 @@ import TagWriter
 
 /// One file of an album as the tagger compares it: its id in the index, where it is, and the
 /// tags read from it now.
-struct AlbumFile: Sendable {
-    var id: Int64
-    var path: String
-    var metadata: TrackMetadata
+public struct AlbumFile: Sendable {
+    public var id: Int64
+    public var path: String
+    public var metadata: TrackMetadata
+
+    public init(id: Int64, path: String, metadata: TrackMetadata) {
+        self.id = id
+        self.path = path
+        self.metadata = metadata
+    }
 }
 
 /// A tag the mapping would change in one file: what it holds now and what it would hold
 /// (ADR 0132), a row of the View Changes sheet.
-struct TagChange: Equatable, Sendable, Identifiable {
-    struct ID: Hashable, Sendable {
-        var fileID: Int64
-        var tag: MappedTag
+public struct TagChange: Equatable, Sendable, Identifiable {
+    public struct ID: Hashable, Sendable {
+        public var fileID: Int64
+        public var tag: MappedTag
     }
 
-    var id: ID
+    public var id: ID
     /// The Discogs field the value comes from.
-    var field: DiscogsField
+    public var field: DiscogsField
     /// Nil for a tag the file doesn't have.
-    var current: String?
+    public var current: String?
     /// Nil to remove the tag: a numbered key past the release's values.
-    var new: String?
+    public var new: String?
 
-    var tag: MappedTag { id.tag }
+    public var tag: MappedTag { id.tag }
 }
 
 /// What the mapping would change in one file.
-struct FileChanges: Equatable, Sendable {
-    var fileID: Int64
-    var path: String
+public struct FileChanges: Equatable, Sendable {
+    public var fileID: Int64
+    public var path: String
     /// In the order of the mapping's fields, then of their targets.
-    var changes: [TagChange]
+    public var changes: [TagChange]
     /// Why nothing can be written to the file, as for a DSD file; nil when it can be.
-    var unwritable: String?
+    public var unwritable: String?
     /// The tags the changes were worked out from.
     var tags: TrackTags
 }
 
 /// Every change the mapping would make to an album's files for its match: the model of the
 /// View Changes sheet and of Apply (ADR 0132). Nothing here reads or writes a file.
-struct AlbumChangeSet: Equatable, Sendable {
-    var files: [FileChanges]
+public struct AlbumChangeSet: Equatable, Sendable {
+    public var files: [FileChanges]
 
-    var changeCount: Int { files.reduce(0) { $0 + $1.changes.count } }
+    public var changeCount: Int { files.reduce(0) { $0 + $1.changes.count } }
 
     /// Each file's edit with the changes `isIncluded` keeps, as `TagWriter` writes it; a file
     /// left with no change has no edit. Throws for a value no format can hold, naming it, so
     /// the sheet can show it before anything is written.
-    func edits(including isIncluded: (TagChange.ID) -> Bool = { _ in true })
+    public func edits(including isIncluded: (TagChange.ID) -> Bool = { _ in true })
         throws(TagValueError) -> [(path: String, edit: TagEdit)]
     {
         var edits: [(path: String, edit: TagEdit)] = []
@@ -76,7 +82,7 @@ struct AlbumChangeSet: Equatable, Sendable {
 /// track gets every field; one it maps to none, such as a bonus track the release lacks, gets
 /// the release's fields only. A field Discogs has no value for leaves its tags as they are, and
 /// a field set to fill empty tags leaves a tag that has a value.
-func changeSet(for files: [AlbumFile], match: AlbumMatch, mapping: DiscogsMapping)
+public func changeSet(for files: [AlbumFile], match: AlbumMatch, mapping: DiscogsMapping)
     -> AlbumChangeSet
 {
     guard let release = match.release else {

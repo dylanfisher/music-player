@@ -21,15 +21,20 @@ public enum MatchTier: String, CaseIterable, Sendable {
 public struct MatchCandidate: Equatable, Sendable {
     public var releaseID: Int
     var score: ReleaseScore
+
+    /// How well its tracklist fits the album's, from 0 to 1 (ADR 0131).
+    public var tracklistScore: Double { score.tracklist }
+    /// Whether it has the album's track count and every title in order.
+    public var fitsTracklist: Bool { score.fitsTracklist }
 }
 
 /// What matching found for one album: its tier, the release chosen, how its files map to that
 /// release's tracks, and the other candidates.
 public struct AlbumMatch: Sendable {
-    var albumID: Int64
+    public internal(set) var albumID: Int64
     public var tier: MatchTier
     /// Nil for no candidate, or for a matched album whose release isn't in the catalog.
-    var release: CatalogRelease?
+    public internal(set) var release: CatalogRelease?
     /// The chosen release's tracks as files hold them (`ReleaseTracklist`).
     var tracks: [CatalogTrack]
     /// Each file's index in `tracks`, by file id; a file that fits no track isn't in it.

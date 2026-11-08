@@ -4,9 +4,10 @@ import Library
 /// Matches each of `albums` with the catalog at `catalog` (ADR 0131), off the calling thread,
 /// in their order. The catalog is opened for this call, so one after an import reads the new
 /// file. Cancelling the task stops it before the next album and throws `CancellationError`.
-/// `progress` hears each album done, off the main thread.
+/// `progress` hears each album done, off the main thread. `chosen` holds the release the user
+/// chose for an album, by album ID, which is its match whatever the others score (ADR 0133).
 public func matchAlbums(
-    _ albums: [DiscogsAlbum], catalogAt catalog: URL,
+    _ albums: [DiscogsAlbum], catalogAt catalog: URL, choosing chosen: [Int64: Int],
     progress: @escaping @Sendable (AlbumMatchProgress) -> Void
 ) async throws -> [AlbumMatch] {
     try Task.checkCancellation()
@@ -16,7 +17,7 @@ public func matchAlbums(
         matches.reserveCapacity(albums.count)
         for album in albums {
             try Task.checkCancellation()
-            matches.append(try matcher.match(album))
+            matches.append(try matcher.match(album, choosing: chosen[album.id]))
             progress(AlbumMatchProgress(albumsDone: matches.count, albumCount: albums.count))
         }
         return matches
@@ -34,7 +35,9 @@ final class AlbumMatcher {
 
     init(_ catalog: Catalog) { self.catalog = catalog }
 
-    func match(_ album: DiscogsAlbum) throws -> AlbumMatch {
+    /// `album`'s match; `choice`, a release the user chose, is the match when the catalog has
+    /// it, tiered by its own score alone, and is a candidate even when no key finds it.
+    func match(_ album: DiscogsAlbum, choosing choice: Int? = nil) throws -> AlbumMatch {
         let ids = album.tracks.map(\.releaseID)
         let tagged = Set(ids.compactMap { $0 })
         let isMatched = tagged.count == 1 && !ids.contains(nil)
@@ -42,7 +45,9 @@ final class AlbumMatcher {
         let seconds = album.tracks.map(\.seconds)
         var releases: [Int: CatalogRelease] = [:]
         var scores: [ReleaseScore] = []
-        for id in try candidateIDs(for: album, in: catalog) {
+        var candidates = try candidateIDs(for: album, in: catalog)
+        if let choice, !candidates.contains(choice) { candidates.append(choice) }
+        for id in candidates {
             guard let release = try catalog.release(id: id) else { continue }
             releases[id] = release
             scores.append(ReleaseScore.best(release, seconds: seconds, titles: titles))
@@ -50,7 +55,18 @@ final class AlbumMatcher {
 
         let tier: MatchTier
         let chosen: ReleaseScore?
-        if isMatched {
+        if let choice, let score = scores.first(where: { $0.releaseID == choice }) {
+            chosen = score
+            if isMatched, tagged.first == String(choice) {
+                tier = .matched
+            } else if !tagged.isEmpty, !isMatched {
+                tier = .incomplete
+            } else if score.fitsTracklist {
+                tier = score.durationsAgree ? .exact : .likely
+            } else {
+                tier = score.isLikely ? .likely : .incomplete
+            }
+        } else if isMatched {
             tier = .matched
             chosen = scores.first { String($0.releaseID) == tagged.first }
         } else if scores.isEmpty {
