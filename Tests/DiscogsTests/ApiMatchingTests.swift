@@ -248,3 +248,22 @@ private func renumbered(_ name: String, _ id: Int) -> [UInt8] {
     _ = try await api.release(id: 1002)
     #expect(outer.all == [40, nil])
 }
+
+@Test func bothKeepsTheCatalogsMatchesWhenTheAPIStopsAndTheAPIAloneDoesnt() async throws {
+    let folder = try fixtureCatalog()
+    let fake = FakeDiscogs()
+    fake.queue("/database/search", .failure(.offline))
+    do {
+        _ = try await run([tiered[0], tiered[3]], .both, catalog: folder.catalog, api: fake.api())
+        Issue.record("the stop wasn't reported")
+    } catch let stopped as APIStoppedMatching {
+        #expect(stopped.error == .offline)
+        #expect(stopped.matches.map(\.tier) == [.exact, .noCandidate])
+        #expect(stopped.matches.first?.releaseID == 1001)
+    }
+    let alone = FakeDiscogs()
+    alone.queue("/database/search", .failure(.offline))
+    await #expect(throws: DiscogsAPIError.offline) {
+        try await run([tiered[3]], .api, catalog: folder.catalog, api: alone.api())
+    }
+}

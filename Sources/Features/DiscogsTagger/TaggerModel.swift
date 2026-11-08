@@ -364,14 +364,23 @@ final class TaggerModel {
                 let chosen = reviews.compactMapValues { review -> Int? in
                     if case .chosen(let id) = review { id } else { nil }
                 }
-                let matches = try await effects.match(albums, chosen, skipsVideo, source) {
-                    progress in
-                    Task { @MainActor [self] in
-                        guard self.run == current, case .analyzing = activity else { return }
-                        activity = .analyzing(done: progress.albumsDone, total: progress.albumCount)
-                        matchProgress = progress
-                        changed()
+                let matches: [AlbumMatch]
+                // Both keeps the catalog's matches when the API stops (ADR 0139).
+                var apiStopped: DiscogsAPIError?
+                do {
+                    matches = try await effects.match(albums, chosen, skipsVideo, source) {
+                        progress in
+                        Task { @MainActor [self] in
+                            guard self.run == current, case .analyzing = activity else { return }
+                            activity = .analyzing(
+                                done: progress.albumsDone, total: progress.albumCount)
+                            matchProgress = progress
+                            changed()
+                        }
                     }
+                } catch let stopped as APIStoppedMatching {
+                    matches = stopped.matches
+                    apiStopped = stopped.error
                 }
                 self.albums = zip(albums, matches).map { album, match in
                     Album(
@@ -383,6 +392,16 @@ final class TaggerModel {
                     format: "Analyzed %@ albums in %.1f s", number(albums.count),
                     Date().timeIntervalSince(started))
                 if alone { status += "; with no catalog, Both asked the Discogs API alone" }
+                if let apiStopped {
+                    status += "; Discogs stopped, so some albums have only the catalog's match"
+                    failed(
+                        sentence(apiStopped.description),
+                        [
+                            "The albums are shown as the catalog matched them, and as the Discogs"
+                                + " API did until it stopped."
+                        ])
+                }
+
             } catch is CancellationError {
                 status = "Analyze stopped; the albums shown are the last run's"
             } catch let error as DiscogsAPIError {

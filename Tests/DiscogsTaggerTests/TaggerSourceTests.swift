@@ -167,3 +167,17 @@ private let fakeTokenText = "fakeTOKENfor3tests0nly"
     #expect(window.releaseLine.stringValue.hasSuffix("from the Discogs API"))
     window.window?.close()
 }
+
+@MainActor
+@Test func whenTheAPIStopsBothTheCatalogsMatchesAreShownWithTheAlert() async throws {
+    let stopped = APIStoppedMatching(matches: [exact(one, nil)], error: .offline)
+    let tagger = await model(
+        Seen(), albums: [one], matches: exact, source: .both, matchError: stopped)
+    var alerts: [String] = []
+    tagger.failed = { message, _ in alerts.append(message) }
+    tagger.analyze()
+    await tagger.finished()
+    #expect(alerts == ["There is no connection to Discogs"])
+    #expect(tagger.albums.map(\.id) == [1])
+    #expect(tagger.status.contains("Discogs stopped"))
+}
