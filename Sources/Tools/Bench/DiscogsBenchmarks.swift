@@ -19,6 +19,7 @@ private let fixtureAlbums = 2_000
 /// The catalog stays, in the caches beside the fixtures, for the matching rows.
 private struct FixtureImport {
     var summary: CatalogImportSummary
+    var dumps: URL
     var catalog: URL
     var footprintBeforeMB: Double
     var footprintPeakMB: Double
@@ -40,8 +41,58 @@ private let fixtureImport = Result { () throws -> FixtureImport in
         throw BenchError.expected("\(fixtureReleases) releases imported: \(summary.records)")
     }
     return FixtureImport(
-        summary: summary, catalog: catalog, footprintBeforeMB: before,
+        summary: summary, dumps: dumps, catalog: catalog, footprintBeforeMB: before,
         footprintPeakMB: try peak.stop())
+}
+
+/// The fixture dump imported again into a catalog of its own, stopped halfway by its task's
+/// cancel and resumed (ADR 0134); then once more with a checkpoint every 256 KB of input, for
+/// what a checkpoint costs.
+private struct ResumedImport {
+    var stoppedSeconds: Double
+    var stoppedAt: Double
+    var resumed: CatalogImportSummary
+    var checkpointed: CatalogImportSummary
+    var checkpoints: Int
+}
+
+private let resumedImport = Result { () throws -> ResumedImport in
+    let straight = try fixtureImport.get()
+    let dumps = straight.dumps
+    let directory = try emptyCacheDirectory("bench-discogs-resume")
+    let catalog = directory.appendingPathComponent("catalog.sqlite", isDirectory: false)
+    let stoppedAt = LockedValue(0.0)
+    let stoppedSeconds = try seconds {
+        do {
+            _ = try waited {
+                try await importCatalog(from: dumps, to: catalog, outsideOf: []) { progress in
+                    guard progress.fraction >= 0.5, stoppedAt.value == 0 else { return }
+                    stoppedAt.value = progress.fraction
+                    // The import's own task, as Stop cancels it.
+                    withUnsafeCurrentTask { $0?.cancel() }
+                }
+            }
+            throw BenchError.expected("the import stopped halfway")
+        } catch CatalogImportError.stopped {}
+    }
+    let resumed = try waited {
+        try await importCatalog(from: dumps, to: catalog, outsideOf: []) { _ in }
+    }
+    guard resumed.resumedBytes > 0, resumed.records == straight.summary.records else {
+        throw BenchError.expected("a resumed import of every record: \(resumed)")
+    }
+    let checkpoints = LockedValue(0)
+    let checkpointed = try waited {
+        try await importCatalog(
+            from: dumps, to: directory.appendingPathComponent("checkpointed.sqlite"),
+            outsideOf: [], checkpointBytes: 256 << 10
+        ) { progress in
+            if progress.checkpointed { checkpoints.value += 1 }
+        }
+    }
+    return ResumedImport(
+        stoppedSeconds: stoppedSeconds, stoppedAt: stoppedAt.value, resumed: resumed,
+        checkpointed: checkpointed, checkpoints: checkpoints.value)
 }
 
 /// Release `id` of the fixture dump as a library album, its tracks' titles and lengths as
@@ -84,6 +135,27 @@ let discogsBenchmarks = [
                     Double(fixtureReleases) / run.summary.seconds,
                     Double(run.summary.compressedBytes) / 1e6,
                     run.footprintPeakMB - run.footprintBeforeMB)
+            ])
+    },
+    Benchmark(
+        name: "discogs: import that fixture dump stopped past halfway, then resumed",
+        budget: Budget(appleSilicon: 6, oldMac: 24, unit: .seconds)
+    ) {
+        let straight = try fixtureImport.get().summary
+        let run = try resumedImport.get()
+        let perCheckpoint =
+            (run.checkpointed.seconds - straight.seconds) / Double(max(run.checkpoints, 1))
+        return Measured(
+            value: run.stoppedSeconds + run.resumed.seconds,
+            notes: [
+                String(
+                    format: "%.2f s to the stop at %.0f%%, %.2f s resumed after %.1f MB;"
+                        + " %.2f s straight through",
+                    run.stoppedSeconds, run.stoppedAt * 100, run.resumed.seconds,
+                    Double(run.resumed.resumedBytes) / 1e6, straight.seconds),
+                String(
+                    format: "%.2f s with %d checkpoints, one every 256 KB of input: %.0f ms each",
+                    run.checkpointed.seconds, run.checkpoints, perCheckpoint * 1000),
             ])
     },
     Benchmark(
@@ -168,3 +240,17 @@ let discogsBenchmarks = [
             ])
     },
 ]
+
+/// A value an import's progress sets from its thread, read once the import is done.
+private final class LockedValue<T: Sendable>: @unchecked Sendable {
+    // `stored` is guarded by `lock`.
+    private let lock = NSLock()
+    private var stored: T
+
+    init(_ value: T) { stored = value }
+
+    var value: T {
+        get { lock.withLock { stored } }
+        set { lock.withLock { stored = newValue } }
+    }
+}
