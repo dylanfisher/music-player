@@ -47,7 +47,7 @@ hardware, an Apple API that can't do what the phase assumes), stop and ask. Don'
 
 Set by the owner on 2026-11-06. Earlier run orders are in the archive.
 
-1. Phase 51, then 52 (set by the owner on 2026-11-07).
+1. Phase 51, then 52, then 53 (set by the owner on 2026-11-07).
 2. Phases 10 and 13 wait. Phase 10 adds pairing tokens, a secret, so the owner decides how
    they're stored first (AGENTS.md).
 
@@ -296,10 +296,10 @@ matched albums already carry.
 
 51a (`Core/Metadata`, `Core/TagWriter`, `Core/Library`, `Tools/TagCorpus`) and 51b (a new
 `Core` module for the catalog) touch different modules, so they run in parallel worktrees and
-merge a, then b. 51c needs both, and 51d needs 51c; 51e needs 51d's import button; 51f runs after the gate. ADR
+merge a, then b. 51c needs both, and 51d needs 51c; 51e needs 51d's import button; 51f runs after the gate, and 51g after 51f. ADR
 numbers: 0128 and 0129 to 51a (the survey's findings, custom fields), 0130 to 51b, 0131 to 51c,
 0132 and 0133 to 51d (the mapping, one confirmation for a match set), 0134 to 51e (resuming an
-import), 0135 to 51f (list fields in smart playlists).
+import), 0135 to 51f (list fields in smart playlists); 51g needs none.
 
 Decided by the owner on 2026-11-07:
 
@@ -645,6 +645,40 @@ mapping choices (51.22–51.24) were decided by the owner the same day.
 - [ ] **Owner check:** a smart playlist of one style on the real library, and the Mood column
       on albums tagged by YATE.
 
+#### 51g. The tagger's and the tag editor's rough edges
+
+From the owner's testing on 2026-11-07, before 51 closes.
+
+- [ ] **51.25 Template help.** A help button (?) beside Field Mapping's template field opens a
+      popover: every token a template can name (from the list `DiscogsMapping` checks
+      against, not a copy), that text outside braces is kept as written, how a list field
+      joins inside a template, and two examples (`{genre} - {styles}`, the owner's `GENRE`).
+- [ ] **51.26 Save As says it saved.** After Save As… the new name is chosen in the saved
+      mappings menu and the sheet says "Saved as “Name”"; a name already in use asks before it
+      replaces that mapping.
+- [ ] **51.27 Import and export a mapping.** Export… writes the shown mapping as JSON in the
+      shape `config.json` keeps it (one encoder); Import… reads a file, and Paste reads JSON from
+      the clipboard. Either is checked as the config's mapping is, and a bad one is refused with
+      the reason, never half applied. An imported mapping is shown unsaved, for Save As….
+- [ ] **51.28 Tooltips and the catalog's state.** Tooltips on Import Discogs Dump… and Field
+      Mapping… say what each does. With a catalog in place the window says so: the dump date it
+      was built from, when it was imported, its size, and its path with a Reveal in Finder
+      button; the import button then reads Reimport Discogs Dump….
+- [ ] **51.29 Tag commands in the tag editor.** While the tag editor is open it shows Undo Tag
+      Edit, Replace Artwork… and Remove Artwork as buttons, which run the same commands as the
+      menu items and are enabled by the same rules.
+- [ ] **51.30 Dismissing a config warning.** A problem that doesn't block the config (an
+      unknown key such as `discogs.token`, which no build knows until 52.1) gets a close
+      button. A dismissed problem stays hidden until the config file changes. A problem that
+      blocks the config has no close button.
+- [ ] **51.31 Tests.** The help lists every token; Save As over an existing name; a mapping
+      exported, imported and pasted back is equal to the one exported; a bad import changes nothing;
+      the catalog status from a fixture catalog; the editor's buttons follow the commands'
+      enabled rules; a dismissed warning returns when the file changes, and a blocking one can't
+      be dismissed.
+- [ ] **Owner check:** the help, Save As, an export opened in a text editor and imported back,
+      the catalog status after the real reimport, and the editor's buttons.
+
 ### 52. Discogs API
 
 - [ ] **52.1 The token.** An optional Discogs personal access token, the player's first secret:
@@ -662,6 +696,50 @@ mapping choices (51.22–51.24) were decided by the owner the same day.
       fetches the release's primary image and writes it as the cover through `TagWriter`.
 - [ ] **Owner check:** the same with the token, on this Mac and the 2015 MacBook Pro, which has
       no catalog.
+
+### 53. Library, browser and settings
+
+From the owner's testing on 2026-11-07. ADRs numbered when it starts, after 52's.
+
+- [ ] **53.1 Show in All Music.** In any list but All Music, a command in the track menu and
+      the View menu, ⌥⇧⌘A, switches to All Music with the selected tracks selected and
+      centered, the keys in the track table.
+- [ ] **53.2 Drag files out.** Track table and timeline rows also carry the files' URLs, so a
+      drag to the Desktop, a Finder window or another app hands it the files. Outside the app
+      the drag offers copy only, so Finder never moves a library file (an ADR beside the music
+      files boundary). Drags within the app are unchanged.
+- [ ] **53.3 Every picture in the art viewer.** When a file holds more than one picture, the
+      art viewer steps through them, by arrow keys and buttons, showing "2 of 3" and the
+      picture's type (front, back, other).
+- [ ] **53.4 A Config group.** General's config file rows move into a sunken group titled
+      Config, as Library's are.
+- [ ] **53.5 The database in Library.** The Library group shows the index's path, its size
+      (the database and its `-wal`), and a Reveal in Finder button.
+- [ ] **53.6 Snapshots.** Once a day, on the scan queue when it's idle (never during a scan or
+      sync), `VACUUM INTO` a temporary file, compressed with gzip (the zlib already linked)
+      to `library-YYYY-MM-DD.sqlite.gz`. It keeps the last 7 daily snapshots and one for each of
+      the 4 weeks before them, and deletes older ones. The folder is a setting, defaulting to
+      `Backups` beside the index in `~/Library/Application Support/MusicPlayer`. A folder inside a watched folder or the sync
+      folder is refused (AGENTS.md). Only the library index is kept; the Discogs catalog is
+      imported again instead. Settings shows the last snapshot's time, and a Back Up Now button.
+      An ADR.
+- [ ] **53.7 Restore.** Settings lists the snapshots, with date and size. Restore… confirms,
+      snapshots the current index first, and relaunches with the chosen one in its place.
+- [ ] **53.8 The Extras tab.** The tag editor gains an Extras tab: every key the reader found
+      that has no field of its own (custom keys, `TXXX`, MP4 freeform), key and value, in one
+      scrolling list, read only, selectable and copyable. With several files selected, a key
+      that differs shows as mixed.
+- [ ] **53.9 Asking before a rescan.** When a new build would drop an index part that a rescan
+      refills, before dropping anything a dialog says which part changed and why, in words
+      kept once with the part, and that every file is read again. It offers Rescan Now or
+      Quit. Quit leaves the index as it was and asks again at the next launch. An ADR.
+- [ ] **53.10 Tests.** The command's enabled rule and what it selects; a drag's pasteboard
+      holds the URLs and a copy-only mask outside the app; the viewer over a fixture with three
+      pictures; snapshot naming, rotation over a simulated 60 days, a gzip that opens as the
+      same database, and a refused folder; a restore round trip; Extras over FLAC, MP4 and ID3
+      fixtures; the rescan dialog's Quit leaves the index untouched.
+- [ ] **Owner check:** each in the running app, with a snapshot restored, and the rescan
+      dialog on the next build that changes the tracks part.
 
 ### 10. Web remote
 
