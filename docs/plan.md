@@ -382,7 +382,7 @@ Needed from 51h:
    problem). The token is also not copied anywhere else: not into `state.json`, the index,
    the log, the sync folder or the cache; step 3 builds the one header from it.
 3. **AGENTS.md.** The "no secrets" bullet is replaced by: "**One secret: the Discogs token**
-   (optional), kept only in `config.json` at mode 0600 ([ADR 0137](...)). Never log, print,
+   (optional), kept only in `config.json` at mode 0600 ([ADR 0137](decisions/0137-the-discogs-token.md)). Never log, print,
    copy or commit it, and never put it in a test or fixture; `DiscogsToken` redacts itself.
    Any other secret: stop and ask first." The Boundaries bullet on music files gains nothing;
    a line is added: "No test or tool calls the Discogs API: tests use recorded responses
