@@ -54,9 +54,14 @@ enum SchemaPart: String, CaseIterable {
     /// cache: rebuilding it discards nothing a fetch can't get again.
     case discogsCache
 
-    var sql: String {
+    /// The part's SQL; the index's as built with Separate Releases off.
+    var sql: String { sql(separateReleases: false) }
+
+    /// The part's SQL, the index's built with Separate Releases as given (ADR 0143); the other
+    /// parts don't depend on it.
+    func sql(separateReleases: Bool) -> String {
         switch self {
-        case .index: indexSchema
+        case .index: indexSchema(separateReleases: separateReleases)
         case .stats: statsSchema
         case .loved: lovedSchema
         case .disliked: dislikedSchema
@@ -152,7 +157,23 @@ let syncTables: Set<String> = [
     syncMovesTable,
 ]
 
-private let indexSchema = """
+/// The first line of the index's SQL, which says how albums were made, so that every
+/// connection reads the option from the file (ADR 0143).
+private func separateReleasesLine(_ on: Bool) -> String {
+    "-- separate releases: \(on ? "on" : "off")\n"
+}
+
+/// Whether the index SQL `stored` was built with Separate Releases on; nil when its first line
+/// doesn't say, as in a file from before the option.
+func storedSeparateReleases(_ stored: String) -> Bool? {
+    [true, false].first { stored.hasPrefix(separateReleasesLine($0)) }
+}
+
+private func indexSchema(separateReleases: Bool) -> String {
+    separateReleasesLine(separateReleases) + indexTablesSchema
+}
+
+private let indexTablesSchema = """
     CREATE TABLE files (
         -- The path's ID in paths, which an index rebuild keeps.
         id INTEGER PRIMARY KEY REFERENCES paths (id),
@@ -185,9 +206,11 @@ private let indexSchema = """
         title TEXT NOT NULL,
         -- The album artist, else the track artist; NULL for a compilation without one.
         artist_id INTEGER REFERENCES artists (id),
-        sort_title TEXT NOT NULL
+        sort_title TEXT NOT NULL,
+        -- The tracks' Discogs release id with Separate Releases on, else ''.
+        release_id TEXT NOT NULL DEFAULT ''
     );
-    CREATE UNIQUE INDEX albums_identity ON albums (title, ifnull(artist_id, 0));
+    CREATE UNIQUE INDEX albums_identity ON albums (title, ifnull(artist_id, 0), release_id);
     CREATE TABLE tracks (
         file_id INTEGER PRIMARY KEY REFERENCES files (id) ON DELETE CASCADE,
         title TEXT,

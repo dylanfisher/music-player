@@ -126,8 +126,9 @@ extension LibraryIndex {
             // lookups the other columns need.
             tieBreak = "t.file_id \(direction)"
         } else {
+            // The album ID keeps two releases of one title apart, each whole.
             tieBreak =
-                "\(filter.groupByAlbumArtist ? "ga" : "ar").sort_name, al.sort_title,"
+                "\(filter.groupByAlbumArtist ? "ga" : "ar").sort_name, al.sort_title, t.album_id,"
                 + " t.disc_number, t.track_number, t.sort_title, t.file_id"
         }
         let sql = """

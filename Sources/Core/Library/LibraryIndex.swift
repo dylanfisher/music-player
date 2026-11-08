@@ -34,6 +34,9 @@ public final class LibraryIndex {
     /// then fill. In memory only: a quit in the middle of the rescan reads as a plain scan at
     /// the next launch (ADR 0136).
     public private(set) var rebuiltIndex = false
+    /// Whether albums are made of each Discogs release (ADR 0143): what this open built the
+    /// index with, which the stored index SQL holds for every other connection.
+    public private(set) var separateReleases = false
     /// Files moved aside for one reason that are kept beside the library: unreadable ones, or
     /// those a restore replaced; older ones are deleted when another is moved.
     static let keptUnreadableFiles = 3
@@ -57,9 +60,14 @@ public final class LibraryIndex {
     /// `confirmRescan` is asked; false throws `LibraryError.rescanDeclined` with nothing in the
     /// file changed, so the next open asks again (ADR 0136). Nil asks nothing. A rebuild of the
     /// stats doesn't ask: it keeps its discard notice (ADR 0022).
+    ///
+    /// `separateReleases` builds the index with Separate Releases on or off, rebuilding it when
+    /// the stored index was built the other way. Nil, which every open but the window's first
+    /// passes, keeps what the stored index was built with (off for a new one), so no other
+    /// connection rebuilds it (ADR 0143).
     public init(
         at url: URL, movingAsideIfUnreadable: Bool = false,
-        confirmRescan: ((RescanNotice) -> Bool)? = nil
+        confirmRescan: ((RescanNotice) -> Bool)? = nil, separateReleases: Bool? = nil
     ) throws {
         fileURL = url
         try FileManager.default.createDirectory(
@@ -72,7 +80,7 @@ public final class LibraryIndex {
                 "SQLite maps \(self.database.mappedBytesInEffect) bytes of the library, not the \(Database.mappedBytes) asked for"
             )
         }
-        try prepareSchema(confirmRescan: confirmRescan)
+        try prepareSchema(confirmRescan: confirmRescan, separateReleases: separateReleases)
         if let detail { try recordDiscard(detail) }
     }
 
@@ -164,8 +172,17 @@ public final class LibraryIndex {
         try database.prepare("VACUUM INTO ?").run(url.path)
     }
 
-    private func prepareSchema(confirmRescan: ((RescanNotice) -> Bool)?) throws {
-        if let confirmRescan, let notice = try rescanNotice(), !confirmRescan(notice) {
+    private func prepareSchema(
+        confirmRescan: ((RescanNotice) -> Bool)?, separateReleases asked: Bool?
+    ) throws {
+        let tables = try database.prepare(tableNamesSQL).map { try $0.text(0) }
+        let stored = tables.contains(schemaIdentityTable) ? try storedParts() : nil
+        let storedOption = stored.flatMap(Self.storedOption)
+        separateReleases = asked ?? storedOption ?? false
+        if let confirmRescan, let stored,
+            let notice = rescanNotice(stored: stored, storedOption: storedOption),
+            !confirmRescan(notice)
+        {
             throw LibraryError.rescanDeclined
         }
         try database.execute(
@@ -179,22 +196,34 @@ public final class LibraryIndex {
         // rows, which foreign keys would check against tables already dropped. The pragma does
         // nothing inside a transaction, so it goes around it.
         try database.execute("PRAGMA foreign_keys = OFF")
-        let rebuilt = Result { try rebuildStaleParts() }
+        let rebuilt = Result { try rebuildStaleParts(adoptingStoredOption: asked == nil) }
         try database.execute("PRAGMA foreign_keys = ON")
         try rebuilt.get()
         try database.execute(healthTracksSchema)
     }
 
-    /// What the rescan question says before this open's rebuild, nil when there is nothing to
-    /// ask: no part a rescan refills is stored in an earlier shape, or the stats are rebuilt
-    /// too. Reads only, so a declined rescan leaves the file as it was.
-    private func rescanNotice() throws -> RescanNotice? {
-        let tables = try database.prepare(tableNamesSQL).map { try $0.text(0) }
-        guard tables.contains(schemaIdentityTable) else { return nil }
-        let stored = try storedParts()
+    /// What the rescan question says before this open's rebuild of the parts `stored`, nil
+    /// when there is nothing to ask: no part a rescan refills is stored in an earlier shape or
+    /// with the other Separate Releases, `storedOption`, or the stats are rebuilt too.
+    private func rescanNotice(stored: [String: String], storedOption: Bool?) -> RescanNotice? {
         let rebuilt = partsToRebuild(stored: stored)
         guard !rebuilt.contains(.stats) else { return nil }
-        return RescanNotice(parts: rebuilt.filter { stored[$0.rawValue] != nil })
+        var parts = rebuilt.filter { stored[$0.rawValue] != nil }
+        let changedOption = storedOption.flatMap { $0 == separateReleases ? nil : separateReleases }
+        // When the option is all that changed, the index's own reason, a new shape, isn't true.
+        if let storedOption, changedOption != nil,
+            stored[SchemaPart.index.rawValue]
+                == SchemaPart.index.sql(separateReleases: storedOption)
+        {
+            parts.removeAll { $0 == .index }
+        }
+        return RescanNotice(parts: parts, separateReleases: changedOption)
+    }
+
+    /// Whether the index part `stored` was built with Separate Releases on; nil when it says
+    /// nothing, as in a new file.
+    private static func storedOption(_ stored: [String: String]) -> Bool? {
+        stored[SchemaPart.index.rawValue].flatMap(storedSeparateReleases)
     }
 
     /// The SQL each part was last built from, by part name.
@@ -207,7 +236,9 @@ public final class LibraryIndex {
 
     /// The parts this build makes again, given the SQL `stored` they were last built from.
     private func partsToRebuild(stored: [String: String]) -> [SchemaPart] {
-        let stale = SchemaPart.allCases.filter { stored[$0.rawValue] != $0.sql }
+        let stale = SchemaPart.allCases.filter {
+            stored[$0.rawValue] != $0.sql(separateReleases: separateReleases)
+        }
         guard !stale.isEmpty else { return [] }
         // Stats tables that don't match are discarded with everything else, since every
         // other part refers to their paths, and so are they when an earlier sync part is
@@ -220,9 +251,13 @@ public final class LibraryIndex {
         return rebuilt
     }
 
-    private func rebuildStaleParts() throws {
+    /// Rebuilds the parts whose SQL differs from this build's. `adoptingStoredOption` takes
+    /// Separate Releases from the stored index as the transaction reads it, so an open that
+    /// asked nothing never undoes another connection's rebuild that committed meanwhile.
+    private func rebuildStaleParts(adoptingStoredOption: Bool) throws {
         try database.transaction {
             let stored = try storedParts()
+            if adoptingStoredOption { separateReleases = Self.storedOption(stored) ?? false }
             let rebuilt = partsToRebuild(stored: stored)
             guard !rebuilt.isEmpty else { return }
             for part in rebuilt where stored[part.rawValue] != nil {
@@ -253,8 +288,9 @@ public final class LibraryIndex {
             let identity = try database.prepare(
                 "INSERT OR REPLACE INTO \(schemaIdentityTable) (part, sql) VALUES (?, ?)")
             for part in rebuilt {
-                try database.execute(part.sql)
-                try identity.run(part.rawValue, part.sql)
+                let sql = part.sql(separateReleases: separateReleases)
+                try database.execute(sql)
+                try identity.run(part.rawValue, sql)
             }
             rebuiltIndex = rebuilt.contains(.index) && stored[SchemaPart.index.rawValue] != nil
         }
@@ -530,7 +566,8 @@ public final class LibraryIndex {
         let albumArtist = try artistID(tags.albumArtist)
         let album = try albumID(
             tags.album,
-            artist: tags.albumArtist != nil ? albumArtist : tags.compilation ? nil : artist)
+            artist: tags.albumArtist != nil ? albumArtist : tags.compilation ? nil : artist,
+            releaseID: tags.custom[DiscogsKey.releaseID])
         let groupArtist =
             tags.albumArtist != nil
             ? albumArtist : tags.compilation ? try artistID(variousArtists) : artist
@@ -650,24 +687,30 @@ public final class LibraryIndex {
         return database.lastInsertRowID
     }
 
-    private func albumID(_ title: String?, artist: Int64?) throws -> Int64? {
+    /// The album of `title` and `artist`, and with Separate Releases on, of `releaseID` too;
+    /// tracks without a release id share one album, as with the option off.
+    private func albumID(_ title: String?, artist: Int64?, releaseID: String?) throws -> Int64? {
         guard let title else { return nil }
         if albumIDs == nil {
             albumIDs = Dictionary(
                 uniqueKeysWithValues: try database.prepare(
-                    "SELECT title, artist_id, id FROM albums"
+                    "SELECT title, artist_id, release_id, id FROM albums"
                 ).map { row in
                     (
                         AlbumKey(
-                            title: try row.text(0), artist: row.optionalInt(1).map(Int64.init)),
-                        try row.int64(2)
+                            title: try row.text(0), artist: row.optionalInt(1).map(Int64.init),
+                            releaseID: try row.text(2)),
+                        try row.int64(3)
                     )
                 })
         }
-        let key = AlbumKey(title: title, artist: artist)
+        let release =
+            separateReleases ? releaseID?.trimmingCharacters(in: .whitespaces) ?? "" : ""
+        let key = AlbumKey(title: title, artist: artist, releaseID: release)
         if let id = albumIDs?[key] { return id }
-        try statement("INSERT INTO albums (title, artist_id, sort_title) VALUES (?, ?, ?)").run(
-            title, artist, sortKey(title))
+        try statement(
+            "INSERT INTO albums (title, artist_id, sort_title, release_id) VALUES (?, ?, ?, ?)"
+        ).run(title, artist, sortKey(title), release)
         albumIDs?[key] = database.lastInsertRowID
         return database.lastInsertRowID
     }
@@ -715,6 +758,7 @@ struct ScannedFile: Sendable {
 private struct AlbumKey: Hashable {
     var title: String
     var artist: Int64?
+    var releaseID: String
 }
 
 /// `path` as the library stores and compares it: without trailing slashes, except that "/"
