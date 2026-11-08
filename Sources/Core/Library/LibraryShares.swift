@@ -226,8 +226,11 @@ public func isDirectory(_ path: String) -> Bool {
         && isDirectory.boolValue
 }
 
-/// Where the sync folder is now, with its share looked up among `shares`.
-public func locate(_ folder: SyncFolder, among shares: [MountedShare]) -> SyncFolderPlace {
+/// Where the sync folder, or another folder setting such as the staging folder, is now, with
+/// its share looked up among `shares`.
+public func locate<Folder: FolderSetting>(_ folder: Folder, among shares: [MountedShare])
+    -> SyncFolderPlace
+{
     guard let share = folder.share else { return .found(canonicalPath(folder.path)) }
     guard let url = ShareURL(share) else {
         preconditionFailure("\(share) passed the settings check")

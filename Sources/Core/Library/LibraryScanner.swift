@@ -80,6 +80,25 @@ public struct LibraryScanner: Sendable {
                     detail: "on a network volume, where FSEvents reports no changes"))
         }
 
+        let skipped = options.skippedFolders.map(canonicalPath)
+        if let staging = skipped.first(where: { isPath(root, inOrAt: $0) }) {
+            summary.issues.append(
+                ScanIssue(
+                    kind: .insideStagingFolder, path: root,
+                    detail: "is in the staging folder \(staging), which no scan reads;"
+                        + " move it out, or watch another folder"))
+            logger.error("\(root) is in the staging folder \(staging); not scanning it")
+            return summary
+        }
+        let skippedInside = skipped.filter { isPath($0, under: root) }
+        for staging in skippedInside {
+            summary.issues.append(
+                ScanIssue(
+                    kind: .stagingFolderSkipped, path: staging,
+                    detail: "the staging folder is inside the watched folder; its downloads"
+                        + " aren't read"))
+        }
+
         let index = try LibraryIndex(at: databaseURL)
         if subtrees.isEmpty { try index.setFinishedWholeScan(of: root, false) }
         let filter = FolderFilter(include: folder.include, exclude: folder.exclude)
@@ -99,8 +118,11 @@ public struct LibraryScanner: Sendable {
             (controller, readers) = (tuning, tuning.level)
         }
         let pipeline = ScanPipeline(
-            starts.filter { startIsIncluded($0, root: root, filter: filter) }, root: root,
-            filter: filter, known: known, removed: try index.removedPathSet(), index: index,
+            starts.filter { start in
+                startIsIncluded(start, root: root, filter: filter)
+                    && !skippedInside.contains { isPath(start, inOrAt: $0) }
+            }, root: root, filter: filter, known: known, removed: try index.removedPathSet(),
+            skipped: skippedInside, index: index,
             controller: controller,
             readers: readers,
             access: access, control: control, counter: ProgressCounter(progress),

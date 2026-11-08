@@ -1,6 +1,7 @@
 import Foundation
 import Log
 import Metadata
+import Settings
 
 /// Walks a folder and reads its new and changed files at the same time, storing the results in
 /// batches. Listers walk depth-first and queue each directory's changed files in listing order,
@@ -58,6 +59,8 @@ final class ScanPipeline: @unchecked Sendable {
     private let rescansModifiedFiles: Bool
     /// The paths removed from the library, in NFC, which the walk passes over.
     private let removed: Set<String>
+    /// Directories the walk doesn't descend into: the staging folder (`ScanOptions`).
+    private let skipped: [String]
     private let access: any ScanFileAccess
     private let control: ScanControl
     private let counter: ProgressCounter
@@ -118,7 +121,8 @@ final class ScanPipeline: @unchecked Sendable {
     /// with `readers`, and `controller`, if any, changes that as it measures.
     init(
         _ starts: [String], root: String, filter: FolderFilter, known: [String: KnownFile],
-        removed: Set<String>, index: LibraryIndex, controller: ReadConcurrency?, readers: Int,
+        removed: Set<String>, skipped: [String] = [], index: LibraryIndex,
+        controller: ReadConcurrency?, readers: Int,
         access: any ScanFileAccess,
         control: ScanControl,
         counter: ProgressCounter, batchSize: Int, rescansModifiedFiles: Bool = true,
@@ -131,6 +135,7 @@ final class ScanPipeline: @unchecked Sendable {
         self.filter = filter
         self.known = known
         self.removed = removed
+        self.skipped = skipped
         self.index = index
         self.access = access
         self.control = control
@@ -200,7 +205,9 @@ final class ScanPipeline: @unchecked Sendable {
                     outcome.moreIssues += 1
                 }
             }
-            directories += listed.directories.reversed()
+            directories += listed.directories.reversed().filter { directory in
+                !skipped.contains { isPath(directory, inOrAt: $0) }
+            }
             found += listed.files.count
             for file in listed.files {
                 if !removed.isEmpty,

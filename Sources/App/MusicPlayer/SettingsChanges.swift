@@ -111,7 +111,8 @@ extension AppDelegate {
         let library = [
             schema.watchedFolders.key, schema.networkScanReaders.key,
             schema.pausePollingDuringPlayback.key, schema.syncFolder.key,
-            schema.removeMissingTracks.key, schema.rescanModifiedFiles.key,
+            schema.stagingFolder.key, schema.removeMissingTracks.key,
+            schema.rescanModifiedFiles.key,
         ]
         if !keys.isDisjoint(with: library) { changedFolders(settings) }
         if keys.contains(schema.groupByAlbumArtist.key), let browser {

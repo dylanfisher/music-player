@@ -43,6 +43,11 @@ public final class LibraryWatcher: @unchecked Sendable {
     private var locateDue = false
     /// The sync folder as Settings has it (ADR 0038); nil syncs nothing.
     private var syncFolder: SyncFolder?
+    /// The staging folder as Settings has it (ADR 0136), and where it was last found: the
+    /// share's mount points it could be under when the share is ambiguous, none when it isn't
+    /// mounted. No scan reads in them.
+    private var stagingFolder: StagingFolder?
+    private var stagingPaths: [String] = []
     /// Set by a trigger or a scan's end until the next sync, and by an edit until the next push.
     private var syncDue = false
     private var pushDue = false
@@ -76,9 +81,11 @@ public final class LibraryWatcher: @unchecked Sendable {
     /// there are none (ADR 0082), scans
     /// the local folders and the network ones whose last whole scan didn't finish, and starts watching
     /// them, and syncs through `syncFolder` at start once the local folders are scanned, after
-    /// each scan and on each trigger. The caller reads them from Settings.
+    /// each scan and on each trigger. No scan reads in `stagingFolder`, wherever it's found.
+    /// The caller reads them from Settings.
     public func start(
         folders: [WatchedFolder], syncFolder: SyncFolder? = nil,
+        stagingFolder: StagingFolder? = nil,
         rescanNetworkFoldersAtLaunch: Bool, pausePollingDuringPlayback: Bool,
         options: ScanOptions = ScanOptions()
     ) {
@@ -86,6 +93,8 @@ public final class LibraryWatcher: @unchecked Sendable {
             precondition(state == nil, "the watcher is already running")
             configured = folders
             self.syncFolder = syncFolder
+            self.stagingFolder = stagingFolder
+            locateStaging()
             syncDue = true
             var located: [WatchedFolder]
             var locatedAll = true
@@ -334,6 +343,7 @@ public final class LibraryWatcher: @unchecked Sendable {
             }
             current.relocated(
                 try locate().map { $0.located(at: canonicalPath($0.path)) }, now: Date())
+            locateStaging()
             locateDue = false
         } catch {
             locateDue = true
@@ -364,6 +374,9 @@ public final class LibraryWatcher: @unchecked Sendable {
             return
         }
         if !syncing, let job = current.start(now: Date()) {
+            var skipping = job.options
+            skipping.skippedFolders = stagingPaths
+            let options = skipping
             let control = ScanControl()
             self.control = control
             scanQueue.async { [self, scanner, events] in
@@ -379,7 +392,7 @@ public final class LibraryWatcher: @unchecked Sendable {
                 let result = Result {
                     try scanner.scan(
                         job.folder, only: job.subtrees, control: control, progress: progress,
-                        options: job.options)
+                        options: options)
                 }
                 progress.finish()
                 Task { [self] in
@@ -457,6 +470,13 @@ public final class LibraryWatcher: @unchecked Sendable {
                         + " it must be outside every watched folder, so nothing was synced"))
             return false
         }
+        if let staging = stagingPaths.first(where: { stagingOverlap($0, [path]) != nil }) {
+            events(
+                .syncFailed(
+                    reason: "the sync folder \(path) is in or around the staging folder"
+                        + " \(staging), where downloads are deleted, so nothing was synced"))
+            return false
+        }
         syncing = true
         scanQueue.async { [self, scanner] in
             let result = Result {
@@ -484,6 +504,33 @@ public final class LibraryWatcher: @unchecked Sendable {
 
     private func locate(_ folder: SyncFolder) throws -> SyncFolderPlace {
         Library.locate(folder, among: folder.share == nil ? [] : try mounts.mountedShares())
+    }
+
+    /// Finds the staging folder again. A share that can't be listed leaves the last paths
+    /// found, so a scan never reads where the folder was. Runs on `queue`.
+    private func locateStaging() {
+        guard let stagingFolder else {
+            stagingPaths = []
+            return
+        }
+        let place: SyncFolderPlace
+        do {
+            place = Library.locate(
+                stagingFolder,
+                among: stagingFolder.share == nil ? [] : try mounts.mountedShares())
+        } catch {
+            logger.error("couldn't find the staging folder on its share: \(error)")
+            return
+        }
+        switch place {
+        case .found(let path): stagingPaths = [path]
+        case .unmounted: stagingPaths = []
+        case .ambiguous(let mountPoints):
+            stagingPaths = mountPoints.map { mountPoint in
+                canonicalPath(
+                    stagingFolder.path.isEmpty ? mountPoint : mountPoint + "/" + stagingFolder.path)
+            }
+        }
     }
 
     private func schedulePoll(at date: Date?) {
