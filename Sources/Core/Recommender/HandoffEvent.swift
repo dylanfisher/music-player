@@ -38,28 +38,36 @@ package enum HandoffEvent: Equatable, Sendable, Codable {
 
     package func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        let type: EventType
         switch self {
-        case .lease: type = .lease
-        case .releaseLease: type = .releaseLease
+        case .lease, .releaseLease, .release, .approved, .importing, .imported, .rejected: break
         case .tagging(let tagging):
-            type = .tagging
             try container.encode(tagging.status, forKey: .status)
             try container.encode(tagging.reasons, forKey: .reasons)
         case .claim(let takeOver):
-            type = .claim
             if takeOver { try container.encode(true, forKey: .takeOver) }
-        case .release: type = .release
-        case .approved: type = .approved
-        case .importing: type = .importing
-        case .imported: type = .imported
-        case .rejected: type = .rejected
         case .failed(let stage, let reason):
-            type = .failed
             try container.encode(stage, forKey: .stage)
             try container.encode(reason, forKey: .reason)
         }
         try container.encode(type, forKey: .type)
+    }
+
+    /// `event.type`, as the service names the event: "lease", "approved".
+    package var name: String { type.rawValue }
+
+    private var type: EventType {
+        switch self {
+        case .lease: .lease
+        case .releaseLease: .releaseLease
+        case .tagging: .tagging
+        case .claim: .claim
+        case .release: .release
+        case .approved: .approved
+        case .importing: .importing
+        case .imported: .imported
+        case .rejected: .rejected
+        case .failed: .failed
+        }
     }
 
     package init(from decoder: any Decoder) throws {

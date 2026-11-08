@@ -76,7 +76,7 @@ package struct RecommenderError: Error, Equatable, CustomStringConvertible {
 
     /// The URL the request went to, or the address and port when there was none to make.
     var service: String
-    var kind: Kind
+    package var kind: Kind
 
     package var description: String { "music-recommender at \(service) \(kind)" }
 }

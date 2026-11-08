@@ -6,8 +6,8 @@ import TagWriter
 
 /// What AutoTag found for a staged job (ADR 0138): whether its tags can be written unasked,
 /// and the edits that would be.
-struct AutoTagRun: Sendable {
-    enum Verdict: Equatable, Sendable {
+package struct AutoTagRun: Sendable {
+    package enum Verdict: Equatable, Sendable {
         /// Tier Exact, every file mapped as the service mapped it, in the format it said, and
         /// every file writable: `edits` can be written without asking.
         case clean
@@ -17,7 +17,7 @@ struct AutoTagRun: Sendable {
         case error([String])
     }
 
-    var verdict: Verdict
+    package var verdict: Verdict
     var staged: StagedAlbum
     /// Nil when a file couldn't be read.
     var match: AlbumMatch?

@@ -146,7 +146,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
             case status, reasons
         }
 
-        init(status: Status, reasons: [String]) {
+        package init(status: Status, reasons: [String]) {
             self.status = status
             self.reasons = reasons
         }
@@ -221,7 +221,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
     package var progress: Progress?
     package var candidate: Candidate?
     /// In release order; empty until a candidate is chosen.
-    var files: [File]
+    package var files: [File]
     /// From `staged` on: the job's folder in the staging folder, one component.
     package var stagedPath: String?
     package var tagging: Tagging

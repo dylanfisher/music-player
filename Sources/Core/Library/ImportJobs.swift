@@ -25,19 +25,19 @@ struct ImportStep: Equatable, Sendable {
 }
 
 /// A report to music-recommender waiting in the outbox.
-struct QueuedImportReport: Equatable, Sendable {
+package struct QueuedImportReport: Equatable, Sendable {
     /// Its place in the outbox; reports go in this order.
-    var seq: Int64
-    var jobID: Int
-    var releaseID: Int
+    package var seq: Int64
+    package var jobID: Int
+    package var releaseID: Int
     /// The request's body as it's sent.
-    var body: String
+    package var body: String
 }
 
 extension LibraryIndex {
     /// Adds a report for the job `job` of the release `release`, after every other, and
     /// returns its place.
-    func queueImportReport(job: Int, release: Int, body: String) throws -> Int64 {
+    package func queueImportReport(job: Int, release: Int, body: String) throws -> Int64 {
         try statement(
             "INSERT INTO \(importOutboxTable) (job_id, release_id, body) VALUES (?, ?, ?)"
         ).run(job, release, body)
@@ -45,7 +45,7 @@ extension LibraryIndex {
     }
 
     /// The reports not yet delivered, oldest first.
-    func importReports() throws -> [QueuedImportReport] {
+    package func importReports() throws -> [QueuedImportReport] {
         try statement(
             "SELECT seq, job_id, release_id, body FROM \(importOutboxTable) ORDER BY seq"
         ).map { row in
@@ -56,7 +56,7 @@ extension LibraryIndex {
     }
 
     /// Drops the report at `seq`, which the service has answered.
-    func removeImportReport(_ seq: Int64) throws {
+    package func removeImportReport(_ seq: Int64) throws {
         try statement("DELETE FROM \(importOutboxTable) WHERE seq = ?").run(seq)
     }
 
@@ -97,7 +97,7 @@ extension LibraryIndex {
     }
 
     /// Forgets the job `job`'s steps, once it's imported.
-    func forgetImportJob(_ job: Int) throws {
+    package func forgetImportJob(_ job: Int) throws {
         try statement("DELETE FROM \(importStepsTable) WHERE job_id = ?").run(job)
     }
 }

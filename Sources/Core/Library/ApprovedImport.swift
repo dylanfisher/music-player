@@ -5,7 +5,7 @@ import Recommender
 
 /// A staged job the owner approved (ADR 0139): the files to move into the library and, for an
 /// upgrade, the files they replace.
-struct ApprovedImport: Sendable {
+package struct ApprovedImport: Sendable {
     /// What an upgrade replaces, as the Approve sheet showed it.
     struct Upgrade: Sendable {
         /// The old files, each with its release position, as the sheet resolved them.
@@ -14,8 +14,8 @@ struct ApprovedImport: Sendable {
         var acknowledged: Set<String>
     }
 
-    var jobID: Int
-    var releaseID: Int
+    package var jobID: Int
+    package var releaseID: Int
     /// As the service last listed it: `staged`, `approved` or `importing`.
     var state: JobState
     /// The job's folder in the staging folder.
@@ -25,7 +25,7 @@ struct ApprovedImport: Sendable {
 }
 
 /// How an import run ended.
-enum ImportOutcome: Equatable, Sendable {
+package enum ImportOutcome: Equatable, Sendable {
     /// Every file is in the library at these paths, and `imported` is in the outbox.
     case imported([String])
     /// Nothing was started, and nothing reported.

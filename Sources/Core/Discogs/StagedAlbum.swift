@@ -5,7 +5,7 @@ import Recommender
 
 /// A job music-recommender staged, as AutoTag takes it: the release it downloaded, where, in
 /// what format, and its files as the service reported them.
-struct StagedJob: Sendable {
+package struct StagedJob: Sendable {
     var releaseID: Int
     /// As the snapshot spelled it, for a file name that starts with it.
     var artist: String
@@ -15,6 +15,16 @@ struct StagedJob: Sendable {
     var format: DownloadJob.Candidate.Format
     /// In the service's order, each `name` relative to `folder`.
     var files: [DownloadJob.File]
+}
+
+extension StagedJob {
+    /// `job` as AutoTag takes it; nil until the service has staged it in a folder.
+    package init?(_ job: DownloadJob) {
+        guard let folder = job.stagedPath, let format = job.candidate?.format else { return nil }
+        self.init(
+            releaseID: job.release.releaseID, artist: job.release.artist, folder: folder,
+            format: format, files: job.files)
+    }
 }
 
 /// A staged job's files read for matching (ADR 0138): each with a synthetic negative id, so
