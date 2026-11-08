@@ -46,9 +46,12 @@ actor DownloadsCoordinator {
     /// Opened on first use, here, since an index belongs to the thread that uses it.
     private var opened: LibraryIndex?
     private var releasedStaleLeases = false
-    private var recoveredStagedWrites = false
-    /// The state each job had at the last poll.
-    private var states: [Int: JobState] = [:]
+    /// The one recovery of the staged journal, started by the first tag-capable poll; every
+    /// poll waits for it, so none tags a job while a torn file is still being put back.
+    private var recovery: Task<Void, Never>?
+    /// The state each job had at the newest poll that listed it, with the revision that gave it.
+    /// Polls run at once, so an older one never replaces a newer.
+    private(set) var states: [Int: (revision: Int, state: JobState)] = [:]
     /// Whether the outbox may hold a report: at launch, which finds what a run before left, then
     /// after a report is queued or a send wasn't answered. A poll with none doesn't look.
     private var outboxMayHold = true
@@ -86,7 +89,9 @@ actor DownloadsCoordinator {
     /// from before it launched; then sends the outbox, and tags the jobs waiting for it.
     func take(_ jobs: [DownloadJob]) async {
         var jobs = jobs
-        states = Dictionary(jobs.map { ($0.id, $0.state) }, uniquingKeysWith: { _, last in last })
+        for job in jobs where job.revision >= (states[job.id]?.revision ?? job.revision) {
+            states[job.id] = (job.revision, job.state)
+        }
         if !releasedStaleLeases {
             releasedStaleLeases = true
             for (offset, job) in jobs.enumerated() where job.lease?.machine == machine {
@@ -99,10 +104,16 @@ actor DownloadsCoordinator {
         }
         if outboxMayHold { await flush() }
         guard let autoTag = effects.autoTag else { return }
-        if !recoveredStagedWrites {
-            recoveredStagedWrites = true
-            for problem in await effects.recover() { note(problem) }
+        let recovering: Task<Void, Never>
+        if let recovery {
+            recovering = recovery
+        } else {
+            recovering = Task { [self] in
+                for problem in await effects.recover() { note(problem) }
+            }
+            recovery = recovering
         }
+        await recovering.value
         for job in jobs.sorted(by: { $0.id < $1.id }) where Self.needsTagging(job) {
             guard tagging == nil else { return }
             await tag(job, with: autoTag)
@@ -283,7 +294,7 @@ actor DownloadsCoordinator {
                 case .refused(let refusal)
                 where event == .imported
                     && (refusal.state == JobState.imported.rawValue
-                        || states[report.jobID] == .imported):
+                        || states[report.jobID]?.state == .imported):
                     // Another Mac finished the job: this Mac's ledger has nothing left to resume.
                     importedAlready = true
                     logger.info("job \(report.jobID) was imported already; its ledger is dropped")

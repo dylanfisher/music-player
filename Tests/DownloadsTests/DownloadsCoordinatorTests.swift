@@ -26,6 +26,27 @@ private final class Calls: @unchecked Sendable {
         }
     }
     func recover() { lock.withLock { events.append("recover") } }
+    private var recoveryGate: CheckedContinuation<Void, Never>?
+    private var holdingRecovery = false
+    /// Makes the recovery wait until `openRecovery`.
+    func holdRecovery() { lock.withLock { holdingRecovery = true } }
+    func waitForRecovery() async {
+        await withCheckedContinuation { (wake: CheckedContinuation<Void, Never>) in
+            let wait = lock.withLock {
+                guard holdingRecovery else { return false }
+                recoveryGate = wake
+                return true
+            }
+            if !wait { wake.resume() }
+        }
+    }
+    func openRecovery() {
+        lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            holdingRecovery = false
+            defer { recoveryGate = nil }
+            return recoveryGate
+        }?.resume()
+    }
     /// What the stand-ins were asked, in order.
     var order: [String] { lock.withLock { events } }
     func write() { lock.withLock { written += 1 } }
@@ -134,6 +155,7 @@ private final class Setup {
                     } : nil,
                 recover: {
                     calls.recover()
+                    await calls.waitForRecovery()
                     return recovery
                 },
                 write: { run in
@@ -482,6 +504,31 @@ private let firstSizes = ["01 First Song.flac": 105, "02 Second Song.flac": 105]
     await coordinator.take([job(1)])
     await coordinator.take([job(2)])
     #expect(setup.calls.order == ["recover", "tag", "tag"])
+}
+
+@Test func aPollThatOverlapsTheRecoveryWaitsForItBeforeTagging() async throws {
+    let setup = try Setup([job(1), job(2)])
+    setup.calls.holdRecovery()
+    let coordinator = setup.coordinator()
+    let first = Task { await coordinator.take([job(1)]) }
+    await eventually("the recovery started") { setup.calls.order.contains("recover") }
+    let second = Task { await coordinator.take([job(2)]) }
+    try await Task.sleep(nanoseconds: 200_000_000)
+    #expect(setup.calls.order == ["recover"], "no job is tagged while the recovery runs")
+    setup.calls.openRecovery()
+    await first.value
+    await second.value
+    #expect(setup.calls.order.first == "recover")
+    #expect(setup.calls.order.contains("tag"))
+}
+
+@Test func anOlderPollNeverReplacesNewerStates() async throws {
+    let setup = try Setup()
+    let coordinator = setup.coordinator(catalog: false)
+    await coordinator.take([job(1, .imported, revision: 5)])
+    await coordinator.take([job(1, .staged, revision: 3), job(2, revision: 2)])
+    #expect(await coordinator.states[1]?.state == .imported)
+    #expect(await coordinator.states[2]?.state == .staged)
 }
 
 @Test func aMacWithNoCatalogLeavesTheStagedJournalAlone() async throws {
