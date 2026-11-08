@@ -41,6 +41,8 @@ extension AppDelegate {
                     startingOver: startingOver, progress: progress)
             })
         tagger.selectedTracks = { [weak browser] in try browser?.selectedTrackIDs() ?? [] }
+        if let state { tagger.sheetLayouts = state[\.taggerSheets] }
+        tagger.sheetLayoutsChosen = { [weak self] in self?.saver?.set(\.taggerSheets, $0) }
         tagger.write = { [weak self] files, window, completion in
             self?.tagEditing.write(files, over: window, completion: completion)
         }

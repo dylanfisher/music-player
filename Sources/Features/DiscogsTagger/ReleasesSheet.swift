@@ -36,6 +36,7 @@ final class ReleasesSheet: NSWindowController, TaggerSheet, NSTableViewDataSourc
     let chosen: Int?
     let fields: [Filter: NSSearchField]
     let table = NSTableView()
+    static let layoutKind = TaggerSheetKind.otherReleases
     /// The candidates the filters leave, in the order the sort gives.
     private(set) var shown: [(summary: ReleaseSummary, score: Double?)]
     /// The release chosen; nil for Cancel.

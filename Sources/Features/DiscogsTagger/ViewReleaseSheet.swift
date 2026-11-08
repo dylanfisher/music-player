@@ -13,6 +13,7 @@ final class ViewReleaseSheet: NSWindowController, TaggerSheet, NSTableViewDataSo
     let heading = NSTextField(labelWithString: "")
     let line = NSTextField(labelWithString: "")
     let table = NSTableView()
+    static let layoutKind = TaggerSheetKind.viewRelease
 
     init(release: ReleaseDetail) {
         self.release = release

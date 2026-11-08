@@ -39,6 +39,10 @@ public final class DiscogsTagger {
     public var dumpsFolder: () -> URL? = { nil }
     /// Saves the folder the user chose to import from.
     public var dumpsFolderChosen: (URL) -> Void = { _ in }
+    /// The size, column widths and sort each sheet was left at, set before the window is
+    /// first shown, and what saves them as a sheet closes.
+    public var sheetLayouts = TaggerSheetLayouts()
+    public var sheetLayoutsChosen: (TaggerSheetLayouts) -> Void = { _ in }
 
     /// `reader` gives the albums and keeps the reviews; `catalog` is the catalog's file.
     public init(
@@ -115,6 +119,11 @@ public final class DiscogsTagger {
         made.choicesChosen = { [weak self] in self?.choicesChosen($0) }
         made.dumpsFolder = { [weak self] in self?.dumpsFolder() }
         made.dumpsFolderChosen = { [weak self] in self?.dumpsFolderChosen($0) }
+        made.sheetLayouts = sheetLayouts
+        made.sheetLayoutsChosen = { [weak self] layouts in
+            self?.sheetLayouts = layouts
+            self?.sheetLayoutsChosen(layouts)
+        }
         controller = made
         return made
     }

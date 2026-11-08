@@ -23,6 +23,7 @@ final class ChangesSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     private let writable: Int
     private(set) var excluded: Set<TagChange.ID>
     let table = NSTableView()
+    static let layoutKind = TaggerSheetKind.viewChanges
     let summary = NSTextField(labelWithString: "")
     /// What the user answered: the boxes left unticked, and whether to apply now; nil for
     /// Cancel.

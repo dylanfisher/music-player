@@ -631,3 +631,64 @@ private func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil
     #expect(frame(controller.trackTable.enclosingScrollView!).height >= before + 190)
     window.close()
 }
+
+/// A sheet opens at the size, column widths and sort it was left at, each kind of sheet its
+/// own, saved through the closure as it closes; a size past the screen or under the sheet's
+/// minimum is brought within them, and a column the sheet no longer has is ignored (51.38).
+@MainActor
+@Test func aSheetKeepsItsSizeWidthsAndSortAfterReopening() async throws {
+    let tagger = await model(
+        Seen(), albums: [], matches: { album, _ in match(album, nil, tier: .noCandidate) })
+    let controller = TaggerWindow(model: tagger)
+    let window = try #require(controller.window)
+    window.orderFront(nil)
+    var saved: [TaggerSheetLayouts] = []
+    controller.sheetLayoutsChosen = { saved.append($0) }
+
+    click(controller.mappingButton)
+    let mapping = try #require(window.attachedSheet?.windowController as? MappingSheet)
+    try #require(mapping.window).setContentSize(NSSize(width: 820, height: 410))
+    let column = try #require(mapping.table.tableColumns.last)
+    column.width = 240
+    // As a drag of a column's edge leaves them: the others take up the difference.
+    mapping.table.sizeToFit()
+    let widths = mapping.table.tableColumns.map(\.width)
+    mapping.endSheet()
+    try await eventually { saved.count == 1 }
+    let layout = try #require(saved.last?.fieldMapping)
+    #expect(layout.width == 820 && layout.height == 410)
+    #expect(
+        mapping.table.tableColumns.map { layout.columns[$0.identifier.rawValue] }
+            == widths.map {
+                Double($0)
+            })
+    #expect(saved.last?.otherReleases == nil, "each kind of sheet its own")
+
+    click(controller.mappingButton)
+    let reopened = try #require(window.attachedSheet?.windowController as? MappingSheet)
+    let sheetWindow = try #require(reopened.window)
+    #expect(
+        sheetWindow.contentRect(forFrameRect: sheetWindow.frame).size
+            == NSSize(width: 820, height: 410))
+    #expect(reopened.table.tableColumns.map(\.width) == widths)
+    reopened.endSheet()
+    window.close()
+
+    let summary = ReleaseSummary(
+        id: 1, artist: "Persuader", title: "Stockholm", label: "Svek", catalogNumber: "SK 1",
+        country: "Sweden", year: "2000", format: "CD", trackCount: 3)
+    let releases = ReleasesSheet(candidates: [(summary, nil)], chosen: 1, title: "Stockholm")
+    releases.sort(by: .year, ascending: false)
+    var layouts = releases.recorded(in: TaggerSheetLayouts())
+    #expect(layouts.otherReleases?.sortColumn == "year")
+    #expect(layouts.otherReleases?.sortAscending == false)
+    layouts.otherReleases?.columns["gone"] = 99
+    layouts.otherReleases?.width = 5000
+    layouts.otherReleases?.height = 10
+    let again = ReleasesSheet(candidates: [(summary, nil)], chosen: 1, title: "Stockholm")
+    again.apply(layouts, room: NSSize(width: 1200, height: 800))
+    let size = try #require(again.window).contentRect(forFrameRect: again.window!.frame).size
+    #expect(size == NSSize(width: 1200, height: again.window!.minSize.height))
+    #expect(again.table.sortDescriptors == [NSSortDescriptor(key: "year", ascending: false)])
+    #expect(again.table.tableColumns.allSatisfy { $0.identifier.rawValue != "gone" })
+}

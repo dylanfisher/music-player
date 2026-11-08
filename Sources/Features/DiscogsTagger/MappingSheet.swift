@@ -18,6 +18,7 @@ final class MappingSheet: NSWindowController, TaggerSheet, NSTableViewDataSource
     private(set) var draft: MappingDraft
     let presets = NSPopUpButton()
     let table = NSTableView()
+    static let layoutKind = TaggerSheetKind.fieldMapping
     let nameField = NSTextField()
     let problemLabel = NSTextField(labelWithString: "")
     let okButton = NSButton(title: "OK", target: nil, action: nil)

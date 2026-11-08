@@ -67,6 +67,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     var choicesChosen: (TaggerChoices) -> Void = { _ in }
     var dumpsFolder: () -> URL? = { nil }
     var dumpsFolderChosen: (URL) -> Void = { _ in }
+    /// The sheets' layouts, which each sheet opens at, and what saves them once one closes.
+    var sheetLayouts = TaggerSheetLayouts()
+    var sheetLayoutsChosen: (TaggerSheetLayouts) -> Void = { _ in }
 
     /// The albums of the tab shown, in list order.
     private(set) var shownAlbums: [TaggerModel.Album] = []
@@ -604,9 +607,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 return alert("The release couldn't be read", ["The catalog has no release \(id)."])
             }
             let shown = ViewReleaseSheet(release: detail)
-            guard let window = shown.window else { return }
             releaseSheet = shown
-            sheetWindow.beginSheet(window) { [self] _ in releaseSheet = nil }
+            begin(shown, over: sheetWindow) { [self] in releaseSheet = nil }
         }
     }
 
@@ -679,16 +681,31 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
     /// Shows `controller`'s window as a sheet over `window`, calling `ended` once it closes.
     private func present(
-        _ controller: NSWindowController & TaggerSheet, over window: NSWindow,
-        ended: @escaping () -> Void
+        _ controller: some TaggerSheet, over window: NSWindow, ended: @escaping () -> Void
     ) {
-        guard let sheetWindow = controller.window else { return }
+        guard controller.window != nil else { return }
         sheet = controller
         refresh()
-        window.beginSheet(sheetWindow) { [weak self] _ in
+        begin(controller, over: window) { [weak self] in
             self?.sheet = nil
             ended()
             self?.refresh()
+        }
+    }
+
+    /// Shows `controller` as a sheet over `window` at the layout it was left at, and saves its
+    /// layout once it closes, before `ended`.
+    private func begin(
+        _ controller: some TaggerSheet, over window: NSWindow, ended: @escaping () -> Void
+    ) {
+        guard let sheetWindow = controller.window else { return }
+        controller.apply(sheetLayouts, room: window.screen?.visibleFrame.size)
+        window.beginSheet(sheetWindow) { [weak self, weak controller] _ in
+            if let self, let controller {
+                sheetLayouts = controller.recorded(in: sheetLayouts)
+                sheetLayoutsChosen(sheetLayouts)
+            }
+            ended()
         }
     }
 
@@ -706,7 +723,12 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
 
 /// A sheet over the tagger's window, which ends itself with its answer set.
 @MainActor
-protocol TaggerSheet: AnyObject {}
+protocol TaggerSheet: NSWindowController {
+    /// Which of the saved layouts is this sheet's.
+    static var layoutKind: TaggerSheetKind { get }
+    /// The table whose column widths and sort the layout keeps.
+    var table: NSTableView { get }
+}
 
 extension NSWindowController {
     /// Ends the sheet this controller's window is.
