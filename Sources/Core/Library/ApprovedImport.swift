@@ -7,11 +7,16 @@ import Recommender
 /// upgrade, the files they replace.
 package struct ApprovedImport: Sendable {
     /// What an upgrade replaces, as the Approve sheet showed it.
-    struct Upgrade: Sendable {
+    package struct Upgrade: Sendable {
         /// The old files, each with its release position, as the sheet resolved them.
         var old: [UpgradeOldFile]
         /// The share paths of the unmatched old files the owner ticked to lose.
         var acknowledged: Set<String>
+
+        package init(old: [UpgradeOldFile], acknowledged: Set<String>) {
+            self.old = old
+            self.acknowledged = acknowledged
+        }
     }
 
     package var jobID: Int
@@ -22,6 +27,18 @@ package struct ApprovedImport: Sendable {
     var folder: String
     var files: [DownloadJob.File]
     var upgrade: Upgrade?
+
+    package init(
+        jobID: Int, releaseID: Int, state: JobState, folder: String, files: [DownloadJob.File],
+        upgrade: Upgrade?
+    ) {
+        self.jobID = jobID
+        self.releaseID = releaseID
+        self.state = state
+        self.folder = folder
+        self.files = files
+        self.upgrade = upgrade
+    }
 }
 
 /// How an import run ended.
@@ -41,7 +58,7 @@ package enum ImportOutcome: Equatable, Sendable {
 /// on this Mac or another, finishes what the last one began. The ledger stays until the outbox
 /// has delivered `imported`, whose sender forgets it. One runs at a time, since the library
 /// folder has one writer. Blocks on the volumes between its awaits.
-struct ImportRun {
+package struct ImportRun {
     let index: LibraryIndex
     let move: LibraryFolderMove
     /// `moveToTrash`, giving its failure: the files it was given that are still there count
@@ -52,7 +69,20 @@ struct ImportRun {
     /// `LibraryWatcher.rescan(directories:)`.
     let rescan: @Sendable ([String]) -> Void
 
-    func run(_ job: ApprovedImport) async -> ImportOutcome {
+    package init(
+        index: LibraryIndex, move: LibraryFolderMove,
+        trash: @escaping @Sendable ([URL]) async -> String?,
+        carry: @escaping @Sendable ([(from: String, to: String)]) async throws -> MoveListImport,
+        rescan: @escaping @Sendable ([String]) -> Void
+    ) {
+        self.index = index
+        self.move = move
+        self.trash = trash
+        self.carry = carry
+        self.rescan = rescan
+    }
+
+    package func run(_ job: ApprovedImport) async -> ImportOutcome {
         do {
             if try reported(.imported, job) {
                 return .imported(try destinations(job))

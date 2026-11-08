@@ -1,19 +1,19 @@
 /// One of an upgrade's old files, found in the index by its path on the share (ADR 0139).
-struct UpgradeOldFile: Equatable, Sendable {
+package struct UpgradeOldFile: Equatable, Sendable {
     /// As the job lists it, relative to the share.
-    var sharePath: String
-    var path: String
+    package var sharePath: String
+    package var path: String
     /// Its track's position in the release, as the matcher placed it; nil when it fits none.
-    var position: String?
+    package var position: String?
     /// Plays, a rating, a love or a playlist entry, which a delete without a new file for it
     /// would lose.
-    var hasStats: Bool
+    package var hasStats: Bool
 }
 
 /// How an upgrade's old files map to its new ones through the release's track positions: each
 /// pair's stats move from the old file to the new, and an old file with no counterpart is
 /// deleted with what it has, once the owner ticks it.
-struct UpgradeMapping: Equatable, Sendable {
+package struct UpgradeMapping: Equatable, Sendable {
     struct Pair: Equatable, Sendable {
         /// The old file's path relative to the share.
         var old: String
@@ -23,11 +23,11 @@ struct UpgradeMapping: Equatable, Sendable {
 
     var pairs: [Pair]
     /// The old files with no new file at their position, in the job's order.
-    var unmatched: [UpgradeOldFile]
+    package var unmatched: [UpgradeOldFile]
 
     /// Pairs each of `old` with the new file of `new` at its position. A position two old files
     /// share goes to the first; the other is unmatched.
-    init(old: [UpgradeOldFile], new: [(name: String, position: String?)]) {
+    package init(old: [UpgradeOldFile], new: [(name: String, position: String?)]) {
         // The service names each position once (`ReleaseSnapshot.positions`).
         var byPosition: [String: String] = [:]
         for file in new {
@@ -46,13 +46,13 @@ struct UpgradeMapping: Equatable, Sendable {
 }
 
 /// Why an upgrade's old files can't be replaced.
-enum UpgradeRefusal: Error, Equatable, CustomStringConvertible {
+package enum UpgradeRefusal: Error, Equatable, CustomStringConvertible {
     /// The job lists a file the index doesn't have.
     case notInLibrary(String)
     /// The file no longer carries the job's release id, so it may not be the album's.
     case otherRelease(String, found: String?, expected: Int)
 
-    var description: String {
+    package var description: String {
         switch self {
         case .notInLibrary(let path): "\(path) isn't in the library"
         case .otherRelease(let path, let found, let expected):
@@ -66,7 +66,7 @@ extension LibraryIndex {
     /// The upgrade's old files `sharePaths`, relative to the share mounted at `shareRoot`, as
     /// the index has them, with no position yet. Each must be a track that still carries
     /// `release`: only the album's own files are ever passed to the Trash.
-    func upgradeOldFiles(_ sharePaths: [String], release: Int, shareRoot: String) throws
+    package func upgradeOldFiles(_ sharePaths: [String], release: Int, shareRoot: String) throws
         -> [UpgradeOldFile]
     {
         let lookup = try statement(

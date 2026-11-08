@@ -3,15 +3,15 @@ import Foundation
 /// What the lossy-origin check found in one staged file (ADR 0139), for the Approve sheet. The
 /// file is analyzed with `analyzeFile(at:)` and nothing else, so no staged path reaches the
 /// index or the measures cache.
-struct StagedOrigin: Equatable, Sendable {
-    var path: String
+package struct StagedOrigin: Equatable, Sendable {
+    package var path: String
     /// Its `lossyOrigin` and `upsampled` verdicts; empty when it shows neither.
-    var verdicts: [Verdict]
+    package var verdicts: [Verdict]
     /// Why it couldn't be analyzed, which the sheet asks about as it does a verdict.
-    var failure: String?
+    package var failure: String?
 
     /// Whether Approve waits for the owner to acknowledge this file.
-    var blocks: Bool { !verdicts.isEmpty || failure != nil }
+    package var blocks: Bool { !verdicts.isEmpty || failure != nil }
 }
 
 /// The verdicts that say a staged file isn't the lossless copy it claims to be.
@@ -23,7 +23,7 @@ let stagedOriginFileCount = 2
 
 /// Analyzes the first and last of `paths`, a staged album's files in order. Blocks on the
 /// reads, so call it off the main thread. Cancelling the task stops the file being analyzed.
-func stagedOrigins(_ paths: [String]) throws -> [StagedOrigin] {
+package func stagedOrigins(_ paths: [String]) throws -> [StagedOrigin] {
     let chosen =
         paths.count <= stagedOriginFileCount ? paths : [paths[0], paths[paths.count - 1]]
     return try chosen.map { path in

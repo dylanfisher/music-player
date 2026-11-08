@@ -27,7 +27,7 @@ struct MoveCalls: Sendable {
 /// tags give it (ADR 0124), never over a file. Every step is in the index's ledger before it's
 /// taken and can be worked out again from the file system, so a crash, or another Mac, resumes
 /// it. Calls block on the volumes, so make them off the main thread.
-struct LibraryFolderMove: Sendable {
+package struct LibraryFolderMove: Sendable {
     /// One staged file's move.
     struct Planned: Equatable, Sendable {
         /// Relative to the staging folder.
@@ -46,6 +46,25 @@ struct LibraryFolderMove: Sendable {
     /// as an upgrade job keeps its old files, so they resolve on any Mac.
     let shareRoot: String
     var calls = MoveCalls()
+
+    package init(stagingRoot: String, libraryFolder: String, shareRoot: String) {
+        self.stagingRoot = stagingRoot
+        self.libraryFolder = libraryFolder
+        self.shareRoot = shareRoot
+    }
+
+    init(stagingRoot: String, libraryFolder: String, shareRoot: String, calls: MoveCalls) {
+        self.init(stagingRoot: stagingRoot, libraryFolder: libraryFolder, shareRoot: shareRoot)
+        self.calls = calls
+    }
+
+    /// Where each of `files` of the staged folder `folder` goes, in the files' order, for the
+    /// Approve sheet to list: a first run's checks, refusing as it would, with nothing moved.
+    package func destinations(folder: String, files: [(name: String, sizeBytes: Int)]) throws
+        -> [String]
+    {
+        try plan(folder: folder, files: files, try checkedRoots()).map(\.destination)
+    }
 
     /// Moves the files `files` of the staged folder `folder` into the library folder, for the
     /// job `job` of the release `release`, and returns their new paths in the files' order.

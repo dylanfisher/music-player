@@ -37,18 +37,18 @@ package struct StagedAlbum: Sendable {
     static let maxFileBytes = 2048 * 1024 * 1024
 
     /// In the album's order.
-    var album: DiscogsAlbum
+    package var album: DiscogsAlbum
     /// The files read, in the job's order.
-    var files: [AlbumFile]
+    package var files: [AlbumFile]
     /// The service's file for each read one, by id.
     var staged: [Int64: DownloadJob.File]
     /// Why a file can't be matched: it's missing, unreadable, too large, or not the size the
     /// service staged. Empty when every file was read.
-    var problems: [String]
+    package var problems: [String]
 
     /// Reads `job`'s files under `stagingRoot`. Blocks on the reads, so call it off the main
     /// thread.
-    init(_ job: StagedJob, stagingRoot: String) {
+    package init(_ job: StagedJob, stagingRoot: String) {
         var problems: [String] = []
         var named: [(id: Int64, path: String)] = []
         var staged: [Int64: DownloadJob.File] = [:]

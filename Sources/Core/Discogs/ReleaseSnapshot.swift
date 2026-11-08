@@ -4,7 +4,7 @@ import Settings
 
 extension ReleaseSnapshot {
     /// Why a release can't be queued for download.
-    enum Problem: Error, Equatable, CustomStringConvertible {
+    package enum Problem: Error, Equatable, CustomStringConvertible {
         /// The Mac's catalog doesn't have it, so there's no tracklist to send; the service has
         /// no catalog of its own.
         case notInCatalog(releaseID: Int)
@@ -16,7 +16,7 @@ extension ReleaseSnapshot {
         /// A tracklist of none or more than `ReleaseSnapshot.trackCap` tracks.
         case trackCount(releaseID: Int, Int)
 
-        var description: String {
+        package var description: String {
             switch self {
             case .notInCatalog(let id): "release \(id) is not in the local catalog"
             case .unnamed(let id): "release \(id) has no artist or no title"
@@ -32,7 +32,7 @@ extension ReleaseSnapshot {
     /// The snapshot of the release `releaseID` in the catalog at `catalog`, for a new job.
     /// Throws `Problem.notInCatalog` when the catalog doesn't have it, so a pasted release is
     /// refused when it's queued, never after a download. Reads the catalog on this thread.
-    static func queueable(releaseID: Int, catalogAt catalog: URL) throws -> ReleaseSnapshot {
+    package static func queueable(releaseID: Int, catalogAt catalog: URL) throws -> ReleaseSnapshot {
         guard let release = try Catalog(at: catalog).release(id: releaseID) else {
             throw Problem.notInCatalog(releaseID: releaseID)
         }

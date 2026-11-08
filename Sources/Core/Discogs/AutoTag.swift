@@ -31,7 +31,7 @@ package struct AutoTagRun: Sendable {
 /// Matches `job`'s staged files under `stagingRoot` against its release in the catalog at
 /// `catalog`, and works out the edits `mapping` makes with every field replaced (ADR 0138).
 /// Writes nothing. Blocks on the file reads, so call it off the main actor.
-func autoTag(
+package func autoTag(
     _ job: StagedJob, stagingRoot: String, catalogAt catalog: URL, mapping: DiscogsMapping
 ) async throws -> AutoTagRun {
     let staged = StagedAlbum(job, stagingRoot: stagingRoot)

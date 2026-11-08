@@ -3,7 +3,7 @@
 extension RecommenderClient {
     /// Queues `snapshot`'s release. Refused with `already_active` while a job for it isn't
     /// terminal, with that job's id.
-    func create(_ snapshot: ReleaseSnapshot, _ order: JobOrder) async throws(RecommenderError)
+    package func create(_ snapshot: ReleaseSnapshot, _ order: JobOrder) async throws(RecommenderError)
         -> DownloadJob
     {
         try await call(
@@ -14,7 +14,7 @@ extension RecommenderClient {
 
     /// Starts a job again from its failed stage; `policy` replaces its policy, for a retry that
     /// searches again.
-    func retry(_ id: Int, policy: FormatPolicy? = nil) async throws(RecommenderError)
+    package func retry(_ id: Int, policy: FormatPolicy? = nil) async throws(RecommenderError)
         -> DownloadJob
     {
         try await call(
@@ -23,7 +23,7 @@ extension RecommenderClient {
         ).job
     }
 
-    func cancel(_ id: Int) async throws(RecommenderError) -> DownloadJob {
+    package func cancel(_ id: Int) async throws(RecommenderError) -> DownloadJob {
         try await call("/v1/downloads/cancel", body: CancelRequest(id: id), as: JobReply.self)
             .job
     }

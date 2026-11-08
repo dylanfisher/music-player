@@ -68,14 +68,14 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
         }
 
         /// The Soulseek user.
-        var peer: String
+        package var peer: String
         package var format: Format
         package var bitDepth: Int?
         package var sampleRateHz: Int?
         package var bitrateKbps: Int?
         package var variableBitrate: Bool?
         package var fileCount: Int
-        var bytes: Int
+        package var bytes: Int
         /// The index into the snapshot's `tracklists` the files matched.
         var tracklist: Int
 
@@ -182,21 +182,21 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
 
     /// What an upgrade replaces: the old album's quality, for the window, and its files,
     /// relative to the library share, so they resolve on any Mac and after an index rebuild.
-    struct Upgrade: Equatable, Sendable, Codable {
-        var currentQuality: String
-        var oldPaths: [String]
+    package struct Upgrade: Equatable, Sendable, Codable {
+        package var currentQuality: String
+        package var oldPaths: [String]
 
         private enum CodingKeys: String, CodingKey, CaseIterable {
             case currentQuality = "current_quality"
             case oldPaths = "old_paths"
         }
 
-        init(currentQuality: String, oldPaths: [String]) {
+        package init(currentQuality: String, oldPaths: [String]) {
             self.currentQuality = currentQuality
             self.oldPaths = oldPaths
         }
 
-        init(from decoder: any Decoder) throws {
+        package init(from decoder: any Decoder) throws {
             let container = try strictContainer(decoder, CodingKeys.self)
             currentQuality = try container.decode(String.self, forKey: .currentQuality)
             oldPaths = try container.decode([String].self, forKey: .oldPaths)
@@ -228,7 +228,7 @@ package struct DownloadJob: Equatable, Sendable, Decodable {
     package var lease: Hold?
     package var review: Hold?
     /// Set for `source` `upgrade` only.
-    var upgrade: Upgrade?
+    package var upgrade: Upgrade?
     /// Whether a rejected or cancelled job's files are still being deleted.
     var cleanupPending: Bool
     package var createdAt: Int

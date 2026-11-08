@@ -6,7 +6,7 @@ import Recommender
 /// the release `release` in the catalog at `catalog`: what an upgrade's old files map to its new
 /// ones through (ADR 0139). A track the match leaves out has none. Reads the catalog off the
 /// calling thread.
-func upgradePositions(of album: DiscogsAlbum, release: Int, catalogAt catalog: URL)
+package func upgradePositions(of album: DiscogsAlbum, release: Int, catalogAt catalog: URL)
     async throws -> [Int64: String]
 {
     let matches = try await matchAlbums(

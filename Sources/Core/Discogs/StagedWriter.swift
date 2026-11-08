@@ -16,7 +16,7 @@ package struct StagedWriter: Sendable {
     let stagingRoot: String
     let writer: TagWriter
 
-    init(stagingRoot: String, dataDirectory: URL) {
+    package init(stagingRoot: String, dataDirectory: URL) {
         self.stagingRoot = stagingRoot
         writer = TagWriter(
             journal: TagUndoJournal(
@@ -28,7 +28,7 @@ package struct StagedWriter: Sendable {
     /// change set again with `mapping`, which must find nothing. Returns the verdict to
     /// report: clean when that held, else why not. A path outside the staging folder, its
     /// symbolic links followed, refuses the whole run before anything is written.
-    func write(_ run: AutoTagRun, mapping: DiscogsMapping) -> AutoTagRun.Verdict {
+    package func write(_ run: AutoTagRun, mapping: DiscogsMapping) -> AutoTagRun.Verdict {
         guard run.verdict == .clean, let match = run.match else { return run.verdict }
         let report: TagWriteReport
         do throws(StagedPathRefused) {
@@ -57,7 +57,7 @@ package struct StagedWriter: Sendable {
     /// Writes `edits` with the staged journal and nothing else: the write the staged tagger's
     /// Apply uses too, which no watcher hears of. Paths outside the staging folder are
     /// refused before any is written.
-    func write(_ edits: [(path: String, edit: TagEdit)]) throws(StagedPathRefused)
+    package func write(_ edits: [(path: String, edit: TagEdit)]) throws(StagedPathRefused)
         -> TagWriteReport
     {
         if let refused = refusedPath(edits.map(\.path)) {
@@ -78,11 +78,11 @@ package struct StagedWriter: Sendable {
 }
 
 /// A path a staged write was asked to write outside the staging folder (ADR 0138).
-struct StagedPathRefused: Error, Equatable, CustomStringConvertible {
+package struct StagedPathRefused: Error, Equatable, CustomStringConvertible {
     var path: String
     var stagingRoot: String
 
-    var description: String { "\(path) isn't inside the staging folder \(stagingRoot)" }
+    package var description: String { "\(path) isn't inside the staging folder \(stagingRoot)" }
 }
 
 /// `path` with every symbolic link followed and `.` and `..` gone; nil when it doesn't exist.

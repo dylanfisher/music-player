@@ -1,16 +1,16 @@
 /// A lossy library album tagged with one Discogs release, which a lossless download of that
 /// release could replace (phase 54): what an upgrade job sends the service as `upgrade`.
-struct UpgradeCandidate: Equatable, Sendable {
-    var albumID: Int64
-    var title: String
+package struct UpgradeCandidate: Equatable, Sendable {
+    package var albumID: Int64
+    package var title: String
     /// The album artist, else the track artist; nil for a compilation without one.
-    var artist: String?
-    var releaseID: Int
+    package var artist: String?
+    package var releaseID: Int
     /// The album's files in disc and track order, relative to the share, so they resolve on
     /// any Mac that mounts it and after an index rebuild.
-    var sharePaths: [String]
+    package var sharePaths: [String]
     /// For the Downloads window: "MP3 320 kbps", the codec and the album's average bit rate.
-    var quality: String
+    package var quality: String
 }
 
 /// Codecs whose files an upgrade replaces, as `tracks.codec` stores them.
@@ -20,7 +20,7 @@ extension LibraryIndex {
     /// The albums whose every file is lossy, carries one `DISCOGS_RELEASE_ID` that's a number,
     /// and is in a watched folder on `share`, by album ID. An album with a file anywhere else
     /// isn't one: the service keeps an upgrade's old files by their path on the share.
-    func upgradeCandidates(onShare share: String) throws -> [UpgradeCandidate] {
+    package func upgradeCandidates(onShare share: String) throws -> [UpgradeCandidate] {
         let roots = try statement(
             "SELECT inner_path, root FROM \(shareRootsTable) WHERE share = ?"
         ).map(share) { (inner: try $0.text(0), root: try $0.text(1)) }

@@ -1,11 +1,11 @@
 /// What a new job asks for besides its release: the policy, and for an upgrade what it
 /// replaces. An upgrade takes only a lossless policy, so it can't ask for a lossy one.
-enum JobOrder: Equatable, Sendable {
+package enum JobOrder: Equatable, Sendable {
     /// The policies an upgrade may ask for.
-    enum LosslessPolicy: Equatable, Sendable, CaseIterable {
+    package enum LosslessPolicy: Equatable, Sendable, CaseIterable {
         case flac, lossless
 
-        var formatPolicy: FormatPolicy {
+        package var formatPolicy: FormatPolicy {
             switch self {
             case .flac: .flac
             case .lossless: .lossless

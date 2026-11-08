@@ -63,7 +63,7 @@ extension LibraryIndex {
     /// Every album with its tracks, read from the index alone, so nothing is read from the
     /// files. An album's label, catalog number, barcode, date, media and country are its first
     /// track's that has one. Tracks without an album aren't in an album to match.
-    func discogsAlbums() throws -> [DiscogsAlbum] {
+    package func discogsAlbums() throws -> [DiscogsAlbum] {
         let rows = try database.prepare(
             """
             SELECT t.album_id, a.title, ar.name, t.file_id, t.title, t.length_frames,
