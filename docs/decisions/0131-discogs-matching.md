@@ -175,10 +175,11 @@ release without one.
 
 ### Running it
 
-`matchAlbums(_:catalogAt:progress:)` runs on a detached task with a catalog connection of its
+`matchAlbums(_:catalogAt:choosing:progress:)` runs on a detached task with a catalog connection of its
 own, opened for the call, since the system SQLite fails a connection whose file an import
 replaced (ADR 0130). It checks for cancellation before each album and reports albums done of
-the total.
+the total: every album of a few, about 200 reports of thousands, since each redraws the window.
+`readAlbumFiles` reports files read the same way.
 
 ## Alternatives considered
 

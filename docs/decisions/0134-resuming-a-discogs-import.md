@@ -64,7 +64,8 @@ An import of a set looks for `<catalog>.importing`:
 - Of another set or build, damaged, without a checkpoint, or not a database: it is removed and
   the import starts over. So does Start Over, and the tool's `--start-over`.
 
-A stop by cancelling the task waits for the next access point, at most one deflate block and
+The index build is one statement that a stop can't interrupt, so the window offers no Stop
+once the import reaches it. A stop by cancelling the task waits for the next access point, at most one deflate block and
 a record on, commits a checkpoint there and throws `stopped`; the parser no longer checks for
 a stop itself. A stop, and a failure to read the dumps (a share disconnected), keep the
 unfinished catalog; any other failure removes it, as a resume would hit it again.

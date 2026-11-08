@@ -30,6 +30,9 @@ nothing is written before the user confirms, and that a second session doesn't r
 - **One undoable edit.** The confirmed edits go to the tag editor's queue as one batch with an
   edit per file (`TagWriter.write(_:progress:)`), after any write queued before, with the status
   bar's progress, the alert for what failed, and Undo Tag Edit putting the whole batch back.
+  An album is marked written as its edits are queued; the paths the write didn't reach (a
+  failure, or a batch that stopped) mark their albums as not written again, so Apply to All
+  offers them.
 - **Reviews kept.** A rejection and a chosen release are kept in the index by path ID, in a
   schema part of their own (`discogs_reviews`), so they outlast an index rebuild as the loved
   tracks do. Matching takes a chosen release as the album's match whatever the others score;
