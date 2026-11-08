@@ -61,6 +61,8 @@ extension Cover {
 
     private static let jpegStart: [UInt8] = [0xFF, 0xD8, 0xFF]
     private static let jpegEnd: [UInt8] = [0xFF, 0xD9]
+    /// The most padding bytes a JPEG may have after its end marker.
+    private static let jpegPadding = 16
     private static let pngStart: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
     /// The IEND chunk: its type and its CRC.
     private static let pngEnd: [UInt8] = [0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]
@@ -70,7 +72,12 @@ extension Cover {
     init(checking bytes: [UInt8]) throws(CoverProblem) {
         let mimeType: String
         if bytes.starts(with: Self.jpegStart) {
-            guard bytes.suffix(Self.jpegEnd.count).elementsEqual(Self.jpegEnd) else {
+            // Some encoders pad a JPEG past its end marker with zero or FF bytes.
+            let padding = bytes.suffix(Self.jpegPadding).reversed().prefix {
+                $0 == 0 || $0 == 0xFF
+            }
+            let content = bytes.dropLast(padding.count)
+            guard content.suffix(Self.jpegEnd.count).elementsEqual(Self.jpegEnd) else {
                 throw .damaged
             }
             mimeType = jpegMIMEType
@@ -99,8 +106,10 @@ extension Cover {
 
 extension DiscogsAPI {
     /// The release's primary image as a cover: the release through the cache, then its image,
-    /// paced as every request is. Without a token nothing is asked.
-    public func cover(release id: Int) async throws(CoverProblem) -> Cover {
+    /// paced as every request is. Without a token nothing is asked. The image is checked and
+    /// decoded off the actor, so a large one doesn't hold up the next request's turn.
+    public nonisolated func cover(release id: Int) async throws(CoverProblem) -> Cover {
+
         guard hasToken else { throw .needsToken }
         let fetched: FetchedRelease
         do {

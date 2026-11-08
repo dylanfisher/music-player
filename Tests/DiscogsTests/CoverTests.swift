@@ -95,6 +95,19 @@ private func pngDeclaring(side: Int) throws -> [UInt8] {
     }
 }
 
+@Test func aJPEGPaddedPastItsEndMarkerIsACoverAndOneCutShortIsnt() throws {
+    let jpeg = try image(jpegMIMEType)
+    for padding in [[UInt8](repeating: 0, count: 3), [0xFF, 0x00], []] {
+        #expect(try Cover(checking: jpeg + padding).mimeType == jpegMIMEType, "\(padding)")
+    }
+    #expect(throws: CoverProblem.damaged) {
+        try Cover(checking: Array(jpeg.dropLast(2)) + [0, 0])
+    }
+    #expect(throws: CoverProblem.damaged) {
+        try Cover(checking: jpeg + [UInt8](repeating: 0, count: 40))
+    }
+}
+
 @Test func theTypeIsReadFromTheBytesNotTheServersContentType() async throws {
     let png = try image(pngMIMEType)
     let cover = try await serving(png, headers: ["Content-Type": "image/jpeg"]).api()
