@@ -313,12 +313,18 @@ its branch `phase/5-soulseek` until the owner merges it). The player tags staged
 them in a Downloads window, and moves them into the library on Approve.
 
 Runs on the branch `phase/54-soulseek-imports`, which `main` doesn't take until the owner has
-reviewed it. 54.1 is docs only and comes first, so the owner reads the boundary changes before
-code depends on them; then P0.1, P0.2 and 54.2 onward in order. P0.2 and everything after it
-need the service's `docs/api.md`. ADR numbers: 0144 to P0.1 (the service token, the app's first
-secret; 52.1 links to it), 0145 to P0.2 (the client), 0146 and 0147 to 54.1, 0148 to 54.4 (the
-player's copy of the matching rules). ADRs 0144, 0146 and 0147 are Proposed until the owner
-approves them, and AGENTS.md changes only then, with the wording each ADR proposes.
+reviewed it. 54.1 is docs only and came first, so the owner read the boundary changes before
+code depended on them; then P0.1, P0.2 and 54.2 onward in order. P0.2 and everything after it
+need the service's `docs/api.md`. ADR numbers: 0144 to P0.1 (the service token, the app's
+second secret, kept as ADR 0137 keeps the Discogs token), 0145 to P0.2 (the client), 0146 and
+0147 to 54.1, 0148 to 54.4 (the player's copy of the matching rules). The owner approved ADRs
+0144 to 0147 on 2026-11-08, and AGENTS.md carries their wording.
+
+The branch was merged with `main` on 2026-11-08, and its ADRs renumbered to 0144 to 0148 to
+follow main's 0143. The merge made the service token follow main's secret rule (ADR 0137):
+`config.json` only, every write mode 0600, a token in a file others can read not used. A staged
+job's tagger writes no cover art and is fixed to the local catalog, and the staging folder is
+refused when it overlaps the snapshot folder (ADR 0142).
 
 Settled on 2026-11-08. The owner asked for the feature in the words above and chose who talks to
 slskd, staging on the NAS with a move on Approve, and the upgrade's trash; the orchestrator
@@ -326,7 +332,7 @@ settled the rest while the owner was away, for the owner's review with the branc
 
 | Question | Answer |
 |---|---|
-| Who talks to slskd | The service only, holding its API key; the player talks to the service by an IP address, a port and a bearer token typed into Settings. No Bonjour yet |
+| Who talks to slskd | The service only, holding its API key; the player talks to the service by an IP address and a port set in Settings and a bearer token set in `config.json` only, with no field in Settings. No Bonjour yet |
 | Staged tag writes | Automatic after a clean match (tier Exact, no unmapped file, the player's mapping agrees with the service's); a discrepancy writes nothing until resolved in the tagger (ADR 0146) |
 | Approve | The confirmation for the move into the library: staged files are renamed into the library folder (ADR 0147) |
 | Upgrade | The old files go through `moveToTrash`, which on the NAS deletes them, and their stats move to the new files (ADR 0147) |
@@ -344,15 +350,18 @@ recorded replies, and staging and the library are temporary folders and `Simulat
 
 #### 54a. The service client
 
-- [ ] **P0.1 Settings.** `recommender.address` (an IP literal; a host name is refused),
+- [x] **P0.1 Settings.** `recommender.address` (an IP literal; a host name is refused),
       `recommender.port`, `recommender.token` and `import.stagingFolder` (a share and a path,
-      the shape of `library.watchedFolders`, ADR 0028), shown in the Settings window. The token
-      is kept only in `config.json`, which a `ConfigStore` extension writes at mode 0600 once
-      a token is set; it is never logged, shown in a problem's text or copied elsewhere. The
-      staging folder is refused inside a watched folder, the library folder or the sync folder,
-      and checked again whenever any of them changes. ADR 0144. Tests: the 0600 write, each
-      refusal, a watched folder change that would hold the staging folder, the token in no log
-      line or problem.
+      the shape of `library.watchedFolders`, ADR 0028). The token is kept as the Discogs token
+      is (ADR 0137): only in `config.json`, every write mode 0600, never logged, shown in a
+      problem's text or copied elsewhere. The staging folder is refused inside a watched folder,
+      the library folder, the sync folder or the snapshot folder, and checked again whenever any
+      of them changes. ADR 0144. Tests: each refusal, a folder change that would hold the
+      staging folder, the token in no printed form or problem, a loose file's token not used.
+      Result: address, port and staging folder are in the Downloads box of the General pane; the
+      token is file-only by the owner's decision, with no field in Settings (`SettingKind.secret`),
+      and the Downloads window's not-set message says where it goes. `ServiceToken` prints as
+      `<service token>`. ADR 0144 accepted on 2026-11-08.
 - [x] **P0.2 Client.** A new `Core/Recommender`: `post` with the bearer header on
       `LocalHTTPClient` (no change to the client beyond what `post(… fields:)` allows), strict
       models for `ping` and the config route, typed errors (unreachable, 401, 400, `ok:false`,
@@ -362,17 +371,19 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       another device's address on a local subnet (`ping` and `downloadsConfig` were removed
       once nothing but tests called them); errors name the
       URL, never the token. `LocalURL(host:port:path:on:)` is the one `LocalNetwork` change.
-      Replies decode with every field present and none unknown. ADR 0145 proposed, its threat
-      model row waiting on approval. The `recommender-reply` fuzz target came with 54.2, to run
+      Replies decode with every field present and none unknown. ADR 0145 accepted, its threat
+      model row is row 65 of ADR 0025. The `recommender-reply` fuzz target came with 54.2, to run
       every reply shape: 60 s, 108k inputs, no crash.
 
 #### 54b. Tagging staged albums
 
-- [ ] **54.1 ADRs.** ADR 0146, staged tag writes: `TagWriter` writes staged files once, after a
+- [x] **54.1 ADRs.** ADR 0146, staged tag writes: `TagWriter` writes staged files once, after a
       clean match, with no confirmation of its own; a fixed overwrite mapping, a second journal,
       a guard that refuses any path outside the staging folder. ADR 0147, the move into the
       library and the upgrade's order, with the trash-on-SMB rule (the NAS has no Trash, so the
-      upgrade's delete is permanent). Each proposes its AGENTS.md wording. Docs only.
+      upgrade's delete is permanent). Each gives its AGENTS.md wording. Docs only.
+      Result: ADRs 0146 and 0147 accepted on 2026-11-08, and AGENTS.md's music files bullet has
+      their clause and sentence.
 - [x] **54.2 Job calls and the snapshot.** The downloads routes in `Core/Recommender` (create,
       list with epoch, reset and paging by revision with `more`, retry, cancel, handoff);
       `Core/Discogs/ReleaseSnapshot.swift`, built from `CatalogRelease` with both
@@ -429,7 +440,7 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       before any write if one is outside the staging folder or missing. The files are then
       read back and the overwrite change set must be empty. Its `write(_:)` is the closure the
       staged tagger (54.11) will use. Nothing calls it yet, so no staged file is written until
-      54.10 wires it after ADR 0146's approval. 5 tests; the guard and the journal's folder
+      54.10 wires it, ADR 0146 being accepted. 5 tests; the guard and the journal's folder
       each caught by a mutation.
 
 #### 54c. Approve
@@ -607,14 +618,18 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       No test of the command's enabled rule: it is the Discogs tagger's, untested there too.
       Launched on a scratch home with the service at 192.0.2.7, the window said the address
       isn't on a local subnet and that the Mac has no catalog.
-- [ ] **Owner checks:** in Settings on each reviewing Mac, the service's IP, port and token and
-      the staging folder, the DAC Mac first. On a scratch folder on the share, from the DAC Mac,
+- [ ] **Owner checks:** on each reviewing Mac, the service's IP, port and staging folder in
+      Settings and the token in `config.json`, the DAC Mac first. On a scratch folder on the share, from the DAC Mac,
       a same-share `RENAME_EXCL` (or the fallback, which the log line names) and a refused
       collision. A new album end to end: queued, staged and clean, approved, in the library. An
       upgrade of an MP3 album copied first: stats, rating and playlists on the new tracks, the
       old files gone. A discrepancy (an album with a bonus track) resolved in the tagger, then
       approved. On mbp2015 the window lists the rows and says it can't queue or tag; with the
       service stopped, its message.
+- [ ] **Follow-up:** `Tests/DiscogsTests/Fixtures/rank-golden.json` still says "music-player ADR
+      0140", the number before the renumbering. It can change only together with
+      music-recommender's byte-identical copy and the SHA-256 in ADR 0148, so fix both Macs'
+      repos in one step.
 
 ### 10. Web remote
 
