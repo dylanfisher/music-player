@@ -17,6 +17,23 @@ extension AppDelegate {
         dispatcher.handle(
             .showDiscogsTagger, enabled: { [weak self] in self?.window != nil },
             run: { [weak self] in self?.discogsTaggerController()?.show() })
+        dispatcher.handle(
+            .openDiscogsRelease, enabled: { [weak self] in self?.selectedReleaseID() != nil },
+            run: { [weak self] in
+                guard let id = self?.selectedReleaseID() else { return }
+                NSWorkspace.shared.open(discogsPage(id))
+            })
+    }
+
+    /// The first selected track's Discogs release id; nil, after logging why, when it can't
+    /// be read.
+    private func selectedReleaseID() -> Int? {
+        do {
+            return try browser?.selectedDiscogsReleaseID()
+        } catch {
+            logger.error("couldn't read the selected track's Discogs release id: \(error)")
+            return nil
+        }
     }
 
     /// The tagger, made on first use; nil, after saying why, when the library can't be read.

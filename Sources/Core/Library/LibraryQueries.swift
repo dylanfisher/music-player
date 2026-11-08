@@ -213,6 +213,14 @@ extension LibraryIndex {
             .first ?? (nil, nil)
     }
 
+    /// Track `id`'s Discogs release id, for Open Discogs Release; nil when it has none, holds
+    /// text that isn't one, or isn't in the index.
+    public func discogsReleaseID(ofTrack id: Int64) throws -> Int? {
+        try statement("SELECT discogs_release_id FROM tracks WHERE file_id = ?")
+            .map(id) { $0.optionalText(0) }
+            .first?.flatMap { Int($0) }
+    }
+
     /// The rows for `ids`, in the same order. An ID with no track, such as one a rescan just
     /// removed, is left out.
     public func rows(ids: [Int64]) throws -> [TrackRow] {

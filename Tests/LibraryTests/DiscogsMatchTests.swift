@@ -24,6 +24,17 @@ private func track(_ path: String, album: String, release: String?, master: Stri
     #expect(row.first?.1 == "m7")
 }
 
+@Test func aTracksReleaseIDIsReadAsANumber() throws {
+    let index = try craftedIndex([
+        track("/m/a/1.flac", album: "A", release: "42"),
+        track("/m/a/2.flac", album: "A", release: nil),
+        track("/m/a/3.flac", album: "A", release: "r42"),
+    ])
+    let ids = try index.trackIDs(sortedBy: .path)
+    #expect(try ids.map { try index.discogsReleaseID(ofTrack: $0) } == [42, nil, nil])
+    #expect(try index.discogsReleaseID(ofTrack: -1) == nil)
+}
+
 @Test func anAlbumIsMatchedOnlyWhenEveryTrackHasOneReleaseID() throws {
     let index = try craftedIndex([
         track("/m/a/1.flac", album: "Matched", release: "1"),

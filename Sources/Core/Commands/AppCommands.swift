@@ -93,6 +93,7 @@ extension CommandID {
     public static let showAlbum = CommandID("track.showAlbum")
     public static let showArtist = CommandID("track.showArtist")
     public static let showInPlaylist = CommandID("track.showInPlaylist")
+    public static let openDiscogsRelease = CommandID("track.openDiscogsRelease")
     /// Rate the selection 0 (no rating) to 5 stars, by index.
     public static let rate = (0...5).map { CommandID("track.rate\($0)") }
 
@@ -266,6 +267,7 @@ public enum AppCommands {
             Command(.toggleDisliked, "Dislike"),
             Command(.showAlbum, "Show Album"),
             Command(.showArtist, "Show Artist"),
+            Command(.openDiscogsRelease, "Open Discogs Release", [.init("d", [cmd, shift])]),
 
             Command(.newPlaylist, "New Playlist", [.init("n", cmd)]),
             Command(

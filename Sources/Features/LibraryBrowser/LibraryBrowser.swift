@@ -1462,6 +1462,13 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         return try index.playlists(holding: track)
     }
 
+    /// The first selected track's Discogs release id, for Open Discogs Release; nil when it has
+    /// none or nothing is selected.
+    public func selectedDiscogsReleaseID() throws -> Int? {
+        guard let track = try selectedTrackIDs().first else { return nil }
+        return try index.discogsReleaseID(ofTrack: track)
+    }
+
     /// Shows the playlist `id` with the first selected track selected.
     public func showSelection(inPlaylist id: Int64) {
         guard let track = selectedTrackIDs(else: "couldn't show the playlist")?.first else {

@@ -52,6 +52,22 @@ private func selectedTrack(_ browser: LibraryBrowser) -> Int64? {
     #expect(selectedTrack(browser) == track)
 }
 
+@MainActor @Test func openDiscogsReleaseReadsTheFirstSelectedTracksReleaseID() async throws {
+    let (browser, index) = try await browser(selecting: [])
+    #expect(try browser.selectedDiscogsReleaseID() == nil)
+    let tagged = browser.model.trackIDs[3]
+    try index.database.prepare("UPDATE tracks SET discogs_release_id = '42' WHERE file_id = ?")
+        .run(tagged)
+    browser.table.table.selectRowIndexes([2], byExtendingSelection: false)
+    #expect(try browser.selectedDiscogsReleaseID() == nil)
+    browser.table.table.selectRowIndexes([3, 2], byExtendingSelection: false)
+    #expect(try browser.selectedDiscogsReleaseID() == nil)
+    browser.table.table.selectRowIndexes([3], byExtendingSelection: false)
+    #expect(try browser.selectedDiscogsReleaseID() == 42)
+    browser.table.table.selectRowIndexes([3, 4], byExtendingSelection: false)
+    #expect(try browser.selectedDiscogsReleaseID() == 42)
+}
+
 @MainActor @Test func addToPlaybackQueueSendsTheSelectedFiles() async throws {
     let (browser, _) = try await browser(selecting: [2, 5])
     let expected = try await browser.model.urls(ofRows: [2, 5])
