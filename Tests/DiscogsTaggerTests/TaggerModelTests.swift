@@ -270,7 +270,10 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     #expect(tagger.activity == .importing(nil))
     #expect(!tagger.canAnalyze)
     gate.open()
-    try await eventually { checks.reads.count == 1 && tagger.catalog == .ready }
+    // checkCatalog sets the catalog, then awaits the unfinished import.
+    try await eventually {
+        checks.reads.count == 1 && tagger.catalog == .ready && tagger.unfinished != nil
+    }
     #expect(tagger.status == "Import stopped; Resume Import carries on from here")
     #expect(tagger.unfinished == UnfinishedImport(dumpDate: "20261101", fraction: 0.42))
     #expect(tagger.activity == .idle)
