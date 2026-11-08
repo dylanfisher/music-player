@@ -85,11 +85,8 @@ public actor DiscogsAPI {
 
     /// The release `id`, from the cache when it holds a readable entry under `cacheDays` old.
     public func release(id: Int) async throws(DiscogsAPIError) -> FetchedRelease {
-        if let json = await cached(.release, id),
-            let entry = try? JSONDecoder().decode(CachedRelease.self, from: Data(json.utf8)),
-            entry.id == id
-        {
-            return entry.fetched
+        if let cached = await cachedRelease(id: id, maximumAgeDays: Self.cacheDays) {
+            return cached
         }
         let body = try await get(Self.baseURL.appendingPathComponent("releases/\(id)")).body
         let fetched: FetchedRelease
@@ -103,6 +100,20 @@ public actor DiscogsAPI {
         }
         await store(.release, id, CachedRelease(fetched))
         return fetched
+    }
+
+    /// The release `id` as the cache holds it, at any age, with no request: for the sheets that
+    /// list releases a run already fetched. Nil when the cache has no readable entry.
+    public func cachedRelease(id: Int) async -> FetchedRelease? {
+        await cachedRelease(id: id, maximumAgeDays: .infinity)
+    }
+
+    private func cachedRelease(id: Int, maximumAgeDays: Double) async -> FetchedRelease? {
+        guard let json = await cached(.release, id, maximumAgeDays: maximumAgeDays),
+            let entry = try? JSONDecoder().decode(CachedRelease.self, from: Data(json.utf8)),
+            entry.id == id
+        else { return nil }
+        return entry.fetched
     }
 
     /// The main release of the master `id`, through the cache as a release is.
@@ -241,10 +252,13 @@ public actor DiscogsAPI {
 
     // MARK: Cache
 
-    private func cached(_ kind: DiscogsCache.Kind, _ id: Int) async -> String? {
+    /// An entry under `maximumAgeDays` old.
+    private func cached(
+        _ kind: DiscogsCache.Kind, _ id: Int, maximumAgeDays: Double = cacheDays
+    ) async -> String? {
         do {
             guard let entry = try await cache.read(kind, id),
-                now() - entry.fetchedAt < Self.cacheDays * 86_400
+                now() - entry.fetchedAt < maximumAgeDays * 86_400
             else { return nil }
             return entry.json
         } catch {

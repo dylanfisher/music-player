@@ -1,34 +1,123 @@
 import Foundation
 import Library
 
-/// Matches each of `albums` with the catalog at `catalog` (ADR 0131), off the calling thread,
-/// in their order. The catalog is opened for this call, so one after an import reads the new
-/// file. Cancelling the task stops it before the next album and throws `CancellationError`.
-/// `progress` hears each album done, off the main thread. `chosen` holds the release the user
-/// chose for an album, by album ID, which is its match whatever the others score (ADR 0133).
-/// `skippingVideo` leaves out the releases that are only Blu-ray, DVD or video (ADR 0132).
+/// Matches each of `albums` with the catalog at `catalog`, the Discogs API or both, as `source`
+/// says (ADRs 0131 and 0139), off the calling thread, in their order. The catalog is opened for
+/// this call, so one after an import reads the new file; with `.api` it isn't opened at all.
+/// Cancelling the task stops it before the next album, or during a wait for Discogs's rate
+/// limit, and throws `CancellationError`. A `DiscogsAPIError` that stops the run is thrown.
+/// `progress` hears each album done and each long wait, off the main thread. `chosen` holds
+/// the release the user chose for an album, by album ID, which is its match whatever the
+/// others score (ADR 0133). `skippingVideo` leaves out the releases that are only Blu-ray, DVD
+/// or video (ADR 0132). `api` is required for `.api` and `.both`.
 public func matchAlbums(
-    _ albums: [DiscogsAlbum], catalogAt catalog: URL, choosing chosen: [Int64: Int],
-    skippingVideo: Bool, progress: @escaping @Sendable (AlbumMatchProgress) -> Void
+    _ albums: [DiscogsAlbum], catalogAt catalog: URL, source: MatchSource = .catalog,
+    api: DiscogsAPI? = nil, choosing chosen: [Int64: Int], skippingVideo: Bool,
+    progress: @escaping @Sendable (AlbumMatchProgress) -> Void
 ) async throws -> [AlbumMatch] {
     try Task.checkCancellation()
+    guard source == .catalog || api != nil else {
+        preconditionFailure("matching with \(source) needs the Discogs API")
+    }
     let task = Task.detached(priority: .utility) {
-        let matcher = AlbumMatcher(try Catalog(at: catalog), skippingVideo: skippingVideo)
+        let matcher = AlbumMatcher(
+            source == .api ? nil : try Catalog(at: catalog), skippingVideo: skippingVideo)
+        let reporter = ProgressReporter(progress)
         var matches: [AlbumMatch] = []
         matches.reserveCapacity(albums.count)
-        for album in albums {
+        if source != .api {
+            for album in albums {
+                try Task.checkCancellation()
+                matches.append(try matcher.match(album, choosing: chosen[album.id]))
+                if isReported(matches.count, of: albums.count) {
+                    reporter.report(albumsDone: matches.count, albumCount: albums.count)
+                }
+            }
+        }
+        guard let api, source != .catalog else { return matches }
+        let indices =
+            source == .api
+            ? Array(albums.indices)
+            : albums.indices.filter { needsAPI(matches[$0], choosing: chosen[albums[$0].id]) }
+        await api.setWaiting { reporter.waiting($0) }
+        var done = 0
+        for index in indices {
             try Task.checkCancellation()
-            matches.append(try matcher.match(album, choosing: chosen[album.id]))
-            if isReported(matches.count, of: albums.count) {
-                progress(AlbumMatchProgress(albumsDone: matches.count, albumCount: albums.count))
+            let album = albums[index]
+            let match = try await matchWithAPI(
+                album, choosing: chosen[album.id], matcher: matcher, api: api)
+            if source == .api { matches.append(match) } else { matches[index] = match }
+            done += 1
+            if source == .api {
+                reporter.report(albumsDone: done, albumCount: indices.count)
+            } else {
+                reporter.report(
+                    albumsDone: albums.count, albumCount: albums.count, apiAlbumsDone: done,
+                    apiAlbumCount: indices.count)
             }
         }
         return matches
     }
     return try await withTaskCancellationHandler {
-        try await task.value
+        do {
+            return try await task.value
+        } catch DiscogsAPIError.cancelled {
+            throw CancellationError()
+        }
     } onCancel: {
         task.cancel()
+    }
+}
+
+/// Whether Both asks the API about an album the catalog pass matched as `match`: one with no
+/// candidate, one whose tracks carry a release id the catalog lacks, and one whose chosen
+/// release it lacks. The dump has no date for each release, so "newer than the dump" is
+/// "not in the catalog" (ADR 0139).
+func needsAPI(_ match: AlbumMatch, choosing choice: Int?) -> Bool {
+    match.tier == .noCandidate || (match.tier == .matched && match.release == nil)
+        || (choice != nil && match.releaseID != choice)
+}
+
+/// `album` matched again with what the API finds for it beside the catalog's candidates. Only
+/// the releases the catalog lacks are fetched.
+private func matchWithAPI(
+    _ album: DiscogsAlbum, choosing choice: Int?, matcher: AlbumMatcher, api: DiscogsAPI
+) async throws -> AlbumMatch {
+    let found = try await ApiCandidates.found(for: album, choosing: choice, api: api)
+    var missing: [Int] = []
+    for candidate in found where try matcher.catalog?.release(id: candidate.id) == nil {
+        missing.append(candidate.id)
+    }
+    let fetched = try await ApiCandidates.fetch(missing, api: api)
+    return try matcher.match(album, choosing: choice, found: found, fetched: fetched)
+}
+
+/// Sends a run's progress from any thread, with the rate-limit wait the API reports.
+private final class ProgressReporter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var last = AlbumMatchProgress(albumsDone: 0, albumCount: 0)
+    private let progress: @Sendable (AlbumMatchProgress) -> Void
+
+    init(_ progress: @escaping @Sendable (AlbumMatchProgress) -> Void) {
+        self.progress = progress
+    }
+
+    func report(
+        albumsDone: Int, albumCount: Int, apiAlbumsDone: Int? = nil, apiAlbumCount: Int? = nil
+    ) {
+        let next = AlbumMatchProgress(
+            albumsDone: albumsDone, albumCount: albumCount, apiAlbumsDone: apiAlbumsDone,
+            apiAlbumCount: apiAlbumCount)
+        lock.withLock { last = next }
+        progress(next)
+    }
+
+    func waiting(_ seconds: Int?) {
+        let next = lock.withLock {
+            last.waitingSeconds = seconds
+            return last
+        }
+        progress(next)
     }
 }
 
@@ -130,7 +219,8 @@ final class AlbumMatcher {
             tracks: chosen?.tracks ?? [], mapping: mapping, candidates: others,
             reasons: NotExactReason.reasons(
                 tier, chosen, tied: tied, foundBy: chosen.flatMap { foundBy[$0.releaseID] },
-                mixedIDs: !tagged.isEmpty && !isMatched))
+                mixedIDs: !tagged.isEmpty && !isMatched),
+            origin: chosen.map { fetched[$0.releaseID] != nil } == true ? .api : .catalog)
     }
 
     /// The best of `scores`, and whether others were as good after the tie-break. The best are

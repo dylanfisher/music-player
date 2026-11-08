@@ -4,27 +4,9 @@ import Testing
 
 @testable import Discogs
 
-private func track(_ position: String, _ title: String, _ duration: String = "") -> String {
-    "<track><position>\(position)</position><title>\(title)</title><duration>\(duration)</duration></track>"
-}
-
-private func heading(_ title: String) -> String { track("", title) }
-
-private let persuader = "<artists><artist><id>1</id><name>Persuader</name></artist></artists>"
-
-/// The dump's XML for each release fixture: the same release as the API writes it.
-private let dumpReleases = [
-    #"<release id="1001">\#(persuader)<title>Stockholm</title><labels><label name="Svek" catno="SK 032" id="5"/></labels><extraartists><artist><id>7</id><name>Jesper Dahlbäck</name><anv></anv><role>Producer</role><tracks></tracks></artist></extraartists><formats><format name="CD" qty="1" text=""><descriptions><description>Album</description></descriptions></format></formats><genres><genre>Electronic</genre></genres><styles><style>Techno</style><style>Minimal</style></styles><country>Sweden</country><released>1999-03-00</released><notes>Recorded in Stockholm.</notes><master_id is_main_release="false">500</master_id><data_quality>Correct</data_quality><tracklist>\#(track("1", "Östermalm", "4:45"))\#(track("2", "Gamla Stan", "6:10"))\#(track("3", "Kungsholmen", "5:00"))</tracklist><identifiers><identifier type="Barcode" value="7 350001 000123" description="Text"/><identifier type="Matrix / Runout" value="SK032 01"/></identifiers><companies><company><id>77</id><name>Svek Studios</name></company></companies></release>"#,
-    #"<release id="1002">\#(persuader)<title>Stockholm</title><labels><label name="Svek" catno="SK 032CD" id="5"/><label name="Other" catno="none" id="6"/></labels><formats><format name="CD" qty="2" text="Digipak"><descriptions><description>Album</description><description>Remastered</description></descriptions></format></formats><genres><genre>Electronic</genre></genres><styles><style>Techno</style></styles><country>Europe</country><released>2009</released><master_id is_main_release="false">500</master_id><tracklist>\#(heading("Disc One"))\#(track("1-1", "Östermalm", "4:45"))\#(track("1-2", "Gamla Stan", "6:10"))\#(heading("Disc Two"))\#(track("2-1", "Kungsholmen", "5:00"))</tracklist></release>"#,
-    #"<release id="1003">\#(persuader)<title>Stockholm</title><labels><label name="Svek" catno="SK 032" id="5"/></labels><formats><format name="Vinyl" qty="2" text=""><descriptions><description>12&quot;</description><description>33 ⅓ RPM</description><description>Album</description></descriptions></format></formats><genres><genre>Electronic</genre></genres><styles><style>Techno</style></styles><country>Sweden</country><released>1999</released><master_id is_main_release="false">500</master_id><tracklist>\#(heading("Side A"))\#(track("A1", "Östermalm", "4:45"))\#(track("A2", "Gamla Stan", "6:10"))\#(heading("Side B"))\#(track("B1", "Kungsholmen", "5:00"))\#(track("B2", "Södermalm"))</tracklist><identifiers><identifier type="Barcode" value="7350001000130"/></identifiers></release>"#,
-    #"<release id="1004">\#(persuader)<title>Suites</title><labels><label name="Svek" catno="SK 040" id="5"/></labels><formats><format name="File" qty="1" text=""><descriptions><description>FLAC</description><description>Album</description></descriptions></format></formats><genres><genre>Electronic</genre></genres><country>Sweden</country><released>2001-05-14</released><tracklist>\#(track("1", "Östermalm", "4:45"))<track><position></position><title>Suite</title><duration></duration><sub_tracks>\#(track("2a", "Gamla Stan", "6:10"))\#(track("2b", "Kungsholmen", "5:00"))</sub_tracks></track></tracklist></release>"#,
-    #"<release id="1005"><artists><artist><id>21</id><name>Soleil (2)</name><anv>Soleil</anv><join>&amp;</join></artist><artist><id>22</id><name>Lune</name><anv></anv><join></join></artist></artists><title>  Duos  </title><labels><label name="Svek" catno="SK 050" id="5"/></labels><extraartists><artist><id>7</id><name>Jesper Dahlbäck</name><anv>J. Dahlbäck</anv><role>Written-By [All Tracks By]</role><tracks>1, 2</tracks></artist><artist><name>Unlinked Engineer</name><role>Mastered By</role></artist></extraartists><formats><format name="CD" qty="1"><descriptions><description>Album</description></descriptions></format></formats><genres><genre>Electronic</genre></genres><styles><style>House</style></styles><country>Sweden</country><released>2003</released><master_id is_main_release="false">0</master_id><tracklist><track><position>1</position><title>Matin</title><duration>3:30</duration><artists><artist><id>21</id><name>Soleil (2)</name><anv>Sol</anv><join>Feat.</join></artist><artist><id>23</id><name>Nuage</name></artist></artists><extraartists><artist><id>22</id><name>Lune</name><anv>L.</anv><role>Remix</role></artist></extraartists></track>\#(track("2", "Soir", "1:02:03"))</tracklist></release>"#,
-    #"<release id="1006">\#(persuader)<title>Stockholm</title><labels><label name="Svek" catno="SK 032" id="5"/></labels><formats><format name="CD" qty="1"/></formats><genres><genre>Electronic</genre></genres><released>1999</released><master_id is_main_release="false">500</master_id><tracklist>\#(track("1", "Östermalm", "4:45"))\#(track("2", "Gamla Stan", "6:10"))\#(track("3", "Kungsholmen", "5:00"))</tracklist></release>"#,
-]
-
 @Test func eachReleaseFromTheAPIIsWhatTheCatalogHoldsForIt() async throws {
     let folder = try DumpFolder()
-    try folder.write("20261101", releases: dumpReleases.joined(separator: "\n") + "\n")
+    try folder.write("20261101", releases: apiDumpReleases)
     let catalog = try folder.importedCatalog()
     let api = FakeDiscogs().api()
     for id in FakeDiscogs.releases.keys.sorted() {
