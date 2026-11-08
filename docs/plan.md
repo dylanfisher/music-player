@@ -878,17 +878,40 @@ recorded replies, and staging and the library are temporary folders and `Simulat
 
 #### 54c. Approve
 
-- [ ] **54.6 Move into the library.** `Core/Library/LibraryFolderMove.swift`: every destination
+- [x] **54.6 Move into the library.** `Core/Library/LibraryFolderMove.swift`: every destination
       checked before any moves, `renamex_np(RENAME_EXCL)` with an `lstat` and `rename`
       fallback on `ENOTSUP` or `EINVAL`, the same volume required, sources only inside the
       staging folder and destinations only inside `library.folder`, a ledger entry per file.
       Tests on temporary folders and `SimulatedNAS`: a collision refuses the album, another
       volume refused, the fallback, each guard.
-- [ ] **54.7 Upgrade mapping and stats.** `Core/Library/UpgradeMapping.swift` (old tracks to new
+      Result: `LibraryFolderMove.moveIn` works out every destination from the staged files'
+      tags (`libraryFolderPath`) and refuses the whole album, moving nothing, when one is taken
+      or two files share one, or a file isn't the staged size or doesn't read. It records every
+      file's destination and size in the ledger, relative to the share, before the first
+      rename, so a resumed run takes them from there once the staged files are gone and the
+      file system says which are done. `renamex_np(RENAME_EXCL)`; on `ENOTSUP` or `EINVAL` an
+      `lstat` and `rename(2)`, logged. Staging and the library folder resolved with links
+      followed, on one volume (`st_dev`, and `EXDEV`) and apart (`stagingOverlap`, the check
+      54.3 left here); sources inside staging and destinations inside the library folder,
+      checked again on every rename. The file system calls are a `MoveCalls` value tests
+      replace; `SimulatedNAS` stands in for a scan's reads, not renames, so the tests use
+      temporary folders. 13 tests; each guard, the fallback's `lstat` and both size checks
+      caught by a mutation. Nothing calls it until ADR 0139 is approved.
+- [x] **54.7 Upgrade mapping and stats.** `Core/Library/UpgradeMapping.swift` (old tracks to new
       through the release's track index; the ones with no counterpart listed);
       `LibraryWatcher.importMoves(lines:)` and a `MoveList` from lines. Tests with a temporary
       index and stats, including `forgetTrashed` then `importMoves`.
-- [ ] **54.8 Approve flow.** The import steps as an idempotent state machine over the ledger and
+      Result: `UpgradeMapping` pairs old and new files by release position; the old files with
+      no counterpart are listed with whether they have stats. `upgradeOldFiles` finds the job's
+      share paths in the index and refuses one not there or no longer tagged with the release.
+      The old album's positions come from `upgradePositions` in `Core/Discogs`
+      (`matchAlbums` with the release chosen, named as the snapshot names them; a release the
+      catalog lacks is refused, since the matcher would pick another). `importMoves(lines:)`
+      builds `MoveList(moves:)` through the same parser and runs on the scan queue; plays, a
+      rating, a love and a playlist entry move, and the move is in the sync log, with and
+      without `forgetTrashed` first. `moveToTrash` and `TrashOutcome` are public;
+      `scripts/surface` flags `moveToTrash` until 54.14 calls it from `App`. 10 tests.
+- [x] **54.8 Approve flow.** The import steps as an idempotent state machine over the ledger and
       the outbox, for a new album and an upgrade. The lossy-origin check calls `analyzeFile(at:)`
       and `verdicts()` on the staged files when the Approve sheet is built, never `FileAnalyzer`
       or `MeasuresCache`, so no staged path enters the index; after the move the upgrade only
@@ -898,6 +921,23 @@ recorded replies, and staging and the library are temporary folders and `Simulat
       (new album) and 54.8b (upgrade). Tests: a failure injected at each step and resumed, the
       outbox replayed, a truncated moved file refused before the delete, an old track with no
       counterpart blocking, stats on the new tracks and the moves in the sync log.
+      Result: one `ImportRun` for both kinds, in `Core/Library`, which now depends on
+      `Recommender` for `JobState` and `HandoffEvent` (both `package`) rather than repeat the
+      stage names. It queues `approved` (from `staged`) and `importing`, moves the files in,
+      and for an upgrade reads each moved file again (tags, size, count), records the old files
+      and their pairs in the ledger, gives the ones still there and still of the release to
+      the trash closure, judged by the files being gone, carries the stats through the
+      `importMoves(lines:)` closure, then rescans and queues `imported`; a failure queues
+      `failed` with its stage. Reports are deduplicated against the outbox, a run drops a
+      `failed` its predecessor queued and never sent, and a run after `imported` only answers.
+      The ledger stays until the outbox's sender forgets it (54.10). The lossy-origin check is
+      `stagedOrigins` in `Core/Analysis`: the first and last staged files through
+      `analyzeFile(at:)` and `verdicts()`; `lossyOrigin`, `upsampled` or a file that can't be
+      analyzed blocks, for 54.13's sheet. Resume Here is the same run on another Mac. Tests: a
+      new album, an upgrade end to end, the unticked block, a truncated file stopped before the
+      delete, a failure at the move, the delete and the carry each resumed, a repeat after
+      `imported`, reports cut short before the move, a retagged old file kept; 13 tests, and 4
+      for the check; each report rule and guard caught by a mutation.
 
 #### 54d. The window
 
