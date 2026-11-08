@@ -36,15 +36,15 @@ import Testing
     #expect(argumentProblem(["--snapshot", "/s.png", "--snapshot-of", "palette"]) == nil)
     #expect(
         argumentProblem(["--snapshot", "/s.png", "--snapshot-of"])
-            == "--snapshot-of needs main, health, stats, review, palette, playlist, tags, settings, playback, appearance, toolbar, folders, shortcuts, statusBar, headerStatus, toolbarSheet"
+            == "--snapshot-of needs main, health, stats, review, palette, playlist, tags, settings, playback, appearance, toolbar, folders, shortcuts, statusBar, headerStatus, toolbarSheet, downloads"
     )
     #expect(
         argumentProblem(["--snapshot", "/s.png", "--snapshot-of", "--measure-window"])
-            == "--snapshot-of needs main, health, stats, review, palette, playlist, tags, settings, playback, appearance, toolbar, folders, shortcuts, statusBar, headerStatus, toolbarSheet"
+            == "--snapshot-of needs main, health, stats, review, palette, playlist, tags, settings, playback, appearance, toolbar, folders, shortcuts, statusBar, headerStatus, toolbarSheet, downloads"
     )
     #expect(
         argumentProblem(["--snapshot", "/s.png", "--snapshot-of", "queue"])
-            == "--snapshot-of needs one of main, health, stats, review, palette, playlist, tags, settings, playback, appearance, toolbar, folders, shortcuts, statusBar, headerStatus, toolbarSheet, not queue"
+            == "--snapshot-of needs one of main, health, stats, review, palette, playlist, tags, settings, playback, appearance, toolbar, folders, shortcuts, statusBar, headerStatus, toolbarSheet, downloads, not queue"
     )
     #expect(
         argumentProblem(["--snapshot-of", "palette"]) == "--snapshot-of only goes with --snapshot")
