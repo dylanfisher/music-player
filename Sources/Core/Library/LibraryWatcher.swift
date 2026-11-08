@@ -243,6 +243,19 @@ public final class LibraryWatcher: @unchecked Sendable {
         }
     }
 
+    /// Import Moves…: applies the move list at `list` (ADR 0026) on the scan queue, so between
+    /// scans and syncs, which map the paths it changes.
+    public func importMoves(from list: URL) async throws -> MoveListImport {
+        try await withCheckedThrowingContinuation { continuation in
+            scanQueue.async { [scanner] in
+                continuation.resume(
+                    with: Result {
+                        try LibraryIndex(at: scanner.databaseURL).importMoves(from: list)
+                    })
+            }
+        }
+    }
+
     /// Stop Watching on the last folder: removes every file from the index, as `start` does for
     /// the files outside the folders when there are some. Its stats stay, by path.
     public func removeEveryFile() {

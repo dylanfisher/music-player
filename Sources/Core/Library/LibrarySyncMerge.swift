@@ -255,15 +255,25 @@ extension LibraryIndex {
     /// Gives the path `old`, which has no file, the path `newNFC` (in NFC), so it keeps its ID,
     /// Date Added and stats. When `newNFC` has a row, its stats join `old`'s first by the merge
     /// rules, and its file, if it has one, takes `old`'s ID. Without one, the stats wait at
-    /// `newNFC` for a scan to find its file, as a play of a path never scanned does. Call
-    /// inside a transaction.
-    func takeMove(_ old: Int64, to newNFC: String) throws {
+    /// `newNFC` for a scan to find its file, as a play of a path never scanned does: without the
+    /// old file's facts, which would make the path lost, and a move candidate, until then.
+    /// Returns whether `newNFC` had stats that merged. Call inside a transaction.
+    @discardableResult
+    func takeMove(_ old: Int64, to newNFC: String) throws -> Bool {
         guard let new = try existingPathID(newNFC) else {
-            try statement("UPDATE paths SET path = ? WHERE id = ?").run(newNFC, old)
-            return
+            try statement(
+                """
+                UPDATE paths SET path = ?, codec = NULL, sample_rate_hz = NULL,
+                    length_frames = NULL, title = NULL
+                WHERE id = ?
+                """
+            ).run(newNFC, old)
+            return false
         }
+        let merged = try pathHasStats(new)
         try absorb(new, into: old)
         try move(old, to: new)
+        return merged
     }
 
     /// Moves the stats of the path `gone` onto `kept`, by the merge rules: counts added, the

@@ -92,8 +92,13 @@ extension LibraryIndex {
         try statement("DELETE FROM paths WHERE id = ?").run(id)
     }
 
+    /// Whether the path `id` has what a move keeps, as `hasStats` says.
+    func pathHasStats(_ id: Int64) throws -> Bool {
+        try !statement("SELECT 1 WHERE \(hasStats("?1"))").map(id, row: { _ in () }).isEmpty
+    }
+
     /// Logs the move of `from` to `to`, both `paths` rows, when both are in share folders.
-    private func logMove(from: String, to: String, _ roots: SyncRoots) throws {
+    func logMove(from: String, to: String, _ roots: SyncRoots) throws {
         guard let old = roots.syncPath(from), let new = roots.syncPath(to) else { return }
         try logSync(.move(from: old, to: new))
         try recordMove(from: old, to: new)
