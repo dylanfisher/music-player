@@ -79,7 +79,7 @@ private func makeEditing(
         return report
     },
     undo: @escaping @Sendable () -> TagWriteReport = { TagWriteReport() },
-    newestEdit: (origin: TagEditOrigin?, fileCount: Int)? = nil,
+    newestEdit: JournaledEdit? = nil,
     confirm: Bool = true,
     progress: [TagWriteProgress] = []
 ) -> TagEditing {
@@ -98,8 +98,8 @@ private func makeEditing(
                 seen.edited(files.map(\.edit))
                 return write(files[0].edit, paths)
             },
-            undo: {
-                seen.ran("undo")
+            undo: { expected in
+                seen.ran(expected.map { "undo \($0.sequence)" } ?? "undo")
                 return undo()
             },
             newestEdit: { newestEdit },
@@ -464,13 +464,17 @@ private final class Titles: @unchecked Sendable {
 }
 
 /// Undo Tag Edit undoes the newest edit anywhere, so it asks first when another kind of
-/// window made it; Cancel leaves the edit undoable (ADR 0136).
+/// window made it; Cancel leaves the edit undoable. The undo is handed the edit it asked about,
+/// so it undoes that one or none (ADR 0136).
 @MainActor
 @Test func undoAsksBeforeUndoingAnotherWindowsEdit() async throws {
-    for (answer, ran) in [(false, [String]()), (true, ["undo"])] {
+    let edit = { (origin: TagEditOrigin?, count: Int) in
+        JournaledEdit(sequence: 7, origin: origin, fileCount: count)
+    }
+    for (answer, ran) in [(false, [String]()), (true, ["undo 7"])] {
         let seen = Seen()
         let editing = makeEditing(
-            seen, newestEdit: (.discogsTagger, 22), confirm: answer)
+            seen, newestEdit: edit(.discogsTagger, 22), confirm: answer)
         editing.undo(over: window, from: .tagEditor)
         try await eventually { !editing.isWriting && !seen.confirmations.isEmpty }
         #expect(seen.confirmations == ["Undo the Discogs tagger's edit of 22 files?"])
@@ -481,13 +485,14 @@ private final class Titles: @unchecked Sendable {
             == "Undo an info window's edit of 1 file?")
 
     // The same window's edit, one whose window isn't known, and none, ask nothing.
-    for (newest, origin) in [
-        ((TagEditOrigin.discogsTagger, 3), TagEditOrigin.discogsTagger), ((nil, 3), .tagEditor),
-    ] as [((TagEditOrigin?, Int), TagEditOrigin)] {
+    for (newest, origin, ran) in [
+        (edit(.discogsTagger, 3), TagEditOrigin.discogsTagger, "undo 7"),
+        (edit(nil, 3), .tagEditor, "undo 7"), (nil, .tagEditor, "undo"),
+    ] {
         let seen = Seen()
         let editing = makeEditing(seen, newestEdit: newest)
         editing.undo(over: window, from: origin)
-        try await eventually { seen.work == ["undo"] }
+        try await eventually { seen.work == [ran] }
         #expect(seen.confirmations.isEmpty)
     }
 }

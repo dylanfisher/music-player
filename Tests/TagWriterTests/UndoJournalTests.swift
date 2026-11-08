@@ -217,18 +217,29 @@ private func newestEntry(_ journal: TagUndoJournal) throws -> URL {
     let writer = scratchWriter()
     #expect(try writer.newestEdit() == nil)
     expectChanged(writer.write(TagEdit(values: [.title: "One"]), to: [urls[0].path]), [urls[0]])
+    let first = try #require(try writer.newestEdit())
     let edit = TagEdit(values: [.title: "Two"])
     expectChanged(
         writer.write(urls.map { ($0.path, edit) }, origin: .discogsTagger), urls)
-    #expect(try writer.newestEdit()! == (.discogsTagger, 2))
-    #expect(try writer.newestEdit()! == (.discogsTagger, 2), "nothing changed")
+    let second = try #require(try writer.newestEdit())
+    #expect(second == JournaledEdit(sequence: 2, origin: .discogsTagger, fileCount: 2))
+    #expect(try writer.newestEdit() == second, "nothing changed")
 
-    expectChanged(writer.undoLast(), urls.reversed())
-    #expect(try writer.newestEdit()! == (.tagEditor, 1))
+    // Asked about the first edit, the undo finds the second newer and undoes nothing.
+    let afterTwo = try urls.map { try Data(contentsOf: $0) }
+    let refused = writer.undoLast(ifNewestIs: first)
+    #expect(refused.changed.isEmpty)
+    #expect(refused.failures.map(\.kind) == [.journal])
+    #expect(try urls.map { try Data(contentsOf: $0) } == afterTwo)
+    #expect(try writer.newestEdit() == second)
+
+    expectChanged(writer.undoLast(ifNewestIs: second), urls.reversed())
+    #expect(try writer.newestEdit() == JournaledEdit(sequence: 1, origin: .tagEditor, fileCount: 1))
     try FileManager.default.removeItem(
         at: try newestEntry(writer.journal).appendingPathComponent(TagUndoJournal.originName))
-    #expect(try writer.newestEdit()! == (nil, 1))
+    #expect(try writer.newestEdit() == JournaledEdit(sequence: 1, origin: nil, fileCount: 1))
     expectChanged(writer.undoLast(), [urls[0]])
+    #expect(writer.undoLast(ifNewestIs: nil).nothingToUndo)
 }
 
 /// The value of the extended attribute `name` of the file at `url`, nil without one.

@@ -133,10 +133,27 @@ public struct TagWriter: Sendable {
         return report
     }
 
-    /// Which window made the newest journaled edit, nil when its journal entry doesn't say,
-    /// and how many files it holds; nil when there is nothing to undo. Changes nothing.
-    public func newestEdit() throws(TagWriteError) -> (origin: TagEditOrigin?, fileCount: Int)? {
+    /// The newest journaled edit, nil when there is nothing to undo. Changes nothing.
+    public func newestEdit() throws(TagWriteError) -> JournaledEdit? {
         try journal.newestEdit()
+    }
+
+    /// Undoes the newest edit only while it is still `expected`, the one Undo Tag Edit asked
+    /// about (nil for none); an edit made since fails the undo with nothing undone, rather than
+    /// undoing an edit nobody was asked about (ADR 0136).
+    public func undoLast(ifNewestIs expected: JournaledEdit?) -> TagWriteReport {
+        var report = TagWriteReport()
+        do throws(TagWriteError) {
+            if try journal.newestEdit() == expected { return undoLast() }
+            report.failures.append(
+                TagWriteError(
+                    path: journal.directory.path, kind: .journal,
+                    detail: "a tag edit was made after Undo Tag Edit asked, so nothing was undone"
+                ))
+        } catch {
+            report.failures.append(error)
+        }
+        return report
     }
 
     /// Undoes the newest journaled edit. A file changed since is dropped from the journal with

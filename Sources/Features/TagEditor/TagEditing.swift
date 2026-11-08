@@ -48,10 +48,10 @@ public final class TagEditing {
                 [(path: String, edit: TagEdit)], TagEditOrigin,
                 @escaping @Sendable (TagWriteProgress) -> Void
             ) -> TagWriteReport
-        var undo: @Sendable () -> TagWriteReport
-        /// Who made the newest edit and how many files it holds, nil with none to undo.
-        var newestEdit:
-            @Sendable () throws(TagWriteError) -> (origin: TagEditOrigin?, fileCount: Int)?
+        /// Undoes the newest edit while it is still the one given, nil for none.
+        var undo: @Sendable (JournaledEdit?) -> TagWriteReport
+        /// The newest edit, nil with none to undo.
+        var newestEdit: @Sendable () throws(TagWriteError) -> JournaledEdit?
         /// Shows an info window in front, beside the main window: at the place given, past the
         /// other info windows' top left corners.
         var present: @MainActor (TagEditorWindow, NSWindow, NSPoint?, [NSPoint]) -> Void
@@ -108,7 +108,8 @@ public final class TagEditing {
     public init(writer: TagWriter) {
         effects = Effects(
             read: { readEditableTracks($0, isStopped: $1) },
-            write: { writer.write($0, origin: $1, progress: $2) }, undo: { writer.undoLast() },
+            write: { writer.write($0, origin: $1, progress: $2) },
+            undo: { writer.undoLast(ifNewestIs: $0) },
             newestEdit: { () throws(TagWriteError) in try writer.newestEdit() },
             present: { $0.show(beside: $1, at: $2, avoiding: $3) }, confirm: ask,
             alert: showProblems)
@@ -277,7 +278,8 @@ public final class TagEditing {
 
     /// Undo Tag Edit: puts back the files of the newest edit, after any write still queued.
     /// `origin` is the kind of window it's pressed in; when the edit is known to come from
-    /// another, it asks first (ADR 0136).
+    /// another, it asks first (ADR 0136). It undoes the edit it looked at, or none: a write
+    /// queued while it asks fails the undo instead of being undone in that edit's place.
     public func undo(over window: NSWindow, from origin: TagEditOrigin) {
         let undo = effects.undo
         let newestEdit = effects.newestEdit
@@ -291,13 +293,14 @@ public final class TagEditing {
                     self.pendingWrites -= 1
                     if self.pendingWrites == 0 { self.saving(nil) }
                     switch newest {
-                    case .success(.some((.some(let made), let count))) where made != origin:
-                        self.effects.confirm(.undoing(made, count), window) { yes in
-                            guard yes else { return }
-                            self.enqueue("undo the tag edit", over: window) { _ in undo() }
+                    case .success(let edit):
+                        let run = {
+                            self.enqueue("undo the tag edit", over: window) { _ in undo(edit) }
                         }
-                    case .success:
-                        self.enqueue("undo the tag edit", over: window) { _ in undo() }
+                        guard let edit, let made = edit.origin, made != origin else { return run() }
+                        self.effects.confirm(.undoing(made, edit.fileCount), window) { yes in
+                            if yes { run() }
+                        }
                     case .failure(let error):
                         self.effects.alert(
                             "Couldn't undo the tag edit", [error.description], window)
