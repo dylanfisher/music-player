@@ -70,6 +70,18 @@ enum SchemaPart: String, CaseIterable {
         }
     }
 
+    /// Why a rebuild of the part needs a rescan, which the rescan question shows (ADR 0136); nil
+    /// for a part a rescan doesn't refill. The stored SQL is the part's only identity, so this
+    /// says what the part holds, not what this build changed in it.
+    var rescanWhy: String? {
+        switch self {
+        case .index:
+            "This build stores the index of the library's files, their tags and albums, in a new"
+                + " shape, so the index is made again from the files."
+        default: nil
+        }
+    }
+
     /// What takes the part's data out of the stats before its earlier tables are dropped, in a
     /// rebuild that keeps the stats; nil for a part whose rows the stats don't count.
     var discardSQL: String? {

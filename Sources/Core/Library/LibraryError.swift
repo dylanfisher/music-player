@@ -18,6 +18,8 @@ enum LibraryError: Error, Equatable, CustomStringConvertible {
     /// A share folder's new mount point inside its old one, or the old inside the new, whose
     /// paths a rewrite would mix up.
     case nestedRoots(String, String)
+    /// The owner answered the rescan question with Quit, so the index was left as it was.
+    case rescanDeclined
 
     var description: String {
         switch self {
@@ -35,6 +37,7 @@ enum LibraryError: Error, Equatable, CustomStringConvertible {
         case .nestedRoots(let old, let new):
             "a share folder moved from \(old) to \(new), one inside the other, so its paths"
                 + " weren't rewritten"
+        case .rescanDeclined: "the library wasn't rebuilt, since the rescan was declined"
         }
     }
 }
