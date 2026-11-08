@@ -87,7 +87,7 @@ public struct AppSettings: SettingsSchema {
     public let receiverEnabled = Setting(
         "receiver.enabled", title: "Control the Receiver with the Volume Keys", default: false,
         "The volume keys set a connected Denon or Marantz receiver's volume.")
-    public let receiverAddress = Setting<ReceiverAddress?>(
+    public let receiverAddress = Setting<IPAddressSetting?>(
         "receiver.address", title: "Receiver Address", default: nil,
         "Its IP address: for a Marantz, or a Denon the search misses.")
     public let appearance = Setting(
