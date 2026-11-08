@@ -77,7 +77,8 @@ private let staged = StagedJob(
 
 @MainActor
 private func stagedTagger(
-    _ files: StagedFiles, writing: Writing = .applies,
+    _ files: StagedFiles, writing: Writing = .applies, choices: TaggerChoices = defaultChoices,
+    catalog: TaggerModel.CatalogState = readyCatalog,
     resolved: @escaping (AutoTagRun.Verdict) -> Void
 ) async -> TaggerModel {
     let release = release(stagedRelease, "The Hunter", titles: ["Sleeper", "Fire"])
@@ -91,7 +92,7 @@ private func stagedTagger(
             },
             summaries: { _ in [] },
             release: { _ in nil },
-            checkCatalog: { readyCatalog },
+            checkCatalog: { catalog },
             write: { edits in
                 switch writing {
                 case .applies: return try files.write(edits)
@@ -99,7 +100,7 @@ private func stagedTagger(
                 case .fails: return report(notWritten: edits.map(\.path))
                 }
             }),
-        mapping: DiscogsPreset.minimal.mapping, savedMappings: [], choices: defaultChoices,
+        mapping: DiscogsPreset.minimal.mapping, savedMappings: [], choices: choices,
         resolved: resolved)
     await made.checkCatalog()
     return made
@@ -186,4 +187,26 @@ private let bonusAlbum = album(-1, "The Hunter", titles: ["Sleeper", "Fire"])
     try await eventually { tagger.status.contains("not fully written") }
     #expect(verdicts.isEmpty)
     #expect(tagger.applicable(.likely).map(\.id) == [-1])
+}
+
+@MainActor @Test func aStagedWriteTakesNoCoverWhateverTheArtworkMode() async throws {
+    let files = StagedFiles(bonusAlbum)
+    var choices = defaultChoices
+    choices.artwork = .replace
+    let tagger = await stagedTagger(files, choices: choices) { _ in }
+    tagger.hasToken = { true }
+    tagger.analyze()
+    await tagger.finished()
+    let plan = try #require(await tagger.plan([-1]))
+    #expect(plan.coverCount == 0)
+    #expect(plan.problems.isEmpty, "\(plan.problems)")
+}
+
+@MainActor @Test func aStagedJobLooksItsReleaseUpInTheCatalogOnly() async throws {
+    let tagger = await stagedTagger(StagedFiles(bonusAlbum), catalog: .missing) { _ in }
+    #expect(tagger.source == .catalog)
+    #expect(tagger.runSource == .catalog)
+    #expect(!tagger.canAnalyze)
+    tagger.chooseSource(.api)
+    #expect(tagger.source == .catalog)
 }

@@ -42,6 +42,9 @@ extension TaggerModel {
         resolved: @escaping (AutoTagRun.Verdict) -> Void
     ) {
         let release = job.releaseID
+        // A staged write is the fixed mapping's tags only, with no cover (ADR 0146).
+        var choices = choices
+        choices.artwork = .off
         self.init(
             effects: Effects(
                 albums: {

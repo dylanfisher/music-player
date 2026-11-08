@@ -227,9 +227,9 @@ final class TaggerModel {
     /// alone.
     var runSource: DiscogsSource { source == .both && !isCatalogReady ? .api : source }
 
-    /// Makes `source` the one Analyze asks, and saves it.
+    /// Makes `source` the one Analyze asks, and saves it. A staged job keeps the catalog.
     func chooseSource(_ source: DiscogsSource) {
-        guard source != self.source || !sourceChosen else { return }
+        guard staged == nil, source != self.source || !sourceChosen else { return }
         self.source = source
         sourceChosen = true
         sourceSaved(source)

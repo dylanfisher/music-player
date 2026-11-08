@@ -303,7 +303,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
             window?.contentView?.layoutSubtreeIfNeeded()
         }
         sourcePopUp.selectItem(at: DiscogsSource.allCases.firstIndex(of: model.source)!)
-        sourcePopUp.isEnabled = !model.isBusy
+        sourcePopUp.isEnabled = !model.isBusy && !model.isStaged
         let tokenTip = model.hasToken() ? nil : Self.noTokenTip
         for (item, source) in zip(sourcePopUp.itemArray, DiscogsSource.allCases) {
             item.toolTip = source == .catalog ? nil : tokenTip
