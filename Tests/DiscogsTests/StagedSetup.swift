@@ -89,10 +89,13 @@ final class StagedSetup {
         try dumps.importCatalog()
     }
 
-    /// Copies `files` into `job-7` and tags them, then runs AutoTag on them for `format`.
+    /// Copies `files` into `job-7` and tags them, then runs AutoTag on them for `format`, as a
+    /// job for the release `releaseID`. `namingTheRelease` tags them with the release's artist
+    /// and album too, so the catalog finds it by them.
     func run(
         _ files: [Staged], format: DownloadJob.Candidate.Format = .flac,
-        mapping: DiscogsMapping = DiscogsPreset.oneToOne.mapping
+        mapping: DiscogsMapping = DiscogsPreset.oneToOne.mapping,
+        releaseID: Int = stagedReleaseID, namingTheRelease: Bool = false
     ) async throws -> AutoTagRun {
         let (fixtures, manifest) = try fixtureLibrary.get()
         let folder = root.appendingPathComponent("job-7", isDirectory: true)
@@ -108,6 +111,11 @@ final class StagedSetup {
             edit.values[.title] = file.title ?? ""
             edit.values[.trackNumber] = file.number.map(String.init) ?? ""
             edit.values[.discNumber] = ""
+            if namingTheRelease {
+                edit.values[.artist] = "Made-Up Artist"
+                edit.values[.albumArtist] = "Made-Up Artist"
+                edit.values[.album] = "Made-Up Album"
+            }
             if file.sample != .garbage && file.sample != .dsf { edits.append((copy.path, edit)) }
             let size = try #require(
                 try FileManager.default.attributesOfItem(atPath: copy.path)[.size] as? Int)
@@ -126,7 +134,7 @@ final class StagedSetup {
                 try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int)
         }
         job = StagedJob(
-            releaseID: stagedReleaseID, artist: "Made-Up Artist", folder: "job-7", format: format,
+            releaseID: releaseID, artist: "Made-Up Artist", folder: "job-7", format: format,
             files: jobFiles)
         self.mapping = mapping
         return try await autoTag()

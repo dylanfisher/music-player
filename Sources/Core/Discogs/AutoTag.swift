@@ -42,7 +42,8 @@ func autoTag(
     let matches = try await matchAlbums(
         [staged.album], catalogAt: catalog, choosing: [StagedAlbum.albumID: job.releaseID],
         skippingVideo: false, progress: { _ in })
-    guard let match = matches.first, match.release != nil else {
+    // A release the catalog lacks isn't chosen, and the matcher then picks the best it finds.
+    guard let match = matches.first, match.releaseID == job.releaseID else {
         let problem = ReleaseSnapshot.Problem.notInCatalog(releaseID: job.releaseID)
         return AutoTagRun(
             verdict: .error([problem.description]), staged: staged, match: nil, changes: nil,

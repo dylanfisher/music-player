@@ -120,3 +120,17 @@ private func reasons(_ run: AutoTagRun) -> [String] {
                 "02 Second Song.flac is track 2, the service said 1",
             ]))
 }
+
+@Test func aJobWhoseReleaseTheCatalogLacksIsAnErrorThoughAnotherMatches() async throws {
+    // The files are tagged as the catalog's release 4242, which the matcher picks when 99
+    // isn't there.
+    let setup = try StagedSetup()
+    let other = try await setup.run(exactStaging, namingTheRelease: true)
+    #expect(other.verdict == .clean)
+    try FileManager.default.removeItem(at: setup.root)
+    let run = try await setup.run(exactStaging, releaseID: 99, namingTheRelease: true)
+    #expect(
+        run.verdict == .error([ReleaseSnapshot.Problem.notInCatalog(releaseID: 99).description]))
+    #expect(run.edits.isEmpty)
+    #expect(run.match == nil)
+}
