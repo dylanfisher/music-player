@@ -55,7 +55,6 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
 /// The MIME type FLAC PICTURE and ID3 APIC give a picture that's a URL, not embedded.
 let linkedPictureMIMEType = "-->"
 
-
 /// Sample rate (20 bits), channels − 1 (3), bits per sample − 1 (5) and total samples (36),
 /// packed after the block and frame size limits.
 private func streamInfo(_ block: Bytes) throws(ParseFailure) -> TrackAudio {

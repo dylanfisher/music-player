@@ -23,7 +23,8 @@ func parseDSF(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
             )
         }
     }
-    return TrackMetadata(tags: id3?.tags ?? TrackTags(), audio: stream.audio, art: id3?.art,
+    return TrackMetadata(
+        tags: id3?.tags ?? TrackTags(), audio: stream.audio, art: id3?.art,
         pictures: id3?.pictures ?? [])
 }
 

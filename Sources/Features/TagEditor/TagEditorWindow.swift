@@ -192,7 +192,9 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     private func removeDiscogsTab() {
         guard let item = tabItem(.discogs) else { return }
         let last = Self.lastTab
-        if shownTab == .discogs { tabs.selectTabViewItem(withIdentifier: TagEditorTab.info.rawValue) }
+        if shownTab == .discogs {
+            tabs.selectTabViewItem(withIdentifier: TagEditorTab.info.rawValue)
+        }
         tabs.removeTabViewItem(item)
         Self.lastTab = last
     }
@@ -661,7 +663,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         dimmed[.foregroundColor] = NSColor.secondaryLabelColor
         let text = NSMutableAttributedString()
         if rows.isEmpty {
-            text.append(NSAttributedString(string: "The files hold no other tags.", attributes: dimmed))
+            text.append(
+                NSAttributedString(string: "The files hold no other tags.", attributes: dimmed))
         }
         for (index, row) in rows.enumerated() {
             if index > 0 { text.append(NSAttributedString(string: "\n", attributes: plain)) }

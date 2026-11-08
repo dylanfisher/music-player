@@ -10,7 +10,8 @@ private let dffChunkHeaderBytes = 12
 /// `DIIN` title and artist aren't read.
 func parseDFF(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     let (stream, id3) = try dffLayout(reader)
-    return TrackMetadata(tags: id3?.tags ?? TrackTags(), audio: stream.audio, art: id3?.art,
+    return TrackMetadata(
+        tags: id3?.tags ?? TrackTags(), audio: stream.audio, art: id3?.art,
         pictures: id3?.pictures ?? [])
 }
 
