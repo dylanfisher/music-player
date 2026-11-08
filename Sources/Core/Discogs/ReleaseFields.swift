@@ -144,7 +144,7 @@ struct ReleaseFields {
 
 /// The Discogs page of release `id`: the one address the release URL tag and every Open on
 /// Discogs use.
-public func releaseURL(_ id: Int) -> String { discogsURL("release", id) }
+func releaseURL(_ id: Int) -> String { discogsURL("release", id) }
 
 /// The Discogs page of release `id`, from `releaseURL`.
 public func discogsPage(_ id: Int) -> URL {
