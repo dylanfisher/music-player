@@ -167,7 +167,7 @@ private func changedRelease(_ change: (inout [String: Any]) -> Void) -> [UInt8] 
     #expect(waits.all == [60, nil])
 }
 
-@Test func a429WaitsAsToldAndATheThirdStopsTheRun() async throws {
+@Test func a429WaitsAsToldAndTheThirdStopsTheRun() async throws {
     let fake = FakeDiscogs()
     let api = fake.api()
     fake.queue("/releases/1001", status: 429, headers: ["Retry-After": "40"])
