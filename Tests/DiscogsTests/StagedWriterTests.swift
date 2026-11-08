@@ -100,3 +100,21 @@ private func entries(_ journal: TagUndoJournal) throws -> [String] {
     #expect(paths.count == 1)
     #expect(!paths.contains { $0.hasPrefix(setup.root.path) })
 }
+
+@Test func aStagedWriteACrashTornIsPutBackFromTheStagedJournal() async throws {
+    let setup = try StagedSetup()
+    let run = try await setup.run(exactStaging)
+    let path = try #require(run.edits.first?.path)
+    let original = try Data(contentsOf: URL(fileURLWithPath: path, isDirectory: false))
+    let writer = setup.stagedWriter
+    var crashing = TagWriter(journal: writer.writer.journal)
+    crashing.faults.tornWriteBytes = 1
+    _ = crashing.write(run.edits)
+    try #require(
+        try Data(contentsOf: URL(fileURLWithPath: path, isDirectory: false)) != original)
+
+    let report = writer.recoverInterrupted()
+    #expect(report.failures.isEmpty)
+    #expect(report.changed.contains(path))
+    #expect(try Data(contentsOf: URL(fileURLWithPath: path, isDirectory: false)) == original)
+}

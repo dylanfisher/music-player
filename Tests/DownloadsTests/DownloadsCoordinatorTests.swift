@@ -14,11 +14,20 @@ private final class Calls: @unchecked Sendable {
     private let lock = NSLock()
     private var tagged: [StagedJob] = []
     private var written = 0
+    private var events: [String] = []
     private var imported: [Int] = []
     private var gate: CheckedContinuation<Void, Never>?
     private var holding = false
 
-    func tag(_ job: StagedJob) { lock.withLock { tagged.append(job) } }
+    func tag(_ job: StagedJob) {
+        lock.withLock {
+            tagged.append(job)
+            events.append("tag")
+        }
+    }
+    func recover() { lock.withLock { events.append("recover") } }
+    /// What the stand-ins were asked, in order.
+    var order: [String] { lock.withLock { events } }
     func write() { lock.withLock { written += 1 } }
     func run(_ id: Int) { lock.withLock { imported.append(id) } }
     var tags: [StagedJob] { lock.withLock { tagged } }
@@ -78,6 +87,8 @@ private final class Setup {
     var verdict = AutoTagRun.Verdict.clean
     /// The staging folder the stand-ins read and write, where `stage` puts files.
     let stagingRoot: String
+    /// What the staged journal's recovery reports as failed.
+    var recoveryProblems: [String] = []
     /// What the stand-in import run does to the outbox, as ImportRun queues its reports.
     var importReports: [HandoffEvent] = [.approved, .importing, .imported]
 
@@ -110,6 +121,7 @@ private final class Setup {
         let url = databaseURL
         let service = service
         let root = stagingRoot
+        let recovery = recoveryProblems
         return DownloadsCoordinator(
             machine: FakeService.machine, databaseURL: url,
             effects: DownloadsCoordinator.Effects(
@@ -120,6 +132,10 @@ private final class Setup {
                         await calls.waitIfHeld()
                         return run(verdict, for: job, root: root)
                     } : nil,
+                recover: {
+                    calls.recover()
+                    return recovery
+                },
                 write: { run in
                     calls.write()
                     if let job = calls.tags.last { grow(job, under: root) }
@@ -458,4 +474,26 @@ private let firstSizes = ["01 First Song.flac": 105, "02 Second Song.flac": 105]
     #expect(
         try setup.index.stagedSizes(job: 1, folder: "job-1")
             == ["01 First Song.flac": 250, "02 Second Song.flac": 250])
+}
+
+@Test func theStagedJournalIsRecoveredOnceBeforeTheFirstTagRun() async throws {
+    let setup = try Setup([job(1), job(2)])
+    let coordinator = setup.coordinator()
+    await coordinator.take([job(1)])
+    await coordinator.take([job(2)])
+    #expect(setup.calls.order == ["recover", "tag", "tag"])
+}
+
+@Test func aMacWithNoCatalogLeavesTheStagedJournalAlone() async throws {
+    let setup = try Setup([job(1)])
+    await setup.coordinator(catalog: false).take([job(1)])
+    #expect(setup.calls.order.isEmpty)
+}
+
+@Test func aRecoveryThatFailedIsSaid() async throws {
+    let setup = try Setup([job(1)])
+    setup.recoveryProblems = ["01.flac couldn't be put back"]
+    let coordinator = setup.coordinator()
+    await coordinator.take([job(1)])
+    #expect(await coordinator.problems.first == "01.flac couldn't be put back")
 }

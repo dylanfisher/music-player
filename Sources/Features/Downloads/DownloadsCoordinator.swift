@@ -25,6 +25,9 @@ actor DownloadsCoordinator {
         /// Matches a staged job's files with its release, writing nothing; nil on a Mac with
         /// no Discogs catalog, which doesn't tag.
         var autoTag: (@Sendable (StagedJob) async throws -> AutoTagRun)?
+        /// Finishes the writes a crash left unconfirmed in the staged journal (ADR 0138),
+        /// giving the failures; the first tag run after launch waits for it.
+        var recover: @Sendable () async -> [String]
         /// Writes a clean run's edits through `StagedWriter` and reads them back, returning
         /// the verdict to report.
         var write: @Sendable (AutoTagRun) async -> AutoTagRun.Verdict
@@ -43,6 +46,7 @@ actor DownloadsCoordinator {
     /// Opened on first use, here, since an index belongs to the thread that uses it.
     private var opened: LibraryIndex?
     private var releasedStaleLeases = false
+    private var recoveredStagedWrites = false
     /// The job being tagged; one at a time.
     private var tagging: Int?
     /// The jobs whose lease a renewal found another Mac holding.
@@ -87,6 +91,10 @@ actor DownloadsCoordinator {
         }
         await flush()
         guard let autoTag = effects.autoTag else { return }
+        if !recoveredStagedWrites {
+            recoveredStagedWrites = true
+            for problem in await effects.recover() { note(problem) }
+        }
         for job in jobs.sorted(by: { $0.id < $1.id }) where Self.needsTagging(job) {
             guard tagging == nil else { return }
             await tag(job, with: autoTag)

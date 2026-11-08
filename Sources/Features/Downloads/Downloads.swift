@@ -165,6 +165,17 @@ package final class Downloads {
             service: setup.service,
             sleep: { seconds in try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1e9)) },
             autoTag: canTag ? tagging : nil,
+            recover: {
+                let root: String
+                do {
+                    root = try await places().stagingRoot
+                } catch {
+                    return ["the staging folder wasn't found: \(error)"]
+                }
+                let writer = StagedWriter(stagingRoot: root, dataDirectory: setup.dataDirectory)
+                let report = await blockingFileWork { writer.recoverInterrupted() }
+                return report.failures.map(\.description)
+            },
             write: { run in
                 let root: String
                 do {

@@ -47,8 +47,8 @@ does, from `Core/Discogs/StagedWriter.swift`:
   anything is written. Nothing under a watched folder or the library folder can pass, since
   Settings refuses a staging folder inside either (ADR 0136).
 - **A journal of its own.** A second `TagUndoJournal`, in a folder of its own beside the main
-  one, holds the in-place writes' recovery entries, so a crash mid-write is put back at the next
-  launch on that Mac. Its write closure doesn't call the library watcher and doesn't push to the
+  one, holds the in-place writes' recovery entries, so a crash mid-write is put back on that Mac
+  before its first tag run after launch. Its write closure doesn't call the library watcher and doesn't push to the
   app's journal, so Edit > Undo never sees a staged write and still undoes the library edit
   before it.
 - **A read-back.** After the write the files are read again and the change set worked out

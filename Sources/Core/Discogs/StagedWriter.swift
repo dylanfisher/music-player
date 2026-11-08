@@ -54,6 +54,10 @@ package struct StagedWriter: Sendable {
         left == 0 ? .clean : .discrepancy(["the files read back with \(left) tags still to change"])
     }
 
+    /// Finishes any write a crash left unconfirmed in the staged journal: a file the crash
+    /// tore is put back from it. Run it before the first staged write after a launch.
+    package func recoverInterrupted() -> TagWriteReport { writer.recoverInterrupted() }
+
     /// Writes `edits` with the staged journal and nothing else: the write the staged tagger's
     /// Apply uses too, which no watcher hears of. Paths outside the staging folder are
     /// refused before any is written.
