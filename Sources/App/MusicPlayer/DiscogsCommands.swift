@@ -34,11 +34,11 @@ extension AppDelegate {
         let tagger = DiscogsTagger(
             reader: reader, catalog: catalog, mapping: settings[\.discogsMapping],
             savedMappings: settings[\.discogsSavedMappings],
-            importing: { [weak self] folder, progress in
+            importing: { [weak self] folder, startingOver, progress in
                 let configured = await MainActor.run { self?.settings?[\.watchedFolders] ?? [] }
                 return try await importCatalog(
                     from: folder, to: catalog, outsideOf: try locatedFolders(configured),
-                    progress: progress)
+                    startingOver: startingOver, progress: progress)
             })
         tagger.selectedTracks = { [weak browser] in try browser?.selectedTrackIDs() ?? [] }
         tagger.write = { [weak self] files, window in

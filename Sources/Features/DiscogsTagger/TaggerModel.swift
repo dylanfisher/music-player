@@ -90,13 +90,18 @@ final class TaggerModel {
                 files: [AlbumFile], problems: [String]
             )
         var checkCatalog: @Sendable () async -> CatalogState
+        /// The import that stopped before it finished, if any (ADR 0134).
+        var unfinishedImport: @Sendable () async -> UnfinishedImport?
+        /// Imports the dump set in the folder, starting over when the flag is set.
         var importCatalog:
-            @Sendable (URL, @escaping @Sendable (CatalogImportProgress) -> Void) async throws ->
-                CatalogImportSummary
+            @Sendable (URL, Bool, @escaping @Sendable (CatalogImportProgress) -> Void) async throws
+                -> CatalogImportSummary
     }
 
     private let effects: Effects
     private(set) var catalog = CatalogState.checking
+    /// An import stopped, quit or killed before it finished, which Resume Import carries on.
+    private(set) var unfinished: UnfinishedImport?
     private(set) var activity = Activity.idle
     /// What the last Analyze, import or Apply ended with, for the line under the toolbar.
     private(set) var status = ""
@@ -157,17 +162,20 @@ final class TaggerModel {
 
     // MARK: - The catalog
 
-    /// Checks the catalog's file, as the window opens and after an import.
+    /// Checks the catalog's file and any unfinished import, as the window opens and after an
+    /// import.
     func checkCatalog() async {
         catalog = .checking
         changed()
         catalog = await effects.checkCatalog()
+        unfinished = await effects.unfinishedImport()
         changed()
     }
 
-    /// Imports the newest dump set in `folder`, replacing the catalog once it's complete; Stop
-    /// cancels it and leaves the old one.
-    func importDump(from folder: URL) {
+    /// Imports the newest dump set in `folder`, replacing the catalog once it's complete. An
+    /// unfinished import of the set is carried on unless `startingOver`. Stop cancels it at its
+    /// next checkpoint, for Resume Import, and leaves the old catalog.
+    func importDump(from folder: URL, startingOver: Bool = false) {
         guard !isBusy else { return }
         run += 1
         let current = run
@@ -177,7 +185,7 @@ final class TaggerModel {
         let importing = effects.importCatalog
         work = Task {
             do {
-                let summary = try await importing(folder) { progress in
+                let summary = try await importing(folder, startingOver) { progress in
                     Task { @MainActor [self] in
                         guard self.run == current, case .importing = activity else { return }
                         activity = .importing(progress)
@@ -189,7 +197,7 @@ final class TaggerModel {
                     summary.dumpDate, number(summary.records[.releases] ?? 0),
                     Double(summary.catalogBytes) / 1e9)
             } catch CatalogImportError.stopped {
-                status = "Import stopped; the catalog is as it was"
+                status = "Import stopped; Resume Import carries on from here"
             } catch {
                 status = "Import failed; the catalog is as it was"
                 failed("The Discogs dump couldn't be imported", ["\(error)"])

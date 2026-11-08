@@ -146,7 +146,7 @@ let discogsBenchmarks = [
                 let tagger = DiscogsTagger(
                     reader: try LibraryReader(databaseURL: databaseURL), catalog: catalog,
                     mapping: DiscogsPreset.oneToOne.mapping, savedMappings: [],
-                    importing: { _, _ in throw CatalogImportError.stopped })
+                    importing: { _, _, _ in throw CatalogImportError.stopped })
                 let start = DispatchTime.now().uptimeNanoseconds
                 tagger.show()
                 guard let window = tagger.window, window.isVisible else {

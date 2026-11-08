@@ -208,7 +208,8 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
                 try Task.checkCancellation()
                 return ([], [])
             },
-            checkCatalog: { .ready }, importCatalog: { _, _ in throw CatalogImportError.stopped }),
+            checkCatalog: { .ready }, unfinishedImport: { nil },
+            importCatalog: { _, _, _ in throw CatalogImportError.stopped }),
         mapping: DiscogsPreset.minimal.mapping, savedMappings: [])
     await tagger.checkCatalog()
     tagger.analyze()
@@ -234,7 +235,8 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
                 checks.read([])
                 return .ready
             },
-            importCatalog: { _, _ in
+            unfinishedImport: { UnfinishedImport(dumpDate: "20261101", fraction: 0.42) },
+            importCatalog: { _, _, _ in
                 gate.wait()
                 throw CatalogImportError.stopped
             }),
@@ -244,6 +246,7 @@ private let matches: @Sendable (DiscogsAlbum, Int?) -> AlbumMatch = { album, cho
     #expect(!tagger.canAnalyze)
     gate.open()
     try await eventually { checks.reads.count == 1 && tagger.catalog == .ready }
-    #expect(tagger.status == "Import stopped; the catalog is as it was")
+    #expect(tagger.status == "Import stopped; Resume Import carries on from here")
+    #expect(tagger.unfinished == UnfinishedImport(dumpDate: "20261101", fraction: 0.42))
     #expect(tagger.activity == .idle)
 }

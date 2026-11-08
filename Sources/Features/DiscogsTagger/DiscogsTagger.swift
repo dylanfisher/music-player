@@ -11,10 +11,11 @@ import TagWriter
 /// them (ADR 0133). The window is made on first show, so the app pays nothing for it until then.
 @MainActor
 public final class DiscogsTagger {
-    /// Imports the dump set in a folder into the catalog, as `importCatalog` does.
+    /// Imports the dump set in a folder into the catalog, starting over when the flag is set,
+    /// as `importCatalog` does.
     public typealias Import =
-        @Sendable (URL, @escaping @Sendable (CatalogImportProgress) -> Void) async throws ->
-        CatalogImportSummary
+        @Sendable (URL, Bool, @escaping @Sendable (CatalogImportProgress) -> Void) async throws
+        -> CatalogImportSummary
 
     let model: TaggerModel
     private var controller: TaggerWindow?
@@ -62,6 +63,7 @@ public final class DiscogsTagger {
                     return read
                 },
                 checkCatalog: { await catalogState(at: catalog) },
+                unfinishedImport: { await blockingFileWork { unfinishedImport(of: catalog) } },
                 importCatalog: importing),
             mapping: mapping, savedMappings: savedMappings)
     }

@@ -9,7 +9,8 @@ import TagWriter
 /// The tagger's window (51.11): the toolbar's source, scope, Analyze and Field Mapping…; a tab
 /// per tier with its count, each an album list; the selected album's release beside its
 /// tracklist, file against track; and the buttons that review it and apply a tier. Without a
-/// catalog it says so and offers the import, and Analyze stays off.
+/// catalog it says so and offers the import, and Analyze stays off. After an import stopped
+/// before it finished it offers Resume Import and Start Over.
 @MainActor
 final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     static let title = "Discogs Tagger"
@@ -26,6 +27,10 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     let statusLabel = NSTextField(labelWithString: "")
     let catalogLabel = NSTextField(wrappingLabelWithString: "")
     let catalogBox = NSStackView()
+    let resumeLabel = NSTextField(wrappingLabelWithString: "")
+    let resumeButton = NSButton(title: "Resume Import", target: nil, action: nil)
+    let startOverButton = NSButton(title: "Start Over", target: nil, action: nil)
+    let resumeBox = NSStackView()
     let tabs = NSSegmentedControl()
     let albumTable = NSTableView()
     let trackTable = NSTableView()
@@ -84,7 +89,8 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         scopePopUp.action = #selector(scopeChosen)
         for (button, action) in [
             (analyzeButton, #selector(analyzeOrStop)), (mappingButton, #selector(showMapping)),
-            (importButton, #selector(chooseDumps)),
+            (importButton, #selector(chooseDumps)), (resumeButton, #selector(resumeImport)),
+            (startOverButton, #selector(startImportOver)),
             (otherReleasesButton, #selector(showOtherReleases)),
             (changesButton, #selector(showChanges)), (rejectButton, #selector(toggleRejected)),
             (applyButton, #selector(applyAll)),
@@ -116,6 +122,9 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         catalogBox.setViews([catalogLabel, catalogImport], in: .leading)
         catalogBox.spacing = 12
         catalogLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        resumeBox.setViews([resumeLabel, resumeButton, startOverButton], in: .leading)
+        resumeBox.spacing = 12
+        resumeLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         tabs.segmentStyle = .automatic
         tabs.segmentCount = MatchTier.allCases.count
@@ -166,12 +175,12 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         detail.widthAnchor.constraint(greaterThanOrEqualToConstant: 420).isActive = true
 
         let bottom = NSStackView(views: [NSView(), applyButton])
-        let page = NSStackView(views: [bar, catalogBox, tabs, split, bottom])
+        let page = NSStackView(views: [bar, catalogBox, resumeBox, tabs, split, bottom])
         page.orientation = .vertical
         page.alignment = .leading
         page.spacing = 10
         page.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
-        for view in [bar, catalogBox, split, bottom] {
+        for view in [bar, catalogBox, resumeBox, split, bottom] {
             view.widthAnchor.constraint(equalTo: page.widthAnchor, constant: -28).isActive = true
         }
         split.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -198,6 +207,13 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         case .unusable(let why):
             catalogBox.isHidden = false
             catalogLabel.stringValue = "The Discogs catalog can't be used: \(why)."
+        }
+        resumeBox.isHidden = model.unfinished == nil || model.isBusy
+        if let unfinished = model.unfinished {
+            resumeLabel.stringValue =
+                "The import of the \(unfinished.dumpDate) Discogs dump stopped at"
+                + " \(Int(unfinished.fraction * 100))%. Resume Import carries on from there; Start"
+                + " Over imports the dump from its start."
         }
         sourcePopUp.selectItem(at: TaggerModel.Source.allCases.firstIndex(of: model.source)!)
         scopePopUp.selectItem(at: TaggerModel.Scope.allCases.firstIndex(of: model.scope)!)
@@ -396,6 +412,27 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
     }
 
     @objc private func chooseDumps() {
+        chooseFolder(startingOver: false)
+    }
+
+    /// Carries on the unfinished import from the dumps folder, or asks for the folder when
+    /// it isn't where it was.
+    @objc private func resumeImport() {
+        importAgain(startingOver: false)
+    }
+
+    @objc private func startImportOver() {
+        importAgain(startingOver: true)
+    }
+
+    private func importAgain(startingOver: Bool) {
+        guard !model.isBusy else { return }
+        guard let folder = dumpsFolder() else { return chooseFolder(startingOver: startingOver) }
+        model.importDump(from: folder, startingOver: startingOver)
+    }
+
+    /// Asks for the dumps folder, then imports from it.
+    private func chooseFolder(startingOver: Bool) {
         guard let window, !model.isBusy else { return }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -408,7 +445,7 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
             dumpsFolderChosen(url)
-            model.importDump(from: url)
+            model.importDump(from: url, startingOver: startingOver)
         }
     }
 

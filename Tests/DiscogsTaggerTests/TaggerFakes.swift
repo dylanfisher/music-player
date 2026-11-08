@@ -107,7 +107,9 @@ func model(
     reviews: [Int64: DiscogsReview] = [:],
     files: @escaping @Sendable ([Int64]) -> [AlbumFile] = { _ in [] },
     catalog: TaggerModel.CatalogState = .ready, gate: Gate? = nil,
-    mapping: DiscogsMapping = DiscogsPreset.minimal.mapping
+    mapping: DiscogsMapping = DiscogsPreset.minimal.mapping,
+    unfinished: UnfinishedImport? = nil,
+    importing: @escaping DiscogsTagger.Import = { _, _, _ in throw CatalogImportError.stopped }
 ) async -> TaggerModel {
     let made = TaggerModel(
         effects: .init(
@@ -137,8 +139,8 @@ func model(
                 progress(ids.count)
                 return (files(ids), [])
             },
-            checkCatalog: { catalog },
-            importCatalog: { _, _ in throw CatalogImportError.stopped }),
+            checkCatalog: { catalog }, unfinishedImport: { unfinished },
+            importCatalog: importing),
         mapping: mapping, savedMappings: [])
     await made.checkCatalog()
     return made

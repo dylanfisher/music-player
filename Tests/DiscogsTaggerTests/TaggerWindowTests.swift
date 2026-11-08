@@ -5,6 +5,7 @@ import Testing
 
 @testable import Discogs
 @testable import DiscogsTagger
+@testable import Fixtures
 @testable import Metadata
 @testable import Settings
 @testable import TagWriter
@@ -152,4 +153,48 @@ private func snapshot(_ window: NSWindow, _ name: String) throws {
     sheet.set("", in: .join, row: row)
     #expect(!sheet.okButton.isEnabled, "a list needs a join")
     #expect(sheet.problemLabel.stringValue == "styles is a list, so it needs a join")
+}
+
+/// The folders and flags each import was started with.
+private final class Imports: @unchecked Sendable {
+    // `started` is guarded by `lock`.
+    private let lock = NSLock()
+    private var started: [(URL, Bool)] = []
+
+    func start(_ folder: URL, _ startingOver: Bool) {
+        lock.withLock { started.append((folder, startingOver)) }
+    }
+
+    var flags: [Bool] { lock.withLock { started.map(\.1) } }
+    var folders: [URL] { lock.withLock { started.map(\.0) } }
+}
+
+@MainActor
+@Test func anUnfinishedImportOffersResumeImportAndStartOver() async throws {
+    let imports = Imports()
+    let tagger = await model(
+        Seen(), albums: [], matches: { album, _ in match(album, nil, tier: .noCandidate) },
+        unfinished: UnfinishedImport(dumpDate: "20261101", fraction: 0.76),
+        importing: { folder, startingOver, _ in
+            imports.start(folder, startingOver)
+            throw CatalogImportError.stopped
+        })
+    let controller = TaggerWindow(model: tagger)
+    let dumps = URL(fileURLWithPath: "/Volumes/music/discogs", isDirectory: true)
+    controller.dumpsFolder = { dumps }
+    #expect(!controller.resumeBox.isHidden)
+    try snapshot(try #require(controller.window), "discogs-tagger-resume")
+    #expect(
+        controller.resumeLabel.stringValue.hasPrefix(
+            "The import of the 20261101 Discogs dump stopped at 76%."))
+    click(controller.resumeButton)
+    #expect(controller.resumeBox.isHidden)
+    await tagger.finished()
+    try await eventually { !tagger.isBusy && !controller.resumeBox.isHidden }
+    click(controller.startOverButton)
+    await tagger.finished()
+    try await eventually { !tagger.isBusy }
+    #expect(imports.flags == [false, true])
+    #expect(imports.folders == [dumps, dumps])
+    controller.window?.close()
 }
