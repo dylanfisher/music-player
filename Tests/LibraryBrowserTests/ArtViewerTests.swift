@@ -55,7 +55,7 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
 /// at either end, saying which shows (53.3).
 @MainActor @Test func theViewerStepsThroughEveryPictureOfAFile() throws {
     let url = try flacWithPictures([4, 3, 6])
-    let metadata = try readMetadata(at: url).metadata
+    let metadata = try readMetadata(at: url, pictures: true).metadata
     let front = try #require(metadata.art)
     let screen = try #require(NSScreen.main)
     let viewer = ArtViewer(
@@ -97,7 +97,7 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
 
 @MainActor @Test func aFileOfOnePictureShowsNoPlace() throws {
     let url = try flacWithPictures([3])
-    let metadata = try readMetadata(at: url).metadata
+    let metadata = try readMetadata(at: url, pictures: true).metadata
     let art = try #require(metadata.art)
     let viewer = ArtViewer(
         image: NSImage(size: NSSize(width: 10, height: 10)), screen: try #require(NSScreen.main),
@@ -115,7 +115,7 @@ private func flacWithPictures(_ types: [UInt32]) throws -> URL {
 /// the picture and the line agree.
 @MainActor @Test func artNoLongerInTheFileShowsTheFirstPicture() async throws {
     let url = try flacWithPictures([4, 3])
-    let metadata = try readMetadata(at: url).metadata
+    let metadata = try readMetadata(at: url, pictures: true).metadata
     let viewer = ArtViewer(
         image: NSImage(size: NSSize(width: 99, height: 99)), screen: try #require(NSScreen.main),
         owner: nil)

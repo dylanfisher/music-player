@@ -6,6 +6,7 @@ public struct TrackMetadata: Equatable, Sendable {
     public var audio: TrackAudio
     /// The front cover when the file has one, otherwise the first embedded picture.
     public var art: EmbeddedArt?
-    /// Every embedded picture, in file order, for the art viewer; `art` is one of them.
+    /// Every embedded picture, in file order, for the art viewer, which asks for them
+    /// (`readMetadata(at:hints:pictures:)`); empty otherwise. `art` is one of them.
     public var pictures: [EmbeddedPicture] = []
 }

@@ -92,8 +92,9 @@ final class ArtViewer {
         return Task {
             let read = await blockingFileWork {
                 Result { () throws(MetadataError) in
-                    try readMetadata(at: URL(fileURLWithPath: path, isDirectory: false))
-                        .metadata.pictures
+                    try readMetadata(
+                        at: URL(fileURLWithPath: path, isDirectory: false), pictures: true
+                    ).metadata.pictures
                 }
             }
             guard opening == session, window.isVisible else { return }

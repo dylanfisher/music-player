@@ -209,6 +209,8 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
     // A picture of a type it can't show is left out and the rest kept; only a `covr` with
     // none it can show is reported, as one of a single picture always was.
     if case .cover = kind {
+        // Without the pictures kept, the first one it can show is all a scan needs.
+        guard reader.keepsPictures || items.art == nil else { return }
         var skipped: ParseFailure?
         for data in datas {
             let (type, valueRange) = try dataValue(data, of: item, reader)
@@ -222,10 +224,11 @@ private func read(_ item: Atom, _ reader: ByteReader, into items: inout ILSTItem
             }
             let art = EmbeddedArt(
                 offset: offset, byteCount: valueRange.count, mimeType: mime, unsynchronised: false)
-            items.pictures.append(EmbeddedPicture(art: art, type: nil))
             if items.art == nil { items.art = art }
+            guard reader.keepsPictures else { break }
+            items.pictures.append(EmbeddedPicture(art: art, type: nil))
         }
-        if items.pictures.isEmpty, let skipped { throw skipped }
+        if items.art == nil, let skipped { throw skipped }
         return
     }
     guard let data = datas.first else { return }

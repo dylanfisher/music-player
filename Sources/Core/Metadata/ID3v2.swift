@@ -396,7 +396,8 @@ func parseID3v2(_ reader: ByteReader, at start: Int, end: Int, container: String
         tags.date = fullDate(year: year, day: day, time: time, &reader.warnings)
     }
     return ID3v2Tag(
-        tags: tags, art: preferredPicture(pictures), pictures: pictures, byteCount: byteCount)
+        tags: tags, art: preferredPicture(pictures), pictures: reader.kept(pictures),
+        byteCount: byteCount)
 }
 
 /// Four characters from A–Z and 0–9.

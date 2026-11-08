@@ -30,8 +30,9 @@ let fixtureLibrary = Result { () throws -> (URL, FixtureManifest) in
     return (root, try loadManifest(in: root))
 }
 
-func parse(_ data: Data) throws(ParseFailure) -> ParsedFile {
-    try parse(ByteReader(MemorySource(data)))
+/// What parsing `data` reads; `pictures` keeps every picture, as the art viewer reads them.
+func parse(_ data: Data, pictures: Bool = false) throws(ParseFailure) -> ParsedFile {
+    try parse(ByteReader(MemorySource(data), keepsPictures: pictures))
 }
 
 /// The warnings from parsing `data`, which must succeed.

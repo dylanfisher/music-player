@@ -23,9 +23,17 @@ package final class ByteReader {
     /// Spent waiting in the source's reads.
     private(set) var readSeconds = 0.0
     package var warnings: [MetadataWarning] = []
+    /// Whether the parse lists every picture in `TrackMetadata.pictures`, which only the art
+    /// viewer reads; otherwise it finds only `art`, as a scan needs.
+    package let keepsPictures: Bool
     private let source: any ByteSource
     private var window: [UInt8] = []
     private var windowStart = 0
+
+    /// `pictures` when the parse keeps them, else none.
+    func kept(_ pictures: [EmbeddedPicture]) -> [EmbeddedPicture] {
+        keepsPictures ? pictures : []
+    }
 
     func warn(_ kind: MetadataWarning.Kind, at offset: Int, _ detail: String) {
         warnings.append(MetadataWarning(kind: kind, offset: offset, detail: detail))
@@ -64,8 +72,9 @@ package final class ByteReader {
         ]
     }
 
-    package init(_ source: any ByteSource) {
+    package init(_ source: any ByteSource, keepsPictures: Bool = false) {
         self.source = source
+        self.keepsPictures = keepsPictures
         size = source.size
     }
 

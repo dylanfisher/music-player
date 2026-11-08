@@ -12,7 +12,9 @@ private let images = (1...3).map { Data(repeating: UInt8($0), count: 40 + $0) }
 /// Each picture's bytes, read back from the file through the URL entry points.
 private func pictureBytes(_ file: Data) throws -> [Data] {
     try withFile(file) { url in
-        try readMetadata(at: url).metadata.pictures.map { try readArt($0.art, at: url) }
+        try readMetadata(at: url, pictures: true).metadata.pictures.map {
+            try readArt($0.art, at: url)
+        }
     }
 }
 
@@ -21,7 +23,7 @@ private func pictureBytes(_ file: Data) throws -> [Data] {
         (0, streamInfo()), (6, flacPicture(type: 4, image: images[0])),
         (6, flacPicture(type: 3, image: images[1])), (6, flacPicture(type: 6, image: images[2])),
     ])
-    let metadata = try parse(file).metadata
+    let metadata = try parse(file, pictures: true).metadata
     #expect(metadata.pictures.map(\.type) == [4, 3, 6])
     #expect(metadata.pictures.map(\.typeName) == ["Back Cover", "Front Cover", "Disc Label"])
     #expect(metadata.art == metadata.pictures[1].art)
@@ -36,7 +38,7 @@ private func pictureBytes(_ file: Data) throws -> [Data] {
     let file =
         id3Tag([apic(3, "front", images[0]), apic(4, "back", images[1]), apic(0, "", images[2])])
         + mpegFrames(4)
-    let metadata = try parse(file).metadata
+    let metadata = try parse(file, pictures: true).metadata
     #expect(metadata.pictures.map(\.typeName) == ["Front Cover", "Back Cover", "Other"])
     #expect(metadata.art == metadata.pictures[0].art)
     #expect(try pictureBytes(file) == images)
@@ -50,7 +52,7 @@ private func pictureBytes(_ file: Data) throws -> [Data] {
         moov(
             entry: alacEntry(rate: 44_100, channels: 2, bits: 16), timescale: 44_100,
             duration: 4410, items: covers))
-    let metadata = try parse(file).metadata
+    let metadata = try parse(file, pictures: true).metadata
     let types: [UInt32?] = metadata.pictures.map(\.type)
     #expect(types == [nil, nil, nil])
     let names: [String?] = metadata.pictures.map(\.typeName)
@@ -70,7 +72,7 @@ private func pictureBytes(_ file: Data) throws -> [Data] {
         moov(
             entry: alacEntry(rate: 44_100, channels: 2, bits: 16), timescale: 44_100,
             duration: 4410, items: covers))
-    let parsed = try parse(file)
+    let parsed = try parse(file, pictures: true)
     #expect(parsed.metadata.pictures.map(\.art.mimeType) == ["image/jpeg", "image/png"])
     #expect(parsed.warnings.isEmpty)
     #expect(try pictureBytes(file) == [images[0], images[2]])
@@ -81,4 +83,34 @@ private func pictureBytes(_ file: Data) throws -> [Data] {
     #expect(EmbeddedPicture(art: art, type: 5).typeName == "Leaflet Page")
     #expect(EmbeddedPicture(art: art, type: 8).typeName == "Other")
     #expect(EmbeddedPicture(art: art, type: 21).typeName == "Other")
+}
+
+/// A read that doesn't ask for the pictures, as a scan's, lists none and finds the same art.
+@Test func aReadWithoutThePicturesListsNoneAndTheSameArt() throws {
+    let files = [
+        flac([
+            (0, streamInfo()), (6, flacPicture(type: 4, image: images[0])),
+            (6, flacPicture(type: 3, image: images[1])),
+        ]),
+        id3Tag([
+            id3Frame("APIC", Data([0]) + ascii("image/png\0") + Data([4]) + Data([0]) + images[0]),
+            id3Frame("APIC", Data([0]) + ascii("image/png\0") + Data([3]) + Data([0]) + images[1]),
+        ]) + mpegFrames(4),
+        mp4File(
+            moov(
+                entry: alacEntry(rate: 44_100, channels: 2, bits: 16), timescale: 44_100,
+                duration: 4410,
+                items: atom(
+                    "covr",
+                    [(99, images[0]), (13, images[1]), (14, images[2])]
+                        .map { atom("data", bigEndian32($0.0) + bigEndian32(0) + $0.1) }
+                        .reduce(Data(), +)))),
+    ]
+    for file in files {
+        let scanned = try parse(file).metadata
+        let viewed = try parse(file, pictures: true).metadata
+        #expect(scanned.pictures.isEmpty)
+        #expect(viewed.pictures.count >= 2)
+        #expect(scanned.art != nil && scanned.art == viewed.art)
+    }
 }

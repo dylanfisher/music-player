@@ -47,7 +47,7 @@ func parseFLAC(_ reader: ByteReader) throws(ParseFailure) -> TrackMetadata {
     }
     return TrackMetadata(
         tags: tags ?? TrackTags(), audio: audio, art: preferredPicture(pictures),
-        pictures: pictures)
+        pictures: reader.kept(pictures))
 }
 
 /// The MIME type FLAC PICTURE and ID3 APIC give a picture that's a URL, not embedded.
