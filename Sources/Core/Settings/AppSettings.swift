@@ -176,34 +176,27 @@ public struct AppSettings: SettingsSchema {
             conflicts.append(
                 SettingConflict(
                     key: syncFolder.key,
-                    reason: "it's inside the watched folder \"\(watched.path)\"; the sync folder"
-                        + " must be outside every watched folder, since the app writes its log there"
-                ))
+                    reason: insideWatchedReason(
+                        watched, "the sync folder", "the app writes its log there")))
         }
         if let catalog = values[discogsCatalogPath.key] as? String,
-            let watched = folders.first(where: {
-                $0.share == nil && isPath(standardized(catalog), inOrAt: standardized($0.path))
-            })
+            let watched = watchedFolder(holding: catalog, among: folders)
         {
             conflicts.append(
                 SettingConflict(
                     key: discogsCatalogPath.key,
-                    reason: "it's inside the watched folder \"\(watched.path)\"; the catalog must"
-                        + " be outside every watched folder, since the app writes it"))
+                    reason: insideWatchedReason(watched, "the catalog", "the app writes it")))
         }
         if let snapshots = values[snapshotFolder.key] as? String {
-            let path = standardized(snapshots)
-            if let watched = folders.first(where: {
-                $0.share == nil && isPath(path, inOrAt: standardized($0.path))
-            }) {
+            if let watched = watchedFolder(holding: snapshots, among: folders) {
                 conflicts.append(
                     SettingConflict(
                         key: snapshotFolder.key,
-                        reason: "it's inside the watched folder \"\(watched.path)\"; the snapshot"
-                            + " folder must be outside every watched folder, since the app writes"
-                            + " the library's snapshots there"))
+                        reason: insideWatchedReason(
+                            watched, "the snapshot folder",
+                            "the app writes the library's snapshots there")))
             } else if let sync = values[syncFolder.key] as? SyncFolder, sync.share == nil,
-                isPath(path, inOrAt: standardized(sync.path))
+                isPath(standardized(snapshots), inOrAt: standardized(sync.path))
             {
                 conflicts.append(
                     SettingConflict(
@@ -213,5 +206,22 @@ public struct AppSettings: SettingsSchema {
             }
         }
         return conflicts
+    }
+
+    /// The folder among `folders` stored by path that `path` is in or is.
+    private func watchedFolder(holding path: String, among folders: [WatchedFolder])
+        -> WatchedFolder?
+    {
+        folders.first {
+            $0.share == nil && isPath(standardized(path), inOrAt: standardized($0.path))
+        }
+    }
+
+    /// Why `subject` can't be inside `watched`: the app writes there, `why`.
+    private func insideWatchedReason(_ watched: WatchedFolder, _ subject: String, _ why: String)
+        -> String
+    {
+        "it's inside the watched folder \"\(watched.path)\"; \(subject) must be outside every"
+            + " watched folder, since \(why)"
     }
 }
