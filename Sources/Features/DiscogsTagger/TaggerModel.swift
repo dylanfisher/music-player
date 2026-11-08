@@ -367,7 +367,7 @@ final class TaggerModel {
         // A file moved or removed since the scan is in neither list; Apply refuses such an album.
         let missing = album.album.tracks.count - files.count - read.count
         if missing > 0 {
-            problems.append("\(DisplayText.count(missing, "file")) no longer in the library")
+            problems.append("\(missing) file\(missing == 1 ? "" : "s") no longer in the library")
         }
         return (Discogs.changeSet(for: files, match: album.match, mapping: mapping), problems)
     }
@@ -456,7 +456,7 @@ final class TaggerModel {
         let albums = plan.albumIDs.count
         let message =
             "Change \(number(plan.fieldCount)) tags in \(number(plan.files.count)) files of "
-            + "\(DisplayText.count(albums, "album"))?"
+            + "\(number(albums)) album\(albums == 1 ? "" : "s")?"
         var detail =
             "Each file gets the values the field mapping writes, as View Changes shows them."
             + " Undo Tag Edit puts them all back."
@@ -477,7 +477,7 @@ final class TaggerModel {
             albums[index].applied = false
         }
         status =
-            "\(DisplayText.count(failed.count, "album")) not fully written;"
+            "\(number(failed.count)) album\(failed.count == 1 ? "" : "s") not fully written;"
             + " Apply can try again"
         changed()
     }

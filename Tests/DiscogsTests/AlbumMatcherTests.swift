@@ -477,7 +477,8 @@ private func match(_ album: DiscogsAlbum, masters: String = "", releases: String
     let reported = (1...5_000).filter { isReported($0, of: 5_000) }
     #expect(reported.count == 200)
     #expect(reported.last == 5_000)
-    #expect((1...1_001).filter { isReported($0, of: 1_001) }.last == 1_001, "the last, off the stride")
+    let odd = (1...1_001).filter { isReported($0, of: 1_001) }
+    #expect(odd.last == 1_001, "the last, off the stride")
 }
 
 @Test func matchingReportsProgressAndStopsWhenCancelled() async throws {

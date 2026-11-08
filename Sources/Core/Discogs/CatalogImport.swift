@@ -88,7 +88,8 @@ func runImport(
 ) throws(CatalogImportError) -> CatalogImportSummary {
     let started = Date()
     let catalogPath = standardized(catalog.path)
-    if let watched = watchedFolders.first(where: { isPath(catalogPath, inOrAt: standardized($0)) }) {
+    if let watched = watchedFolders.first(where: { isPath(catalogPath, inOrAt: standardized($0)) })
+    {
         throw .catalogInsideWatchedFolder(catalog: catalog.path, folder: watched)
     }
     let set = try DumpSet.newest(in: folder)
