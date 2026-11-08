@@ -41,12 +41,7 @@ struct RecommenderClient: Sendable {
     func call<Request: Encodable, Reply: Decodable>(
         _ path: String, body: Request, as _: Reply.Type
     ) async throws(RecommenderError) -> Reply {
-        let url: LocalURL
-        do throws(LocalURL.Refusal) {
-            url = try LocalURL(host: host, port: port, path: path, on: interface)
-        } catch {
-            preconditionFailure("the interface was checked to hold \(host): \(error)")
-        }
+        let url = url(path)
         let fail = { (kind: RecommenderError.Kind) in
             RecommenderError(service: url.description, kind: kind)
         }
@@ -75,6 +70,17 @@ struct RecommenderClient: Sendable {
     }
 }
 
+extension RecommenderClient {
+    /// The URL of the route at `path`.
+    func url(_ path: String) -> LocalURL {
+        do throws(LocalURL.Refusal) {
+            return try LocalURL(host: host, port: port, path: path, on: interface)
+        } catch {
+            preconditionFailure("the interface was checked to hold \(host): \(error)")
+        }
+    }
+}
+
 /// Sorted keys, so a request's bytes are the same each time it's made.
 let requestEncoder: JSONEncoder = {
     let encoder = JSONEncoder()
@@ -86,15 +92,15 @@ let requestEncoder: JSONEncoder = {
 struct EmptyRequest: Encodable {}
 
 /// `ping`'s reply.
-struct PingReply: Decodable {
+package struct PingReply: Decodable {
     var version: String
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
         case ok, version
     }
 
-    init(from decoder: any Decoder) throws {
-        let container = try okContainer(decoder, CodingKeys.self)
+    package init(from decoder: any Decoder) throws {
+        let container = try strictContainer(decoder, CodingKeys.self)
         version = try container.decode(String.self, forKey: .version)
     }
 }

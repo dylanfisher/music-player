@@ -40,13 +40,14 @@ struct FuzzTarget: Sendable {
         vorbis, config, state, journal, rules, playlistFile, syncLog, swinsian, swinsianPredicate,
         swinsianColumns, iTunesXML, tagWriter, receiverLine, deviceDescription, soapReply,
         avTransportReply, serviceDescription, httpRequest, didlLite, chunkedBody, discogsDump,
+        recommenderReply,
     ]
 
     static func named(_ name: String) -> FuzzTarget? { all.first { $0.name == name } }
 }
 
 /// Values at JSON's edges, and comments, which the config file allows.
-private let jsonTokens = ["-1", "1e999", "0.5", "\\u0000", "\\ud800", "//", "/*", "*/", "null"]
+let jsonTokens = ["-1", "1e999", "0.5", "\\u0000", "\\ud800", "//", "/*", "*/", "null"]
 
 /// The one file a target writes each input to, in its work folder.
 private let inputFileName = "fuzz-input"

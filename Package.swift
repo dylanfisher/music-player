@@ -145,7 +145,8 @@ let package = Package(
         .target(
             name: "Discogs",
             dependencies: [
-                "DisplayText", "Library", "Log", "Metadata", "SQLite", "Settings", "TagWriter",
+                "DisplayText", "Library", "Log", "Metadata", "Recommender", "SQLite", "Settings",
+                "TagWriter",
             ],
             path: "Sources/Core/Discogs",
             swiftSettings: strictSwift,
@@ -290,7 +291,8 @@ let package = Package(
             name: "Fuzz",
             dependencies: [
                 "Discogs", "Fixtures", "FuzzCoverage", "HALOutput", "Library", "LocalNetwork",
-                "Log", "Metadata", "Receiver", "SQLite", "Settings", "TagWriter", "UPnP",
+                "Log", "Metadata", "Receiver", "Recommender", "SQLite", "Settings", "TagWriter",
+                "UPnP",
             ],
             path: "Sources/Tools/Fuzz",
             swiftSettings: strictSwift
@@ -332,8 +334,8 @@ let package = Package(
             name: "DiscogsTests",
             dependencies: [
                 // DiscogsImport, built for the tests that kill it partway through an import.
-                "Discogs", "DiscogsImport", "Fixtures", "Library", "Metadata", "SQLite",
-                "Settings", "TagWriter",
+                "Discogs", "DiscogsImport", "Fixtures", "Library", "Metadata", "Recommender",
+                "SQLite", "Settings", "TagWriter",
             ],
             swiftSettings: strictSwift
         ),

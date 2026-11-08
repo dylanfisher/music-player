@@ -6,7 +6,7 @@ import Settings
 let replyDecoder = JSONDecoder()
 
 /// A 200's body as `Reply`, or the refusal it holds when `ok` is false.
-func decodeReply<Reply: Decodable>(_ body: [UInt8], as _: Reply.Type)
+package func decodeReply<Reply: Decodable>(_ body: [UInt8], as _: Reply.Type)
     throws(RecommenderError.Kind) -> Reply
 {
     do {
@@ -28,7 +28,7 @@ func decodeReply<Reply: Decodable>(_ body: [UInt8], as _: Reply.Type)
 
 /// `decoder`'s object, checked to have no key but `Keys`. Every reply type's `init(from:)`
 /// starts with it, and `decodeReply` has read `ok` already.
-func okContainer<Keys: CodingKey & CaseIterable>(_ decoder: any Decoder, _: Keys.Type) throws
+func strictContainer<Keys: CodingKey & CaseIterable>(_ decoder: any Decoder, _: Keys.Type) throws
     -> KeyedDecodingContainer<Keys>
 {
     try rejectUnknownKeys(decoder, Keys.self)
@@ -54,7 +54,7 @@ private struct RefusalReply: Decodable {
     }
 
     init(from decoder: any Decoder) throws {
-        let container = try okContainer(decoder, CodingKeys.self)
+        let container = try strictContainer(decoder, CodingKeys.self)
         error = try container.decode(ServiceRefusal.self, forKey: .error)
     }
 }

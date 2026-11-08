@@ -3,8 +3,8 @@ import Foundation
 import LocalNetwork
 
 /// Why a call to music-recommender failed, naming the address it went to and never the token.
-struct RecommenderError: Error, Equatable, CustomStringConvertible {
-    enum Kind: Error, Equatable, CustomStringConvertible {
+package struct RecommenderError: Error, Equatable, CustomStringConvertible {
+    package enum Kind: Error, Equatable, CustomStringConvertible {
         /// `recommender.address` isn't another device's address on a local subnet.
         case offSubnet
         /// Nothing answered, the connection failed, or no answer came in time.
@@ -54,7 +54,7 @@ struct RecommenderError: Error, Equatable, CustomStringConvertible {
             }
         }
 
-        var description: String {
+        package var description: String {
             switch self {
             case .offSubnet: "isn't another device's address on a local subnet"
             case .unreachable(let error): "didn't answer: \(error)"
@@ -78,7 +78,7 @@ struct RecommenderError: Error, Equatable, CustomStringConvertible {
     var service: String
     var kind: Kind
 
-    var description: String { "music-recommender at \(service) \(kind)" }
+    package var description: String { "music-recommender at \(service) \(kind)" }
 }
 
 /// The body of a reply that isn't 200, read only for its code.

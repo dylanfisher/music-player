@@ -1,5 +1,5 @@
 /// `downloads/config`'s reply: whether the downloads are on, and the policies they take.
-struct DownloadsConfig: Equatable, Sendable, Decodable {
+package struct DownloadsConfig: Equatable, Sendable, Decodable {
     var enabled: Bool
     /// Why the downloads are off, in words; nil while they're on.
     var offReason: String?
@@ -28,8 +28,8 @@ struct DownloadsConfig: Equatable, Sendable, Decodable {
         self.stagingDirName = stagingDirName
     }
 
-    init(from decoder: any Decoder) throws {
-        let container = try okContainer(decoder, CodingKeys.self)
+    package init(from decoder: any Decoder) throws {
+        let container = try strictContainer(decoder, CodingKeys.self)
         enabled = try container.decode(Bool.self, forKey: .enabled)
         offReason = try container.decode(String?.self, forKey: .offReason)
         formatPolicies = try container.decode([FormatPolicy].self, forKey: .formatPolicies)

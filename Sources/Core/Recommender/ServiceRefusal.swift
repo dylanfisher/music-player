@@ -4,7 +4,7 @@ import Settings
 /// The `error` of a 200 with `ok: false`: a request the service understood and refused. Clients
 /// branch on `code`; `message` is for a person. The other fields come with the codes the
 /// contract lists them for.
-struct ServiceRefusal: Equatable, Sendable, Decodable, CustomStringConvertible {
+package struct ServiceRefusal: Equatable, Sendable, Decodable, CustomStringConvertible {
     enum Code: String, Equatable, Sendable, Decodable {
         /// The service's config has no downloads tables.
         case downloadsOff = "downloads_off"
@@ -38,8 +38,8 @@ struct ServiceRefusal: Equatable, Sendable, Decodable, CustomStringConvertible {
         self.message = message
     }
 
-    init(from decoder: any Decoder) throws {
-        let container = try okContainer(decoder, CodingKeys.self)
+    package init(from decoder: any Decoder) throws {
+        let container = try strictContainer(decoder, CodingKeys.self)
         code = try container.decode(Code.self, forKey: .code)
         message = try container.decode(String.self, forKey: .message)
         jobID = try container.decodeIfPresent(Int.self, forKey: .jobID)
@@ -48,5 +48,5 @@ struct ServiceRefusal: Equatable, Sendable, Decodable, CustomStringConvertible {
         expiresAt = try container.decodeIfPresent(Int.self, forKey: .expiresAt)
     }
 
-    var description: String { "\(code.rawValue): \(terminalSafe(message))" }
+    package var description: String { "\(code.rawValue): \(terminalSafe(message))" }
 }
