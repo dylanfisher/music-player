@@ -579,49 +579,159 @@ setting and refusal; 5 scheduler; 6 restore; 7 Settings UI; 8 ADR 0142 and AGENT
 
 ## 53c. Separate Releases (53.13) (ADR 0143)
 
-Modules: Library (schema, `LibraryIndex`), Settings, SettingsWindow, App. Depends on 51h's
-rescan dialog. Runs after 53a and 53b are merged because it changes `LibrarySchema.swift` and
-the dialog's table.
+Modules: Library (`LibrarySchema.swift`, `LibraryIndex.swift`, `RescanNotice.swift`,
+`BrowserGroupingSQL.swift`, `LibraryQueries.swift`), Settings (`AppSettings.swift`), Commands
+(`AppMenus.swift`), App (`AppDelegate.swift`, `SettingsChanges.swift`), LibraryBrowser
+(`RescanAlert.swift`). Merges after 53a and 53b (see "Files shared with 53a and 53b").
 
-1. **Schema.** `albums` gains `release_id TEXT NOT NULL DEFAULT ''`; the index becomes
-   `albums_identity ON albums (title, ifnull(artist_id, 0), release_id)`. `AlbumKey` and the
-   `albumIDs` cache include it. The setting does not change the SQL text, so the stale-part
-   check can't see it. Decision: `indexSchema` takes the option: `SchemaPart.sql` becomes
-   `sql(separateReleases:)`, and the index part's stored SQL carries a first line
-   `-- separate releases: on|off`, so a change is a stale `index` part and takes the existing
-   rebuild path (drop, recreate, rescan refills; stats, `scans` and the rest kept as for any
-   index change). `LibraryIndex.init(at:separateReleases:)` passes it; `prepareSchema` and
-   `rebuildStaleParts` use it. Every `LibraryIndex(at:)` caller (AppDelegate, ScanCommand,
-   tests, tools) is updated; tests default to off.
-2. **Insert.** `insertTrack` passes `tags.discogsReleaseID` (the string, trimmed) as the
-   album's release id when the option is on and the track has one, else `''`. Tracks with no
-   release id still merge with each other and with nothing else, which is intended: an
-   untagged copy of an album stays one album.
-3. **Setting.** `AppSettings.separateReleases: Setting<Bool>` `library.separateReleases`,
-   "Separate Releases", default false (existing libraries unchanged), summary: "Make an album
-   of each Discogs release, so a remaster tagged with the original's title is its own album,
-   sorted by its own year." Shown in the Library box by prefix; also a File-menu setting
-   toggle beside `groupByAlbumArtist`.
-4. **Applying it.** The index is opened once at launch with the option, so a change is applied
-   at the next launch: the toggle in Settings shows the 51.32 dialog's wording at once
-   ("Rescan Now" quits and relaunches into the rebuild; "Cancel" reverts the toggle). Rebuild
-   through the same path as a build's schema change, so the status bar says it's a rebuild.
-   The dialog's per-part wording table (51.32, in words kept once with the part) gets an entry:
-   the albums are grouped differently, every file is read again, plays, ratings and playlists
-   stay. The reason sentence is chosen by whether the option went on or off.
-5. **Sorting by year.** Album ordering is `sort_title` then track fields; two albums with one
-   title now interleave by album id unless ordered. The album sort in `BrowserGroupingSQL` and
-   `TrackColumnSort` adds the album's earliest track year as the tie-break after title, so
-   each release stays together and the older sorts first. Test for this order.
-6. **Tests.** `LibraryTests`: an original and a 2025 remaster with the same title and artist,
-   different release ids: one album off, two on; tracks of each stay with their own; sorted
-   by year; a track without an id joins the album off and stays alone on; flipping the
-   option changes the stored SQL and rebuilds only the index part (stats kept); the dialog
-   text for each direction (`SettingsWindowTests`).
-7. **ADR 0143:** an album's identity with the option, why a setting not a rule, why the
-   release id and not the master, the rebuild.
+What 51h built (read from main, 548d4115):
 
-Commits: 1 schema and option plumbing; 2 insert and sort; 3 setting and dialog; 4 tests; 5 ADR.
+- `SchemaPart.rescanWhy: String?` (LibrarySchema.swift): one fixed sentence per part, nil for a
+  part a rescan doesn't refill. Today only `.index` has one ("This build stores the index ... in a
+  new shape ..."). It cannot know a direction, so it can't carry "on" or "off".
+- `RescanNotice` (Library/RescanNotice.swift): `init?(parts: [SchemaPart])`, `title` ("Rescan the
+  Library?"), `text` = the parts' `rescanWhy` joined, plus "Every file is read again. Plays,
+  ratings and playlists stay."
+- `LibraryIndex.init(at:movingAsideIfUnreadable:confirmRescan:)`, where `confirmRescan:
+  ((RescanNotice) -> Bool)?` is asked from `prepareSchema` via the private `rescanNotice()`
+  (reads `storedParts()` and `partsToRebuild(stored:)`, writes nothing) before `rebuildStaleParts()`.
+  False throws `LibraryError.rescanDeclined`, file untouched. `public private(set) var
+  rebuiltIndex` is set inside `rebuildStaleParts` (index in `rebuilt` and previously stored);
+  `LibraryBrowser` copies it to `status.rebuildingIndex` (LibraryStatus shows the rebuild).
+- `askToRescan(_:) -> Bool` (Features/LibraryBrowser/RescanAlert.swift): a modal NSAlert, buttons
+  "Rescan Now" / "Quit". Only `AppDelegate.openWindow` passes it (the one launch open, with
+  `movingAsideIfUnreadable: true`); `catch LibraryError.rescanDeclined` there calls
+  `NSApp.terminate`.
+
+What the old 53c got wrong:
+
+1. "Every `LibraryIndex(at:)` caller is updated" is the dangerous part. Besides AppDelegate and
+   ScanCommand there are ~15 in Core/Library alone (`LibraryReader`, `LibraryScanner`,
+   `LibraryWatcher`, `MeasuresCache`, `StatsReader`), plus Tools and 37 test files, and 53b's
+   `SnapshotScheduler` and `SnapshotRestore` add two more. All open the same file. If the option
+   were a plain `Bool` defaulting to off, any of them opening a library built with it on would
+   see a stale index part and drop and rebuild it, and the scanner would insert albums without
+   release ids. So the option cannot be a parameter every open must repeat.
+   Fix: the stored index SQL is the single source of truth. `init` takes `separateReleases: Bool?
+   = nil`. Nil adopts whatever the stored first line says (on a new file: off); only the launch
+   open in `AppDelegate.openWindow` passes the setting's value. `LibraryIndex` keeps the
+   resolved value in a `private(set) var separateReleases: Bool`, read by `albumID`. No other
+   caller changes, and the tests default to nil.
+2. "`SchemaPart.sql` becomes `sql(separateReleases:)`": only `.index` takes it. Keep `var sql`
+   for the others (and `sql` for `.index` = off) and add `func sql(separateReleases: Bool) ->
+   String`; `indexSchema` becomes a function returning the `-- separate releases: on|off\n`
+   line plus the text. `partsToRebuild(stored:)`, `rebuildStaleParts` (`database.execute(part.sql)`
+   and `identity.run(part.rawValue, part.sql)`) and `rescanNotice()` all compare and write
+   `$0.sql`, so they all take the resolved option (a parameter or the stored property, set in
+   `prepareSchema` before `rescanNotice()`, which runs first). Read the stored option from
+   `storedParts()[index]`'s first line.
+3. "A change is applied at the next launch ... 'Cancel' reverts the toggle". The modal at launch
+   has "Rescan Now" / "Quit", not Cancel, and Quit leaves the file untouched so the next launch
+   asks again: a user who flips the setting and quits is asked on every launch until they edit
+   the config by hand. And `rescanWhy` is fixed text. Decision:
+   - `RescanNotice` gains `separateReleases: Bool?` (nil unless this open's change is the
+     option's; `init?(parts:separateReleases:)`). `text` puts the direction sentence first, in
+     words kept once beside the part: on, "Albums are made of each Discogs release, so a
+     reissue tagged with the original's title is an album of its own."; off, "Albums are made of
+     title and artist again, so releases that share them merge." In both, the stock tail ("Every
+     file is read again. Plays, ratings and playlists stay.") is unchanged. The index part's
+     "new shape" sentence is not shown when the only reason is the option: `partsToRebuild` can't
+     tell, so `rescanNotice()` compares the stored SQL with the same part built with the stored
+     option; equal means the option is the only difference.
+   - Runtime toggle: `AppDelegate.settingsChanged` (SettingsChanges.swift), on
+     `schema.separateReleases.key`, compares with `index.separateReleases` and, if different,
+     shows a sheet on the Settings window with `notice.title` / `notice.text`, "Rescan Now" /
+     "Cancel". Cancel calls `settings.set(\.separateReleases, to: old)` (ConfigStore.set exists).
+     Rescan Now relaunches; there is no relaunch code in the tree today, so write the minimal one
+     in App (`NSWorkspace.openApplication(at: Bundle.main.bundleURL, ...)` then terminate) and
+     say so in the ADR. A hand-edit of the config file takes the same path, since it also goes
+     through `settingsChanged`.
+   - Launch with a differing setting (relaunched, or edited while closed): `askToRescan` as is,
+     but a decline there is "Quit" (51h's behavior). Accept that; the owner can revert the
+     setting in the file. If that is not acceptable, the alternative is a third button "Keep"
+     that reopens with the stored option; not in 53c.
+   - `rebuiltIndex` and `LibraryStatus.rebuildingIndex` already say "rebuilding" for any index
+     rebuild. No change.
+4. "The reason sentence is chosen by the direction": see 3; the per-part table is `rescanWhy`, a
+   single string, so the direction text lives on `RescanNotice`, not in `SchemaPart`.
+5. "Album ordering interleaves by album id": the track query's `ORDER BY` already adds
+   `t.album_id` when grouping by album artist and sorting by Artist or Album
+   (LibraryQueries.swift ~l.119), so those orders keep releases together; the other branch's
+   tie-break (`ar/ga.sort_name, al.sort_title, t.disc_number, ...`) has no album id and would
+   interleave two releases. Add `t.album_id` after `al.sort_title` there. The Album pane
+   (`BrowserGroupingSQL`, `.albums`, order `sort_title`) needs `sort_title, <year>` with the
+   same correlated `min(TrackColumn.year.expression)` subquery `.albumsByYear` already uses
+   (extract it once, not copy it; two uses so no third occurrence rule issue, but they must share
+   the text). The track table does not get a year subquery per row (cost on 100k rows; measure
+   with the Bench if wanted); two releases then sort adjacent in insertion order, each whole.
+   `TrackColumnSort` (`.album: "al.sort_title"`) is unchanged.
+6. Release id source: `insertTrack` binds `tags.custom[DiscogsKey.releaseID]` (a String?) into
+   `tracks.discogs_release_id`; there is no `tags.discogsReleaseID`. Pass the same trimmed value
+   to `albumID(_:artist:releaseID:)`.
+
+Steps:
+
+1. **Schema and plumbing.** `albums.release_id TEXT NOT NULL DEFAULT ''`; index
+   `albums_identity ON albums (title, ifnull(artist_id, 0), release_id)`; `AlbumKey` gains
+   `releaseID: String`; the cache query selects `release_id`; the `INSERT INTO albums` binds it.
+   `indexSchema` -> `func indexSchema(separateReleases:)` with the first line; `SchemaPart`
+   `sql(separateReleases:)`; `LibraryIndex.init(... separateReleases: Bool? = nil ...)` with the
+   resolution in point 1/2.
+2. **Insert.** `albumID` uses `separateReleases ? trimmedReleaseID ?? "" : ""`. A track with no
+   id still merges with every other idless one (intended).
+3. **Setting.** `AppSettings.separateReleases = Setting("library.separateReleases", title:
+   "Separate Releases", default: false, "Make an album of each Discogs release ...")`, placed
+   after `groupByAlbumArtist`; `GeneralModel` groups by the `"library."` prefix, so it shows in
+   the Library group with no model change (check after 53b's pane rework). File menu: add
+   `.setting(settings.separateReleases.key)` after `groupByAlbumArtist` in `AppMenus` (~l.119).
+4. **Applying it.** `RescanNotice` direction, `askToRescan` unchanged, `settingsChanged` sheet
+   and relaunch (point 3). `AppDelegate.openWindow` passes `separateReleases: settings[\.separateReleases]`.
+5. **Sort.** Point 5.
+6. **Tests** (new file `Tests/LibraryTests/SeparateReleasesTests.swift`, not edits to
+   `LibraryIndexTests`, which 53b edits; the dialog text in `RescanNoticeTests.swift`): original
+   and 2025 remaster, same title and artist, different ids: one album off, two on, tracks stay
+   with their own; idless track joins off, stays alone on; reopening with nil keeps the stored
+   option and does not rebuild (this is the guard for the snapshot and scanner opens); reopening
+   with the other value asks `confirmRescan` once with a notice carrying the direction, rebuilds
+   only the index and scans parts, keeps ratings (as `quitAtTheRescanQuestionLeavesTheFileAsItWas`
+   does); declined leaves the file byte-equal; Album pane and table order for two releases; the
+   notice text per direction. The Settings-sheet path in `SettingsWindowTests` or a
+   `MusicPlayerTests` fixture only if the sheet is testable without a relaunch; otherwise inject
+   the relaunch.
+7. **ADR 0143** (0141 is 53a's, 0142 is 53b's): identity with the option, setting not rule,
+   release id not master, stored-SQL option with open-by-nil adoption and why (many connections),
+   the toggle's sheet and the relaunch, Quit at launch.
+
+Commits: 1 schema, option and the nil-adopting open; 2 insert and sort; 3 setting, menu, notice
+and sheet; 4 tests with each; 5 ADR.
+
+Files shared with 53a and 53b (`git diff --stat main...HEAD` of each worktree):
+
+- `Sources/App/MusicPlayer/AppDelegate.swift`: 53a (import, `editing.release` ~l.629) and 53b
+  (`applyRestoreAtLaunch`, `SnapshotScheduler(...)` right after the `LibraryIndex(at:
+  movingAsideIfUnreadable:confirmRescan:)` call, ~l.244-260, watcher start ~l.848). 53c edits that
+  same `LibraryIndex(...)` call: expect a textual conflict with 53b; resolve by adding the
+  argument to 53b's version of the call.
+- `Sources/App/MusicPlayer/SettingsChanges.swift`: 53b (`libraryDatabase`/`backUpNow` closures ~l.252).
+  53c adds a block after the `groupByAlbumArtist` one (~l.117): different hunk.
+- `Sources/Core/Library/LibraryIndex.swift`: 53b rewrites `moveAside` and adds `move`,
+  `pruneMovedAside`, `copy(to:)` (l.34-160) immediately above `prepareSchema`; 53c edits `init`
+  doc/signature, `prepareSchema`, `partsToRebuild`, `rebuildStaleParts`, `albumID`, `AlbumKey`.
+  Adjacent, likely a clean merge, but rebase and check `prepareSchema`'s context.
+- `Sources/Core/Settings/AppSettings.swift`: 53b adds `snapshotFolder` after `libraryFolder` and
+  rewrites the conflicts section at the bottom; 53c adds one setting at ~l.83. Clean.
+- `Sources/Core/Commands/AppMenus.swift`: 53a edits the track menu (~l.63) and View (~l.172);
+  53c one line at ~l.119. Clean.
+- `Sources/Core/Library/LibraryQueries.swift`: 53a adds `discogsReleaseID(ofTrack:)` at ~l.213;
+  53c edits the sort tie-break at ~l.119-135. Clean.
+- 53b's `Snapshot/SnapshotScheduler.swift` and `SnapshotRestore.swift` call `LibraryIndex(at:)`;
+  safe only with the nil-adopting open (point 1). Also 53b's restore can put back an index with
+  the other option; the next launch then asks via `askToRescan`, which is correct.
+- `GeneralModel.swift` / `GeneralPane.swift` (53b): 53c has no edit, but confirm the
+  `"library."` prefix grouping survived 53b.
+- Tests: 53b edits `LibraryIndexTests.swift`; 53c adds new files only.
+- Not touched by either: `LibrarySchema.swift`, `RescanNotice.swift`, `RescanAlert.swift`,
+  `BrowserGroupingSQL.swift`, `RescanNoticeTests.swift`.
 
 ## 53.9 and 53.15 tests
 
