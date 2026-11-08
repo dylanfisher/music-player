@@ -1462,6 +1462,26 @@ public final class LibraryBrowser: NSObject, NSSplitViewDelegate, NSSearchFieldD
         return try index.playlists(holding: track)
     }
 
+    /// Whether Show in All Music has tracks to show: a selection in a list narrower than All
+    /// Music.
+    public var canShowSelectionInAllMusic: Bool { hasSelectedTracks && !showsAllMusic }
+
+    /// Show in All Music: the whole library with the selected tracks selected, the first
+    /// centered, and the keys in the track table.
+    public func showSelectionInAllMusic() {
+        guard let ids = selectedTrackIDs(else: "couldn't show the tracks in All Music"),
+            !ids.isEmpty
+        else { return }
+        Task {
+            _ = await model.showAll()
+            if !searchField.stringValue.isEmpty { searchField.stringValue = "" }
+            showSource()
+            table.select(model.rows(holding: Set(ids)))
+            table.centerSelection()
+            focusTracks()
+        }
+    }
+
     /// The first selected track's Discogs release id, for Open Discogs Release; nil when it has
     /// none or nothing is selected.
     public func selectedDiscogsReleaseID() throws -> Int? {

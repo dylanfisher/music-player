@@ -63,7 +63,8 @@ public enum AppMenus {
     /// Its items act on the selection, which a right-click sets.
     public static let trackMenu: [MenuEntry] = [
         .command(.playNext), .command(.addToQueue), .command(.playSelection), .separator,
-        .command(.showAlbum), .command(.showArtist), .command(.openDiscogsRelease), .separator,
+        .command(.showAlbum), .command(.showArtist), .command(.showInAllMusic),
+        .command(.openDiscogsRelease), .separator,
         .command(.toggleLoved), .command(.toggleDisliked), .separator,
         .submenu(ratingMenuTitle, CommandID.rate.map(MenuEntry.command), showsChords: true),
         .separator, .command(.editTags), .command(.showSpectrum), .command(.revealInFinder),
@@ -171,7 +172,8 @@ public enum AppMenus {
                     .separator, .command(.back), .command(.forward), .command(.undoSelection),
                     .command(.redoSelection), .command(.showCurrentTrack),
                     .command(.showSelectedTrack),
-                    .command(.showAllTracks), .command(.openDiscogsRelease),
+                    .command(.showAllTracks), .command(.showInAllMusic),
+                    .command(.openDiscogsRelease),
                     .command(.scrollUp), .command(.scrollDown),
                     .separator, .setting(settings.appearance.key),
                     .submenu(

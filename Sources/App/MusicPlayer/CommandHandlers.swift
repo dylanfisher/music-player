@@ -217,6 +217,10 @@ extension AppDelegate {
         dispatcher.handle(
             .showAllTracks, enabled: { [weak self] in self?.browser?.showsAllMusic == false },
             run: { [weak self] in self?.browser?.showAll() })
+        dispatcher.handle(
+            .showInAllMusic,
+            enabled: { [weak self] in self?.browser?.canShowSelectionInAllMusic == true },
+            run: { [weak self] in self?.browser?.showSelectionInAllMusic() })
         dispatcher.handle(.scrollUp, enabled: hasWindow) { [weak self] in
             self?.browser?.scrollTracks(byRows: -1)
         }
