@@ -68,6 +68,24 @@ extension AppDelegate {
             guard let window = self?.window?.window else { return }
             self?.browser?.restoreRemoved(over: window)
         }
+        dispatcher.handle(
+            .importMoves, enabled: { [weak self] in self?.window != nil && self?.watcher != nil },
+            run: { [weak self] in self?.chooseMoveList() })
+    }
+
+    /// Import Moves…: an open panel for the move list, which the watcher applies between scans.
+    private func chooseMoveList() {
+        guard let window = window?.window, let watcher else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.message =
+            "Choose a list of moved files: each line an old path, a tab and the new path."
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.browser?.importMoves(from: url, over: window) { list in
+                try await watcher.importMoves(from: list)
+            }
+        }
     }
 
     /// Whether the main window is open, for the commands that need it.

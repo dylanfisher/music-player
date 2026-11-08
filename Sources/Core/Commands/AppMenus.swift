@@ -109,6 +109,7 @@ public enum AppMenus {
                     .setting(settings.discogsSkipVideo.key),
                     .setting(settings.discogsFillSortArtist.key), .command(.rescanNow),
                     .command(.resolveLostStats), .command(.restoreRemoved),
+                    .command(.importMoves),
                     .setting(settings.pausePollingDuringPlayback.key),
                     .setting(settings.rescanNetworkFoldersAtLaunch.key),
                     .setting(settings.removeMissingTracks.key),

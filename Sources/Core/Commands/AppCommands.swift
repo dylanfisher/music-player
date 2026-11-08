@@ -73,6 +73,8 @@ extension CommandID {
     public static let resumeScan = CommandID("library.resumeScan")
     public static let resolveLostStats = CommandID("library.resolveLostStats")
     public static let restoreRemoved = CommandID("library.restoreRemoved")
+    /// Applies a list of moved files' old and new paths to the index (ADR 0026).
+    public static let importMoves = CommandID("library.importMoves")
     public static let revealInFinder = CommandID("track.revealInFinder")
     public static let copyPath = CommandID("track.copyPath")
     /// Removes the selection from the library, or moves its files to the Trash (ADR 0050).
@@ -246,6 +248,7 @@ public enum AppCommands {
             Command(.resumeScan, "Resume Scan"),
             Command(.resolveLostStats, "Resolve Lost Stats…"),
             Command(.restoreRemoved, "Restore Removed Tracks…"),
+            Command(.importMoves, "Import Moves…"),
             Command(
                 .revealInFinder, "Reveal in Finder",
                 [.init("r", cmd), .init("r", [cmd, shift])]),
