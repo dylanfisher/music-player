@@ -242,3 +242,21 @@ private func exists(_ path: String) -> Bool { FileManager.default.fileExists(atP
         return true
     }
 }
+
+@Test func aResumeRefusesAStagedFileSwappedForALinkOutside() throws {
+    let folders = try MoveFolders()
+    let files = try folders.files()
+    var calls = MoveCalls()
+    calls.renameExclusive = { from, to in
+        from.hasSuffix("02.flac")
+            ? EIO : (renamex_np(from, to, UInt32(RENAME_EXCL)) == 0 ? 0 : errno)
+    }
+    #expect(throws: MoveRefusal.self) { try folders.moveIn(calls) }
+    let staged = folders.staging + "/job-7/02.flac"
+    let outside = folders.share + "/elsewhere.flac"
+    try FileManager.default.moveItem(atPath: staged, toPath: outside)
+    try FileManager.default.createSymbolicLink(atPath: staged, withDestinationPath: outside)
+    #expect(throws: MoveRefusal.outsideStaging(staged)) { try folders.moveIn(files: files) }
+    #expect(exists(outside))
+    #expect(!exists(folders.destinations[1]))
+}
