@@ -140,9 +140,8 @@ extension ApiRelease {
             let subTracks = try self.converted(track.subTracks ?? [], depth: depth + 1, rows: &rows)
             let position = try nonEmpty(track.position)
             let seconds = try track.duration.flatMap { CatalogTrack.seconds(try trimmed($0)) }
-            let kind: CatalogTrack.Kind =
-                !subTracks.isEmpty
-                ? .index : position == nil && seconds == nil ? .heading : .track
+            let kind = CatalogTrack.kind(
+                position: position, durationSeconds: seconds, hasSubTracks: !subTracks.isEmpty)
             converted.append(
                 CatalogTrack(
                     kind: kind, position: position, title: try trimmed(track.title),
