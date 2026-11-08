@@ -159,6 +159,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             current.reread(model.tracks)
             self.model = current
             showValues()
+            showDiscogs(current.discogsReleaseIDs)
             return
         }
         self.model = model
@@ -170,12 +171,29 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
         focusFirstField()
     }
 
-    /// Reads the first of `ids` into the Discogs tab; with none, the tab goes.
+    /// The release ids the Discogs tab was last read for, so a reread that leaves them as
+    /// they were reads nothing again.
+    private var discogsShownIDs: [Int]?
+    /// Counts the catalog reads, so one finishing after a later one started is dropped.
+    private var discogsRead = 0
+    /// The Discogs tab while it's taken away, to put back.
+    private var discogsItem: NSTabViewItem?
+
+    /// Reads the first of `ids` into the Discogs tab, and puts the tab back when a save gave
+    /// the files their first release id; with none, the tab goes.
     private func showDiscogs(_ ids: [Int]) {
-        guard let first = ids.first else { return removeDiscogsTab() }
+        guard ids != discogsShownIDs else { return }
+        discogsShownIDs = ids
+        discogsRead += 1
+        guard let first = ids.first else {
+            discogsReleaseID = nil
+            return removeDiscogsTab()
+        }
+        if tabItem(.discogs) == nil, let discogsItem { tabs.addTabViewItem(discogsItem) }
         discogsReleaseID = first
         discogsText.string = "Reading the Discogs catalog…"
         let release = self.release
+        let mine = discogsRead
         Task { [weak self] in
             let read: Result<ReleaseDetail?, any Error>
             do {
@@ -183,7 +201,8 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
             } catch {
                 read = .failure(error)
             }
-            self?.discogsText.string = discogsTabText(read, releases: ids.count)
+            guard let self, mine == discogsRead else { return }
+            discogsText.string = discogsTabText(read, releases: ids.count)
         }
     }
 
@@ -191,6 +210,7 @@ public final class TagEditorWindow: NSObject, NSTextFieldDelegate, NSTextViewDel
     /// window opens on if it was.
     private func removeDiscogsTab() {
         guard let item = tabItem(.discogs) else { return }
+        discogsItem = item
         let last = Self.lastTab
         if shownTab == .discogs {
             tabs.selectTabViewItem(withIdentifier: TagEditorTab.info.rawValue)

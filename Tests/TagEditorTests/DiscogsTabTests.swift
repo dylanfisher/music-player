@@ -44,6 +44,49 @@ private let stockholm = ReleaseDetail(
             == "No Discogs catalog is imported.")
 }
 
+/// Waits a few seconds for `condition`.
+@MainActor
+private func waitFor(_ what: String, _ condition: () -> Bool) async throws {
+    let deadline = Date().addingTimeInterval(5)
+    while !condition() {
+        try #require(Date() < deadline, "timed out waiting for \(what)")
+        try await Task.sleep(for: .milliseconds(5))
+    }
+}
+
+/// A save that gives the files a release id, or changes it, brings the tab back or reads the
+/// new release; a read for the old one that finishes late is dropped.
+@MainActor @Test func aRereadShowsTheReleaseTheFilesHoldNow() async throws {
+    let editor = TagEditorWindow(paths: ["/music/a.flac"])
+    defer { editor.close() }
+    var held: CheckedContinuation<Void, Never>?
+    editor.release = { id in
+        if id == 42 { await withCheckedContinuation { held = $0 } }
+        var detail = stockholm
+        detail.summary.id = id
+        detail.summary.title = "Release \(id)"
+        return detail
+    }
+    editor.load(TagEditorModel(tracks: [track("a", release: nil)]))
+    #expect(!editor.shownTabs.contains(.discogs))
+
+    editor.load(TagEditorModel(tracks: [track("a", release: "42")]))
+    #expect(editor.shownTabs.last == .discogs)
+    #expect(editor.discogsReleaseID == 42)
+    try await waitFor("the read of 42") { held != nil }
+    editor.load(TagEditorModel(tracks: [track("a", release: "7")]))
+    #expect(editor.discogsReleaseID == 7)
+    try await waitFor("release 7") { editor.discogsText.string.contains("Release 7") }
+    held?.resume()
+    held = nil
+    try await Task.sleep(for: .milliseconds(50))
+    #expect(editor.discogsText.string.contains("Release 7"), "the late read of 42 is dropped")
+
+    editor.load(TagEditorModel(tracks: [track("a", release: nil)]))
+    #expect(!editor.shownTabs.contains(.discogs))
+    #expect(editor.discogsReleaseID == nil)
+}
+
 /// Files with a release id get the tab, read from the catalog, with Open on Discogs; files
 /// with none don't.
 @MainActor @Test func onlyFilesWithAReleaseIdHaveTheTab() async throws {
