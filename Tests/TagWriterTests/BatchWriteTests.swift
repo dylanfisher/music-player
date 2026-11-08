@@ -231,3 +231,22 @@ private final class InFlight: @unchecked Sendable {
     func leave() { lock.withLock { now -= 1 } }
     var most: Int { lock.withLock { peak } }
 }
+
+/// Each file of a batch gets its own edit, in place or through the temp file, and one undo puts
+/// them all back (ADR 0133): the Discogs tagger writes each track its own title.
+@Test func aBatchWritesEachFileItsOwnEdit() throws {
+    let urls = try batch() + [try Sample.mp4.copy()]
+    let originals = try urls.map { try Data(contentsOf: $0) }
+    let writer = scratchWriter()
+    let edits = urls.enumerated().map { index, url in
+        (path: url.path, edit: TagEdit(values: [.title: "Track \(index + 1)"]))
+    }
+    expectChanged(writer.write(edits), urls)
+    #expect(try urls.map { try tags($0).title } == urls.indices.map { "Track \($0 + 1)" })
+
+    let undone = writer.undoLast()
+    #expect(undone.failures == [])
+    #expect(Set(undone.changed) == Set(urls.map(\.path)))
+    #expect(try urls.map { try Data(contentsOf: $0) } == originals)
+    #expect(writer.undoLast().nothingToUndo, "one edit for the batch")
+}

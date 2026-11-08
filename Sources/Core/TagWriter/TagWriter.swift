@@ -31,9 +31,20 @@ public struct TagWriter: Sendable {
         _ edit: TagEdit, to requested: [String],
         progress: @escaping @Sendable (TagWriteProgress) -> Void = { _ in }
     ) -> TagWriteReport {
+        write(requested.map { (path: $0, edit: edit) }, progress: progress)
+    }
+
+    /// Writes each file's own edit, as one undoable edit, the way `write(_:to:)` writes one
+    /// edit to them all: the Discogs tagger writes each track its release's values (ADR 0133).
+    /// A path named twice is written with its first edit only.
+    public func write(
+        _ requested: [(path: String, edit: TagEdit)],
+        progress: @escaping @Sendable (TagWriteProgress) -> Void = { _ in }
+    ) -> TagWriteReport {
         // Once each, so a path named twice isn't written by two threads at once.
         var named = Set<String>()
-        let paths = requested.filter { named.insert($0).inserted }
+        let files = requested.filter { named.insert($0.path).inserted }
+        let paths = files.map(\.path)
         let counter = WriteProgressCounter(total: paths.count, report: progress)
         var report = recoverInterrupted()
         let entry: TagUndoJournal.Entry
@@ -65,7 +76,7 @@ public struct TagWriter: Sendable {
             let prepared = autoreleasepool { () -> Result<Prepared, TagWriteError> in
                 do throws(TagWriteError) {
                     if let error = unclear[path] { throw error }
-                    return .success(try prepare(edit, path, entry: entry))
+                    return .success(try prepare(files[index].edit, path, entry: entry))
                 } catch {
                     logger.error("\(error.description)")
                     return .failure(error)
