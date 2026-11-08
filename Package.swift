@@ -144,8 +144,8 @@ let package = Package(
         .target(
             name: "Discogs",
             dependencies: [
-                "DisplayText", "HTTPSClient", "Library", "Log", "Metadata", "SQLite", "Settings",
-                "TagWriter",
+                "Artwork", "DisplayText", "HTTPSClient", "Library", "Log", "Metadata", "SQLite",
+                "Settings", "TagWriter",
             ],
             path: "Sources/Core/Discogs",
             swiftSettings: strictSwift,

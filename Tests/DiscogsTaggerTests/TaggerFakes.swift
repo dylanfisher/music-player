@@ -134,6 +134,9 @@ func model(
     choices: TaggerChoices = defaultChoices, unfinished: UnfinishedImport? = nil,
     source: DiscogsSource? = .catalog,
     matchError: (any Error & Sendable)? = nil,
+    cover: @escaping @Sendable (Int) async -> Result<Cover, CoverProblem> = { _ in
+        .failure(.needsToken)
+    },
     importing: @escaping DiscogsTagger.Import = { _, _, _ in throw CatalogImportError.stopped }
 ) async -> TaggerModel {
     let made = TaggerModel(
@@ -179,7 +182,8 @@ func model(
                 return (files(ids), [])
             },
             checkCatalog: { catalog }, unfinishedImport: { unfinished },
-            importCatalog: importing),
+            importCatalog: importing, cover: cover),
+
         mapping: mapping, savedMappings: [], choices: choices, source: source)
     await made.checkCatalog()
 

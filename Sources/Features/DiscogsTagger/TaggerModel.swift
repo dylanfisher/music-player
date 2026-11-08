@@ -53,6 +53,8 @@ final class TaggerModel {
         var chosen: Int?
         /// The changes the user unticked in View Changes, which Apply leaves out.
         var excluded: Set<TagChange.ID> = []
+        /// Whether the user unticked the cover in View Changes.
+        var coverExcluded = false
         /// Handed to the writer in this session.
         var applied = false
 
@@ -67,6 +69,8 @@ final class TaggerModel {
         /// The album each file belongs to, by path.
         var albumOfPath: [String: Int64] = [:]
         var fieldCount: Int
+        /// The files that get the release's cover.
+        var coverCount = 0
         /// The albums left out, each with why: a file that couldn't be read, or a value no
         /// format holds.
         var problems: [String]
@@ -100,6 +104,10 @@ final class TaggerModel {
         var importCatalog:
             @Sendable (URL, Bool, @escaping @Sendable (CatalogImportProgress) -> Void) async throws
                 -> CatalogImportSummary
+        /// The release's primary image from Discogs, checked (ADR 0140).
+        var cover: @Sendable (Int) async -> Result<Cover, CoverProblem> = { _ in
+            .failure(.needsToken)
+        }
     }
 
     private let effects: Effects
@@ -151,6 +159,9 @@ final class TaggerModel {
     private var reading: Task<(files: [AlbumFile], problems: [String]), any Error>?
     /// Counts the runs started, so a late progress report of an older one is dropped.
     private var run = 0
+    /// Each release's cover as fetched this session, so Apply after View Changes, or a second
+    /// Apply, asks Discogs once.
+    private var covers: [Int: Result<Cover, CoverProblem>] = [:]
 
     init(
         effects: Effects, mapping: DiscogsMapping, savedMappings: [NamedDiscogsMapping],
@@ -485,13 +496,39 @@ final class TaggerModel {
         if missing > 0 {
             problems.append("\(missing) file\(missing == 1 ? "" : "s") no longer in the library")
         }
-        return (changeSet(files, album), problems)
+        let (set, problem) = await covered(changeSet(files, album), album)
+        return (set, problems + (problem.map { [$0] } ?? []))
     }
 
-    /// Keeps the changes the user unticked in View Changes out of Apply.
-    func setExcluded(_ excluded: Set<TagChange.ID>, for albumID: Int64) {
+    /// `set` with the release's cover, when the artwork mode and a token ask for one, and why
+    /// the album has none when it can't have it. Each release's cover is fetched once.
+    private func covered(_ set: AlbumChangeSet, _ album: Album) async -> (
+        AlbumChangeSet, problem: String?
+    ) {
+        guard choices.artwork != .off, hasToken(), let releaseID = album.match.releaseID else {
+            return (set, nil)
+        }
+        let result: Result<Cover, CoverProblem>
+        if let known = covers[releaseID] {
+            result = known
+        } else {
+            result = await effects.cover(releaseID)
+            covers[releaseID] = result
+        }
+        switch result {
+        case .success(let cover): return (set.covering(cover, mode: choices.artwork), nil)
+        case .failure(let problem): return (set, "\(albumTitle(album.album)): no cover: \(problem)")
+        }
+    }
+
+    /// Keeps the changes the user unticked in View Changes out of Apply, and the cover when
+    /// `coverExcluded`.
+    func setExcluded(
+        _ excluded: Set<TagChange.ID>, coverExcluded: Bool = false, for albumID: Int64
+    ) {
         guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
         albums[index].excluded = excluded
+        albums[index].coverExcluded = coverExcluded
         changed()
     }
 
@@ -554,9 +591,12 @@ final class TaggerModel {
                         + " unreadable or no longer in the library")
                 continue
             }
-            let set = changeSet(albumFiles, album)
+            let (set, coverProblem) = await covered(changeSet(albumFiles, album), album)
+            if let coverProblem { plan.problems.append(coverProblem) }
             do {
-                let edits = try set.edits { !album.excluded.contains($0) }
+                let edits = try set.edits(
+                    including: { !album.excluded.contains($0) },
+                    includingCover: !album.coverExcluded)
                 guard !edits.isEmpty else { continue }
                 plan.albumIDs.append(album.id)
                 plan.files += edits
@@ -564,6 +604,7 @@ final class TaggerModel {
                 plan.fieldCount += set.files.flatMap(\.changes).count {
                     !album.excluded.contains($0.id)
                 }
+                if !album.coverExcluded { plan.coverCount += set.coveredFiles }
             } catch {
                 plan.problems.append("\(albumTitle(album.album)): \(error)")
             }
@@ -574,12 +615,17 @@ final class TaggerModel {
     /// The question Apply's confirmation sheet asks.
     static func confirmation(_ plan: ApplyPlan) -> (message: String, detail: String) {
         let albums = plan.albumIDs.count
+        let covers =
+            plan.coverCount == 0 ? "" : " and \(DisplayText.count(plan.coverCount, "cover"))"
         let message =
-            "Change \(number(plan.fieldCount)) tags in \(number(plan.files.count)) files of "
-            + "\(number(albums)) album\(albums == 1 ? "" : "s")?"
+            "Change \(number(plan.fieldCount)) tags\(covers) in \(number(plan.files.count)) files"
+            + " of \(number(albums)) album\(albums == 1 ? "" : "s")?"
         var detail =
             "Each file gets the values the field mapping writes, as View Changes shows them."
+            + (plan.coverCount == 0
+                ? "" : " Each cover is its release's primary image from Discogs.")
             + " Undo Tag Edit puts them all back."
+
         if !plan.problems.isEmpty {
             detail +=
                 "\n\n\(plan.problems.count) left out: "

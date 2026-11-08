@@ -176,6 +176,13 @@ public actor DiscogsAPI {
             .map(\.id).filter { seen.insert($0).inserted }
     }
 
+    /// The image at `url`, which must be https on `imageHost`, at most `Cover.byteCap` bytes. It
+    /// is paced as the API's requests are and carries no token.
+    func image(at url: URL) async throws(DiscogsAPIError) -> [UInt8] {
+        guard HTTPSClient.allows(url, hosts: [Self.imageHost]) else { throw .refusedAddress }
+        return try await get(url, cap: Cover.byteCap).body
+    }
+
     // MARK: Requests
 
     /// GETs `url` once its turn and the rate limit allow, with the user agent and, to `host`

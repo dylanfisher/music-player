@@ -682,11 +682,13 @@ final class TaggerWindow: NSWindowController, NSTableViewDataSource, NSTableView
                 return alert("\(problems.count) of the album's files can't be read", problems)
             }
             let changes = ChangesSheet(
-                set: set, excluded: album.excluded, title: albumTitle(album.album),
-                releaseID: releaseID)
+                set: set, excluded: album.excluded, coverExcluded: album.coverExcluded,
+                title: albumTitle(album.album), releaseID: releaseID)
             present(changes, over: window) { [self] in
                 guard let answer = changes.result else { return }
-                model.setExcluded(answer.excluded, for: album.id)
+                model.setExcluded(
+                    answer.excluded, coverExcluded: answer.coverExcluded, for: album.id)
+
                 if answer.apply { apply([album.id]) }
             }
         }

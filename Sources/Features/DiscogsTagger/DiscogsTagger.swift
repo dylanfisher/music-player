@@ -87,7 +87,15 @@ public final class DiscogsTagger {
                 },
                 checkCatalog: { await catalogState(at: catalog) },
                 unfinishedImport: { await blockingFileWork { unfinishedImport(of: catalog) } },
-                importCatalog: importing),
+                importCatalog: importing,
+                cover: { id in
+                    let api = await api()
+                    do throws(CoverProblem) {
+                        return .success(try await api.cover(release: id))
+                    } catch {
+                        return .failure(error)
+                    }
+                }),
             mapping: mapping, savedMappings: savedMappings, choices: choices, source: source)
         model.hasToken = { api().hasToken }
     }
